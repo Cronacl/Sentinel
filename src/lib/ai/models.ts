@@ -275,5 +275,12 @@ export function findModel(
 }
 
 export function isKnownModel(provider: AIProvider, modelId: string): boolean {
-  return !!findModel(provider, modelId);
+	return !!findModel(provider, modelId);
+}
+
+export function toCompositeModelId(
+	provider: AIProvider,
+	modelId: string,
+): string {
+	return `${provider}:${modelId}`;
 }
