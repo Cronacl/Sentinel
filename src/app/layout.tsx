@@ -1,9 +1,8 @@
-import "@/styles/globals.css";
-
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 
-import { TRPCReactProvider } from "@/trpc/react";
+import { Providers } from "@/components/providers";
+import "@/styles/globals.css";
 
 export const metadata: Metadata = {
 	title: "Sentinel",
@@ -87,8 +86,15 @@ export default function RootLayout({
 			lang="en"
 			suppressHydrationWarning
 		>
-			<body>
-				<TRPCReactProvider>{children}</TRPCReactProvider>
+			<head>
+				<script
+					dangerouslySetInnerHTML={{
+						__html: `(function(){var d=document.documentElement,t=window.matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light";d.classList.add(t);d.setAttribute("data-theme",t)})()`,
+					}}
+				/>
+			</head>
+			<body className="bg-background text-foreground">
+				<Providers>{children}</Providers>
 			</body>
 		</html>
 	);

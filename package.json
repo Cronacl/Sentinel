@@ -6,9 +6,8 @@
 	"scripts": {
 		"build": "next build",
 		"auth:sync": "bun x auth@latest generate --config ./src/server/better-auth/config.ts",
-		"check": "biome check .",
-		"check:unsafe": "biome check --write --unsafe .",
-		"check:write": "biome check --write .",
+		"format": "prettier --write .",
+		"format:check": "prettier --check .",
 		"db:generate": "prisma migrate dev",
 		"db:migrate": "prisma migrate deploy",
 		"db:push": "prisma db push",
@@ -25,6 +24,8 @@
 		"@better-auth/prisma-adapter": "^1.5.3",
 		"@heroui/react": "^3.0.0-beta.8",
 		"@heroui/styles": "^3.0.0-beta.8",
+		"@hugeicons/core-free-icons": "^4.0.0",
+		"@hugeicons/react": "^1.1.5",
 		"@prisma/client": "^6.6.0",
 		"@t3-oss/env-nextjs": "^0.12.0",
 		"@tanstack/react-query": "^5.69.0",
@@ -42,12 +43,14 @@
 		"zod": "^3.24.2"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.2.5",
 		"@tailwindcss/postcss": "^4.0.15",
+		"@trivago/prettier-plugin-sort-imports": "^6.0.2",
 		"@types/node": "^20.14.10",
 		"@types/react": "^19.0.0",
 		"@types/react-dom": "^19.0.0",
 		"postcss": "^8.5.3",
+		"prettier": "^3.8.1",
+		"prettier-plugin-tailwindcss": "^0.7.2",
 		"prisma": "^6.6.0",
 		"tailwindcss": "^4.0.15",
 		"typescript": "^5.8.2"

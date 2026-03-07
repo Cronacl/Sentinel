@@ -1,5 +1,7 @@
 import { authRouter } from "@/server/api/routers/auth";
 import { healthRouter } from "@/server/api/routers/health";
+import { modelsRouter } from "@/server/api/routers/models";
+import { providersRouter } from "@/server/api/routers/providers";
 import { createCallerFactory, createTRPCRouter } from "@/server/api/trpc";
 
 /**
@@ -10,6 +12,8 @@ import { createCallerFactory, createTRPCRouter } from "@/server/api/trpc";
 export const appRouter = createTRPCRouter({
 	auth: authRouter,
 	health: healthRouter,
+	models: modelsRouter,
+	providers: providersRouter,
 });
 
 // export type definition of API

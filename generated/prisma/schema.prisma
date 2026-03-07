@@ -8,6 +8,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum AIProvider {
+  openai
+  anthropic
+  google
+}
+
 model User {
   id            String    @id
   name          String //@db.Text
@@ -19,10 +25,42 @@ model User {
   sessions      Session[]
   accounts      Account[]
 
-  passkeys Passkey[]
+  passkeys         Passkey[]
+  credentials      ProviderCredential[]
+  modelPreferences ModelPreference[]
 
   @@unique([email])
   @@map("user")
+}
+
+model ProviderCredential {
+  id              String     @id @default(cuid())
+  userId          String
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider        AIProvider
+  encryptedConfig String
+  isEnabled       Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@unique([userId, provider])
+  @@index([userId])
+  @@map("provider_credential")
+}
+
+model ModelPreference {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider  AIProvider
+  modelId   String
+  isCustom  Boolean    @default(false)
+  isEnabled Boolean    @default(true)
+  createdAt DateTime   @default(now())
+
+  @@unique([userId, provider, modelId])
+  @@index([userId])
+  @@map("model_preference")
 }
 
 model Session {

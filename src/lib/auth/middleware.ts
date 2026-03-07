@@ -1,6 +1,6 @@
-import { type NextRequest, NextResponse } from "next/server";
 import type { MiddlewareRule } from "next-middleware-toolkit";
 import { MiddlewareBuilder, Rules } from "next-middleware-toolkit";
+import { type NextRequest, NextResponse } from "next/server";
 
 import { env } from "@/env";
 import type { MiddlewareUser } from "@/lib/auth/share-types";

@@ -131,6 +131,26 @@ exports.Prisma.UserScalarFieldEnum = {
   updatedAt: 'updatedAt'
 };
 
+exports.Prisma.ProviderCredentialScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  provider: 'provider',
+  encryptedConfig: 'encryptedConfig',
+  isEnabled: 'isEnabled',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ModelPreferenceScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  provider: 'provider',
+  modelId: 'modelId',
+  isCustom: 'isCustom',
+  isEnabled: 'isEnabled',
+  createdAt: 'createdAt'
+};
+
 exports.Prisma.SessionScalarFieldEnum = {
   id: 'id',
   expiresAt: 'expiresAt',
@@ -195,10 +215,16 @@ exports.Prisma.NullsOrder = {
   first: 'first',
   last: 'last'
 };
-
+exports.AIProvider = exports.$Enums.AIProvider = {
+  openai: 'openai',
+  anthropic: 'anthropic',
+  google: 'google'
+};
 
 exports.Prisma.ModelName = {
   User: 'User',
+  ProviderCredential: 'ProviderCredential',
+  ModelPreference: 'ModelPreference',
   Session: 'Session',
   Account: 'Account',
   Verification: 'Verification',

@@ -19,6 +19,16 @@ export type PrismaPromise<T> = $Public.PrismaPromise<T>
  */
 export type User = $Result.DefaultSelection<Prisma.$UserPayload>
 /**
+ * Model ProviderCredential
+ * 
+ */
+export type ProviderCredential = $Result.DefaultSelection<Prisma.$ProviderCredentialPayload>
+/**
+ * Model ModelPreference
+ * 
+ */
+export type ModelPreference = $Result.DefaultSelection<Prisma.$ModelPreferencePayload>
+/**
  * Model Session
  * 
  */
@@ -38,6 +48,24 @@ export type Verification = $Result.DefaultSelection<Prisma.$VerificationPayload>
  * 
  */
 export type Passkey = $Result.DefaultSelection<Prisma.$PasskeyPayload>
+
+/**
+ * Enums
+ */
+export namespace $Enums {
+  export const AIProvider: {
+  openai: 'openai',
+  anthropic: 'anthropic',
+  google: 'google'
+};
+
+export type AIProvider = (typeof AIProvider)[keyof typeof AIProvider]
+
+}
+
+export type AIProvider = $Enums.AIProvider
+
+export const AIProvider: typeof $Enums.AIProvider
 
 /**
  * ##  Prisma Client ʲˢ
@@ -166,6 +194,26 @@ export class PrismaClient<
     * ```
     */
   get user(): Prisma.UserDelegate<ExtArgs, ClientOptions>;
+
+  /**
+   * `prisma.providerCredential`: Exposes CRUD operations for the **ProviderCredential** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more ProviderCredentials
+    * const providerCredentials = await prisma.providerCredential.findMany()
+    * ```
+    */
+  get providerCredential(): Prisma.ProviderCredentialDelegate<ExtArgs, ClientOptions>;
+
+  /**
+   * `prisma.modelPreference`: Exposes CRUD operations for the **ModelPreference** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more ModelPreferences
+    * const modelPreferences = await prisma.modelPreference.findMany()
+    * ```
+    */
+  get modelPreference(): Prisma.ModelPreferenceDelegate<ExtArgs, ClientOptions>;
 
   /**
    * `prisma.session`: Exposes CRUD operations for the **Session** model.
@@ -648,6 +696,8 @@ export namespace Prisma {
 
   export const ModelName: {
     User: 'User',
+    ProviderCredential: 'ProviderCredential',
+    ModelPreference: 'ModelPreference',
     Session: 'Session',
     Account: 'Account',
     Verification: 'Verification',
@@ -670,7 +720,7 @@ export namespace Prisma {
       omit: GlobalOmitOptions
     }
     meta: {
-      modelProps: "user" | "session" | "account" | "verification" | "passkey"
+      modelProps: "user" | "providerCredential" | "modelPreference" | "session" | "account" | "verification" | "passkey"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
@@ -745,6 +795,154 @@ export namespace Prisma {
           count: {
             args: Prisma.UserCountArgs<ExtArgs>
             result: $Utils.Optional<UserCountAggregateOutputType> | number
+          }
+        }
+      }
+      ProviderCredential: {
+        payload: Prisma.$ProviderCredentialPayload<ExtArgs>
+        fields: Prisma.ProviderCredentialFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.ProviderCredentialFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCredentialPayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.ProviderCredentialFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCredentialPayload>
+          }
+          findFirst: {
+            args: Prisma.ProviderCredentialFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCredentialPayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.ProviderCredentialFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCredentialPayload>
+          }
+          findMany: {
+            args: Prisma.ProviderCredentialFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCredentialPayload>[]
+          }
+          create: {
+            args: Prisma.ProviderCredentialCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCredentialPayload>
+          }
+          createMany: {
+            args: Prisma.ProviderCredentialCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.ProviderCredentialCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCredentialPayload>[]
+          }
+          delete: {
+            args: Prisma.ProviderCredentialDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCredentialPayload>
+          }
+          update: {
+            args: Prisma.ProviderCredentialUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCredentialPayload>
+          }
+          deleteMany: {
+            args: Prisma.ProviderCredentialDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.ProviderCredentialUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateManyAndReturn: {
+            args: Prisma.ProviderCredentialUpdateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCredentialPayload>[]
+          }
+          upsert: {
+            args: Prisma.ProviderCredentialUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ProviderCredentialPayload>
+          }
+          aggregate: {
+            args: Prisma.ProviderCredentialAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateProviderCredential>
+          }
+          groupBy: {
+            args: Prisma.ProviderCredentialGroupByArgs<ExtArgs>
+            result: $Utils.Optional<ProviderCredentialGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.ProviderCredentialCountArgs<ExtArgs>
+            result: $Utils.Optional<ProviderCredentialCountAggregateOutputType> | number
+          }
+        }
+      }
+      ModelPreference: {
+        payload: Prisma.$ModelPreferencePayload<ExtArgs>
+        fields: Prisma.ModelPreferenceFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.ModelPreferenceFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ModelPreferencePayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.ModelPreferenceFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ModelPreferencePayload>
+          }
+          findFirst: {
+            args: Prisma.ModelPreferenceFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ModelPreferencePayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.ModelPreferenceFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ModelPreferencePayload>
+          }
+          findMany: {
+            args: Prisma.ModelPreferenceFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ModelPreferencePayload>[]
+          }
+          create: {
+            args: Prisma.ModelPreferenceCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ModelPreferencePayload>
+          }
+          createMany: {
+            args: Prisma.ModelPreferenceCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.ModelPreferenceCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ModelPreferencePayload>[]
+          }
+          delete: {
+            args: Prisma.ModelPreferenceDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ModelPreferencePayload>
+          }
+          update: {
+            args: Prisma.ModelPreferenceUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ModelPreferencePayload>
+          }
+          deleteMany: {
+            args: Prisma.ModelPreferenceDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.ModelPreferenceUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateManyAndReturn: {
+            args: Prisma.ModelPreferenceUpdateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ModelPreferencePayload>[]
+          }
+          upsert: {
+            args: Prisma.ModelPreferenceUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ModelPreferencePayload>
+          }
+          aggregate: {
+            args: Prisma.ModelPreferenceAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateModelPreference>
+          }
+          groupBy: {
+            args: Prisma.ModelPreferenceGroupByArgs<ExtArgs>
+            result: $Utils.Optional<ModelPreferenceGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.ModelPreferenceCountArgs<ExtArgs>
+            result: $Utils.Optional<ModelPreferenceCountAggregateOutputType> | number
           }
         }
       }
@@ -1141,6 +1339,8 @@ export namespace Prisma {
   }
   export type GlobalOmitConfig = {
     user?: UserOmit
+    providerCredential?: ProviderCredentialOmit
+    modelPreference?: ModelPreferenceOmit
     session?: SessionOmit
     account?: AccountOmit
     verification?: VerificationOmit
@@ -1228,12 +1428,16 @@ export namespace Prisma {
     sessions: number
     accounts: number
     passkeys: number
+    credentials: number
+    modelPreferences: number
   }
 
   export type UserCountOutputTypeSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     sessions?: boolean | UserCountOutputTypeCountSessionsArgs
     accounts?: boolean | UserCountOutputTypeCountAccountsArgs
     passkeys?: boolean | UserCountOutputTypeCountPasskeysArgs
+    credentials?: boolean | UserCountOutputTypeCountCredentialsArgs
+    modelPreferences?: boolean | UserCountOutputTypeCountModelPreferencesArgs
   }
 
   // Custom InputTypes
@@ -1266,6 +1470,20 @@ export namespace Prisma {
    */
   export type UserCountOutputTypeCountPasskeysArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     where?: PasskeyWhereInput
+  }
+
+  /**
+   * UserCountOutputType without action
+   */
+  export type UserCountOutputTypeCountCredentialsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ProviderCredentialWhereInput
+  }
+
+  /**
+   * UserCountOutputType without action
+   */
+  export type UserCountOutputTypeCountModelPreferencesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ModelPreferenceWhereInput
   }
 
 
@@ -1456,6 +1674,8 @@ export namespace Prisma {
     sessions?: boolean | User$sessionsArgs<ExtArgs>
     accounts?: boolean | User$accountsArgs<ExtArgs>
     passkeys?: boolean | User$passkeysArgs<ExtArgs>
+    credentials?: boolean | User$credentialsArgs<ExtArgs>
+    modelPreferences?: boolean | User$modelPreferencesArgs<ExtArgs>
     _count?: boolean | UserCountOutputTypeDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["user"]>
 
@@ -1494,6 +1714,8 @@ export namespace Prisma {
     sessions?: boolean | User$sessionsArgs<ExtArgs>
     accounts?: boolean | User$accountsArgs<ExtArgs>
     passkeys?: boolean | User$passkeysArgs<ExtArgs>
+    credentials?: boolean | User$credentialsArgs<ExtArgs>
+    modelPreferences?: boolean | User$modelPreferencesArgs<ExtArgs>
     _count?: boolean | UserCountOutputTypeDefaultArgs<ExtArgs>
   }
   export type UserIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {}
@@ -1505,6 +1727,8 @@ export namespace Prisma {
       sessions: Prisma.$SessionPayload<ExtArgs>[]
       accounts: Prisma.$AccountPayload<ExtArgs>[]
       passkeys: Prisma.$PasskeyPayload<ExtArgs>[]
+      credentials: Prisma.$ProviderCredentialPayload<ExtArgs>[]
+      modelPreferences: Prisma.$ModelPreferencePayload<ExtArgs>[]
     }
     scalars: $Extensions.GetPayloadResult<{
       id: string
@@ -1911,6 +2135,8 @@ export namespace Prisma {
     sessions<T extends User$sessionsArgs<ExtArgs> = {}>(args?: Subset<T, User$sessionsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$SessionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     accounts<T extends User$accountsArgs<ExtArgs> = {}>(args?: Subset<T, User$accountsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$AccountPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     passkeys<T extends User$passkeysArgs<ExtArgs> = {}>(args?: Subset<T, User$passkeysArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$PasskeyPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    credentials<T extends User$credentialsArgs<ExtArgs> = {}>(args?: Subset<T, User$credentialsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ProviderCredentialPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    modelPreferences<T extends User$modelPreferencesArgs<ExtArgs> = {}>(args?: Subset<T, User$modelPreferencesArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ModelPreferencePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -2407,6 +2633,54 @@ export namespace Prisma {
   }
 
   /**
+   * User.credentials
+   */
+  export type User$credentialsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCredential
+     */
+    select?: ProviderCredentialSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCredential
+     */
+    omit?: ProviderCredentialOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ProviderCredentialInclude<ExtArgs> | null
+    where?: ProviderCredentialWhereInput
+    orderBy?: ProviderCredentialOrderByWithRelationInput | ProviderCredentialOrderByWithRelationInput[]
+    cursor?: ProviderCredentialWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: ProviderCredentialScalarFieldEnum | ProviderCredentialScalarFieldEnum[]
+  }
+
+  /**
+   * User.modelPreferences
+   */
+  export type User$modelPreferencesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ModelPreference
+     */
+    select?: ModelPreferenceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ModelPreference
+     */
+    omit?: ModelPreferenceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ModelPreferenceInclude<ExtArgs> | null
+    where?: ModelPreferenceWhereInput
+    orderBy?: ModelPreferenceOrderByWithRelationInput | ModelPreferenceOrderByWithRelationInput[]
+    cursor?: ModelPreferenceWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: ModelPreferenceScalarFieldEnum | ModelPreferenceScalarFieldEnum[]
+  }
+
+  /**
    * User without action
    */
   export type UserDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
@@ -2422,6 +2696,2174 @@ export namespace Prisma {
      * Choose, which related nodes to fetch as well
      */
     include?: UserInclude<ExtArgs> | null
+  }
+
+
+  /**
+   * Model ProviderCredential
+   */
+
+  export type AggregateProviderCredential = {
+    _count: ProviderCredentialCountAggregateOutputType | null
+    _min: ProviderCredentialMinAggregateOutputType | null
+    _max: ProviderCredentialMaxAggregateOutputType | null
+  }
+
+  export type ProviderCredentialMinAggregateOutputType = {
+    id: string | null
+    userId: string | null
+    provider: $Enums.AIProvider | null
+    encryptedConfig: string | null
+    isEnabled: boolean | null
+    createdAt: Date | null
+    updatedAt: Date | null
+  }
+
+  export type ProviderCredentialMaxAggregateOutputType = {
+    id: string | null
+    userId: string | null
+    provider: $Enums.AIProvider | null
+    encryptedConfig: string | null
+    isEnabled: boolean | null
+    createdAt: Date | null
+    updatedAt: Date | null
+  }
+
+  export type ProviderCredentialCountAggregateOutputType = {
+    id: number
+    userId: number
+    provider: number
+    encryptedConfig: number
+    isEnabled: number
+    createdAt: number
+    updatedAt: number
+    _all: number
+  }
+
+
+  export type ProviderCredentialMinAggregateInputType = {
+    id?: true
+    userId?: true
+    provider?: true
+    encryptedConfig?: true
+    isEnabled?: true
+    createdAt?: true
+    updatedAt?: true
+  }
+
+  export type ProviderCredentialMaxAggregateInputType = {
+    id?: true
+    userId?: true
+    provider?: true
+    encryptedConfig?: true
+    isEnabled?: true
+    createdAt?: true
+    updatedAt?: true
+  }
+
+  export type ProviderCredentialCountAggregateInputType = {
+    id?: true
+    userId?: true
+    provider?: true
+    encryptedConfig?: true
+    isEnabled?: true
+    createdAt?: true
+    updatedAt?: true
+    _all?: true
+  }
+
+  export type ProviderCredentialAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ProviderCredential to aggregate.
+     */
+    where?: ProviderCredentialWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ProviderCredentials to fetch.
+     */
+    orderBy?: ProviderCredentialOrderByWithRelationInput | ProviderCredentialOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: ProviderCredentialWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ProviderCredentials from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ProviderCredentials.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned ProviderCredentials
+    **/
+    _count?: true | ProviderCredentialCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: ProviderCredentialMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: ProviderCredentialMaxAggregateInputType
+  }
+
+  export type GetProviderCredentialAggregateType<T extends ProviderCredentialAggregateArgs> = {
+        [P in keyof T & keyof AggregateProviderCredential]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateProviderCredential[P]>
+      : GetScalarType<T[P], AggregateProviderCredential[P]>
+  }
+
+
+
+
+  export type ProviderCredentialGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ProviderCredentialWhereInput
+    orderBy?: ProviderCredentialOrderByWithAggregationInput | ProviderCredentialOrderByWithAggregationInput[]
+    by: ProviderCredentialScalarFieldEnum[] | ProviderCredentialScalarFieldEnum
+    having?: ProviderCredentialScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: ProviderCredentialCountAggregateInputType | true
+    _min?: ProviderCredentialMinAggregateInputType
+    _max?: ProviderCredentialMaxAggregateInputType
+  }
+
+  export type ProviderCredentialGroupByOutputType = {
+    id: string
+    userId: string
+    provider: $Enums.AIProvider
+    encryptedConfig: string
+    isEnabled: boolean
+    createdAt: Date
+    updatedAt: Date
+    _count: ProviderCredentialCountAggregateOutputType | null
+    _min: ProviderCredentialMinAggregateOutputType | null
+    _max: ProviderCredentialMaxAggregateOutputType | null
+  }
+
+  type GetProviderCredentialGroupByPayload<T extends ProviderCredentialGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<ProviderCredentialGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof ProviderCredentialGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], ProviderCredentialGroupByOutputType[P]>
+            : GetScalarType<T[P], ProviderCredentialGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type ProviderCredentialSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    userId?: boolean
+    provider?: boolean
+    encryptedConfig?: boolean
+    isEnabled?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+    user?: boolean | UserDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["providerCredential"]>
+
+  export type ProviderCredentialSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    userId?: boolean
+    provider?: boolean
+    encryptedConfig?: boolean
+    isEnabled?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+    user?: boolean | UserDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["providerCredential"]>
+
+  export type ProviderCredentialSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    userId?: boolean
+    provider?: boolean
+    encryptedConfig?: boolean
+    isEnabled?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+    user?: boolean | UserDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["providerCredential"]>
+
+  export type ProviderCredentialSelectScalar = {
+    id?: boolean
+    userId?: boolean
+    provider?: boolean
+    encryptedConfig?: boolean
+    isEnabled?: boolean
+    createdAt?: boolean
+    updatedAt?: boolean
+  }
+
+  export type ProviderCredentialOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "userId" | "provider" | "encryptedConfig" | "isEnabled" | "createdAt" | "updatedAt", ExtArgs["result"]["providerCredential"]>
+  export type ProviderCredentialInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    user?: boolean | UserDefaultArgs<ExtArgs>
+  }
+  export type ProviderCredentialIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    user?: boolean | UserDefaultArgs<ExtArgs>
+  }
+  export type ProviderCredentialIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    user?: boolean | UserDefaultArgs<ExtArgs>
+  }
+
+  export type $ProviderCredentialPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "ProviderCredential"
+    objects: {
+      user: Prisma.$UserPayload<ExtArgs>
+    }
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      userId: string
+      provider: $Enums.AIProvider
+      encryptedConfig: string
+      isEnabled: boolean
+      createdAt: Date
+      updatedAt: Date
+    }, ExtArgs["result"]["providerCredential"]>
+    composites: {}
+  }
+
+  type ProviderCredentialGetPayload<S extends boolean | null | undefined | ProviderCredentialDefaultArgs> = $Result.GetResult<Prisma.$ProviderCredentialPayload, S>
+
+  type ProviderCredentialCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    Omit<ProviderCredentialFindManyArgs, 'select' | 'include' | 'distinct' | 'omit'> & {
+      select?: ProviderCredentialCountAggregateInputType | true
+    }
+
+  export interface ProviderCredentialDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['ProviderCredential'], meta: { name: 'ProviderCredential' } }
+    /**
+     * Find zero or one ProviderCredential that matches the filter.
+     * @param {ProviderCredentialFindUniqueArgs} args - Arguments to find a ProviderCredential
+     * @example
+     * // Get one ProviderCredential
+     * const providerCredential = await prisma.providerCredential.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends ProviderCredentialFindUniqueArgs>(args: SelectSubset<T, ProviderCredentialFindUniqueArgs<ExtArgs>>): Prisma__ProviderCredentialClient<$Result.GetResult<Prisma.$ProviderCredentialPayload<ExtArgs>, T, "findUnique", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find one ProviderCredential that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {ProviderCredentialFindUniqueOrThrowArgs} args - Arguments to find a ProviderCredential
+     * @example
+     * // Get one ProviderCredential
+     * const providerCredential = await prisma.providerCredential.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends ProviderCredentialFindUniqueOrThrowArgs>(args: SelectSubset<T, ProviderCredentialFindUniqueOrThrowArgs<ExtArgs>>): Prisma__ProviderCredentialClient<$Result.GetResult<Prisma.$ProviderCredentialPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ProviderCredential that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProviderCredentialFindFirstArgs} args - Arguments to find a ProviderCredential
+     * @example
+     * // Get one ProviderCredential
+     * const providerCredential = await prisma.providerCredential.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends ProviderCredentialFindFirstArgs>(args?: SelectSubset<T, ProviderCredentialFindFirstArgs<ExtArgs>>): Prisma__ProviderCredentialClient<$Result.GetResult<Prisma.$ProviderCredentialPayload<ExtArgs>, T, "findFirst", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ProviderCredential that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProviderCredentialFindFirstOrThrowArgs} args - Arguments to find a ProviderCredential
+     * @example
+     * // Get one ProviderCredential
+     * const providerCredential = await prisma.providerCredential.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends ProviderCredentialFindFirstOrThrowArgs>(args?: SelectSubset<T, ProviderCredentialFindFirstOrThrowArgs<ExtArgs>>): Prisma__ProviderCredentialClient<$Result.GetResult<Prisma.$ProviderCredentialPayload<ExtArgs>, T, "findFirstOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find zero or more ProviderCredentials that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProviderCredentialFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all ProviderCredentials
+     * const providerCredentials = await prisma.providerCredential.findMany()
+     * 
+     * // Get first 10 ProviderCredentials
+     * const providerCredentials = await prisma.providerCredential.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const providerCredentialWithIdOnly = await prisma.providerCredential.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends ProviderCredentialFindManyArgs>(args?: SelectSubset<T, ProviderCredentialFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ProviderCredentialPayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
+
+    /**
+     * Create a ProviderCredential.
+     * @param {ProviderCredentialCreateArgs} args - Arguments to create a ProviderCredential.
+     * @example
+     * // Create one ProviderCredential
+     * const ProviderCredential = await prisma.providerCredential.create({
+     *   data: {
+     *     // ... data to create a ProviderCredential
+     *   }
+     * })
+     * 
+     */
+    create<T extends ProviderCredentialCreateArgs>(args: SelectSubset<T, ProviderCredentialCreateArgs<ExtArgs>>): Prisma__ProviderCredentialClient<$Result.GetResult<Prisma.$ProviderCredentialPayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Create many ProviderCredentials.
+     * @param {ProviderCredentialCreateManyArgs} args - Arguments to create many ProviderCredentials.
+     * @example
+     * // Create many ProviderCredentials
+     * const providerCredential = await prisma.providerCredential.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends ProviderCredentialCreateManyArgs>(args?: SelectSubset<T, ProviderCredentialCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many ProviderCredentials and returns the data saved in the database.
+     * @param {ProviderCredentialCreateManyAndReturnArgs} args - Arguments to create many ProviderCredentials.
+     * @example
+     * // Create many ProviderCredentials
+     * const providerCredential = await prisma.providerCredential.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many ProviderCredentials and only return the `id`
+     * const providerCredentialWithIdOnly = await prisma.providerCredential.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends ProviderCredentialCreateManyAndReturnArgs>(args?: SelectSubset<T, ProviderCredentialCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ProviderCredentialPayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Delete a ProviderCredential.
+     * @param {ProviderCredentialDeleteArgs} args - Arguments to delete one ProviderCredential.
+     * @example
+     * // Delete one ProviderCredential
+     * const ProviderCredential = await prisma.providerCredential.delete({
+     *   where: {
+     *     // ... filter to delete one ProviderCredential
+     *   }
+     * })
+     * 
+     */
+    delete<T extends ProviderCredentialDeleteArgs>(args: SelectSubset<T, ProviderCredentialDeleteArgs<ExtArgs>>): Prisma__ProviderCredentialClient<$Result.GetResult<Prisma.$ProviderCredentialPayload<ExtArgs>, T, "delete", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Update one ProviderCredential.
+     * @param {ProviderCredentialUpdateArgs} args - Arguments to update one ProviderCredential.
+     * @example
+     * // Update one ProviderCredential
+     * const providerCredential = await prisma.providerCredential.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends ProviderCredentialUpdateArgs>(args: SelectSubset<T, ProviderCredentialUpdateArgs<ExtArgs>>): Prisma__ProviderCredentialClient<$Result.GetResult<Prisma.$ProviderCredentialPayload<ExtArgs>, T, "update", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Delete zero or more ProviderCredentials.
+     * @param {ProviderCredentialDeleteManyArgs} args - Arguments to filter ProviderCredentials to delete.
+     * @example
+     * // Delete a few ProviderCredentials
+     * const { count } = await prisma.providerCredential.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends ProviderCredentialDeleteManyArgs>(args?: SelectSubset<T, ProviderCredentialDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ProviderCredentials.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProviderCredentialUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many ProviderCredentials
+     * const providerCredential = await prisma.providerCredential.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends ProviderCredentialUpdateManyArgs>(args: SelectSubset<T, ProviderCredentialUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ProviderCredentials and returns the data updated in the database.
+     * @param {ProviderCredentialUpdateManyAndReturnArgs} args - Arguments to update many ProviderCredentials.
+     * @example
+     * // Update many ProviderCredentials
+     * const providerCredential = await prisma.providerCredential.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Update zero or more ProviderCredentials and only return the `id`
+     * const providerCredentialWithIdOnly = await prisma.providerCredential.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    updateManyAndReturn<T extends ProviderCredentialUpdateManyAndReturnArgs>(args: SelectSubset<T, ProviderCredentialUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ProviderCredentialPayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Create or update one ProviderCredential.
+     * @param {ProviderCredentialUpsertArgs} args - Arguments to update or create a ProviderCredential.
+     * @example
+     * // Update or create a ProviderCredential
+     * const providerCredential = await prisma.providerCredential.upsert({
+     *   create: {
+     *     // ... data to create a ProviderCredential
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the ProviderCredential we want to update
+     *   }
+     * })
+     */
+    upsert<T extends ProviderCredentialUpsertArgs>(args: SelectSubset<T, ProviderCredentialUpsertArgs<ExtArgs>>): Prisma__ProviderCredentialClient<$Result.GetResult<Prisma.$ProviderCredentialPayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+
+    /**
+     * Count the number of ProviderCredentials.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProviderCredentialCountArgs} args - Arguments to filter ProviderCredentials to count.
+     * @example
+     * // Count the number of ProviderCredentials
+     * const count = await prisma.providerCredential.count({
+     *   where: {
+     *     // ... the filter for the ProviderCredentials we want to count
+     *   }
+     * })
+    **/
+    count<T extends ProviderCredentialCountArgs>(
+      args?: Subset<T, ProviderCredentialCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], ProviderCredentialCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a ProviderCredential.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProviderCredentialAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends ProviderCredentialAggregateArgs>(args: Subset<T, ProviderCredentialAggregateArgs>): Prisma.PrismaPromise<GetProviderCredentialAggregateType<T>>
+
+    /**
+     * Group by ProviderCredential.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ProviderCredentialGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends ProviderCredentialGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: ProviderCredentialGroupByArgs['orderBy'] }
+        : { orderBy?: ProviderCredentialGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, ProviderCredentialGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetProviderCredentialGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the ProviderCredential model
+   */
+  readonly fields: ProviderCredentialFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for ProviderCredential.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__ProviderCredentialClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    user<T extends UserDefaultArgs<ExtArgs> = {}>(args?: Subset<T, UserDefaultArgs<ExtArgs>>): Prisma__UserClient<$Result.GetResult<Prisma.$UserPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the ProviderCredential model
+   */
+  interface ProviderCredentialFieldRefs {
+    readonly id: FieldRef<"ProviderCredential", 'String'>
+    readonly userId: FieldRef<"ProviderCredential", 'String'>
+    readonly provider: FieldRef<"ProviderCredential", 'AIProvider'>
+    readonly encryptedConfig: FieldRef<"ProviderCredential", 'String'>
+    readonly isEnabled: FieldRef<"ProviderCredential", 'Boolean'>
+    readonly createdAt: FieldRef<"ProviderCredential", 'DateTime'>
+    readonly updatedAt: FieldRef<"ProviderCredential", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * ProviderCredential findUnique
+   */
+  export type ProviderCredentialFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCredential
+     */
+    select?: ProviderCredentialSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCredential
+     */
+    omit?: ProviderCredentialOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ProviderCredentialInclude<ExtArgs> | null
+    /**
+     * Filter, which ProviderCredential to fetch.
+     */
+    where: ProviderCredentialWhereUniqueInput
+  }
+
+  /**
+   * ProviderCredential findUniqueOrThrow
+   */
+  export type ProviderCredentialFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCredential
+     */
+    select?: ProviderCredentialSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCredential
+     */
+    omit?: ProviderCredentialOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ProviderCredentialInclude<ExtArgs> | null
+    /**
+     * Filter, which ProviderCredential to fetch.
+     */
+    where: ProviderCredentialWhereUniqueInput
+  }
+
+  /**
+   * ProviderCredential findFirst
+   */
+  export type ProviderCredentialFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCredential
+     */
+    select?: ProviderCredentialSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCredential
+     */
+    omit?: ProviderCredentialOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ProviderCredentialInclude<ExtArgs> | null
+    /**
+     * Filter, which ProviderCredential to fetch.
+     */
+    where?: ProviderCredentialWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ProviderCredentials to fetch.
+     */
+    orderBy?: ProviderCredentialOrderByWithRelationInput | ProviderCredentialOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ProviderCredentials.
+     */
+    cursor?: ProviderCredentialWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ProviderCredentials from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ProviderCredentials.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ProviderCredentials.
+     */
+    distinct?: ProviderCredentialScalarFieldEnum | ProviderCredentialScalarFieldEnum[]
+  }
+
+  /**
+   * ProviderCredential findFirstOrThrow
+   */
+  export type ProviderCredentialFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCredential
+     */
+    select?: ProviderCredentialSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCredential
+     */
+    omit?: ProviderCredentialOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ProviderCredentialInclude<ExtArgs> | null
+    /**
+     * Filter, which ProviderCredential to fetch.
+     */
+    where?: ProviderCredentialWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ProviderCredentials to fetch.
+     */
+    orderBy?: ProviderCredentialOrderByWithRelationInput | ProviderCredentialOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ProviderCredentials.
+     */
+    cursor?: ProviderCredentialWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ProviderCredentials from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ProviderCredentials.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ProviderCredentials.
+     */
+    distinct?: ProviderCredentialScalarFieldEnum | ProviderCredentialScalarFieldEnum[]
+  }
+
+  /**
+   * ProviderCredential findMany
+   */
+  export type ProviderCredentialFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCredential
+     */
+    select?: ProviderCredentialSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCredential
+     */
+    omit?: ProviderCredentialOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ProviderCredentialInclude<ExtArgs> | null
+    /**
+     * Filter, which ProviderCredentials to fetch.
+     */
+    where?: ProviderCredentialWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ProviderCredentials to fetch.
+     */
+    orderBy?: ProviderCredentialOrderByWithRelationInput | ProviderCredentialOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing ProviderCredentials.
+     */
+    cursor?: ProviderCredentialWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ProviderCredentials from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ProviderCredentials.
+     */
+    skip?: number
+    distinct?: ProviderCredentialScalarFieldEnum | ProviderCredentialScalarFieldEnum[]
+  }
+
+  /**
+   * ProviderCredential create
+   */
+  export type ProviderCredentialCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCredential
+     */
+    select?: ProviderCredentialSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCredential
+     */
+    omit?: ProviderCredentialOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ProviderCredentialInclude<ExtArgs> | null
+    /**
+     * The data needed to create a ProviderCredential.
+     */
+    data: XOR<ProviderCredentialCreateInput, ProviderCredentialUncheckedCreateInput>
+  }
+
+  /**
+   * ProviderCredential createMany
+   */
+  export type ProviderCredentialCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many ProviderCredentials.
+     */
+    data: ProviderCredentialCreateManyInput | ProviderCredentialCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * ProviderCredential createManyAndReturn
+   */
+  export type ProviderCredentialCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCredential
+     */
+    select?: ProviderCredentialSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCredential
+     */
+    omit?: ProviderCredentialOmit<ExtArgs> | null
+    /**
+     * The data used to create many ProviderCredentials.
+     */
+    data: ProviderCredentialCreateManyInput | ProviderCredentialCreateManyInput[]
+    skipDuplicates?: boolean
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ProviderCredentialIncludeCreateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * ProviderCredential update
+   */
+  export type ProviderCredentialUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCredential
+     */
+    select?: ProviderCredentialSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCredential
+     */
+    omit?: ProviderCredentialOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ProviderCredentialInclude<ExtArgs> | null
+    /**
+     * The data needed to update a ProviderCredential.
+     */
+    data: XOR<ProviderCredentialUpdateInput, ProviderCredentialUncheckedUpdateInput>
+    /**
+     * Choose, which ProviderCredential to update.
+     */
+    where: ProviderCredentialWhereUniqueInput
+  }
+
+  /**
+   * ProviderCredential updateMany
+   */
+  export type ProviderCredentialUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update ProviderCredentials.
+     */
+    data: XOR<ProviderCredentialUpdateManyMutationInput, ProviderCredentialUncheckedUpdateManyInput>
+    /**
+     * Filter which ProviderCredentials to update
+     */
+    where?: ProviderCredentialWhereInput
+    /**
+     * Limit how many ProviderCredentials to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * ProviderCredential updateManyAndReturn
+   */
+  export type ProviderCredentialUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCredential
+     */
+    select?: ProviderCredentialSelectUpdateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCredential
+     */
+    omit?: ProviderCredentialOmit<ExtArgs> | null
+    /**
+     * The data used to update ProviderCredentials.
+     */
+    data: XOR<ProviderCredentialUpdateManyMutationInput, ProviderCredentialUncheckedUpdateManyInput>
+    /**
+     * Filter which ProviderCredentials to update
+     */
+    where?: ProviderCredentialWhereInput
+    /**
+     * Limit how many ProviderCredentials to update.
+     */
+    limit?: number
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ProviderCredentialIncludeUpdateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * ProviderCredential upsert
+   */
+  export type ProviderCredentialUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCredential
+     */
+    select?: ProviderCredentialSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCredential
+     */
+    omit?: ProviderCredentialOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ProviderCredentialInclude<ExtArgs> | null
+    /**
+     * The filter to search for the ProviderCredential to update in case it exists.
+     */
+    where: ProviderCredentialWhereUniqueInput
+    /**
+     * In case the ProviderCredential found by the `where` argument doesn't exist, create a new ProviderCredential with this data.
+     */
+    create: XOR<ProviderCredentialCreateInput, ProviderCredentialUncheckedCreateInput>
+    /**
+     * In case the ProviderCredential was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<ProviderCredentialUpdateInput, ProviderCredentialUncheckedUpdateInput>
+  }
+
+  /**
+   * ProviderCredential delete
+   */
+  export type ProviderCredentialDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCredential
+     */
+    select?: ProviderCredentialSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCredential
+     */
+    omit?: ProviderCredentialOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ProviderCredentialInclude<ExtArgs> | null
+    /**
+     * Filter which ProviderCredential to delete.
+     */
+    where: ProviderCredentialWhereUniqueInput
+  }
+
+  /**
+   * ProviderCredential deleteMany
+   */
+  export type ProviderCredentialDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ProviderCredentials to delete
+     */
+    where?: ProviderCredentialWhereInput
+    /**
+     * Limit how many ProviderCredentials to delete.
+     */
+    limit?: number
+  }
+
+  /**
+   * ProviderCredential without action
+   */
+  export type ProviderCredentialDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProviderCredential
+     */
+    select?: ProviderCredentialSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ProviderCredential
+     */
+    omit?: ProviderCredentialOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ProviderCredentialInclude<ExtArgs> | null
+  }
+
+
+  /**
+   * Model ModelPreference
+   */
+
+  export type AggregateModelPreference = {
+    _count: ModelPreferenceCountAggregateOutputType | null
+    _min: ModelPreferenceMinAggregateOutputType | null
+    _max: ModelPreferenceMaxAggregateOutputType | null
+  }
+
+  export type ModelPreferenceMinAggregateOutputType = {
+    id: string | null
+    userId: string | null
+    provider: $Enums.AIProvider | null
+    modelId: string | null
+    isCustom: boolean | null
+    isEnabled: boolean | null
+    createdAt: Date | null
+  }
+
+  export type ModelPreferenceMaxAggregateOutputType = {
+    id: string | null
+    userId: string | null
+    provider: $Enums.AIProvider | null
+    modelId: string | null
+    isCustom: boolean | null
+    isEnabled: boolean | null
+    createdAt: Date | null
+  }
+
+  export type ModelPreferenceCountAggregateOutputType = {
+    id: number
+    userId: number
+    provider: number
+    modelId: number
+    isCustom: number
+    isEnabled: number
+    createdAt: number
+    _all: number
+  }
+
+
+  export type ModelPreferenceMinAggregateInputType = {
+    id?: true
+    userId?: true
+    provider?: true
+    modelId?: true
+    isCustom?: true
+    isEnabled?: true
+    createdAt?: true
+  }
+
+  export type ModelPreferenceMaxAggregateInputType = {
+    id?: true
+    userId?: true
+    provider?: true
+    modelId?: true
+    isCustom?: true
+    isEnabled?: true
+    createdAt?: true
+  }
+
+  export type ModelPreferenceCountAggregateInputType = {
+    id?: true
+    userId?: true
+    provider?: true
+    modelId?: true
+    isCustom?: true
+    isEnabled?: true
+    createdAt?: true
+    _all?: true
+  }
+
+  export type ModelPreferenceAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ModelPreference to aggregate.
+     */
+    where?: ModelPreferenceWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ModelPreferences to fetch.
+     */
+    orderBy?: ModelPreferenceOrderByWithRelationInput | ModelPreferenceOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: ModelPreferenceWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ModelPreferences from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ModelPreferences.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned ModelPreferences
+    **/
+    _count?: true | ModelPreferenceCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: ModelPreferenceMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: ModelPreferenceMaxAggregateInputType
+  }
+
+  export type GetModelPreferenceAggregateType<T extends ModelPreferenceAggregateArgs> = {
+        [P in keyof T & keyof AggregateModelPreference]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateModelPreference[P]>
+      : GetScalarType<T[P], AggregateModelPreference[P]>
+  }
+
+
+
+
+  export type ModelPreferenceGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ModelPreferenceWhereInput
+    orderBy?: ModelPreferenceOrderByWithAggregationInput | ModelPreferenceOrderByWithAggregationInput[]
+    by: ModelPreferenceScalarFieldEnum[] | ModelPreferenceScalarFieldEnum
+    having?: ModelPreferenceScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: ModelPreferenceCountAggregateInputType | true
+    _min?: ModelPreferenceMinAggregateInputType
+    _max?: ModelPreferenceMaxAggregateInputType
+  }
+
+  export type ModelPreferenceGroupByOutputType = {
+    id: string
+    userId: string
+    provider: $Enums.AIProvider
+    modelId: string
+    isCustom: boolean
+    isEnabled: boolean
+    createdAt: Date
+    _count: ModelPreferenceCountAggregateOutputType | null
+    _min: ModelPreferenceMinAggregateOutputType | null
+    _max: ModelPreferenceMaxAggregateOutputType | null
+  }
+
+  type GetModelPreferenceGroupByPayload<T extends ModelPreferenceGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<ModelPreferenceGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof ModelPreferenceGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], ModelPreferenceGroupByOutputType[P]>
+            : GetScalarType<T[P], ModelPreferenceGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type ModelPreferenceSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    userId?: boolean
+    provider?: boolean
+    modelId?: boolean
+    isCustom?: boolean
+    isEnabled?: boolean
+    createdAt?: boolean
+    user?: boolean | UserDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["modelPreference"]>
+
+  export type ModelPreferenceSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    userId?: boolean
+    provider?: boolean
+    modelId?: boolean
+    isCustom?: boolean
+    isEnabled?: boolean
+    createdAt?: boolean
+    user?: boolean | UserDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["modelPreference"]>
+
+  export type ModelPreferenceSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    userId?: boolean
+    provider?: boolean
+    modelId?: boolean
+    isCustom?: boolean
+    isEnabled?: boolean
+    createdAt?: boolean
+    user?: boolean | UserDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["modelPreference"]>
+
+  export type ModelPreferenceSelectScalar = {
+    id?: boolean
+    userId?: boolean
+    provider?: boolean
+    modelId?: boolean
+    isCustom?: boolean
+    isEnabled?: boolean
+    createdAt?: boolean
+  }
+
+  export type ModelPreferenceOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "userId" | "provider" | "modelId" | "isCustom" | "isEnabled" | "createdAt", ExtArgs["result"]["modelPreference"]>
+  export type ModelPreferenceInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    user?: boolean | UserDefaultArgs<ExtArgs>
+  }
+  export type ModelPreferenceIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    user?: boolean | UserDefaultArgs<ExtArgs>
+  }
+  export type ModelPreferenceIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    user?: boolean | UserDefaultArgs<ExtArgs>
+  }
+
+  export type $ModelPreferencePayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "ModelPreference"
+    objects: {
+      user: Prisma.$UserPayload<ExtArgs>
+    }
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      userId: string
+      provider: $Enums.AIProvider
+      modelId: string
+      isCustom: boolean
+      isEnabled: boolean
+      createdAt: Date
+    }, ExtArgs["result"]["modelPreference"]>
+    composites: {}
+  }
+
+  type ModelPreferenceGetPayload<S extends boolean | null | undefined | ModelPreferenceDefaultArgs> = $Result.GetResult<Prisma.$ModelPreferencePayload, S>
+
+  type ModelPreferenceCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    Omit<ModelPreferenceFindManyArgs, 'select' | 'include' | 'distinct' | 'omit'> & {
+      select?: ModelPreferenceCountAggregateInputType | true
+    }
+
+  export interface ModelPreferenceDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['ModelPreference'], meta: { name: 'ModelPreference' } }
+    /**
+     * Find zero or one ModelPreference that matches the filter.
+     * @param {ModelPreferenceFindUniqueArgs} args - Arguments to find a ModelPreference
+     * @example
+     * // Get one ModelPreference
+     * const modelPreference = await prisma.modelPreference.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends ModelPreferenceFindUniqueArgs>(args: SelectSubset<T, ModelPreferenceFindUniqueArgs<ExtArgs>>): Prisma__ModelPreferenceClient<$Result.GetResult<Prisma.$ModelPreferencePayload<ExtArgs>, T, "findUnique", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find one ModelPreference that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {ModelPreferenceFindUniqueOrThrowArgs} args - Arguments to find a ModelPreference
+     * @example
+     * // Get one ModelPreference
+     * const modelPreference = await prisma.modelPreference.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends ModelPreferenceFindUniqueOrThrowArgs>(args: SelectSubset<T, ModelPreferenceFindUniqueOrThrowArgs<ExtArgs>>): Prisma__ModelPreferenceClient<$Result.GetResult<Prisma.$ModelPreferencePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ModelPreference that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ModelPreferenceFindFirstArgs} args - Arguments to find a ModelPreference
+     * @example
+     * // Get one ModelPreference
+     * const modelPreference = await prisma.modelPreference.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends ModelPreferenceFindFirstArgs>(args?: SelectSubset<T, ModelPreferenceFindFirstArgs<ExtArgs>>): Prisma__ModelPreferenceClient<$Result.GetResult<Prisma.$ModelPreferencePayload<ExtArgs>, T, "findFirst", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ModelPreference that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ModelPreferenceFindFirstOrThrowArgs} args - Arguments to find a ModelPreference
+     * @example
+     * // Get one ModelPreference
+     * const modelPreference = await prisma.modelPreference.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends ModelPreferenceFindFirstOrThrowArgs>(args?: SelectSubset<T, ModelPreferenceFindFirstOrThrowArgs<ExtArgs>>): Prisma__ModelPreferenceClient<$Result.GetResult<Prisma.$ModelPreferencePayload<ExtArgs>, T, "findFirstOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find zero or more ModelPreferences that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ModelPreferenceFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all ModelPreferences
+     * const modelPreferences = await prisma.modelPreference.findMany()
+     * 
+     * // Get first 10 ModelPreferences
+     * const modelPreferences = await prisma.modelPreference.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const modelPreferenceWithIdOnly = await prisma.modelPreference.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends ModelPreferenceFindManyArgs>(args?: SelectSubset<T, ModelPreferenceFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ModelPreferencePayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
+
+    /**
+     * Create a ModelPreference.
+     * @param {ModelPreferenceCreateArgs} args - Arguments to create a ModelPreference.
+     * @example
+     * // Create one ModelPreference
+     * const ModelPreference = await prisma.modelPreference.create({
+     *   data: {
+     *     // ... data to create a ModelPreference
+     *   }
+     * })
+     * 
+     */
+    create<T extends ModelPreferenceCreateArgs>(args: SelectSubset<T, ModelPreferenceCreateArgs<ExtArgs>>): Prisma__ModelPreferenceClient<$Result.GetResult<Prisma.$ModelPreferencePayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Create many ModelPreferences.
+     * @param {ModelPreferenceCreateManyArgs} args - Arguments to create many ModelPreferences.
+     * @example
+     * // Create many ModelPreferences
+     * const modelPreference = await prisma.modelPreference.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends ModelPreferenceCreateManyArgs>(args?: SelectSubset<T, ModelPreferenceCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many ModelPreferences and returns the data saved in the database.
+     * @param {ModelPreferenceCreateManyAndReturnArgs} args - Arguments to create many ModelPreferences.
+     * @example
+     * // Create many ModelPreferences
+     * const modelPreference = await prisma.modelPreference.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many ModelPreferences and only return the `id`
+     * const modelPreferenceWithIdOnly = await prisma.modelPreference.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends ModelPreferenceCreateManyAndReturnArgs>(args?: SelectSubset<T, ModelPreferenceCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ModelPreferencePayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Delete a ModelPreference.
+     * @param {ModelPreferenceDeleteArgs} args - Arguments to delete one ModelPreference.
+     * @example
+     * // Delete one ModelPreference
+     * const ModelPreference = await prisma.modelPreference.delete({
+     *   where: {
+     *     // ... filter to delete one ModelPreference
+     *   }
+     * })
+     * 
+     */
+    delete<T extends ModelPreferenceDeleteArgs>(args: SelectSubset<T, ModelPreferenceDeleteArgs<ExtArgs>>): Prisma__ModelPreferenceClient<$Result.GetResult<Prisma.$ModelPreferencePayload<ExtArgs>, T, "delete", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Update one ModelPreference.
+     * @param {ModelPreferenceUpdateArgs} args - Arguments to update one ModelPreference.
+     * @example
+     * // Update one ModelPreference
+     * const modelPreference = await prisma.modelPreference.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends ModelPreferenceUpdateArgs>(args: SelectSubset<T, ModelPreferenceUpdateArgs<ExtArgs>>): Prisma__ModelPreferenceClient<$Result.GetResult<Prisma.$ModelPreferencePayload<ExtArgs>, T, "update", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Delete zero or more ModelPreferences.
+     * @param {ModelPreferenceDeleteManyArgs} args - Arguments to filter ModelPreferences to delete.
+     * @example
+     * // Delete a few ModelPreferences
+     * const { count } = await prisma.modelPreference.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends ModelPreferenceDeleteManyArgs>(args?: SelectSubset<T, ModelPreferenceDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ModelPreferences.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ModelPreferenceUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many ModelPreferences
+     * const modelPreference = await prisma.modelPreference.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends ModelPreferenceUpdateManyArgs>(args: SelectSubset<T, ModelPreferenceUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ModelPreferences and returns the data updated in the database.
+     * @param {ModelPreferenceUpdateManyAndReturnArgs} args - Arguments to update many ModelPreferences.
+     * @example
+     * // Update many ModelPreferences
+     * const modelPreference = await prisma.modelPreference.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Update zero or more ModelPreferences and only return the `id`
+     * const modelPreferenceWithIdOnly = await prisma.modelPreference.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    updateManyAndReturn<T extends ModelPreferenceUpdateManyAndReturnArgs>(args: SelectSubset<T, ModelPreferenceUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ModelPreferencePayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Create or update one ModelPreference.
+     * @param {ModelPreferenceUpsertArgs} args - Arguments to update or create a ModelPreference.
+     * @example
+     * // Update or create a ModelPreference
+     * const modelPreference = await prisma.modelPreference.upsert({
+     *   create: {
+     *     // ... data to create a ModelPreference
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the ModelPreference we want to update
+     *   }
+     * })
+     */
+    upsert<T extends ModelPreferenceUpsertArgs>(args: SelectSubset<T, ModelPreferenceUpsertArgs<ExtArgs>>): Prisma__ModelPreferenceClient<$Result.GetResult<Prisma.$ModelPreferencePayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+
+    /**
+     * Count the number of ModelPreferences.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ModelPreferenceCountArgs} args - Arguments to filter ModelPreferences to count.
+     * @example
+     * // Count the number of ModelPreferences
+     * const count = await prisma.modelPreference.count({
+     *   where: {
+     *     // ... the filter for the ModelPreferences we want to count
+     *   }
+     * })
+    **/
+    count<T extends ModelPreferenceCountArgs>(
+      args?: Subset<T, ModelPreferenceCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], ModelPreferenceCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a ModelPreference.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ModelPreferenceAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends ModelPreferenceAggregateArgs>(args: Subset<T, ModelPreferenceAggregateArgs>): Prisma.PrismaPromise<GetModelPreferenceAggregateType<T>>
+
+    /**
+     * Group by ModelPreference.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ModelPreferenceGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends ModelPreferenceGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: ModelPreferenceGroupByArgs['orderBy'] }
+        : { orderBy?: ModelPreferenceGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, ModelPreferenceGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetModelPreferenceGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the ModelPreference model
+   */
+  readonly fields: ModelPreferenceFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for ModelPreference.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__ModelPreferenceClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    user<T extends UserDefaultArgs<ExtArgs> = {}>(args?: Subset<T, UserDefaultArgs<ExtArgs>>): Prisma__UserClient<$Result.GetResult<Prisma.$UserPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the ModelPreference model
+   */
+  interface ModelPreferenceFieldRefs {
+    readonly id: FieldRef<"ModelPreference", 'String'>
+    readonly userId: FieldRef<"ModelPreference", 'String'>
+    readonly provider: FieldRef<"ModelPreference", 'AIProvider'>
+    readonly modelId: FieldRef<"ModelPreference", 'String'>
+    readonly isCustom: FieldRef<"ModelPreference", 'Boolean'>
+    readonly isEnabled: FieldRef<"ModelPreference", 'Boolean'>
+    readonly createdAt: FieldRef<"ModelPreference", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * ModelPreference findUnique
+   */
+  export type ModelPreferenceFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ModelPreference
+     */
+    select?: ModelPreferenceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ModelPreference
+     */
+    omit?: ModelPreferenceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ModelPreferenceInclude<ExtArgs> | null
+    /**
+     * Filter, which ModelPreference to fetch.
+     */
+    where: ModelPreferenceWhereUniqueInput
+  }
+
+  /**
+   * ModelPreference findUniqueOrThrow
+   */
+  export type ModelPreferenceFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ModelPreference
+     */
+    select?: ModelPreferenceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ModelPreference
+     */
+    omit?: ModelPreferenceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ModelPreferenceInclude<ExtArgs> | null
+    /**
+     * Filter, which ModelPreference to fetch.
+     */
+    where: ModelPreferenceWhereUniqueInput
+  }
+
+  /**
+   * ModelPreference findFirst
+   */
+  export type ModelPreferenceFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ModelPreference
+     */
+    select?: ModelPreferenceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ModelPreference
+     */
+    omit?: ModelPreferenceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ModelPreferenceInclude<ExtArgs> | null
+    /**
+     * Filter, which ModelPreference to fetch.
+     */
+    where?: ModelPreferenceWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ModelPreferences to fetch.
+     */
+    orderBy?: ModelPreferenceOrderByWithRelationInput | ModelPreferenceOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ModelPreferences.
+     */
+    cursor?: ModelPreferenceWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ModelPreferences from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ModelPreferences.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ModelPreferences.
+     */
+    distinct?: ModelPreferenceScalarFieldEnum | ModelPreferenceScalarFieldEnum[]
+  }
+
+  /**
+   * ModelPreference findFirstOrThrow
+   */
+  export type ModelPreferenceFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ModelPreference
+     */
+    select?: ModelPreferenceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ModelPreference
+     */
+    omit?: ModelPreferenceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ModelPreferenceInclude<ExtArgs> | null
+    /**
+     * Filter, which ModelPreference to fetch.
+     */
+    where?: ModelPreferenceWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ModelPreferences to fetch.
+     */
+    orderBy?: ModelPreferenceOrderByWithRelationInput | ModelPreferenceOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ModelPreferences.
+     */
+    cursor?: ModelPreferenceWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ModelPreferences from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ModelPreferences.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ModelPreferences.
+     */
+    distinct?: ModelPreferenceScalarFieldEnum | ModelPreferenceScalarFieldEnum[]
+  }
+
+  /**
+   * ModelPreference findMany
+   */
+  export type ModelPreferenceFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ModelPreference
+     */
+    select?: ModelPreferenceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ModelPreference
+     */
+    omit?: ModelPreferenceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ModelPreferenceInclude<ExtArgs> | null
+    /**
+     * Filter, which ModelPreferences to fetch.
+     */
+    where?: ModelPreferenceWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ModelPreferences to fetch.
+     */
+    orderBy?: ModelPreferenceOrderByWithRelationInput | ModelPreferenceOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing ModelPreferences.
+     */
+    cursor?: ModelPreferenceWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ModelPreferences from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ModelPreferences.
+     */
+    skip?: number
+    distinct?: ModelPreferenceScalarFieldEnum | ModelPreferenceScalarFieldEnum[]
+  }
+
+  /**
+   * ModelPreference create
+   */
+  export type ModelPreferenceCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ModelPreference
+     */
+    select?: ModelPreferenceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ModelPreference
+     */
+    omit?: ModelPreferenceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ModelPreferenceInclude<ExtArgs> | null
+    /**
+     * The data needed to create a ModelPreference.
+     */
+    data: XOR<ModelPreferenceCreateInput, ModelPreferenceUncheckedCreateInput>
+  }
+
+  /**
+   * ModelPreference createMany
+   */
+  export type ModelPreferenceCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many ModelPreferences.
+     */
+    data: ModelPreferenceCreateManyInput | ModelPreferenceCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * ModelPreference createManyAndReturn
+   */
+  export type ModelPreferenceCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ModelPreference
+     */
+    select?: ModelPreferenceSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ModelPreference
+     */
+    omit?: ModelPreferenceOmit<ExtArgs> | null
+    /**
+     * The data used to create many ModelPreferences.
+     */
+    data: ModelPreferenceCreateManyInput | ModelPreferenceCreateManyInput[]
+    skipDuplicates?: boolean
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ModelPreferenceIncludeCreateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * ModelPreference update
+   */
+  export type ModelPreferenceUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ModelPreference
+     */
+    select?: ModelPreferenceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ModelPreference
+     */
+    omit?: ModelPreferenceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ModelPreferenceInclude<ExtArgs> | null
+    /**
+     * The data needed to update a ModelPreference.
+     */
+    data: XOR<ModelPreferenceUpdateInput, ModelPreferenceUncheckedUpdateInput>
+    /**
+     * Choose, which ModelPreference to update.
+     */
+    where: ModelPreferenceWhereUniqueInput
+  }
+
+  /**
+   * ModelPreference updateMany
+   */
+  export type ModelPreferenceUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update ModelPreferences.
+     */
+    data: XOR<ModelPreferenceUpdateManyMutationInput, ModelPreferenceUncheckedUpdateManyInput>
+    /**
+     * Filter which ModelPreferences to update
+     */
+    where?: ModelPreferenceWhereInput
+    /**
+     * Limit how many ModelPreferences to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * ModelPreference updateManyAndReturn
+   */
+  export type ModelPreferenceUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ModelPreference
+     */
+    select?: ModelPreferenceSelectUpdateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ModelPreference
+     */
+    omit?: ModelPreferenceOmit<ExtArgs> | null
+    /**
+     * The data used to update ModelPreferences.
+     */
+    data: XOR<ModelPreferenceUpdateManyMutationInput, ModelPreferenceUncheckedUpdateManyInput>
+    /**
+     * Filter which ModelPreferences to update
+     */
+    where?: ModelPreferenceWhereInput
+    /**
+     * Limit how many ModelPreferences to update.
+     */
+    limit?: number
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ModelPreferenceIncludeUpdateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * ModelPreference upsert
+   */
+  export type ModelPreferenceUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ModelPreference
+     */
+    select?: ModelPreferenceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ModelPreference
+     */
+    omit?: ModelPreferenceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ModelPreferenceInclude<ExtArgs> | null
+    /**
+     * The filter to search for the ModelPreference to update in case it exists.
+     */
+    where: ModelPreferenceWhereUniqueInput
+    /**
+     * In case the ModelPreference found by the `where` argument doesn't exist, create a new ModelPreference with this data.
+     */
+    create: XOR<ModelPreferenceCreateInput, ModelPreferenceUncheckedCreateInput>
+    /**
+     * In case the ModelPreference was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<ModelPreferenceUpdateInput, ModelPreferenceUncheckedUpdateInput>
+  }
+
+  /**
+   * ModelPreference delete
+   */
+  export type ModelPreferenceDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ModelPreference
+     */
+    select?: ModelPreferenceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ModelPreference
+     */
+    omit?: ModelPreferenceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ModelPreferenceInclude<ExtArgs> | null
+    /**
+     * Filter which ModelPreference to delete.
+     */
+    where: ModelPreferenceWhereUniqueInput
+  }
+
+  /**
+   * ModelPreference deleteMany
+   */
+  export type ModelPreferenceDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ModelPreferences to delete
+     */
+    where?: ModelPreferenceWhereInput
+    /**
+     * Limit how many ModelPreferences to delete.
+     */
+    limit?: number
+  }
+
+  /**
+   * ModelPreference without action
+   */
+  export type ModelPreferenceDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ModelPreference
+     */
+    select?: ModelPreferenceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ModelPreference
+     */
+    omit?: ModelPreferenceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ModelPreferenceInclude<ExtArgs> | null
   }
 
 
@@ -6889,6 +9331,32 @@ export namespace Prisma {
   export type UserScalarFieldEnum = (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum]
 
 
+  export const ProviderCredentialScalarFieldEnum: {
+    id: 'id',
+    userId: 'userId',
+    provider: 'provider',
+    encryptedConfig: 'encryptedConfig',
+    isEnabled: 'isEnabled',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+  };
+
+  export type ProviderCredentialScalarFieldEnum = (typeof ProviderCredentialScalarFieldEnum)[keyof typeof ProviderCredentialScalarFieldEnum]
+
+
+  export const ModelPreferenceScalarFieldEnum: {
+    id: 'id',
+    userId: 'userId',
+    provider: 'provider',
+    modelId: 'modelId',
+    isCustom: 'isCustom',
+    isEnabled: 'isEnabled',
+    createdAt: 'createdAt'
+  };
+
+  export type ModelPreferenceScalarFieldEnum = (typeof ModelPreferenceScalarFieldEnum)[keyof typeof ModelPreferenceScalarFieldEnum]
+
+
   export const SessionScalarFieldEnum: {
     id: 'id',
     expiresAt: 'expiresAt',
@@ -7016,6 +9484,20 @@ export namespace Prisma {
 
 
   /**
+   * Reference to a field of type 'AIProvider'
+   */
+  export type EnumAIProviderFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AIProvider'>
+    
+
+
+  /**
+   * Reference to a field of type 'AIProvider[]'
+   */
+  export type ListEnumAIProviderFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'AIProvider[]'>
+    
+
+
+  /**
    * Reference to a field of type 'Int'
    */
   export type IntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int'>
@@ -7060,6 +9542,8 @@ export namespace Prisma {
     sessions?: SessionListRelationFilter
     accounts?: AccountListRelationFilter
     passkeys?: PasskeyListRelationFilter
+    credentials?: ProviderCredentialListRelationFilter
+    modelPreferences?: ModelPreferenceListRelationFilter
   }
 
   export type UserOrderByWithRelationInput = {
@@ -7073,6 +9557,8 @@ export namespace Prisma {
     sessions?: SessionOrderByRelationAggregateInput
     accounts?: AccountOrderByRelationAggregateInput
     passkeys?: PasskeyOrderByRelationAggregateInput
+    credentials?: ProviderCredentialOrderByRelationAggregateInput
+    modelPreferences?: ModelPreferenceOrderByRelationAggregateInput
   }
 
   export type UserWhereUniqueInput = Prisma.AtLeast<{
@@ -7089,6 +9575,8 @@ export namespace Prisma {
     sessions?: SessionListRelationFilter
     accounts?: AccountListRelationFilter
     passkeys?: PasskeyListRelationFilter
+    credentials?: ProviderCredentialListRelationFilter
+    modelPreferences?: ModelPreferenceListRelationFilter
   }, "id" | "email">
 
   export type UserOrderByWithAggregationInput = {
@@ -7115,6 +9603,138 @@ export namespace Prisma {
     image?: StringNullableWithAggregatesFilter<"User"> | string | null
     createdAt?: DateTimeWithAggregatesFilter<"User"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"User"> | Date | string
+  }
+
+  export type ProviderCredentialWhereInput = {
+    AND?: ProviderCredentialWhereInput | ProviderCredentialWhereInput[]
+    OR?: ProviderCredentialWhereInput[]
+    NOT?: ProviderCredentialWhereInput | ProviderCredentialWhereInput[]
+    id?: StringFilter<"ProviderCredential"> | string
+    userId?: StringFilter<"ProviderCredential"> | string
+    provider?: EnumAIProviderFilter<"ProviderCredential"> | $Enums.AIProvider
+    encryptedConfig?: StringFilter<"ProviderCredential"> | string
+    isEnabled?: BoolFilter<"ProviderCredential"> | boolean
+    createdAt?: DateTimeFilter<"ProviderCredential"> | Date | string
+    updatedAt?: DateTimeFilter<"ProviderCredential"> | Date | string
+    user?: XOR<UserScalarRelationFilter, UserWhereInput>
+  }
+
+  export type ProviderCredentialOrderByWithRelationInput = {
+    id?: SortOrder
+    userId?: SortOrder
+    provider?: SortOrder
+    encryptedConfig?: SortOrder
+    isEnabled?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+    user?: UserOrderByWithRelationInput
+  }
+
+  export type ProviderCredentialWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    userId_provider?: ProviderCredentialUserIdProviderCompoundUniqueInput
+    AND?: ProviderCredentialWhereInput | ProviderCredentialWhereInput[]
+    OR?: ProviderCredentialWhereInput[]
+    NOT?: ProviderCredentialWhereInput | ProviderCredentialWhereInput[]
+    userId?: StringFilter<"ProviderCredential"> | string
+    provider?: EnumAIProviderFilter<"ProviderCredential"> | $Enums.AIProvider
+    encryptedConfig?: StringFilter<"ProviderCredential"> | string
+    isEnabled?: BoolFilter<"ProviderCredential"> | boolean
+    createdAt?: DateTimeFilter<"ProviderCredential"> | Date | string
+    updatedAt?: DateTimeFilter<"ProviderCredential"> | Date | string
+    user?: XOR<UserScalarRelationFilter, UserWhereInput>
+  }, "id" | "userId_provider">
+
+  export type ProviderCredentialOrderByWithAggregationInput = {
+    id?: SortOrder
+    userId?: SortOrder
+    provider?: SortOrder
+    encryptedConfig?: SortOrder
+    isEnabled?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+    _count?: ProviderCredentialCountOrderByAggregateInput
+    _max?: ProviderCredentialMaxOrderByAggregateInput
+    _min?: ProviderCredentialMinOrderByAggregateInput
+  }
+
+  export type ProviderCredentialScalarWhereWithAggregatesInput = {
+    AND?: ProviderCredentialScalarWhereWithAggregatesInput | ProviderCredentialScalarWhereWithAggregatesInput[]
+    OR?: ProviderCredentialScalarWhereWithAggregatesInput[]
+    NOT?: ProviderCredentialScalarWhereWithAggregatesInput | ProviderCredentialScalarWhereWithAggregatesInput[]
+    id?: StringWithAggregatesFilter<"ProviderCredential"> | string
+    userId?: StringWithAggregatesFilter<"ProviderCredential"> | string
+    provider?: EnumAIProviderWithAggregatesFilter<"ProviderCredential"> | $Enums.AIProvider
+    encryptedConfig?: StringWithAggregatesFilter<"ProviderCredential"> | string
+    isEnabled?: BoolWithAggregatesFilter<"ProviderCredential"> | boolean
+    createdAt?: DateTimeWithAggregatesFilter<"ProviderCredential"> | Date | string
+    updatedAt?: DateTimeWithAggregatesFilter<"ProviderCredential"> | Date | string
+  }
+
+  export type ModelPreferenceWhereInput = {
+    AND?: ModelPreferenceWhereInput | ModelPreferenceWhereInput[]
+    OR?: ModelPreferenceWhereInput[]
+    NOT?: ModelPreferenceWhereInput | ModelPreferenceWhereInput[]
+    id?: StringFilter<"ModelPreference"> | string
+    userId?: StringFilter<"ModelPreference"> | string
+    provider?: EnumAIProviderFilter<"ModelPreference"> | $Enums.AIProvider
+    modelId?: StringFilter<"ModelPreference"> | string
+    isCustom?: BoolFilter<"ModelPreference"> | boolean
+    isEnabled?: BoolFilter<"ModelPreference"> | boolean
+    createdAt?: DateTimeFilter<"ModelPreference"> | Date | string
+    user?: XOR<UserScalarRelationFilter, UserWhereInput>
+  }
+
+  export type ModelPreferenceOrderByWithRelationInput = {
+    id?: SortOrder
+    userId?: SortOrder
+    provider?: SortOrder
+    modelId?: SortOrder
+    isCustom?: SortOrder
+    isEnabled?: SortOrder
+    createdAt?: SortOrder
+    user?: UserOrderByWithRelationInput
+  }
+
+  export type ModelPreferenceWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    userId_provider_modelId?: ModelPreferenceUserIdProviderModelIdCompoundUniqueInput
+    AND?: ModelPreferenceWhereInput | ModelPreferenceWhereInput[]
+    OR?: ModelPreferenceWhereInput[]
+    NOT?: ModelPreferenceWhereInput | ModelPreferenceWhereInput[]
+    userId?: StringFilter<"ModelPreference"> | string
+    provider?: EnumAIProviderFilter<"ModelPreference"> | $Enums.AIProvider
+    modelId?: StringFilter<"ModelPreference"> | string
+    isCustom?: BoolFilter<"ModelPreference"> | boolean
+    isEnabled?: BoolFilter<"ModelPreference"> | boolean
+    createdAt?: DateTimeFilter<"ModelPreference"> | Date | string
+    user?: XOR<UserScalarRelationFilter, UserWhereInput>
+  }, "id" | "userId_provider_modelId">
+
+  export type ModelPreferenceOrderByWithAggregationInput = {
+    id?: SortOrder
+    userId?: SortOrder
+    provider?: SortOrder
+    modelId?: SortOrder
+    isCustom?: SortOrder
+    isEnabled?: SortOrder
+    createdAt?: SortOrder
+    _count?: ModelPreferenceCountOrderByAggregateInput
+    _max?: ModelPreferenceMaxOrderByAggregateInput
+    _min?: ModelPreferenceMinOrderByAggregateInput
+  }
+
+  export type ModelPreferenceScalarWhereWithAggregatesInput = {
+    AND?: ModelPreferenceScalarWhereWithAggregatesInput | ModelPreferenceScalarWhereWithAggregatesInput[]
+    OR?: ModelPreferenceScalarWhereWithAggregatesInput[]
+    NOT?: ModelPreferenceScalarWhereWithAggregatesInput | ModelPreferenceScalarWhereWithAggregatesInput[]
+    id?: StringWithAggregatesFilter<"ModelPreference"> | string
+    userId?: StringWithAggregatesFilter<"ModelPreference"> | string
+    provider?: EnumAIProviderWithAggregatesFilter<"ModelPreference"> | $Enums.AIProvider
+    modelId?: StringWithAggregatesFilter<"ModelPreference"> | string
+    isCustom?: BoolWithAggregatesFilter<"ModelPreference"> | boolean
+    isEnabled?: BoolWithAggregatesFilter<"ModelPreference"> | boolean
+    createdAt?: DateTimeWithAggregatesFilter<"ModelPreference"> | Date | string
   }
 
   export type SessionWhereInput = {
@@ -7437,6 +10057,8 @@ export namespace Prisma {
     sessions?: SessionCreateNestedManyWithoutUserInput
     accounts?: AccountCreateNestedManyWithoutUserInput
     passkeys?: PasskeyCreateNestedManyWithoutUserInput
+    credentials?: ProviderCredentialCreateNestedManyWithoutUserInput
+    modelPreferences?: ModelPreferenceCreateNestedManyWithoutUserInput
   }
 
   export type UserUncheckedCreateInput = {
@@ -7450,6 +10072,8 @@ export namespace Prisma {
     sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
     accounts?: AccountUncheckedCreateNestedManyWithoutUserInput
     passkeys?: PasskeyUncheckedCreateNestedManyWithoutUserInput
+    credentials?: ProviderCredentialUncheckedCreateNestedManyWithoutUserInput
+    modelPreferences?: ModelPreferenceUncheckedCreateNestedManyWithoutUserInput
   }
 
   export type UserUpdateInput = {
@@ -7463,6 +10087,8 @@ export namespace Prisma {
     sessions?: SessionUpdateManyWithoutUserNestedInput
     accounts?: AccountUpdateManyWithoutUserNestedInput
     passkeys?: PasskeyUpdateManyWithoutUserNestedInput
+    credentials?: ProviderCredentialUpdateManyWithoutUserNestedInput
+    modelPreferences?: ModelPreferenceUpdateManyWithoutUserNestedInput
   }
 
   export type UserUncheckedUpdateInput = {
@@ -7476,6 +10102,8 @@ export namespace Prisma {
     sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
     accounts?: AccountUncheckedUpdateManyWithoutUserNestedInput
     passkeys?: PasskeyUncheckedUpdateManyWithoutUserNestedInput
+    credentials?: ProviderCredentialUncheckedUpdateManyWithoutUserNestedInput
+    modelPreferences?: ModelPreferenceUncheckedUpdateManyWithoutUserNestedInput
   }
 
   export type UserCreateManyInput = {
@@ -7506,6 +10134,144 @@ export namespace Prisma {
     image?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ProviderCredentialCreateInput = {
+    id?: string
+    provider: $Enums.AIProvider
+    encryptedConfig: string
+    isEnabled?: boolean
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    user: UserCreateNestedOneWithoutCredentialsInput
+  }
+
+  export type ProviderCredentialUncheckedCreateInput = {
+    id?: string
+    userId: string
+    provider: $Enums.AIProvider
+    encryptedConfig: string
+    isEnabled?: boolean
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type ProviderCredentialUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    provider?: EnumAIProviderFieldUpdateOperationsInput | $Enums.AIProvider
+    encryptedConfig?: StringFieldUpdateOperationsInput | string
+    isEnabled?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    user?: UserUpdateOneRequiredWithoutCredentialsNestedInput
+  }
+
+  export type ProviderCredentialUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    userId?: StringFieldUpdateOperationsInput | string
+    provider?: EnumAIProviderFieldUpdateOperationsInput | $Enums.AIProvider
+    encryptedConfig?: StringFieldUpdateOperationsInput | string
+    isEnabled?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ProviderCredentialCreateManyInput = {
+    id?: string
+    userId: string
+    provider: $Enums.AIProvider
+    encryptedConfig: string
+    isEnabled?: boolean
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type ProviderCredentialUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    provider?: EnumAIProviderFieldUpdateOperationsInput | $Enums.AIProvider
+    encryptedConfig?: StringFieldUpdateOperationsInput | string
+    isEnabled?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ProviderCredentialUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    userId?: StringFieldUpdateOperationsInput | string
+    provider?: EnumAIProviderFieldUpdateOperationsInput | $Enums.AIProvider
+    encryptedConfig?: StringFieldUpdateOperationsInput | string
+    isEnabled?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ModelPreferenceCreateInput = {
+    id?: string
+    provider: $Enums.AIProvider
+    modelId: string
+    isCustom?: boolean
+    isEnabled?: boolean
+    createdAt?: Date | string
+    user: UserCreateNestedOneWithoutModelPreferencesInput
+  }
+
+  export type ModelPreferenceUncheckedCreateInput = {
+    id?: string
+    userId: string
+    provider: $Enums.AIProvider
+    modelId: string
+    isCustom?: boolean
+    isEnabled?: boolean
+    createdAt?: Date | string
+  }
+
+  export type ModelPreferenceUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    provider?: EnumAIProviderFieldUpdateOperationsInput | $Enums.AIProvider
+    modelId?: StringFieldUpdateOperationsInput | string
+    isCustom?: BoolFieldUpdateOperationsInput | boolean
+    isEnabled?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    user?: UserUpdateOneRequiredWithoutModelPreferencesNestedInput
+  }
+
+  export type ModelPreferenceUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    userId?: StringFieldUpdateOperationsInput | string
+    provider?: EnumAIProviderFieldUpdateOperationsInput | $Enums.AIProvider
+    modelId?: StringFieldUpdateOperationsInput | string
+    isCustom?: BoolFieldUpdateOperationsInput | boolean
+    isEnabled?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ModelPreferenceCreateManyInput = {
+    id?: string
+    userId: string
+    provider: $Enums.AIProvider
+    modelId: string
+    isCustom?: boolean
+    isEnabled?: boolean
+    createdAt?: Date | string
+  }
+
+  export type ModelPreferenceUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    provider?: EnumAIProviderFieldUpdateOperationsInput | $Enums.AIProvider
+    modelId?: StringFieldUpdateOperationsInput | string
+    isCustom?: BoolFieldUpdateOperationsInput | boolean
+    isEnabled?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ModelPreferenceUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    userId?: StringFieldUpdateOperationsInput | string
+    provider?: EnumAIProviderFieldUpdateOperationsInput | $Enums.AIProvider
+    modelId?: StringFieldUpdateOperationsInput | string
+    isCustom?: BoolFieldUpdateOperationsInput | boolean
+    isEnabled?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type SessionCreateInput = {
@@ -7919,6 +10685,18 @@ export namespace Prisma {
     none?: PasskeyWhereInput
   }
 
+  export type ProviderCredentialListRelationFilter = {
+    every?: ProviderCredentialWhereInput
+    some?: ProviderCredentialWhereInput
+    none?: ProviderCredentialWhereInput
+  }
+
+  export type ModelPreferenceListRelationFilter = {
+    every?: ModelPreferenceWhereInput
+    some?: ModelPreferenceWhereInput
+    none?: ModelPreferenceWhereInput
+  }
+
   export type SortOrderInput = {
     sort: SortOrder
     nulls?: NullsOrder
@@ -7933,6 +10711,14 @@ export namespace Prisma {
   }
 
   export type PasskeyOrderByRelationAggregateInput = {
+    _count?: SortOrder
+  }
+
+  export type ProviderCredentialOrderByRelationAggregateInput = {
+    _count?: SortOrder
+  }
+
+  export type ModelPreferenceOrderByRelationAggregateInput = {
     _count?: SortOrder
   }
 
@@ -8024,9 +10810,97 @@ export namespace Prisma {
     _max?: NestedDateTimeFilter<$PrismaModel>
   }
 
+  export type EnumAIProviderFilter<$PrismaModel = never> = {
+    equals?: $Enums.AIProvider | EnumAIProviderFieldRefInput<$PrismaModel>
+    in?: $Enums.AIProvider[] | ListEnumAIProviderFieldRefInput<$PrismaModel>
+    notIn?: $Enums.AIProvider[] | ListEnumAIProviderFieldRefInput<$PrismaModel>
+    not?: NestedEnumAIProviderFilter<$PrismaModel> | $Enums.AIProvider
+  }
+
   export type UserScalarRelationFilter = {
     is?: UserWhereInput
     isNot?: UserWhereInput
+  }
+
+  export type ProviderCredentialUserIdProviderCompoundUniqueInput = {
+    userId: string
+    provider: $Enums.AIProvider
+  }
+
+  export type ProviderCredentialCountOrderByAggregateInput = {
+    id?: SortOrder
+    userId?: SortOrder
+    provider?: SortOrder
+    encryptedConfig?: SortOrder
+    isEnabled?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type ProviderCredentialMaxOrderByAggregateInput = {
+    id?: SortOrder
+    userId?: SortOrder
+    provider?: SortOrder
+    encryptedConfig?: SortOrder
+    isEnabled?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type ProviderCredentialMinOrderByAggregateInput = {
+    id?: SortOrder
+    userId?: SortOrder
+    provider?: SortOrder
+    encryptedConfig?: SortOrder
+    isEnabled?: SortOrder
+    createdAt?: SortOrder
+    updatedAt?: SortOrder
+  }
+
+  export type EnumAIProviderWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.AIProvider | EnumAIProviderFieldRefInput<$PrismaModel>
+    in?: $Enums.AIProvider[] | ListEnumAIProviderFieldRefInput<$PrismaModel>
+    notIn?: $Enums.AIProvider[] | ListEnumAIProviderFieldRefInput<$PrismaModel>
+    not?: NestedEnumAIProviderWithAggregatesFilter<$PrismaModel> | $Enums.AIProvider
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumAIProviderFilter<$PrismaModel>
+    _max?: NestedEnumAIProviderFilter<$PrismaModel>
+  }
+
+  export type ModelPreferenceUserIdProviderModelIdCompoundUniqueInput = {
+    userId: string
+    provider: $Enums.AIProvider
+    modelId: string
+  }
+
+  export type ModelPreferenceCountOrderByAggregateInput = {
+    id?: SortOrder
+    userId?: SortOrder
+    provider?: SortOrder
+    modelId?: SortOrder
+    isCustom?: SortOrder
+    isEnabled?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type ModelPreferenceMaxOrderByAggregateInput = {
+    id?: SortOrder
+    userId?: SortOrder
+    provider?: SortOrder
+    modelId?: SortOrder
+    isCustom?: SortOrder
+    isEnabled?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type ModelPreferenceMinOrderByAggregateInput = {
+    id?: SortOrder
+    userId?: SortOrder
+    provider?: SortOrder
+    modelId?: SortOrder
+    isCustom?: SortOrder
+    isEnabled?: SortOrder
+    createdAt?: SortOrder
   }
 
   export type SessionCountOrderByAggregateInput = {
@@ -8260,6 +11134,20 @@ export namespace Prisma {
     connect?: PasskeyWhereUniqueInput | PasskeyWhereUniqueInput[]
   }
 
+  export type ProviderCredentialCreateNestedManyWithoutUserInput = {
+    create?: XOR<ProviderCredentialCreateWithoutUserInput, ProviderCredentialUncheckedCreateWithoutUserInput> | ProviderCredentialCreateWithoutUserInput[] | ProviderCredentialUncheckedCreateWithoutUserInput[]
+    connectOrCreate?: ProviderCredentialCreateOrConnectWithoutUserInput | ProviderCredentialCreateOrConnectWithoutUserInput[]
+    createMany?: ProviderCredentialCreateManyUserInputEnvelope
+    connect?: ProviderCredentialWhereUniqueInput | ProviderCredentialWhereUniqueInput[]
+  }
+
+  export type ModelPreferenceCreateNestedManyWithoutUserInput = {
+    create?: XOR<ModelPreferenceCreateWithoutUserInput, ModelPreferenceUncheckedCreateWithoutUserInput> | ModelPreferenceCreateWithoutUserInput[] | ModelPreferenceUncheckedCreateWithoutUserInput[]
+    connectOrCreate?: ModelPreferenceCreateOrConnectWithoutUserInput | ModelPreferenceCreateOrConnectWithoutUserInput[]
+    createMany?: ModelPreferenceCreateManyUserInputEnvelope
+    connect?: ModelPreferenceWhereUniqueInput | ModelPreferenceWhereUniqueInput[]
+  }
+
   export type SessionUncheckedCreateNestedManyWithoutUserInput = {
     create?: XOR<SessionCreateWithoutUserInput, SessionUncheckedCreateWithoutUserInput> | SessionCreateWithoutUserInput[] | SessionUncheckedCreateWithoutUserInput[]
     connectOrCreate?: SessionCreateOrConnectWithoutUserInput | SessionCreateOrConnectWithoutUserInput[]
@@ -8279,6 +11167,20 @@ export namespace Prisma {
     connectOrCreate?: PasskeyCreateOrConnectWithoutUserInput | PasskeyCreateOrConnectWithoutUserInput[]
     createMany?: PasskeyCreateManyUserInputEnvelope
     connect?: PasskeyWhereUniqueInput | PasskeyWhereUniqueInput[]
+  }
+
+  export type ProviderCredentialUncheckedCreateNestedManyWithoutUserInput = {
+    create?: XOR<ProviderCredentialCreateWithoutUserInput, ProviderCredentialUncheckedCreateWithoutUserInput> | ProviderCredentialCreateWithoutUserInput[] | ProviderCredentialUncheckedCreateWithoutUserInput[]
+    connectOrCreate?: ProviderCredentialCreateOrConnectWithoutUserInput | ProviderCredentialCreateOrConnectWithoutUserInput[]
+    createMany?: ProviderCredentialCreateManyUserInputEnvelope
+    connect?: ProviderCredentialWhereUniqueInput | ProviderCredentialWhereUniqueInput[]
+  }
+
+  export type ModelPreferenceUncheckedCreateNestedManyWithoutUserInput = {
+    create?: XOR<ModelPreferenceCreateWithoutUserInput, ModelPreferenceUncheckedCreateWithoutUserInput> | ModelPreferenceCreateWithoutUserInput[] | ModelPreferenceUncheckedCreateWithoutUserInput[]
+    connectOrCreate?: ModelPreferenceCreateOrConnectWithoutUserInput | ModelPreferenceCreateOrConnectWithoutUserInput[]
+    createMany?: ModelPreferenceCreateManyUserInputEnvelope
+    connect?: ModelPreferenceWhereUniqueInput | ModelPreferenceWhereUniqueInput[]
   }
 
   export type StringFieldUpdateOperationsInput = {
@@ -8339,6 +11241,34 @@ export namespace Prisma {
     deleteMany?: PasskeyScalarWhereInput | PasskeyScalarWhereInput[]
   }
 
+  export type ProviderCredentialUpdateManyWithoutUserNestedInput = {
+    create?: XOR<ProviderCredentialCreateWithoutUserInput, ProviderCredentialUncheckedCreateWithoutUserInput> | ProviderCredentialCreateWithoutUserInput[] | ProviderCredentialUncheckedCreateWithoutUserInput[]
+    connectOrCreate?: ProviderCredentialCreateOrConnectWithoutUserInput | ProviderCredentialCreateOrConnectWithoutUserInput[]
+    upsert?: ProviderCredentialUpsertWithWhereUniqueWithoutUserInput | ProviderCredentialUpsertWithWhereUniqueWithoutUserInput[]
+    createMany?: ProviderCredentialCreateManyUserInputEnvelope
+    set?: ProviderCredentialWhereUniqueInput | ProviderCredentialWhereUniqueInput[]
+    disconnect?: ProviderCredentialWhereUniqueInput | ProviderCredentialWhereUniqueInput[]
+    delete?: ProviderCredentialWhereUniqueInput | ProviderCredentialWhereUniqueInput[]
+    connect?: ProviderCredentialWhereUniqueInput | ProviderCredentialWhereUniqueInput[]
+    update?: ProviderCredentialUpdateWithWhereUniqueWithoutUserInput | ProviderCredentialUpdateWithWhereUniqueWithoutUserInput[]
+    updateMany?: ProviderCredentialUpdateManyWithWhereWithoutUserInput | ProviderCredentialUpdateManyWithWhereWithoutUserInput[]
+    deleteMany?: ProviderCredentialScalarWhereInput | ProviderCredentialScalarWhereInput[]
+  }
+
+  export type ModelPreferenceUpdateManyWithoutUserNestedInput = {
+    create?: XOR<ModelPreferenceCreateWithoutUserInput, ModelPreferenceUncheckedCreateWithoutUserInput> | ModelPreferenceCreateWithoutUserInput[] | ModelPreferenceUncheckedCreateWithoutUserInput[]
+    connectOrCreate?: ModelPreferenceCreateOrConnectWithoutUserInput | ModelPreferenceCreateOrConnectWithoutUserInput[]
+    upsert?: ModelPreferenceUpsertWithWhereUniqueWithoutUserInput | ModelPreferenceUpsertWithWhereUniqueWithoutUserInput[]
+    createMany?: ModelPreferenceCreateManyUserInputEnvelope
+    set?: ModelPreferenceWhereUniqueInput | ModelPreferenceWhereUniqueInput[]
+    disconnect?: ModelPreferenceWhereUniqueInput | ModelPreferenceWhereUniqueInput[]
+    delete?: ModelPreferenceWhereUniqueInput | ModelPreferenceWhereUniqueInput[]
+    connect?: ModelPreferenceWhereUniqueInput | ModelPreferenceWhereUniqueInput[]
+    update?: ModelPreferenceUpdateWithWhereUniqueWithoutUserInput | ModelPreferenceUpdateWithWhereUniqueWithoutUserInput[]
+    updateMany?: ModelPreferenceUpdateManyWithWhereWithoutUserInput | ModelPreferenceUpdateManyWithWhereWithoutUserInput[]
+    deleteMany?: ModelPreferenceScalarWhereInput | ModelPreferenceScalarWhereInput[]
+  }
+
   export type SessionUncheckedUpdateManyWithoutUserNestedInput = {
     create?: XOR<SessionCreateWithoutUserInput, SessionUncheckedCreateWithoutUserInput> | SessionCreateWithoutUserInput[] | SessionUncheckedCreateWithoutUserInput[]
     connectOrCreate?: SessionCreateOrConnectWithoutUserInput | SessionCreateOrConnectWithoutUserInput[]
@@ -8379,6 +11309,66 @@ export namespace Prisma {
     update?: PasskeyUpdateWithWhereUniqueWithoutUserInput | PasskeyUpdateWithWhereUniqueWithoutUserInput[]
     updateMany?: PasskeyUpdateManyWithWhereWithoutUserInput | PasskeyUpdateManyWithWhereWithoutUserInput[]
     deleteMany?: PasskeyScalarWhereInput | PasskeyScalarWhereInput[]
+  }
+
+  export type ProviderCredentialUncheckedUpdateManyWithoutUserNestedInput = {
+    create?: XOR<ProviderCredentialCreateWithoutUserInput, ProviderCredentialUncheckedCreateWithoutUserInput> | ProviderCredentialCreateWithoutUserInput[] | ProviderCredentialUncheckedCreateWithoutUserInput[]
+    connectOrCreate?: ProviderCredentialCreateOrConnectWithoutUserInput | ProviderCredentialCreateOrConnectWithoutUserInput[]
+    upsert?: ProviderCredentialUpsertWithWhereUniqueWithoutUserInput | ProviderCredentialUpsertWithWhereUniqueWithoutUserInput[]
+    createMany?: ProviderCredentialCreateManyUserInputEnvelope
+    set?: ProviderCredentialWhereUniqueInput | ProviderCredentialWhereUniqueInput[]
+    disconnect?: ProviderCredentialWhereUniqueInput | ProviderCredentialWhereUniqueInput[]
+    delete?: ProviderCredentialWhereUniqueInput | ProviderCredentialWhereUniqueInput[]
+    connect?: ProviderCredentialWhereUniqueInput | ProviderCredentialWhereUniqueInput[]
+    update?: ProviderCredentialUpdateWithWhereUniqueWithoutUserInput | ProviderCredentialUpdateWithWhereUniqueWithoutUserInput[]
+    updateMany?: ProviderCredentialUpdateManyWithWhereWithoutUserInput | ProviderCredentialUpdateManyWithWhereWithoutUserInput[]
+    deleteMany?: ProviderCredentialScalarWhereInput | ProviderCredentialScalarWhereInput[]
+  }
+
+  export type ModelPreferenceUncheckedUpdateManyWithoutUserNestedInput = {
+    create?: XOR<ModelPreferenceCreateWithoutUserInput, ModelPreferenceUncheckedCreateWithoutUserInput> | ModelPreferenceCreateWithoutUserInput[] | ModelPreferenceUncheckedCreateWithoutUserInput[]
+    connectOrCreate?: ModelPreferenceCreateOrConnectWithoutUserInput | ModelPreferenceCreateOrConnectWithoutUserInput[]
+    upsert?: ModelPreferenceUpsertWithWhereUniqueWithoutUserInput | ModelPreferenceUpsertWithWhereUniqueWithoutUserInput[]
+    createMany?: ModelPreferenceCreateManyUserInputEnvelope
+    set?: ModelPreferenceWhereUniqueInput | ModelPreferenceWhereUniqueInput[]
+    disconnect?: ModelPreferenceWhereUniqueInput | ModelPreferenceWhereUniqueInput[]
+    delete?: ModelPreferenceWhereUniqueInput | ModelPreferenceWhereUniqueInput[]
+    connect?: ModelPreferenceWhereUniqueInput | ModelPreferenceWhereUniqueInput[]
+    update?: ModelPreferenceUpdateWithWhereUniqueWithoutUserInput | ModelPreferenceUpdateWithWhereUniqueWithoutUserInput[]
+    updateMany?: ModelPreferenceUpdateManyWithWhereWithoutUserInput | ModelPreferenceUpdateManyWithWhereWithoutUserInput[]
+    deleteMany?: ModelPreferenceScalarWhereInput | ModelPreferenceScalarWhereInput[]
+  }
+
+  export type UserCreateNestedOneWithoutCredentialsInput = {
+    create?: XOR<UserCreateWithoutCredentialsInput, UserUncheckedCreateWithoutCredentialsInput>
+    connectOrCreate?: UserCreateOrConnectWithoutCredentialsInput
+    connect?: UserWhereUniqueInput
+  }
+
+  export type EnumAIProviderFieldUpdateOperationsInput = {
+    set?: $Enums.AIProvider
+  }
+
+  export type UserUpdateOneRequiredWithoutCredentialsNestedInput = {
+    create?: XOR<UserCreateWithoutCredentialsInput, UserUncheckedCreateWithoutCredentialsInput>
+    connectOrCreate?: UserCreateOrConnectWithoutCredentialsInput
+    upsert?: UserUpsertWithoutCredentialsInput
+    connect?: UserWhereUniqueInput
+    update?: XOR<XOR<UserUpdateToOneWithWhereWithoutCredentialsInput, UserUpdateWithoutCredentialsInput>, UserUncheckedUpdateWithoutCredentialsInput>
+  }
+
+  export type UserCreateNestedOneWithoutModelPreferencesInput = {
+    create?: XOR<UserCreateWithoutModelPreferencesInput, UserUncheckedCreateWithoutModelPreferencesInput>
+    connectOrCreate?: UserCreateOrConnectWithoutModelPreferencesInput
+    connect?: UserWhereUniqueInput
+  }
+
+  export type UserUpdateOneRequiredWithoutModelPreferencesNestedInput = {
+    create?: XOR<UserCreateWithoutModelPreferencesInput, UserUncheckedCreateWithoutModelPreferencesInput>
+    connectOrCreate?: UserCreateOrConnectWithoutModelPreferencesInput
+    upsert?: UserUpsertWithoutModelPreferencesInput
+    connect?: UserWhereUniqueInput
+    update?: XOR<XOR<UserUpdateToOneWithWhereWithoutModelPreferencesInput, UserUpdateWithoutModelPreferencesInput>, UserUncheckedUpdateWithoutModelPreferencesInput>
   }
 
   export type UserCreateNestedOneWithoutSessionsInput = {
@@ -8557,6 +11547,23 @@ export namespace Prisma {
     _max?: NestedDateTimeFilter<$PrismaModel>
   }
 
+  export type NestedEnumAIProviderFilter<$PrismaModel = never> = {
+    equals?: $Enums.AIProvider | EnumAIProviderFieldRefInput<$PrismaModel>
+    in?: $Enums.AIProvider[] | ListEnumAIProviderFieldRefInput<$PrismaModel>
+    notIn?: $Enums.AIProvider[] | ListEnumAIProviderFieldRefInput<$PrismaModel>
+    not?: NestedEnumAIProviderFilter<$PrismaModel> | $Enums.AIProvider
+  }
+
+  export type NestedEnumAIProviderWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.AIProvider | EnumAIProviderFieldRefInput<$PrismaModel>
+    in?: $Enums.AIProvider[] | ListEnumAIProviderFieldRefInput<$PrismaModel>
+    notIn?: $Enums.AIProvider[] | ListEnumAIProviderFieldRefInput<$PrismaModel>
+    not?: NestedEnumAIProviderWithAggregatesFilter<$PrismaModel> | $Enums.AIProvider
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumAIProviderFilter<$PrismaModel>
+    _max?: NestedEnumAIProviderFilter<$PrismaModel>
+  }
+
   export type NestedDateTimeNullableFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel> | null
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null
@@ -8715,6 +11722,62 @@ export namespace Prisma {
     skipDuplicates?: boolean
   }
 
+  export type ProviderCredentialCreateWithoutUserInput = {
+    id?: string
+    provider: $Enums.AIProvider
+    encryptedConfig: string
+    isEnabled?: boolean
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type ProviderCredentialUncheckedCreateWithoutUserInput = {
+    id?: string
+    provider: $Enums.AIProvider
+    encryptedConfig: string
+    isEnabled?: boolean
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type ProviderCredentialCreateOrConnectWithoutUserInput = {
+    where: ProviderCredentialWhereUniqueInput
+    create: XOR<ProviderCredentialCreateWithoutUserInput, ProviderCredentialUncheckedCreateWithoutUserInput>
+  }
+
+  export type ProviderCredentialCreateManyUserInputEnvelope = {
+    data: ProviderCredentialCreateManyUserInput | ProviderCredentialCreateManyUserInput[]
+    skipDuplicates?: boolean
+  }
+
+  export type ModelPreferenceCreateWithoutUserInput = {
+    id?: string
+    provider: $Enums.AIProvider
+    modelId: string
+    isCustom?: boolean
+    isEnabled?: boolean
+    createdAt?: Date | string
+  }
+
+  export type ModelPreferenceUncheckedCreateWithoutUserInput = {
+    id?: string
+    provider: $Enums.AIProvider
+    modelId: string
+    isCustom?: boolean
+    isEnabled?: boolean
+    createdAt?: Date | string
+  }
+
+  export type ModelPreferenceCreateOrConnectWithoutUserInput = {
+    where: ModelPreferenceWhereUniqueInput
+    create: XOR<ModelPreferenceCreateWithoutUserInput, ModelPreferenceUncheckedCreateWithoutUserInput>
+  }
+
+  export type ModelPreferenceCreateManyUserInputEnvelope = {
+    data: ModelPreferenceCreateManyUserInput | ModelPreferenceCreateManyUserInput[]
+    skipDuplicates?: boolean
+  }
+
   export type SessionUpsertWithWhereUniqueWithoutUserInput = {
     where: SessionWhereUniqueInput
     update: XOR<SessionUpdateWithoutUserInput, SessionUncheckedUpdateWithoutUserInput>
@@ -8813,6 +11876,208 @@ export namespace Prisma {
     aaguid?: StringNullableFilter<"Passkey"> | string | null
   }
 
+  export type ProviderCredentialUpsertWithWhereUniqueWithoutUserInput = {
+    where: ProviderCredentialWhereUniqueInput
+    update: XOR<ProviderCredentialUpdateWithoutUserInput, ProviderCredentialUncheckedUpdateWithoutUserInput>
+    create: XOR<ProviderCredentialCreateWithoutUserInput, ProviderCredentialUncheckedCreateWithoutUserInput>
+  }
+
+  export type ProviderCredentialUpdateWithWhereUniqueWithoutUserInput = {
+    where: ProviderCredentialWhereUniqueInput
+    data: XOR<ProviderCredentialUpdateWithoutUserInput, ProviderCredentialUncheckedUpdateWithoutUserInput>
+  }
+
+  export type ProviderCredentialUpdateManyWithWhereWithoutUserInput = {
+    where: ProviderCredentialScalarWhereInput
+    data: XOR<ProviderCredentialUpdateManyMutationInput, ProviderCredentialUncheckedUpdateManyWithoutUserInput>
+  }
+
+  export type ProviderCredentialScalarWhereInput = {
+    AND?: ProviderCredentialScalarWhereInput | ProviderCredentialScalarWhereInput[]
+    OR?: ProviderCredentialScalarWhereInput[]
+    NOT?: ProviderCredentialScalarWhereInput | ProviderCredentialScalarWhereInput[]
+    id?: StringFilter<"ProviderCredential"> | string
+    userId?: StringFilter<"ProviderCredential"> | string
+    provider?: EnumAIProviderFilter<"ProviderCredential"> | $Enums.AIProvider
+    encryptedConfig?: StringFilter<"ProviderCredential"> | string
+    isEnabled?: BoolFilter<"ProviderCredential"> | boolean
+    createdAt?: DateTimeFilter<"ProviderCredential"> | Date | string
+    updatedAt?: DateTimeFilter<"ProviderCredential"> | Date | string
+  }
+
+  export type ModelPreferenceUpsertWithWhereUniqueWithoutUserInput = {
+    where: ModelPreferenceWhereUniqueInput
+    update: XOR<ModelPreferenceUpdateWithoutUserInput, ModelPreferenceUncheckedUpdateWithoutUserInput>
+    create: XOR<ModelPreferenceCreateWithoutUserInput, ModelPreferenceUncheckedCreateWithoutUserInput>
+  }
+
+  export type ModelPreferenceUpdateWithWhereUniqueWithoutUserInput = {
+    where: ModelPreferenceWhereUniqueInput
+    data: XOR<ModelPreferenceUpdateWithoutUserInput, ModelPreferenceUncheckedUpdateWithoutUserInput>
+  }
+
+  export type ModelPreferenceUpdateManyWithWhereWithoutUserInput = {
+    where: ModelPreferenceScalarWhereInput
+    data: XOR<ModelPreferenceUpdateManyMutationInput, ModelPreferenceUncheckedUpdateManyWithoutUserInput>
+  }
+
+  export type ModelPreferenceScalarWhereInput = {
+    AND?: ModelPreferenceScalarWhereInput | ModelPreferenceScalarWhereInput[]
+    OR?: ModelPreferenceScalarWhereInput[]
+    NOT?: ModelPreferenceScalarWhereInput | ModelPreferenceScalarWhereInput[]
+    id?: StringFilter<"ModelPreference"> | string
+    userId?: StringFilter<"ModelPreference"> | string
+    provider?: EnumAIProviderFilter<"ModelPreference"> | $Enums.AIProvider
+    modelId?: StringFilter<"ModelPreference"> | string
+    isCustom?: BoolFilter<"ModelPreference"> | boolean
+    isEnabled?: BoolFilter<"ModelPreference"> | boolean
+    createdAt?: DateTimeFilter<"ModelPreference"> | Date | string
+  }
+
+  export type UserCreateWithoutCredentialsInput = {
+    id: string
+    name: string
+    email: string
+    emailVerified?: boolean
+    image?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    sessions?: SessionCreateNestedManyWithoutUserInput
+    accounts?: AccountCreateNestedManyWithoutUserInput
+    passkeys?: PasskeyCreateNestedManyWithoutUserInput
+    modelPreferences?: ModelPreferenceCreateNestedManyWithoutUserInput
+  }
+
+  export type UserUncheckedCreateWithoutCredentialsInput = {
+    id: string
+    name: string
+    email: string
+    emailVerified?: boolean
+    image?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
+    accounts?: AccountUncheckedCreateNestedManyWithoutUserInput
+    passkeys?: PasskeyUncheckedCreateNestedManyWithoutUserInput
+    modelPreferences?: ModelPreferenceUncheckedCreateNestedManyWithoutUserInput
+  }
+
+  export type UserCreateOrConnectWithoutCredentialsInput = {
+    where: UserWhereUniqueInput
+    create: XOR<UserCreateWithoutCredentialsInput, UserUncheckedCreateWithoutCredentialsInput>
+  }
+
+  export type UserUpsertWithoutCredentialsInput = {
+    update: XOR<UserUpdateWithoutCredentialsInput, UserUncheckedUpdateWithoutCredentialsInput>
+    create: XOR<UserCreateWithoutCredentialsInput, UserUncheckedCreateWithoutCredentialsInput>
+    where?: UserWhereInput
+  }
+
+  export type UserUpdateToOneWithWhereWithoutCredentialsInput = {
+    where?: UserWhereInput
+    data: XOR<UserUpdateWithoutCredentialsInput, UserUncheckedUpdateWithoutCredentialsInput>
+  }
+
+  export type UserUpdateWithoutCredentialsInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    email?: StringFieldUpdateOperationsInput | string
+    emailVerified?: BoolFieldUpdateOperationsInput | boolean
+    image?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    sessions?: SessionUpdateManyWithoutUserNestedInput
+    accounts?: AccountUpdateManyWithoutUserNestedInput
+    passkeys?: PasskeyUpdateManyWithoutUserNestedInput
+    modelPreferences?: ModelPreferenceUpdateManyWithoutUserNestedInput
+  }
+
+  export type UserUncheckedUpdateWithoutCredentialsInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    email?: StringFieldUpdateOperationsInput | string
+    emailVerified?: BoolFieldUpdateOperationsInput | boolean
+    image?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
+    accounts?: AccountUncheckedUpdateManyWithoutUserNestedInput
+    passkeys?: PasskeyUncheckedUpdateManyWithoutUserNestedInput
+    modelPreferences?: ModelPreferenceUncheckedUpdateManyWithoutUserNestedInput
+  }
+
+  export type UserCreateWithoutModelPreferencesInput = {
+    id: string
+    name: string
+    email: string
+    emailVerified?: boolean
+    image?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    sessions?: SessionCreateNestedManyWithoutUserInput
+    accounts?: AccountCreateNestedManyWithoutUserInput
+    passkeys?: PasskeyCreateNestedManyWithoutUserInput
+    credentials?: ProviderCredentialCreateNestedManyWithoutUserInput
+  }
+
+  export type UserUncheckedCreateWithoutModelPreferencesInput = {
+    id: string
+    name: string
+    email: string
+    emailVerified?: boolean
+    image?: string | null
+    createdAt?: Date | string
+    updatedAt?: Date | string
+    sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
+    accounts?: AccountUncheckedCreateNestedManyWithoutUserInput
+    passkeys?: PasskeyUncheckedCreateNestedManyWithoutUserInput
+    credentials?: ProviderCredentialUncheckedCreateNestedManyWithoutUserInput
+  }
+
+  export type UserCreateOrConnectWithoutModelPreferencesInput = {
+    where: UserWhereUniqueInput
+    create: XOR<UserCreateWithoutModelPreferencesInput, UserUncheckedCreateWithoutModelPreferencesInput>
+  }
+
+  export type UserUpsertWithoutModelPreferencesInput = {
+    update: XOR<UserUpdateWithoutModelPreferencesInput, UserUncheckedUpdateWithoutModelPreferencesInput>
+    create: XOR<UserCreateWithoutModelPreferencesInput, UserUncheckedCreateWithoutModelPreferencesInput>
+    where?: UserWhereInput
+  }
+
+  export type UserUpdateToOneWithWhereWithoutModelPreferencesInput = {
+    where?: UserWhereInput
+    data: XOR<UserUpdateWithoutModelPreferencesInput, UserUncheckedUpdateWithoutModelPreferencesInput>
+  }
+
+  export type UserUpdateWithoutModelPreferencesInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    email?: StringFieldUpdateOperationsInput | string
+    emailVerified?: BoolFieldUpdateOperationsInput | boolean
+    image?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    sessions?: SessionUpdateManyWithoutUserNestedInput
+    accounts?: AccountUpdateManyWithoutUserNestedInput
+    passkeys?: PasskeyUpdateManyWithoutUserNestedInput
+    credentials?: ProviderCredentialUpdateManyWithoutUserNestedInput
+  }
+
+  export type UserUncheckedUpdateWithoutModelPreferencesInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    email?: StringFieldUpdateOperationsInput | string
+    emailVerified?: BoolFieldUpdateOperationsInput | boolean
+    image?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
+    accounts?: AccountUncheckedUpdateManyWithoutUserNestedInput
+    passkeys?: PasskeyUncheckedUpdateManyWithoutUserNestedInput
+    credentials?: ProviderCredentialUncheckedUpdateManyWithoutUserNestedInput
+  }
+
   export type UserCreateWithoutSessionsInput = {
     id: string
     name: string
@@ -8823,6 +12088,8 @@ export namespace Prisma {
     updatedAt?: Date | string
     accounts?: AccountCreateNestedManyWithoutUserInput
     passkeys?: PasskeyCreateNestedManyWithoutUserInput
+    credentials?: ProviderCredentialCreateNestedManyWithoutUserInput
+    modelPreferences?: ModelPreferenceCreateNestedManyWithoutUserInput
   }
 
   export type UserUncheckedCreateWithoutSessionsInput = {
@@ -8835,6 +12102,8 @@ export namespace Prisma {
     updatedAt?: Date | string
     accounts?: AccountUncheckedCreateNestedManyWithoutUserInput
     passkeys?: PasskeyUncheckedCreateNestedManyWithoutUserInput
+    credentials?: ProviderCredentialUncheckedCreateNestedManyWithoutUserInput
+    modelPreferences?: ModelPreferenceUncheckedCreateNestedManyWithoutUserInput
   }
 
   export type UserCreateOrConnectWithoutSessionsInput = {
@@ -8863,6 +12132,8 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     accounts?: AccountUpdateManyWithoutUserNestedInput
     passkeys?: PasskeyUpdateManyWithoutUserNestedInput
+    credentials?: ProviderCredentialUpdateManyWithoutUserNestedInput
+    modelPreferences?: ModelPreferenceUpdateManyWithoutUserNestedInput
   }
 
   export type UserUncheckedUpdateWithoutSessionsInput = {
@@ -8875,6 +12146,8 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     accounts?: AccountUncheckedUpdateManyWithoutUserNestedInput
     passkeys?: PasskeyUncheckedUpdateManyWithoutUserNestedInput
+    credentials?: ProviderCredentialUncheckedUpdateManyWithoutUserNestedInput
+    modelPreferences?: ModelPreferenceUncheckedUpdateManyWithoutUserNestedInput
   }
 
   export type UserCreateWithoutAccountsInput = {
@@ -8887,6 +12160,8 @@ export namespace Prisma {
     updatedAt?: Date | string
     sessions?: SessionCreateNestedManyWithoutUserInput
     passkeys?: PasskeyCreateNestedManyWithoutUserInput
+    credentials?: ProviderCredentialCreateNestedManyWithoutUserInput
+    modelPreferences?: ModelPreferenceCreateNestedManyWithoutUserInput
   }
 
   export type UserUncheckedCreateWithoutAccountsInput = {
@@ -8899,6 +12174,8 @@ export namespace Prisma {
     updatedAt?: Date | string
     sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
     passkeys?: PasskeyUncheckedCreateNestedManyWithoutUserInput
+    credentials?: ProviderCredentialUncheckedCreateNestedManyWithoutUserInput
+    modelPreferences?: ModelPreferenceUncheckedCreateNestedManyWithoutUserInput
   }
 
   export type UserCreateOrConnectWithoutAccountsInput = {
@@ -8927,6 +12204,8 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUpdateManyWithoutUserNestedInput
     passkeys?: PasskeyUpdateManyWithoutUserNestedInput
+    credentials?: ProviderCredentialUpdateManyWithoutUserNestedInput
+    modelPreferences?: ModelPreferenceUpdateManyWithoutUserNestedInput
   }
 
   export type UserUncheckedUpdateWithoutAccountsInput = {
@@ -8939,6 +12218,8 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
     passkeys?: PasskeyUncheckedUpdateManyWithoutUserNestedInput
+    credentials?: ProviderCredentialUncheckedUpdateManyWithoutUserNestedInput
+    modelPreferences?: ModelPreferenceUncheckedUpdateManyWithoutUserNestedInput
   }
 
   export type UserCreateWithoutPasskeysInput = {
@@ -8951,6 +12232,8 @@ export namespace Prisma {
     updatedAt?: Date | string
     sessions?: SessionCreateNestedManyWithoutUserInput
     accounts?: AccountCreateNestedManyWithoutUserInput
+    credentials?: ProviderCredentialCreateNestedManyWithoutUserInput
+    modelPreferences?: ModelPreferenceCreateNestedManyWithoutUserInput
   }
 
   export type UserUncheckedCreateWithoutPasskeysInput = {
@@ -8963,6 +12246,8 @@ export namespace Prisma {
     updatedAt?: Date | string
     sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
     accounts?: AccountUncheckedCreateNestedManyWithoutUserInput
+    credentials?: ProviderCredentialUncheckedCreateNestedManyWithoutUserInput
+    modelPreferences?: ModelPreferenceUncheckedCreateNestedManyWithoutUserInput
   }
 
   export type UserCreateOrConnectWithoutPasskeysInput = {
@@ -8991,6 +12276,8 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUpdateManyWithoutUserNestedInput
     accounts?: AccountUpdateManyWithoutUserNestedInput
+    credentials?: ProviderCredentialUpdateManyWithoutUserNestedInput
+    modelPreferences?: ModelPreferenceUpdateManyWithoutUserNestedInput
   }
 
   export type UserUncheckedUpdateWithoutPasskeysInput = {
@@ -9003,6 +12290,8 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
     accounts?: AccountUncheckedUpdateManyWithoutUserNestedInput
+    credentials?: ProviderCredentialUncheckedUpdateManyWithoutUserNestedInput
+    modelPreferences?: ModelPreferenceUncheckedUpdateManyWithoutUserNestedInput
   }
 
   export type SessionCreateManyUserInput = {
@@ -9041,6 +12330,24 @@ export namespace Prisma {
     transports?: string | null
     createdAt?: Date | string | null
     aaguid?: string | null
+  }
+
+  export type ProviderCredentialCreateManyUserInput = {
+    id?: string
+    provider: $Enums.AIProvider
+    encryptedConfig: string
+    isEnabled?: boolean
+    createdAt?: Date | string
+    updatedAt?: Date | string
+  }
+
+  export type ModelPreferenceCreateManyUserInput = {
+    id?: string
+    provider: $Enums.AIProvider
+    modelId: string
+    isCustom?: boolean
+    isEnabled?: boolean
+    createdAt?: Date | string
   }
 
   export type SessionUpdateWithoutUserInput = {
@@ -9155,6 +12462,60 @@ export namespace Prisma {
     transports?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     aaguid?: NullableStringFieldUpdateOperationsInput | string | null
+  }
+
+  export type ProviderCredentialUpdateWithoutUserInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    provider?: EnumAIProviderFieldUpdateOperationsInput | $Enums.AIProvider
+    encryptedConfig?: StringFieldUpdateOperationsInput | string
+    isEnabled?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ProviderCredentialUncheckedUpdateWithoutUserInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    provider?: EnumAIProviderFieldUpdateOperationsInput | $Enums.AIProvider
+    encryptedConfig?: StringFieldUpdateOperationsInput | string
+    isEnabled?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ProviderCredentialUncheckedUpdateManyWithoutUserInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    provider?: EnumAIProviderFieldUpdateOperationsInput | $Enums.AIProvider
+    encryptedConfig?: StringFieldUpdateOperationsInput | string
+    isEnabled?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ModelPreferenceUpdateWithoutUserInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    provider?: EnumAIProviderFieldUpdateOperationsInput | $Enums.AIProvider
+    modelId?: StringFieldUpdateOperationsInput | string
+    isCustom?: BoolFieldUpdateOperationsInput | boolean
+    isEnabled?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ModelPreferenceUncheckedUpdateWithoutUserInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    provider?: EnumAIProviderFieldUpdateOperationsInput | $Enums.AIProvider
+    modelId?: StringFieldUpdateOperationsInput | string
+    isCustom?: BoolFieldUpdateOperationsInput | boolean
+    isEnabled?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ModelPreferenceUncheckedUpdateManyWithoutUserInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    provider?: EnumAIProviderFieldUpdateOperationsInput | $Enums.AIProvider
+    modelId?: StringFieldUpdateOperationsInput | string
+    isCustom?: BoolFieldUpdateOperationsInput | boolean
+    isEnabled?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
 

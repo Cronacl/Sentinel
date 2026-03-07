@@ -1,7 +1,7 @@
 import {
 	AppRules,
-	createFetchUser,
 	MiddlewareBuilder,
+	createFetchUser,
 } from "@/lib/auth/middleware";
 import type { MiddlewareUser } from "@/lib/auth/share-types";
 

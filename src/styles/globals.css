@@ -8,8 +8,24 @@
 	--font-display: var(--font-millionaire), var(--font-sans);
 }
 
+:root,
+[data-theme="light"] {
+	--background: #fff;
+	--surface: #f9f9f9;
+	--accent: oklch(0% 0 0);
+	--accent-foreground: oklch(100% 0 0);
+}
+
+.dark,
+[data-theme="dark"] {
+	--background: #181818;
+	--surface: #000;
+	--accent: oklch(100% 0 0);
+	--accent-foreground: oklch(0% 0 0);
+}
+
 html {
-	color-scheme: dark;
+	color-scheme: light dark;
 }
 
 body {
