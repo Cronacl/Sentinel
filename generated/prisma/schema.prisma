@@ -28,29 +28,108 @@ enum ThemePreference {
   system
 }
 
-model User {
-  id                 String            @id
-  name               String //@db.Text
-  email              String
-  emailVerified      Boolean           @default(false)
-  image              String? //@db.Text
-  nickname           String?
-  occupation         String?
-  aboutUser          String?
-  personalityPreset  PersonalityPreset @default(pragmatic)
-  customInstructions String?
-  themePreference    ThemePreference   @default(system)
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @default(now()) @updatedAt
-  sessions           Session[]
-  accounts           Account[]
+enum ThreadListOrganizeBy {
+  workspace
+  chronological
+}
 
-  passkeys         Passkey[]
-  credentials      ProviderCredential[]
-  modelPreferences ModelPreference[]
+enum ThreadListSortBy {
+  created
+  updated
+}
+
+enum ThreadMessageRole {
+  system
+  user
+  assistant
+}
+
+model User {
+  id                   String               @id
+  name                 String //@db.Text
+  email                String
+  emailVerified        Boolean              @default(false)
+  image                String? //@db.Text
+  nickname             String?
+  occupation           String?
+  aboutUser            String?
+  personalityPreset    PersonalityPreset    @default(pragmatic)
+  customInstructions   String?
+  themePreference      ThemePreference      @default(system)
+  selectedWorkspaceId  String?
+  threadListOrganizeBy ThreadListOrganizeBy @default(workspace)
+  threadListSortBy     ThreadListSortBy     @default(updated)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @default(now()) @updatedAt
+  sessions             Session[]
+  accounts             Account[]
+
+  selectedWorkspace Workspace?           @relation("SelectedWorkspace", fields: [selectedWorkspaceId], references: [id], onDelete: SetNull)
+  ownedWorkspaces   Workspace[]          @relation("OwnedWorkspaces")
+  threads           Thread[]
+  passkeys          Passkey[]
+  credentials       ProviderCredential[]
+  modelPreferences  ModelPreference[]
 
   @@unique([email])
+  @@index([selectedWorkspaceId])
   @@map("user")
+}
+
+model Workspace {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("OwnedWorkspaces", fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  rootPath    String?
+  description String?
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  selectedByUsers User[]   @relation("SelectedWorkspace")
+  threads         Thread[]
+
+  @@index([userId])
+  @@index([userId, isArchived])
+  @@map("workspace")
+}
+
+model Thread {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  summary     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  archivedAt  DateTime?
+
+  messages ThreadMessage[]
+
+  @@index([workspaceId])
+  @@index([userId])
+  @@index([workspaceId, archivedAt, updatedAt])
+  @@index([userId, archivedAt, updatedAt])
+  @@map("thread")
+}
+
+model ThreadMessage {
+  id        String            @id @default(cuid())
+  threadId  String
+  thread    Thread            @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  messageId String
+  role      ThreadMessageRole
+  parts     Json
+  metadata  Json?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@unique([threadId, messageId])
+  @@index([threadId, createdAt])
+  @@map("thread_message")
 }
 
 model ProviderCredential {

@@ -133,6 +133,42 @@ exports.Prisma.UserScalarFieldEnum = {
   personalityPreset: 'personalityPreset',
   customInstructions: 'customInstructions',
   themePreference: 'themePreference',
+  selectedWorkspaceId: 'selectedWorkspaceId',
+  threadListOrganizeBy: 'threadListOrganizeBy',
+  threadListSortBy: 'threadListSortBy',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.WorkspaceScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  name: 'name',
+  rootPath: 'rootPath',
+  description: 'description',
+  isArchived: 'isArchived',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
+exports.Prisma.ThreadScalarFieldEnum = {
+  id: 'id',
+  workspaceId: 'workspaceId',
+  userId: 'userId',
+  title: 'title',
+  summary: 'summary',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+  archivedAt: 'archivedAt'
+};
+
+exports.Prisma.ThreadMessageScalarFieldEnum = {
+  id: 'id',
+  threadId: 'threadId',
+  messageId: 'messageId',
+  role: 'role',
+  parts: 'parts',
+  metadata: 'metadata',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -212,6 +248,15 @@ exports.Prisma.SortOrder = {
   desc: 'desc'
 };
 
+exports.Prisma.JsonNullValueInput = {
+  JsonNull: Prisma.JsonNull
+};
+
+exports.Prisma.NullableJsonNullValueInput = {
+  DbNull: Prisma.DbNull,
+  JsonNull: Prisma.JsonNull
+};
+
 exports.Prisma.QueryMode = {
   default: 'default',
   insensitive: 'insensitive'
@@ -220,6 +265,12 @@ exports.Prisma.QueryMode = {
 exports.Prisma.NullsOrder = {
   first: 'first',
   last: 'last'
+};
+
+exports.Prisma.JsonNullValueFilter = {
+  DbNull: Prisma.DbNull,
+  JsonNull: Prisma.JsonNull,
+  AnyNull: Prisma.AnyNull
 };
 exports.PersonalityPreset = exports.$Enums.PersonalityPreset = {
   friendly: 'friendly',
@@ -234,6 +285,22 @@ exports.ThemePreference = exports.$Enums.ThemePreference = {
   system: 'system'
 };
 
+exports.ThreadListOrganizeBy = exports.$Enums.ThreadListOrganizeBy = {
+  workspace: 'workspace',
+  chronological: 'chronological'
+};
+
+exports.ThreadListSortBy = exports.$Enums.ThreadListSortBy = {
+  created: 'created',
+  updated: 'updated'
+};
+
+exports.ThreadMessageRole = exports.$Enums.ThreadMessageRole = {
+  system: 'system',
+  user: 'user',
+  assistant: 'assistant'
+};
+
 exports.AIProvider = exports.$Enums.AIProvider = {
   openai: 'openai',
   anthropic: 'anthropic',
@@ -243,6 +310,9 @@ exports.AIProvider = exports.$Enums.AIProvider = {
 
 exports.Prisma.ModelName = {
   User: 'User',
+  Workspace: 'Workspace',
+  Thread: 'Thread',
+  ThreadMessage: 'ThreadMessage',
   ProviderCredential: 'ProviderCredential',
   ModelPreference: 'ModelPreference',
   Session: 'Session',
