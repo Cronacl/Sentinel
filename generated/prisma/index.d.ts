@@ -56,7 +56,8 @@ export namespace $Enums {
   export const AIProvider: {
   openai: 'openai',
   anthropic: 'anthropic',
-  google: 'google'
+  google: 'google',
+  google_vertex: 'google_vertex'
 };
 
 export type AIProvider = (typeof AIProvider)[keyof typeof AIProvider]

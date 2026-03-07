@@ -218,7 +218,8 @@ exports.Prisma.NullsOrder = {
 exports.AIProvider = exports.$Enums.AIProvider = {
   openai: 'openai',
   anthropic: 'anthropic',
-  google: 'google'
+  google: 'google',
+  google_vertex: 'google_vertex'
 };
 
 exports.Prisma.ModelName = {

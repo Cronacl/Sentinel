@@ -2,32 +2,42 @@
 @import "@heroui/styles";
 
 @theme {
-	--font-sans:
-		var(--font-satoshi), ui-sans-serif, system-ui, sans-serif,
-		"Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-	--font-display: var(--font-millionaire), var(--font-sans);
+  --font-sans:
+    var(--font-satoshi), ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-display: var(--font-millionaire), var(--font-sans);
 }
 
 :root,
 [data-theme="light"] {
-	--background: #fff;
-	--surface: #f9f9f9;
-	--accent: oklch(0% 0 0);
-	--accent-foreground: oklch(100% 0 0);
+  --background: #fff;
+  --surface: #f9f9f9;
+  --accent: oklch(0% 0 0);
+  --accent-foreground: oklch(100% 0 0);
+  --default-hover: #f0f0f0;
+  /* a lighter default hover color */
+  --default: #f0f0f0;
 }
 
 .dark,
 [data-theme="dark"] {
-	--background: #181818;
-	--surface: #000;
-	--accent: oklch(100% 0 0);
-	--accent-foreground: oklch(0% 0 0);
+  --background: #181818;
+  --surface: #000;
+  --accent: oklch(100% 0 0);
+  --accent-foreground: oklch(0% 0 0);
+  --default-hover: #202020;
+  /* a darker default hover color */
+  --default: #121212;
 }
 
 html {
-	color-scheme: light dark;
+  color-scheme: light dark;
 }
 
 body {
-	font-family: var(--font-sans), sans-serif;
+  font-family: var(--font-sans), sans-serif;
+}
+
+[data-slot="modal-dialog"] {
+  background-color: var(--surface);
 }
