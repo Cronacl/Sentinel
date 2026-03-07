@@ -22,6 +22,8 @@ next-env.d.ts
 /build
 /dist
 /desktop/dist
+/desktop/
+
 
 # misc
 .DS_Store
