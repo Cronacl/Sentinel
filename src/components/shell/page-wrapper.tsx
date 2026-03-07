@@ -42,13 +42,13 @@ export function PageWrapper({
   const hasHeader = title || showToggle || actions;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex items-start h-full flex-col overflow-hidden">
       {hasHeader && (
         <header
-          className=" flex shrink-0 items-center gap-3  px-4 lg:px-6"
+          className="app-region-no-drag flex shrink-0 items-center gap-3 px-4 lg:px-6"
           style={{ minHeight: 44 }}
         >
-          {showToggle && <SidebarToggle />}
+          {showToggle && <SidebarToggle className="app-region-no-drag" />}
 
           {title && (
             <div className="min-w-0 flex-1">

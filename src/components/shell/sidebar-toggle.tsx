@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@heroui/react";
+import { Button, cn } from "@heroui/react";
 import { LayoutLeftIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
@@ -16,7 +16,7 @@ export function SidebarToggle({
   return (
     <Button
       aria-label="Toggle sidebar"
-      className={className}
+      className={cn(className, "h-8 w-8 rounded-xl")}
       isIconOnly
       onPress={toggleLeftSidebar}
       size="sm"

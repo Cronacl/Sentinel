@@ -16,7 +16,7 @@ function TrafficLightButton({
   return (
     <button
       aria-label={ariaLabel}
-      className={`app-region-no-drag h-3.5 w-3.5 min-w-3.5 min-h-3.5 rounded-full transition-transform hover:scale-105 ${colorClassName}`}
+      className={`app-region-no-drag h-2.5 w-2.5 min-w-2.5 min-h-2.5 rounded-full transition-transform hover:scale-105 ${colorClassName}`}
       onClick={onPress}
       type="button"
     />
@@ -28,7 +28,7 @@ export function SidebarWindowChrome() {
 
   return (
     <div className="app-region-drag grid h-14 shrink-0 grid-cols-[52px_1fr_52px] items-center px-4">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <TrafficLightButton
           ariaLabel="Close window"
           colorClassName="bg-[#ff5f57]"
