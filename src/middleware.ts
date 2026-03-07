@@ -1,19 +1,15 @@
-import {
-  AppRules,
-  MiddlewareBuilder,
-  createFetchUser,
-} from "@/lib/auth/middleware";
-import type { MiddlewareUser } from "@/lib/auth/share-types";
+import { NextResponse, type NextRequest } from "next/server";
 
-const middleware = new MiddlewareBuilder<MiddlewareUser>({
-  fetchUser: createFetchUser(),
-})
-  .exact("/login", AppRules.isNotLoggedIn())
-  .exact("/signup", AppRules.isNotLoggedIn())
-  .exact("/", AppRules.isLoggedIn())
-  .build();
+export default function middleware(request: NextRequest) {
+  if (
+    request.nextUrl.pathname === "/login" ||
+    request.nextUrl.pathname === "/signup"
+  ) {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
 
-export default middleware;
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: ["/((?!api/|_next/|_proxy/|_static|_vercel|[\\w-]+\\.\\w+).*)"],

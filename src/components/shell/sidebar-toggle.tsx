@@ -6,12 +6,17 @@ import { HugeiconsIcon } from "@hugeicons/react";
 
 import { useShell } from "./shell-context";
 
-export function SidebarToggle() {
+export function SidebarToggle({
+  className = "border-none",
+}: {
+  className?: string;
+}) {
   const { toggleLeftSidebar } = useShell();
 
   return (
     <Button
       aria-label="Toggle sidebar"
+      className={className}
       isIconOnly
       onPress={toggleLeftSidebar}
       size="sm"

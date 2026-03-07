@@ -1,4 +1,9 @@
+"use client";
+
 import type { PropsWithChildren, ReactNode } from "react";
+
+import { SidebarToggle } from "@/components/shell/sidebar-toggle";
+import { useShell } from "@/components/shell/shell-context";
 
 interface SettingsPageWrapperProps extends PropsWithChildren {
   title: string;
@@ -12,15 +17,22 @@ export function SettingsPageWrapper({
   actions,
   children,
 }: SettingsPageWrapperProps) {
+  const { leftSidebarOpen } = useShell();
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-2xl px-10 py-8">
           <div className="mb-6 flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-foreground text-xl font-medium tracking-tight">
-                {title}
-              </h1>
+            <div className="min-w-0">
+              <div className="flex items-center gap-3">
+                {!leftSidebarOpen ? (
+                  <SidebarToggle className="rounded-xl border border-white/10 bg-white/[0.02]" />
+                ) : null}
+                <h1 className="text-foreground text-xl font-medium tracking-tight">
+                  {title}
+                </h1>
+              </div>
               {subtitle && (
                 <p className="text-muted mt-1 text-sm">{subtitle}</p>
               )}

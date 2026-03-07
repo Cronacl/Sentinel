@@ -19,7 +19,7 @@ import { WorkspaceSidebar } from "./workspace-sidebar";
 import { LeftSidebar } from "./left-sidebar";
 import { RightSidebar } from "./right-sidebar";
 import { ShellProvider } from "./shell-context";
-import { SidebarToggle } from "./sidebar-toggle";
+import { SidebarWindowChrome } from "./sidebar-window-chrome";
 
 const SETTINGS_NAV = [
   { href: "/settings", label: "General", icon: Settings05Icon },
@@ -93,7 +93,12 @@ export function AppShell({ children }: PropsWithChildren) {
     <ShellProvider>
       <div className="flex h-dvh overflow-hidden">
         <LeftSidebar>
-          <SidebarContent />
+          <div className="flex h-full flex-col">
+            <SidebarWindowChrome />
+            <div className="min-h-0 flex-1">
+              <SidebarContent />
+            </div>
+          </div>
         </LeftSidebar>
 
         <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden">

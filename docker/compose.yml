@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sentinel
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sentinel"]
+      interval: 5s
+      retries: 10
+      timeout: 5s
+    ports:
+      - "55432:5432"
+    restart: unless-stopped
+    volumes:
+      - sentinel_postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+      timeout: 3s
+    ports:
+      - "56379:6379"
+    restart: unless-stopped
+    volumes:
+      - sentinel_redis_data:/data
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.4
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:6333/"]
+      interval: 10s
+      retries: 10
+      timeout: 5s
+    ports:
+      - "56333:6333"
+    restart: unless-stopped
+    volumes:
+      - sentinel_qdrant_data:/qdrant/storage
+
+volumes:
+  sentinel_postgres_data:
+  sentinel_qdrant_data:
+  sentinel_redis_data:

@@ -24,8 +24,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CreateWorkspaceModal } from "@/components/workspaces/create-workspace-modal";
 import { api, type RouterOutputs } from "@/trpc/react";
 
-import { SidebarToggle } from "./sidebar-toggle";
-
 type OrganizeBy = "chronological" | "workspace";
 type SortBy = "created" | "updated";
 
@@ -441,10 +439,6 @@ export function WorkspaceSidebar() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-14 shrink-0 items-center gap-2 px-4">
-        <SidebarToggle />
-      </div>
-
       <div className="shrink-0 px-3 pt-1 pb-3">
         <nav className="flex flex-col gap-1">
           {PRIMARY_NAV.map((item) => {

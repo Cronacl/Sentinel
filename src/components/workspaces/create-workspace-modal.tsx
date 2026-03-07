@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
+import { getDesktopApi } from "@/lib/desktop/client";
 import { ControlledTextField } from "@/components/forms/controlled-fields";
 import { workspaceCreateSchema } from "@/schemas/workspace-thread.schema";
 
@@ -35,13 +36,10 @@ const defaultValues: WorkspaceCreateFormValues = {
   name: "",
 };
 
-type DirectoryHandleLike = {
+type PickedDirectory = {
   name: string;
-};
-
-type DirectoryPickerWindow = Window & {
-  showDirectoryPicker?: () => Promise<DirectoryHandleLike>;
-};
+  path: string;
+} | null;
 
 export function CreateWorkspaceModal({
   isOpen,
@@ -49,15 +47,12 @@ export function CreateWorkspaceModal({
   onOpenChange,
 }: CreateWorkspaceModalProps) {
   const state = useOverlayState({ isOpen, onOpenChange });
-  const canPickDirectory =
-    typeof window !== "undefined" &&
-    "showDirectoryPicker" in (window as DirectoryPickerWindow);
-  const [pickedDirectoryLabel, setPickedDirectoryLabel] = useState("");
+  const [pickedDirectory, setPickedDirectory] = useState<PickedDirectory>(null);
   const [pickError, setPickError] = useState("");
   const [submitError, setSubmitError] = useState("");
 
   const form = useForm<WorkspaceCreateFormValues>({
-    defaultValues: { name: defaultValues.name },
+    defaultValues,
     resolver: zodResolver(workspaceCreateFormSchema),
   });
 
@@ -68,35 +63,35 @@ export function CreateWorkspaceModal({
 
     setSubmitError("");
     setPickError("");
-    setPickedDirectoryLabel("");
-    form.reset({ name: defaultValues.name });
+    setPickedDirectory(null);
+    form.reset(defaultValues);
   }, [form, isOpen]);
 
   const handlePickDirectory = async () => {
     setPickError("");
 
-    const pickerWindow = window as DirectoryPickerWindow;
-    if (!pickerWindow.showDirectoryPicker) {
-      setPickError("Folder picking is not available in this runtime yet.");
+    const desktop = getDesktopApi();
+    if (!desktop) {
+      setPickError("Directory picking is only available in Sentinel desktop.");
       return;
     }
 
     try {
-      const handle = await pickerWindow.showDirectoryPicker();
-      setPickedDirectoryLabel(handle.name);
+      const directory = await desktop.pickDirectory();
+      setPickedDirectory(directory);
 
-      if (!form.getValues("name").trim()) {
-        form.setValue("name", handle.name, {
+      if (directory && !form.getValues("name").trim()) {
+        form.setValue("name", directory.name, {
           shouldDirty: true,
           shouldValidate: true,
         });
       }
     } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return;
-      }
-
-      setPickError("Unable to open the folder picker.");
+      setPickError(
+        error instanceof Error
+          ? error.message
+          : "Unable to open the folder picker.",
+      );
     }
   };
 
@@ -106,10 +101,10 @@ export function CreateWorkspaceModal({
     try {
       await onCreate({
         ...values,
-        rootPath: undefined,
+        rootPath: pickedDirectory?.path,
       });
-      form.reset({ name: defaultValues.name });
-      setPickedDirectoryLabel("");
+      form.reset(defaultValues);
+      setPickedDirectory(null);
       state.close();
     } catch (error) {
       setSubmitError(
@@ -139,8 +134,7 @@ export function CreateWorkspaceModal({
                   Create Workspace
                 </Modal.Heading>
                 <p className="text-muted mt-1 text-sm">
-                  Create a workspace for grouped threads. Local folder linking
-                  needs a native desktop bridge, so it is not stored yet here.
+                  Create a workspace and optionally link it to a local folder.
                 </p>
               </div>
               <Modal.CloseTrigger />
@@ -169,16 +163,15 @@ export function CreateWorkspaceModal({
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-foreground text-sm font-medium">
-                        Folder selection
+                        Linked folder
                       </p>
                       <p className="text-muted mt-1 text-xs leading-5">
-                        You can pick a folder for naming convenience, but this
-                        web runtime cannot read the absolute filesystem path.
+                        Pick a folder to store its real absolute path for future
+                        file and shell operations.
                       </p>
                     </div>
 
                     <Button
-                      isDisabled={!canPickDirectory}
                       onPress={() => void handlePickDirectory()}
                       size="sm"
                       type="button"
@@ -203,17 +196,10 @@ export function CreateWorkspaceModal({
                         strokeWidth={1.5}
                       />
                       <span className="truncate">
-                        {pickedDirectoryLabel || "No folder selected"}
+                        {pickedDirectory?.path || "No folder linked"}
                       </span>
                     </div>
                   </div>
-
-                  {!canPickDirectory ? (
-                    <p className="text-muted mt-3 text-xs leading-5">
-                      This browser runtime cannot expose absolute local folder
-                      paths. A desktop bridge is required for that.
-                    </p>
-                  ) : null}
 
                   {pickError ? (
                     <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mt-3 rounded-xl border px-3 py-2.5 text-xs">

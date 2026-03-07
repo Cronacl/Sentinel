@@ -1,15 +1,15 @@
 import { TRPCError } from "@trpc/server";
 
 import type { ThreadListInput } from "@/schemas/workspace-thread.schema";
-import { auth } from "@/server/better-auth";
 import { db } from "@/server/db";
+import type { LocalSession } from "@/server/local-profile";
 
 import type { createTRPCContext } from "../trpc";
 
 type BaseTRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
 type ProtectedTRPCContext = BaseTRPCContext & {
   db: typeof db;
-  session: NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;
+  session: LocalSession;
 };
 
 export async function getOwnedWorkspaceOrThrow(

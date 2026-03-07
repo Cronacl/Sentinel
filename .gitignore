@@ -20,6 +20,8 @@ next-env.d.ts
 
 # production
 /build
+/dist
+/desktop/dist
 
 # misc
 .DS_Store

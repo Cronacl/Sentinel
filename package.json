@@ -2,10 +2,16 @@
   "name": "sentinel",
   "version": "0.1.0",
   "private": true,
+  "description": "Sentinel local-first desktop app",
+  "author": "Sentinel",
   "type": "module",
+  "main": "desktop/main/index.mjs",
   "scripts": {
     "build": "next build",
-    "auth:sync": "bun x auth@latest generate --config ./src/server/better-auth/config.ts",
+    "build:desktop": "node ./scripts/desktop/clean.mjs && bun run build && node ./scripts/desktop/prepare-production.mjs && electron-builder --mac dmg",
+    "dev:desktop": "concurrently -k \"NEXT_PUBLIC_URL=http://127.0.0.1:3232 BETTER_AUTH_URL=http://127.0.0.1:3232 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/sentinel REDIS_URL=redis://127.0.0.1:56379 QDRANT_URL=http://127.0.0.1:56333 ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef bun run dev -- --port 3232\" \"NEXT_PUBLIC_URL=http://127.0.0.1:3232 BETTER_AUTH_URL=http://127.0.0.1:3232 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/sentinel REDIS_URL=redis://127.0.0.1:56379 QDRANT_URL=http://127.0.0.1:56333 ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef node ./scripts/desktop/dev-launch.mjs\"",
+    "infra:down": "docker compose -f ./docker/compose.yml down",
+    "infra:up": "docker compose -f ./docker/compose.yml up -d",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:generate": "prisma migrate dev",
@@ -25,9 +31,6 @@
     "@ai-sdk/openai": "^3.0.41",
     "@ai-sdk/provider": "^3.0.8",
     "@ai-sdk/react": "^3.0.118",
-    "@auth/prisma-adapter": "^2.7.2",
-    "@better-auth/passkey": "^1.5.3",
-    "@better-auth/prisma-adapter": "^1.5.3",
     "@heroui/react": "^3.0.0-beta.8",
     "@heroui/styles": "^3.0.0-beta.8",
     "@hookform/resolvers": "^5.2.2",
@@ -40,13 +43,12 @@
     "@trpc/react-query": "^11.0.0",
     "@trpc/server": "^11.0.0",
     "ai": "^6.0.116",
-    "better-auth": "^1.3",
     "motion": "^12.35.0",
     "next": "^15.2.3",
-    "next-middleware-toolkit": "^2.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.71.2",
+    "prisma": "^6.6.0",
     "server-only": "^0.0.1",
     "superjson": "^2.2.1",
     "tailwind-variants": "^3.2.2",
@@ -58,12 +60,55 @@
     "@types/node": "^20.14.10",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "concurrently": "^9.2.1",
+    "electron": "^40.8.0",
+    "electron-builder": "^26.8.1",
     "postcss": "^8.5.3",
     "prettier": "^3.8.1",
     "prettier-plugin-tailwindcss": "^0.7.2",
-    "prisma": "^6.6.0",
     "tailwindcss": "^4.0.15",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "wait-on": "^9.0.4"
+  },
+  "build": {
+    "appId": "app.sentinel.desktop",
+    "asarUnpack": [
+      "generated/**",
+      "node_modules/@prisma/client/**",
+      "node_modules/prisma/**"
+    ],
+    "directories": {
+      "buildResources": "build"
+    },
+    "electronDist": "node_modules/electron/dist",
+    "extraResources": [
+      {
+        "from": "desktop/dist/server",
+        "to": "server"
+      },
+      {
+        "from": "docker/compose.yml",
+        "to": "docker/compose.yml"
+      }
+    ],
+    "files": [
+      "desktop/**/*",
+      "scripts/desktop/**/*",
+      "src/**/*",
+      "generated/**/*",
+      "prisma/**/*",
+      "build/**/*",
+      ".env.example",
+      "next.config.js",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg"
+      ]
+    }
   },
   "ct3aMetadata": {
     "initVersion": "7.40.0"

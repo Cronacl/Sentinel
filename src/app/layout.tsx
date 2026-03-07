@@ -3,8 +3,7 @@ import localFont from "next/font/local";
 
 import { Providers } from "@/components/providers";
 import { DEFAULT_THEME_PREFERENCE, getThemeInitScript } from "@/lib/theme";
-import { getSession } from "@/server/better-auth/server";
-import { db } from "@/server/db";
+import { getOrCreateLocalProfile } from "@/server/local-profile";
 import "@/styles/globals.css";
 
 export const metadata: Metadata = {
@@ -12,6 +11,8 @@ export const metadata: Metadata = {
   description: "Backend foundation for the Cronacl rewrite in Sentinel.",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
+
+export const dynamic = "force-dynamic";
 
 const satoshi = localFont({
   src: [
@@ -83,15 +84,8 @@ const millionaire = localFont({
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const session = await getSession();
-  const themePreference = session?.user?.id
-    ? ((
-        await db.user.findUnique({
-          where: { id: session.user.id },
-          select: { themePreference: true },
-        })
-      )?.themePreference ?? DEFAULT_THEME_PREFERENCE)
-    : DEFAULT_THEME_PREFERENCE;
+  const user = await getOrCreateLocalProfile();
+  const themePreference = user?.themePreference ?? DEFAULT_THEME_PREFERENCE;
 
   return (
     <html
