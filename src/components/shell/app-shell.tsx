@@ -7,6 +7,7 @@ import {
   Settings01Icon,
   Settings05Icon,
   TestTubeIcon,
+  UserCircleIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
@@ -20,6 +21,11 @@ import { SidebarToggle } from "./sidebar-toggle";
 
 const SETTINGS_NAV = [
   { href: "/settings", label: "General", icon: Settings05Icon },
+  {
+    href: "/settings/personalization",
+    label: "Personalization",
+    icon: UserCircleIcon,
+  },
   { href: "/settings/providers", label: "Providers", icon: TestTubeIcon },
   { href: "/settings/models", label: "Models", icon: Brain02Icon },
 ] as const;

@@ -127,6 +127,11 @@ exports.Prisma.UserScalarFieldEnum = {
   email: 'email',
   emailVerified: 'emailVerified',
   image: 'image',
+  nickname: 'nickname',
+  occupation: 'occupation',
+  aboutUser: 'aboutUser',
+  personalityPreset: 'personalityPreset',
+  customInstructions: 'customInstructions',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -215,6 +220,13 @@ exports.Prisma.NullsOrder = {
   first: 'first',
   last: 'last'
 };
+exports.PersonalityPreset = exports.$Enums.PersonalityPreset = {
+  friendly: 'friendly',
+  pragmatic: 'pragmatic',
+  analytical: 'analytical',
+  mentor: 'mentor'
+};
+
 exports.AIProvider = exports.$Enums.AIProvider = {
   openai: 'openai',
   anthropic: 'anthropic',

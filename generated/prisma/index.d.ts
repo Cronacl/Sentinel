@@ -62,11 +62,25 @@ export namespace $Enums {
 
 export type AIProvider = (typeof AIProvider)[keyof typeof AIProvider]
 
+
+export const PersonalityPreset: {
+  friendly: 'friendly',
+  pragmatic: 'pragmatic',
+  analytical: 'analytical',
+  mentor: 'mentor'
+};
+
+export type PersonalityPreset = (typeof PersonalityPreset)[keyof typeof PersonalityPreset]
+
 }
 
 export type AIProvider = $Enums.AIProvider
 
 export const AIProvider: typeof $Enums.AIProvider
+
+export type PersonalityPreset = $Enums.PersonalityPreset
+
+export const PersonalityPreset: typeof $Enums.PersonalityPreset
 
 /**
  * ##  Prisma Client ʲˢ
@@ -1508,6 +1522,11 @@ export namespace Prisma {
     email: string | null
     emailVerified: boolean | null
     image: string | null
+    nickname: string | null
+    occupation: string | null
+    aboutUser: string | null
+    personalityPreset: $Enums.PersonalityPreset | null
+    customInstructions: string | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -1518,6 +1537,11 @@ export namespace Prisma {
     email: string | null
     emailVerified: boolean | null
     image: string | null
+    nickname: string | null
+    occupation: string | null
+    aboutUser: string | null
+    personalityPreset: $Enums.PersonalityPreset | null
+    customInstructions: string | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -1528,6 +1552,11 @@ export namespace Prisma {
     email: number
     emailVerified: number
     image: number
+    nickname: number
+    occupation: number
+    aboutUser: number
+    personalityPreset: number
+    customInstructions: number
     createdAt: number
     updatedAt: number
     _all: number
@@ -1540,6 +1569,11 @@ export namespace Prisma {
     email?: true
     emailVerified?: true
     image?: true
+    nickname?: true
+    occupation?: true
+    aboutUser?: true
+    personalityPreset?: true
+    customInstructions?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -1550,6 +1584,11 @@ export namespace Prisma {
     email?: true
     emailVerified?: true
     image?: true
+    nickname?: true
+    occupation?: true
+    aboutUser?: true
+    personalityPreset?: true
+    customInstructions?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -1560,6 +1599,11 @@ export namespace Prisma {
     email?: true
     emailVerified?: true
     image?: true
+    nickname?: true
+    occupation?: true
+    aboutUser?: true
+    personalityPreset?: true
+    customInstructions?: true
     createdAt?: true
     updatedAt?: true
     _all?: true
@@ -1643,6 +1687,11 @@ export namespace Prisma {
     email: string
     emailVerified: boolean
     image: string | null
+    nickname: string | null
+    occupation: string | null
+    aboutUser: string | null
+    personalityPreset: $Enums.PersonalityPreset
+    customInstructions: string | null
     createdAt: Date
     updatedAt: Date
     _count: UserCountAggregateOutputType | null
@@ -1670,6 +1719,11 @@ export namespace Prisma {
     email?: boolean
     emailVerified?: boolean
     image?: boolean
+    nickname?: boolean
+    occupation?: boolean
+    aboutUser?: boolean
+    personalityPreset?: boolean
+    customInstructions?: boolean
     createdAt?: boolean
     updatedAt?: boolean
     sessions?: boolean | User$sessionsArgs<ExtArgs>
@@ -1686,6 +1740,11 @@ export namespace Prisma {
     email?: boolean
     emailVerified?: boolean
     image?: boolean
+    nickname?: boolean
+    occupation?: boolean
+    aboutUser?: boolean
+    personalityPreset?: boolean
+    customInstructions?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["user"]>
@@ -1696,6 +1755,11 @@ export namespace Prisma {
     email?: boolean
     emailVerified?: boolean
     image?: boolean
+    nickname?: boolean
+    occupation?: boolean
+    aboutUser?: boolean
+    personalityPreset?: boolean
+    customInstructions?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["user"]>
@@ -1706,11 +1770,16 @@ export namespace Prisma {
     email?: boolean
     emailVerified?: boolean
     image?: boolean
+    nickname?: boolean
+    occupation?: boolean
+    aboutUser?: boolean
+    personalityPreset?: boolean
+    customInstructions?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
 
-  export type UserOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "name" | "email" | "emailVerified" | "image" | "createdAt" | "updatedAt", ExtArgs["result"]["user"]>
+  export type UserOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "name" | "email" | "emailVerified" | "image" | "nickname" | "occupation" | "aboutUser" | "personalityPreset" | "customInstructions" | "createdAt" | "updatedAt", ExtArgs["result"]["user"]>
   export type UserInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     sessions?: boolean | User$sessionsArgs<ExtArgs>
     accounts?: boolean | User$accountsArgs<ExtArgs>
@@ -1737,6 +1806,11 @@ export namespace Prisma {
       email: string
       emailVerified: boolean
       image: string | null
+      nickname: string | null
+      occupation: string | null
+      aboutUser: string | null
+      personalityPreset: $Enums.PersonalityPreset
+      customInstructions: string | null
       createdAt: Date
       updatedAt: Date
     }, ExtArgs["result"]["user"]>
@@ -2172,6 +2246,11 @@ export namespace Prisma {
     readonly email: FieldRef<"User", 'String'>
     readonly emailVerified: FieldRef<"User", 'Boolean'>
     readonly image: FieldRef<"User", 'String'>
+    readonly nickname: FieldRef<"User", 'String'>
+    readonly occupation: FieldRef<"User", 'String'>
+    readonly aboutUser: FieldRef<"User", 'String'>
+    readonly personalityPreset: FieldRef<"User", 'PersonalityPreset'>
+    readonly customInstructions: FieldRef<"User", 'String'>
     readonly createdAt: FieldRef<"User", 'DateTime'>
     readonly updatedAt: FieldRef<"User", 'DateTime'>
   }
@@ -9325,6 +9404,11 @@ export namespace Prisma {
     email: 'email',
     emailVerified: 'emailVerified',
     image: 'image',
+    nickname: 'nickname',
+    occupation: 'occupation',
+    aboutUser: 'aboutUser',
+    personalityPreset: 'personalityPreset',
+    customInstructions: 'customInstructions',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
   };
@@ -9471,6 +9555,20 @@ export namespace Prisma {
 
 
   /**
+   * Reference to a field of type 'PersonalityPreset'
+   */
+  export type EnumPersonalityPresetFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'PersonalityPreset'>
+    
+
+
+  /**
+   * Reference to a field of type 'PersonalityPreset[]'
+   */
+  export type ListEnumPersonalityPresetFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'PersonalityPreset[]'>
+    
+
+
+  /**
    * Reference to a field of type 'DateTime'
    */
   export type DateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DateTime'>
@@ -9538,6 +9636,11 @@ export namespace Prisma {
     email?: StringFilter<"User"> | string
     emailVerified?: BoolFilter<"User"> | boolean
     image?: StringNullableFilter<"User"> | string | null
+    nickname?: StringNullableFilter<"User"> | string | null
+    occupation?: StringNullableFilter<"User"> | string | null
+    aboutUser?: StringNullableFilter<"User"> | string | null
+    personalityPreset?: EnumPersonalityPresetFilter<"User"> | $Enums.PersonalityPreset
+    customInstructions?: StringNullableFilter<"User"> | string | null
     createdAt?: DateTimeFilter<"User"> | Date | string
     updatedAt?: DateTimeFilter<"User"> | Date | string
     sessions?: SessionListRelationFilter
@@ -9553,6 +9656,11 @@ export namespace Prisma {
     email?: SortOrder
     emailVerified?: SortOrder
     image?: SortOrderInput | SortOrder
+    nickname?: SortOrderInput | SortOrder
+    occupation?: SortOrderInput | SortOrder
+    aboutUser?: SortOrderInput | SortOrder
+    personalityPreset?: SortOrder
+    customInstructions?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     sessions?: SessionOrderByRelationAggregateInput
@@ -9571,6 +9679,11 @@ export namespace Prisma {
     name?: StringFilter<"User"> | string
     emailVerified?: BoolFilter<"User"> | boolean
     image?: StringNullableFilter<"User"> | string | null
+    nickname?: StringNullableFilter<"User"> | string | null
+    occupation?: StringNullableFilter<"User"> | string | null
+    aboutUser?: StringNullableFilter<"User"> | string | null
+    personalityPreset?: EnumPersonalityPresetFilter<"User"> | $Enums.PersonalityPreset
+    customInstructions?: StringNullableFilter<"User"> | string | null
     createdAt?: DateTimeFilter<"User"> | Date | string
     updatedAt?: DateTimeFilter<"User"> | Date | string
     sessions?: SessionListRelationFilter
@@ -9586,6 +9699,11 @@ export namespace Prisma {
     email?: SortOrder
     emailVerified?: SortOrder
     image?: SortOrderInput | SortOrder
+    nickname?: SortOrderInput | SortOrder
+    occupation?: SortOrderInput | SortOrder
+    aboutUser?: SortOrderInput | SortOrder
+    personalityPreset?: SortOrder
+    customInstructions?: SortOrderInput | SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     _count?: UserCountOrderByAggregateInput
@@ -9602,6 +9720,11 @@ export namespace Prisma {
     email?: StringWithAggregatesFilter<"User"> | string
     emailVerified?: BoolWithAggregatesFilter<"User"> | boolean
     image?: StringNullableWithAggregatesFilter<"User"> | string | null
+    nickname?: StringNullableWithAggregatesFilter<"User"> | string | null
+    occupation?: StringNullableWithAggregatesFilter<"User"> | string | null
+    aboutUser?: StringNullableWithAggregatesFilter<"User"> | string | null
+    personalityPreset?: EnumPersonalityPresetWithAggregatesFilter<"User"> | $Enums.PersonalityPreset
+    customInstructions?: StringNullableWithAggregatesFilter<"User"> | string | null
     createdAt?: DateTimeWithAggregatesFilter<"User"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"User"> | Date | string
   }
@@ -10053,6 +10176,11 @@ export namespace Prisma {
     email: string
     emailVerified?: boolean
     image?: string | null
+    nickname?: string | null
+    occupation?: string | null
+    aboutUser?: string | null
+    personalityPreset?: $Enums.PersonalityPreset
+    customInstructions?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionCreateNestedManyWithoutUserInput
@@ -10068,6 +10196,11 @@ export namespace Prisma {
     email: string
     emailVerified?: boolean
     image?: string | null
+    nickname?: string | null
+    occupation?: string | null
+    aboutUser?: string | null
+    personalityPreset?: $Enums.PersonalityPreset
+    customInstructions?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
@@ -10083,6 +10216,11 @@ export namespace Prisma {
     email?: StringFieldUpdateOperationsInput | string
     emailVerified?: BoolFieldUpdateOperationsInput | boolean
     image?: NullableStringFieldUpdateOperationsInput | string | null
+    nickname?: NullableStringFieldUpdateOperationsInput | string | null
+    occupation?: NullableStringFieldUpdateOperationsInput | string | null
+    aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
+    personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
+    customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUpdateManyWithoutUserNestedInput
@@ -10098,6 +10236,11 @@ export namespace Prisma {
     email?: StringFieldUpdateOperationsInput | string
     emailVerified?: BoolFieldUpdateOperationsInput | boolean
     image?: NullableStringFieldUpdateOperationsInput | string | null
+    nickname?: NullableStringFieldUpdateOperationsInput | string | null
+    occupation?: NullableStringFieldUpdateOperationsInput | string | null
+    aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
+    personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
+    customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
@@ -10113,6 +10256,11 @@ export namespace Prisma {
     email: string
     emailVerified?: boolean
     image?: string | null
+    nickname?: string | null
+    occupation?: string | null
+    aboutUser?: string | null
+    personalityPreset?: $Enums.PersonalityPreset
+    customInstructions?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -10123,6 +10271,11 @@ export namespace Prisma {
     email?: StringFieldUpdateOperationsInput | string
     emailVerified?: BoolFieldUpdateOperationsInput | boolean
     image?: NullableStringFieldUpdateOperationsInput | string | null
+    nickname?: NullableStringFieldUpdateOperationsInput | string | null
+    occupation?: NullableStringFieldUpdateOperationsInput | string | null
+    aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
+    personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
+    customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -10133,6 +10286,11 @@ export namespace Prisma {
     email?: StringFieldUpdateOperationsInput | string
     emailVerified?: BoolFieldUpdateOperationsInput | boolean
     image?: NullableStringFieldUpdateOperationsInput | string | null
+    nickname?: NullableStringFieldUpdateOperationsInput | string | null
+    occupation?: NullableStringFieldUpdateOperationsInput | string | null
+    aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
+    personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
+    customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -10657,6 +10815,13 @@ export namespace Prisma {
     not?: NestedStringNullableFilter<$PrismaModel> | string | null
   }
 
+  export type EnumPersonalityPresetFilter<$PrismaModel = never> = {
+    equals?: $Enums.PersonalityPreset | EnumPersonalityPresetFieldRefInput<$PrismaModel>
+    in?: $Enums.PersonalityPreset[] | ListEnumPersonalityPresetFieldRefInput<$PrismaModel>
+    notIn?: $Enums.PersonalityPreset[] | ListEnumPersonalityPresetFieldRefInput<$PrismaModel>
+    not?: NestedEnumPersonalityPresetFilter<$PrismaModel> | $Enums.PersonalityPreset
+  }
+
   export type DateTimeFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -10729,6 +10894,11 @@ export namespace Prisma {
     email?: SortOrder
     emailVerified?: SortOrder
     image?: SortOrder
+    nickname?: SortOrder
+    occupation?: SortOrder
+    aboutUser?: SortOrder
+    personalityPreset?: SortOrder
+    customInstructions?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -10739,6 +10909,11 @@ export namespace Prisma {
     email?: SortOrder
     emailVerified?: SortOrder
     image?: SortOrder
+    nickname?: SortOrder
+    occupation?: SortOrder
+    aboutUser?: SortOrder
+    personalityPreset?: SortOrder
+    customInstructions?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -10749,6 +10924,11 @@ export namespace Prisma {
     email?: SortOrder
     emailVerified?: SortOrder
     image?: SortOrder
+    nickname?: SortOrder
+    occupation?: SortOrder
+    aboutUser?: SortOrder
+    personalityPreset?: SortOrder
+    customInstructions?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -10795,6 +10975,16 @@ export namespace Prisma {
     _count?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedStringNullableFilter<$PrismaModel>
     _max?: NestedStringNullableFilter<$PrismaModel>
+  }
+
+  export type EnumPersonalityPresetWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.PersonalityPreset | EnumPersonalityPresetFieldRefInput<$PrismaModel>
+    in?: $Enums.PersonalityPreset[] | ListEnumPersonalityPresetFieldRefInput<$PrismaModel>
+    notIn?: $Enums.PersonalityPreset[] | ListEnumPersonalityPresetFieldRefInput<$PrismaModel>
+    not?: NestedEnumPersonalityPresetWithAggregatesFilter<$PrismaModel> | $Enums.PersonalityPreset
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumPersonalityPresetFilter<$PrismaModel>
+    _max?: NestedEnumPersonalityPresetFilter<$PrismaModel>
   }
 
   export type DateTimeWithAggregatesFilter<$PrismaModel = never> = {
@@ -11196,6 +11386,10 @@ export namespace Prisma {
     set?: string | null
   }
 
+  export type EnumPersonalityPresetFieldUpdateOperationsInput = {
+    set?: $Enums.PersonalityPreset
+  }
+
   export type DateTimeFieldUpdateOperationsInput = {
     set?: Date | string
   }
@@ -11459,6 +11653,13 @@ export namespace Prisma {
     not?: NestedStringNullableFilter<$PrismaModel> | string | null
   }
 
+  export type NestedEnumPersonalityPresetFilter<$PrismaModel = never> = {
+    equals?: $Enums.PersonalityPreset | EnumPersonalityPresetFieldRefInput<$PrismaModel>
+    in?: $Enums.PersonalityPreset[] | ListEnumPersonalityPresetFieldRefInput<$PrismaModel>
+    notIn?: $Enums.PersonalityPreset[] | ListEnumPersonalityPresetFieldRefInput<$PrismaModel>
+    not?: NestedEnumPersonalityPresetFilter<$PrismaModel> | $Enums.PersonalityPreset
+  }
+
   export type NestedDateTimeFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -11532,6 +11733,16 @@ export namespace Prisma {
     gt?: number | IntFieldRefInput<$PrismaModel>
     gte?: number | IntFieldRefInput<$PrismaModel>
     not?: NestedIntNullableFilter<$PrismaModel> | number | null
+  }
+
+  export type NestedEnumPersonalityPresetWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.PersonalityPreset | EnumPersonalityPresetFieldRefInput<$PrismaModel>
+    in?: $Enums.PersonalityPreset[] | ListEnumPersonalityPresetFieldRefInput<$PrismaModel>
+    notIn?: $Enums.PersonalityPreset[] | ListEnumPersonalityPresetFieldRefInput<$PrismaModel>
+    not?: NestedEnumPersonalityPresetWithAggregatesFilter<$PrismaModel> | $Enums.PersonalityPreset
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumPersonalityPresetFilter<$PrismaModel>
+    _max?: NestedEnumPersonalityPresetFilter<$PrismaModel>
   }
 
   export type NestedDateTimeWithAggregatesFilter<$PrismaModel = never> = {
@@ -11941,6 +12152,11 @@ export namespace Prisma {
     email: string
     emailVerified?: boolean
     image?: string | null
+    nickname?: string | null
+    occupation?: string | null
+    aboutUser?: string | null
+    personalityPreset?: $Enums.PersonalityPreset
+    customInstructions?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionCreateNestedManyWithoutUserInput
@@ -11955,6 +12171,11 @@ export namespace Prisma {
     email: string
     emailVerified?: boolean
     image?: string | null
+    nickname?: string | null
+    occupation?: string | null
+    aboutUser?: string | null
+    personalityPreset?: $Enums.PersonalityPreset
+    customInstructions?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
@@ -11985,6 +12206,11 @@ export namespace Prisma {
     email?: StringFieldUpdateOperationsInput | string
     emailVerified?: BoolFieldUpdateOperationsInput | boolean
     image?: NullableStringFieldUpdateOperationsInput | string | null
+    nickname?: NullableStringFieldUpdateOperationsInput | string | null
+    occupation?: NullableStringFieldUpdateOperationsInput | string | null
+    aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
+    personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
+    customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUpdateManyWithoutUserNestedInput
@@ -11999,6 +12225,11 @@ export namespace Prisma {
     email?: StringFieldUpdateOperationsInput | string
     emailVerified?: BoolFieldUpdateOperationsInput | boolean
     image?: NullableStringFieldUpdateOperationsInput | string | null
+    nickname?: NullableStringFieldUpdateOperationsInput | string | null
+    occupation?: NullableStringFieldUpdateOperationsInput | string | null
+    aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
+    personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
+    customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
@@ -12013,6 +12244,11 @@ export namespace Prisma {
     email: string
     emailVerified?: boolean
     image?: string | null
+    nickname?: string | null
+    occupation?: string | null
+    aboutUser?: string | null
+    personalityPreset?: $Enums.PersonalityPreset
+    customInstructions?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionCreateNestedManyWithoutUserInput
@@ -12027,6 +12263,11 @@ export namespace Prisma {
     email: string
     emailVerified?: boolean
     image?: string | null
+    nickname?: string | null
+    occupation?: string | null
+    aboutUser?: string | null
+    personalityPreset?: $Enums.PersonalityPreset
+    customInstructions?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
@@ -12057,6 +12298,11 @@ export namespace Prisma {
     email?: StringFieldUpdateOperationsInput | string
     emailVerified?: BoolFieldUpdateOperationsInput | boolean
     image?: NullableStringFieldUpdateOperationsInput | string | null
+    nickname?: NullableStringFieldUpdateOperationsInput | string | null
+    occupation?: NullableStringFieldUpdateOperationsInput | string | null
+    aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
+    personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
+    customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUpdateManyWithoutUserNestedInput
@@ -12071,6 +12317,11 @@ export namespace Prisma {
     email?: StringFieldUpdateOperationsInput | string
     emailVerified?: BoolFieldUpdateOperationsInput | boolean
     image?: NullableStringFieldUpdateOperationsInput | string | null
+    nickname?: NullableStringFieldUpdateOperationsInput | string | null
+    occupation?: NullableStringFieldUpdateOperationsInput | string | null
+    aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
+    personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
+    customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
@@ -12085,6 +12336,11 @@ export namespace Prisma {
     email: string
     emailVerified?: boolean
     image?: string | null
+    nickname?: string | null
+    occupation?: string | null
+    aboutUser?: string | null
+    personalityPreset?: $Enums.PersonalityPreset
+    customInstructions?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     accounts?: AccountCreateNestedManyWithoutUserInput
@@ -12099,6 +12355,11 @@ export namespace Prisma {
     email: string
     emailVerified?: boolean
     image?: string | null
+    nickname?: string | null
+    occupation?: string | null
+    aboutUser?: string | null
+    personalityPreset?: $Enums.PersonalityPreset
+    customInstructions?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     accounts?: AccountUncheckedCreateNestedManyWithoutUserInput
@@ -12129,6 +12390,11 @@ export namespace Prisma {
     email?: StringFieldUpdateOperationsInput | string
     emailVerified?: BoolFieldUpdateOperationsInput | boolean
     image?: NullableStringFieldUpdateOperationsInput | string | null
+    nickname?: NullableStringFieldUpdateOperationsInput | string | null
+    occupation?: NullableStringFieldUpdateOperationsInput | string | null
+    aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
+    personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
+    customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     accounts?: AccountUpdateManyWithoutUserNestedInput
@@ -12143,6 +12409,11 @@ export namespace Prisma {
     email?: StringFieldUpdateOperationsInput | string
     emailVerified?: BoolFieldUpdateOperationsInput | boolean
     image?: NullableStringFieldUpdateOperationsInput | string | null
+    nickname?: NullableStringFieldUpdateOperationsInput | string | null
+    occupation?: NullableStringFieldUpdateOperationsInput | string | null
+    aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
+    personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
+    customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     accounts?: AccountUncheckedUpdateManyWithoutUserNestedInput
@@ -12157,6 +12428,11 @@ export namespace Prisma {
     email: string
     emailVerified?: boolean
     image?: string | null
+    nickname?: string | null
+    occupation?: string | null
+    aboutUser?: string | null
+    personalityPreset?: $Enums.PersonalityPreset
+    customInstructions?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionCreateNestedManyWithoutUserInput
@@ -12171,6 +12447,11 @@ export namespace Prisma {
     email: string
     emailVerified?: boolean
     image?: string | null
+    nickname?: string | null
+    occupation?: string | null
+    aboutUser?: string | null
+    personalityPreset?: $Enums.PersonalityPreset
+    customInstructions?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
@@ -12201,6 +12482,11 @@ export namespace Prisma {
     email?: StringFieldUpdateOperationsInput | string
     emailVerified?: BoolFieldUpdateOperationsInput | boolean
     image?: NullableStringFieldUpdateOperationsInput | string | null
+    nickname?: NullableStringFieldUpdateOperationsInput | string | null
+    occupation?: NullableStringFieldUpdateOperationsInput | string | null
+    aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
+    personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
+    customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUpdateManyWithoutUserNestedInput
@@ -12215,6 +12501,11 @@ export namespace Prisma {
     email?: StringFieldUpdateOperationsInput | string
     emailVerified?: BoolFieldUpdateOperationsInput | boolean
     image?: NullableStringFieldUpdateOperationsInput | string | null
+    nickname?: NullableStringFieldUpdateOperationsInput | string | null
+    occupation?: NullableStringFieldUpdateOperationsInput | string | null
+    aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
+    personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
+    customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
@@ -12229,6 +12520,11 @@ export namespace Prisma {
     email: string
     emailVerified?: boolean
     image?: string | null
+    nickname?: string | null
+    occupation?: string | null
+    aboutUser?: string | null
+    personalityPreset?: $Enums.PersonalityPreset
+    customInstructions?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionCreateNestedManyWithoutUserInput
@@ -12243,6 +12539,11 @@ export namespace Prisma {
     email: string
     emailVerified?: boolean
     image?: string | null
+    nickname?: string | null
+    occupation?: string | null
+    aboutUser?: string | null
+    personalityPreset?: $Enums.PersonalityPreset
+    customInstructions?: string | null
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
@@ -12273,6 +12574,11 @@ export namespace Prisma {
     email?: StringFieldUpdateOperationsInput | string
     emailVerified?: BoolFieldUpdateOperationsInput | boolean
     image?: NullableStringFieldUpdateOperationsInput | string | null
+    nickname?: NullableStringFieldUpdateOperationsInput | string | null
+    occupation?: NullableStringFieldUpdateOperationsInput | string | null
+    aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
+    personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
+    customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUpdateManyWithoutUserNestedInput
@@ -12287,6 +12593,11 @@ export namespace Prisma {
     email?: StringFieldUpdateOperationsInput | string
     emailVerified?: BoolFieldUpdateOperationsInput | boolean
     image?: NullableStringFieldUpdateOperationsInput | string | null
+    nickname?: NullableStringFieldUpdateOperationsInput | string | null
+    occupation?: NullableStringFieldUpdateOperationsInput | string | null
+    aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
+    personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
+    customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
