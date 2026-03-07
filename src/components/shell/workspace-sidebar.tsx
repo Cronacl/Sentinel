@@ -90,7 +90,7 @@ function ThreadList({
   selectedWorkspaceId: string | null;
 }) {
   return (
-    <div className="flex flex-col gap-5 px-3 py-3">
+    <div className="flex flex-col gap-1 px-3 py-3">
       {groups.map((group) => {
         const isExpanded = expandedWorkspaceIds.has(group.workspace.id);
         const isWorkspaceActive = selectedWorkspaceId === group.workspace.id;
@@ -287,25 +287,8 @@ export function WorkspaceSidebar() {
     },
   });
 
-  const selectWorkspace = api.workspaces.select.useMutation({
-    onSuccess: async () => {
-      await Promise.all([
-        utils.workspaces.getCurrent.invalidate(),
-        utils.workspaces.list.invalidate(),
-      ]);
-    },
-  });
-
-  const updatePreferences = api.workspaces.updatePreferences.useMutation({
-    onSuccess: async (updated) => {
-      setOrganizeBy(updated.organizeBy);
-      setSortBy(updated.sortBy);
-      await Promise.all([
-        utils.workspaces.getPreferences.invalidate(),
-        utils.threads.list.invalidate(),
-      ]);
-    },
-  });
+  const selectWorkspace = api.workspaces.select.useMutation();
+  const updatePreferences = api.workspaces.updatePreferences.useMutation();
 
   useEffect(() => {
     if (!preferences.data) {
@@ -397,17 +380,10 @@ export function WorkspaceSidebar() {
     setOrganizeBy(nextOrganizeBy);
     setSortBy(nextSortBy);
 
-    try {
-      await updatePreferences.mutateAsync({
-        organizeBy: nextOrganizeBy,
-        sortBy: nextSortBy,
-      });
-    } catch {
-      if (preferences.data) {
-        setOrganizeBy(preferences.data.organizeBy);
-        setSortBy(preferences.data.sortBy);
-      }
-    }
+    void updatePreferences.mutateAsync({
+      organizeBy: nextOrganizeBy,
+      sortBy: nextSortBy,
+    });
   };
 
   const handleToggleWorkspace = (workspaceId: string) => {
@@ -424,13 +400,8 @@ export function WorkspaceSidebar() {
 
   const handlePressWorkspace = async (workspaceId: string) => {
     if (selectedWorkspaceId !== workspaceId) {
-      try {
-        await selectWorkspace.mutateAsync({ workspaceId });
-      } catch {
-        return;
-      }
+      void selectWorkspace.mutateAsync({ workspaceId });
     }
-
     handleToggleWorkspace(workspaceId);
   };
 
@@ -475,7 +446,7 @@ export function WorkspaceSidebar() {
 
       <div className="flex shrink-0 items-center gap-1 px-4">
         <div className="min-w-0 flex-1">
-          <h2 className="text-muted px-2 text-xs font-medium">Threads</h2>
+          <h2 className="text-muted/80 px-2 text-xs font-medium">Threads</h2>
         </div>
 
         <Button
