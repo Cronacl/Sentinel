@@ -4,6 +4,7 @@ import type { PropsWithChildren, ReactNode } from "react";
 
 import { useShell } from "./shell-context";
 import { SidebarToggle } from "./sidebar-toggle";
+import { ScrollShadow } from "@heroui/react";
 
 interface PageWrapperProps extends PropsWithChildren {
   /** Page title shown in the header. */
@@ -44,7 +45,7 @@ export function PageWrapper({
     <div className="flex h-full flex-col overflow-hidden">
       {hasHeader && (
         <header
-          className="border-separator flex shrink-0 items-center gap-3 border-b px-4 lg:px-6"
+          className=" flex shrink-0 items-center gap-3  px-4 lg:px-6"
           style={{ minHeight: 44 }}
         >
           {showToggle && <SidebarToggle />}
@@ -69,13 +70,13 @@ export function PageWrapper({
       )}
 
       <div className="flex-1 overflow-y-auto">
-        <div
-          className={`mx-auto h-full ${maxWidthMap[maxWidth]} ${
+        <ScrollShadow
+          className={`mx-auto h-[calc(100vh-44px)] overflow-y-auto ${maxWidthMap[maxWidth]} ${
             flush ? "" : "px-4 py-4 lg:px-5 lg:py-5"
           }`}
         >
           {children}
-        </div>
+        </ScrollShadow>
       </div>
     </div>
   );

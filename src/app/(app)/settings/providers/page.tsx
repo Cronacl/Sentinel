@@ -21,6 +21,26 @@ const STATUS_LABEL = {
   not_configured: "Not configured",
 } as const;
 
+function ProvidersSkeleton() {
+  return (
+    <div className="flex flex-col gap-2">
+      {Array.from({ length: 3 }).map((_, index) => (
+        <section
+          className="border-separator bg-surface rounded-xl border p-5"
+          key={index}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 flex-1 space-y-2">
+              <Skeleton className="h-3 w-36 rounded-md" />
+              <Skeleton className="h-2 w-72 max-w-full rounded-md" />
+            </div>
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 export default function ProvidersPage() {
   const [modalProvider, setModalProvider] = useState<{
     id: ProviderKey;
@@ -40,27 +60,9 @@ export default function ProvidersPage() {
       subtitle="Manage your AI provider connections"
       title="Providers"
     >
-      <div className="flex flex-col gap-2">
-        {isLoading && (
-          <>
-            {Array.from({ length: 3 }).map((_, index) => (
-              <div
-                key={index}
-                className="border-separator flex items-center gap-4 rounded-xl border px-4 py-3"
-              >
-                <div className="min-w-0 flex-1 space-y-2">
-                  <Skeleton className="h-4 w-32 rounded-md" />
-                  <Skeleton className="h-3 w-56 rounded-md" />
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Skeleton className="h-6 w-10 rounded-full" />
-                  <Skeleton className="h-8 w-20 rounded-lg" />
-                </div>
-              </div>
-            ))}
-          </>
-        )}
+      {isLoading ? <ProvidersSkeleton /> : null}
 
+      <div className="flex flex-col gap-2">
         {providers?.map((p) => (
           <div
             key={p.id}

@@ -27,6 +27,62 @@ const CAPABILITY_LABEL: Record<string, string> = {
   vision: "Vision",
 };
 
+function ModelsSkeleton() {
+  return (
+    <div className="flex flex-col gap-6">
+      {Array.from({ length: 2 }).map((_, sectionIndex) => (
+        <section key={sectionIndex}>
+          <div className="mb-3 flex items-center gap-2">
+            <Skeleton className="h-5 w-32 rounded-md" />
+            <Skeleton className="h-5 w-24 rounded-full" />
+          </div>
+
+          <div className="border-separator bg-surface rounded-xl border p-2">
+            <div className="flex flex-col gap-2">
+              {Array.from({ length: 3 }).map((__, rowIndex) => (
+                <div
+                  className="bg-background border-separator flex items-center gap-4 rounded-xl border px-4 py-3"
+                  key={rowIndex}
+                >
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Skeleton className="h-4 w-40 rounded-md" />
+                    <Skeleton className="h-3 w-72 max-w-full rounded-md" />
+                    <div className="flex gap-1">
+                      <Skeleton className="h-5 w-16 rounded-full" />
+                      <Skeleton className="h-5 w-20 rounded-full" />
+                    </div>
+                  </div>
+
+                  <Skeleton className="h-6 w-10 rounded-full" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      ))}
+
+      <section className="border-separator bg-surface rounded-xl border p-5">
+        <div className="mb-5 space-y-2">
+          <Skeleton className="h-5 w-36 rounded-md" />
+          <Skeleton className="h-4 w-80 max-w-full rounded-md" />
+        </div>
+
+        <div className="flex items-end gap-3">
+          <div className="w-44 space-y-2">
+            <Skeleton className="h-4 w-20 rounded-md" />
+            <Skeleton className="h-10 w-full rounded-xl" />
+          </div>
+          <div className="min-w-0 flex-1 space-y-2">
+            <Skeleton className="h-4 w-20 rounded-md" />
+            <Skeleton className="h-10 w-full rounded-xl" />
+          </div>
+          <Skeleton className="h-10 w-16 rounded-xl" />
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function ModelsPage() {
   const { data: models, isLoading } = api.models.list.useQuery();
   const utils = api.useUtils();
@@ -131,40 +187,7 @@ export default function ModelsPage() {
       subtitle="Enable or disable models and add custom ones"
       title="Models"
     >
-      {isLoading && (
-        <div className="flex flex-col gap-6">
-          {Array.from({ length: 2 }).map((_, sectionIndex) => (
-            <section key={sectionIndex}>
-              <div className="mb-3 flex items-center gap-2">
-                <Skeleton className="h-4 w-28 rounded-md" />
-                <Skeleton className="h-5 w-24 rounded-full" />
-              </div>
-              <div className="border-separator rounded-xl border">
-                {Array.from({ length: 3 }).map((__, rowIndex) => (
-                  <div
-                    className={`flex items-center gap-3 px-4 py-3 ${
-                      rowIndex < 2 ? "border-separator border-b" : ""
-                    }`}
-                    key={rowIndex}
-                  >
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <Skeleton className="h-4 w-36 rounded-md" />
-                      <Skeleton className="h-3 w-64 rounded-md" />
-                      <div className="flex gap-1">
-                        <Skeleton className="h-5 w-16 rounded-full" />
-                        <Skeleton className="h-5 w-20 rounded-full" />
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <Skeleton className="h-6 w-10 rounded-full" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
-      )}
+      {isLoading ? <ModelsSkeleton /> : null}
 
       {actionError ? (
         <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">

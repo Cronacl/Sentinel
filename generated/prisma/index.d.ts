@@ -72,6 +72,15 @@ export const PersonalityPreset: {
 
 export type PersonalityPreset = (typeof PersonalityPreset)[keyof typeof PersonalityPreset]
 
+
+export const ThemePreference: {
+  light: 'light',
+  dark: 'dark',
+  system: 'system'
+};
+
+export type ThemePreference = (typeof ThemePreference)[keyof typeof ThemePreference]
+
 }
 
 export type AIProvider = $Enums.AIProvider
@@ -81,6 +90,10 @@ export const AIProvider: typeof $Enums.AIProvider
 export type PersonalityPreset = $Enums.PersonalityPreset
 
 export const PersonalityPreset: typeof $Enums.PersonalityPreset
+
+export type ThemePreference = $Enums.ThemePreference
+
+export const ThemePreference: typeof $Enums.ThemePreference
 
 /**
  * ##  Prisma Client ʲˢ
@@ -1527,6 +1540,7 @@ export namespace Prisma {
     aboutUser: string | null
     personalityPreset: $Enums.PersonalityPreset | null
     customInstructions: string | null
+    themePreference: $Enums.ThemePreference | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -1542,6 +1556,7 @@ export namespace Prisma {
     aboutUser: string | null
     personalityPreset: $Enums.PersonalityPreset | null
     customInstructions: string | null
+    themePreference: $Enums.ThemePreference | null
     createdAt: Date | null
     updatedAt: Date | null
   }
@@ -1557,6 +1572,7 @@ export namespace Prisma {
     aboutUser: number
     personalityPreset: number
     customInstructions: number
+    themePreference: number
     createdAt: number
     updatedAt: number
     _all: number
@@ -1574,6 +1590,7 @@ export namespace Prisma {
     aboutUser?: true
     personalityPreset?: true
     customInstructions?: true
+    themePreference?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -1589,6 +1606,7 @@ export namespace Prisma {
     aboutUser?: true
     personalityPreset?: true
     customInstructions?: true
+    themePreference?: true
     createdAt?: true
     updatedAt?: true
   }
@@ -1604,6 +1622,7 @@ export namespace Prisma {
     aboutUser?: true
     personalityPreset?: true
     customInstructions?: true
+    themePreference?: true
     createdAt?: true
     updatedAt?: true
     _all?: true
@@ -1692,6 +1711,7 @@ export namespace Prisma {
     aboutUser: string | null
     personalityPreset: $Enums.PersonalityPreset
     customInstructions: string | null
+    themePreference: $Enums.ThemePreference
     createdAt: Date
     updatedAt: Date
     _count: UserCountAggregateOutputType | null
@@ -1724,6 +1744,7 @@ export namespace Prisma {
     aboutUser?: boolean
     personalityPreset?: boolean
     customInstructions?: boolean
+    themePreference?: boolean
     createdAt?: boolean
     updatedAt?: boolean
     sessions?: boolean | User$sessionsArgs<ExtArgs>
@@ -1745,6 +1766,7 @@ export namespace Prisma {
     aboutUser?: boolean
     personalityPreset?: boolean
     customInstructions?: boolean
+    themePreference?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["user"]>
@@ -1760,6 +1782,7 @@ export namespace Prisma {
     aboutUser?: boolean
     personalityPreset?: boolean
     customInstructions?: boolean
+    themePreference?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }, ExtArgs["result"]["user"]>
@@ -1775,11 +1798,12 @@ export namespace Prisma {
     aboutUser?: boolean
     personalityPreset?: boolean
     customInstructions?: boolean
+    themePreference?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
 
-  export type UserOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "name" | "email" | "emailVerified" | "image" | "nickname" | "occupation" | "aboutUser" | "personalityPreset" | "customInstructions" | "createdAt" | "updatedAt", ExtArgs["result"]["user"]>
+  export type UserOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "name" | "email" | "emailVerified" | "image" | "nickname" | "occupation" | "aboutUser" | "personalityPreset" | "customInstructions" | "themePreference" | "createdAt" | "updatedAt", ExtArgs["result"]["user"]>
   export type UserInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     sessions?: boolean | User$sessionsArgs<ExtArgs>
     accounts?: boolean | User$accountsArgs<ExtArgs>
@@ -1811,6 +1835,7 @@ export namespace Prisma {
       aboutUser: string | null
       personalityPreset: $Enums.PersonalityPreset
       customInstructions: string | null
+      themePreference: $Enums.ThemePreference
       createdAt: Date
       updatedAt: Date
     }, ExtArgs["result"]["user"]>
@@ -2251,6 +2276,7 @@ export namespace Prisma {
     readonly aboutUser: FieldRef<"User", 'String'>
     readonly personalityPreset: FieldRef<"User", 'PersonalityPreset'>
     readonly customInstructions: FieldRef<"User", 'String'>
+    readonly themePreference: FieldRef<"User", 'ThemePreference'>
     readonly createdAt: FieldRef<"User", 'DateTime'>
     readonly updatedAt: FieldRef<"User", 'DateTime'>
   }
@@ -9409,6 +9435,7 @@ export namespace Prisma {
     aboutUser: 'aboutUser',
     personalityPreset: 'personalityPreset',
     customInstructions: 'customInstructions',
+    themePreference: 'themePreference',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
   };
@@ -9569,6 +9596,20 @@ export namespace Prisma {
 
 
   /**
+   * Reference to a field of type 'ThemePreference'
+   */
+  export type EnumThemePreferenceFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ThemePreference'>
+    
+
+
+  /**
+   * Reference to a field of type 'ThemePreference[]'
+   */
+  export type ListEnumThemePreferenceFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ThemePreference[]'>
+    
+
+
+  /**
    * Reference to a field of type 'DateTime'
    */
   export type DateTimeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DateTime'>
@@ -9641,6 +9682,7 @@ export namespace Prisma {
     aboutUser?: StringNullableFilter<"User"> | string | null
     personalityPreset?: EnumPersonalityPresetFilter<"User"> | $Enums.PersonalityPreset
     customInstructions?: StringNullableFilter<"User"> | string | null
+    themePreference?: EnumThemePreferenceFilter<"User"> | $Enums.ThemePreference
     createdAt?: DateTimeFilter<"User"> | Date | string
     updatedAt?: DateTimeFilter<"User"> | Date | string
     sessions?: SessionListRelationFilter
@@ -9661,6 +9703,7 @@ export namespace Prisma {
     aboutUser?: SortOrderInput | SortOrder
     personalityPreset?: SortOrder
     customInstructions?: SortOrderInput | SortOrder
+    themePreference?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     sessions?: SessionOrderByRelationAggregateInput
@@ -9684,6 +9727,7 @@ export namespace Prisma {
     aboutUser?: StringNullableFilter<"User"> | string | null
     personalityPreset?: EnumPersonalityPresetFilter<"User"> | $Enums.PersonalityPreset
     customInstructions?: StringNullableFilter<"User"> | string | null
+    themePreference?: EnumThemePreferenceFilter<"User"> | $Enums.ThemePreference
     createdAt?: DateTimeFilter<"User"> | Date | string
     updatedAt?: DateTimeFilter<"User"> | Date | string
     sessions?: SessionListRelationFilter
@@ -9704,6 +9748,7 @@ export namespace Prisma {
     aboutUser?: SortOrderInput | SortOrder
     personalityPreset?: SortOrder
     customInstructions?: SortOrderInput | SortOrder
+    themePreference?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     _count?: UserCountOrderByAggregateInput
@@ -9725,6 +9770,7 @@ export namespace Prisma {
     aboutUser?: StringNullableWithAggregatesFilter<"User"> | string | null
     personalityPreset?: EnumPersonalityPresetWithAggregatesFilter<"User"> | $Enums.PersonalityPreset
     customInstructions?: StringNullableWithAggregatesFilter<"User"> | string | null
+    themePreference?: EnumThemePreferenceWithAggregatesFilter<"User"> | $Enums.ThemePreference
     createdAt?: DateTimeWithAggregatesFilter<"User"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"User"> | Date | string
   }
@@ -10181,6 +10227,7 @@ export namespace Prisma {
     aboutUser?: string | null
     personalityPreset?: $Enums.PersonalityPreset
     customInstructions?: string | null
+    themePreference?: $Enums.ThemePreference
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionCreateNestedManyWithoutUserInput
@@ -10201,6 +10248,7 @@ export namespace Prisma {
     aboutUser?: string | null
     personalityPreset?: $Enums.PersonalityPreset
     customInstructions?: string | null
+    themePreference?: $Enums.ThemePreference
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
@@ -10221,6 +10269,7 @@ export namespace Prisma {
     aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
     personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
     customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
+    themePreference?: EnumThemePreferenceFieldUpdateOperationsInput | $Enums.ThemePreference
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUpdateManyWithoutUserNestedInput
@@ -10241,6 +10290,7 @@ export namespace Prisma {
     aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
     personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
     customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
+    themePreference?: EnumThemePreferenceFieldUpdateOperationsInput | $Enums.ThemePreference
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
@@ -10261,6 +10311,7 @@ export namespace Prisma {
     aboutUser?: string | null
     personalityPreset?: $Enums.PersonalityPreset
     customInstructions?: string | null
+    themePreference?: $Enums.ThemePreference
     createdAt?: Date | string
     updatedAt?: Date | string
   }
@@ -10276,6 +10327,7 @@ export namespace Prisma {
     aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
     personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
     customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
+    themePreference?: EnumThemePreferenceFieldUpdateOperationsInput | $Enums.ThemePreference
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -10291,6 +10343,7 @@ export namespace Prisma {
     aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
     personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
     customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
+    themePreference?: EnumThemePreferenceFieldUpdateOperationsInput | $Enums.ThemePreference
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
@@ -10822,6 +10875,13 @@ export namespace Prisma {
     not?: NestedEnumPersonalityPresetFilter<$PrismaModel> | $Enums.PersonalityPreset
   }
 
+  export type EnumThemePreferenceFilter<$PrismaModel = never> = {
+    equals?: $Enums.ThemePreference | EnumThemePreferenceFieldRefInput<$PrismaModel>
+    in?: $Enums.ThemePreference[] | ListEnumThemePreferenceFieldRefInput<$PrismaModel>
+    notIn?: $Enums.ThemePreference[] | ListEnumThemePreferenceFieldRefInput<$PrismaModel>
+    not?: NestedEnumThemePreferenceFilter<$PrismaModel> | $Enums.ThemePreference
+  }
+
   export type DateTimeFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -10899,6 +10959,7 @@ export namespace Prisma {
     aboutUser?: SortOrder
     personalityPreset?: SortOrder
     customInstructions?: SortOrder
+    themePreference?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -10914,6 +10975,7 @@ export namespace Prisma {
     aboutUser?: SortOrder
     personalityPreset?: SortOrder
     customInstructions?: SortOrder
+    themePreference?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -10929,6 +10991,7 @@ export namespace Prisma {
     aboutUser?: SortOrder
     personalityPreset?: SortOrder
     customInstructions?: SortOrder
+    themePreference?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
   }
@@ -10985,6 +11048,16 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedEnumPersonalityPresetFilter<$PrismaModel>
     _max?: NestedEnumPersonalityPresetFilter<$PrismaModel>
+  }
+
+  export type EnumThemePreferenceWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.ThemePreference | EnumThemePreferenceFieldRefInput<$PrismaModel>
+    in?: $Enums.ThemePreference[] | ListEnumThemePreferenceFieldRefInput<$PrismaModel>
+    notIn?: $Enums.ThemePreference[] | ListEnumThemePreferenceFieldRefInput<$PrismaModel>
+    not?: NestedEnumThemePreferenceWithAggregatesFilter<$PrismaModel> | $Enums.ThemePreference
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumThemePreferenceFilter<$PrismaModel>
+    _max?: NestedEnumThemePreferenceFilter<$PrismaModel>
   }
 
   export type DateTimeWithAggregatesFilter<$PrismaModel = never> = {
@@ -11390,6 +11463,10 @@ export namespace Prisma {
     set?: $Enums.PersonalityPreset
   }
 
+  export type EnumThemePreferenceFieldUpdateOperationsInput = {
+    set?: $Enums.ThemePreference
+  }
+
   export type DateTimeFieldUpdateOperationsInput = {
     set?: Date | string
   }
@@ -11660,6 +11737,13 @@ export namespace Prisma {
     not?: NestedEnumPersonalityPresetFilter<$PrismaModel> | $Enums.PersonalityPreset
   }
 
+  export type NestedEnumThemePreferenceFilter<$PrismaModel = never> = {
+    equals?: $Enums.ThemePreference | EnumThemePreferenceFieldRefInput<$PrismaModel>
+    in?: $Enums.ThemePreference[] | ListEnumThemePreferenceFieldRefInput<$PrismaModel>
+    notIn?: $Enums.ThemePreference[] | ListEnumThemePreferenceFieldRefInput<$PrismaModel>
+    not?: NestedEnumThemePreferenceFilter<$PrismaModel> | $Enums.ThemePreference
+  }
+
   export type NestedDateTimeFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -11743,6 +11827,16 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedEnumPersonalityPresetFilter<$PrismaModel>
     _max?: NestedEnumPersonalityPresetFilter<$PrismaModel>
+  }
+
+  export type NestedEnumThemePreferenceWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.ThemePreference | EnumThemePreferenceFieldRefInput<$PrismaModel>
+    in?: $Enums.ThemePreference[] | ListEnumThemePreferenceFieldRefInput<$PrismaModel>
+    notIn?: $Enums.ThemePreference[] | ListEnumThemePreferenceFieldRefInput<$PrismaModel>
+    not?: NestedEnumThemePreferenceWithAggregatesFilter<$PrismaModel> | $Enums.ThemePreference
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumThemePreferenceFilter<$PrismaModel>
+    _max?: NestedEnumThemePreferenceFilter<$PrismaModel>
   }
 
   export type NestedDateTimeWithAggregatesFilter<$PrismaModel = never> = {
@@ -12157,6 +12251,7 @@ export namespace Prisma {
     aboutUser?: string | null
     personalityPreset?: $Enums.PersonalityPreset
     customInstructions?: string | null
+    themePreference?: $Enums.ThemePreference
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionCreateNestedManyWithoutUserInput
@@ -12176,6 +12271,7 @@ export namespace Prisma {
     aboutUser?: string | null
     personalityPreset?: $Enums.PersonalityPreset
     customInstructions?: string | null
+    themePreference?: $Enums.ThemePreference
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
@@ -12211,6 +12307,7 @@ export namespace Prisma {
     aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
     personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
     customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
+    themePreference?: EnumThemePreferenceFieldUpdateOperationsInput | $Enums.ThemePreference
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUpdateManyWithoutUserNestedInput
@@ -12230,6 +12327,7 @@ export namespace Prisma {
     aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
     personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
     customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
+    themePreference?: EnumThemePreferenceFieldUpdateOperationsInput | $Enums.ThemePreference
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
@@ -12249,6 +12347,7 @@ export namespace Prisma {
     aboutUser?: string | null
     personalityPreset?: $Enums.PersonalityPreset
     customInstructions?: string | null
+    themePreference?: $Enums.ThemePreference
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionCreateNestedManyWithoutUserInput
@@ -12268,6 +12367,7 @@ export namespace Prisma {
     aboutUser?: string | null
     personalityPreset?: $Enums.PersonalityPreset
     customInstructions?: string | null
+    themePreference?: $Enums.ThemePreference
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
@@ -12303,6 +12403,7 @@ export namespace Prisma {
     aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
     personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
     customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
+    themePreference?: EnumThemePreferenceFieldUpdateOperationsInput | $Enums.ThemePreference
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUpdateManyWithoutUserNestedInput
@@ -12322,6 +12423,7 @@ export namespace Prisma {
     aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
     personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
     customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
+    themePreference?: EnumThemePreferenceFieldUpdateOperationsInput | $Enums.ThemePreference
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
@@ -12341,6 +12443,7 @@ export namespace Prisma {
     aboutUser?: string | null
     personalityPreset?: $Enums.PersonalityPreset
     customInstructions?: string | null
+    themePreference?: $Enums.ThemePreference
     createdAt?: Date | string
     updatedAt?: Date | string
     accounts?: AccountCreateNestedManyWithoutUserInput
@@ -12360,6 +12463,7 @@ export namespace Prisma {
     aboutUser?: string | null
     personalityPreset?: $Enums.PersonalityPreset
     customInstructions?: string | null
+    themePreference?: $Enums.ThemePreference
     createdAt?: Date | string
     updatedAt?: Date | string
     accounts?: AccountUncheckedCreateNestedManyWithoutUserInput
@@ -12395,6 +12499,7 @@ export namespace Prisma {
     aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
     personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
     customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
+    themePreference?: EnumThemePreferenceFieldUpdateOperationsInput | $Enums.ThemePreference
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     accounts?: AccountUpdateManyWithoutUserNestedInput
@@ -12414,6 +12519,7 @@ export namespace Prisma {
     aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
     personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
     customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
+    themePreference?: EnumThemePreferenceFieldUpdateOperationsInput | $Enums.ThemePreference
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     accounts?: AccountUncheckedUpdateManyWithoutUserNestedInput
@@ -12433,6 +12539,7 @@ export namespace Prisma {
     aboutUser?: string | null
     personalityPreset?: $Enums.PersonalityPreset
     customInstructions?: string | null
+    themePreference?: $Enums.ThemePreference
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionCreateNestedManyWithoutUserInput
@@ -12452,6 +12559,7 @@ export namespace Prisma {
     aboutUser?: string | null
     personalityPreset?: $Enums.PersonalityPreset
     customInstructions?: string | null
+    themePreference?: $Enums.ThemePreference
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
@@ -12487,6 +12595,7 @@ export namespace Prisma {
     aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
     personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
     customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
+    themePreference?: EnumThemePreferenceFieldUpdateOperationsInput | $Enums.ThemePreference
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUpdateManyWithoutUserNestedInput
@@ -12506,6 +12615,7 @@ export namespace Prisma {
     aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
     personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
     customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
+    themePreference?: EnumThemePreferenceFieldUpdateOperationsInput | $Enums.ThemePreference
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
@@ -12525,6 +12635,7 @@ export namespace Prisma {
     aboutUser?: string | null
     personalityPreset?: $Enums.PersonalityPreset
     customInstructions?: string | null
+    themePreference?: $Enums.ThemePreference
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionCreateNestedManyWithoutUserInput
@@ -12544,6 +12655,7 @@ export namespace Prisma {
     aboutUser?: string | null
     personalityPreset?: $Enums.PersonalityPreset
     customInstructions?: string | null
+    themePreference?: $Enums.ThemePreference
     createdAt?: Date | string
     updatedAt?: Date | string
     sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
@@ -12579,6 +12691,7 @@ export namespace Prisma {
     aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
     personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
     customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
+    themePreference?: EnumThemePreferenceFieldUpdateOperationsInput | $Enums.ThemePreference
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUpdateManyWithoutUserNestedInput
@@ -12598,6 +12711,7 @@ export namespace Prisma {
     aboutUser?: NullableStringFieldUpdateOperationsInput | string | null
     personalityPreset?: EnumPersonalityPresetFieldUpdateOperationsInput | $Enums.PersonalityPreset
     customInstructions?: NullableStringFieldUpdateOperationsInput | string | null
+    themePreference?: EnumThemePreferenceFieldUpdateOperationsInput | $Enums.ThemePreference
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput

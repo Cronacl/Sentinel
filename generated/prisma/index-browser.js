@@ -132,6 +132,7 @@ exports.Prisma.UserScalarFieldEnum = {
   aboutUser: 'aboutUser',
   personalityPreset: 'personalityPreset',
   customInstructions: 'customInstructions',
+  themePreference: 'themePreference',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -225,6 +226,12 @@ exports.PersonalityPreset = exports.$Enums.PersonalityPreset = {
   pragmatic: 'pragmatic',
   analytical: 'analytical',
   mentor: 'mentor'
+};
+
+exports.ThemePreference = exports.$Enums.ThemePreference = {
+  light: 'light',
+  dark: 'dark',
+  system: 'system'
 };
 
 exports.AIProvider = exports.$Enums.AIProvider = {

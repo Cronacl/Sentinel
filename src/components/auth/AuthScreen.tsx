@@ -1,7 +1,10 @@
 "use client";
 
 import { Button, Card, Spinner } from "@heroui/react";
-import { useState, useTransition } from "react";
+import { FingerPrintIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, useTransition } from "react";
 
 import Logo from "@/components/shared/logo";
 import { signIn } from "@/server/better-auth/client";
@@ -44,9 +47,23 @@ function GoogleIcon() {
   );
 }
 
+function isPasskeyCancelled(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const code = "code" in error ? error.code : undefined;
+  const message = "message" in error ? error.message : undefined;
+
+  return code === "AUTH_CANCELLED" || message === "auth cancelled";
+}
+
 export function AuthScreen(props: AuthScreenProps) {
+  const router = useRouter();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isPasskeyPending, setIsPasskeyPending] = useState(false);
   const [isGooglePending, startGoogleTransition] = useTransition();
+  const hasAttemptedConditionalPasskey = useRef(false);
 
   const handleGoogleSignIn = () => {
     setErrorMessage(null);
@@ -61,6 +78,70 @@ export function AuthScreen(props: AuthScreenProps) {
       }
     });
   };
+
+  const completePasskeySignIn = () => {
+    router.refresh();
+    router.push("/");
+  };
+
+  const handlePasskeySignIn = async (options?: { autoFill?: boolean }) => {
+    const isAutoFill = options?.autoFill === true;
+
+    if (!isAutoFill) {
+      setIsPasskeyPending(true);
+    }
+
+    setErrorMessage(null);
+
+    try {
+      const result = await signIn.passkey(
+        isAutoFill ? { autoFill: true } : undefined,
+      );
+
+      if (result?.error) {
+        if (!isPasskeyCancelled(result.error)) {
+          setErrorMessage(
+            result.error.message ?? "Unable to sign in with a passkey.",
+          );
+        }
+        return;
+      }
+
+      completePasskeySignIn();
+    } catch (error) {
+      if (!isPasskeyCancelled(error)) {
+        setErrorMessage("Unable to sign in with a passkey.");
+      }
+    } finally {
+      if (!isAutoFill) {
+        setIsPasskeyPending(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (
+      hasAttemptedConditionalPasskey.current ||
+      typeof window === "undefined" ||
+      typeof PublicKeyCredential === "undefined" ||
+      typeof PublicKeyCredential.isConditionalMediationAvailable !== "function"
+    ) {
+      return;
+    }
+
+    hasAttemptedConditionalPasskey.current = true;
+
+    void (async () => {
+      const isAvailable =
+        await PublicKeyCredential.isConditionalMediationAvailable();
+
+      if (!isAvailable) {
+        return;
+      }
+
+      await handlePasskeySignIn({ autoFill: true });
+    })();
+  }, []);
 
   return (
     <main className="bg-background text-foreground relative min-h-screen overflow-hidden px-4 py-6">
@@ -78,9 +159,16 @@ export function AuthScreen(props: AuthScreenProps) {
             </div>
           </Card.Header>
           <Card.Content className="space-y-3">
+            <input
+              aria-hidden="true"
+              autoComplete="username webauthn"
+              className="pointer-events-none absolute h-0 w-0 opacity-0"
+              tabIndex={-1}
+              type="text"
+            />
             <Button
               className="w-full text-sm"
-              isDisabled={isGooglePending}
+              isDisabled={isGooglePending || isPasskeyPending}
               isPending={isGooglePending}
               onPress={handleGoogleSignIn}
               variant="primary"
@@ -92,9 +180,39 @@ export function AuthScreen(props: AuthScreenProps) {
                   ) : (
                     <GoogleIcon />
                   )}
-                  {isGooglePending
-                    ? "Redirecting to Google..."
-                    : "Continue with Google"}
+                  Continue with Google
+                </>
+              )}
+            </Button>
+
+            <div className="flex items-center gap-3">
+              <div className="bg-separator h-px flex-1" />
+              <span className="text-muted text-[11px] uppercase tracking-[0.18em]">
+                Or
+              </span>
+              <div className="bg-separator h-px flex-1" />
+            </div>
+
+            <Button
+              className="w-full text-sm"
+              isDisabled={isGooglePending || isPasskeyPending}
+              isPending={isPasskeyPending}
+              onPress={() => void handlePasskeySignIn()}
+              variant="secondary"
+            >
+              {({ isPending }) => (
+                <>
+                  {isPending ? (
+                    <Spinner color="current" size="sm" />
+                  ) : (
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={FingerPrintIcon}
+                      size={16}
+                      strokeWidth={1.5}
+                    />
+                  )}
+                  Continue with Passkey
                 </>
               )}
             </Button>

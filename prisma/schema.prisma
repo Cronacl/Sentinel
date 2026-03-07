@@ -23,21 +23,28 @@ enum PersonalityPreset {
   mentor
 }
 
+enum ThemePreference {
+  light
+  dark
+  system
+}
+
 model User {
-  id            String    @id
-  name          String //@db.Text
-  email         String
-  emailVerified Boolean   @default(false)
-  image         String? //@db.Text
-  nickname      String?
-  occupation    String?
-  aboutUser     String?
-  personalityPreset PersonalityPreset @default(pragmatic)
+  id                 String            @id
+  name               String //@db.Text
+  email              String
+  emailVerified      Boolean           @default(false)
+  image              String? //@db.Text
+  nickname           String?
+  occupation         String?
+  aboutUser          String?
+  personalityPreset  PersonalityPreset @default(pragmatic)
   customInstructions String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @default(now()) @updatedAt
-  sessions      Session[]
-  accounts      Account[]
+  themePreference    ThemePreference   @default(system)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @default(now()) @updatedAt
+  sessions           Session[]
+  accounts           Account[]
 
   passkeys         Passkey[]
   credentials      ProviderCredential[]

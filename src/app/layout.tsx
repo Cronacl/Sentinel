@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 
 import { Providers } from "@/components/providers";
+import { DEFAULT_THEME_PREFERENCE, getThemeInitScript } from "@/lib/theme";
+import { getSession } from "@/server/better-auth/server";
+import { db } from "@/server/db";
 import "@/styles/globals.css";
 
 export const metadata: Metadata = {
@@ -77,9 +80,19 @@ const millionaire = localFont({
   variable: "--font-millionaire",
 });
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const session = await getSession();
+  const themePreference = session?.user?.id
+    ? ((
+        await db.user.findUnique({
+          where: { id: session.user.id },
+          select: { themePreference: true },
+        })
+      )?.themePreference ?? DEFAULT_THEME_PREFERENCE)
+    : DEFAULT_THEME_PREFERENCE;
+
   return (
     <html
       className={`${satoshi.variable} ${millionaire.variable}`}
@@ -89,7 +102,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var d=document.documentElement,t=window.matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light";d.classList.add(t);d.setAttribute("data-theme",t)})()`,
+            __html: getThemeInitScript(themePreference),
           }}
         />
       </head>

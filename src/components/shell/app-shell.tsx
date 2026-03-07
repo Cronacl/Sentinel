@@ -2,10 +2,13 @@
 
 import { Button } from "@heroui/react";
 import {
-  ArrowLeft01Icon,
+  AiIdeaIcon,
+  ArrowLeft02Icon,
   Brain02Icon,
+  PencilEdit02Icon,
   Settings01Icon,
   Settings05Icon,
+  ShieldUserIcon,
   TestTubeIcon,
   UserCircleIcon,
 } from "@hugeicons/core-free-icons";
@@ -26,8 +29,14 @@ const SETTINGS_NAV = [
     label: "Personalization",
     icon: UserCircleIcon,
   },
+  { href: "/settings/security", label: "Security", icon: ShieldUserIcon },
   { href: "/settings/providers", label: "Providers", icon: TestTubeIcon },
   { href: "/settings/models", label: "Models", icon: Brain02Icon },
+] as const;
+
+const ROOT_NAV = [
+  { href: "/", label: "New Thread", icon: PencilEdit02Icon },
+  { href: "/skills", label: "Skills", icon: AiIdeaIcon },
 ] as const;
 
 function SidebarContent() {
@@ -50,7 +59,7 @@ function SidebarContent() {
           >
             <HugeiconsIcon
               color="currentColor"
-              icon={ArrowLeft01Icon}
+              icon={ArrowLeft02Icon}
               size={14}
               strokeWidth={1.5}
             />
@@ -88,7 +97,28 @@ function SidebarContent() {
         <SidebarToggle />
       </div>
 
-      <div className="flex-1" />
+      <div className="flex-1">
+        <nav className="flex flex-col gap-0.5 px-3 pt-1">
+          {ROOT_NAV.map((item) => (
+            <Button
+              key={item.href}
+              size="sm"
+              fullWidth
+              variant="ghost"
+              className="justify-start rounded-lg"
+              onPress={() => router.push(item.href)}
+            >
+              <HugeiconsIcon
+                color="currentColor"
+                icon={item.icon}
+                size={15}
+                strokeWidth={1.5}
+              />
+              {item.label}
+            </Button>
+          ))}
+        </nav>
+      </div>
 
       <div className="shrink-0 px-3 pb-3">
         <Button
