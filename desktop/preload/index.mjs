@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("sentinelDesktop", {
   app: {
     getVersion: () => ipcRenderer.invoke(DESKTOP_CHANNELS.APP_VERSION),
   },
+  pickFiles: () => ipcRenderer.invoke(DESKTOP_CHANNELS.PICK_FILES),
   pickDirectory: () => ipcRenderer.invoke(DESKTOP_CHANNELS.PICK_DIRECTORY),
   services: {
     start: () => ipcRenderer.invoke(DESKTOP_CHANNELS.SERVICES_START),

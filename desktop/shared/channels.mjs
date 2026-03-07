@@ -1,5 +1,6 @@
 export const DESKTOP_CHANNELS = {
   APP_VERSION: "sentinel:app-version",
+  PICK_FILES: "sentinel:pick-files",
   PICK_DIRECTORY: "sentinel:pick-directory",
   SERVICES_START: "sentinel:services-start",
   SERVICES_STATUS: "sentinel:services-status",

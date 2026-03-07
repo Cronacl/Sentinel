@@ -137,6 +137,7 @@ export const threadsRouter = createTRPCRouter({
 
       return ctx.db.thread.create({
         data: {
+          ...(input.threadId ? { id: input.threadId } : {}),
           summary: input.summary.trim() || null,
           title: input.title.trim(),
           userId: ctx.session.user.id,

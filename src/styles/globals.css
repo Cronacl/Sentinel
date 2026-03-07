@@ -15,7 +15,6 @@
   --accent: oklch(0% 0 0);
   --accent-foreground: oklch(100% 0 0);
   --default-hover: #f0f0f0;
-  /* a lighter default hover color */
   --default: #f0f0f0;
 }
 
@@ -26,7 +25,6 @@
   --accent: oklch(100% 0 0);
   --accent-foreground: oklch(0% 0 0);
   --default-hover: #202020;
-  /* a darker default hover color */
   --default: #121212;
 }
 
@@ -48,4 +46,24 @@ body {
 
 [data-slot="modal-dialog"] {
   background-color: var(--surface);
+}
+
+.sentinel-composer-editor.ProseMirror {
+  max-height: 192px;
+  min-height: 32px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.sentinel-composer-editor.ProseMirror p.is-editor-empty:first-child::before {
+  color: color-mix(in srgb, var(--foreground) 38%, transparent);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.sentinel-composer-editor.ProseMirror-focused {
+  outline: none;
 }

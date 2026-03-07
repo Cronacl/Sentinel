@@ -3,6 +3,13 @@ export type DesktopDirectorySelection = {
   path: string;
 };
 
+export type DesktopFileSelection = {
+  mimeType?: string;
+  name: string;
+  path: string;
+  size?: number;
+};
+
 export type DesktopServicesStatus = {
   appServer: boolean;
   docker: boolean;
@@ -15,6 +22,7 @@ export type SentinelDesktopApi = {
   app: {
     getVersion: () => Promise<string>;
   };
+  pickFiles: () => Promise<DesktopFileSelection[]>;
   pickDirectory: () => Promise<DesktopDirectorySelection | null>;
   services: {
     start: () => Promise<DesktopServicesStatus>;

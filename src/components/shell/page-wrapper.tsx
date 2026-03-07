@@ -42,7 +42,7 @@ export function PageWrapper({
   const hasHeader = title || showToggle || actions;
 
   return (
-    <div className="flex items-start h-full flex-col overflow-hidden">
+    <div className="flex w-full items-start h-full flex-col overflow-hidden">
       {hasHeader && (
         <header
           className="app-region-no-drag flex shrink-0 items-center gap-3 px-4 lg:px-6"
@@ -69,9 +69,9 @@ export function PageWrapper({
         </header>
       )}
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex w-full flex-1 overflow-y-auto">
         <ScrollShadow
-          className={`mx-auto h-[calc(100vh-44px)] overflow-y-auto ${maxWidthMap[maxWidth]} ${
+          className={`w-full h-[calc(100vh-44px)] overflow-y-auto ${
             flush ? "" : "px-4 py-4 lg:px-5 lg:py-5"
           }`}
         >

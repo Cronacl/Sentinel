@@ -91,6 +91,7 @@ export const threadListSchema = z
 
 export const threadCreateSchema = z.object({
   summary: optionalText(500).optional().default(""),
+  threadId: z.string().uuid().optional(),
   title: z.string().trim().min(1, "Thread title is required.").max(200),
   workspaceId: z.string().min(1).optional(),
 });

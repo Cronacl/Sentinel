@@ -1,5 +1,7 @@
-import { PageWrapper } from "@/components/shell";
+import { redirect } from "next/navigation";
 
-export default async function Home() {
-  return <PageWrapper title="New Thread"></PageWrapper>;
+export const dynamic = "force-dynamic";
+
+export default function Home() {
+  redirect(`/thread/${crypto.randomUUID()}`);
 }

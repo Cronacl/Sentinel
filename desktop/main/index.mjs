@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -201,6 +202,28 @@ function registerIpc() {
       name: path.basename(selectedPath),
       path: selectedPath,
     };
+  });
+
+  ipcMain.handle(DESKTOP_CHANNELS.PICK_FILES, async () => {
+    const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
+      properties: ["multiSelections", "openFile"],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return [];
+    }
+
+    return Promise.all(
+      result.filePaths.map(async (selectedPath) => {
+        const selectedStat = await stat(selectedPath).catch(() => null);
+
+        return {
+          name: path.basename(selectedPath),
+          path: selectedPath,
+          size: selectedStat?.size,
+        };
+      }),
+    );
   });
 
   ipcMain.handle(DESKTOP_CHANNELS.SERVICES_STATUS, async () => {

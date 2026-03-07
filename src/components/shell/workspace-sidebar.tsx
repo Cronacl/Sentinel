@@ -77,6 +77,7 @@ type ChronologicalThreadItem = NonNullable<
 >;
 
 function ThreadList({
+  onPressThread,
   groups,
   selectedThreadId,
   selectedWorkspaceId,
@@ -85,6 +86,7 @@ function ThreadList({
 }: {
   expandedWorkspaceIds: Set<string>;
   groups: ThreadGroup;
+  onPressThread: (workspaceId: string, threadId: string) => void;
   onPressWorkspace: (workspaceId: string) => void;
   selectedThreadId: string | null;
   selectedWorkspaceId: string | null;
@@ -137,12 +139,15 @@ function ThreadList({
                     const isActive = selectedThreadId === thread.id;
 
                     return (
-                      <Link
+                      <button
                         className={`group hover:bg-default/60 flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm transition-colors ${
                           isActive ? "bg-default text-foreground" : "text-muted"
                         }`}
-                        href={`/workspace/${group.workspace.id}/thread/${thread.id}`}
                         key={thread.id}
+                        onClick={() =>
+                          onPressThread(group.workspace.id, thread.id)
+                        }
+                        type="button"
                       >
                         <span className="min-w-0 truncate text-sm">
                           {thread.title}
@@ -150,7 +155,7 @@ function ThreadList({
                         <span className="text-muted shrink-0 text-xs">
                           {formatRelativeTime(thread.updatedAt)}
                         </span>
-                      </Link>
+                      </button>
                     );
                   })
                 ) : (
@@ -169,9 +174,11 @@ function ThreadList({
 
 function ChronologicalThreadList({
   items,
+  onPressThread,
   selectedThreadId,
 }: {
   items: ChronologicalThreadItem;
+  onPressThread: (workspaceId: string, threadId: string) => void;
   selectedThreadId: string | null;
 }) {
   return (
@@ -180,12 +187,13 @@ function ChronologicalThreadList({
         const isActive = selectedThreadId === item.id;
 
         return (
-          <Link
+          <button
             className={`group hover:bg-default/60 rounded-xl px-3 py-2 text-sm transition-colors ${
               isActive ? "bg-default text-foreground" : "text-muted"
             }`}
-            href={`/workspace/${item.workspace.id}/thread/${item.id}`}
             key={item.id}
+            onClick={() => onPressThread(item.workspace.id, item.id)}
+            type="button"
           >
             <div className="flex items-center justify-between gap-3">
               <span className="min-w-0 truncate">{item.title}</span>
@@ -196,7 +204,7 @@ function ChronologicalThreadList({
             <p className="text-muted mt-1 truncate text-[11px]">
               {item.workspace.name}
             </p>
-          </Link>
+          </button>
         );
       })}
     </div>
@@ -256,10 +264,6 @@ export function WorkspaceSidebar() {
 
   const preferences = api.workspaces.getPreferences.useQuery();
   const currentWorkspace = api.workspaces.getCurrent.useQuery();
-  const selectedWorkspaceIdFromPath = useMemo(() => {
-    const match = pathname.match(/^\/workspace\/([^/]+)/);
-    return match?.[1] ?? null;
-  }, [pathname]);
   const selectedThreadId = useMemo(() => {
     const match = pathname.match(/\/thread\/([^/]+)/);
     return match?.[1] ?? null;
@@ -300,8 +304,7 @@ export function WorkspaceSidebar() {
   }, [preferences.data]);
 
   useEffect(() => {
-    const selectedWorkspaceId =
-      selectedWorkspaceIdFromPath ?? currentWorkspace.data?.id ?? null;
+    const selectedWorkspaceId = currentWorkspace.data?.id ?? null;
 
     if (organizeBy !== "workspace" || groups.length === 0) {
       return;
@@ -328,12 +331,7 @@ export function WorkspaceSidebar() {
 
       return next;
     });
-  }, [
-    currentWorkspace.data?.id,
-    groups,
-    organizeBy,
-    selectedWorkspaceIdFromPath,
-  ]);
+  }, [currentWorkspace.data?.id, groups, organizeBy]);
 
   useEffect(() => {
     if (!isPreferencesOpen) {
@@ -365,8 +363,7 @@ export function WorkspaceSidebar() {
     };
   }, [isPreferencesOpen]);
 
-  const selectedWorkspaceId =
-    selectedWorkspaceIdFromPath ?? currentWorkspace.data?.id ?? null;
+  const selectedWorkspaceId = currentWorkspace.data?.id ?? null;
 
   const handlePreferencesChange = async (
     nextValues: Partial<{
@@ -405,6 +402,14 @@ export function WorkspaceSidebar() {
     handleToggleWorkspace(workspaceId);
   };
 
+  const handlePressThread = async (workspaceId: string, threadId: string) => {
+    if (selectedWorkspaceId !== workspaceId) {
+      await selectWorkspace.mutateAsync({ workspaceId });
+    }
+
+    router.push(`/thread/${threadId}`);
+  };
+
   const isEmpty =
     organizeBy === "workspace" ? groups.length === 0 : items.length === 0;
 
@@ -427,7 +432,13 @@ export function WorkspaceSidebar() {
                 }`}
                 fullWidth
                 key={item.href}
-                onPress={() => router.push(item.href)}
+                onPress={() => {
+                  if (item.href === "/") {
+                    router.push(`/thread/${crypto.randomUUID()}`);
+                  } else {
+                    router.push(item.href);
+                  }
+                }}
                 size="sm"
                 variant="ghost"
               >
@@ -484,7 +495,7 @@ export function WorkspaceSidebar() {
             {isPreferencesOpen ? (
               <motion.div
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                className="absolute top-9 right-0 z-30 w-[10rem] overflow-hidden rounded-2xl border border-white/10 bg-background p-1.5 text-white shadow-[0_24px_80px_rgba(0,0,0,0.5)] backdrop-blur-xl"
+                className="absolute top-9 right-0 z-30 w-40 overflow-hidden rounded-2xl border border-border bg-overlay p-1.5 text-foreground shadow-overlay backdrop-blur-xl"
                 exit={{ opacity: 0, scale: 0.97, y: -10 }}
                 initial={{ opacity: 0, scale: 0.97, y: -10 }}
                 transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
@@ -511,7 +522,7 @@ export function WorkspaceSidebar() {
                   }
                 />
 
-                <div className="mx-2 my-3 h-px bg-white/10" />
+                <div className="mx-2 my-3 h-px bg-separator" />
 
                 <div className="space-y-1 px-2 pb-2">
                   <p className="text-[11px] font-medium text-muted">Sort by</p>
@@ -548,6 +559,9 @@ export function WorkspaceSidebar() {
             <ThreadList
               expandedWorkspaceIds={expandedWorkspaceIds}
               groups={groups}
+              onPressThread={(workspaceId, threadId) =>
+                void handlePressThread(workspaceId, threadId)
+              }
               onPressWorkspace={(workspaceId) =>
                 void handlePressWorkspace(workspaceId)
               }
@@ -559,6 +573,9 @@ export function WorkspaceSidebar() {
           {organizeBy === "chronological" && items.length > 0 ? (
             <ChronologicalThreadList
               items={items}
+              onPressThread={(workspaceId, threadId) =>
+                void handlePressThread(workspaceId, threadId)
+              }
               selectedThreadId={selectedThreadId}
             />
           ) : null}
