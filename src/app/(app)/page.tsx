@@ -1,7 +1,7 @@
-import { redirect } from "next/navigation";
+"use client";
 
-export const dynamic = "force-dynamic";
+import { NewThreadScreen } from "@/components/chat/new-thread-screen";
 
-export default function Home() {
-  redirect(`/thread/${crypto.randomUUID()}`);
+export default function HomePage() {
+  return <NewThreadScreen />;
 }

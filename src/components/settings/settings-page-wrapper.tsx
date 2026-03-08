@@ -1,5 +1,6 @@
 "use client";
 
+import { ScrollShadow } from "@heroui/react";
 import type { PropsWithChildren, ReactNode } from "react";
 
 import { SidebarToggle } from "@/components/shell/sidebar-toggle";
@@ -20,9 +21,9 @@ export function SettingsPageWrapper({
   const { leftSidebarOpen } = useShell();
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl px-10 py-8">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+      <ScrollShadow className="h-[calc(100vh-0.25rem)] w-full overflow-y-auto px-6 py-8 lg:px-8">
+        <div className="mx-auto w-full max-w-2xl">
           <div className="mb-6 flex items-start justify-between gap-4">
             <div className="app-region-no-drag min-w-0">
               <div className="flex items-center gap-3">
@@ -43,7 +44,7 @@ export function SettingsPageWrapper({
           </div>
           {children}
         </div>
-      </div>
+      </ScrollShadow>
     </div>
   );
 }

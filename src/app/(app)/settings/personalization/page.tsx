@@ -80,7 +80,7 @@ export default function PersonalizationPage() {
   const {
     data: personalization,
     error,
-    isLoading,
+    isPending,
   } = api.personalization.get.useQuery();
 
   useEffect(() => {
@@ -96,13 +96,26 @@ export default function PersonalizationPage() {
   }, [form, personalization]);
 
   const savePersonalization = api.personalization.upsert.useMutation({
-    onSuccess: async (data) => {
-      setSubmitError("");
-      form.reset(data);
-      await utils.personalization.get.invalidate();
+    onMutate: async (values) => {
+      const previousPersonalization = utils.personalization.get.getData();
+
+      utils.personalization.get.setData(undefined, values);
+
+      return { previousPersonalization };
     },
-    onError: (mutationError) => {
+    onSuccess: (data) => {
+      setSubmitError("");
+      utils.personalization.get.setData(undefined, data);
+      form.reset(data);
+    },
+    onError: (mutationError, _variables, context) => {
       setSubmitError(mutationError.message);
+      if (context?.previousPersonalization) {
+        utils.personalization.get.setData(
+          undefined,
+          context.previousPersonalization,
+        );
+      }
     },
   });
 
@@ -132,7 +145,7 @@ export default function PersonalizationPage() {
         </p>
       ) : null}
 
-      {isLoading ? (
+      {!personalization && isPending ? (
         <PersonalizationSkeleton />
       ) : (
         <Form

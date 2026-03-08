@@ -84,26 +84,89 @@ function ModelsSkeleton() {
 }
 
 export default function ModelsPage() {
-  const { data: models, isLoading } = api.models.list.useQuery();
+  const { data: models, isPending } = api.models.list.useQuery();
   const utils = api.useUtils();
 
   const enable = api.models.enable.useMutation({
-    onSuccess: () => void utils.models.list.invalidate(),
+    onMutate: async ({ modelId, provider }) => {
+      const previousModels = utils.models.list.getData();
+      utils.models.list.setData(undefined, (current) =>
+        current?.map((model) =>
+          model.provider === provider && model.modelId === modelId
+            ? { ...model, isEnabled: true }
+            : model,
+        ),
+      );
+      return { previousModels };
+    },
+    onError: (_error, _variables, context) => {
+      utils.models.list.setData(undefined, context?.previousModels ?? []);
+    },
   });
   const disable = api.models.disable.useMutation({
-    onSuccess: () => void utils.models.list.invalidate(),
+    onMutate: async ({ modelId, provider }) => {
+      const previousModels = utils.models.list.getData();
+      utils.models.list.setData(undefined, (current) =>
+        current?.map((model) =>
+          model.provider === provider && model.modelId === modelId
+            ? { ...model, isEnabled: false }
+            : model,
+        ),
+      );
+      return { previousModels };
+    },
+    onError: (_error, _variables, context) => {
+      utils.models.list.setData(undefined, context?.previousModels ?? []);
+    },
   });
   const addCustom = api.models.addCustom.useMutation({
+    onMutate: async (variables) => {
+      const previousModels = utils.models.list.getData();
+      utils.models.list.setData(undefined, (current) => [
+        ...(current ?? []),
+        {
+          capabilities: [],
+          contextWindow: undefined,
+          description: "Custom model",
+          displayName: variables.modelId,
+          isConnected: true,
+          isCustom: true,
+          isEnabled: true,
+          modelId: variables.modelId,
+          provider: variables.provider,
+        },
+      ]);
+
+      return { previousModels };
+    },
     onSuccess: (_, variables) => {
-      void utils.models.list.invalidate();
       customModelForm.reset({
         modelId: "",
         provider: variables.provider,
       });
     },
+    onError: (_error, _variables, context) => {
+      utils.models.list.setData(undefined, context?.previousModels ?? []);
+    },
   });
   const removeCustom = api.models.removeCustom.useMutation({
-    onSuccess: () => void utils.models.list.invalidate(),
+    onMutate: async ({ modelId, provider }) => {
+      const previousModels = utils.models.list.getData();
+      utils.models.list.setData(undefined, (current) =>
+        current?.filter(
+          (model) =>
+            !(
+              model.provider === provider &&
+              model.modelId === modelId &&
+              model.isCustom
+            ),
+        ),
+      );
+      return { previousModels };
+    },
+    onError: (_error, _variables, context) => {
+      utils.models.list.setData(undefined, context?.previousModels ?? []);
+    },
   });
 
   const customModelForm = useForm<CustomModelFormValues>({
@@ -116,6 +179,7 @@ export default function ModelsPage() {
 
   const [actionError, setActionError] = useState("");
   const [customError, setCustomError] = useState("");
+  const [pendingToggleKey, setPendingToggleKey] = useState<string | null>(null);
 
   const grouped = models
     ? (Object.entries(
@@ -150,7 +214,13 @@ export default function ModelsPage() {
     modelId: string,
     currentEnabled: boolean,
   ) => {
+    if (pendingToggleKey) {
+      return;
+    }
+
     setActionError("");
+    const toggleKey = `${provider}:${modelId}`;
+    setPendingToggleKey(toggleKey);
 
     try {
       if (currentEnabled) {
@@ -161,6 +231,10 @@ export default function ModelsPage() {
     } catch (error) {
       setActionError(
         error instanceof Error ? error.message : "Unable to update that model.",
+      );
+    } finally {
+      setPendingToggleKey((current) =>
+        current === toggleKey ? null : current,
       );
     }
   };
@@ -187,7 +261,7 @@ export default function ModelsPage() {
       subtitle="Enable or disable models and add custom ones"
       title="Models"
     >
-      {isLoading ? <ModelsSkeleton /> : null}
+      {!models && isPending ? <ModelsSkeleton /> : null}
 
       {actionError ? (
         <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
@@ -269,8 +343,16 @@ export default function ModelsPage() {
                         )}
                       </Button>
                     ) : null}
-                    <Switch
-                      isDisabled={enable.isPending || disable.isPending}
+                    <Switch.Root
+                      aria-label={
+                        model.isEnabled ? "Disable model" : "Enable model"
+                      }
+                      className={
+                        pendingToggleKey ===
+                        `${model.provider}:${model.modelId}`
+                          ? "opacity-60"
+                          : undefined
+                      }
                       isSelected={model.isEnabled}
                       onChange={() =>
                         handleToggle(
@@ -279,12 +361,11 @@ export default function ModelsPage() {
                           model.isEnabled,
                         )
                       }
-                      size="sm"
                     >
                       <Switch.Control>
                         <Switch.Thumb />
                       </Switch.Control>
-                    </Switch>
+                    </Switch.Root>
                   </div>
                 </div>
               ))}

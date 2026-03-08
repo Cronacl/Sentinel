@@ -129,14 +129,6 @@ export function ProviderConfigModal({
     });
   }, [existing, form, isOpen, isSuccess, isVertexProvider]);
 
-  const invalidateQueries = async () => {
-    await Promise.all([
-      utils.providers.list.invalidate(),
-      utils.providers.get.invalidate({ provider }),
-      utils.models.list.invalidate(),
-    ]);
-  };
-
   const handleSave = async (values: ProviderConfigFormValues) => {
     setSubmitError("");
 
@@ -182,7 +174,34 @@ export function ProviderConfigModal({
         });
       }
 
-      await invalidateQueries();
+      utils.providers.get.setData(
+        { provider },
+        {
+          config,
+          isEnabled: values.isEnabled,
+          provider,
+        },
+      );
+      utils.providers.list.setData(undefined, (current) =>
+        current?.map((item) =>
+          item.id === provider
+            ? {
+                ...item,
+                status: values.isEnabled ? "active" : "disabled",
+              }
+            : item,
+        ),
+      );
+      utils.models.list.setData(undefined, (current) =>
+        current?.map((item) =>
+          item.provider === provider
+            ? {
+                ...item,
+                isConnected: values.isEnabled,
+              }
+            : item,
+        ),
+      );
       state.close();
     } catch (mutationError) {
       setSubmitError(
@@ -196,7 +215,27 @@ export function ProviderConfigModal({
 
     try {
       await remove.mutateAsync({ provider });
-      await invalidateQueries();
+      utils.providers.get.setData({ provider }, null);
+      utils.providers.list.setData(undefined, (current) =>
+        current?.map((item) =>
+          item.id === provider
+            ? {
+                ...item,
+                status: "not_configured",
+              }
+            : item,
+        ),
+      );
+      utils.models.list.setData(undefined, (current) =>
+        current?.map((item) =>
+          item.provider === provider
+            ? {
+                ...item,
+                isConnected: false,
+              }
+            : item,
+        ),
+      );
       state.close();
     } catch (mutationError) {
       setSubmitError(

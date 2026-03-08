@@ -1,12 +1,13 @@
 "use client";
 
-import { Spinner } from "@heroui/react";
+import { Button, Spinner } from "@heroui/react";
 import Placeholder from "@tiptap/extension-placeholder";
 import StarterKit from "@tiptap/starter-kit";
 import { EditorContent, useEditor } from "@tiptap/react";
 import {
   Add01Icon,
   ArrowDown01Icon,
+  ArrowUp02Icon,
   Brain02Icon,
   Cancel01Icon,
   File01Icon,
@@ -55,18 +56,12 @@ function getModelKey(provider: AIProvider, modelId: string) {
 
 function SendIcon() {
   return (
-    <svg
-      fill="none"
-      height="16"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      viewBox="0 0 16 16"
-      width="16"
-    >
-      <path d="M8 12V4M4 8l4-4 4 4" />
-    </svg>
+    <HugeiconsIcon
+      color="currentColor"
+      icon={ArrowUp02Icon}
+      size={16}
+      strokeWidth={1.5}
+    />
   );
 }
 
@@ -505,11 +500,13 @@ export function ChatComposer({
 
         <div className="flex items-center justify-between px-2 pb-2">
           <div className="flex items-center">
-            <button
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-default hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
-              disabled={!hasWorkspace}
+            <Button
+              isIconOnly
+              isDisabled={!hasWorkspace}
+              size="sm"
+              variant="ghost"
+              className="h-6 w-6 min-w-6 min-h-6 rounded-lg"
               onClick={() => void handlePickFiles()}
-              type="button"
             >
               <HugeiconsIcon
                 color="currentColor"
@@ -517,7 +514,7 @@ export function ChatComposer({
                 size={18}
                 strokeWidth={1.5}
               />
-            </button>
+            </Button>
 
             <div className="relative" ref={modelMenuRef}>
               <button
@@ -605,13 +602,15 @@ export function ChatComposer({
             </div>
           </div>
 
-          <button
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted transition-colors hover:bg-default hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
-            disabled={isLocked}
-            type="button"
+          <Button
+            isIconOnly
+            isDisabled={isLocked}
+            size="sm"
+            variant="primary"
+            className="h-8 w-8 min-w-8 min-h-8"
           >
             <SendIcon />
-          </button>
+          </Button>
         </div>
       </div>
 

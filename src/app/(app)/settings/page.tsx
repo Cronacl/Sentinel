@@ -46,7 +46,7 @@ export default function GeneralSettingsPage() {
   );
   const [submitError, setSubmitError] = useState("");
 
-  const { data: appearance, error, isLoading } = api.appearance.get.useQuery();
+  const { data: appearance, error, isPending } = api.appearance.get.useQuery();
 
   useEffect(() => {
     if (!appearance) {
@@ -57,18 +57,32 @@ export default function GeneralSettingsPage() {
   }, [appearance]);
 
   const updateAppearance = api.appearance.update.useMutation({
-    onSuccess: async (data) => {
+    onMutate: async (nextValues) => {
+      const previousAppearance = utils.appearance.get.getData();
+
+      utils.appearance.get.setData(undefined, {
+        themePreference: nextValues.themePreference,
+      });
+
+      return { previousAppearance };
+    },
+    onSuccess: (data) => {
       setSubmitError("");
       setThemePreference(data.themePreference);
       applyThemePreference(data.themePreference);
       window.dispatchEvent(new Event("sentinel-theme-change"));
-      await utils.appearance.get.invalidate();
     },
-    onError: (mutationError) => {
+    onError: (mutationError, _variables, context) => {
       setSubmitError(mutationError.message);
-      if (appearance) {
-        setThemePreference(appearance.themePreference);
-        applyThemePreference(appearance.themePreference);
+      const previousTheme =
+        context?.previousAppearance?.themePreference ??
+        appearance?.themePreference;
+      if (previousTheme) {
+        utils.appearance.get.setData(undefined, {
+          themePreference: previousTheme,
+        });
+        setThemePreference(previousTheme);
+        applyThemePreference(previousTheme);
         window.dispatchEvent(new Event("sentinel-theme-change"));
       }
     },
@@ -112,7 +126,7 @@ export default function GeneralSettingsPage() {
         </p>
       ) : null}
 
-      {isLoading ? (
+      {!appearance && isPending ? (
         <GeneralSettingsSkeleton />
       ) : (
         <section className="border-separator bg-surface rounded-xl border p-5">

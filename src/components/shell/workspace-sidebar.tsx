@@ -33,6 +33,35 @@ const PRIMARY_NAV = [
   { href: "/skills", icon: AiIdeaIcon, label: "Skills" },
 ] as const;
 
+function toCurrentWorkspace(
+  workspace:
+    | {
+        createdAt: Date;
+        description: string | null;
+        id: string;
+        name: string;
+        rootPath: string | null;
+        updatedAt: Date;
+      }
+    | null
+    | undefined,
+) {
+  if (!workspace) {
+    return null;
+  }
+
+  return {
+    createdAt: workspace.createdAt,
+    description: workspace.description,
+    id: workspace.id,
+    isArchived: false,
+    name: workspace.name,
+    rootPath: workspace.rootPath,
+    updatedAt: workspace.updatedAt,
+    userId: "",
+  };
+}
+
 function formatRelativeTime(value: Date | string) {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -280,19 +309,95 @@ export function WorkspaceSidebar() {
     threads.data && "items" in threads.data ? (threads.data.items ?? []) : [];
 
   const createWorkspace = api.workspaces.create.useMutation({
-    onSuccess: async (workspace) => {
-      await Promise.all([
-        utils.workspaces.getCurrent.invalidate(),
-        utils.workspaces.list.invalidate(),
-        utils.threads.list.invalidate(),
-      ]);
-      await selectWorkspace.mutateAsync({ workspaceId: workspace.id });
+    onSuccess: (workspace) => {
+      utils.workspaces.getCurrent.setData(undefined, {
+        createdAt: workspace.createdAt,
+        description: workspace.description,
+        id: workspace.id,
+        isArchived: workspace.isArchived,
+        name: workspace.name,
+        rootPath: workspace.rootPath,
+        updatedAt: workspace.updatedAt,
+        userId: workspace.userId,
+      });
+      utils.workspaces.list.setData(undefined, (current) => {
+        const existing = current ?? [];
+        const withoutWorkspace = existing.filter(
+          (item) => item.id !== workspace.id,
+        );
+        return [
+          {
+            createdAt: workspace.createdAt,
+            description: workspace.description,
+            id: workspace.id,
+            isSelected: true,
+            latestThreadUpdatedAt: null,
+            name: workspace.name,
+            rootPath: workspace.rootPath,
+            threadCount: 0,
+            updatedAt: workspace.updatedAt,
+          },
+          ...withoutWorkspace.map((item) => ({ ...item, isSelected: false })),
+        ];
+      });
       setExpandedWorkspaceIds((current) => new Set(current).add(workspace.id));
     },
   });
 
-  const selectWorkspace = api.workspaces.select.useMutation();
-  const updatePreferences = api.workspaces.updatePreferences.useMutation();
+  const selectWorkspace = api.workspaces.select.useMutation({
+    onMutate: async ({ workspaceId }) => {
+      const previousCurrentWorkspace = utils.workspaces.getCurrent.getData();
+      const previousWorkspaces = utils.workspaces.list.getData();
+
+      utils.workspaces.getCurrent.setData(undefined, () => {
+        const nextWorkspace = previousWorkspaces?.find(
+          (workspace) => workspace.id === workspaceId,
+        );
+        return (
+          toCurrentWorkspace(nextWorkspace) ?? previousCurrentWorkspace ?? null
+        );
+      });
+      utils.workspaces.list.setData(undefined, (current) =>
+        current?.map((workspace) => ({
+          ...workspace,
+          isSelected: workspace.id === workspaceId,
+        })),
+      );
+
+      return {
+        previousCurrentWorkspace,
+        previousWorkspaces,
+      };
+    },
+    onError: (_error, _variables, context) => {
+      utils.workspaces.getCurrent.setData(
+        undefined,
+        context?.previousCurrentWorkspace ?? null,
+      );
+      utils.workspaces.list.setData(
+        undefined,
+        context?.previousWorkspaces ?? [],
+      );
+    },
+  });
+  const updatePreferences = api.workspaces.updatePreferences.useMutation({
+    onMutate: async (nextValues) => {
+      const previousPreferences = utils.workspaces.getPreferences.getData();
+
+      utils.workspaces.getPreferences.setData(undefined, {
+        organizeBy: nextValues.organizeBy,
+        sortBy: nextValues.sortBy,
+      });
+
+      return { previousPreferences };
+    },
+    onError: (_error, _variables, context) => {
+      utils.workspaces.getPreferences.setData(
+        undefined,
+        context?.previousPreferences,
+      );
+    },
+  });
 
   useEffect(() => {
     if (!preferences.data) {
@@ -377,7 +482,7 @@ export function WorkspaceSidebar() {
     setOrganizeBy(nextOrganizeBy);
     setSortBy(nextSortBy);
 
-    void updatePreferences.mutateAsync({
+    void updatePreferences.mutate({
       organizeBy: nextOrganizeBy,
       sortBy: nextSortBy,
     });
@@ -397,21 +502,25 @@ export function WorkspaceSidebar() {
 
   const handlePressWorkspace = async (workspaceId: string) => {
     if (selectedWorkspaceId !== workspaceId) {
-      void selectWorkspace.mutateAsync({ workspaceId });
+      void selectWorkspace.mutate({ workspaceId });
     }
     handleToggleWorkspace(workspaceId);
   };
 
-  const handlePressThread = async (workspaceId: string, threadId: string) => {
+  const handlePressThread = (workspaceId: string, threadId: string) => {
     if (selectedWorkspaceId !== workspaceId) {
-      await selectWorkspace.mutateAsync({ workspaceId });
+      void selectWorkspace.mutate({ workspaceId });
     }
 
+    void utils.threads.get.prefetch({ threadId });
     router.push(`/thread/${threadId}`);
   };
 
   const isEmpty =
     organizeBy === "workspace" ? groups.length === 0 : items.length === 0;
+  const showSidebarLoading =
+    (!threads.data && threads.isPending) ||
+    (!preferences.data && preferences.isPending);
 
   return (
     <div className="flex h-full flex-col">
@@ -434,7 +543,11 @@ export function WorkspaceSidebar() {
                 key={item.href}
                 onPress={() => {
                   if (item.href === "/") {
-                    router.push(`/thread/${crypto.randomUUID()}`);
+                    if (pathname === "/") {
+                      window.dispatchEvent(new Event("sentinel:new-thread"));
+                    } else {
+                      router.push("/");
+                    }
                   } else {
                     router.push(item.href);
                   }
@@ -551,9 +664,7 @@ export function WorkspaceSidebar() {
 
       <div className="min-h-0 flex-1">
         <ScrollShadow className="h-full">
-          {threads.isLoading || preferences.isLoading ? (
-            <WorkspaceSidebarLoadingState />
-          ) : null}
+          {showSidebarLoading ? <WorkspaceSidebarLoadingState /> : null}
 
           {organizeBy === "workspace" && groups.length > 0 ? (
             <ThreadList

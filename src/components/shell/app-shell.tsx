@@ -15,6 +15,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { PropsWithChildren } from "react";
 
+import { api } from "@/trpc/react";
+
 import { WorkspaceSidebar } from "./workspace-sidebar";
 import { LeftSidebar } from "./left-sidebar";
 import { RightSidebar } from "./right-sidebar";
@@ -32,6 +34,22 @@ const SETTINGS_NAV = [
   { href: "/settings/providers", label: "Providers", icon: TestTubeIcon },
   { href: "/settings/models", label: "Models", icon: Brain02Icon },
 ] as const;
+
+function ShellWarmCache() {
+  api.workspaces.getCurrent.useQuery();
+  api.workspaces.list.useQuery();
+  api.workspaces.getPreferences.useQuery();
+  api.models.list.useQuery();
+  api.appearance.get.useQuery();
+  api.personalization.get.useQuery();
+  api.auth.me.useQuery();
+  api.threads.list.useQuery({
+    organizeBy: "workspace",
+    sortBy: "updated",
+  });
+
+  return null;
+}
 
 function SidebarContent() {
   const pathname = usePathname();
@@ -91,6 +109,7 @@ function SidebarContent() {
 export function AppShell({ children }: PropsWithChildren) {
   return (
     <ShellProvider>
+      <ShellWarmCache />
       <div className="flex h-dvh overflow-hidden">
         <LeftSidebar>
           <div className="flex h-full flex-col">
@@ -101,7 +120,7 @@ export function AppShell({ children }: PropsWithChildren) {
           </div>
         </LeftSidebar>
 
-        <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden">
+        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {children}
         </main>
 

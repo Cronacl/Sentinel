@@ -47,11 +47,41 @@ export default function ProvidersPage() {
     name: string;
   } | null>(null);
 
-  const { data: providers, isLoading } = api.providers.list.useQuery();
+  const { data: providers, isPending } = api.providers.list.useQuery();
   const utils = api.useUtils();
 
   const toggle = api.providers.toggle.useMutation({
-    onSuccess: () => void utils.providers.list.invalidate(),
+    onMutate: async ({ isEnabled, provider }) => {
+      const previousProviders = utils.providers.list.getData();
+      const previousModels = utils.models.list.getData();
+
+      utils.providers.list.setData(undefined, (current) =>
+        current?.map((item) =>
+          item.id === provider
+            ? {
+                ...item,
+                status: isEnabled ? "active" : "disabled",
+              }
+            : item,
+        ),
+      );
+      utils.models.list.setData(undefined, (current) =>
+        current?.map((item) =>
+          item.provider === provider
+            ? { ...item, isConnected: isEnabled }
+            : item,
+        ),
+      );
+
+      return {
+        previousModels,
+        previousProviders,
+      };
+    },
+    onError: (_error, _variables, context) => {
+      utils.providers.list.setData(undefined, context?.previousProviders ?? []);
+      utils.models.list.setData(undefined, context?.previousModels ?? []);
+    },
   });
   const isToggling = toggle.isPending;
 
@@ -60,7 +90,7 @@ export default function ProvidersPage() {
       subtitle="Manage your AI provider connections"
       title="Providers"
     >
-      {isLoading ? <ProvidersSkeleton /> : null}
+      {!providers && isPending ? <ProvidersSkeleton /> : null}
 
       <div className="flex flex-col gap-2">
         {providers?.map((p) => (

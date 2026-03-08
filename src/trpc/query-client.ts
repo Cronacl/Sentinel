@@ -8,7 +8,11 @@ export const createQueryClient = () =>
   new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 30 * 1000,
+        placeholderData: (previousData: unknown) => previousData,
+        refetchOnMount: false,
+        refetchOnReconnect: false,
+        refetchOnWindowFocus: false,
+        staleTime: 5 * 60 * 1000,
       },
       dehydrate: {
         serializeData: SuperJSON.serialize,

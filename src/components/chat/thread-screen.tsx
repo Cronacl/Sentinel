@@ -19,9 +19,12 @@ type ThreadScreenProps = {
     title: string;
   };
   workspace: {
+    createdAt: Date;
+    description: string | null;
     id: string;
     name: string;
     rootPath: string | null;
+    updatedAt: Date;
   };
 };
 
@@ -54,11 +57,41 @@ export function ThreadScreen({
   const utils = api.useUtils();
   const currentWorkspace = api.workspaces.getCurrent.useQuery();
   const selectWorkspace = api.workspaces.select.useMutation({
-    onSuccess: async () => {
-      await Promise.all([
-        utils.workspaces.getCurrent.invalidate(),
-        utils.workspaces.list.invalidate(),
-      ]);
+    onMutate: async ({ workspaceId }) => {
+      const previousCurrentWorkspace = utils.workspaces.getCurrent.getData();
+      const previousWorkspaces = utils.workspaces.list.getData();
+
+      utils.workspaces.getCurrent.setData(undefined, {
+        createdAt: workspace.createdAt,
+        description: workspace.description,
+        id: workspace.id,
+        isArchived: false,
+        name: workspace.name,
+        rootPath: workspace.rootPath,
+        updatedAt: workspace.updatedAt,
+        userId: "",
+      });
+      utils.workspaces.list.setData(undefined, (current) =>
+        current?.map((item) => ({
+          ...item,
+          isSelected: item.id === workspaceId,
+        })),
+      );
+
+      return {
+        previousCurrentWorkspace,
+        previousWorkspaces,
+      };
+    },
+    onError: (_error, _variables, context) => {
+      utils.workspaces.getCurrent.setData(
+        undefined,
+        context?.previousCurrentWorkspace ?? null,
+      );
+      utils.workspaces.list.setData(
+        undefined,
+        context?.previousWorkspaces ?? [],
+      );
     },
   });
 
@@ -71,7 +104,7 @@ export function ThreadScreen({
       return;
     }
 
-    void selectWorkspace.mutateAsync({ workspaceId: workspace.id });
+    void selectWorkspace.mutate({ workspaceId: workspace.id });
   }, [
     currentWorkspace.data,
     currentWorkspace.isLoading,

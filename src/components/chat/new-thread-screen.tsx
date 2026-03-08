@@ -2,7 +2,6 @@
 
 import { Spinner } from "@heroui/react";
 import {
-  AiIdeaIcon,
   ArrowDown01Icon,
   Folder01Icon,
   FolderAddIcon,
@@ -12,13 +11,14 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
 import { PageWrapper } from "@/components/shell";
+import { SentinelLogoBadge } from "@/components/shared/logo";
 import { CreateWorkspaceModal } from "@/components/workspaces/create-workspace-modal";
 import { api } from "@/trpc/react";
 
 import { ChatComposer } from "./chat-composer";
 
 type NewThreadScreenProps = {
-  threadId: string;
+  threadId?: string;
 };
 
 export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
@@ -27,26 +27,115 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   const workspaces = api.workspaces.list.useQuery();
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [draftThreadId, setDraftThreadId] = useState(
+    () => threadId ?? crypto.randomUUID(),
+  );
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
 
   const selectWorkspace = api.workspaces.select.useMutation({
-    onSuccess: async () => {
-      await Promise.all([
-        utils.workspaces.getCurrent.invalidate(),
-        utils.workspaces.list.invalidate(),
-      ]);
+    onMutate: async ({ workspaceId }) => {
+      const previousCurrentWorkspace = utils.workspaces.getCurrent.getData();
+      const previousWorkspaceList = utils.workspaces.list.getData();
+
+      utils.workspaces.getCurrent.setData(undefined, () => {
+        const nextWorkspace = previousWorkspaceList?.find(
+          (workspace) => workspace.id === workspaceId,
+        );
+        return nextWorkspace
+          ? {
+              createdAt: nextWorkspace.createdAt,
+              description: nextWorkspace.description,
+              id: nextWorkspace.id,
+              isArchived: false,
+              name: nextWorkspace.name,
+              rootPath: nextWorkspace.rootPath,
+              updatedAt: nextWorkspace.updatedAt,
+              userId: "",
+            }
+          : (previousCurrentWorkspace ?? null);
+      });
+
+      utils.workspaces.list.setData(undefined, (current) =>
+        current?.map((workspace) => ({
+          ...workspace,
+          isSelected: workspace.id === workspaceId,
+        })),
+      );
+
+      return {
+        previousCurrentWorkspace,
+        previousWorkspaceList,
+      };
+    },
+    onError: (_error, _variables, context) => {
+      utils.workspaces.getCurrent.setData(
+        undefined,
+        context?.previousCurrentWorkspace ?? null,
+      );
+      utils.workspaces.list.setData(
+        undefined,
+        context?.previousWorkspaceList ?? [],
+      );
     },
   });
 
   const createWorkspace = api.workspaces.create.useMutation({
-    onSuccess: async () => {
-      await Promise.all([
-        utils.workspaces.getCurrent.invalidate(),
-        utils.workspaces.list.invalidate(),
-      ]);
+    onSuccess: (workspace) => {
+      utils.workspaces.getCurrent.setData(undefined, {
+        createdAt: workspace.createdAt,
+        description: workspace.description,
+        id: workspace.id,
+        isArchived: workspace.isArchived,
+        name: workspace.name,
+        rootPath: workspace.rootPath,
+        updatedAt: workspace.updatedAt,
+        userId: workspace.userId,
+      });
+      utils.workspaces.list.setData(undefined, (current) => {
+        const existing = current ?? [];
+        const withoutWorkspace = existing.filter(
+          (item) => item.id !== workspace.id,
+        );
+        return [
+          {
+            createdAt: workspace.createdAt,
+            description: workspace.description,
+            id: workspace.id,
+            isSelected: true,
+            latestThreadUpdatedAt: null,
+            name: workspace.name,
+            rootPath: workspace.rootPath,
+            threadCount: 0,
+            updatedAt: workspace.updatedAt,
+          },
+          ...withoutWorkspace.map((item) => ({ ...item, isSelected: false })),
+        ];
+      });
       setIsCreateOpen(false);
     },
   });
+
+  useEffect(() => {
+    if (!threadId) {
+      return;
+    }
+
+    setDraftThreadId(threadId);
+  }, [threadId]);
+
+  useEffect(() => {
+    if (threadId) {
+      return;
+    }
+
+    const handleNewThread = () => {
+      setDraftThreadId(crypto.randomUUID());
+    };
+
+    window.addEventListener("sentinel:new-thread", handleNewThread);
+    return () =>
+      window.removeEventListener("sentinel:new-thread", handleNewThread);
+  }, [threadId]);
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -69,14 +158,10 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     <PageWrapper title="New Thread" flush>
       <div className="flex h-[calc(100vh-44px)] flex-col">
         <div className="flex flex-1 flex-col items-center justify-center gap-4 overflow-y-auto px-4 py-6">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-default">
-            <HugeiconsIcon
-              color="currentColor"
-              icon={AiIdeaIcon}
-              size={24}
-              strokeWidth={1.4}
-            />
-          </div>
+          <SentinelLogoBadge
+            className="h-8 w-8 rounded-[1.75rem]"
+            markClassName="h-9 w-9"
+          />
 
           <h2 className="text-2xl font-medium tracking-tight text-foreground">
             What can I help you with?
@@ -121,8 +206,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                   transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
                 >
                   {(workspaces.data ?? []).map((workspace) => {
-                    const isSelected =
-                      workspace.id === selectedWorkspace?.id;
+                    const isSelected = workspace.id === selectedWorkspace?.id;
 
                     return (
                       <button
@@ -186,7 +270,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
           <div className="mx-auto w-full max-w-2xl">
             <ChatComposer
               activeWorkspace={selectedWorkspace}
-              threadId={threadId}
+              threadId={draftThreadId}
             />
           </div>
         </div>
