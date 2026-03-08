@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Spinner } from "@heroui/react";
+import { Spinner } from "@heroui/react";
 import Placeholder from "@tiptap/extension-placeholder";
 import StarterKit from "@tiptap/starter-kit";
 import { EditorContent, useEditor } from "@tiptap/react";
@@ -20,6 +20,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AIProvider } from "@/../generated/prisma";
 import { getDesktopApi } from "@/lib/desktop/client";
 import type { DesktopFileSelection } from "@/lib/desktop/contracts";
+import {
+  type ReasoningEffort,
+  getDefaultReasoningEffort,
+  getSupportedReasoningEfforts,
+} from "@/lib/ai/models";
 import { PROVIDERS } from "@/lib/ai/providers";
 import { api } from "@/trpc/react";
 
@@ -40,9 +45,15 @@ type ChatComposerProps = {
     name: string;
     rootPath?: string | null;
   } | null;
+  onSend?: (input: {
+    modelId: string;
+    reasoningEffort?: ReasoningEffort | null;
+    text: string;
+  }) => void;
+  onStop?: () => void;
   promptSeed?: string;
   promptSeedKey?: string | number;
-  threadId: string;
+  status?: "submitted" | "streaming" | "ready" | "error";
 };
 
 function isImageAttachment(a: ComposerAttachment) {
@@ -54,82 +65,8 @@ function getModelKey(provider: AIProvider, modelId: string) {
   return `${provider}:${modelId}`;
 }
 
-function SendIcon() {
-  return (
-    <HugeiconsIcon
-      color="currentColor"
-      icon={ArrowUp02Icon}
-      size={16}
-      strokeWidth={1.5}
-    />
-  );
-}
-
-function ImagePreviewModal({
-  attachment,
-  onClose,
-}: {
-  attachment: ComposerAttachment;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        animate={{ opacity: 1 }}
-        className="fixed inset-0 z-50 flex items-center justify-center"
-        exit={{ opacity: 0 }}
-        initial={{ opacity: 0 }}
-        onClick={onClose}
-        transition={{ duration: 0.2 }}
-      >
-        <div className="absolute inset-0 bg-overlay/70 backdrop-blur-sm" />
-
-        <motion.div
-          animate={{ opacity: 1, scale: 1 }}
-          className="relative z-10 flex max-h-[85vh] max-w-[85vw] flex-col items-center gap-3"
-          exit={{ opacity: 0, scale: 0.95 }}
-          initial={{ opacity: 0, scale: 0.95 }}
-          onClick={(e) => e.stopPropagation()}
-          transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <div className="relative overflow-hidden rounded-xl">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              alt={attachment.name}
-              className="max-h-[80vh] max-w-[80vw] object-contain"
-              src={attachment.previewUrl}
-            />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-overlay-foreground/70">
-              {attachment.name}
-            </span>
-            <button
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-default text-foreground transition-colors hover:bg-default-hover"
-              onClick={onClose}
-              type="button"
-            >
-              <HugeiconsIcon
-                color="currentColor"
-                icon={Cancel01Icon}
-                size={16}
-                strokeWidth={2}
-              />
-            </button>
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  );
+function getReasoningEffortLabel(effort: ReasoningEffort) {
+  return effort.charAt(0).toUpperCase() + effort.slice(1);
 }
 
 function AttachmentChip({
@@ -170,9 +107,7 @@ function AttachmentChip({
           </div>
         )}
       </div>
-
       <span className="min-w-0 truncate text-muted">{attachment.name}</span>
-
       <button
         className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full bg-surface text-foreground group-hover:flex"
         onClick={(e) => {
@@ -192,19 +127,91 @@ function AttachmentChip({
   );
 }
 
+function ImagePreviewModal({
+  attachment,
+  onClose,
+}: {
+  attachment: ComposerAttachment;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        animate={{ opacity: 1 }}
+        className="fixed inset-0 z-50 flex items-center justify-center"
+        exit={{ opacity: 0 }}
+        initial={{ opacity: 0 }}
+        onClick={onClose}
+        transition={{ duration: 0.2 }}
+      >
+        <div className="absolute inset-0 bg-overlay/70 backdrop-blur-sm" />
+        <motion.div
+          animate={{ opacity: 1, scale: 1 }}
+          className="relative z-10 flex max-h-[85vh] max-w-[85vw] flex-col items-center gap-3"
+          exit={{ opacity: 0, scale: 0.95 }}
+          initial={{ opacity: 0, scale: 0.95 }}
+          onClick={(e) => e.stopPropagation()}
+          transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <div className="relative overflow-hidden rounded-xl">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              alt={attachment.name}
+              className="max-h-[80vh] max-w-[80vw] object-contain"
+              src={attachment.previewUrl}
+            />
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-overlay-foreground/70">
+              {attachment.name}
+            </span>
+            <button
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-default text-foreground transition-colors hover:bg-default-hover"
+              onClick={onClose}
+              type="button"
+            >
+              <HugeiconsIcon
+                color="currentColor"
+                icon={Cancel01Icon}
+                size={16}
+                strokeWidth={2}
+              />
+            </button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
 export function ChatComposer({
   activeWorkspace,
+  onSend,
+  onStop,
   promptSeed,
   promptSeedKey,
-  threadId,
+  status = "ready",
 }: ChatComposerProps) {
+  const handleSendRef = useRef<() => void>(() => {});
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [reasoningMenuOpen, setReasoningMenuOpen] = useState(false);
   const [attachmentError, setAttachmentError] = useState("");
   const [selectedModelKey, setSelectedModelKey] = useState<string | null>(null);
+  const [selectedReasoningEffort, setSelectedReasoningEffort] =
+    useState<ReasoningEffort | null>(null);
   const [previewAttachment, setPreviewAttachment] =
     useState<ComposerAttachment | null>(null);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
+  const reasoningMenuRef = useRef<HTMLDivElement | null>(null);
   const modelsQuery = api.models.list.useQuery();
 
   const availableModels = useMemo(
@@ -233,7 +240,18 @@ export function ChatComposer({
 
   const hasWorkspace = Boolean(activeWorkspace);
   const hasModels = availableModels.length > 0;
+  const isBusy = status === "submitted" || status === "streaming";
   const isLocked = !hasWorkspace || !hasModels;
+  const supportedReasoningEfforts = selectedModel
+    ? getSupportedReasoningEfforts(
+        selectedModel.provider,
+        selectedModel.modelId,
+      )
+    : [];
+  const supportsReasoning = supportedReasoningEfforts.length > 0;
+  const reasoningLabel = selectedReasoningEffort
+    ? getReasoningEffortLabel(selectedReasoningEffort)
+    : null;
 
   const placeholderText = "Ask follow-up changes";
 
@@ -247,10 +265,17 @@ export function ChatComposer({
         class:
           "sentinel-composer-editor outline-none text-[14px] leading-6 text-foreground",
       },
+      handleKeyDown: (_view, event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          handleSendRef.current();
+          return true;
+        }
+        return false;
+      },
       handlePaste: (_view, event) => {
         const items = event.clipboardData?.items;
         if (!items) return false;
-
         const files: File[] = [];
         for (const item of items) {
           if (item.kind === "file") {
@@ -258,18 +283,15 @@ export function ChatComposer({
             if (file) files.push(file);
           }
         }
-
         if (files.length > 0) {
           addBrowserFiles(files);
           return true;
         }
-
         return false;
       },
       handleDrop: (_view, event) => {
         const files = event.dataTransfer?.files;
         if (!files || files.length === 0) return false;
-
         addBrowserFiles(Array.from(files));
         return true;
       },
@@ -281,42 +303,38 @@ export function ChatComposer({
         heading: false,
         horizontalRule: false,
       }),
-      Placeholder.configure({
-        placeholder: placeholderText,
-      }),
+      Placeholder.configure({ placeholder: placeholderText }),
     ],
     immediatelyRender: false,
   });
 
   useEffect(() => {
     if (!editor) return;
-    editor.setEditable(!isLocked);
-
+    editor.setEditable(!isLocked && !isBusy);
     const placeholderExt = editor.extensionManager.extensions.find(
       (ext) => ext.name === "placeholder",
     );
     if (placeholderExt) {
-      placeholderExt.options.placeholder = placeholderText;
+      placeholderExt.options.placeholder = isBusy
+        ? "Generating..."
+        : placeholderText;
       editor.view.dispatch(editor.state.tr);
     }
-  }, [editor, isLocked, placeholderText]);
+  }, [editor, isLocked, isBusy, placeholderText]);
 
   useEffect(() => {
     if (availableModels.length === 0) {
       setSelectedModelKey(null);
       return;
     }
-
     setSelectedModelKey((current) => {
       if (
         current &&
         availableModels.some(
           (m) => getModelKey(m.provider, m.modelId) === current,
         )
-      ) {
+      )
         return current;
-      }
-
       const first = availableModels[0];
       return first ? getModelKey(first.provider, first.modelId) : null;
     });
@@ -324,7 +342,6 @@ export function ChatComposer({
 
   useEffect(() => {
     if (!editor || promptSeedKey === undefined) return;
-
     if (!promptSeed?.trim()) {
       editor.commands.setContent({
         content: [{ type: "paragraph" }],
@@ -332,7 +349,6 @@ export function ChatComposer({
       });
       return;
     }
-
     editor.commands.setContent({
       content: [
         {
@@ -351,21 +367,46 @@ export function ChatComposer({
         modelMenuRef.current &&
         event.target instanceof Node &&
         !modelMenuRef.current.contains(event.target)
-      ) {
+      )
         setModelMenuOpen(false);
-      }
+      if (
+        reasoningMenuRef.current &&
+        event.target instanceof Node &&
+        !reasoningMenuRef.current.contains(event.target)
+      )
+        setReasoningMenuOpen(false);
     };
-
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, []);
 
   useEffect(() => {
+    if (!selectedModel) {
+      setSelectedReasoningEffort(null);
+      return;
+    }
+    const supported = getSupportedReasoningEfforts(
+      selectedModel.provider,
+      selectedModel.modelId,
+    );
+    if (supported.length === 0) {
+      setSelectedReasoningEffort(null);
+      return;
+    }
+    setSelectedReasoningEffort((current) => {
+      if (current && supported.includes(current)) return current;
+      return getDefaultReasoningEffort(
+        selectedModel.provider,
+        selectedModel.modelId,
+      );
+    });
+  }, [selectedModel]);
+
+  useEffect(() => {
     return () => {
       for (const a of attachments) {
-        if (a.previewUrl?.startsWith("blob:")) {
+        if (a.previewUrl?.startsWith("blob:"))
           URL.revokeObjectURL(a.previewUrl);
-        }
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -375,7 +416,6 @@ export function ChatComposer({
 
   const addBrowserFiles = useCallback((files: File[]) => {
     if (files.length === 0) return;
-
     const newAttachments: ComposerAttachment[] = files.map((f) => {
       const isImage = IMAGE_MIME_RE.test(f.type);
       return {
@@ -387,7 +427,6 @@ export function ChatComposer({
         previewUrl: isImage ? URL.createObjectURL(f) : undefined,
       };
     });
-
     setAttachments((current) => [...current, ...newAttachments]);
   }, []);
 
@@ -409,18 +448,15 @@ export function ChatComposer({
   const removeAttachment = useCallback((id: string) => {
     setAttachments((current) => {
       const removed = current.find((a) => a.id === id);
-      if (removed?.previewUrl?.startsWith("blob:")) {
+      if (removed?.previewUrl?.startsWith("blob:"))
         URL.revokeObjectURL(removed.previewUrl);
-      }
       return current.filter((a) => a.id !== id);
     });
   }, []);
 
   const handlePickFiles = async () => {
     setAttachmentError("");
-
     const desktop = getDesktopApi();
-
     if (desktop) {
       try {
         const pickedFiles = await desktop.pickFiles();
@@ -440,6 +476,21 @@ export function ChatComposer({
     e.target.value = "";
   };
 
+  const handleSend = useCallback(() => {
+    if (!editor || !selectedModelKey || !onSend || isBusy) return;
+    const text = editor.getText().trim();
+    if (!text) return;
+    onSend({
+      modelId: selectedModelKey,
+      reasoningEffort: selectedReasoningEffort,
+      text,
+    });
+    editor.commands.clearContent();
+    setAttachments([]);
+  }, [editor, selectedModelKey, onSend, isBusy, selectedReasoningEffort]);
+
+  handleSendRef.current = handleSend;
+
   const disabledMessage =
     !modelsQuery.isLoading && !hasModels ? (
       <>
@@ -453,17 +504,17 @@ export function ChatComposer({
 
   return (
     <>
-      <div className="relative rounded-2xl border border-border bg-surface">
-        <input
-          ref={fileInputRef}
-          className="hidden"
-          multiple
-          onChange={handleFileInputChange}
-          type="file"
-        />
+      <input
+        ref={fileInputRef}
+        className="hidden"
+        multiple
+        onChange={handleFileInputChange}
+        type="file"
+      />
 
+      <div className="w-full rounded-[20px] border border-border/50 bg-background  dark:bg-surface p-2 shadow-[0_0_10px_0_rgba(0,0,0,0.03)]">
         {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 px-3 pt-3">
+          <div className="flex flex-wrap gap-1.5 px-2 pb-1.5">
             {attachments.map((attachment) => (
               <AttachmentChip
                 attachment={attachment}
@@ -475,38 +526,38 @@ export function ChatComposer({
           </div>
         )}
 
-        <div className="relative min-h-[44px] px-4 pt-1.5 pb-0.5">
-          {!editor ? (
-            <div className="pointer-events-none pt-1 text-[14px] leading-6 text-muted opacity-70">
-              {placeholderText}
-            </div>
-          ) : null}
-          <EditorContent editor={editor} />
+        <div className="px-2">
+          <div className="min-h-[28px]">
+            {!editor ? (
+              <div className="pointer-events-none py-2 text-[14px] leading-6 text-muted/50">
+                {placeholderText}
+              </div>
+            ) : null}
+            <EditorContent editor={editor} />
+          </div>
         </div>
 
         {disabledMessage && (
-          <div className="px-4 pb-2">
+          <div className="px-3 pb-1">
             <p className="text-xs text-muted">{disabledMessage}</p>
           </div>
         )}
 
         {attachmentError && (
-          <div className="px-4 pb-2">
+          <div className="px-3 pb-1">
             <p className="text-danger-soft-foreground text-xs">
               {attachmentError}
             </p>
           </div>
         )}
 
-        <div className="flex items-center justify-between px-2 pb-2">
-          <div className="flex items-center">
-            <Button
-              isIconOnly
-              isDisabled={!hasWorkspace}
-              size="sm"
-              variant="ghost"
-              className="h-6 w-6 min-w-6 min-h-6 rounded-lg"
+        <div className="flex h-10 items-center justify-between px-1.5">
+          <div className="flex items-center gap-0.5">
+            <button
+              className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:text-foreground disabled:opacity-30"
+              disabled={!hasWorkspace}
               onClick={() => void handlePickFiles()}
+              type="button"
             >
               <HugeiconsIcon
                 color="currentColor"
@@ -514,11 +565,11 @@ export function ChatComposer({
                 size={18}
                 strokeWidth={1.5}
               />
-            </Button>
+            </button>
 
             <div className="relative" ref={modelMenuRef}>
               <button
-                className="flex h-8 items-center gap-1 rounded-lg px-2 text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+                className="flex h-8 items-center gap-1 rounded-full px-2.5 text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground disabled:opacity-30"
                 disabled={!hasModels || modelsQuery.isLoading}
                 onClick={() => setModelMenuOpen((o) => !o)}
                 type="button"
@@ -526,7 +577,7 @@ export function ChatComposer({
                 {modelsQuery.isLoading ? (
                   <Spinner color="current" size="sm" />
                 ) : (
-                  <span className="max-w-[180px] truncate">
+                  <span className="max-w-[160px] truncate">
                     {selectedModel?.displayName ?? "No model"}
                   </span>
                 )}
@@ -534,7 +585,7 @@ export function ChatComposer({
                   className={`transition-transform ${modelMenuOpen ? "rotate-180" : ""}`}
                   color="currentColor"
                   icon={ArrowDown01Icon}
-                  size={12}
+                  size={11}
                   strokeWidth={1.5}
                 />
               </button>
@@ -543,27 +594,28 @@ export function ChatComposer({
                 {modelMenuOpen && (
                   <motion.div
                     animate={{ opacity: 1, scale: 1, y: 0 }}
-                    className="absolute bottom-10 left-0 z-30 max-h-[280px] w-[300px] overflow-y-auto rounded-xl border border-border bg-overlay p-1 shadow-overlay backdrop-blur-xl"
+                    className="absolute bottom-10 left-0 z-30 max-h-[280px] w-[280px] overflow-y-auto rounded-xl border border-border bg-overlay p-1 shadow-overlay backdrop-blur-xl"
                     exit={{ opacity: 0, scale: 0.97, y: 6 }}
                     initial={{ opacity: 0, scale: 0.97, y: 6 }}
-                    transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+                    transition={{
+                      duration: 0.15,
+                      ease: [0.22, 1, 0.36, 1],
+                    }}
                   >
                     {groupedModels.map(([provider, models]) => (
                       <div key={provider}>
-                        <div className="px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-muted/60">
+                        <div className="px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-muted/50">
                           {PROVIDERS[provider].displayName}
                         </div>
-
                         {models.map((model) => {
                           const modelKey = getModelKey(
                             model.provider,
                             model.modelId,
                           );
                           const isSelected = selectedModelKey === modelKey;
-
                           return (
                             <button
-                              className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                              className={`flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm transition-colors ${
                                 isSelected
                                   ? "bg-default text-foreground"
                                   : "text-muted hover:bg-default hover:text-foreground"
@@ -578,19 +630,12 @@ export function ChatComposer({
                               <HugeiconsIcon
                                 color="currentColor"
                                 icon={Brain02Icon}
-                                size={14}
+                                size={13}
                                 strokeWidth={1.5}
                               />
-                              <div className="min-w-0">
-                                <div className="truncate text-[13px] font-medium">
-                                  {model.displayName}
-                                </div>
-                                {model.description && (
-                                  <div className="truncate text-xs text-muted/60">
-                                    {model.description}
-                                  </div>
-                                )}
-                              </div>
+                              <span className="truncate text-[13px]">
+                                {model.displayName}
+                              </span>
                             </button>
                           );
                         })}
@@ -600,21 +645,99 @@ export function ChatComposer({
                 )}
               </AnimatePresence>
             </div>
+
+            {supportsReasoning && (
+              <div className="relative" ref={reasoningMenuRef}>
+                <button
+                  className="flex h-8 items-center gap-1 rounded-full px-2.5 text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground"
+                  onClick={() => setReasoningMenuOpen((open) => !open)}
+                  type="button"
+                >
+                  <span>{reasoningLabel ?? "Medium"}</span>
+                  <HugeiconsIcon
+                    className={`transition-transform ${reasoningMenuOpen ? "rotate-180" : ""}`}
+                    color="currentColor"
+                    icon={ArrowDown01Icon}
+                    size={11}
+                    strokeWidth={1.5}
+                  />
+                </button>
+
+                <AnimatePresence>
+                  {reasoningMenuOpen && (
+                    <motion.div
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      className="absolute bottom-10 left-0 z-30 w-[160px] overflow-hidden rounded-xl border border-border bg-overlay p-1 shadow-overlay backdrop-blur-xl"
+                      exit={{ opacity: 0, scale: 0.97, y: 6 }}
+                      initial={{ opacity: 0, scale: 0.97, y: 6 }}
+                      transition={{
+                        duration: 0.15,
+                        ease: [0.22, 1, 0.36, 1],
+                      }}
+                    >
+                      {supportedReasoningEfforts.map((effort) => {
+                        const isSelected = selectedReasoningEffort === effort;
+                        return (
+                          <button
+                            className={`flex w-full items-center rounded-lg px-3 py-1.5 text-left text-sm transition-colors ${
+                              isSelected
+                                ? "bg-default text-foreground"
+                                : "text-muted hover:bg-default hover:text-foreground"
+                            }`}
+                            key={effort}
+                            onClick={() => {
+                              setSelectedReasoningEffort(effort);
+                              setReasoningMenuOpen(false);
+                            }}
+                            type="button"
+                          >
+                            {getReasoningEffortLabel(effort)}
+                          </button>
+                        );
+                      })}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
           </div>
 
-          <Button
-            isIconOnly
-            isDisabled={isLocked}
-            size="sm"
-            variant="primary"
-            className="h-8 w-8 min-w-8 min-h-8"
-          >
-            <SendIcon />
-          </Button>
+          <div className="flex items-center gap-1">
+            {isBusy ? (
+              <button
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-default text-muted transition-colors hover:text-foreground"
+                onClick={onStop}
+                type="button"
+              >
+                <svg
+                  fill="currentColor"
+                  height={12}
+                  viewBox="0 0 16 16"
+                  width={12}
+                >
+                  <rect height={10} rx={2} width={10} x={3} y={3} />
+                </svg>
+              </button>
+            ) : (
+              <button
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-accent-foreground transition-opacity hover:opacity-80 disabled:opacity-25 disabled:cursor-not-allowed"
+                disabled={isLocked}
+                onClick={handleSend}
+                type="button"
+              >
+                <HugeiconsIcon
+                  color="currentColor"
+                  icon={ArrowUp02Icon}
+                  size={16}
+                  strokeWidth={1.5}
+                />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {previewAttachment && previewAttachment.previewUrl && (
+      {previewAttachment?.previewUrl && (
         <ImagePreviewModal
           attachment={previewAttachment}
           onClose={() => setPreviewAttachment(null)}

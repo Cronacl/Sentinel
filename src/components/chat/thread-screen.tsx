@@ -1,18 +1,19 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { UIMessage } from "ai";
 
 import { PageWrapper } from "@/components/shell";
+import { useThreadChat } from "@/hooks/use-thread-chat";
+import type { ReasoningEffort } from "@/lib/ai/models";
 import { api } from "@/trpc/react";
 
 import { ChatComposer } from "./chat-composer";
+import { ChatMessage } from "./chat-message";
+import { ScrollShadow } from "@heroui/react";
 
 type ThreadScreenProps = {
-  initialMessages: Array<{
-    id: string;
-    parts: unknown;
-    role: "assistant" | "system" | "user";
-  }>;
+  initialMessages: UIMessage[];
   thread: {
     id: string;
     summary: string | null;
@@ -27,27 +28,6 @@ type ThreadScreenProps = {
     updatedAt: Date;
   };
 };
-
-function getMessagePreview(parts: unknown) {
-  if (!Array.isArray(parts)) {
-    return "";
-  }
-
-  for (const part of parts) {
-    if (
-      part &&
-      typeof part === "object" &&
-      "type" in part &&
-      part.type === "text" &&
-      "text" in part &&
-      typeof part.text === "string"
-    ) {
-      return part.text;
-    }
-  }
-
-  return "";
-}
 
 export function ThreadScreen({
   initialMessages,
@@ -78,10 +58,7 @@ export function ThreadScreen({
         })),
       );
 
-      return {
-        previousCurrentWorkspace,
-        previousWorkspaces,
-      };
+      return { previousCurrentWorkspace, previousWorkspaces };
     },
     onError: (_error, _variables, context) => {
       utils.workspaces.getCurrent.setData(
@@ -94,6 +71,65 @@ export function ThreadScreen({
       );
     },
   });
+
+  const [chatError, setChatError] = useState<string | null>(null);
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const isUserNearBottomRef = useRef(true);
+
+  const chat = useThreadChat({
+    threadId: thread.id,
+    initialMessages,
+    workspaceId: workspace.id,
+    onFinish: () => {
+      void utils.threads.list.invalidate();
+    },
+    onError: (error) => {
+      setChatError(error.message);
+    },
+  });
+
+  const isBusy = chat.status === "submitted" || chat.status === "streaming";
+
+  const handleSend = useCallback(
+    ({
+      modelId,
+      reasoningEffort,
+      text,
+    }: {
+      modelId: string;
+      reasoningEffort?: ReasoningEffort | null;
+      text: string;
+    }) => {
+      setChatError(null);
+      void chat.sendMessage({ modelId, reasoningEffort, text });
+    },
+    [chat],
+  );
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    const scrollArea = scrollAreaRef.current;
+    if (!scrollArea) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = scrollArea;
+      isUserNearBottomRef.current =
+        scrollHeight - scrollTop - clientHeight < 100;
+    };
+
+    scrollArea.addEventListener("scroll", handleScroll, { passive: true });
+    return () => scrollArea.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    if (isUserNearBottomRef.current) {
+      scrollToBottom();
+    }
+  }, [chat.messages, scrollToBottom]);
 
   useEffect(() => {
     if (
@@ -114,50 +150,42 @@ export function ThreadScreen({
   ]);
 
   return (
-    <PageWrapper
-      maxWidth="2xl"
-      subtitle={workspace.name}
-      title={thread.title}
-      flush
-    >
-      <div className="flex h-[calc(100vh-44px)] flex-col">
-        <div className="flex-1 overflow-y-auto px-4 py-4 lg:px-5 lg:py-5">
-          <div className="mx-auto flex w-full max-w-5xl flex-col gap-3">
-            {initialMessages.length > 0 ? (
-              initialMessages.map((message) => (
-                <article
-                  className="rounded-2xl border border-border bg-surface px-4 py-3"
-                  key={message.id}
-                >
-                  <div className="text-[11px] uppercase tracking-[0.14em] text-muted">
-                    {message.role}
-                  </div>
-                  <p className="mt-2 text-sm leading-6 text-foreground whitespace-pre-wrap">
-                    {getMessagePreview(message.parts) ||
-                      "Non-text message parts"}
-                  </p>
-                </article>
-              ))
-            ) : (
-              <div className="rounded-2xl border border-border bg-surface p-6">
-                <p className="text-lg font-medium text-foreground">
-                  Nothing here yet.
-                </p>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-                  Shape the first message below, attach anything Sentinel should
-                  consider, and use the model picker to frame the thread.
+    <PageWrapper subtitle={workspace.name} title={thread.title} flush>
+      <ScrollShadow
+        ref={scrollAreaRef}
+        className="flex h-[calc(100vh-44px)] flex-col overflow-y-auto"
+      >
+        <div className="mx-auto w-full max-w-3xl flex-1 px-6 pt-4">
+          <div className="flex flex-col gap-4">
+            {chat.messages.map((message, idx) => (
+              <ChatMessage
+                key={message.id}
+                message={message}
+                isStreaming={isBusy && idx === chat.messages.length - 1}
+              />
+            ))}
+
+            {chatError && (
+              <div className="rounded-lg border border-danger-soft-hover bg-danger-soft px-3 py-2.5">
+                <p className="text-xs text-danger-soft-foreground">
+                  {chatError}
                 </p>
               </div>
             )}
+
+            <div ref={messagesEndRef} />
           </div>
         </div>
 
-        <div className="shrink-0 px-4 pb-4 lg:px-5">
-          <div className="mx-auto w-full max-w-5xl">
-            <ChatComposer activeWorkspace={workspace} threadId={thread.id} />
-          </div>
+        <div className="sticky bottom-0 z-50 mx-auto w-full max-w-3xl px-6 pb-3 pt-2">
+          <ChatComposer
+            activeWorkspace={workspace}
+            onSend={handleSend}
+            onStop={chat.stop}
+            status={chat.status}
+          />
         </div>
-      </div>
+      </ScrollShadow>
     </PageWrapper>
   );
 }

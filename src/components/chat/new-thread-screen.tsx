@@ -8,14 +8,17 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { PageWrapper } from "@/components/shell";
 import { SentinelLogoBadge } from "@/components/shared/logo";
+import { useThreadChat } from "@/hooks/use-thread-chat";
+import type { ReasoningEffort } from "@/lib/ai/models";
 import { CreateWorkspaceModal } from "@/components/workspaces/create-workspace-modal";
 import { api } from "@/trpc/react";
 
 import { ChatComposer } from "./chat-composer";
+import { ChatMessage } from "./chat-message";
 
 type NewThreadScreenProps = {
   threadId?: string;
@@ -27,10 +30,13 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   const workspaces = api.workspaces.list.useQuery();
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
   const [draftThreadId, setDraftThreadId] = useState(
     () => threadId ?? crypto.randomUUID(),
   );
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const hasNavigatedRef = useRef(false);
 
   const selectWorkspace = api.workspaces.select.useMutation({
     onMutate: async ({ workspaceId }) => {
@@ -62,10 +68,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         })),
       );
 
-      return {
-        previousCurrentWorkspace,
-        previousWorkspaceList,
-      };
+      return { previousCurrentWorkspace, previousWorkspaceList };
     },
     onError: (_error, _variables, context) => {
       utils.workspaces.getCurrent.setData(
@@ -115,20 +118,62 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     },
   });
 
-  useEffect(() => {
-    if (!threadId) {
-      return;
-    }
+  const selectedWorkspace = currentWorkspace.data;
 
+  const chat = useThreadChat({
+    threadId: draftThreadId,
+    initialMessages: [],
+    workspaceId: selectedWorkspace?.id ?? "",
+    onFinish: () => {
+      void utils.threads.list.invalidate();
+    },
+    onError: (error) => {
+      setChatError(error.message);
+    },
+  });
+
+  const hasMessages = chat.messages.length > 0;
+  const isBusy = chat.status === "submitted" || chat.status === "streaming";
+
+  const handleSend = useCallback(
+    ({
+      modelId,
+      reasoningEffort,
+      text,
+    }: {
+      modelId: string;
+      reasoningEffort?: ReasoningEffort | null;
+      text: string;
+    }) => {
+      setChatError(null);
+      void chat.sendMessage({ modelId, reasoningEffort, text });
+
+      if (!hasNavigatedRef.current) {
+        hasNavigatedRef.current = true;
+        window.history.replaceState(null, "", `/thread/${draftThreadId}`);
+        void utils.threads.list.invalidate();
+      }
+    },
+    [chat, draftThreadId, utils.threads.list],
+  );
+
+  useEffect(() => {
+    if (hasMessages) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chat.messages, hasMessages]);
+
+  useEffect(() => {
+    if (!threadId) return;
     setDraftThreadId(threadId);
   }, [threadId]);
 
   useEffect(() => {
-    if (threadId) {
-      return;
-    }
+    if (threadId) return;
 
     const handleNewThread = () => {
+      hasNavigatedRef.current = false;
+      setChatError(null);
       setDraftThreadId(crypto.randomUUID());
     };
 
@@ -152,12 +197,58 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, []);
 
-  const selectedWorkspace = currentWorkspace.data;
+  if (hasMessages) {
+    const firstText =
+      chat.messages[0]?.parts?.find(
+        (p): p is Extract<
+          (typeof chat.messages)[0]["parts"][number],
+          { type: "text" }
+        > => p.type === "text",
+      )?.text.slice(0, 60) ?? "New Thread";
+
+    return (
+      <PageWrapper title={firstText} flush>
+        <div className="flex h-[calc(100vh-44px)] flex-col overflow-y-auto">
+          <div className="mx-auto w-full max-w-3xl flex-1 px-6 pt-4">
+            <div className="flex flex-col gap-4">
+              {chat.messages.map((message, idx) => (
+                <ChatMessage
+                  key={message.id}
+                  message={message}
+                  isStreaming={isBusy && idx === chat.messages.length - 1}
+                />
+              ))}
+
+              {chatError && (
+                <div className="rounded-lg border border-danger-soft-hover bg-danger-soft px-3 py-2.5">
+                  <p className="text-xs text-danger-soft-foreground">
+                    {chatError}
+                  </p>
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
+            </div>
+          </div>
+
+          <div className="sticky bottom-0 z-50 mx-auto w-full max-w-3xl px-6 pb-3 pt-2">
+            <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-background to-transparent" />
+            <ChatComposer
+              activeWorkspace={selectedWorkspace}
+              onSend={handleSend}
+              onStop={chat.stop}
+              status={chat.status}
+            />
+          </div>
+        </div>
+      </PageWrapper>
+    );
+  }
 
   return (
     <PageWrapper title="New Thread" flush>
-      <div className="flex h-[calc(100vh-44px)] flex-col">
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 overflow-y-auto px-4 py-6">
+      <div className="flex h-[calc(100vh-44px)] flex-col overflow-y-auto">
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-6">
           <SentinelLogoBadge
             className="h-8 w-8 rounded-[1.75rem]"
             markClassName="h-9 w-9"
@@ -266,13 +357,14 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
           </div>
         </div>
 
-        <div className="shrink-0 px-4 pb-4">
-          <div className="mx-auto w-full max-w-2xl">
-            <ChatComposer
-              activeWorkspace={selectedWorkspace}
-              threadId={draftThreadId}
-            />
-          </div>
+        <div className="sticky bottom-0 z-50 mx-auto w-full max-w-3xl px-6 pb-3 pt-2">
+          <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-background to-transparent" />
+          <ChatComposer
+            activeWorkspace={selectedWorkspace}
+            onSend={handleSend}
+            onStop={chat.stop}
+            status={chat.status}
+          />
         </div>
       </div>
 

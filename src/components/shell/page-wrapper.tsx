@@ -69,15 +69,19 @@ export function PageWrapper({
         </header>
       )}
 
-      <div className="flex w-full flex-1 overflow-y-auto">
-        <ScrollShadow
-          className={`w-full h-[calc(100vh-44px)] overflow-y-auto ${
-            flush ? "" : "px-4 py-4 lg:px-5 lg:py-5"
-          }`}
-        >
+      {flush ? (
+        <div className="w-full flex-1 overflow-hidden">
           {children}
-        </ScrollShadow>
-      </div>
+        </div>
+      ) : (
+        <div className="flex w-full flex-1 overflow-y-auto">
+          <ScrollShadow
+            className="w-full h-[calc(100vh-44px)] overflow-y-auto px-4 py-4 lg:px-5 lg:py-5"
+          >
+            {children}
+          </ScrollShadow>
+        </div>
+      )}
     </div>
   );
 }
