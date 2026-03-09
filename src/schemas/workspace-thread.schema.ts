@@ -114,6 +114,16 @@ export const threadArchiveSchema = z.object({
   threadId: z.string().min(1),
 });
 
+export const threadSearchSchema = z.object({
+  query: z.string().trim().min(1),
+  workspaceId: z.string().min(1).optional(),
+});
+
+export const threadSetActiveBranchSchema = z.object({
+  messageId: z.string().min(1),
+  threadId: z.string().min(1),
+});
+
 export const threadMessageAppendSchema = z.object({
   message: threadUIMessageSchema,
   threadId: z.string().min(1),

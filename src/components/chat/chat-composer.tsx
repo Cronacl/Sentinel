@@ -10,34 +10,37 @@ import {
   ArrowUp02Icon,
   Brain02Icon,
   Cancel01Icon,
-  File01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { FileUIPart } from "ai";
 
 import type { AIProvider } from "@/../generated/prisma";
-import { getDesktopApi } from "@/lib/desktop/client";
-import type { DesktopFileSelection } from "@/lib/desktop/contracts";
 import {
+  getModelAttachmentCapabilities,
   type ReasoningEffort,
   getDefaultReasoningEffort,
   getSupportedReasoningEfforts,
 } from "@/lib/ai/models";
+import {
+  CHAT_ATTACHMENT_ACCEPT,
+  getAttachmentIcon,
+  getAttachmentTone,
+  type AttachmentKind,
+} from "@/lib/files/chat-attachment-types";
 import { PROVIDERS } from "@/lib/ai/providers";
 import { api } from "@/trpc/react";
 
-const IMAGE_MIME_RE = /^image\/(png|jpe?g|gif|webp|svg\+xml|bmp|ico)$/i;
-
-type ComposerAttachment = {
-  id: string;
-  name: string;
-  path: string;
-  size?: number;
-  mimeType?: string;
-  previewUrl?: string;
-};
+import {
+  convertComposerAttachmentsToFileParts,
+  createComposerAttachmentFromFilePart,
+  createBrowserAttachments,
+  isImageAttachment,
+  type ComposerAttachment,
+} from "./chat-attachments";
+import { AttachmentIcon } from "./attachment-icon";
 
 type ChatComposerProps = {
   activeWorkspace?: {
@@ -46,20 +49,19 @@ type ChatComposerProps = {
     rootPath?: string | null;
   } | null;
   onSend?: (input: {
+    files?: FileUIPart[];
     modelId: string;
     reasoningEffort?: ReasoningEffort | null;
     text: string;
   }) => void;
   onStop?: () => void;
+  onCancelEdit?: () => void;
+  attachmentSeed?: FileUIPart[];
+  isEditing?: boolean;
   promptSeed?: string;
   promptSeedKey?: string | number;
   status?: "submitted" | "streaming" | "ready" | "error";
 };
-
-function isImageAttachment(a: ComposerAttachment) {
-  if (a.mimeType && IMAGE_MIME_RE.test(a.mimeType)) return true;
-  return /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(a.name);
-}
 
 function getModelKey(provider: AIProvider, modelId: string) {
   return `${provider}:${modelId}`;
@@ -67,6 +69,41 @@ function getModelKey(provider: AIProvider, modelId: string) {
 
 function getReasoningEffortLabel(effort: ReasoningEffort) {
   return effort.charAt(0).toUpperCase() + effort.slice(1);
+}
+
+function getAttachmentKindLabel(kind: AttachmentKind) {
+  switch (kind) {
+    case "image":
+      return "images";
+    case "document":
+      return "documents";
+    case "code-text":
+      return "text/code files";
+    case "archive":
+      return "archives";
+    case "audio":
+      return "audio files";
+    case "video":
+      return "video files";
+    default:
+      return "files";
+  }
+}
+
+function supportsAttachmentKind(
+  kind: AttachmentKind,
+  capabilities: ReturnType<typeof getModelAttachmentCapabilities>,
+) {
+  switch (kind) {
+    case "image":
+      return capabilities.supportsImages;
+    case "document":
+      return capabilities.supportsDocuments;
+    case "code-text":
+      return capabilities.supportsCodeTextFiles;
+    default:
+      return false;
+  }
 }
 
 function AttachmentChip({
@@ -79,6 +116,8 @@ function AttachmentChip({
   onPreview: () => void;
 }) {
   const isImage = isImageAttachment(attachment);
+  const attachmentIcon = getAttachmentIcon(attachment.fileType);
+  const attachmentTone = getAttachmentTone(attachment.fileType.displayType);
 
   return (
     <div
@@ -97,16 +136,18 @@ function AttachmentChip({
             />
           </div>
         ) : (
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-default">
-            <HugeiconsIcon
-              color="currentColor"
-              icon={File01Icon}
-              size={12}
-              strokeWidth={1.5}
-            />
+          <div
+            className={`flex h-6 w-6 items-center justify-center rounded-full ${attachmentTone.backgroundClassName} ${attachmentTone.textClassName}`}
+          >
+            <AttachmentIcon icon={attachmentIcon} size={12} strokeWidth={1.9} />
           </div>
         )}
       </div>
+      {!isImage ? (
+        <span className="rounded-full bg-default px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-muted">
+          {attachment.fileType.label}
+        </span>
+      ) : null}
       <span className="min-w-0 truncate text-muted">{attachment.name}</span>
       <button
         className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full bg-surface text-foreground group-hover:flex"
@@ -194,6 +235,9 @@ function ImagePreviewModal({
 
 export function ChatComposer({
   activeWorkspace,
+  attachmentSeed = [],
+  isEditing = false,
+  onCancelEdit,
   onSend,
   onStop,
   promptSeed,
@@ -210,6 +254,7 @@ export function ChatComposer({
     useState<ReasoningEffort | null>(null);
   const [previewAttachment, setPreviewAttachment] =
     useState<ComposerAttachment | null>(null);
+  const attachmentsRef = useRef<ComposerAttachment[]>([]);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const reasoningMenuRef = useRef<HTMLDivElement | null>(null);
   const modelsQuery = api.models.list.useQuery();
@@ -252,6 +297,36 @@ export function ChatComposer({
   const reasoningLabel = selectedReasoningEffort
     ? getReasoningEffortLabel(selectedReasoningEffort)
     : null;
+  const attachmentCapabilities = selectedModel
+    ? getModelAttachmentCapabilities(
+        selectedModel.provider,
+        selectedModel.modelId,
+      )
+    : {
+        supportsCodeTextFiles: false,
+        supportsDocuments: false,
+        supportsImages: false,
+      };
+  const unsupportedAttachmentKinds = useMemo(() => {
+    return Array.from(
+      new Set(
+        attachments
+          .map((attachment) => attachment.fileType.kind)
+          .filter(
+            (kind) => !supportsAttachmentKind(kind, attachmentCapabilities),
+          ),
+      ),
+    );
+  }, [attachmentCapabilities, attachments]);
+  const attachmentWarning = useMemo(() => {
+    if (!selectedModel || unsupportedAttachmentKinds.length === 0) {
+      return "";
+    }
+
+    const labels = unsupportedAttachmentKinds.map(getAttachmentKindLabel);
+
+    return `${selectedModel.displayName} may not support ${labels.join(", ")} as chat attachments.`;
+  }, [selectedModel, unsupportedAttachmentKinds]);
 
   const placeholderText = "Ask follow-up changes";
 
@@ -362,6 +437,14 @@ export function ChatComposer({
   }, [editor, promptSeed, promptSeedKey]);
 
   useEffect(() => {
+    if (promptSeedKey === undefined) {
+      return;
+    }
+
+    setAttachments(attachmentSeed.map(createComposerAttachmentFromFilePart));
+  }, [attachmentSeed, promptSeedKey]);
+
+  useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
       if (
         modelMenuRef.current &&
@@ -403,46 +486,37 @@ export function ChatComposer({
   }, [selectedModel]);
 
   useEffect(() => {
+    attachmentsRef.current = attachments;
+  }, [attachments]);
+
+  useEffect(() => {
     return () => {
-      for (const a of attachments) {
+      for (const a of attachmentsRef.current) {
         if (a.previewUrl?.startsWith("blob:"))
           URL.revokeObjectURL(a.previewUrl);
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const addBrowserFiles = useCallback((files: File[]) => {
     if (files.length === 0) return;
-    const newAttachments: ComposerAttachment[] = files.map((f) => {
-      const isImage = IMAGE_MIME_RE.test(f.type);
-      return {
-        id: crypto.randomUUID(),
-        name: f.name,
-        path: f.name,
-        size: f.size,
-        mimeType: f.type || undefined,
-        previewUrl: isImage ? URL.createObjectURL(f) : undefined,
-      };
-    });
-    setAttachments((current) => [...current, ...newAttachments]);
-  }, []);
+    const { accepted, rejected } = createBrowserAttachments(files);
 
-  const addDesktopFiles = useCallback((files: DesktopFileSelection[]) => {
-    if (files.length === 0) return;
-    setAttachments((current) => {
-      const seenPaths = new Set(current.map((f) => f.path));
-      const next = files
-        .filter((f) => !seenPaths.has(f.path))
-        .map((f) => ({
-          ...f,
-          id: crypto.randomUUID(),
-          previewUrl: undefined,
-        }));
-      return [...current, ...next];
-    });
+    if (rejected.length > 0) {
+      setAttachmentError(
+        "Some files are not supported yet. Use images, text/code files, PDF, office documents, spreadsheets, or presentations.",
+      );
+    } else {
+      setAttachmentError("");
+    }
+
+    if (accepted.length === 0) {
+      return;
+    }
+
+    setAttachments((current) => [...current, ...accepted]);
   }, []);
 
   const removeAttachment = useCallback((id: string) => {
@@ -456,17 +530,7 @@ export function ChatComposer({
 
   const handlePickFiles = async () => {
     setAttachmentError("");
-    const desktop = getDesktopApi();
-    if (desktop) {
-      try {
-        const pickedFiles = await desktop.pickFiles();
-        addDesktopFiles(pickedFiles);
-      } catch {
-        fileInputRef.current?.click();
-      }
-    } else {
-      fileInputRef.current?.click();
-    }
+    fileInputRef.current?.click();
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -476,20 +540,56 @@ export function ChatComposer({
     e.target.value = "";
   };
 
-  const handleSend = useCallback(() => {
+  const clearAttachments = useCallback(() => {
+    setAttachments((current) => {
+      current.forEach((attachment) => {
+        if (attachment.previewUrl?.startsWith("blob:")) {
+          URL.revokeObjectURL(attachment.previewUrl);
+        }
+      });
+      return [];
+    });
+  }, []);
+
+  const handleSend = useCallback(async () => {
     if (!editor || !selectedModelKey || !onSend || isBusy) return;
     const text = editor.getText().trim();
-    if (!text) return;
-    onSend({
-      modelId: selectedModelKey,
-      reasoningEffort: selectedReasoningEffort,
-      text,
-    });
-    editor.commands.clearContent();
-    setAttachments([]);
-  }, [editor, selectedModelKey, onSend, isBusy, selectedReasoningEffort]);
+    if (!text && attachments.length === 0) return;
 
-  handleSendRef.current = handleSend;
+    try {
+      setAttachmentError("");
+      const files = await convertComposerAttachmentsToFileParts(attachments);
+      if (!text && files.length === 0) {
+        setAttachmentError("Unable to attach one or more selected files.");
+        return;
+      }
+
+      onSend({
+        ...(files.length > 0 ? { files } : {}),
+        modelId: selectedModelKey,
+        reasoningEffort: selectedReasoningEffort,
+        text,
+      });
+    } catch {
+      setAttachmentError("Unable to attach one or more selected files.");
+      return;
+    }
+    editor.commands.clearContent();
+    setPreviewAttachment(null);
+    clearAttachments();
+  }, [
+    attachments,
+    clearAttachments,
+    editor,
+    isBusy,
+    onSend,
+    selectedModelKey,
+    selectedReasoningEffort,
+  ]);
+
+  handleSendRef.current = () => {
+    void handleSend();
+  };
 
   const disabledMessage =
     !modelsQuery.isLoading && !hasModels ? (
@@ -505,6 +605,7 @@ export function ChatComposer({
   return (
     <>
       <input
+        accept={CHAT_ATTACHMENT_ACCEPT}
         ref={fileInputRef}
         className="hidden"
         multiple
@@ -512,8 +613,8 @@ export function ChatComposer({
         type="file"
       />
 
-      <div className="w-full rounded-[20px] border border-border/50 bg-background  dark:bg-surface p-2 shadow-[0_0_10px_0_rgba(0,0,0,0.03)]">
-        {attachments.length > 0 && (
+      <div className="w-full rounded-[20px] border border-muted/20 bg-background  dark:bg-surface p-2 ">
+              {attachments.length > 0 && (
           <div className="flex flex-wrap gap-1.5 px-2 pb-1.5">
             {attachments.map((attachment) => (
               <AttachmentChip
@@ -524,7 +625,17 @@ export function ChatComposer({
               />
             ))}
           </div>
-        )}
+              )}
+
+              {isEditing ? (
+                <button
+                  className="text-muted hover:text-foreground px-2 text-xs"
+                  onClick={onCancelEdit}
+                  type="button"
+                >
+                  Cancel edit
+                </button>
+              ) : null}
 
         <div className="px-2">
           <div className="min-h-[28px]">
@@ -548,6 +659,12 @@ export function ChatComposer({
             <p className="text-danger-soft-foreground text-xs">
               {attachmentError}
             </p>
+          </div>
+        )}
+
+        {attachmentWarning && !attachmentError && (
+          <div className="px-3 pb-1">
+            <p className="text-[11px] text-amber-200/75">{attachmentWarning}</p>
           </div>
         )}
 

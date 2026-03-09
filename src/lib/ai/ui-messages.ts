@@ -1,16 +1,18 @@
 import { validateUIMessages, type UIMessage } from "ai";
 
 import { Prisma } from "@/../generated/prisma";
-
-type PersistedThreadMessageRecord = {
-  createdAt: Date;
-  id: string;
-  messageId: string;
-  metadata: Prisma.JsonValue | null;
-  parts: Prisma.JsonValue;
-  role: "system" | "user" | "assistant";
-  updatedAt: Date;
-};
+import {
+  buildActiveThreadMessages,
+  type PersistedThreadMessageRecord,
+} from "./thread-branches";
+import {
+  normalizeThreadMessageMetadata,
+  normalizeThreadUIMessage,
+  normalizeThreadUIMessages,
+  type ThreadMessageMetadata,
+  type ThreadUIMessage,
+  threadMessageMetadataSchema,
+} from "./thread-message-types";
 
 function toInputJsonValue(value: unknown): Prisma.InputJsonValue | undefined {
   if (value === undefined) {
@@ -26,9 +28,36 @@ function toInputJsonValue(value: unknown): Prisma.InputJsonValue | undefined {
   return JSON.parse(serialized) as Prisma.InputJsonValue;
 }
 
+function normalizeUnknownThreadUIMessage(message: unknown) {
+  if (!message || typeof message !== "object") {
+    return message;
+  }
+
+  return normalizeThreadUIMessage(
+    message as Omit<ThreadUIMessage, "metadata"> & {
+      metadata?: ThreadMessageMetadata | null;
+    },
+  );
+}
+
+function normalizeUnknownThreadUIMessages(messages: unknown) {
+  if (!Array.isArray(messages)) {
+    return messages;
+  }
+
+  return normalizeThreadUIMessages(
+    messages as Array<
+      Omit<ThreadUIMessage, "metadata"> & {
+        metadata?: ThreadMessageMetadata | null;
+      }
+    >,
+  );
+}
+
 export async function validateThreadUIMessage(message: unknown) {
-  const [validatedMessage] = await validateUIMessages({
-    messages: [message],
+  const [validatedMessage] = await validateUIMessages<ThreadUIMessage>({
+    messages: [normalizeUnknownThreadUIMessage(message)],
+    metadataSchema: threadMessageMetadataSchema,
   });
 
   if (!validatedMessage) {
@@ -39,26 +68,21 @@ export async function validateThreadUIMessage(message: unknown) {
 }
 
 export async function validateThreadUIMessages(messages: unknown) {
-  return validateUIMessages({
-    messages,
+  return validateUIMessages<ThreadUIMessage>({
+    messages: normalizeUnknownThreadUIMessages(messages),
+    metadataSchema: threadMessageMetadataSchema,
   });
 }
 
 export async function mapThreadMessagesToUIMessages(
   messages: PersistedThreadMessageRecord[],
 ) {
-  return validateThreadUIMessages(
-    messages.map((message) => ({
-      id: message.messageId,
-      ...(message.metadata === null ? {} : { metadata: message.metadata }),
-      parts: message.parts,
-      role: message.role,
-    })),
-  );
+  return validateThreadUIMessages(buildActiveThreadMessages(messages));
 }
 
-export function serializeThreadUIMessage(message: UIMessage) {
-  const metadata = toInputJsonValue(message.metadata);
+export function serializeThreadUIMessage(message: ThreadUIMessage) {
+  const normalizedMessage = normalizeThreadUIMessage(message);
+  const metadata = toInputJsonValue(normalizedMessage.metadata);
   const parts = toInputJsonValue(message.parts);
 
   if (!parts || !Array.isArray(parts)) {
@@ -67,9 +91,7 @@ export function serializeThreadUIMessage(message: UIMessage) {
 
   return {
     messageId: message.id,
-    ...(message.metadata === undefined
-      ? {}
-      : { metadata: metadata ?? Prisma.JsonNull }),
+    metadata: metadata ?? Prisma.JsonNull,
     parts,
     role: message.role,
   };

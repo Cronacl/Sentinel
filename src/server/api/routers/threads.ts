@@ -6,8 +6,11 @@ import {
   threadGetSchema,
   threadListSchema,
   threadRenameSchema,
+  threadSearchSchema,
+  threadSetActiveBranchSchema,
   threadUpdateMetaSchema,
 } from "@/schemas/workspace-thread.schema";
+import { createPrismaThreadChatPersistence } from "@/lib/ai/chat/persistence";
 import { mapThreadMessagesToUIMessages } from "@/lib/ai/ui-messages";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
@@ -184,6 +187,36 @@ export const threadsRouter = createTRPCRouter({
       };
     }),
 
+  search: protectedProcedure
+    .input(threadSearchSchema)
+    .query(async ({ ctx, input }) => {
+      return ctx.db.thread.findMany({
+        where: {
+          archivedAt: null,
+          ...(input.workspaceId ? { workspaceId: input.workspaceId } : {}),
+          userId: ctx.session.user.id,
+          workspace: {
+            isArchived: false,
+            userId: ctx.session.user.id,
+          },
+          OR: [
+            { title: { contains: input.query, mode: "insensitive" } },
+            { summary: { contains: input.query, mode: "insensitive" } },
+          ],
+        },
+        orderBy: {
+          updatedAt: "desc",
+        },
+        select: {
+          ...threadSelect,
+          workspace: {
+            select: workspaceSelect,
+          },
+        },
+        take: 50,
+      });
+    }),
+
   rename: protectedProcedure
     .input(threadRenameSchema)
     .mutation(async ({ ctx, input }) => {
@@ -226,5 +259,19 @@ export const threadsRouter = createTRPCRouter({
         },
         select: threadSelect,
       });
+    }),
+
+  setActiveBranch: protectedProcedure
+    .input(threadSetActiveBranchSchema)
+    .mutation(async ({ ctx, input }) => {
+      await getOwnedThreadOrThrow(ctx, input.threadId);
+
+      const persistence = createPrismaThreadChatPersistence(ctx.db);
+      await persistence.setActiveMessage({
+        messageId: input.messageId,
+        threadId: input.threadId,
+      });
+
+      return { ok: true };
     }),
 });

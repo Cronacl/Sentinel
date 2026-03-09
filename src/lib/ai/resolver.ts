@@ -41,13 +41,12 @@ export function parseModelId(compositeId: string): {
   return { provider: provider as AIProvider, model };
 }
 
-/**
- * Resolves a composite model ID (e.g. "openai:gpt-5.2-pro") into an AI SDK
- * LanguageModel instance, using the given user's stored credentials.
- */
-export async function getLanguageModel(userId: string, compositeId: string) {
-  const { provider, model } = parseModelId(compositeId);
+export type ProviderConfig = Record<string, unknown>;
 
+export async function getProviderConfig(
+  userId: string,
+  provider: AIProvider,
+): Promise<ProviderConfig> {
   const credential = await db.providerCredential.findUnique({
     where: { userId_provider: { userId, provider } },
   });
@@ -64,11 +63,16 @@ export async function getLanguageModel(userId: string, compositeId: string) {
     );
   }
 
-  const config = JSON.parse(decrypt(credential.encryptedConfig)) as Record<
-    string,
-    unknown
-  >;
+  return JSON.parse(decrypt(credential.encryptedConfig)) as ProviderConfig;
+}
 
+/**
+ * Resolves a composite model ID (e.g. "openai:gpt-5.2-pro") into an AI SDK
+ * LanguageModel instance, using the given user's stored credentials.
+ */
+export async function getLanguageModel(userId: string, compositeId: string) {
+  const { provider, model } = parseModelId(compositeId);
+  const config = await getProviderConfig(userId, provider);
   const providerInstance = createProviderInstance(provider, config);
   return providerInstance.languageModel(model);
 }

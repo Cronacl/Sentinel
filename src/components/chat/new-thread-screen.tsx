@@ -14,11 +14,15 @@ import { PageWrapper } from "@/components/shell";
 import { SentinelLogoBadge } from "@/components/shared/logo";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import type { ReasoningEffort } from "@/lib/ai/models";
+import type { ThreadUIMessage } from "@/lib/ai/thread-message-types";
 import { CreateWorkspaceModal } from "@/components/workspaces/create-workspace-modal";
 import { api } from "@/trpc/react";
+import type { ChatOnDataCallback } from "ai";
+import type { FileUIPart } from "ai";
 
 import { ChatComposer } from "./chat-composer";
 import { ChatMessage } from "./chat-message";
+import { ChatScrollControl, useChatScrollControl } from "./chat-scroll-control";
 
 type NewThreadScreenProps = {
   threadId?: string;
@@ -31,11 +35,19 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [generatedTitle, setGeneratedTitle] = useState<string | null>(null);
   const [draftThreadId, setDraftThreadId] = useState(
     () => threadId ?? crypto.randomUUID(),
   );
+  const {
+    buttonDirection,
+    composerDockRef,
+    composerOffset,
+    isButtonVisible,
+    jump,
+    scrollAreaRef,
+  } = useChatScrollControl(draftThreadId);
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const hasNavigatedRef = useRef(false);
 
   const selectWorkspace = api.workspaces.select.useMutation({
@@ -119,10 +131,26 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   });
 
   const selectedWorkspace = currentWorkspace.data;
+  const handleData: ChatOnDataCallback<ThreadUIMessage> = (dataPart) => {
+    if (
+      dataPart.type === "data-thread-title" &&
+      dataPart.data.threadId === draftThreadId
+    ) {
+      setGeneratedTitle(dataPart.data.title);
+    }
+
+    if (
+      dataPart.type === "data-thread-invalidation" &&
+      dataPart.data.threadId === draftThreadId
+    ) {
+      void utils.threads.list.invalidate();
+    }
+  };
 
   const chat = useThreadChat({
     threadId: draftThreadId,
     initialMessages: [],
+    onData: handleData,
     workspaceId: selectedWorkspace?.id ?? "",
     onFinish: () => {
       void utils.threads.list.invalidate();
@@ -137,16 +165,19 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
 
   const handleSend = useCallback(
     ({
+      files,
       modelId,
       reasoningEffort,
       text,
     }: {
+      files?: FileUIPart[];
       modelId: string;
       reasoningEffort?: ReasoningEffort | null;
       text: string;
     }) => {
       setChatError(null);
-      void chat.sendMessage({ modelId, reasoningEffort, text });
+      setGeneratedTitle(null);
+      void chat.sendMessage({ files, modelId, reasoningEffort, text });
 
       if (!hasNavigatedRef.current) {
         hasNavigatedRef.current = true;
@@ -156,12 +187,6 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     },
     [chat, draftThreadId, utils.threads.list],
   );
-
-  useEffect(() => {
-    if (hasMessages) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [chat.messages, hasMessages]);
 
   useEffect(() => {
     if (!threadId) return;
@@ -174,6 +199,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     const handleNewThread = () => {
       hasNavigatedRef.current = false;
       setChatError(null);
+      setGeneratedTitle(null);
       setDraftThreadId(crypto.randomUUID());
     };
 
@@ -199,47 +225,63 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
 
   if (hasMessages) {
     const firstText =
-      chat.messages[0]?.parts?.find(
-        (p): p is Extract<
-          (typeof chat.messages)[0]["parts"][number],
-          { type: "text" }
-        > => p.type === "text",
-      )?.text.slice(0, 60) ?? "New Thread";
+      chat.messages[0]?.parts
+        ?.find(
+          (
+            p,
+          ): p is Extract<
+            (typeof chat.messages)[0]["parts"][number],
+            { type: "text" }
+          > => p.type === "text",
+        )
+        ?.text.slice(0, 60) ?? "New Thread";
 
     return (
-      <PageWrapper title={firstText} flush>
-        <div className="flex h-[calc(100vh-44px)] flex-col overflow-y-auto">
-          <div className="mx-auto w-full max-w-3xl flex-1 px-6 pt-4">
-            <div className="flex flex-col gap-4">
-              {chat.messages.map((message, idx) => (
-                <ChatMessage
-                  key={message.id}
-                  message={message}
-                  isStreaming={isBusy && idx === chat.messages.length - 1}
-                />
-              ))}
+      <PageWrapper title={generatedTitle ?? firstText} flush>
+        <div className="relative h-full">
+          <div
+            ref={scrollAreaRef}
+            className="flex h-[calc(100vh-44px)] flex-col overflow-y-auto"
+          >
+            <div className="mx-auto w-full max-w-3xl flex-1 px-6 pt-4">
+              <div className="flex flex-col gap-4">
+                {chat.messages.map((message, idx) => (
+                  <ChatMessage
+                    key={message.id}
+                    message={message}
+                    isStreaming={isBusy && idx === chat.messages.length - 1}
+                  />
+                ))}
 
-              {chatError && (
-                <div className="rounded-lg border border-danger-soft-hover bg-danger-soft px-3 py-2.5">
-                  <p className="text-xs text-danger-soft-foreground">
-                    {chatError}
-                  </p>
-                </div>
-              )}
+                {chatError && (
+                  <div className="rounded-lg border border-danger-soft-hover bg-danger-soft px-3 py-2.5">
+                    <p className="text-xs text-danger-soft-foreground">
+                      {chatError}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
 
-              <div ref={messagesEndRef} />
+            <div
+              ref={composerDockRef}
+              className="sticky bottom-0 z-50 mx-auto w-full max-w-3xl px-6 pb-3 pt-2"
+            >
+              <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-background to-transparent" />
+              <ChatComposer
+                activeWorkspace={selectedWorkspace}
+                onSend={handleSend}
+                onStop={chat.stop}
+                status={chat.status}
+              />
             </div>
           </div>
-
-          <div className="sticky bottom-0 z-50 mx-auto w-full max-w-3xl px-6 pb-3 pt-2">
-            <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-background to-transparent" />
-            <ChatComposer
-              activeWorkspace={selectedWorkspace}
-              onSend={handleSend}
-              onStop={chat.stop}
-              status={chat.status}
-            />
-          </div>
+          <ChatScrollControl
+            bottomOffset={composerOffset}
+            direction={buttonDirection}
+            isVisible={isButtonVisible}
+            onClick={jump}
+          />
         </div>
       </PageWrapper>
     );
@@ -291,7 +333,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
               {isWorkspaceMenuOpen && (
                 <motion.div
                   animate={{ opacity: 1, scale: 1, y: 0 }}
-                  className="absolute left-1/2 top-10 z-30 w-[320px] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-overlay p-1 shadow-overlay backdrop-blur-xl"
+                  className="absolute left-1/2 top-10 z-[200] w-[320px] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-background p-1 shadow-overlay backdrop-blur-xl"
                   exit={{ opacity: 0, scale: 0.97, y: -6 }}
                   initial={{ opacity: 0, scale: 0.97, y: -6 }}
                   transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}

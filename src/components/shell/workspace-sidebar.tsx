@@ -12,10 +12,12 @@ import {
   Folder01Icon,
   FolderAddIcon,
   PencilEdit02Icon,
+  Search01Icon,
   Settings01Icon,
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { formatDistanceToNowStrict } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -62,32 +64,37 @@ function toCurrentWorkspace(
   };
 }
 
+const SHORT_LABELS: Record<string, string> = {
+  second: "s",
+  seconds: "s",
+  minute: "m",
+  minutes: "m",
+  hour: "h",
+  hours: "h",
+  day: "d",
+  days: "d",
+  month: "mo",
+  months: "mo",
+  year: "y",
+  years: "y",
+};
+
 function formatRelativeTime(value: Date | string) {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) {
     return "";
   }
 
-  const diffMs = date.getTime() - Date.now();
-  const diffMinutes = Math.round(diffMs / (1000 * 60));
-  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-
-  const units = [
-    { divisor: 60 * 24 * 30, unit: "month" },
-    { divisor: 60 * 24 * 7, unit: "week" },
-    { divisor: 60 * 24, unit: "day" },
-    { divisor: 60, unit: "hour" },
-    { divisor: 1, unit: "minute" },
-  ] as const;
-
-  for (const { divisor, unit } of units) {
-    const value = Math.round(diffMinutes / divisor);
-    if (Math.abs(value) >= 1) {
-      return formatter.format(value, unit);
-    }
+  const diffMs = Math.abs(Date.now() - date.getTime());
+  if (diffMs < 30_000) {
+    return "now";
   }
 
-  return "now";
+  const result = formatDistanceToNowStrict(date);
+  return result.replace(
+    /(\d+)\s+(\w+)/,
+    (_, num, unit) => `${num}${SHORT_LABELS[unit] ?? unit}`,
+  );
 }
 
 function WorkspaceSidebarLoadingState() {
@@ -162,7 +169,7 @@ function ThreadList({
             </Button>
 
             {isExpanded ? (
-              <div className="mt-1 flex flex-col gap-0.5 pl-7">
+              <div className="mt-1 flex flex-col gap-0.5 pl-2">
                 {group.threads.length > 0 ? (
                   group.threads.map((thread) => {
                     const isActive = selectedThreadId === thread.id;
@@ -285,6 +292,7 @@ export function WorkspaceSidebar() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [organizeBy, setOrganizeBy] = useState<OrganizeBy>("workspace");
+  const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("updated");
   const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState<Set<string>>(
     new Set(),
@@ -302,6 +310,10 @@ export function WorkspaceSidebar() {
     organizeBy,
     sortBy,
   });
+  const threadSearch = api.threads.search.useQuery(
+    { query: searchQuery },
+    { enabled: searchQuery.trim().length > 0 },
+  );
 
   const groups: ThreadGroup =
     threads.data && "groups" in threads.data ? (threads.data.groups ?? []) : [];
@@ -340,6 +352,7 @@ export function WorkspaceSidebar() {
           ...withoutWorkspace.map((item) => ({ ...item, isSelected: false })),
         ];
       });
+      void utils.threads.list.invalidate();
       setExpandedWorkspaceIds((current) => new Set(current).add(workspace.id));
     },
   });
@@ -409,8 +422,6 @@ export function WorkspaceSidebar() {
   }, [preferences.data]);
 
   useEffect(() => {
-    const selectedWorkspaceId = currentWorkspace.data?.id ?? null;
-
     if (organizeBy !== "workspace" || groups.length === 0) {
       return;
     }
@@ -419,24 +430,9 @@ export function WorkspaceSidebar() {
       if (current.size > 0) {
         return current;
       }
-
-      const next = new Set<string>();
-      for (const group of groups) {
-        if (
-          group.workspace.id === selectedWorkspaceId ||
-          group.threads.length > 0
-        ) {
-          next.add(group.workspace.id);
-        }
-      }
-
-      if (next.size === 0 && groups[0]) {
-        next.add(groups[0].workspace.id);
-      }
-
-      return next;
+      return new Set(groups.map((g) => g.workspace.id));
     });
-  }, [currentWorkspace.data?.id, groups, organizeBy]);
+  }, [groups, organizeBy]);
 
   useEffect(() => {
     if (!isPreferencesOpen) {
@@ -517,10 +513,15 @@ export function WorkspaceSidebar() {
   };
 
   const isEmpty =
-    organizeBy === "workspace" ? groups.length === 0 : items.length === 0;
+    searchQuery.trim().length > 0
+      ? (threadSearch.data?.length ?? 0) === 0
+      : organizeBy === "workspace"
+        ? groups.length === 0
+        : items.length === 0;
   const showSidebarLoading =
     (!threads.data && threads.isPending) ||
-    (!preferences.data && preferences.isPending);
+    (!preferences.data && preferences.isPending) ||
+    threadSearch.isLoading;
 
   return (
     <div className="flex h-full flex-col">
@@ -662,11 +663,38 @@ export function WorkspaceSidebar() {
         </div>
       </div>
 
+      <div className="px-4 pb-2">
+        <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-default/20 px-3 py-2">
+          <HugeiconsIcon
+            color="currentColor"
+            icon={Search01Icon}
+            size={14}
+            strokeWidth={1.6}
+          />
+          <input
+            className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted"
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search threads"
+            value={searchQuery}
+          />
+        </div>
+      </div>
+
       <div className="min-h-0 flex-1">
         <ScrollShadow className="h-full">
           {showSidebarLoading ? <WorkspaceSidebarLoadingState /> : null}
 
-          {organizeBy === "workspace" && groups.length > 0 ? (
+          {searchQuery.trim().length > 0 && (threadSearch.data?.length ?? 0) > 0 ? (
+            <ChronologicalThreadList
+              items={threadSearch.data ?? []}
+              onPressThread={(workspaceId, threadId) =>
+                void handlePressThread(workspaceId, threadId)
+              }
+              selectedThreadId={selectedThreadId}
+            />
+          ) : null}
+
+          {searchQuery.trim().length === 0 && organizeBy === "workspace" && groups.length > 0 ? (
             <ThreadList
               expandedWorkspaceIds={expandedWorkspaceIds}
               groups={groups}
@@ -681,7 +709,7 @@ export function WorkspaceSidebar() {
             />
           ) : null}
 
-          {organizeBy === "chronological" && items.length > 0 ? (
+          {searchQuery.trim().length === 0 && organizeBy === "chronological" && items.length > 0 ? (
             <ChronologicalThreadList
               items={items}
               onPressThread={(workspaceId, threadId) =>
@@ -695,16 +723,20 @@ export function WorkspaceSidebar() {
             <div className="px-6 py-4">
               <div className="border-separator bg-background rounded-2xl border p-4">
                 <p className="text-foreground text-sm font-medium">
-                  {organizeBy === "workspace"
+                  {searchQuery.trim().length > 0
+                    ? "No threads found"
+                    : organizeBy === "workspace"
                     ? "No workspaces yet"
                     : "No threads found"}
                 </p>
                 <p className="text-muted mt-1 text-xs leading-5">
-                  {organizeBy === "workspace"
+                  {searchQuery.trim().length > 0
+                    ? "No threads match the current search yet."
+                    : organizeBy === "workspace"
                     ? "Create a workspace to start grouping threads by project root."
                     : "No threads match the current sidebar filters yet."}
                 </p>
-                {organizeBy === "workspace" ? (
+                {searchQuery.trim().length === 0 && organizeBy === "workspace" ? (
                   <Button
                     className="mt-4"
                     onPress={() => setIsCreateOpen(true)}

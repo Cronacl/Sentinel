@@ -1,6 +1,5 @@
 "use client";
 
-import { Spinner } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -35,7 +34,11 @@ export function ThreadRouteScreen({ threadId }: { threadId: string }) {
     return (
       <PageWrapper flush title="Thread">
         <div className="flex h-[calc(100vh-44px)] items-center justify-center px-4">
-          <Spinner color="current" size="sm" />
+          <div
+            aria-label="Loading"
+            className="h-4 w-4 animate-spin rounded-full border-2 border-muted/25 border-t-foreground"
+            role="status"
+          />
         </div>
       </PageWrapper>
     );

@@ -7,6 +7,12 @@ export type ModelCapability =
   | "tool_use"
   | "object_generation";
 
+export type ModelAttachmentCapabilities = {
+  supportsCodeTextFiles: boolean;
+  supportsDocuments: boolean;
+  supportsImages: boolean;
+};
+
 export type ModelMeta = {
   id: string;
   displayName: string;
@@ -24,6 +30,7 @@ type ReasoningConfig = {
   defaultEffort: ReasoningEffort;
   forceReasoning?: boolean;
   providerValueMap?: Partial<Record<ReasoningEffort, string>>;
+  reasoningSummary?: "auto" | "concise" | "detailed";
   strategy:
     | "anthropic-effort"
     | "google-thinking-level"
@@ -33,6 +40,7 @@ type ReasoningConfig = {
 
 const OPENAI_GPT_5_REASONING_CONFIG: ReasoningConfig = {
   defaultEffort: "minimal",
+  reasoningSummary: "detailed",
   strategy: "openai-reasoning-effort",
   supportedEfforts: ["minimal", "low", "medium", "high"],
 };
@@ -46,6 +54,7 @@ const OPENAI_GPT_5_1_REASONING_CONFIG: ReasoningConfig = {
 
 const OPENAI_REASONING_CONFIG: ReasoningConfig = {
   defaultEffort: "medium",
+  reasoningSummary: "detailed",
   strategy: "openai-reasoning-effort",
   supportedEfforts: ["minimal", "low", "medium", "high"],
 };
@@ -652,6 +661,9 @@ export function getReasoningProviderOptions(
       [providerOptionsKey]: {
         ...(config.forceReasoning ? { forceReasoning: true } : {}),
         reasoningEffort: providerValue,
+        ...(config.reasoningSummary
+          ? { reasoningSummary: config.reasoningSummary }
+          : {}),
       },
     };
   }
@@ -675,4 +687,26 @@ export function getReasoningProviderOptions(
   }
 
   return undefined;
+}
+
+export function getModelAttachmentCapabilities(
+  provider: AIProvider,
+  modelId: string,
+): ModelAttachmentCapabilities {
+  const capabilities = findModel(provider, modelId)?.capabilities ?? [];
+  const supportsImages = capabilities.includes("vision");
+
+  if (!supportsImages) {
+    return {
+      supportsCodeTextFiles: false,
+      supportsDocuments: false,
+      supportsImages: false,
+    };
+  }
+
+  return {
+    supportsCodeTextFiles: true,
+    supportsDocuments: true,
+    supportsImages: true,
+  };
 }

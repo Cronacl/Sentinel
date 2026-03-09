@@ -6,8 +6,9 @@
     var(--font-satoshi), ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --font-display: var(--font-millionaire), var(--font-sans);
-  --font-mono: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono",
-    "Menlo", "Monaco", "Consolas", "Liberation Mono", monospace;
+  --font-mono:
+    "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", "Menlo", "Monaco",
+    "Consolas", "Liberation Mono", monospace;
 }
 
 :root,
@@ -62,6 +63,17 @@ html {
 
 body {
   font-family: var(--font-sans), sans-serif;
+}
+
+* {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+  height: 0;
+  width: 0;
 }
 
 .app-region-drag {
@@ -205,90 +217,137 @@ body {
   margin-bottom: 0.75em;
 }
 
+.sentinel-reasoning-prose {
+  font-size: 13px;
+  line-height: 1.7;
+  color: color-mix(in srgb, var(--foreground) 74%, transparent);
+}
+
+.sentinel-reasoning-prose > *:first-child {
+  margin-top: 0;
+}
+
+.sentinel-reasoning-prose > *:last-child {
+  margin-bottom: 0;
+}
+
+.sentinel-reasoning-prose p,
+.sentinel-reasoning-prose ul,
+.sentinel-reasoning-prose ol,
+.sentinel-reasoning-prose blockquote {
+  margin-top: 0.65em;
+  margin-bottom: 0.65em;
+}
+
+.sentinel-reasoning-prose strong,
+.sentinel-reasoning-prose h1,
+.sentinel-reasoning-prose h2,
+.sentinel-reasoning-prose h3,
+.sentinel-reasoning-prose h4 {
+  color: color-mix(in srgb, var(--foreground) 88%, transparent);
+}
+
+.sentinel-reasoning-timeline-prose {
+  font-size: 14px;
+  line-height: 1.7;
+  color: color-mix(in srgb, var(--foreground) 56%, transparent);
+}
+
+.sentinel-reasoning-timeline-prose > *:first-child {
+  margin-top: 0;
+}
+
+.sentinel-reasoning-timeline-prose > *:last-child {
+  margin-bottom: 0;
+}
+
+.sentinel-reasoning-timeline-prose p {
+  margin-top: 0.55em;
+  margin-bottom: 0.55em;
+}
+
+.sentinel-reasoning-timeline-prose strong,
+.sentinel-reasoning-timeline-prose h1,
+.sentinel-reasoning-timeline-prose h2,
+.sentinel-reasoning-timeline-prose h3,
+.sentinel-reasoning-timeline-prose h4 {
+  color: color-mix(in srgb, var(--foreground) 68%, transparent);
+  font-weight: 500;
+}
+
+.sentinel-reasoning-timeline-prose ul,
+.sentinel-reasoning-timeline-prose ol {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  padding-left: 1.25em;
+}
+
+.sentinel-reasoning-timeline-prose li {
+  margin-top: 0.2em;
+  margin-bottom: 0.2em;
+}
+
+.sentinel-reasoning-timeline-prose code {
+  font-size: 0.9em;
+}
+
+.sentinel-reasoning-timeline-prose blockquote {
+  border-left: 2px solid color-mix(in srgb, var(--border) 80%, transparent);
+  color: color-mix(in srgb, var(--foreground) 52%, transparent);
+  margin-top: 0.7em;
+  margin-bottom: 0.7em;
+  padding-left: 0.9em;
+}
+
+.sentinel-thinking-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--foreground) 55%, transparent) 0%,
+    color-mix(in srgb, var(--foreground) 100%, transparent) 50%,
+    color-mix(in srgb, var(--foreground) 55%, transparent) 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: sentinel-thinking-shimmer 1.7s linear infinite;
+}
+
+@keyframes sentinel-thinking-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -20% 0;
+  }
+}
+
 /* ── Code highlighting ───────────────────────────────────────── */
 
-.sentinel-code-block pre {
-  margin: 0;
-  background: var(--code-bg);
-  font-family: var(--font-mono);
+.sentinel-shiki pre,
+.sentinel-shiki .shiki {
+  margin: 0 !important;
+  overflow-x: auto;
+  background: var(--code-bg) !important;
+  font-family: var(--font-mono) !important;
   font-size: 13px;
   line-height: 1.6;
   tab-size: 2;
 }
 
-.sentinel-code-block code {
-  font-family: inherit;
+.sentinel-shiki .shiki {
+  padding: 4px 4px;
+}
+
+.sentinel-shiki .shiki code,
+.sentinel-shiki pre code {
+  display: block;
+  font-family: inherit !important;
   font-size: inherit;
+  white-space: pre;
 }
 
-.hljs {
-  color: var(--foreground);
-  background: transparent;
-}
-
-.hljs-keyword,
-.hljs-selector-tag {
-  color: var(--hljs-keyword);
-}
-
-.hljs-string,
-.hljs-doctag,
-.hljs-template-tag,
-.hljs-template-variable {
-  color: var(--hljs-string);
-}
-
-.hljs-number {
-  color: var(--hljs-number);
-}
-
-.hljs-comment {
-  color: var(--hljs-comment);
-  font-style: italic;
-}
-
-.hljs-title,
-.hljs-title.function_,
-.hljs-section {
-  color: var(--hljs-function);
-}
-
-.hljs-variable,
-.hljs-params {
-  color: var(--hljs-variable);
-}
-
-.hljs-type,
-.hljs-built_in,
-.hljs-class {
-  color: var(--hljs-type);
-}
-
-.hljs-attr,
-.hljs-attribute {
-  color: var(--hljs-attr);
-}
-
-.hljs-tag {
-  color: var(--hljs-tag);
-}
-
-.hljs-literal,
-.hljs-symbol {
-  color: var(--hljs-literal);
-}
-
-.hljs-meta,
-.hljs-meta .hljs-keyword {
-  color: var(--hljs-keyword);
-}
-
-.hljs-deletion {
-  color: var(--hljs-keyword);
-  background: color-mix(in srgb, var(--hljs-keyword) 12%, transparent);
-}
-
-.hljs-addition {
-  color: var(--hljs-attr);
-  background: color-mix(in srgb, var(--hljs-attr) 12%, transparent);
+.sentinel-shiki pre code {
+  padding: 8px 8px;
 }
