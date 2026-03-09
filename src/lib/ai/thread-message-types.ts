@@ -63,13 +63,44 @@ export const threadMessageMetadataSchema = z
   })
   .partial();
 
-export type ThreadMessageMetadata = z.infer<
-  typeof threadMessageMetadataSchema
->;
+export type ThreadMessageMetadata = z.infer<typeof threadMessageMetadataSchema>;
 export type ThreadUIMessage = UIMessage<
   ThreadMessageMetadata,
   ThreadUIDataTypes
 >;
+
+function getTextFingerprint(text: string) {
+  if (!text) {
+    return "0::";
+  }
+
+  const head = text.slice(0, 24);
+  const tail = text.length > 24 ? text.slice(-24) : "";
+  return `${text.length}:${head}:${tail}`;
+}
+
+function getPartSyncToken(part: ThreadUIMessage["parts"][number]) {
+  switch (part.type) {
+    case "text":
+    case "reasoning":
+      return `${part.type}:${part.state ?? ""}:${getTextFingerprint(part.text)}`;
+    case "file":
+      return [
+        part.type,
+        part.filename ?? "",
+        part.mediaType,
+        getTextFingerprint(part.url),
+      ].join(":");
+    case "dynamic-tool":
+      return [part.type, part.toolCallId, part.toolName, part.state].join(":");
+    default:
+      return [
+        part.type,
+        "toolCallId" in part ? String(part.toolCallId) : "",
+        "state" in part ? String(part.state) : "",
+      ].join(":");
+  }
+}
 
 function hasDataUrlPayload(url: string) {
   if (!url.startsWith("data:")) {
@@ -105,7 +136,9 @@ function sanitizeThreadMessageParts(parts: unknown) {
     }
 
     if (candidate.type === "file") {
-      return typeof candidate.url === "string" && hasDataUrlPayload(candidate.url);
+      return (
+        typeof candidate.url === "string" && hasDataUrlPayload(candidate.url)
+      );
     }
 
     return true;
@@ -148,7 +181,9 @@ export function normalizeThreadUIMessage(
   return {
     ...message,
     metadata: normalizeThreadMessageMetadata(message.metadata),
-    parts: sanitizeThreadMessageParts(message.parts) as ThreadUIMessage["parts"],
+    parts: sanitizeThreadMessageParts(
+      message.parts,
+    ) as ThreadUIMessage["parts"],
   };
 }
 
@@ -162,4 +197,30 @@ export function normalizeThreadUIMessages(
   return messages
     .map(normalizeThreadUIMessage)
     .filter((message) => message.parts.length > 0);
+}
+
+export function getThreadMessageSyncToken(message: ThreadUIMessage) {
+  const metadata = message.metadata;
+
+  return [
+    message.id,
+    message.role,
+    metadata?.status ?? "",
+    metadata?.branchId ?? "",
+    metadata?.editedFromMessageId ?? "",
+    metadata?.isActive ? "1" : "0",
+    metadata?.errorMessage ?? "",
+    metadata?.finishReason ?? "",
+    metadata?.usage?.totalTokens ?? "",
+    metadata?.usage?.reasoningTokens ?? "",
+    metadata?.reasoning?.durationMs ?? "",
+    metadata?.reasoning?.activeSinceMs ?? "",
+    metadata?.branchOptions
+      ?.map(
+        (option) =>
+          `${option.messageId}:${option.role}:${option.label}:${option.isActive ? "1" : "0"}:${option.status ?? ""}`,
+      )
+      .join(",") ?? "",
+    message.parts.map(getPartSyncToken).join("|"),
+  ].join("::");
 }

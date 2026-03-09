@@ -8,6 +8,7 @@ import { flushSync } from "react-dom";
 
 import type { ReasoningEffort } from "@/lib/ai/models";
 import {
+  getThreadMessageSyncToken,
   normalizeThreadUIMessages,
   type ThreadUIMessage,
   threadMessageMetadataSchema,
@@ -42,14 +43,7 @@ function getMessageIndex(messages: ThreadUIMessage[], messageId: string) {
 }
 
 function getMessageSyncSignature(messages: ThreadUIMessage[]) {
-  return JSON.stringify(
-    messages.map((message) => ({
-      id: message.id,
-      metadata: message.metadata ?? {},
-      parts: message.parts,
-      role: message.role,
-    })),
-  );
+  return messages.map(getThreadMessageSyncToken).join("||");
 }
 
 export function useThreadChat({
@@ -67,7 +61,13 @@ export function useThreadChat({
     () =>
       new DefaultChatTransport<ThreadUIMessage>({
         api: "/api/chat",
-        prepareSendMessagesRequest: ({ id, messageId, messages, trigger, body }) => {
+        prepareSendMessagesRequest: ({
+          id,
+          messageId,
+          messages,
+          trigger,
+          body,
+        }) => {
           const requestBody = (body ?? {}) as Record<string, unknown>;
 
           if (trigger === "submit-message") {
@@ -154,14 +154,13 @@ export function useThreadChat({
     onError,
   });
   const lastSyncedSignatureRef = useRef(initialMessagesSignature);
+  const syncedThreadIdRef = useRef(threadId);
 
   useEffect(() => {
-    const chatMessagesSignature = getMessageSyncSignature(
-      normalizeThreadUIMessages(chat.messages),
-    );
-
-    if (chatMessagesSignature === initialMessagesSignature) {
+    if (syncedThreadIdRef.current !== threadId) {
+      syncedThreadIdRef.current = threadId;
       lastSyncedSignatureRef.current = initialMessagesSignature;
+      chat.setMessages(normalizedInitialMessages);
       return;
     }
 
@@ -176,11 +175,11 @@ export function useThreadChat({
     lastSyncedSignatureRef.current = initialMessagesSignature;
     chat.setMessages(normalizedInitialMessages);
   }, [
-    chat.messages,
     chat.setMessages,
     chat.status,
     initialMessagesSignature,
     normalizedInitialMessages,
+    threadId,
   ]);
 
   const sendMessage = useCallback(
@@ -205,7 +204,13 @@ export function useThreadChat({
   );
 
   const editMessage = useCallback(
-    ({ files, modelId, reasoningEffort, targetMessageId, text }: EditThreadMessageInput) => {
+    ({
+      files,
+      modelId,
+      reasoningEffort,
+      targetMessageId,
+      text,
+    }: EditThreadMessageInput) => {
       const fileParts = files ?? [];
       const nextMessage: ThreadUIMessage = {
         id: crypto.randomUUID(),

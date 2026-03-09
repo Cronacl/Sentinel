@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactElement, type ReactNode } from "react";
+import { memo, type ReactElement, type ReactNode, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -26,71 +26,80 @@ function InlineCode({ children }: { children: ReactNode }) {
   );
 }
 
-const markdownComponents: import("react-markdown").Components = {
-  pre({ children }) {
-    if (
-      typeof children === "object" &&
-      children !== null &&
-      "props" in children
-    ) {
-      const codeElement = children as ReactElement<{
-        children?: ReactNode;
-        className?: string;
-      }>;
-      const code = extractText(codeElement.props.children);
-
-      return (
-        <CodeBlock code={code} language={codeElement.props.className} />
-      );
-    }
-
-    return <pre>{children}</pre>;
-  },
-  code({ children }) {
-    return <InlineCode>{children}</InlineCode>;
-  },
-  a({ href, children }) {
-    return (
-      <a
-        className="text-blue-400 underline decoration-blue-400/30 underline-offset-2 transition-colors hover:decoration-blue-400"
-        href={href}
-        rel="noopener noreferrer"
-        target="_blank"
-      >
-        {children}
-      </a>
-    );
-  },
-  table({ children }) {
-    return (
-      <div className="my-3 overflow-x-auto rounded-lg border border-border">
-        <table className="w-full text-sm">{children}</table>
-      </div>
-    );
-  },
-  th({ children }) {
-    return (
-      <th className="border-b border-border bg-default/30 px-3 py-2 text-left text-xs font-semibold text-muted">
-        {children}
-      </th>
-    );
-  },
-  td({ children }) {
-    return (
-      <td className="border-b border-border/40 px-3 py-2 text-foreground">
-        {children}
-      </td>
-    );
-  },
-};
-
-export function MarkdownContent({
+export const MarkdownContent = memo(function MarkdownContent({
+  isStreaming = false,
   text,
   variant = "answer",
 }: {
+  isStreaming?: boolean;
   text: string;
   variant?: "answer" | "reasoning" | "reasoning-timeline";
 }) {
+  const markdownComponents = useMemo<import("react-markdown").Components>(
+    () => ({
+      pre({ children }) {
+        if (
+          typeof children === "object" &&
+          children !== null &&
+          "props" in children
+        ) {
+          const codeElement = children as ReactElement<{
+            children?: ReactNode;
+            className?: string;
+          }>;
+          const code = extractText(codeElement.props.children);
+
+          return (
+            <CodeBlock
+              code={code}
+              language={codeElement.props.className}
+              shouldHighlight={!isStreaming}
+            />
+          );
+        }
+
+        return <pre>{children}</pre>;
+      },
+      code({ children }) {
+        return <InlineCode>{children}</InlineCode>;
+      },
+      a({ href, children }) {
+        return (
+          <a
+            className="text-blue-400 underline decoration-blue-400/30 underline-offset-2 transition-colors hover:decoration-blue-400"
+            href={href}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            {children}
+          </a>
+        );
+      },
+      table({ children }) {
+        return (
+          <div className="my-3 overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-sm">{children}</table>
+          </div>
+        );
+      },
+      th({ children }) {
+        return (
+          <th className="border-b border-border bg-default/30 px-3 py-2 text-left text-xs font-semibold text-muted">
+            {children}
+          </th>
+        );
+      },
+      td({ children }) {
+        return (
+          <td className="border-b border-border/40 px-3 py-2 text-foreground">
+            {children}
+          </td>
+        );
+      },
+    }),
+    [isStreaming],
+  );
+
   return (
     <div
       className={
@@ -109,4 +118,4 @@ export function MarkdownContent({
       </ReactMarkdown>
     </div>
   );
-}
+});

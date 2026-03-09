@@ -38,27 +38,52 @@ function buildInlineHtml({ body, title }) {
           body {
             margin: 0;
             min-height: 100vh;
-            background:
-              radial-gradient(circle at top, rgba(56,56,61,.35), transparent 40%),
-              #090909;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #090909;
             color: #f5f5f5;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
           }
           .shell {
-            max-width: 560px;
-            padding: 40px;
+            width: min(420px, calc(100vw - 48px));
+            padding: 32px 24px;
+            text-align: center;
+          }
+          .mark {
+            width: 36px;
+            height: 36px;
+            border-radius: 12px;
+            margin: 0 auto 18px;
+            display: grid;
+            place-items: center;
+            background: #121212;
+            border: 1px solid rgba(255,255,255,.08);
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: .04em;
           }
           h1 {
-            margin: 0 0 16px;
-            font-size: 28px;
+            margin: 0 0 10px;
+            font-size: 24px;
+            line-height: 1.15;
           }
           p {
-            margin: 0 0 10px;
+            margin: 0;
             color: #a1a1aa;
-            line-height: 1.6;
+            line-height: 1.55;
           }
-          code {
-            color: #f5f5f5;
+          .spinner {
+            width: 18px;
+            height: 18px;
+            margin: 18px auto 0;
+            border-radius: 999px;
+            border: 2px solid rgba(255,255,255,.14);
+            border-top-color: rgba(255,255,255,.78);
+            animation: spin .8s linear infinite;
+          }
+          @keyframes spin {
+            to { transform: rotate(360deg); }
           }
         </style>
       </head>
@@ -73,11 +98,12 @@ function buildInlineHtml({ body, title }) {
 
 function getLoadingPageUrl() {
   return buildInlineHtml({
-    title: "Starting Sentinel",
+    title: "Opening Sentinel",
     body: `
-      <h1>Starting Sentinel</h1>
-      <p>Checking the local runtime, database migrations, and the app server.</p>
-      <p>If this takes more than a few seconds in development, check the terminal for renderer or load errors.</p>
+      <div class="mark">S</div>
+      <h1>Opening Sentinel</h1>
+      <p>Preparing your local workspace…</p>
+      <div class="spinner" aria-hidden="true"></div>
     `,
   });
 }
@@ -108,6 +134,15 @@ function createWindow() {
     },
     width: 1440,
   });
+  let hasShownWindow = false;
+  const showWindow = () => {
+    if (hasShownWindow) {
+      return;
+    }
+
+    hasShownWindow = true;
+    mainWindow?.show();
+  };
 
   mainWindow.webContents.on(
     "console-message",
@@ -144,7 +179,8 @@ function createWindow() {
   );
 
   void mainWindow.loadURL(getLoadingPageUrl());
-  mainWindow.once("ready-to-show", () => mainWindow?.show());
+  mainWindow.webContents.once("did-finish-load", showWindow);
+  mainWindow.once("ready-to-show", showWindow);
 }
 
 async function loadFailureState(error) {

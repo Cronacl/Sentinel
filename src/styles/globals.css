@@ -65,6 +65,17 @@ body {
   font-family: var(--font-sans), sans-serif;
 }
 
+.sentinel-scroll-shell {
+  position: relative;
+  overflow: hidden;
+}
+
+.sentinel-scroll-area {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 * {
   -ms-overflow-style: none;
   scrollbar-width: none;

@@ -4,7 +4,7 @@ import { Copy01Icon, Tick01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Icon } from "@iconify/react";
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   bundledLanguages,
   createHighlighter,
@@ -131,9 +131,11 @@ function useResolvedTheme() {
 export function CodeBlock({
   code,
   language,
+  shouldHighlight = true,
 }: {
   code: string;
   language?: string;
+  shouldHighlight?: boolean;
 }) {
   const theme = useResolvedTheme();
   const normalizedLanguage = useMemo(
@@ -144,6 +146,8 @@ export function CodeBlock({
   const [copied, setCopied] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null);
+  const [hasBeenVisible, setHasBeenVisible] = useState(!shouldHighlight);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const actualLanguage =
     normalizedLanguage === "text" ? null : normalizedLanguage;
   const lineCount = useMemo(() => getLineCount(trimmedCode), [trimmedCode]);
@@ -163,6 +167,35 @@ export function CodeBlock({
     setIsCollapsed(isCollapsible);
   }, [isCollapsible]);
 
+  useEffect(() => {
+    if (!shouldHighlight) {
+      setHasBeenVisible(false);
+      setHighlightedHtml(null);
+      return;
+    }
+
+    const container = containerRef.current;
+    if (!container || hasBeenVisible) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setHasBeenVisible(true);
+          observer.disconnect();
+        }
+      },
+      {
+        rootMargin: "240px 0px",
+      },
+    );
+
+    observer.observe(container);
+
+    return () => observer.disconnect();
+  }, [hasBeenVisible, shouldHighlight]);
+
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(trimmedCode);
     setCopied(true);
@@ -170,6 +203,10 @@ export function CodeBlock({
   }, [trimmedCode]);
 
   useEffect(() => {
+    if (!shouldHighlight || !hasBeenVisible) {
+      return;
+    }
+
     let isCancelled = false;
 
     const highlight = async () => {
@@ -215,10 +252,19 @@ export function CodeBlock({
     return () => {
       isCancelled = true;
     };
-  }, [theme, normalizedLanguage, displayedCode]);
+  }, [
+    displayedCode,
+    hasBeenVisible,
+    normalizedLanguage,
+    shouldHighlight,
+    theme,
+  ]);
 
   return (
-    <div className="sentinel-code-block group relative my-2 w-full max-w-xl overflow-hidden rounded-2xl border border-border/50 bg-background shadow-[0_0_10px_0_rgba(0,0,0,0.01)] dark:border-border/50 dark:bg-surface/50 dark:shadow-none">
+    <div
+      className="sentinel-code-block group relative my-2 w-full max-w-xl overflow-hidden rounded-2xl border border-border/50 bg-background shadow-[0_0_10px_0_rgba(0,0,0,0.01)] dark:border-border/50 dark:bg-surface/50 dark:shadow-none"
+      ref={containerRef}
+    >
       <div className="flex h-11 items-center justify-between border-b border-border/50 px-3 py-1.5">
         {actualLanguage ? (
           <div className="flex items-center gap-1">
@@ -259,7 +305,7 @@ export function CodeBlock({
       </div>
 
       <div className="sentinel-shiki">
-        {highlightedHtml ? (
+        {shouldHighlight && hasBeenVisible && highlightedHtml ? (
           <div dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
         ) : (
           <pre>

@@ -131,37 +131,45 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   });
 
   const selectedWorkspace = currentWorkspace.data;
-  const handleData: ChatOnDataCallback<ThreadUIMessage> = (dataPart) => {
-    if (
-      dataPart.type === "data-thread-title" &&
-      dataPart.data.threadId === draftThreadId
-    ) {
-      setGeneratedTitle(dataPart.data.title);
-    }
+  const handleData = useCallback<ChatOnDataCallback<ThreadUIMessage>>(
+    (dataPart) => {
+      if (
+        dataPart.type === "data-thread-title" &&
+        dataPart.data.threadId === draftThreadId
+      ) {
+        setGeneratedTitle(dataPart.data.title);
+      }
 
-    if (
-      dataPart.type === "data-thread-invalidation" &&
-      dataPart.data.threadId === draftThreadId
-    ) {
-      void utils.threads.list.invalidate();
-    }
-  };
+      if (
+        dataPart.type === "data-thread-invalidation" &&
+        dataPart.data.threadId === draftThreadId
+      ) {
+        void utils.threads.list.invalidate();
+      }
+    },
+    [draftThreadId, utils.threads.list],
+  );
+
+  const handleFinish = useCallback(() => {
+    void utils.threads.list.invalidate();
+  }, [utils.threads.list]);
+
+  const handleError = useCallback((error: Error) => {
+    setChatError(error.message);
+  }, []);
 
   const chat = useThreadChat({
     threadId: draftThreadId,
     initialMessages: [],
     onData: handleData,
     workspaceId: selectedWorkspace?.id ?? "",
-    onFinish: () => {
-      void utils.threads.list.invalidate();
-    },
-    onError: (error) => {
-      setChatError(error.message);
-    },
+    onFinish: handleFinish,
+    onError: handleError,
   });
+  const { messages, sendMessage, status, stop } = chat;
 
-  const hasMessages = chat.messages.length > 0;
-  const isBusy = chat.status === "submitted" || chat.status === "streaming";
+  const hasMessages = messages.length > 0;
+  const isBusy = status === "submitted" || status === "streaming";
 
   const handleSend = useCallback(
     ({
@@ -177,7 +185,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     }) => {
       setChatError(null);
       setGeneratedTitle(null);
-      void chat.sendMessage({ files, modelId, reasoningEffort, text });
+      void sendMessage({ files, modelId, reasoningEffort, text });
 
       if (!hasNavigatedRef.current) {
         hasNavigatedRef.current = true;
@@ -185,7 +193,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         void utils.threads.list.invalidate();
       }
     },
-    [chat, draftThreadId, utils.threads.list],
+    [draftThreadId, sendMessage, utils.threads.list],
   );
 
   useEffect(() => {
@@ -225,12 +233,12 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
 
   if (hasMessages) {
     const firstText =
-      chat.messages[0]?.parts
+      messages[0]?.parts
         ?.find(
           (
             p,
           ): p is Extract<
-            (typeof chat.messages)[0]["parts"][number],
+            (typeof messages)[0]["parts"][number],
             { type: "text" }
           > => p.type === "text",
         )
@@ -238,18 +246,18 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
 
     return (
       <PageWrapper title={generatedTitle ?? firstText} flush>
-        <div className="relative h-full">
+        <div className="sentinel-scroll-shell relative h-full">
           <div
             ref={scrollAreaRef}
-            className="flex h-[calc(100vh-44px)] flex-col overflow-y-auto"
+            className="sentinel-scroll-area flex h-[calc(100vh-44px)] flex-col"
           >
             <div className="mx-auto w-full max-w-3xl flex-1 px-6 pt-4">
               <div className="flex flex-col gap-4">
-                {chat.messages.map((message, idx) => (
+                {messages.map((message, idx) => (
                   <ChatMessage
                     key={message.id}
                     message={message}
-                    isStreaming={isBusy && idx === chat.messages.length - 1}
+                    isStreaming={isBusy && idx === messages.length - 1}
                   />
                 ))}
 
@@ -271,8 +279,8 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
               <ChatComposer
                 activeWorkspace={selectedWorkspace}
                 onSend={handleSend}
-                onStop={chat.stop}
-                status={chat.status}
+                onStop={stop}
+                status={status}
               />
             </div>
           </div>
@@ -289,124 +297,126 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
 
   return (
     <PageWrapper title="New Thread" flush>
-      <div className="flex h-[calc(100vh-44px)] flex-col overflow-y-auto">
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-6">
-          <SentinelLogoBadge
-            className="h-8 w-8 rounded-[1.75rem]"
-            markClassName="h-9 w-9"
-          />
+      <div className="sentinel-scroll-shell h-[calc(100vh-44px)]">
+        <div className="sentinel-scroll-area flex h-full flex-col">
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-6">
+            <SentinelLogoBadge
+              className="h-8 w-8 rounded-[1.75rem]"
+              markClassName="h-9 w-9"
+            />
 
-          <h2 className="text-2xl font-medium tracking-tight text-foreground">
-            What can I help you with?
-          </h2>
+            <h2 className="text-2xl font-medium tracking-tight text-foreground">
+              What can I help you with?
+            </h2>
 
-          <div className="relative" ref={workspaceMenuRef}>
-            <button
-              className="flex h-8 items-center gap-2 rounded-full border border-border bg-surface px-3 text-sm text-muted transition-colors hover:text-foreground disabled:opacity-40"
-              disabled={selectWorkspace.isPending}
-              onClick={() => setIsWorkspaceMenuOpen((open) => !open)}
-              type="button"
-            >
-              {currentWorkspace.isLoading ? (
-                <Spinner color="current" size="sm" />
-              ) : (
+            <div className="relative" ref={workspaceMenuRef}>
+              <button
+                className="flex h-8 items-center gap-2 rounded-full border border-border bg-surface px-3 text-sm text-muted transition-colors hover:text-foreground disabled:opacity-40"
+                disabled={selectWorkspace.isPending}
+                onClick={() => setIsWorkspaceMenuOpen((open) => !open)}
+                type="button"
+              >
+                {currentWorkspace.isLoading ? (
+                  <Spinner color="current" size="sm" />
+                ) : (
+                  <HugeiconsIcon
+                    color="currentColor"
+                    icon={Folder01Icon}
+                    size={14}
+                    strokeWidth={1.5}
+                  />
+                )}
+                <span className="max-w-[200px] truncate">
+                  {selectedWorkspace?.name ?? "Choose workspace"}
+                </span>
                 <HugeiconsIcon
+                  className={`transition-transform ${isWorkspaceMenuOpen ? "rotate-180" : ""}`}
                   color="currentColor"
-                  icon={Folder01Icon}
-                  size={14}
+                  icon={ArrowDown01Icon}
+                  size={12}
                   strokeWidth={1.5}
                 />
-              )}
-              <span className="max-w-[200px] truncate">
-                {selectedWorkspace?.name ?? "Choose workspace"}
-              </span>
-              <HugeiconsIcon
-                className={`transition-transform ${isWorkspaceMenuOpen ? "rotate-180" : ""}`}
-                color="currentColor"
-                icon={ArrowDown01Icon}
-                size={12}
-                strokeWidth={1.5}
-              />
-            </button>
+              </button>
 
-            <AnimatePresence>
-              {isWorkspaceMenuOpen && (
-                <motion.div
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  className="absolute left-1/2 top-10 z-[200] w-[320px] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-background p-1 shadow-overlay backdrop-blur-xl"
-                  exit={{ opacity: 0, scale: 0.97, y: -6 }}
-                  initial={{ opacity: 0, scale: 0.97, y: -6 }}
-                  transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
-                >
-                  {(workspaces.data ?? []).map((workspace) => {
-                    const isSelected = workspace.id === selectedWorkspace?.id;
-
-                    return (
-                      <button
-                        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                          isSelected
-                            ? "bg-default text-foreground"
-                            : "text-muted hover:bg-default hover:text-foreground"
-                        }`}
-                        key={workspace.id}
-                        onClick={() => {
-                          void selectWorkspace.mutateAsync({
-                            workspaceId: workspace.id,
-                          });
-                          setIsWorkspaceMenuOpen(false);
-                        }}
-                        type="button"
-                      >
-                        <HugeiconsIcon
-                          color="currentColor"
-                          icon={Folder01Icon}
-                          size={14}
-                          strokeWidth={1.5}
-                        />
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">
-                            {workspace.name}
-                          </div>
-                          <div className="truncate text-xs text-muted">
-                            {workspace.rootPath || "No folder linked"}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-
-                  <div className="mx-1.5 my-1 h-px bg-separator" />
-
-                  <button
-                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-muted transition-colors hover:bg-default hover:text-foreground"
-                    onClick={() => {
-                      setIsWorkspaceMenuOpen(false);
-                      setIsCreateOpen(true);
-                    }}
-                    type="button"
+              <AnimatePresence>
+                {isWorkspaceMenuOpen && (
+                  <motion.div
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    className="absolute left-1/2 top-10 z-[200] w-[320px] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-background p-1 shadow-overlay backdrop-blur-xl"
+                    exit={{ opacity: 0, scale: 0.97, y: -6 }}
+                    initial={{ opacity: 0, scale: 0.97, y: -6 }}
+                    transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
                   >
-                    <HugeiconsIcon
-                      color="currentColor"
-                      icon={FolderAddIcon}
-                      size={14}
-                      strokeWidth={1.5}
-                    />
-                    <span>Create workspace</span>
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
+                    {(workspaces.data ?? []).map((workspace) => {
+                      const isSelected = workspace.id === selectedWorkspace?.id;
 
-        <div className="sticky bottom-0 z-50 mx-auto w-full max-w-3xl px-6 pb-3 pt-2">
-          <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-background to-transparent" />
-          <ChatComposer
-            activeWorkspace={selectedWorkspace}
-            onSend={handleSend}
-            onStop={chat.stop}
-            status={chat.status}
-          />
+                      return (
+                        <button
+                          className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                            isSelected
+                              ? "bg-default text-foreground"
+                              : "text-muted hover:bg-default hover:text-foreground"
+                          }`}
+                          key={workspace.id}
+                          onClick={() => {
+                            void selectWorkspace.mutateAsync({
+                              workspaceId: workspace.id,
+                            });
+                            setIsWorkspaceMenuOpen(false);
+                          }}
+                          type="button"
+                        >
+                          <HugeiconsIcon
+                            color="currentColor"
+                            icon={Folder01Icon}
+                            size={14}
+                            strokeWidth={1.5}
+                          />
+                          <div className="min-w-0">
+                            <div className="truncate font-medium">
+                              {workspace.name}
+                            </div>
+                            <div className="truncate text-xs text-muted">
+                              {workspace.rootPath || "No folder linked"}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+
+                    <div className="mx-1.5 my-1 h-px bg-separator" />
+
+                    <button
+                      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-muted transition-colors hover:bg-default hover:text-foreground"
+                      onClick={() => {
+                        setIsWorkspaceMenuOpen(false);
+                        setIsCreateOpen(true);
+                      }}
+                      type="button"
+                    >
+                      <HugeiconsIcon
+                        color="currentColor"
+                        icon={FolderAddIcon}
+                        size={14}
+                        strokeWidth={1.5}
+                      />
+                      <span>Create workspace</span>
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+
+          <div className="sticky bottom-0 z-50 mx-auto w-full max-w-3xl px-6 pb-3 pt-2">
+            <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-background to-transparent" />
+            <ChatComposer
+              activeWorkspace={selectedWorkspace}
+              onSend={handleSend}
+              onStop={stop}
+              status={status}
+            />
+          </div>
         </div>
       </div>
 

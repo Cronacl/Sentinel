@@ -39,10 +39,6 @@ function ShellWarmCache() {
   api.workspaces.getCurrent.useQuery();
   api.workspaces.list.useQuery();
   api.workspaces.getPreferences.useQuery();
-  api.models.list.useQuery();
-  api.appearance.get.useQuery();
-  api.personalization.get.useQuery();
-  api.auth.me.useQuery();
   api.threads.list.useQuery({
     organizeBy: "workspace",
     sortBy: "updated",

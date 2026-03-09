@@ -6,7 +6,6 @@ import {
   ArrowReloadHorizontalIcon,
   ArrowRight01Icon,
   PencilEdit02Icon,
-  StopCircleIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
@@ -14,6 +13,7 @@ import type {
   ThreadMessageMetadata,
   ThreadUIMessage,
 } from "@/lib/ai/thread-message-types";
+import { getThreadMessageSyncToken as getMessageSyncToken } from "@/lib/ai/thread-message-types";
 
 import { CopyButton } from "./message-parts/copy-button";
 import { FilePart } from "./message-parts/file-part";
@@ -166,14 +166,12 @@ function AssistantMessage({
   onRegenerate,
   onRetry,
   onSelectBranch,
-  onStop,
   isStreaming,
   message,
 }: {
   onRegenerate?: (messageId: string) => void;
   onRetry?: (messageId: string) => void;
   onSelectBranch?: (messageId: string) => void;
-  onStop?: (messageId: string) => void;
   isStreaming: boolean;
   message: ThreadUIMessage;
 }) {
@@ -208,11 +206,7 @@ function AssistantMessage({
   );
   const status =
     rawStatus ??
-    (isStreaming
-      ? "streaming"
-      : hasVisibleParts
-        ? "completed"
-        : undefined);
+    (isStreaming ? "streaming" : hasVisibleParts ? "completed" : undefined);
 
   if (!hasVisibleParts && isStreaming) {
     return (
@@ -298,7 +292,13 @@ function AssistantMessage({
                   const { part } = entry;
 
                   if (part.type === "text") {
-                    return <TextPart key={key} part={part} />;
+                    return (
+                      <TextPart
+                        isStreaming={isStreaming && part.state === "streaming"}
+                        key={key}
+                        part={part}
+                      />
+                    );
                   }
 
                   if (part.type === "file") {
@@ -435,7 +435,6 @@ type ChatMessageProps = {
   onRegenerate?: (messageId: string) => void;
   onRetry?: (messageId: string) => void;
   onSelectBranch?: (messageId: string) => void;
-  onStop?: (messageId: string) => void;
 };
 
 export const ChatMessage = memo(function ChatMessage({
@@ -445,7 +444,6 @@ export const ChatMessage = memo(function ChatMessage({
   onRegenerate,
   onRetry,
   onSelectBranch,
-  onStop,
 }: ChatMessageProps) {
   if (message.role === "user") {
     return (
@@ -464,7 +462,29 @@ export const ChatMessage = memo(function ChatMessage({
       onRegenerate={onRegenerate}
       onRetry={onRetry}
       onSelectBranch={onSelectBranch}
-      onStop={onStop}
     />
   );
-});
+}, areChatMessagePropsEqual);
+
+function areChatMessagePropsEqual(
+  prev: ChatMessageProps,
+  next: ChatMessageProps,
+) {
+  if (
+    prev.isStreaming !== next.isStreaming ||
+    prev.onEdit !== next.onEdit ||
+    prev.onRegenerate !== next.onRegenerate ||
+    prev.onRetry !== next.onRetry ||
+    prev.onSelectBranch !== next.onSelectBranch
+  ) {
+    return false;
+  }
+
+  if (prev.message === next.message) {
+    return true;
+  }
+
+  return (
+    getMessageSyncToken(prev.message) === getMessageSyncToken(next.message)
+  );
+}

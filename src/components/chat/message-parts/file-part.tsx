@@ -1,5 +1,7 @@
 "use client";
 
+import { memo } from "react";
+
 import {
   detectAttachmentType,
   getAttachmentIcon,
@@ -13,7 +15,7 @@ function isImageFile(part: FilePartType) {
   return part.mediaType.startsWith("image/");
 }
 
-export function FilePart({
+export const FilePart = memo(function FilePart({
   part,
   variant = "default",
 }: {
@@ -117,4 +119,4 @@ export function FilePart({
       </div>
     </a>
   );
-}
+});

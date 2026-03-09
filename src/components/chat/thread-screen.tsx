@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ScrollShadow } from "@heroui/react";
 import { Archive02Icon, PencilEdit02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
@@ -41,23 +40,37 @@ export function ThreadScreen({
 }: ThreadScreenProps) {
   const utils = api.useUtils();
   const [threadTitle, setThreadTitle] = useState(thread.title);
-  const [editingMessage, setEditingMessage] = useState<ThreadUIMessage | null>(null);
-  const handleData: ChatOnDataCallback<ThreadUIMessage> = (dataPart) => {
-    if (
-      dataPart.type === "data-thread-title" &&
-      dataPart.data.threadId === thread.id
-    ) {
-      setThreadTitle(dataPart.data.title);
-    }
+  const [editingMessage, setEditingMessage] = useState<ThreadUIMessage | null>(
+    null,
+  );
+  const handleData = useCallback<ChatOnDataCallback<ThreadUIMessage>>(
+    (dataPart) => {
+      if (
+        dataPart.type === "data-thread-title" &&
+        dataPart.data.threadId === thread.id
+      ) {
+        setThreadTitle(dataPart.data.title);
+      }
 
-    if (
-      dataPart.type === "data-thread-invalidation" &&
-      dataPart.data.threadId === thread.id
-    ) {
-      void utils.threads.get.invalidate({ threadId: thread.id });
-      void utils.threads.list.invalidate();
-    }
-  };
+      if (
+        dataPart.type === "data-thread-invalidation" &&
+        dataPart.data.threadId === thread.id
+      ) {
+        void utils.threads.get.invalidate({ threadId: thread.id });
+        void utils.threads.list.invalidate();
+      }
+    },
+    [thread.id, utils.threads.get, utils.threads.list],
+  );
+
+  const handleFinish = useCallback(() => {
+    void utils.threads.get.invalidate({ threadId: thread.id });
+    void utils.threads.list.invalidate();
+  }, [thread.id, utils.threads.get, utils.threads.list]);
+
+  const handleError = useCallback((error: Error) => {
+    setChatError(error.message);
+  }, []);
 
   const currentWorkspace = api.workspaces.getCurrent.useQuery();
   const selectWorkspace = api.workspaces.select.useMutation({
@@ -129,16 +142,20 @@ export function ThreadScreen({
     initialMessages,
     onData: handleData,
     workspaceId: workspace.id,
-    onFinish: () => {
-      void utils.threads.get.invalidate({ threadId: thread.id });
-      void utils.threads.list.invalidate();
-    },
-    onError: (error) => {
-      setChatError(error.message);
-    },
+    onFinish: handleFinish,
+    onError: handleError,
   });
+  const {
+    editMessage,
+    messages,
+    regenerateMessage,
+    retryMessage,
+    sendMessage,
+    status,
+    stop,
+  } = chat;
 
-  const isBusy = chat.status === "submitted" || chat.status === "streaming";
+  const isBusy = status === "submitted" || status === "streaming";
 
   const handleSend = useCallback(
     ({
@@ -153,18 +170,15 @@ export function ThreadScreen({
       text: string;
     }) => {
       setChatError(null);
-      void chat.sendMessage({ files, modelId, reasoningEffort, text });
+      void sendMessage({ files, modelId, reasoningEffort, text });
     },
-    [chat],
+    [sendMessage],
   );
 
-  const handleEdit = useCallback(
-    (message: ThreadUIMessage) => {
-      setEditingMessage(message);
-      setChatError(null);
-    },
-    [],
-  );
+  const handleEdit = useCallback((message: ThreadUIMessage) => {
+    setEditingMessage(message);
+    setChatError(null);
+  }, []);
 
   const handleCancelEdit = useCallback(() => {
     setEditingMessage(null);
@@ -184,8 +198,10 @@ export function ThreadScreen({
         .filter(
           (
             part,
-          ): part is Extract<ThreadUIMessage["parts"][number], { type: "text" }> =>
-            part.type === "text",
+          ): part is Extract<
+            ThreadUIMessage["parts"][number],
+            { type: "text" }
+          > => part.type === "text",
         )
         .map((part) => part.text)
         .join("\n\n") ?? undefined,
@@ -209,7 +225,7 @@ export function ThreadScreen({
       }
 
       setChatError(null);
-      void chat.editMessage({
+      void editMessage({
         files,
         modelId,
         reasoningEffort,
@@ -218,7 +234,7 @@ export function ThreadScreen({
       });
       setEditingMessage(null);
     },
-    [chat, editingMessage],
+    [editMessage, editingMessage],
   );
 
   const handleRename = useCallback(() => {
@@ -239,6 +255,30 @@ export function ThreadScreen({
 
     void archiveThread.mutate({ threadId: thread.id });
   }, [archiveThread, thread.id]);
+
+  const handleRegenerate = useCallback(
+    (messageId: string) => {
+      void regenerateMessage(messageId);
+    },
+    [regenerateMessage],
+  );
+
+  const handleRetry = useCallback(
+    (messageId: string) => {
+      void retryMessage(messageId);
+    },
+    [retryMessage],
+  );
+
+  const handleSelectBranch = useCallback(
+    (messageId: string) => {
+      void setActiveBranch.mutate({
+        messageId,
+        threadId: thread.id,
+      });
+    },
+    [setActiveBranch, thread.id],
+  );
 
   useEffect(() => {
     if (
@@ -267,7 +307,12 @@ export function ThreadScreen({
             onClick={handleRename}
             type="button"
           >
-            <HugeiconsIcon color="currentColor" icon={PencilEdit02Icon} size={14} strokeWidth={1.7} />
+            <HugeiconsIcon
+              color="currentColor"
+              icon={PencilEdit02Icon}
+              size={14}
+              strokeWidth={1.7}
+            />
             Rename
           </button>
           <button
@@ -275,7 +320,12 @@ export function ThreadScreen({
             onClick={handleArchive}
             type="button"
           >
-            <HugeiconsIcon color="currentColor" icon={Archive02Icon} size={14} strokeWidth={1.7} />
+            <HugeiconsIcon
+              color="currentColor"
+              icon={Archive02Icon}
+              size={14}
+              strokeWidth={1.7}
+            />
             Archive
           </button>
         </>
@@ -284,28 +334,22 @@ export function ThreadScreen({
       title={threadTitle}
       flush
     >
-      <div className="relative h-full">
-        <ScrollShadow
+      <div className="sentinel-scroll-shell relative h-full">
+        <div
           ref={scrollAreaRef}
-          className="flex h-[calc(100vh-44px)] flex-col overflow-y-auto"
+          className="sentinel-scroll-area flex h-[calc(100vh-44px)] flex-col"
         >
           <div className="mx-auto w-full max-w-3xl flex-1 px-6 pt-4">
             <div className="flex flex-col gap-4">
-              {chat.messages.map((message, idx) => (
+              {messages.map((message, idx) => (
                 <ChatMessage
                   key={message.id}
                   message={message}
-                  isStreaming={isBusy && idx === chat.messages.length - 1}
+                  isStreaming={isBusy && idx === messages.length - 1}
                   onEdit={handleEdit}
-                  onRegenerate={(messageId) => void chat.regenerateMessage(messageId)}
-                  onRetry={(messageId) => void chat.retryMessage(messageId)}
-                  onSelectBranch={(messageId) =>
-                    void setActiveBranch.mutate({
-                      messageId,
-                      threadId: thread.id,
-                    })
-                  }
-                  onStop={() => chat.stop()}
+                  onRegenerate={handleRegenerate}
+                  onRetry={handleRetry}
+                  onSelectBranch={handleSelectBranch}
                 />
               ))}
 
@@ -328,13 +372,13 @@ export function ThreadScreen({
               isEditing={editingMessage != null}
               onCancelEdit={handleCancelEdit}
               onSend={editingMessage ? handleEditSubmit : handleSend}
-              onStop={chat.stop}
+              onStop={stop}
               promptSeed={editingPromptSeed}
               promptSeedKey={editingMessage?.id}
-              status={chat.status}
+              status={status}
             />
           </div>
-        </ScrollShadow>
+        </div>
         <ChatScrollControl
           bottomOffset={composerOffset}
           direction={buttonDirection}

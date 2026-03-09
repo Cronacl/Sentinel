@@ -1,5 +1,7 @@
 "use client";
 
+import { memo } from "react";
+
 import type { ToolPart as ToolPartType } from "./types";
 import { getToolName, getToolStateLabel, stringifyJson } from "./types";
 
@@ -11,7 +13,11 @@ function JsonBlock({ value }: { value: unknown }) {
   );
 }
 
-export function ToolPart({ part }: { part: ToolPartType }) {
+export const ToolPart = memo(function ToolPart({
+  part,
+}: {
+  part: ToolPartType;
+}) {
   const toolName = getToolName(part);
   const stateLabel = getToolStateLabel(part.state);
   const approval = "approval" in part ? part.approval : undefined;
@@ -68,4 +74,4 @@ export function ToolPart({ part }: { part: ToolPartType }) {
       ) : null}
     </div>
   );
-}
+});

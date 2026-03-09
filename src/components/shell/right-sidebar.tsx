@@ -29,7 +29,7 @@ export function RightSidebar() {
             rightSidebarOpen ? "translate-x-0" : "translate-x-full"
           }`}
         >
-          <div className="flex-1 overflow-y-auto">{rightSidebarContent}</div>
+          <div className="flex-1 overflow-hidden">{rightSidebarContent}</div>
         </aside>
       </>
     );
@@ -41,7 +41,7 @@ export function RightSidebar() {
       style={{ width: rightSidebarOpen ? 380 : 0 }}
     >
       <div className="flex h-full flex-col" style={{ width: 380 }}>
-        <div className="flex-1 overflow-y-auto">{rightSidebarContent}</div>
+        <div className="flex-1 overflow-hidden">{rightSidebarContent}</div>
       </div>
     </aside>
   );

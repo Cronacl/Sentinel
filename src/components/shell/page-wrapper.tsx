@@ -4,7 +4,6 @@ import type { PropsWithChildren, ReactNode } from "react";
 
 import { useShell } from "./shell-context";
 import { SidebarToggle } from "./sidebar-toggle";
-import { ScrollShadow } from "@heroui/react";
 
 interface PageWrapperProps extends PropsWithChildren {
   /** Page title shown in the header. */
@@ -42,7 +41,7 @@ export function PageWrapper({
   const hasHeader = title || showToggle || actions;
 
   return (
-    <div className="flex w-full items-start h-full flex-col overflow-hidden">
+    <div className="flex h-full w-full items-start flex-col overflow-hidden">
       {hasHeader && (
         <header
           className="app-region-no-drag flex shrink-0 items-center gap-3 px-4 lg:px-6"
@@ -70,16 +69,12 @@ export function PageWrapper({
       )}
 
       {flush ? (
-        <div className="w-full flex-1 overflow-hidden">
-          {children}
-        </div>
+        <div className="w-full flex-1 overflow-hidden">{children}</div>
       ) : (
-        <div className="flex w-full flex-1 overflow-y-auto">
-          <ScrollShadow
-            className="w-full h-[calc(100vh-44px)] overflow-y-auto px-4 py-4 lg:px-5 lg:py-5"
-          >
+        <div className="sentinel-scroll-shell flex w-full flex-1 overflow-hidden">
+          <div className="sentinel-scroll-area h-[calc(100vh-44px)] w-full px-4 py-4 lg:px-5 lg:py-5">
             {children}
-          </ScrollShadow>
+          </div>
         </div>
       )}
     </div>

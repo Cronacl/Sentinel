@@ -1,6 +1,5 @@
 "use client";
 
-import { ScrollShadow } from "@heroui/react";
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
@@ -138,38 +137,40 @@ export const ReasoningSidebar = memo(function ReasoningSidebar() {
         </button>
       </div>
 
-      <ScrollShadow className="flex-1 overflow-y-auto">
-        {parsedSteps.length === 0 ? (
-          <div className="flex items-center justify-center py-8 text-sm text-default-400">
-            No thinking content available
-          </div>
-        ) : (
-          <div className="relative flex flex-col">
-            {parsedSteps.map((step, index) => (
-              <TimelineStep
-                connectsToNext={
-                  index < parsedSteps.length - 1 || showDoneIndicator
-                }
-                isLast={index === parsedSteps.length - 1}
-                key={`reasoning-step-${index}-${step.title.slice(0, 20)}`}
-                shouldRenderContent={index < renderedCount}
-                step={step}
-              />
-            ))}
+      <div className="sentinel-scroll-shell min-h-0 flex-1">
+        <div className="sentinel-scroll-area flex h-full flex-col">
+          {parsedSteps.length === 0 ? (
+            <div className="flex items-center justify-center py-8 text-sm text-default-400">
+              No thinking content available
+            </div>
+          ) : (
+            <div className="relative flex flex-col">
+              {parsedSteps.map((step, index) => (
+                <TimelineStep
+                  connectsToNext={
+                    index < parsedSteps.length - 1 || showDoneIndicator
+                  }
+                  isLast={index === parsedSteps.length - 1}
+                  key={`reasoning-step-${index}-${step.title.slice(0, 20)}`}
+                  shouldRenderContent={index < renderedCount}
+                  step={step}
+                />
+              ))}
 
-            {showDoneIndicator ? (
-              <div className="grid grid-cols-[22px_minmax(0,1fr)] gap-x-5 pt-2">
-                <div className="relative flex justify-center">
-                  <div className="mt-[8px] h-[8px] w-[8px] rounded-full bg-foreground/80" />
-                </div>
-                <div className="min-w-0 text-[15px] font-medium leading-none tracking-[-0.01em] text-foreground/88">
+              {showDoneIndicator ? (
+                <div className="grid grid-cols-[22px_minmax(0,1fr)] gap-x-5 pt-2">
+                  <div className="relative flex justify-center">
+                    <div className="mt-[8px] h-[8px] w-[8px] rounded-full bg-foreground/80" />
+                  </div>
+                  <div className="min-w-0 text-[15px] font-medium leading-none tracking-[-0.01em] text-foreground/88">
                     Done
+                  </div>
                 </div>
-              </div>
-            ) : null}
-          </div>
-        )}
-      </ScrollShadow>
+              ) : null}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 });

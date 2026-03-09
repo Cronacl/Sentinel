@@ -1,27 +1,23 @@
 "use client";
 
-import { Button, ScrollShadow, Spinner } from "@heroui/react";
+import { Button, Spinner } from "@heroui/react";
 import {
-  Add01Icon,
   AddCircleHalfDotIcon,
   AiIdeaIcon,
   ArrowDown01Icon,
-  ArrowUpDownIcon,
   Clock01Icon,
   FilterMailIcon,
   Folder01Icon,
   FolderAddIcon,
   PencilEdit02Icon,
-  Search01Icon,
   Settings01Icon,
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CreateWorkspaceModal } from "@/components/workspaces/create-workspace-modal";
 import { api, type RouterOutputs } from "@/trpc/react";
@@ -112,7 +108,7 @@ type ChronologicalThreadItem = NonNullable<
   Extract<RouterOutputs["threads"]["list"], { items: unknown[] }>["items"]
 >;
 
-function ThreadList({
+const ThreadList = memo(function ThreadList({
   onPressThread,
   groups,
   selectedThreadId,
@@ -206,9 +202,9 @@ function ThreadList({
       })}
     </div>
   );
-}
+});
 
-function ChronologicalThreadList({
+const ChronologicalThreadList = memo(function ChronologicalThreadList({
   items,
   onPressThread,
   selectedThreadId,
@@ -245,7 +241,7 @@ function ChronologicalThreadList({
       })}
     </div>
   );
-}
+});
 
 function PreferenceMenuItem({
   icon,
@@ -292,7 +288,6 @@ export function WorkspaceSidebar() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [organizeBy, setOrganizeBy] = useState<OrganizeBy>("workspace");
-  const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("updated");
   const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState<Set<string>>(
     new Set(),
@@ -310,10 +305,6 @@ export function WorkspaceSidebar() {
     organizeBy,
     sortBy,
   });
-  const threadSearch = api.threads.search.useQuery(
-    { query: searchQuery },
-    { enabled: searchQuery.trim().length > 0 },
-  );
 
   const groups: ThreadGroup =
     threads.data && "groups" in threads.data ? (threads.data.groups ?? []) : [];
@@ -466,25 +457,28 @@ export function WorkspaceSidebar() {
 
   const selectedWorkspaceId = currentWorkspace.data?.id ?? null;
 
-  const handlePreferencesChange = async (
-    nextValues: Partial<{
-      organizeBy: OrganizeBy;
-      sortBy: SortBy;
-    }>,
-  ) => {
-    const nextOrganizeBy = nextValues.organizeBy ?? organizeBy;
-    const nextSortBy = nextValues.sortBy ?? sortBy;
+  const handlePreferencesChange = useCallback(
+    (
+      nextValues: Partial<{
+        organizeBy: OrganizeBy;
+        sortBy: SortBy;
+      }>,
+    ) => {
+      const nextOrganizeBy = nextValues.organizeBy ?? organizeBy;
+      const nextSortBy = nextValues.sortBy ?? sortBy;
 
-    setOrganizeBy(nextOrganizeBy);
-    setSortBy(nextSortBy);
+      setOrganizeBy(nextOrganizeBy);
+      setSortBy(nextSortBy);
 
-    void updatePreferences.mutate({
-      organizeBy: nextOrganizeBy,
-      sortBy: nextSortBy,
-    });
-  };
+      void updatePreferences.mutate({
+        organizeBy: nextOrganizeBy,
+        sortBy: nextSortBy,
+      });
+    },
+    [organizeBy, sortBy, updatePreferences],
+  );
 
-  const handleToggleWorkspace = (workspaceId: string) => {
+  const handleToggleWorkspace = useCallback((workspaceId: string) => {
     setExpandedWorkspaceIds((current) => {
       const next = new Set(current);
       if (next.has(workspaceId)) {
@@ -494,34 +488,35 @@ export function WorkspaceSidebar() {
       }
       return next;
     });
-  };
+  }, []);
 
-  const handlePressWorkspace = async (workspaceId: string) => {
-    if (selectedWorkspaceId !== workspaceId) {
-      void selectWorkspace.mutate({ workspaceId });
-    }
-    handleToggleWorkspace(workspaceId);
-  };
+  const handlePressWorkspace = useCallback(
+    (workspaceId: string) => {
+      if (selectedWorkspaceId !== workspaceId) {
+        void selectWorkspace.mutate({ workspaceId });
+      }
+      handleToggleWorkspace(workspaceId);
+    },
+    [handleToggleWorkspace, selectWorkspace, selectedWorkspaceId],
+  );
 
-  const handlePressThread = (workspaceId: string, threadId: string) => {
-    if (selectedWorkspaceId !== workspaceId) {
-      void selectWorkspace.mutate({ workspaceId });
-    }
+  const handlePressThread = useCallback(
+    (workspaceId: string, threadId: string) => {
+      if (selectedWorkspaceId !== workspaceId) {
+        void selectWorkspace.mutate({ workspaceId });
+      }
 
-    void utils.threads.get.prefetch({ threadId });
-    router.push(`/thread/${threadId}`);
-  };
+      void utils.threads.get.prefetch({ threadId });
+      router.push(`/thread/${threadId}`);
+    },
+    [router, selectWorkspace, selectedWorkspaceId, utils.threads.get],
+  );
 
   const isEmpty =
-    searchQuery.trim().length > 0
-      ? (threadSearch.data?.length ?? 0) === 0
-      : organizeBy === "workspace"
-        ? groups.length === 0
-        : items.length === 0;
+    organizeBy === "workspace" ? groups.length === 0 : items.length === 0;
   const showSidebarLoading =
     (!threads.data && threads.isPending) ||
-    (!preferences.data && preferences.isPending) ||
-    threadSearch.isLoading;
+    (!preferences.data && preferences.isPending);
 
   return (
     <div className="flex h-full flex-col">
@@ -663,93 +658,58 @@ export function WorkspaceSidebar() {
         </div>
       </div>
 
-      <div className="px-4 pb-2">
-        <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-default/20 px-3 py-2">
-          <HugeiconsIcon
-            color="currentColor"
-            icon={Search01Icon}
-            size={14}
-            strokeWidth={1.6}
-          />
-          <input
-            className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted"
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search threads"
-            value={searchQuery}
-          />
-        </div>
-      </div>
-
       <div className="min-h-0 flex-1">
-        <ScrollShadow className="h-full">
-          {showSidebarLoading ? <WorkspaceSidebarLoadingState /> : null}
+        <div className="sentinel-scroll-shell h-full">
+          <div className="sentinel-scroll-area h-full">
+            {showSidebarLoading ? <WorkspaceSidebarLoadingState /> : null}
 
-          {searchQuery.trim().length > 0 && (threadSearch.data?.length ?? 0) > 0 ? (
-            <ChronologicalThreadList
-              items={threadSearch.data ?? []}
-              onPressThread={(workspaceId, threadId) =>
-                void handlePressThread(workspaceId, threadId)
-              }
-              selectedThreadId={selectedThreadId}
-            />
-          ) : null}
+            {organizeBy === "workspace" && groups.length > 0 ? (
+              <ThreadList
+                expandedWorkspaceIds={expandedWorkspaceIds}
+                groups={groups}
+                onPressThread={handlePressThread}
+                onPressWorkspace={handlePressWorkspace}
+                selectedThreadId={selectedThreadId}
+                selectedWorkspaceId={selectedWorkspaceId}
+              />
+            ) : null}
 
-          {searchQuery.trim().length === 0 && organizeBy === "workspace" && groups.length > 0 ? (
-            <ThreadList
-              expandedWorkspaceIds={expandedWorkspaceIds}
-              groups={groups}
-              onPressThread={(workspaceId, threadId) =>
-                void handlePressThread(workspaceId, threadId)
-              }
-              onPressWorkspace={(workspaceId) =>
-                void handlePressWorkspace(workspaceId)
-              }
-              selectedThreadId={selectedThreadId}
-              selectedWorkspaceId={selectedWorkspaceId}
-            />
-          ) : null}
+            {organizeBy === "chronological" && items.length > 0 ? (
+              <ChronologicalThreadList
+                items={items}
+                onPressThread={handlePressThread}
+                selectedThreadId={selectedThreadId}
+              />
+            ) : null}
 
-          {searchQuery.trim().length === 0 && organizeBy === "chronological" && items.length > 0 ? (
-            <ChronologicalThreadList
-              items={items}
-              onPressThread={(workspaceId, threadId) =>
-                void handlePressThread(workspaceId, threadId)
-              }
-              selectedThreadId={selectedThreadId}
-            />
-          ) : null}
-
-          {!threads.isLoading && !preferences.isLoading && isEmpty ? (
-            <div className="px-6 py-4">
-              <div className="border-separator bg-background rounded-2xl border p-4">
-                <p className="text-foreground text-sm font-medium">
-                  {searchQuery.trim().length > 0
-                    ? "No threads found"
-                    : organizeBy === "workspace"
-                    ? "No workspaces yet"
-                    : "No threads found"}
-                </p>
-                <p className="text-muted mt-1 text-xs leading-5">
-                  {searchQuery.trim().length > 0
-                    ? "No threads match the current search yet."
-                    : organizeBy === "workspace"
-                    ? "Create a workspace to start grouping threads by project root."
-                    : "No threads match the current sidebar filters yet."}
-                </p>
-                {searchQuery.trim().length === 0 && organizeBy === "workspace" ? (
-                  <Button
-                    className="mt-4"
-                    onPress={() => setIsCreateOpen(true)}
-                    size="sm"
-                    variant="secondary"
-                  >
-                    Create Workspace
-                  </Button>
-                ) : null}
+            {!threads.isLoading && !preferences.isLoading && isEmpty ? (
+              <div className="px-6 py-4">
+                <div className="border-separator bg-background rounded-2xl border p-4">
+                  <p className="text-foreground text-sm font-medium">
+                    {organizeBy === "workspace"
+                      ? "No workspaces yet"
+                      : "No threads found"}
+                  </p>
+                  <p className="text-muted mt-1 text-xs leading-5">
+                    {organizeBy === "workspace"
+                      ? "Create a workspace to start grouping threads by project root."
+                      : "No threads match the current sidebar filters yet."}
+                  </p>
+                  {organizeBy === "workspace" ? (
+                    <Button
+                      className="mt-4"
+                      onPress={() => setIsCreateOpen(true)}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      Create Workspace
+                    </Button>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          ) : null}
-        </ScrollShadow>
+            ) : null}
+          </div>
+        </div>
       </div>
 
       <div className="shrink-0 px-3 pb-3">
