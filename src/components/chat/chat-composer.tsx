@@ -613,7 +613,7 @@ export function ChatComposer({
         type="file"
       />
 
-      <div className="w-full rounded-[20px] border border-muted/20 bg-background  dark:bg-surface p-2 ">
+      <div className="w-full rounded-[18px] border border-border/50 dark:border-border/80 bg-background  dark:bg-background p-2 shadow-[0_0_10px_rgba(0,0,0,0.05)]">
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-1.5 px-2 pb-1.5">
             {attachments.map((attachment) => (
@@ -640,7 +640,7 @@ export function ChatComposer({
         <div className="px-2">
           <div className="min-h-[28px]">
             {!editor ? (
-              <div className="pointer-events-none py-2 text-[14px] leading-6 text-muted/50">
+              <div className="pointer-events-none py-1 text-[14px] leading-6 text-muted/50">
                 {placeholderText}
               </div>
             ) : null}

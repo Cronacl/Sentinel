@@ -310,7 +310,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
 
             <div className="relative" ref={workspaceMenuRef}>
               <button
-                className="flex h-8 items-center gap-2 rounded-full border border-border bg-surface px-3 text-sm text-muted transition-colors hover:text-foreground disabled:opacity-40"
+                className="flex h-8 items-center gap-2 rounded-xl border border-border/70 cursor-pointer bg-surface/40 px-3 text-sm text-muted transition-colors hover:text-foreground disabled:opacity-40"
                 disabled={selectWorkspace.isPending}
                 onClick={() => setIsWorkspaceMenuOpen((open) => !open)}
                 type="button"

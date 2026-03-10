@@ -504,14 +504,14 @@ export function ThreadScreen({
         <Modal.Backdrop>
           <Modal.Container placement="center" size="sm">
             <Modal.Dialog className="border-separator w-full border sm:max-w-[400px]">
-              <Modal.Header className="items-start justify-between gap-4">
-                <Modal.Heading className="text-base">
-                  Rename thread
-                </Modal.Heading>
-                <Modal.CloseTrigger />
-              </Modal.Header>
-              <Modal.Body className="p-2">
-                <Form onSubmit={handleRenameSubmit}>
+              <Form className="contents" onSubmit={handleRenameSubmit}>
+                <Modal.Header className="items-start justify-between gap-4">
+                  <Modal.Heading className="text-base">
+                    Rename thread
+                  </Modal.Heading>
+                  <Modal.CloseTrigger />
+                </Modal.Header>
+                <Modal.Body className="p-2">
                   <TextField.Root
                     autoFocus
                     defaultValue={threadTitle}
@@ -521,20 +521,20 @@ export function ThreadScreen({
                     <Label>Thread title</Label>
                     <Input.Root ref={renameInputRef} />
                   </TextField.Root>
-                  <div className="mt-4 flex w-full justify-end gap-2">
-                    <Button
-                      onPress={() => renameState.close()}
-                      type="button"
-                      variant="ghost"
-                    >
-                      Cancel
-                    </Button>
-                    <Button isPending={renameThread.isPending} type="submit">
-                      Rename
-                    </Button>
-                  </div>
-                </Form>
-              </Modal.Body>
+                </Modal.Body>
+                <Modal.Footer>
+                  <Button
+                    onPress={() => renameState.close()}
+                    type="button"
+                    variant="ghost"
+                  >
+                    Cancel
+                  </Button>
+                  <Button isPending={renameThread.isPending} type="submit">
+                    Rename
+                  </Button>
+                </Modal.Footer>
+              </Form>
             </Modal.Dialog>
           </Modal.Container>
         </Modal.Backdrop>

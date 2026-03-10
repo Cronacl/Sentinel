@@ -122,35 +122,35 @@ export function CreateWorkspaceModal({
       <Modal.Backdrop>
         <Modal.Container placement="center" size="md">
           <Modal.Dialog className="border-separator w-full border sm:max-w-[460px]">
-            <Modal.Header className="items-start justify-between gap-4">
-              <div>
-                <Modal.Heading className="flex items-center gap-2 text-base">
-                  <HugeiconsIcon
-                    color="currentColor"
-                    icon={FolderAddIcon}
-                    size={18}
-                    strokeWidth={1.5}
-                  />
-                  Create Workspace
-                </Modal.Heading>
-                <p className="text-muted mt-1 text-sm">
-                  Create a workspace and optionally link it to a local folder.
-                </p>
-              </div>
-              <Modal.CloseTrigger />
-            </Modal.Header>
+            <Form
+              className="contents"
+              onSubmit={form.handleSubmit(handleSubmit)}
+            >
+              <Modal.Header className="items-start justify-between gap-4">
+                <div>
+                  <Modal.Heading className="flex items-center gap-2 text-base">
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={FolderAddIcon}
+                      size={18}
+                      strokeWidth={1.5}
+                    />
+                    Create Workspace
+                  </Modal.Heading>
+                  <p className="text-muted mt-1 text-sm">
+                    Create a workspace and optionally link it to a local folder.
+                  </p>
+                </div>
+                <Modal.CloseTrigger />
+              </Modal.Header>
 
-            <Modal.Body className="p-2">
-              {submitError ? (
-                <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground rounded-xl border px-3 py-2.5 text-xs">
-                  {submitError}
-                </p>
-              ) : null}
+              <Modal.Body className="p-2">
+                {submitError ? (
+                  <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground rounded-xl border px-3 py-2.5 text-xs">
+                    {submitError}
+                  </p>
+                ) : null}
 
-              <Form
-                className="flex flex-col gap-4"
-                onSubmit={form.handleSubmit(handleSubmit)}
-              >
                 <ControlledTextField
                   control={form.control}
                   inputProps={{ placeholder: "Sentinel" }}
@@ -207,29 +207,27 @@ export function CreateWorkspaceModal({
                     </p>
                   ) : null}
                 </div>
+              </Modal.Body>
 
-                <div className="flex justify-end gap-2">
-                  <Button
-                    isDisabled={isBusy}
-                    onPress={() => state.close()}
-                    type="button"
-                    variant="ghost"
-                  >
-                    Cancel
-                  </Button>
-                  <Button isPending={isBusy} type="submit">
-                    {({ isPending }) => (
-                      <>
-                        {isPending ? (
-                          <Spinner color="current" size="sm" />
-                        ) : null}
-                        Create
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </Form>
-            </Modal.Body>
+              <Modal.Footer>
+                <Button
+                  isDisabled={isBusy}
+                  onPress={() => state.close()}
+                  type="button"
+                  variant="ghost"
+                >
+                  Cancel
+                </Button>
+                <Button isPending={isBusy} type="submit">
+                  {({ isPending }) => (
+                    <>
+                      {isPending ? <Spinner color="current" size="sm" /> : null}
+                      Create
+                    </>
+                  )}
+                </Button>
+              </Modal.Footer>
+            </Form>
           </Modal.Dialog>
         </Modal.Container>
       </Modal.Backdrop>

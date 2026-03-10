@@ -99,6 +99,84 @@ body {
   background-color: var(--surface);
 }
 
+@layer components {
+  .modal__backdrop {
+    background:
+      radial-gradient(
+        circle at top,
+        color-mix(in srgb, var(--accent) 10%, transparent),
+        transparent 42%
+      ),
+      color-mix(in srgb, black 58%, transparent);
+  }
+
+  .dark .modal__backdrop,
+  [data-theme="dark"] .modal__backdrop {
+    background:
+      radial-gradient(
+        circle at top,
+        color-mix(in srgb, var(--accent) 12%, transparent),
+        transparent 40%
+      ),
+      color-mix(in srgb, black 72%, transparent);
+  }
+
+  .modal__container {
+    padding: 0.75rem;
+  }
+
+  @media (min-width: 640px) {
+    .modal__container {
+      padding: 1.5rem;
+    }
+  }
+
+  .modal__dialog {
+    max-height: calc(var(--visual-viewport-height) - 1.5rem);
+    border: 1px solid
+      color-mix(in srgb, var(--border) 82%, var(--foreground) 8%);
+    background: color-mix(in srgb, var(--overlay) 96%, var(--background) 4%);
+    box-shadow:
+      0 24px 80px rgba(0, 0, 0, 0.24),
+      0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  }
+
+  .modal__header {
+    gap: 0.75rem;
+  }
+
+  .modal__body {
+    overscroll-behavior: contain;
+  }
+
+  .modal__body--scroll-inside {
+    padding-right: 0.125rem;
+  }
+
+  .modal__body--scroll-inside::-webkit-scrollbar {
+    display: block;
+    width: 8px;
+  }
+
+  .modal__body--scroll-inside::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+    background-color: color-mix(in srgb, var(--muted) 55%, transparent);
+  }
+
+  .modal__footer {
+    margin-top: 1rem;
+    border-top: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+    padding-top: 1rem;
+  }
+
+  .modal__close-trigger {
+    top: 1rem;
+    right: 1rem;
+  }
+}
+
 /* ── Composer ────────────────────────────────────────────────── */
 
 .sentinel-composer-editor.ProseMirror {
