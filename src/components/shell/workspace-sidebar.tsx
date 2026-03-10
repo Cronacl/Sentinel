@@ -335,7 +335,7 @@ function PinnedThreadsList({
   if (threads.length === 0) return null;
 
   return (
-    <div className="px-3 pt-2">
+    <div className="px-4 pt-2">
       <div className="flex flex-col gap-0.5">
         {threads.map((thread) => {
           const isActive = selectedThreadId === thread.id;
