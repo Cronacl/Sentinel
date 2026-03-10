@@ -536,13 +536,13 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
   selectedThreadId: string | null;
 }) {
   return (
-    <div className="flex flex-col gap-1 px-3 py-1">
+    <div className="flex flex-col gap-1 px-2 py-1">
       {items.map((item) => {
         const isActive = selectedThreadId === item.id;
 
         return (
           <div
-            className={`group hover:bg-default/60 min-w-0 cursor-pointer rounded-xl px-2 py-1 text-sm transition-colors ${
+            className={`group hover:bg-default/60 min-w-0 cursor-pointer rounded-xl px-1 py-1 text-sm transition-colors ${
               isActive ? "font-medium bg-default text-foreground" : "text-muted"
             }`}
             key={item.id}

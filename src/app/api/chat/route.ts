@@ -1,6 +1,4 @@
-import {
-  createThreadChatErrorResponse,
-} from "@/lib/ai/chat/errors";
+import { createThreadChatErrorResponse } from "@/lib/ai/chat/errors";
 import { runThreadChat } from "@/lib/ai/chat";
 import { getLocalSession } from "@/server/local-profile";
 
