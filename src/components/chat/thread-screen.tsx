@@ -1,13 +1,36 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Archive02Icon, PencilEdit02Icon } from "@hugeicons/core-free-icons";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Button,
+  Dropdown,
+  Form,
+  Input,
+  Kbd,
+  Label,
+  Modal,
+  TextField,
+  useOverlayState,
+} from "@heroui/react";
+import {
+  Archive02Icon,
+  MoreHorizontalIcon,
+  PencilEdit02Icon,
+  PinIcon,
+  PinOffIcon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+
+import { useRouter } from "next/navigation";
 
 import { PageWrapper } from "@/components/shell";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import type { ReasoningEffort } from "@/lib/ai/models";
 import type { ThreadUIMessage } from "@/lib/ai/thread-message-types";
+import {
+  applyOptimisticThreadPinUpdate,
+  restoreOptimisticThreadPinUpdate,
+} from "@/lib/threads/cache";
 import { api } from "@/trpc/react";
 import type { ChatOnDataCallback } from "ai";
 import type { FileUIPart } from "ai";
@@ -20,6 +43,7 @@ type ThreadScreenProps = {
   initialMessages: ThreadUIMessage[];
   thread: {
     id: string;
+    pinnedAt: Date | null;
     summary: string | null;
     title: string;
   };
@@ -38,6 +62,7 @@ export function ThreadScreen({
   thread,
   workspace,
 }: ThreadScreenProps) {
+  const router = useRouter();
   const utils = api.useUtils();
   const [threadTitle, setThreadTitle] = useState(thread.title);
   const [editingMessage, setEditingMessage] = useState<ThreadUIMessage | null>(
@@ -110,6 +135,35 @@ export function ThreadScreen({
   });
 
   const [chatError, setChatError] = useState<string | null>(null);
+  const isPinned = thread.pinnedAt != null;
+  const pinToggleLockRef = useRef(false);
+
+  const togglePin = api.threads.togglePin.useMutation({
+    onMutate: async ({ pinned }) => {
+      return applyOptimisticThreadPinUpdate({
+        pinnedAt: pinned ? new Date() : null,
+        threadId: thread.id,
+        utils,
+        workspaceId: workspace.id,
+      });
+    },
+    onSuccess: (updatedThread) => {
+      applyOptimisticThreadPinUpdate({
+        pinnedAt: updatedThread.pinnedAt,
+        threadId: thread.id,
+        utils,
+        workspaceId: workspace.id,
+      });
+    },
+    onError: (_error, _variables, context) => {
+      restoreOptimisticThreadPinUpdate(utils, context, thread.id);
+    },
+    onSettled: () => {
+      pinToggleLockRef.current = false;
+      void utils.threads.get.invalidate({ threadId: thread.id });
+      void utils.threads.list.invalidate();
+    },
+  });
   const renameThread = api.threads.rename.useMutation({
     onSuccess: (nextThread) => {
       setThreadTitle(nextThread.title);
@@ -120,7 +174,7 @@ export function ThreadScreen({
   const archiveThread = api.threads.archive.useMutation({
     onSuccess: () => {
       void utils.threads.list.invalidate();
-      window.history.pushState(null, "", "/");
+      router.push("/");
     },
   });
   const setActiveBranch = api.threads.setActiveBranch.useMutation({
@@ -237,22 +291,39 @@ export function ThreadScreen({
     [editMessage, editingMessage],
   );
 
-  const handleRename = useCallback(() => {
-    const nextTitle = window.prompt("Rename thread", threadTitle)?.trim();
-    if (!nextTitle) {
+  const renameState = useOverlayState({});
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  const handleOpenRename = useCallback(() => {
+    renameState.open();
+  }, [renameState]);
+
+  const handleRenameSubmit = useCallback(
+    (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      const formData = new FormData(e.currentTarget);
+      const nextTitle = (formData.get("title") as string)?.trim();
+      if (!nextTitle) return;
+      void renameThread.mutate({ threadId: thread.id, title: nextTitle });
+      renameState.close();
+    },
+    [renameThread, renameState, thread.id],
+  );
+
+  const handleTogglePin = useCallback(() => {
+    if (pinToggleLockRef.current) {
       return;
     }
-    void renameThread.mutate({
-      threadId: thread.id,
-      title: nextTitle,
-    });
-  }, [renameThread, thread.id, threadTitle]);
+
+    const nextPinned =
+      (utils.threads.get.getData({ threadId: thread.id })?.thread.pinnedAt ??
+        thread.pinnedAt) == null;
+
+    pinToggleLockRef.current = true;
+    void togglePin.mutate({ pinned: nextPinned, threadId: thread.id });
+  }, [thread.id, thread.pinnedAt, togglePin, utils.threads.get]);
 
   const handleArchive = useCallback(() => {
-    if (!window.confirm("Archive this thread?")) {
-      return;
-    }
-
     void archiveThread.mutate({ threadId: thread.id });
   }, [archiveThread, thread.id]);
 
@@ -301,37 +372,80 @@ export function ThreadScreen({
   return (
     <PageWrapper
       actions={
-        <>
-          <button
-            className="text-muted hover:text-foreground flex items-center gap-1 rounded-lg px-2 py-1 text-xs"
-            onClick={handleRename}
-            type="button"
+        <Dropdown>
+          <Button
+            aria-label="Thread options"
+            isIconOnly
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 min-w-7"
           >
             <HugeiconsIcon
               color="currentColor"
-              icon={PencilEdit02Icon}
-              size={14}
-              strokeWidth={1.7}
+              icon={MoreHorizontalIcon}
+              size={18}
+              strokeWidth={1.5}
             />
-            Rename
-          </button>
-          <button
-            className="text-muted hover:text-foreground flex items-center gap-1 rounded-lg px-2 py-1 text-xs"
-            onClick={handleArchive}
-            type="button"
-          >
-            <HugeiconsIcon
-              color="currentColor"
-              icon={Archive02Icon}
-              size={14}
-              strokeWidth={1.7}
-            />
-            Archive
-          </button>
-        </>
+          </Button>
+          <Dropdown.Popover className="min-w-[200px]" placement="bottom end">
+            <Dropdown.Menu
+              onAction={(key) => {
+                if (key === "pin") handleTogglePin();
+                if (key === "rename") handleOpenRename();
+                if (key === "archive") handleArchive();
+              }}
+            >
+              <Dropdown.Item
+                id="pin"
+                textValue={isPinned ? "Unpin thread" : "Pin thread"}
+              >
+                <HugeiconsIcon
+                  color="currentColor"
+                  icon={isPinned ? PinOffIcon : PinIcon}
+                  size={16}
+                  strokeWidth={1.5}
+                />
+                <Label>{isPinned ? "Unpin thread" : "Pin thread"}</Label>
+                <Kbd slot="keyboard">&#x2325;&#x2318;P</Kbd>
+              </Dropdown.Item>
+              <Dropdown.Item id="rename" textValue="Rename thread">
+                <HugeiconsIcon
+                  color="currentColor"
+                  icon={PencilEdit02Icon}
+                  size={16}
+                  strokeWidth={1.5}
+                />
+                <Label>Rename thread</Label>
+                <Kbd slot="keyboard">&#x2303;&#x2318;R</Kbd>
+              </Dropdown.Item>
+              <Dropdown.Item id="archive" textValue="Archive thread">
+                <HugeiconsIcon
+                  color="currentColor"
+                  icon={Archive02Icon}
+                  size={16}
+                  strokeWidth={1.5}
+                />
+                <Label>Archive thread</Label>
+                <Kbd slot="keyboard">&#x21E7;&#x2318;A</Kbd>
+              </Dropdown.Item>
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown>
       }
-      subtitle={workspace.name}
-      title={threadTitle}
+      title={
+        <span className="flex items-center gap-1.5">
+          {isPinned && (
+            <HugeiconsIcon
+              className="shrink-0 text-muted"
+              color="currentColor"
+              icon={PinIcon}
+              size={13}
+              strokeWidth={1.5}
+            />
+          )}
+          <span className="truncate">{threadTitle}</span>
+        </span>
+      }
       flush
     >
       <div className="sentinel-scroll-shell relative h-full">
@@ -339,7 +453,7 @@ export function ThreadScreen({
           ref={scrollAreaRef}
           className="sentinel-scroll-area flex h-[calc(100vh-44px)] flex-col"
         >
-          <div className="mx-auto w-full max-w-3xl flex-1 px-6 pt-4">
+          <div className="mx-auto w-full max-w-2xl flex-1 px-6 pt-4">
             <div className="flex flex-col gap-4">
               {messages.map((message, idx) => (
                 <ChatMessage
@@ -364,7 +478,7 @@ export function ThreadScreen({
           </div>
           <div
             ref={composerDockRef}
-            className="sticky bottom-0 z-50 mx-auto w-full max-w-3xl px-6 pb-3 pt-2"
+            className="sticky bottom-0 z-50 mx-auto w-full max-w-2xl px-6 pb-3 pt-2"
           >
             <ChatComposer
               activeWorkspace={workspace}
@@ -386,6 +500,45 @@ export function ThreadScreen({
           onClick={jump}
         />
       </div>
+      <Modal.Root state={renameState}>
+        <Modal.Backdrop>
+          <Modal.Container placement="center" size="sm">
+            <Modal.Dialog className="border-separator w-full border sm:max-w-[400px]">
+              <Modal.Header className="items-start justify-between gap-4">
+                <Modal.Heading className="text-base">
+                  Rename thread
+                </Modal.Heading>
+                <Modal.CloseTrigger />
+              </Modal.Header>
+              <Modal.Body className="p-2">
+                <Form onSubmit={handleRenameSubmit}>
+                  <TextField.Root
+                    autoFocus
+                    defaultValue={threadTitle}
+                    isRequired
+                    name="title"
+                  >
+                    <Label>Thread title</Label>
+                    <Input.Root ref={renameInputRef} />
+                  </TextField.Root>
+                  <div className="mt-4 flex w-full justify-end gap-2">
+                    <Button
+                      onPress={() => renameState.close()}
+                      type="button"
+                      variant="ghost"
+                    >
+                      Cancel
+                    </Button>
+                    <Button isPending={renameThread.isPending} type="submit">
+                      Rename
+                    </Button>
+                  </div>
+                </Form>
+              </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal.Root>
     </PageWrapper>
   );
 }

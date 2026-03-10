@@ -1,15 +1,18 @@
+import { and, eq } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
+
 import {
   threadMessageAppendSchema,
   threadMessageListSchema,
   threadMessagesReplaceSchema,
 } from "@/schemas/workspace-thread.schema";
-import { TRPCError } from "@trpc/server";
 import {
   mapThreadMessagesToUIMessages,
   serializeThreadUIMessage,
   validateThreadUIMessage,
   validateThreadUIMessages,
 } from "@/lib/ai/ui-messages";
+import { threadMessages, threads } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
 import { getOwnedThreadOrThrow } from "./workspace-thread-helpers";
@@ -28,29 +31,54 @@ export const messagesRouter = createTRPCRouter({
       }
 
       const message = await validateThreadUIMessage(input.message);
+      const serialized = serializeThreadUIMessage(message);
 
-      const [persistedMessage] = await ctx.db.$transaction([
-        ctx.db.threadMessage.upsert({
-          where: {
-            threadId_messageId: {
-              messageId: message.id,
+      let persistedMessage: typeof threadMessages.$inferSelect;
+
+      ctx.db.transaction((tx) => {
+        const existing = tx
+          .select({ id: threadMessages.id })
+          .from(threadMessages)
+          .where(
+            and(
+              eq(threadMessages.threadId, thread.id),
+              eq(threadMessages.messageId, serialized.messageId),
+            ),
+          )
+          .get();
+
+        if (existing) {
+          tx.update(threadMessages)
+            .set(serialized)
+            .where(eq(threadMessages.id, existing.id))
+            .run();
+          const updated = tx
+            .select()
+            .from(threadMessages)
+            .where(eq(threadMessages.id, existing.id))
+            .get();
+          persistedMessage = updated!;
+        } else {
+          const insertedRows = tx
+            .insert(threadMessages)
+            .values({
+              ...serialized,
               threadId: thread.id,
-            },
-          },
-          create: {
-            ...serializeThreadUIMessage(message),
-            threadId: thread.id,
-          },
-          update: serializeThreadUIMessage(message),
-        }),
-        ctx.db.thread.update({
-          where: { id: thread.id },
-          data: { updatedAt: new Date() },
-        }),
-      ]);
+            })
+            .returning()
+            .all();
+          const inserted = insertedRows[0];
+          persistedMessage = inserted!;
+        }
+
+        tx.update(threads)
+          .set({ updatedAt: new Date() })
+          .where(eq(threads.id, thread.id))
+          .run();
+      });
 
       const [uiMessage] = await mapThreadMessagesToUIMessages([
-        persistedMessage,
+        persistedMessage! as any,
       ]);
 
       return uiMessage;
@@ -70,25 +98,25 @@ export const messagesRouter = createTRPCRouter({
 
       const messages = await validateThreadUIMessages(input.messages);
 
-      await ctx.db.$transaction([
-        ctx.db.threadMessage.deleteMany({
-          where: { threadId: thread.id },
-        }),
-        ...(messages.length === 0
-          ? []
-          : [
-              ctx.db.threadMessage.createMany({
-                data: messages.map((message) => ({
-                  ...serializeThreadUIMessage(message),
-                  threadId: thread.id,
-                })),
-              }),
-            ]),
-        ctx.db.thread.update({
-          where: { id: thread.id },
-          data: { updatedAt: new Date() },
-        }),
-      ]);
+      ctx.db.transaction((tx) => {
+        tx.delete(threadMessages)
+          .where(eq(threadMessages.threadId, thread.id))
+          .run();
+
+        for (const message of messages) {
+          tx.insert(threadMessages)
+            .values({
+              ...serializeThreadUIMessage(message),
+              threadId: thread.id,
+            })
+            .run();
+        }
+
+        tx.update(threads)
+          .set({ updatedAt: new Date() })
+          .where(eq(threads.id, thread.id))
+          .run();
+      });
 
       return messages;
     }),
@@ -98,13 +126,11 @@ export const messagesRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const thread = await getOwnedThreadOrThrow(ctx, input.threadId);
 
-      const messages = await ctx.db.threadMessage.findMany({
-        where: { threadId: thread.id },
-        orderBy: {
-          createdAt: "asc",
-        },
+      const messages = await ctx.db.query.threadMessages.findMany({
+        where: eq(threadMessages.threadId, thread.id),
+        orderBy: (messages, { asc }) => [asc(messages.createdAt)],
       });
 
-      return mapThreadMessagesToUIMessages(messages);
+      return await mapThreadMessagesToUIMessages(messages as any[]);
     }),
 });

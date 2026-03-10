@@ -1,5 +1,5 @@
 import { resolveThreadChatModel } from "./model";
-import { createPrismaThreadChatPersistence } from "./persistence";
+import { createDrizzleThreadChatPersistence } from "./persistence";
 import { parseThreadChatRequest } from "./request";
 import { createReasoningMetadataTracker } from "./reasoning-metadata";
 import { createThreadChatResponse } from "./stream";
@@ -13,7 +13,7 @@ const defaultDependencies: ThreadChatDependencies = {
   clock: {
     now: () => Date.now(),
   },
-  persistence: createPrismaThreadChatPersistence(),
+  persistence: createDrizzleThreadChatPersistence(),
   resolveModel: resolveThreadChatModel,
 };
 

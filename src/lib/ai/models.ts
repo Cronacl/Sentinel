@@ -1,4 +1,4 @@
-import type { AIProvider } from "@/../generated/prisma";
+import type { AIProvider } from "@/server/db/enums";
 import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
 
 export type ModelCapability =

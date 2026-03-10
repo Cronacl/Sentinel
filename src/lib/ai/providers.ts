@@ -1,4 +1,4 @@
-import type { AIProvider } from "@/../generated/prisma";
+import type { AIProvider } from "@/server/db/enums";
 
 export type ProviderMeta = {
   id: AIProvider;

@@ -9,9 +9,13 @@
 /coverage
 
 # database
-/prisma/db.sqlite
-/prisma/db.sqlite-journal
-db.sqlite
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+# drizzle
+/drizzle
 
 # next.js
 /.next/

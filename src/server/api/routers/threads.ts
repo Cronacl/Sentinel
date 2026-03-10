@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import { and, eq, isNull, like } from "drizzle-orm";
 
 import {
   threadArchiveSchema,
@@ -8,10 +9,12 @@ import {
   threadRenameSchema,
   threadSearchSchema,
   threadSetActiveBranchSchema,
+  threadTogglePinSchema,
   threadUpdateMetaSchema,
 } from "@/schemas/workspace-thread.schema";
-import { createPrismaThreadChatPersistence } from "@/lib/ai/chat/persistence";
+import { createDrizzleThreadChatPersistence } from "@/lib/ai/chat/persistence";
 import { mapThreadMessagesToUIMessages } from "@/lib/ai/ui-messages";
+import { threadMessages, threads, workspaces } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
 import {
@@ -20,16 +23,11 @@ import {
   getThreadListSettings,
 } from "./workspace-thread-helpers";
 
-function getThreadOrder(sortBy: "created" | "updated") {
-  return sortBy === "created"
-    ? ({ createdAt: "desc" } as const)
-    : ({ updatedAt: "desc" } as const);
-}
-
 const threadSelect = {
   archivedAt: true,
   createdAt: true,
   id: true,
+  pinnedAt: true,
   summary: true,
   title: true,
   updatedAt: true,
@@ -49,42 +47,45 @@ export const threadsRouter = createTRPCRouter({
     .input(threadListSchema)
     .query(async ({ ctx, input }) => {
       const settings = getThreadListSettings(ctx.user, input);
-      const where = {
-        archivedAt: null,
-        ...(settings.workspaceId ? { workspaceId: settings.workspaceId } : {}),
-        userId: ctx.session.user.id,
-        workspace: {
-          isArchived: false,
-          userId: ctx.session.user.id,
-        },
-      } as const;
 
       if (settings.workspaceId) {
         await getOwnedWorkspaceOrThrow(ctx, settings.workspaceId);
       }
 
       if (settings.organizeBy === "workspace") {
-        const workspaces = await ctx.db.workspace.findMany({
-          where: {
-            ...(settings.workspaceId ? { id: settings.workspaceId } : {}),
-            isArchived: false,
-            userId: ctx.session.user.id,
-          },
-          orderBy: {
-            updatedAt: "desc",
-          },
-          select: {
-            ...workspaceSelect,
+        const allWorkspaces = await ctx.db.query.workspaces.findMany({
+          where: and(
+            ...[
+              settings.workspaceId
+                ? eq(workspaces.id, settings.workspaceId)
+                : undefined,
+              eq(workspaces.isArchived, false),
+              eq(workspaces.userId, ctx.session.user.id),
+            ].filter(Boolean),
+          ),
+          orderBy: (workspaces, { desc }) => [desc(workspaces.updatedAt)],
+          columns: workspaceSelect,
+          with: {
             threads: {
-              orderBy: getThreadOrder(settings.sortBy),
-              select: threadSelect,
-              where,
+              where: and(
+                isNull(threads.archivedAt),
+                eq(threads.userId, ctx.session.user.id),
+                ...(settings.workspaceId
+                  ? [eq(threads.workspaceId, settings.workspaceId)]
+                  : []),
+              ),
+              orderBy: (threads, { desc }) => [
+                settings.sortBy === "created"
+                  ? desc(threads.createdAt)
+                  : desc(threads.updatedAt),
+              ],
+              columns: threadSelect,
             },
           },
         });
 
         return {
-          groups: workspaces.map((workspace) => ({
+          groups: allWorkspaces.map((workspace) => ({
             threads: workspace.threads,
             workspace: {
               createdAt: workspace.createdAt,
@@ -100,13 +101,23 @@ export const threadsRouter = createTRPCRouter({
         };
       }
 
-      const items = await ctx.db.thread.findMany({
-        where,
-        orderBy: getThreadOrder(settings.sortBy),
-        select: {
-          ...threadSelect,
+      const items = await ctx.db.query.threads.findMany({
+        where: and(
+          isNull(threads.archivedAt),
+          eq(threads.userId, ctx.session.user.id),
+          ...(settings.workspaceId
+            ? [eq(threads.workspaceId, settings.workspaceId)]
+            : []),
+        ),
+        orderBy: (threads, { desc }) => [
+          settings.sortBy === "created"
+            ? desc(threads.createdAt)
+            : desc(threads.updatedAt),
+        ],
+        columns: threadSelect,
+        with: {
           workspace: {
-            select: workspaceSelect,
+            columns: workspaceSelect,
           },
         },
       });
@@ -138,40 +149,47 @@ export const threadsRouter = createTRPCRouter({
         });
       }
 
-      return ctx.db.thread.create({
-        data: {
+      const [thread] = ctx.db
+        .insert(threads)
+        .values({
           ...(input.threadId ? { id: input.threadId } : {}),
           summary: input.summary.trim() || null,
           title: input.title.trim(),
           userId: ctx.session.user.id,
           workspaceId: workspace.id,
-        },
-        select: {
-          ...threadSelect,
+        })
+        .returning()
+        .all();
+
+      const result = await ctx.db.query.threads.findFirst({
+        where: eq(threads.id, thread!.id),
+        columns: threadSelect,
+        with: {
           workspace: {
-            select: workspaceSelect,
+            columns: workspaceSelect,
           },
         },
       });
+
+      return result!;
     }),
 
   get: protectedProcedure
     .input(threadGetSchema)
     .query(async ({ ctx, input }) => {
       const thread = await getOwnedThreadOrThrow(ctx, input.threadId);
-      const messages = await ctx.db.threadMessage.findMany({
-        where: { threadId: thread.id },
-        orderBy: {
-          createdAt: "asc",
-        },
+      const messages = await ctx.db.query.threadMessages.findMany({
+        where: eq(threadMessages.threadId, thread.id),
+        orderBy: (messages, { asc }) => [asc(messages.createdAt)],
       });
 
       return {
-        messages: await mapThreadMessagesToUIMessages(messages),
+        messages: await mapThreadMessagesToUIMessages(messages as any[]),
         thread: {
           archivedAt: thread.archivedAt,
           createdAt: thread.createdAt,
           id: thread.id,
+          pinnedAt: thread.pinnedAt,
           summary: thread.summary,
           title: thread.title,
           updatedAt: thread.updatedAt,
@@ -190,31 +208,30 @@ export const threadsRouter = createTRPCRouter({
   search: protectedProcedure
     .input(threadSearchSchema)
     .query(async ({ ctx, input }) => {
-      return ctx.db.thread.findMany({
-        where: {
-          archivedAt: null,
-          ...(input.workspaceId ? { workspaceId: input.workspaceId } : {}),
-          userId: ctx.session.user.id,
+      const allThreads = await ctx.db.query.threads.findMany({
+        where: and(
+          isNull(threads.archivedAt),
+          eq(threads.userId, ctx.session.user.id),
+          ...(input.workspaceId
+            ? [eq(threads.workspaceId, input.workspaceId)]
+            : []),
+        ),
+        orderBy: (threads, { desc }) => [desc(threads.updatedAt)],
+        columns: threadSelect,
+        with: {
           workspace: {
-            isArchived: false,
-            userId: ctx.session.user.id,
-          },
-          OR: [
-            { title: { contains: input.query, mode: "insensitive" } },
-            { summary: { contains: input.query, mode: "insensitive" } },
-          ],
-        },
-        orderBy: {
-          updatedAt: "desc",
-        },
-        select: {
-          ...threadSelect,
-          workspace: {
-            select: workspaceSelect,
+            columns: workspaceSelect,
           },
         },
-        take: 50,
+        limit: 50,
       });
+
+      const query = input.query.toLowerCase();
+      return allThreads.filter(
+        (t) =>
+          t.title.toLowerCase().includes(query) ||
+          (t.summary && t.summary.toLowerCase().includes(query)),
+      );
     }),
 
   rename: protectedProcedure
@@ -222,13 +239,22 @@ export const threadsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await getOwnedThreadOrThrow(ctx, input.threadId);
 
-      return ctx.db.thread.update({
-        where: { id: input.threadId },
-        data: {
-          title: input.title.trim(),
-        },
-        select: threadSelect,
-      });
+      const [updated] = ctx.db
+        .update(threads)
+        .set({ title: input.title.trim() })
+        .where(eq(threads.id, input.threadId))
+        .returning({
+          archivedAt: threads.archivedAt,
+          createdAt: threads.createdAt,
+          id: threads.id,
+          pinnedAt: threads.pinnedAt,
+          summary: threads.summary,
+          title: threads.title,
+          updatedAt: threads.updatedAt,
+        })
+        .all();
+
+      return updated!;
     }),
 
   updateMeta: protectedProcedure
@@ -236,15 +262,26 @@ export const threadsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await getOwnedThreadOrThrow(ctx, input.threadId);
 
-      return ctx.db.thread.update({
-        where: { id: input.threadId },
-        data: {
+      const [updated] = ctx.db
+        .update(threads)
+        .set({
           ...(input.summary === undefined
             ? {}
             : { summary: input.summary.trim() || null }),
-        },
-        select: threadSelect,
-      });
+        })
+        .where(eq(threads.id, input.threadId))
+        .returning({
+          archivedAt: threads.archivedAt,
+          createdAt: threads.createdAt,
+          id: threads.id,
+          pinnedAt: threads.pinnedAt,
+          summary: threads.summary,
+          title: threads.title,
+          updatedAt: threads.updatedAt,
+        })
+        .all();
+
+      return updated!;
     }),
 
   archive: protectedProcedure
@@ -252,13 +289,48 @@ export const threadsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await getOwnedThreadOrThrow(ctx, input.threadId);
 
-      return ctx.db.thread.update({
-        where: { id: input.threadId },
-        data: {
-          archivedAt: new Date(),
-        },
-        select: threadSelect,
-      });
+      const [updated] = ctx.db
+        .update(threads)
+        .set({ archivedAt: new Date() })
+        .where(eq(threads.id, input.threadId))
+        .returning({
+          archivedAt: threads.archivedAt,
+          createdAt: threads.createdAt,
+          id: threads.id,
+          pinnedAt: threads.pinnedAt,
+          summary: threads.summary,
+          title: threads.title,
+          updatedAt: threads.updatedAt,
+        })
+        .all();
+
+      return updated!;
+    }),
+
+  togglePin: protectedProcedure
+    .input(threadTogglePinSchema)
+    .mutation(async ({ ctx, input }) => {
+      const thread = await getOwnedThreadOrThrow(ctx, input.threadId);
+      const nextPinnedAt = input.pinned
+        ? (thread.pinnedAt ?? new Date())
+        : null;
+
+      const [updated] = ctx.db
+        .update(threads)
+        .set({ pinnedAt: nextPinnedAt })
+        .where(eq(threads.id, input.threadId))
+        .returning({
+          archivedAt: threads.archivedAt,
+          createdAt: threads.createdAt,
+          id: threads.id,
+          pinnedAt: threads.pinnedAt,
+          summary: threads.summary,
+          title: threads.title,
+          updatedAt: threads.updatedAt,
+        })
+        .all();
+
+      return updated!;
     }),
 
   setActiveBranch: protectedProcedure
@@ -266,7 +338,7 @@ export const threadsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await getOwnedThreadOrThrow(ctx, input.threadId);
 
-      const persistence = createPrismaThreadChatPersistence(ctx.db);
+      const persistence = createDrizzleThreadChatPersistence(ctx.db);
       await persistence.setActiveMessage({
         messageId: input.messageId,
         threadId: input.threadId,

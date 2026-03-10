@@ -4,12 +4,15 @@ import { Button, Spinner } from "@heroui/react";
 import {
   AddCircleHalfDotIcon,
   AiIdeaIcon,
+  Archive02Icon,
   ArrowDown01Icon,
   Clock01Icon,
   FilterMailIcon,
   Folder01Icon,
   FolderAddIcon,
   PencilEdit02Icon,
+  PinIcon,
+  PinOffIcon,
   Settings01Icon,
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
@@ -20,6 +23,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CreateWorkspaceModal } from "@/components/workspaces/create-workspace-modal";
+import {
+  applyOptimisticThreadPinUpdate,
+  restoreOptimisticThreadPinUpdate,
+} from "@/lib/threads/cache";
 import { api, type RouterOutputs } from "@/trpc/react";
 
 type OrganizeBy = "chronological" | "workspace";
@@ -108,6 +115,200 @@ type ChronologicalThreadItem = NonNullable<
   Extract<RouterOutputs["threads"]["list"], { items: unknown[] }>["items"]
 >;
 
+function findThreadState(
+  threadId: string,
+  groups: ThreadGroup,
+  items: ChronologicalThreadItem,
+) {
+  for (const group of groups) {
+    const thread = group.threads.find((item) => item.id === threadId);
+    if (thread) {
+      return {
+        pinnedAt: thread.pinnedAt,
+        workspaceId: group.workspace.id,
+      };
+    }
+  }
+
+  const item = items.find((entry) => entry.id === threadId);
+  if (!item) {
+    return null;
+  }
+
+  return {
+    pinnedAt: item.pinnedAt,
+    workspaceId: item.workspace.id,
+  };
+}
+
+function ThreadItemActions({
+  threadId,
+  isPinned,
+  onPin,
+  onArchive,
+  alwaysVisible = false,
+}: {
+  alwaysVisible?: boolean;
+  isPinned: boolean;
+  onArchive: (threadId: string) => void;
+  onPin: (threadId: string) => void;
+  threadId: string;
+}) {
+  return (
+    <span
+      className={`thread-actions absolute inset-y-0 right-0 flex items-center gap-0.5 transition-opacity duration-150 ${
+        alwaysVisible
+          ? "pointer-events-auto opacity-100"
+          : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+      }`}
+    >
+      <button
+        aria-label={isPinned ? "Unpin thread" : "Pin thread"}
+        className="hover:bg-default flex h-6 w-6 items-center justify-center rounded-lg transition-colors"
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          onPin(threadId);
+        }}
+        type="button"
+      >
+        <HugeiconsIcon
+          color="currentColor"
+          icon={isPinned ? PinOffIcon : PinIcon}
+          size={14}
+          strokeWidth={1.5}
+        />
+      </button>
+      <button
+        aria-label="Archive thread"
+        className="hover:bg-default flex h-6 w-6 items-center justify-center rounded-lg transition-colors"
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          onArchive(threadId);
+        }}
+        type="button"
+      >
+        <HugeiconsIcon
+          color="currentColor"
+          icon={Archive02Icon}
+          size={14}
+          strokeWidth={1.5}
+        />
+      </button>
+    </span>
+  );
+}
+
+function ThreadItemTrailing({
+  threadId,
+  isPinned,
+  onPin,
+  onArchive,
+  updatedAt,
+  alwaysVisible = false,
+}: {
+  alwaysVisible?: boolean;
+  isPinned: boolean;
+  onArchive: (threadId: string) => void;
+  onPin: (threadId: string) => void;
+  threadId: string;
+  updatedAt?: Date;
+}) {
+  const hasTimestamp = !alwaysVisible && updatedAt != null;
+
+  return (
+    <span
+      className={`relative flex h-6 shrink-0 items-center justify-end ${
+        hasTimestamp ? "w-[4.5rem]" : "w-[3.25rem]"
+      }`}
+    >
+      {hasTimestamp ? (
+        <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center text-xs text-muted transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0">
+          {formatRelativeTime(updatedAt)}
+        </span>
+      ) : null}
+      <ThreadItemActions
+        alwaysVisible={alwaysVisible}
+        isPinned={isPinned}
+        onArchive={onArchive}
+        onPin={onPin}
+        threadId={threadId}
+      />
+    </span>
+  );
+}
+
+function PinnedThreadsList({
+  threads,
+  selectedThreadId,
+  onPressThread,
+  onPin,
+  onArchive,
+}: {
+  onArchive: (threadId: string) => void;
+  onPin: (threadId: string) => void;
+  onPressThread: (workspaceId: string, threadId: string) => void;
+  selectedThreadId: string | null;
+  threads: Array<{
+    id: string;
+    pinnedAt: Date | null;
+    title: string;
+    updatedAt: Date;
+    workspace: { id: string; name: string };
+  }>;
+}) {
+  if (threads.length === 0) return null;
+
+  return (
+    <div className="px-3 pt-3 pb-1">
+      <p className="text-muted/80 px-2 pb-2 text-[11px] font-medium">Pinned</p>
+      <div className="flex flex-col gap-0.5">
+        {threads.map((thread) => {
+          const isActive = selectedThreadId === thread.id;
+          return (
+            <div
+              className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-sm transition-colors ${
+                isActive ? "bg-default text-foreground" : "text-muted"
+              }`}
+              key={thread.id}
+              onClick={() => onPressThread(thread.workspace.id, thread.id)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onPressThread(thread.workspace.id, thread.id);
+                }
+              }}
+            >
+              <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+                <HugeiconsIcon
+                  className="shrink-0 text-muted"
+                  color="currentColor"
+                  icon={PinIcon}
+                  size={12}
+                  strokeWidth={1.5}
+                />
+                <span className="min-w-0 truncate" title={thread.title}>
+                  {thread.title}
+                </span>
+              </span>
+              <ThreadItemTrailing
+                alwaysVisible
+                isPinned
+                onArchive={onArchive}
+                onPin={onPin}
+                threadId={thread.id}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const ThreadList = memo(function ThreadList({
   onPressThread,
   groups,
@@ -115,9 +316,13 @@ const ThreadList = memo(function ThreadList({
   selectedWorkspaceId,
   expandedWorkspaceIds,
   onPressWorkspace,
+  onPin,
+  onArchive,
 }: {
   expandedWorkspaceIds: Set<string>;
   groups: ThreadGroup;
+  onArchive: (threadId: string) => void;
+  onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
   onPressWorkspace: (workspaceId: string) => void;
   selectedThreadId: string | null;
@@ -171,23 +376,48 @@ const ThreadList = memo(function ThreadList({
                     const isActive = selectedThreadId === thread.id;
 
                     return (
-                      <button
-                        className={`group hover:bg-default/60 flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm transition-colors ${
+                      <div
+                        className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-sm transition-colors ${
                           isActive ? "bg-default text-foreground" : "text-muted"
                         }`}
                         key={thread.id}
                         onClick={() =>
                           onPressThread(group.workspace.id, thread.id)
                         }
-                        type="button"
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onPressThread(group.workspace.id, thread.id);
+                          }
+                        }}
                       >
-                        <span className="min-w-0 truncate text-sm">
-                          {thread.title}
+                        <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+                          {thread.pinnedAt != null && (
+                            <HugeiconsIcon
+                              className="shrink-0 text-muted"
+                              color="currentColor"
+                              icon={PinIcon}
+                              size={11}
+                              strokeWidth={1.5}
+                            />
+                          )}
+                          <span
+                            className="min-w-0 truncate text-sm"
+                            title={thread.title}
+                          >
+                            {thread.title}
+                          </span>
                         </span>
-                        <span className="text-muted shrink-0 text-xs">
-                          {formatRelativeTime(thread.updatedAt)}
-                        </span>
-                      </button>
+                        <ThreadItemTrailing
+                          isPinned={thread.pinnedAt != null}
+                          onArchive={onArchive}
+                          onPin={onPin}
+                          threadId={thread.id}
+                          updatedAt={thread.updatedAt}
+                        />
+                      </div>
                     );
                   })
                 ) : (
@@ -208,8 +438,12 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
   items,
   onPressThread,
   selectedThreadId,
+  onPin,
+  onArchive,
 }: {
   items: ChronologicalThreadItem;
+  onArchive: (threadId: string) => void;
+  onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
   selectedThreadId: string | null;
 }) {
@@ -219,24 +453,45 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
         const isActive = selectedThreadId === item.id;
 
         return (
-          <button
-            className={`group hover:bg-default/60 rounded-xl px-3 py-2 text-sm transition-colors ${
+          <div
+            className={`group hover:bg-default/60 min-w-0 cursor-pointer rounded-xl px-2 py-1 text-sm transition-colors ${
               isActive ? "bg-default text-foreground" : "text-muted"
             }`}
             key={item.id}
             onClick={() => onPressThread(item.workspace.id, item.id)}
-            type="button"
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onPressThread(item.workspace.id, item.id);
+              }
+            }}
           >
-            <div className="flex items-center justify-between gap-3">
-              <span className="min-w-0 truncate">{item.title}</span>
-              <span className="text-muted shrink-0 text-xs">
-                {formatRelativeTime(item.updatedAt)}
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+                {item.pinnedAt != null && (
+                  <HugeiconsIcon
+                    className="shrink-0 text-muted"
+                    color="currentColor"
+                    icon={PinIcon}
+                    size={11}
+                    strokeWidth={1.5}
+                  />
+                )}
+                <span className="min-w-0 truncate" title={item.title}>
+                  {item.title}
+                </span>
               </span>
+              <ThreadItemTrailing
+                isPinned={item.pinnedAt != null}
+                onArchive={onArchive}
+                onPin={onPin}
+                threadId={item.id}
+                updatedAt={item.updatedAt}
+              />
             </div>
-            <p className="text-muted mt-1 truncate text-[11px]">
-              {item.workspace.name}
-            </p>
-          </button>
+          </div>
         );
       })}
     </div>
@@ -293,6 +548,7 @@ export function WorkspaceSidebar() {
     new Set(),
   );
   const preferencesRef = useRef<HTMLDivElement | null>(null);
+  const pinActionLockRef = useRef(new Set<string>());
 
   const preferences = api.workspaces.getPreferences.useQuery();
   const currentWorkspace = api.workspaces.getCurrent.useQuery();
@@ -310,6 +566,133 @@ export function WorkspaceSidebar() {
     threads.data && "groups" in threads.data ? (threads.data.groups ?? []) : [];
   const items: ChronologicalThreadItem =
     threads.data && "items" in threads.data ? (threads.data.items ?? []) : [];
+
+  const pinnedThreads = useMemo(() => {
+    const pinned: Array<{
+      id: string;
+      pinnedAt: Date | null;
+      title: string;
+      updatedAt: Date;
+      workspace: { id: string; name: string };
+    }> = [];
+
+    if (organizeBy === "workspace") {
+      for (const group of groups) {
+        for (const thread of group.threads) {
+          if (thread.pinnedAt) {
+            pinned.push({
+              ...thread,
+              workspace: { id: group.workspace.id, name: group.workspace.name },
+            });
+          }
+        }
+      }
+    } else {
+      for (const item of items) {
+        if (item.pinnedAt) {
+          pinned.push({
+            ...item,
+            workspace: { id: item.workspace.id, name: item.workspace.name },
+          });
+        }
+      }
+    }
+
+    return pinned.sort(
+      (a, b) =>
+        new Date(b.pinnedAt!).getTime() - new Date(a.pinnedAt!).getTime(),
+    );
+  }, [groups, items, organizeBy]);
+
+  const togglePin = api.threads.togglePin.useMutation({
+    onMutate: async ({ pinned, threadId }) => {
+      const currentThread =
+        findThreadState(threadId, groups, items) ??
+        (() => {
+          const thread = utils.threads.get.getData({ threadId })?.thread;
+
+          if (!thread) {
+            return null;
+          }
+
+          return {
+            pinnedAt: thread.pinnedAt,
+            workspaceId: currentWorkspace.data?.id,
+          };
+        })();
+
+      return applyOptimisticThreadPinUpdate({
+        pinnedAt: pinned ? (currentThread?.pinnedAt ?? new Date()) : null,
+        threadId,
+        utils,
+        workspaceId: currentThread?.workspaceId,
+      });
+    },
+    onSuccess: (updatedThread, variables) => {
+      const currentThread = findThreadState(variables.threadId, groups, items);
+
+      applyOptimisticThreadPinUpdate({
+        pinnedAt: updatedThread.pinnedAt,
+        threadId: variables.threadId,
+        utils,
+        workspaceId: currentThread?.workspaceId ?? currentWorkspace.data?.id,
+      });
+    },
+    onError: (_error, variables, context) => {
+      restoreOptimisticThreadPinUpdate(utils, context, variables.threadId);
+    },
+    onSettled: (_data, _error, variables) => {
+      pinActionLockRef.current.delete(variables.threadId);
+      void utils.threads.list.invalidate();
+      void utils.threads.get.invalidate({ threadId: variables.threadId });
+    },
+  });
+
+  const archiveThread = api.threads.archive.useMutation({
+    onSuccess: (_data, variables) => {
+      void utils.threads.list.invalidate();
+      if (variables.threadId === selectedThreadId) {
+        router.push("/");
+      }
+    },
+  });
+
+  const handlePin = useCallback(
+    (threadId: string) => {
+      if (pinActionLockRef.current.has(threadId)) {
+        return;
+      }
+
+      const currentThread =
+        findThreadState(threadId, groups, items) ??
+        (() => {
+          const thread = utils.threads.get.getData({ threadId })?.thread;
+
+          if (!thread) {
+            return null;
+          }
+
+          return {
+            pinnedAt: thread.pinnedAt,
+            workspaceId: currentWorkspace.data?.id,
+          };
+        })();
+
+      pinActionLockRef.current.add(threadId);
+      void togglePin.mutate({
+        pinned: currentThread?.pinnedAt == null,
+        threadId,
+      });
+    },
+    [currentWorkspace.data?.id, groups, items, togglePin, utils.threads.get],
+  );
+
+  const handleArchiveThread = useCallback(
+    (threadId: string) => {
+      void archiveThread.mutate({ threadId });
+    },
+    [archiveThread],
+  );
 
   const createWorkspace = api.workspaces.create.useMutation({
     onSuccess: (workspace) => {
@@ -663,10 +1046,22 @@ export function WorkspaceSidebar() {
           <div className="sentinel-scroll-area h-full">
             {showSidebarLoading ? <WorkspaceSidebarLoadingState /> : null}
 
+            {pinnedThreads.length > 0 ? (
+              <PinnedThreadsList
+                onArchive={handleArchiveThread}
+                onPin={handlePin}
+                onPressThread={handlePressThread}
+                selectedThreadId={selectedThreadId}
+                threads={pinnedThreads}
+              />
+            ) : null}
+
             {organizeBy === "workspace" && groups.length > 0 ? (
               <ThreadList
                 expandedWorkspaceIds={expandedWorkspaceIds}
                 groups={groups}
+                onArchive={handleArchiveThread}
+                onPin={handlePin}
                 onPressThread={handlePressThread}
                 onPressWorkspace={handlePressWorkspace}
                 selectedThreadId={selectedThreadId}
@@ -677,6 +1072,8 @@ export function WorkspaceSidebar() {
             {organizeBy === "chronological" && items.length > 0 ? (
               <ChronologicalThreadList
                 items={items}
+                onArchive={handleArchiveThread}
+                onPin={handlePin}
                 onPressThread={handlePressThread}
                 selectedThreadId={selectedThreadId}
               />

@@ -5,7 +5,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createVertex } from "@ai-sdk/google-vertex";
 import { createOpenAI } from "@ai-sdk/openai";
 
-import type { AIProvider } from "@/../generated/prisma";
+import type { AIProvider } from "@/server/db/enums";
 
 type ApiKeyConfig = {
   apiKey: string;

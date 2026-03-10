@@ -1,17 +1,20 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+import { eq } from "drizzle-orm";
+
 import type { MiddlewareUser } from "@/lib/auth/share-types";
 import { db } from "@/server/db";
+import { users } from "@/server/db/schema";
 import { getOrCreateLocalProfile } from "@/server/local-profile";
 
 export const runtime = "nodejs";
 
-async function fetchUserById(userId: string): Promise<MiddlewareUser | null> {
-  return db.user.findUnique({
-    where: {
-      id: userId,
-    },
-  });
+async function fetchUserById(userId: string): Promise<MiddlewareUser> {
+  return (
+    (await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    })) ?? null
+  );
 }
 
 export async function GET(req: NextRequest) {

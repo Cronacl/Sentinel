@@ -1,13 +1,15 @@
 import { TRPCError } from "@trpc/server";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
-import type { AIProvider } from "@/../generated/prisma";
+import type { AIProvider } from "@/server/db/enums";
 import {
   PROVIDER_CONFIG_SCHEMAS,
   validateProviderConfig,
 } from "@/lib/ai/config-schemas";
 import { decrypt, encrypt } from "@/lib/ai/encrypt";
 import { PROVIDER_LIST } from "@/lib/ai/providers";
+import { modelPreferences, providerCredentials } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
 const aiProviderEnum = z.enum([
@@ -21,9 +23,9 @@ export const providersRouter = createTRPCRouter({
   list: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
 
-    const credentials = await ctx.db.providerCredential.findMany({
-      where: { userId },
-      select: { provider: true, isEnabled: true },
+    const credentials = await ctx.db.query.providerCredentials.findMany({
+      where: eq(providerCredentials.userId, userId),
+      columns: { provider: true, isEnabled: true },
     });
 
     const credentialMap = new Map(
@@ -47,13 +49,11 @@ export const providersRouter = createTRPCRouter({
   get: protectedProcedure
     .input(z.object({ provider: aiProviderEnum }))
     .query(async ({ ctx, input }) => {
-      const credential = await ctx.db.providerCredential.findUnique({
-        where: {
-          userId_provider: {
-            userId: ctx.session.user.id,
-            provider: input.provider,
-          },
-        },
+      const credential = await ctx.db.query.providerCredentials.findFirst({
+        where: and(
+          eq(providerCredentials.userId, ctx.session.user.id),
+          eq(providerCredentials.provider, input.provider),
+        ),
       });
 
       if (!credential) return null;
@@ -91,25 +91,34 @@ export const providersRouter = createTRPCRouter({
         input.config,
       );
       const encryptedConfig = encrypt(JSON.stringify(validated));
+      const userId = ctx.session.user.id;
 
-      return ctx.db.providerCredential.upsert({
-        where: {
-          userId_provider: {
-            userId: ctx.session.user.id,
-            provider: input.provider,
-          },
-        },
-        create: {
-          userId: ctx.session.user.id,
-          provider: input.provider,
-          encryptedConfig,
-        },
-        update: {
-          encryptedConfig,
-          isEnabled: true,
-        },
-        select: { provider: true, isEnabled: true },
+      const existing = await ctx.db.query.providerCredentials.findFirst({
+        where: and(
+          eq(providerCredentials.userId, userId),
+          eq(providerCredentials.provider, input.provider),
+        ),
+        columns: { id: true },
       });
+
+      if (existing) {
+        ctx.db
+          .update(providerCredentials)
+          .set({ encryptedConfig, isEnabled: true })
+          .where(eq(providerCredentials.id, existing.id))
+          .run();
+      } else {
+        ctx.db
+          .insert(providerCredentials)
+          .values({
+            userId,
+            provider: input.provider,
+            encryptedConfig,
+          })
+          .run();
+      }
+
+      return { provider: input.provider, isEnabled: true };
     }),
 
   delete: protectedProcedure
@@ -117,16 +126,25 @@ export const providersRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
 
-      await ctx.db.$transaction([
-        ctx.db.modelPreference.deleteMany({
-          where: { userId, provider: input.provider },
-        }),
-        ctx.db.providerCredential.delete({
-          where: {
-            userId_provider: { userId, provider: input.provider },
-          },
-        }),
-      ]);
+      ctx.db.transaction((tx) => {
+        tx.delete(modelPreferences)
+          .where(
+            and(
+              eq(modelPreferences.userId, userId),
+              eq(modelPreferences.provider, input.provider),
+            ),
+          )
+          .run();
+
+        tx.delete(providerCredentials)
+          .where(
+            and(
+              eq(providerCredentials.userId, userId),
+              eq(providerCredentials.provider, input.provider),
+            ),
+          )
+          .run();
+      });
 
       return { success: true };
     }),
@@ -139,15 +157,29 @@ export const providersRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      return ctx.db.providerCredential.update({
-        where: {
-          userId_provider: {
-            userId: ctx.session.user.id,
-            provider: input.provider,
-          },
-        },
-        data: { isEnabled: input.isEnabled },
-        select: { provider: true, isEnabled: true },
+      const userId = ctx.session.user.id;
+
+      const existing = await ctx.db.query.providerCredentials.findFirst({
+        where: and(
+          eq(providerCredentials.userId, userId),
+          eq(providerCredentials.provider, input.provider),
+        ),
+        columns: { id: true },
       });
+
+      if (!existing) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Provider not found.",
+        });
+      }
+
+      ctx.db
+        .update(providerCredentials)
+        .set({ isEnabled: input.isEnabled })
+        .where(eq(providerCredentials.id, existing.id))
+        .run();
+
+      return { provider: input.provider, isEnabled: input.isEnabled };
     }),
 });

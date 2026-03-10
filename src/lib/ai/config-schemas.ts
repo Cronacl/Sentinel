@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { AIProvider } from "@/../generated/prisma";
+import type { AIProvider } from "@/server/db/enums";
 
 const normalizePrivateKey = (key?: string | null) =>
   key ? key.replace(/\\n/g, "\n").replace(/\r/g, "") : key;

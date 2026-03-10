@@ -1,7 +1,10 @@
 import "server-only";
 
-import type { AIProvider } from "@/../generated/prisma";
+import { and, eq } from "drizzle-orm";
+
+import type { AIProvider } from "@/server/db/enums";
 import { db } from "@/server/db";
+import { modelPreferences, providerCredentials } from "@/server/db/schema";
 
 import { decrypt } from "./encrypt";
 import { getModelsForProvider, isKnownModel } from "./models";
@@ -47,8 +50,11 @@ export async function getProviderConfig(
   userId: string,
   provider: AIProvider,
 ): Promise<ProviderConfig> {
-  const credential = await db.providerCredential.findUnique({
-    where: { userId_provider: { userId, provider } },
+  const credential = await db.query.providerCredentials.findFirst({
+    where: and(
+      eq(providerCredentials.userId, userId),
+      eq(providerCredentials.provider, provider),
+    ),
   });
 
   if (!credential) {
@@ -66,10 +72,6 @@ export async function getProviderConfig(
   return JSON.parse(decrypt(credential.encryptedConfig)) as ProviderConfig;
 }
 
-/**
- * Resolves a composite model ID (e.g. "openai:gpt-5.2-pro") into an AI SDK
- * LanguageModel instance, using the given user's stored credentials.
- */
 export async function getLanguageModel(userId: string, compositeId: string) {
   const { provider, model } = parseModelId(compositeId);
   const config = await getProviderConfig(userId, provider);
@@ -77,20 +79,18 @@ export async function getLanguageModel(userId: string, compositeId: string) {
   return providerInstance.languageModel(model);
 }
 
-/**
- * Returns all models the user can currently use: built-in models for connected
- * providers that are enabled in preferences, plus any custom models.
- */
 export async function getEnabledModels(userId: string) {
-  const [credentials, preferences] = await Promise.all([
-    db.providerCredential.findMany({
-      where: { userId, isEnabled: true },
-      select: { provider: true },
-    }),
-    db.modelPreference.findMany({
-      where: { userId },
-    }),
-  ]);
+  const credentials = await db.query.providerCredentials.findMany({
+    where: and(
+      eq(providerCredentials.userId, userId),
+      eq(providerCredentials.isEnabled, true),
+    ),
+    columns: { provider: true },
+  });
+
+  const preferences = await db.query.modelPreferences.findMany({
+    where: eq(modelPreferences.userId, userId),
+  });
 
   const connectedProviders = new Set(credentials.map((c) => c.provider));
   const prefMap = new Map(

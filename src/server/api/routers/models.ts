@@ -1,12 +1,14 @@
 import { TRPCError } from "@trpc/server";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
-import type { AIProvider } from "@/../generated/prisma";
+import type { AIProvider } from "@/server/db/enums";
 import {
   MODEL_CATALOG,
   getModelsForProvider,
   isKnownModel,
 } from "@/lib/ai/models";
+import { modelPreferences, providerCredentials } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
 const aiProviderEnum = z.enum([
@@ -28,15 +30,18 @@ export const modelsRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
 
-      const connectedProviders = await ctx.db.providerCredential.findMany({
-        where: { userId, isEnabled: true },
-        select: { provider: true },
+      const connectedProviders = await ctx.db.query.providerCredentials.findMany({
+        where: and(
+          eq(providerCredentials.userId, userId),
+          eq(providerCredentials.isEnabled, true),
+        ),
+        columns: { provider: true },
       });
 
       const connectedSet = new Set(connectedProviders.map((p) => p.provider));
 
-      const preferences = await ctx.db.modelPreference.findMany({
-        where: { userId },
+      const preferences = await ctx.db.query.modelPreferences.findMany({
+        where: eq(modelPreferences.userId, userId),
       });
 
       const prefMap = new Map(
@@ -96,23 +101,36 @@ export const modelsRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      return ctx.db.modelPreference.upsert({
-        where: {
-          userId_provider_modelId: {
-            userId: ctx.session.user.id,
-            provider: input.provider,
-            modelId: input.modelId,
-          },
-        },
-        create: {
-          userId: ctx.session.user.id,
+      const userId = ctx.session.user.id;
+
+      const existing = await ctx.db.query.modelPreferences.findFirst({
+        where: and(
+          eq(modelPreferences.userId, userId),
+          eq(modelPreferences.provider, input.provider),
+          eq(modelPreferences.modelId, input.modelId),
+        ),
+      });
+
+      if (existing) {
+        ctx.db
+          .update(modelPreferences)
+          .set({ isEnabled: true })
+          .where(eq(modelPreferences.id, existing.id))
+          .run();
+        return { provider: input.provider, modelId: input.modelId, isEnabled: true };
+      }
+
+      ctx.db
+        .insert(modelPreferences)
+        .values({
+          userId,
           provider: input.provider,
           modelId: input.modelId,
           isEnabled: true,
-        },
-        update: { isEnabled: true },
-        select: { provider: true, modelId: true, isEnabled: true },
-      });
+        })
+        .run();
+
+      return { provider: input.provider, modelId: input.modelId, isEnabled: true };
     }),
 
   disable: protectedProcedure
@@ -123,23 +141,36 @@ export const modelsRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      return ctx.db.modelPreference.upsert({
-        where: {
-          userId_provider_modelId: {
-            userId: ctx.session.user.id,
-            provider: input.provider,
-            modelId: input.modelId,
-          },
-        },
-        create: {
-          userId: ctx.session.user.id,
+      const userId = ctx.session.user.id;
+
+      const existing = await ctx.db.query.modelPreferences.findFirst({
+        where: and(
+          eq(modelPreferences.userId, userId),
+          eq(modelPreferences.provider, input.provider),
+          eq(modelPreferences.modelId, input.modelId),
+        ),
+      });
+
+      if (existing) {
+        ctx.db
+          .update(modelPreferences)
+          .set({ isEnabled: false })
+          .where(eq(modelPreferences.id, existing.id))
+          .run();
+        return { provider: input.provider, modelId: input.modelId, isEnabled: false };
+      }
+
+      ctx.db
+        .insert(modelPreferences)
+        .values({
+          userId,
           provider: input.provider,
           modelId: input.modelId,
           isEnabled: false,
-        },
-        update: { isEnabled: false },
-        select: { provider: true, modelId: true, isEnabled: true },
-      });
+        })
+        .run();
+
+      return { provider: input.provider, modelId: input.modelId, isEnabled: false };
     }),
 
   addCustom: protectedProcedure
@@ -152,11 +183,12 @@ export const modelsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
 
-      const credential = await ctx.db.providerCredential.findUnique({
-        where: {
-          userId_provider: { userId, provider: input.provider },
-        },
-        select: { isEnabled: true },
+      const credential = await ctx.db.query.providerCredentials.findFirst({
+        where: and(
+          eq(providerCredentials.userId, userId),
+          eq(providerCredentials.provider, input.provider),
+        ),
+        columns: { isEnabled: true },
       });
 
       if (!credential?.isEnabled) {
@@ -166,21 +198,24 @@ export const modelsRouter = createTRPCRouter({
         });
       }
 
-      return ctx.db.modelPreference.create({
-        data: {
+      const [created] = ctx.db
+        .insert(modelPreferences)
+        .values({
           userId,
           provider: input.provider,
           modelId: input.modelId,
           isCustom: true,
           isEnabled: true,
-        },
-        select: {
-          provider: true,
-          modelId: true,
-          isCustom: true,
-          isEnabled: true,
-        },
-      });
+        })
+        .returning({
+          provider: modelPreferences.provider,
+          modelId: modelPreferences.modelId,
+          isCustom: modelPreferences.isCustom,
+          isEnabled: modelPreferences.isEnabled,
+        })
+        .all();
+
+      return created!;
     }),
 
   removeCustom: protectedProcedure
@@ -191,15 +226,15 @@ export const modelsRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const pref = await ctx.db.modelPreference.findUnique({
-        where: {
-          userId_provider_modelId: {
-            userId: ctx.session.user.id,
-            provider: input.provider,
-            modelId: input.modelId,
-          },
-        },
-        select: { isCustom: true },
+      const userId = ctx.session.user.id;
+
+      const pref = await ctx.db.query.modelPreferences.findFirst({
+        where: and(
+          eq(modelPreferences.userId, userId),
+          eq(modelPreferences.provider, input.provider),
+          eq(modelPreferences.modelId, input.modelId),
+        ),
+        columns: { id: true, isCustom: true },
       });
 
       if (!pref?.isCustom) {
@@ -209,14 +244,11 @@ export const modelsRouter = createTRPCRouter({
         });
       }
 
-      return ctx.db.modelPreference.delete({
-        where: {
-          userId_provider_modelId: {
-            userId: ctx.session.user.id,
-            provider: input.provider,
-            modelId: input.modelId,
-          },
-        },
-      });
+      ctx.db
+        .delete(modelPreferences)
+        .where(eq(modelPreferences.id, pref.id))
+        .run();
+
+      return { provider: input.provider, modelId: input.modelId };
     }),
 });

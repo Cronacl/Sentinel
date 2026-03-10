@@ -17,7 +17,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FileUIPart } from "ai";
 
-import type { AIProvider } from "@/../generated/prisma";
+import type { AIProvider } from "@/server/db/enums";
 import {
   getModelAttachmentCapabilities,
   type ReasoningEffort,
@@ -614,7 +614,7 @@ export function ChatComposer({
       />
 
       <div className="w-full rounded-[20px] border border-muted/20 bg-background  dark:bg-surface p-2 ">
-              {attachments.length > 0 && (
+        {attachments.length > 0 && (
           <div className="flex flex-wrap gap-1.5 px-2 pb-1.5">
             {attachments.map((attachment) => (
               <AttachmentChip
@@ -625,17 +625,17 @@ export function ChatComposer({
               />
             ))}
           </div>
-              )}
+        )}
 
-              {isEditing ? (
-                <button
-                  className="text-muted hover:text-foreground px-2 text-xs"
-                  onClick={onCancelEdit}
-                  type="button"
-                >
-                  Cancel edit
-                </button>
-              ) : null}
+        {isEditing ? (
+          <button
+            className="text-muted hover:text-foreground px-2 text-xs"
+            onClick={onCancelEdit}
+            type="button"
+          >
+            Cancel edit
+          </button>
+        ) : null}
 
         <div className="px-2">
           <div className="min-h-[28px]">

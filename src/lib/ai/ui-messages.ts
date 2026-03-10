@@ -1,6 +1,5 @@
 import { validateUIMessages, type UIMessage } from "ai";
 
-import { Prisma } from "@/../generated/prisma";
 import {
   buildActiveThreadMessages,
   type PersistedThreadMessageRecord,
@@ -14,7 +13,7 @@ import {
   threadMessageMetadataSchema,
 } from "./thread-message-types";
 
-function toInputJsonValue(value: unknown): Prisma.InputJsonValue | undefined {
+function toJsonValue(value: unknown): unknown {
   if (value === undefined) {
     return undefined;
   }
@@ -25,7 +24,7 @@ function toInputJsonValue(value: unknown): Prisma.InputJsonValue | undefined {
     return undefined;
   }
 
-  return JSON.parse(serialized) as Prisma.InputJsonValue;
+  return JSON.parse(serialized) as unknown;
 }
 
 function normalizeUnknownThreadUIMessage(message: unknown) {
@@ -82,8 +81,8 @@ export async function mapThreadMessagesToUIMessages(
 
 export function serializeThreadUIMessage(message: ThreadUIMessage) {
   const normalizedMessage = normalizeThreadUIMessage(message);
-  const metadata = toInputJsonValue(normalizedMessage.metadata);
-  const parts = toInputJsonValue(message.parts);
+  const metadata = toJsonValue(normalizedMessage.metadata);
+  const parts = toJsonValue(message.parts);
 
   if (!parts || !Array.isArray(parts)) {
     throw new Error("UI message parts must serialize to a JSON array.");
@@ -91,7 +90,7 @@ export function serializeThreadUIMessage(message: ThreadUIMessage) {
 
   return {
     messageId: message.id,
-    metadata: metadata ?? Prisma.JsonNull,
+    metadata: metadata ?? null,
     parts,
     role: message.role,
   };

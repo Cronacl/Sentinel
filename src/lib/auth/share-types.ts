@@ -1,9 +1,5 @@
-import { db } from "@/server/db";
+import type { InferSelectModel } from "drizzle-orm";
 
-const q = db.user.findUnique({
-  where: {
-    id: "",
-  },
-});
+import type { users } from "@/server/db/schema";
 
-export type MiddlewareUser = Awaited<typeof q>;
+export type MiddlewareUser = InferSelectModel<typeof users> | null;

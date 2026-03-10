@@ -251,7 +251,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             ref={scrollAreaRef}
             className="sentinel-scroll-area flex h-[calc(100vh-44px)] flex-col"
           >
-            <div className="mx-auto w-full max-w-3xl flex-1 px-6 pt-4">
+            <div className="mx-auto w-full max-w-2xl flex-1 px-6 pt-4">
               <div className="flex flex-col gap-4">
                 {messages.map((message, idx) => (
                   <ChatMessage
@@ -273,9 +273,8 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
 
             <div
               ref={composerDockRef}
-              className="sticky bottom-0 z-50 mx-auto w-full max-w-3xl px-6 pb-3 pt-2"
+              className="sticky bottom-0 z-50 mx-auto w-full max-w-2xl px-6 pb-3 pt-2"
             >
-              <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-background to-transparent" />
               <ChatComposer
                 activeWorkspace={selectedWorkspace}
                 onSend={handleSend}
@@ -408,8 +407,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             </div>
           </div>
 
-          <div className="sticky bottom-0 z-50 mx-auto w-full max-w-3xl px-6 pb-3 pt-2">
-            <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-background to-transparent" />
+          <div className="sticky bottom-0 z-50 mx-auto w-full max-w-2xl px-6 pb-3 pt-2">
             <ChatComposer
               activeWorkspace={selectedWorkspace}
               onSend={handleSend}

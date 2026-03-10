@@ -5,14 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { DESKTOP_CHANNELS } from "../shared/channels.mjs";
 import { createRuntimePaths } from "../../scripts/desktop/constants.mjs";
-import {
-  ensureLocalEnv,
-  getInfrastructureStatus,
-  startInfrastructure,
-  stopInfrastructure,
-  syncPrismaSchema,
-  waitForInfrastructure,
-} from "../../scripts/desktop/service-manager.mjs";
+import { ensureLocalEnv } from "../../scripts/desktop/service-manager.mjs";
 import {
   getAppServerStatus,
   startLocalServer,
@@ -193,7 +186,6 @@ async function loadFailureState(error) {
       body: `
         <h1>Sentinel could not start</h1>
         <p>${message}</p>
-        <p>Verify Docker Desktop is installed and running, then restart Sentinel.</p>
       `,
     }),
   );
@@ -202,22 +194,6 @@ async function loadFailureState(error) {
 async function bootstrapDesktop() {
   const runtimePaths = getRuntimePaths();
   await ensureLocalEnv(runtimePaths);
-
-  const initialStatus = await getInfrastructureStatus(runtimePaths);
-  if (!initialStatus.docker) {
-    throw new Error("Docker Desktop is required before Sentinel can start.");
-  }
-
-  if (
-    !initialStatus.postgres ||
-    !initialStatus.redis ||
-    !initialStatus.qdrant
-  ) {
-    await startInfrastructure(runtimePaths);
-  }
-
-  await waitForInfrastructure(runtimePaths);
-  await syncPrismaSchema(runtimePaths);
 
   serverState = await startLocalServer(runtimePaths);
   await mainWindow?.loadURL(serverState.url);
@@ -263,48 +239,37 @@ function registerIpc() {
   });
 
   ipcMain.handle(DESKTOP_CHANNELS.SERVICES_STATUS, async () => {
-    const runtimePaths = getRuntimePaths();
-    const status = await getInfrastructureStatus(runtimePaths);
     const appServer = await getAppServerStatus(
       serverState?.url ??
         process.env.SENTINEL_APP_URL ??
         "http://127.0.0.1:3232",
     );
 
-    return {
-      appServer,
-      ...status,
-    };
+    return { appServer };
   });
 
   ipcMain.handle(DESKTOP_CHANNELS.SERVICES_START, async () => {
     const runtimePaths = getRuntimePaths();
-    await startInfrastructure(runtimePaths);
-    const status = await waitForInfrastructure(runtimePaths);
 
     if (!serverState) {
-      await syncPrismaSchema(runtimePaths);
       serverState = await startLocalServer(runtimePaths);
       await mainWindow?.loadURL(serverState.url);
     }
 
-    return {
-      ...status,
-      appServer: await getAppServerStatus(
-        serverState?.url ??
-          process.env.SENTINEL_APP_URL ??
-          "http://127.0.0.1:3232",
-      ),
-    };
+    const appServer = await getAppServerStatus(
+      serverState?.url ??
+        process.env.SENTINEL_APP_URL ??
+        "http://127.0.0.1:3232",
+    );
+
+    return { appServer };
   });
 
   ipcMain.handle(DESKTOP_CHANNELS.SERVICES_STOP, async () => {
-    const runtimePaths = getRuntimePaths();
     await stopLocalServer(serverState);
     serverState = null;
-    const status = await stopInfrastructure(runtimePaths);
 
-    return status;
+    return { appServer: false };
   });
 
   ipcMain.handle(DESKTOP_CHANNELS.APP_VERSION, async () => app.getVersion());

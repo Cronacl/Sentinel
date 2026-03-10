@@ -114,6 +114,11 @@ export const threadArchiveSchema = z.object({
   threadId: z.string().min(1),
 });
 
+export const threadTogglePinSchema = z.object({
+  pinned: z.boolean(),
+  threadId: z.string().min(1),
+});
+
 export const threadSearchSchema = z.object({
   query: z.string().trim().min(1),
   workspaceId: z.string().min(1).optional(),

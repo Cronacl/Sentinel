@@ -9,17 +9,13 @@
   "scripts": {
     "build": "next build",
     "build:desktop": "node ./scripts/desktop/clean.mjs && bun run build && node ./scripts/desktop/prepare-production.mjs && electron-builder --mac dmg",
-    "dev:desktop": "concurrently -k \"NEXT_PUBLIC_URL=http://127.0.0.1:3232 BETTER_AUTH_URL=http://127.0.0.1:3232 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/sentinel REDIS_URL=redis://127.0.0.1:56379 QDRANT_URL=http://127.0.0.1:56333 ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef bun run dev -- --port 3232\" \"NEXT_PUBLIC_URL=http://127.0.0.1:3232 BETTER_AUTH_URL=http://127.0.0.1:3232 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/sentinel REDIS_URL=redis://127.0.0.1:56379 QDRANT_URL=http://127.0.0.1:56333 ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef node ./scripts/desktop/dev-launch.mjs\"",
-    "infra:down": "docker compose -f ./docker/compose.yml down",
-    "infra:up": "docker compose -f ./docker/compose.yml up -d",
+    "dev:desktop": "concurrently -k \"NEXT_PUBLIC_URL=http://127.0.0.1:3232 BETTER_AUTH_URL=http://127.0.0.1:3232 ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef bun run dev -- --port 3232\" \"NEXT_PUBLIC_URL=http://127.0.0.1:3232 BETTER_AUTH_URL=http://127.0.0.1:3232 ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef node ./scripts/desktop/dev-launch.mjs\"",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "db:generate": "prisma migrate dev",
-    "db:migrate": "prisma migrate deploy",
-    "db:push": "prisma db push",
-    "db:studio": "prisma studio",
+    "db:push": "npx drizzle-kit push",
+    "db:generate": "npx drizzle-kit generate",
+    "db:studio": "npx drizzle-kit studio",
     "dev": "next dev --turbo",
-    "postinstall": "prisma generate",
     "preview": "next build && next start",
     "start": "next start",
     "typecheck": "tsc --noEmit"
@@ -37,7 +33,7 @@
     "@hugeicons/core-free-icons": "^4.0.0",
     "@hugeicons/react": "^1.1.5",
     "@iconify/react": "^6.0.2",
-    "@prisma/client": "^6.6.0",
+    "@paralleldrive/cuid2": "^3.3.0",
     "@t3-oss/env-nextjs": "^0.12.0",
     "@tanstack/react-query": "^5.69.0",
     "@tiptap/extension-placeholder": "^3.20.1",
@@ -48,19 +44,22 @@
     "@trpc/react-query": "^11.0.0",
     "@trpc/server": "^11.0.0",
     "ai": "^6.0.116",
+    "better-sqlite3": "^12.6.2",
     "date-fns": "^4.1.0",
+    "drizzle-orm": "^0.45.1",
     "highlight.js": "^11.11.1",
     "motion": "^12.35.0",
     "next": "^15.2.3",
-    "prisma": "^6.6.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.71.2",
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
+    "resumable-stream": "^2.2.10",
     "server-only": "^0.0.1",
     "shiki": "^4.0.1",
+    "sqlite-vec": "^0.1.7-alpha.2",
     "superjson": "^2.2.1",
     "tailwind-variants": "^3.2.2",
     "zod": "^3.24.2"
@@ -68,10 +67,12 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.15",
     "@trivago/prettier-plugin-sort-imports": "^6.0.2",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.14.10",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "concurrently": "^9.2.1",
+    "drizzle-kit": "^0.31.9",
     "electron": "^40.8.0",
     "electron-builder": "^26.8.1",
     "postcss": "^8.5.3",
@@ -84,9 +85,8 @@
   "build": {
     "appId": "app.sentinel.desktop",
     "asarUnpack": [
-      "generated/**",
-      "node_modules/@prisma/client/**",
-      "node_modules/prisma/**"
+      "node_modules/better-sqlite3/**",
+      "node_modules/sqlite-vec/**"
     ],
     "directories": {
       "buildResources": "build"
@@ -96,18 +96,12 @@
       {
         "from": "desktop/dist/server",
         "to": "server"
-      },
-      {
-        "from": "docker/compose.yml",
-        "to": "docker/compose.yml"
       }
     ],
     "files": [
       "desktop/**/*",
       "scripts/desktop/**/*",
       "src/**/*",
-      "generated/**/*",
-      "prisma/**/*",
       "build/**/*",
       ".env.example",
       "next.config.js",

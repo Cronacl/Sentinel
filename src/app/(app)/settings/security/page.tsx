@@ -16,10 +16,6 @@ import { api } from "@/trpc/react";
 
 const DEFAULT_STATUS: DesktopServicesStatus = {
   appServer: false,
-  docker: false,
-  postgres: false,
-  qdrant: false,
-  redis: false,
 };
 
 function SecuritySkeleton() {
@@ -46,9 +42,7 @@ function SecuritySkeleton() {
         </div>
 
         <div className="space-y-2">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <Skeleton className="h-14 w-full rounded-xl" key={index} />
-          ))}
+          <Skeleton className="h-14 w-full rounded-xl" />
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
@@ -276,28 +270,8 @@ export default function SecuritySettingsPage() {
           <div className="space-y-2">
             <RuntimeRow
               isActive={services.appServer}
-              label="App"
+              label="App Server"
               value={services.appServer ? version : "Offline"}
-            />
-            <RuntimeRow
-              isActive={services.docker}
-              label="Docker"
-              value={services.docker ? "Connected" : "Unavailable"}
-            />
-            <RuntimeRow
-              isActive={services.postgres}
-              label="Postgres"
-              value={services.postgres ? "Running" : "Stopped"}
-            />
-            <RuntimeRow
-              isActive={services.redis}
-              label="Redis"
-              value={services.redis ? "Running" : "Stopped"}
-            />
-            <RuntimeRow
-              isActive={services.qdrant}
-              label="Qdrant"
-              value={services.qdrant ? "Running" : "Stopped"}
             />
           </div>
 
@@ -312,7 +286,7 @@ export default function SecuritySettingsPage() {
               {({ isPending }) => (
                 <>
                   {isPending ? <Spinner color="current" size="sm" /> : null}
-                  Stop services
+                  Stop server
                 </>
               )}
             </Button>
@@ -325,7 +299,7 @@ export default function SecuritySettingsPage() {
               {({ isPending }) => (
                 <>
                   {isPending ? <Spinner color="current" size="sm" /> : null}
-                  Start services
+                  Start server
                 </>
               )}
             </Button>

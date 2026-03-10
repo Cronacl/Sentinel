@@ -5,9 +5,14 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import type { User } from "@/../generated/prisma";
+import { eq } from "drizzle-orm";
+import type { InferSelectModel } from "drizzle-orm";
+
 import { env } from "@/env";
 import { db } from "@/server/db";
+import { users } from "@/server/db/schema";
+
+export type User = InferSelectModel<typeof users>;
 
 type LocalProfileState = {
   localProfileId?: string;
@@ -68,27 +73,40 @@ async function persistProfileId(profileId: string) {
 
 async function createLocalProfile(): Promise<User> {
   const seed = getDefaultProfileSeed();
-  const user = await db.user.upsert({
-    where: { email: seed.email },
-    update: {},
-    create: {
-      email: seed.email,
-      emailVerified: true,
-      id: randomUUID(),
-      name: seed.name,
-    },
+
+  const existing = await db.query.users.findFirst({
+    where: eq(users.email, seed.email),
   });
 
-  await persistProfileId(user.id);
-  return user;
+  if (existing) {
+    return existing;
+  }
+
+  const id = randomUUID();
+  db.insert(users)
+    .values({
+      email: seed.email,
+      emailVerified: true,
+      id,
+      name: seed.name,
+    })
+    .onConflictDoNothing({ target: users.email })
+    .run();
+
+  const user = await db.query.users.findFirst({
+    where: eq(users.email, seed.email),
+  });
+
+  await persistProfileId(user!.id);
+  return user!;
 }
 
 export async function getOrCreateLocalProfile(): Promise<User> {
   const state = await readState();
 
   if (state.localProfileId) {
-    const user = await db.user.findUnique({
-      where: { id: state.localProfileId },
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, state.localProfileId),
     });
 
     if (user) {
@@ -96,8 +114,8 @@ export async function getOrCreateLocalProfile(): Promise<User> {
     }
   }
 
-  const existingUser = await db.user.findFirst({
-    orderBy: { createdAt: "asc" },
+  const existingUser = await db.query.users.findFirst({
+    orderBy: (users, { asc }) => [asc(users.createdAt)],
   });
 
   if (existingUser) {

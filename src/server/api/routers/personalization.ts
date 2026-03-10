@@ -1,11 +1,14 @@
+import { eq } from "drizzle-orm";
+
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { personalizationFormSchema } from "@/schemas/personalization.schema";
+import { users } from "@/server/db/schema";
 
 export const personalizationRouter = createTRPCRouter({
   get: protectedProcedure.query(async ({ ctx }) => {
-    const user = await ctx.db.user.findUnique({
-      where: { id: ctx.session.user.id },
-      select: {
+    const user = await ctx.db.query.users.findFirst({
+      where: eq(users.id, ctx.session.user.id),
+      columns: {
         aboutUser: true,
         customInstructions: true,
         nickname: true,
@@ -34,24 +37,18 @@ export const personalizationRouter = createTRPCRouter({
         personalityPreset: input.personality,
       };
 
-      const user = await ctx.db.user.update({
-        where: { id: ctx.session.user.id },
-        data,
-        select: {
-          aboutUser: true,
-          customInstructions: true,
-          nickname: true,
-          occupation: true,
-          personalityPreset: true,
-        },
-      });
+      ctx.db
+        .update(users)
+        .set(data)
+        .where(eq(users.id, ctx.session.user.id))
+        .run();
 
       return {
-        aboutUser: user.aboutUser ?? "",
-        customInstructions: user.customInstructions ?? "",
-        nickname: user.nickname ?? "",
-        occupation: user.occupation ?? "",
-        personality: user.personalityPreset,
+        aboutUser: data.aboutUser ?? "",
+        customInstructions: data.customInstructions ?? "",
+        nickname: data.nickname ?? "",
+        occupation: data.occupation ?? "",
+        personality: data.personalityPreset,
       };
     }),
 });

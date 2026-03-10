@@ -7,7 +7,7 @@ import { SidebarToggle } from "./sidebar-toggle";
 
 interface PageWrapperProps extends PropsWithChildren {
   /** Page title shown in the header. */
-  title?: string;
+  title?: ReactNode;
   /** Subtitle or description rendered below the title. */
   subtitle?: ReactNode;
   /** Slot for action buttons rendered at the end of the header row. */

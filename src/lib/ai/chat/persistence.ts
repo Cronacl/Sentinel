@@ -1,5 +1,7 @@
-import type { PrismaClient } from "@/../generated/prisma";
-import { db } from "@/server/db";
+import { and, eq } from "drizzle-orm";
+
+import { db as defaultDb, type Database } from "@/server/db";
+import { threadMessages, threads } from "@/server/db/schema";
 
 import type { PersistedThreadMessageRecord } from "../thread-branches";
 import {
@@ -24,8 +26,8 @@ function matchesParent(
   return (metadata?.parentMessageId ?? null) === parentMessageId;
 }
 
-export function createPrismaThreadChatPersistence(
-  client: PrismaClient = db,
+export function createDrizzleThreadChatPersistence(
+  client: Database = defaultDb,
 ): ChatPersistenceAdapter {
   return {
     async ensureThread({
@@ -34,21 +36,18 @@ export function createPrismaThreadChatPersistence(
       userId,
       workspaceId,
     }: EnsureThreadInput) {
-      const existingThread = await client.thread.findUnique({
-        where: { id: threadId },
-        select: { id: true },
+      const existingThread = await client.query.threads.findFirst({
+        where: eq(threads.id, threadId),
+        columns: { id: true },
       });
 
-      await client.thread.upsert({
-        where: { id: threadId },
-        create: {
-          id: threadId,
-          title,
-          userId,
-          workspaceId,
-        },
-        update: {},
-      });
+      if (!existingThread) {
+        client
+          .insert(threads)
+          .values({ id: threadId, title, userId, workspaceId })
+          .onConflictDoNothing({ target: threads.id })
+          .run();
+      }
 
       return {
         created: existingThread == null,
@@ -56,20 +55,20 @@ export function createPrismaThreadChatPersistence(
     },
 
     async getThreadMessages(threadId) {
-      return client.threadMessage.findMany({
-        where: { threadId },
-        orderBy: {
-          createdAt: "asc",
-        },
-      }) as Promise<PersistedThreadMessageRecord[]>;
+      const rows = await client.query.threadMessages.findMany({
+        where: eq(threadMessages.threadId, threadId),
+        orderBy: (messages, { asc }) => [asc(messages.createdAt)],
+      });
+      return rows as unknown as PersistedThreadMessageRecord[];
     },
 
     async setActiveMessage({ messageId, threadId }: SetActiveMessageInput) {
-      const messages = await client.threadMessage.findMany({
-        where: { threadId },
-        orderBy: { createdAt: "asc" },
+      const messages = await client.query.threadMessages.findMany({
+        where: eq(threadMessages.threadId, threadId),
+        orderBy: (messages, { asc }) => [asc(messages.createdAt)],
       });
-      const target = messages.find((message) => message.messageId === messageId);
+
+      const target = messages.find((msg) => msg.messageId === messageId);
       if (!target) {
         return;
       }
@@ -79,31 +78,30 @@ export function createPrismaThreadChatPersistence(
       );
       const parentMessageId = targetMetadata.parentMessageId ?? null;
 
-      const updates = messages
-        .filter((message) =>
-          matchesParent(
-            normalizeThreadMessageMetadata(
-              message.metadata as ThreadMessageMetadata | null | undefined,
-            ),
-            parentMessageId,
+      const toUpdate = messages.filter((msg) =>
+        matchesParent(
+          normalizeThreadMessageMetadata(
+            msg.metadata as ThreadMessageMetadata | null | undefined,
           ),
-        )
-        .map((message) => {
+          parentMessageId,
+        ),
+      );
+
+      client.transaction((tx) => {
+        for (const msg of toUpdate) {
           const metadata = normalizeThreadMessageMetadata(
-            message.metadata as ThreadMessageMetadata | null | undefined,
+            msg.metadata as ThreadMessageMetadata | null | undefined,
           );
-
-          return client.threadMessage.update({
-            where: { id: message.id },
-            data: {
+          tx.update(threadMessages)
+            .set({
               metadata: mergeThreadMessageMetadata(metadata, {
-                isActive: message.messageId === messageId,
+                isActive: msg.messageId === messageId,
               }),
-            },
-          });
-        });
-
-      await client.$transaction(updates);
+            })
+            .where(eq(threadMessages.id, msg.id))
+            .run();
+        }
+      });
     },
 
     async updateThreadMessageMetadata({
@@ -111,13 +109,11 @@ export function createPrismaThreadChatPersistence(
       metadata,
       threadId,
     }: UpdateThreadMessageMetadataInput) {
-      const existing = await client.threadMessage.findUnique({
-        where: {
-          threadId_messageId: {
-            messageId,
-            threadId,
-          },
-        },
+      const existing = await client.query.threadMessages.findFirst({
+        where: and(
+          eq(threadMessages.threadId, threadId),
+          eq(threadMessages.messageId, messageId),
+        ),
       });
 
       if (!existing) {
@@ -128,47 +124,65 @@ export function createPrismaThreadChatPersistence(
         existing.metadata as ThreadMessageMetadata | null | undefined,
       );
 
-      await client.threadMessage.update({
-        where: { id: existing.id },
-        data: {
+      client
+        .update(threadMessages)
+        .set({
           metadata: mergeThreadMessageMetadata(currentMetadata, metadata),
-        },
-      });
+        })
+        .where(eq(threadMessages.id, existing.id))
+        .run();
     },
 
-    async upsertThreadMessage({ createdAt, message, threadId }: UpsertThreadMessageInput) {
+    async upsertThreadMessage({
+      createdAt,
+      message,
+      threadId,
+    }: UpsertThreadMessageInput) {
       const serializedMessage = serializeThreadUIMessage(message);
 
-      await client.$transaction([
-        client.threadMessage.upsert({
-          where: {
-            threadId_messageId: {
-              messageId: serializedMessage.messageId,
+      client.transaction((tx) => {
+        const existing = tx
+          .select({ id: threadMessages.id })
+          .from(threadMessages)
+          .where(
+            and(
+              eq(threadMessages.threadId, threadId),
+              eq(threadMessages.messageId, serializedMessage.messageId),
+            ),
+          )
+          .get();
+
+        if (existing) {
+          tx.update(threadMessages)
+            .set(serializedMessage)
+            .where(eq(threadMessages.id, existing.id))
+            .run();
+        } else {
+          tx.insert(threadMessages)
+            .values({
+              ...serializedMessage,
+              ...(createdAt ? { createdAt } : {}),
               threadId,
-            },
-          },
-          create: {
-            ...serializedMessage,
-            ...(createdAt ? { createdAt } : {}),
-            threadId,
-          },
-          update: serializedMessage,
-        }),
-        client.thread.update({
-          where: { id: threadId },
-          data: { updatedAt: new Date() },
-        }),
-      ]);
+            })
+            .run();
+        }
+
+        tx.update(threads)
+          .set({ updatedAt: new Date() })
+          .where(eq(threads.id, threadId))
+          .run();
+      });
     },
 
     async updateThreadTitle({ threadId, title }) {
-      await client.thread.update({
-        where: { id: threadId },
-        data: {
+      client
+        .update(threads)
+        .set({
           title,
           updatedAt: new Date(),
-        },
-      });
+        })
+        .where(eq(threads.id, threadId))
+        .run();
     },
   };
 }

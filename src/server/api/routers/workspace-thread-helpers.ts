@@ -1,14 +1,16 @@
 import { TRPCError } from "@trpc/server";
+import { eq } from "drizzle-orm";
 
 import type { ThreadListInput } from "@/schemas/workspace-thread.schema";
-import { db } from "@/server/db";
+import type { Database } from "@/server/db";
+import { threads, workspaces } from "@/server/db/schema";
 import type { LocalSession } from "@/server/local-profile";
 
 import type { createTRPCContext } from "../trpc";
 
 type BaseTRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;
 type ProtectedTRPCContext = BaseTRPCContext & {
-  db: typeof db;
+  db: Database;
   session: LocalSession;
 };
 
@@ -16,8 +18,8 @@ export async function getOwnedWorkspaceOrThrow(
   ctx: ProtectedTRPCContext,
   workspaceId: string,
 ) {
-  const workspace = await ctx.db.workspace.findUnique({
-    where: { id: workspaceId },
+  const workspace = await ctx.db.query.workspaces.findFirst({
+    where: eq(workspaces.id, workspaceId),
   });
 
   if (!workspace || workspace.userId !== ctx.session.user.id) {
@@ -34,9 +36,9 @@ export async function getOwnedThreadOrThrow(
   ctx: ProtectedTRPCContext,
   threadId: string,
 ) {
-  const thread = await ctx.db.thread.findUnique({
-    where: { id: threadId },
-    include: {
+  const thread = await ctx.db.query.threads.findFirst({
+    where: eq(threads.id, threadId),
+    with: {
       workspace: true,
     },
   });

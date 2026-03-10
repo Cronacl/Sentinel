@@ -20,13 +20,3 @@ await cp(path.join(projectRoot, "public"), path.join(targetRoot, "public"), {
   force: true,
   recursive: true,
 });
-await cp(
-  path.join(projectRoot, "generated", "prisma"),
-  path.join(targetRoot, "generated", "prisma"),
-  {
-    recursive: true,
-  },
-);
-await cp(path.join(projectRoot, "prisma"), path.join(targetRoot, "prisma"), {
-  recursive: true,
-});

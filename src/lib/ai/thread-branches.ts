@@ -1,4 +1,4 @@
-import type { ThreadMessageRole } from "@/../generated/prisma";
+import type { ThreadMessageRole } from "@/server/db/enums";
 
 import {
   mergeThreadMessageMetadata,

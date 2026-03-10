@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { Prisma } from "@/../generated/prisma";
+import { and, count, eq, isNull, max, ne, sql } from "drizzle-orm";
 
 import {
   threadListPreferencesSchema,
@@ -8,6 +8,7 @@ import {
   workspaceSelectSchema,
   workspaceUpdateSchema,
 } from "@/schemas/workspace-thread.schema";
+import { threads, users, workspaces } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
 import { getOwnedWorkspaceOrThrow } from "./workspace-thread-helpers";
@@ -22,13 +23,18 @@ async function assertWorkspaceRootPathAvailable(
     return;
   }
 
-  const existingWorkspace = await db.workspace.findFirst({
-    where: {
-      id: workspaceId ? { not: workspaceId } : undefined,
-      rootPath,
-      userId,
-    },
-    select: { id: true },
+  const conditions = [
+    eq(workspaces.rootPath, rootPath),
+    eq(workspaces.userId, userId),
+  ];
+
+  if (workspaceId) {
+    conditions.push(ne(workspaces.id, workspaceId));
+  }
+
+  const existingWorkspace = await db.query.workspaces.findFirst({
+    where: and(...conditions),
+    columns: { id: true },
   });
 
   if (existingWorkspace) {
@@ -39,55 +45,39 @@ async function assertWorkspaceRootPathAvailable(
   }
 }
 
-function getWorkspaceErrorMessage(error: unknown) {
-  if (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === "P2002"
-  ) {
-    return "A workspace with that root path already exists.";
-  }
-
-  return null;
-}
-
 export const workspacesRouter = createTRPCRouter({
   list: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
-    const workspaces = await ctx.db.workspace.findMany({
-      where: {
-        isArchived: false,
-        userId,
-      },
-      orderBy: {
-        updatedAt: "desc",
-      },
+    const allWorkspaces = await ctx.db.query.workspaces.findMany({
+      where: and(
+        eq(workspaces.isArchived, false),
+        eq(workspaces.userId, userId),
+      ),
+      orderBy: (workspaces, { desc }) => [desc(workspaces.updatedAt)],
     });
 
-    const threadStats = await ctx.db.thread.groupBy({
-      by: ["workspaceId"],
-      where: {
-        archivedAt: null,
-        userId,
-      },
-      _count: {
-        _all: true,
-      },
-      _max: {
-        updatedAt: true,
-      },
-    });
+    const threadStats = ctx.db
+      .select({
+        workspaceId: threads.workspaceId,
+        threadCount: count().as("thread_count"),
+        latestThreadUpdatedAt: max(threads.updatedAt).as("latest_updated"),
+      })
+      .from(threads)
+      .where(and(isNull(threads.archivedAt), eq(threads.userId, userId)))
+      .groupBy(threads.workspaceId)
+      .all();
 
     const statsMap = new Map(
       threadStats.map((item) => [
         item.workspaceId,
         {
-          latestThreadUpdatedAt: item._max.updatedAt ?? null,
-          threadCount: item._count._all,
+          latestThreadUpdatedAt: item.latestThreadUpdatedAt ?? null,
+          threadCount: item.threadCount,
         },
       ]),
     );
 
-    return workspaces.map((workspace) => {
+    return allWorkspaces.map((workspace) => {
       const stats = statsMap.get(workspace.id);
       return {
         createdAt: workspace.createdAt,
@@ -108,32 +98,29 @@ export const workspacesRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       const rootPath = input.rootPath?.trim() || null;
-      const data = {
-        description: input.description.trim() || null,
-        name: input.name.trim(),
-        rootPath,
-        userId,
-      };
 
-      try {
-        await assertWorkspaceRootPathAvailable(ctx.db, userId, rootPath);
-        const workspace = await ctx.db.workspace.create({ data });
+      await assertWorkspaceRootPathAvailable(ctx.db, userId, rootPath);
 
-        if (!ctx.user.selectedWorkspaceId) {
-          await ctx.db.user.update({
-            where: { id: userId },
-            data: { selectedWorkspaceId: workspace.id },
-          });
-        }
+      const [workspace] = ctx.db
+        .insert(workspaces)
+        .values({
+          description: input.description.trim() || null,
+          name: input.name.trim(),
+          rootPath,
+          userId,
+        })
+        .returning()
+        .all();
 
-        return workspace;
-      } catch (error) {
-        const message = getWorkspaceErrorMessage(error);
-        if (message) {
-          throw new TRPCError({ code: "CONFLICT", message });
-        }
-        throw error;
+      if (!ctx.user.selectedWorkspaceId && workspace) {
+        ctx.db
+          .update(users)
+          .set({ selectedWorkspaceId: workspace.id })
+          .where(eq(users.id, userId))
+          .run();
       }
+
+      return workspace!;
     }),
 
   update: protectedProcedure
@@ -142,29 +129,25 @@ export const workspacesRouter = createTRPCRouter({
       await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const rootPath = input.rootPath?.trim() || null;
 
-      try {
-        await assertWorkspaceRootPathAvailable(
-          ctx.db,
-          ctx.session.user.id,
-          rootPath,
-          input.workspaceId,
-        );
+      await assertWorkspaceRootPathAvailable(
+        ctx.db,
+        ctx.session.user.id,
+        rootPath,
+        input.workspaceId,
+      );
 
-        return await ctx.db.workspace.update({
-          where: { id: input.workspaceId },
-          data: {
-            description: input.description.trim() || null,
-            name: input.name.trim(),
-            rootPath,
-          },
-        });
-      } catch (error) {
-        const message = getWorkspaceErrorMessage(error);
-        if (message) {
-          throw new TRPCError({ code: "CONFLICT", message });
-        }
-        throw error;
-      }
+      const [updated] = ctx.db
+        .update(workspaces)
+        .set({
+          description: input.description.trim() || null,
+          name: input.name.trim(),
+          rootPath,
+        })
+        .where(eq(workspaces.id, input.workspaceId))
+        .returning()
+        .all();
+
+      return updated!;
     }),
 
   archive: protectedProcedure
@@ -172,33 +155,31 @@ export const workspacesRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
 
-      await ctx.db.workspace.update({
-        where: { id: workspace.id },
-        data: { isArchived: true },
-      });
+      ctx.db
+        .update(workspaces)
+        .set({ isArchived: true })
+        .where(eq(workspaces.id, workspace.id))
+        .run();
 
       let nextSelectedWorkspaceId = ctx.user.selectedWorkspaceId;
       if (ctx.user.selectedWorkspaceId === workspace.id) {
-        const fallbackWorkspace = await ctx.db.workspace.findFirst({
-          where: {
-            id: { not: workspace.id },
-            isArchived: false,
-            userId: ctx.session.user.id,
-          },
-          orderBy: {
-            updatedAt: "desc",
-          },
-          select: { id: true },
+        const fallbackWorkspace = await ctx.db.query.workspaces.findFirst({
+          where: and(
+            ne(workspaces.id, workspace.id),
+            eq(workspaces.isArchived, false),
+            eq(workspaces.userId, ctx.session.user.id),
+          ),
+          orderBy: (workspaces, { desc }) => [desc(workspaces.updatedAt)],
+          columns: { id: true },
         });
 
         nextSelectedWorkspaceId = fallbackWorkspace?.id ?? null;
 
-        await ctx.db.user.update({
-          where: { id: ctx.session.user.id },
-          data: {
-            selectedWorkspaceId: nextSelectedWorkspaceId,
-          },
-        });
+        ctx.db
+          .update(users)
+          .set({ selectedWorkspaceId: nextSelectedWorkspaceId })
+          .where(eq(users.id, ctx.session.user.id))
+          .run();
       }
 
       return {
@@ -220,10 +201,11 @@ export const workspacesRouter = createTRPCRouter({
         });
       }
 
-      await ctx.db.user.update({
-        where: { id: ctx.session.user.id },
-        data: { selectedWorkspaceId: workspace.id },
-      });
+      ctx.db
+        .update(users)
+        .set({ selectedWorkspaceId: workspace.id })
+        .where(eq(users.id, ctx.session.user.id))
+        .run();
 
       return {
         selectedWorkspaceId: workspace.id,
@@ -240,28 +222,28 @@ export const workspacesRouter = createTRPCRouter({
       return null;
     }
 
-    const fallbackWorkspace = await ctx.db.workspace.findFirst({
-      where: {
-        isArchived: false,
-        userId: ctx.session.user.id,
-      },
-      orderBy: {
-        updatedAt: "desc",
-      },
+    const fallbackWorkspace = await ctx.db.query.workspaces.findFirst({
+      where: and(
+        eq(workspaces.isArchived, false),
+        eq(workspaces.userId, ctx.session.user.id),
+      ),
+      orderBy: (workspaces, { desc }) => [desc(workspaces.updatedAt)],
     });
 
     if (!fallbackWorkspace) {
-      await ctx.db.user.update({
-        where: { id: ctx.session.user.id },
-        data: { selectedWorkspaceId: null },
-      });
+      ctx.db
+        .update(users)
+        .set({ selectedWorkspaceId: null })
+        .where(eq(users.id, ctx.session.user.id))
+        .run();
       return null;
     }
 
-    await ctx.db.user.update({
-      where: { id: ctx.session.user.id },
-      data: { selectedWorkspaceId: fallbackWorkspace.id },
-    });
+    ctx.db
+      .update(users)
+      .set({ selectedWorkspaceId: fallbackWorkspace.id })
+      .where(eq(users.id, ctx.session.user.id))
+      .run();
 
     return fallbackWorkspace;
   }),
@@ -276,21 +258,18 @@ export const workspacesRouter = createTRPCRouter({
   updatePreferences: protectedProcedure
     .input(threadListPreferencesSchema)
     .mutation(async ({ ctx, input }) => {
-      const user = await ctx.db.user.update({
-        where: { id: ctx.session.user.id },
-        data: {
+      ctx.db
+        .update(users)
+        .set({
           threadListOrganizeBy: input.organizeBy,
           threadListSortBy: input.sortBy,
-        },
-        select: {
-          threadListOrganizeBy: true,
-          threadListSortBy: true,
-        },
-      });
+        })
+        .where(eq(users.id, ctx.session.user.id))
+        .run();
 
       return {
-        organizeBy: user.threadListOrganizeBy,
-        sortBy: user.threadListSortBy,
+        organizeBy: input.organizeBy,
+        sortBy: input.sortBy,
       };
     }),
 });

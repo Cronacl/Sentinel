@@ -8,10 +8,6 @@ export const env = createEnv({
       process.env.NODE_ENV === "production"
         ? z.string()
         : z.string().optional(),
-    DATABASE_URL: z
-      .string()
-      .url()
-      .default("postgresql://postgres:postgres@127.0.0.1:55432/sentinel"),
     ENCRYPTION_KEY: z
       .string()
       .length(64, "ENCRYPTION_KEY must be a 32-byte hex string (64 chars)")
@@ -27,8 +23,7 @@ export const env = createEnv({
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
-    QDRANT_URL: z.string().url().default("http://127.0.0.1:56333"),
-    REDIS_URL: z.string().url().default("redis://127.0.0.1:56379"),
+    SENTINEL_DB_PATH: z.string().optional(),
     SENTINEL_STATE_PATH: z.string().optional(),
   },
   client: {
@@ -37,15 +32,13 @@ export const env = createEnv({
   runtimeEnv: {
     BETTER_AUTH_URL: process.env.BETTER_AUTH_URL,
     BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET,
-    DATABASE_URL: process.env.DATABASE_URL,
     ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
     GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI,
     NEXT_PUBLIC_URL: process.env.NEXT_PUBLIC_URL,
     NODE_ENV: process.env.NODE_ENV,
-    QDRANT_URL: process.env.QDRANT_URL,
-    REDIS_URL: process.env.REDIS_URL,
+    SENTINEL_DB_PATH: process.env.SENTINEL_DB_PATH,
     SENTINEL_STATE_PATH: process.env.SENTINEL_STATE_PATH,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,

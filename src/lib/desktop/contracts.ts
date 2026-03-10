@@ -12,10 +12,6 @@ export type DesktopFileSelection = {
 
 export type DesktopServicesStatus = {
   appServer: boolean;
-  docker: boolean;
-  postgres: boolean;
-  qdrant: boolean;
-  redis: boolean;
 };
 
 export type SentinelDesktopApi = {
