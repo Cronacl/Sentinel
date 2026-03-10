@@ -39,6 +39,8 @@ export const users = sqliteTable(
     themePreference: text("theme_preference", { enum: THEME_PREFERENCES })
       .notNull()
       .default("system"),
+    defaultChatModelId: text("default_chat_model_id"),
+    defaultChatReasoningEffort: text("default_chat_reasoning_effort"),
     selectedWorkspaceId: text("selected_workspace_id"),
     threadListOrganizeBy: text("thread_list_organize_by", {
       enum: THREAD_LIST_ORGANIZE_BY,
@@ -123,6 +125,8 @@ export const threads = sqliteTable(
     userId: text("user_id").notNull(),
     title: text("title").notNull(),
     summary: text("summary"),
+    chatModelId: text("chat_model_id"),
+    chatReasoningEffort: text("chat_reasoning_effort"),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .$defaultFn(() => new Date()),

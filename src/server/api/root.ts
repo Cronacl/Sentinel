@@ -1,5 +1,6 @@
 import { appearanceRouter } from "@/server/api/routers/appearance";
 import { authRouter } from "@/server/api/routers/auth";
+import { chatPreferencesRouter } from "@/server/api/routers/chat-preferences";
 import { healthRouter } from "@/server/api/routers/health";
 import { messagesRouter } from "@/server/api/routers/messages";
 import { modelsRouter } from "@/server/api/routers/models";
@@ -17,6 +18,7 @@ import { workspacesRouter } from "@/server/api/routers/workspaces";
 export const appRouter = createTRPCRouter({
   appearance: appearanceRouter,
   auth: authRouter,
+  chatPreferences: chatPreferencesRouter,
   health: healthRouter,
   messages: messagesRouter,
   models: modelsRouter,

@@ -33,6 +33,23 @@ export async function ensureThread(
   return { created: !existing };
 }
 
+export function updateThreadChatSettings(
+  threadId: string,
+  settings: {
+    modelId: string;
+    reasoningEffort?: string | null;
+  },
+) {
+  db.update(threads)
+    .set({
+      chatModelId: settings.modelId,
+      chatReasoningEffort: settings.reasoningEffort ?? null,
+      updatedAt: new Date(),
+    })
+    .where(eq(threads.id, threadId))
+    .run();
+}
+
 export async function loadThreadMessages(threadId: string) {
   const rows = await db.query.threadMessages.findMany({
     where: eq(threadMessages.threadId, threadId),

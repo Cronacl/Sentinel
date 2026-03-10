@@ -4,7 +4,6 @@ import { useChat } from "@ai-sdk/react";
 import type { ChatOnDataCallback, FileUIPart } from "ai";
 import { DefaultChatTransport } from "ai";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { flushSync } from "react-dom";
 
 import type { ReasoningEffort } from "@/lib/ai/models";
 import {
@@ -36,10 +35,6 @@ type EditThreadMessageInput = SendThreadMessageInput & {
 
 function getLastUserMessage(messages: ThreadUIMessage[]) {
   return [...messages].reverse().find((message) => message.role === "user");
-}
-
-function getMessageIndex(messages: ThreadUIMessage[], messageId: string) {
-  return messages.findIndex((message) => message.id === messageId);
 }
 
 function getMessageSyncSignature(messages: ThreadUIMessage[]) {
@@ -248,50 +243,26 @@ export function useThreadChat({
 
   const regenerateMessage = useCallback(
     (messageId: string) => {
-      const targetIndex = getMessageIndex(chat.messages, messageId);
-      const nextVisibleMessages =
-        targetIndex >= 0 ? chat.messages.slice(0, targetIndex) : chat.messages;
-
-      const request = chat.regenerate({
+      return chat.regenerate({
         body: {
           trigger: "regenerate-assistant-message",
           workspaceId: workspaceIdRef.current,
         },
         messageId,
       });
-
-      if (targetIndex >= 0) {
-        flushSync(() => {
-          chat.setMessages(nextVisibleMessages);
-        });
-      }
-
-      return request;
     },
     [chat],
   );
 
   const retryMessage = useCallback(
     (messageId: string) => {
-      const targetIndex = getMessageIndex(chat.messages, messageId);
-      const nextVisibleMessages =
-        targetIndex >= 0 ? chat.messages.slice(0, targetIndex) : chat.messages;
-
-      const request = chat.regenerate({
+      return chat.regenerate({
         body: {
           trigger: "retry-assistant-message",
           workspaceId: workspaceIdRef.current,
         },
         messageId,
       });
-
-      if (targetIndex >= 0) {
-        flushSync(() => {
-          chat.setMessages(nextVisibleMessages);
-        });
-      }
-
-      return request;
     },
     [chat],
   );

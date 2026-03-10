@@ -39,6 +39,8 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     "personality_preset" text DEFAULT 'pragmatic' NOT NULL,
     "custom_instructions" text,
     "theme_preference" text DEFAULT 'system' NOT NULL,
+    "default_chat_model_id" text,
+    "default_chat_reasoning_effort" text,
     "selected_workspace_id" text,
     "thread_list_organize_by" text DEFAULT 'workspace' NOT NULL,
     "thread_list_sort_by" text DEFAULT 'updated' NOT NULL,
@@ -69,6 +71,8 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     "user_id" text NOT NULL,
     "title" text NOT NULL,
     "summary" text,
+    "chat_model_id" text,
+    "chat_reasoning_effort" text,
     "created_at" integer NOT NULL,
     "updated_at" integer NOT NULL,
     "archived_at" integer
@@ -80,7 +84,31 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
   db.run(sql`CREATE INDEX IF NOT EXISTS "thread_user_archived_updated_idx" ON "thread" ("user_id", "archived_at", "updated_at")`);
 
   try {
+    db.run(sql`ALTER TABLE "user" ADD COLUMN "default_chat_model_id" text`);
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(sql`ALTER TABLE "user" ADD COLUMN "default_chat_reasoning_effort" text`);
+  } catch {
+    // column already exists
+  }
+
+  try {
     db.run(sql`ALTER TABLE "thread" ADD COLUMN "pinned_at" integer`);
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(sql`ALTER TABLE "thread" ADD COLUMN "chat_model_id" text`);
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(sql`ALTER TABLE "thread" ADD COLUMN "chat_reasoning_effort" text`);
   } catch {
     // column already exists
   }

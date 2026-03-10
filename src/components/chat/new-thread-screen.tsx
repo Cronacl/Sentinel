@@ -8,6 +8,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AnimatePresence, motion } from "motion/react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { PageWrapper } from "@/components/shell";
@@ -29,6 +30,7 @@ type NewThreadScreenProps = {
 };
 
 export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
+  const router = useRouter();
   const utils = api.useUtils();
   const currentWorkspace = api.workspaces.getCurrent.useQuery();
   const workspaces = api.workspaces.list.useQuery();
@@ -48,7 +50,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     scrollAreaRef,
   } = useChatScrollControl(draftThreadId);
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
-  const hasNavigatedRef = useRef(false);
+  const hasHandedOffRef = useRef(false);
 
   const selectWorkspace = api.workspaces.select.useMutation({
     onMutate: async ({ workspaceId }) => {
@@ -138,6 +140,17 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         dataPart.data.threadId === draftThreadId
       ) {
         setGeneratedTitle(dataPart.data.title);
+        utils.threads.get.setData({ threadId: draftThreadId }, (current) =>
+          current
+            ? {
+                ...current,
+                thread: {
+                  ...current.thread,
+                  title: dataPart.data.title,
+                },
+              }
+            : current,
+        );
       }
 
       if (
@@ -152,8 +165,9 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   );
 
   const handleFinish = useCallback(() => {
+    void utils.threads.get.invalidate({ threadId: draftThreadId });
     void utils.threads.list.invalidate();
-  }, [utils.threads.list]);
+  }, [draftThreadId, utils.threads.get, utils.threads.list]);
 
   const handleError = useCallback((error: Error) => {
     setChatError(error.message);
@@ -171,6 +185,10 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
 
   const hasMessages = messages.length > 0;
   const isBusy = status === "submitted" || status === "streaming";
+  const threadDetailsQuery = api.threads.get.useQuery(
+    { threadId: draftThreadId },
+    { enabled: hasMessages },
+  );
 
   const handleSend = useCallback(
     ({
@@ -187,18 +205,14 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       setChatError(null);
       setGeneratedTitle(null);
       void sendMessage({ files, modelId, reasoningEffort, text });
-
-      if (!hasNavigatedRef.current) {
-        hasNavigatedRef.current = true;
-        window.history.replaceState(null, "", `/thread/${draftThreadId}`);
-        void utils.threads.list.invalidate();
-      }
+      void utils.threads.list.invalidate();
     },
-    [draftThreadId, sendMessage, utils.threads.list],
+    [sendMessage, utils.threads.list],
   );
 
   useEffect(() => {
     if (!threadId) return;
+    hasHandedOffRef.current = false;
     setDraftThreadId(threadId);
   }, [threadId]);
 
@@ -206,7 +220,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     if (threadId) return;
 
     const handleNewThread = () => {
-      hasNavigatedRef.current = false;
+      hasHandedOffRef.current = false;
       setChatError(null);
       setGeneratedTitle(null);
       setDraftThreadId(crypto.randomUUID());
@@ -216,6 +230,26 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     return () =>
       window.removeEventListener("sentinel:new-thread", handleNewThread);
   }, [threadId]);
+
+  useEffect(() => {
+    if (threadId || !hasMessages || isBusy || !threadDetailsQuery.data) {
+      return;
+    }
+
+    if (hasHandedOffRef.current) {
+      return;
+    }
+
+    hasHandedOffRef.current = true;
+    router.replace(`/thread/${draftThreadId}`);
+  }, [
+    draftThreadId,
+    hasMessages,
+    isBusy,
+    router,
+    threadDetailsQuery.data,
+    threadId,
+  ]);
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -281,6 +315,18 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                 onSend={handleSend}
                 onStop={stop}
                 status={status}
+                threadId={draftThreadId}
+                threadSelection={
+                  threadDetailsQuery.data
+                    ? {
+                        modelId: threadDetailsQuery.data.thread.chatModelId,
+                        reasoningEffort:
+                          (threadDetailsQuery.data.thread
+                            .chatReasoningEffort as ReasoningEffort | null) ??
+                          null,
+                      }
+                    : null
+                }
               />
             </div>
           </div>
@@ -311,7 +357,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
 
             <div className="relative" ref={workspaceMenuRef}>
               <button
-                className="flex h-8 items-center gap-2 rounded-xl border border-border/70 cursor-pointer bg-surface/40 px-3 text-sm text-muted transition-colors hover:text-foreground disabled:opacity-40"
+                className="flex h-8 items-center gap-2 rounded-xl border border-border/70 cursor-pointer bg-surface px-3 text-sm text-muted transition-colors hover:text-foreground disabled:opacity-40"
                 disabled={selectWorkspace.isPending}
                 onClick={() => setIsWorkspaceMenuOpen((open) => !open)}
                 type="button"

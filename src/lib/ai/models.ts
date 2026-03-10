@@ -40,6 +40,9 @@ type ReasoningConfig = {
 
 const OPENAI_GPT_5_REASONING_CONFIG: ReasoningConfig = {
   defaultEffort: "minimal",
+  providerValueMap: {
+    minimal: "none",
+  },
   reasoningSummary: "detailed",
   strategy: "openai-reasoning-effort",
   supportedEfforts: ["minimal", "low", "medium", "high"],
@@ -47,9 +50,6 @@ const OPENAI_GPT_5_REASONING_CONFIG: ReasoningConfig = {
 
 const OPENAI_GPT_5_1_REASONING_CONFIG: ReasoningConfig = {
   ...OPENAI_GPT_5_REASONING_CONFIG,
-  providerValueMap: {
-    minimal: "none",
-  },
 };
 
 const OPENAI_REASONING_CONFIG: ReasoningConfig = {

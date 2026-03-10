@@ -25,6 +25,7 @@ import { validateThreadUIMessage } from "../ui-messages";
 
 import { createAttachmentDownloadHandler } from "./attachments";
 import { InvalidThreadChatRequestError } from "./errors";
+import { buildPersistedAssistantMessage } from "./finalize-assistant";
 import { resolveThreadChatModel } from "./model";
 import * as persist from "./persistence";
 import { createReasoningMetadataTracker } from "./reasoning-metadata";
@@ -215,6 +216,13 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
     fallbackTitle,
   );
 
+  if (request.modelId) {
+    persist.updateThreadChatSettings(request.threadId, {
+      modelId: request.modelId,
+      reasoningEffort: request.reasoningEffort ?? null,
+    });
+  }
+
   // ── Persist user message (submit / edit) ──────────────────────
   if (
     request.message &&
@@ -356,20 +364,15 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
         responseMessage as ThreadUIMessage,
       );
       const [finalAssistant] = normalizeThreadUIMessages(finalized).slice(-1);
-      const merged = finalAssistant ?? placeholder;
-
-      const status = streamErrorMessage ? "error" : "completed";
-
-      persist.upsertMessage(request.threadId, {
-        ...merged,
-        id: assistantId,
-        metadata: mergeThreadMessageMetadata(merged.metadata, {
+      persist.upsertMessage(
+        request.threadId,
+        buildPersistedAssistantMessage({
+          assistantId,
           ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
-          finishReason: merged.metadata?.finishReason,
-          isActive: true,
-          status,
+          finalAssistant,
+          placeholder,
         }),
-      });
+      );
 
       persist.clearActiveStream(request.threadId);
     },

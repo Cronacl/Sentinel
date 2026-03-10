@@ -98,10 +98,10 @@ function BranchSwitcher({
   onSelect,
   options,
 }: {
-  onSelect: (messageId: string) => void;
+  onSelect?: (messageId: string) => void;
   options: NonNullable<ThreadMessageMetadata["branchOptions"]>;
 }) {
-  if (options.length <= 1) {
+  if (!onSelect || options.length <= 1) {
     return null;
   }
 
@@ -361,21 +361,23 @@ function AssistantMessage({
             {!isStreaming && assistantText ? (
               <CopyButton text={assistantText} title="Copy answer" />
             ) : null}
-            {!isStreaming && (status === "error" || status === "cancelled") ? (
+            {!isStreaming &&
+            onRetry &&
+            (status === "error" || status === "cancelled") ? (
               <MessageActionButton
                 icon={ArrowReloadHorizontalIcon}
                 label="Retry"
                 onClick={() => onRetry?.(message.id)}
               />
             ) : null}
-            {!isStreaming && status === "completed" ? (
+            {!isStreaming && onRegenerate && status === "completed" ? (
               <MessageActionButton
                 icon={ArrowReloadHorizontalIcon}
                 label="Regenerate"
                 onClick={() => onRegenerate?.(message.id)}
               />
             ) : null}
-            {!isStreaming ? (
+            {!isStreaming && onSelectBranch ? (
               <BranchSwitcher
                 onSelect={(id) => onSelectBranch?.(id)}
                 options={branchOptions}
@@ -444,11 +446,13 @@ function UserMessage({
             text={textParts.map((part) => part.text).join("\n\n")}
             title="Copy prompt"
           />
-          <MessageActionButton
-            icon={PencilEdit02Icon}
-            label="Edit"
-            onClick={() => onEdit?.(message)}
-          />
+          {onEdit ? (
+            <MessageActionButton
+              icon={PencilEdit02Icon}
+              label="Edit"
+              onClick={() => onEdit(message)}
+            />
+          ) : null}
           <BranchSwitcher
             onSelect={(id) => onSelectBranch?.(id)}
             options={branchOptions}

@@ -61,6 +61,11 @@ type ChatComposerProps = {
   promptSeed?: string;
   promptSeedKey?: string | number;
   status?: "submitted" | "streaming" | "ready" | "error";
+  threadId?: string;
+  threadSelection?: {
+    modelId: string | null;
+    reasoningEffort?: ReasoningEffort | null;
+  } | null;
 };
 
 function getModelKey(provider: AIProvider, modelId: string) {
@@ -69,6 +74,23 @@ function getModelKey(provider: AIProvider, modelId: string) {
 
 function getReasoningEffortLabel(effort: ReasoningEffort) {
   return effort.charAt(0).toUpperCase() + effort.slice(1);
+}
+
+function resolveReasoningEffort(
+  provider: AIProvider,
+  modelId: string,
+  preferredEffort?: ReasoningEffort | null,
+) {
+  const supportedEfforts = getSupportedReasoningEfforts(provider, modelId);
+  if (supportedEfforts.length === 0) {
+    return null;
+  }
+
+  if (preferredEffort && supportedEfforts.includes(preferredEffort)) {
+    return preferredEffort;
+  }
+
+  return getDefaultReasoningEffort(provider, modelId);
 }
 
 function getAttachmentKindLabel(kind: AttachmentKind) {
@@ -243,7 +265,10 @@ export function ChatComposer({
   promptSeed,
   promptSeedKey,
   status = "ready",
+  threadId,
+  threadSelection = null,
 }: ChatComposerProps) {
+  const utils = api.useUtils();
   const handleSendRef = useRef<() => void>(() => {});
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
@@ -255,9 +280,33 @@ export function ChatComposer({
   const [previewAttachment, setPreviewAttachment] =
     useState<ComposerAttachment | null>(null);
   const attachmentsRef = useRef<ComposerAttachment[]>([]);
+  const threadPersistenceReadyRef = useRef(false);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
   const reasoningMenuRef = useRef<HTMLDivElement | null>(null);
   const modelsQuery = api.models.list.useQuery();
+  const globalSelectionQuery = api.chatPreferences.get.useQuery();
+  const initializedSelectionScopeRef = useRef<string | null>(null);
+  const updateGlobalSelection = api.chatPreferences.updateGlobal.useMutation({
+    onSuccess: (data) => {
+      utils.chatPreferences.get.setData(undefined, data);
+    },
+  });
+  const updateThreadSelection = api.threads.updateChatSettings.useMutation({
+    onSuccess: (data) => {
+      utils.threads.get.setData({ threadId: data.threadId }, (current) =>
+        current
+          ? {
+              ...current,
+              thread: {
+                ...current.thread,
+                chatModelId: data.modelId,
+                chatReasoningEffort: data.reasoningEffort ?? null,
+              },
+            }
+          : current,
+      );
+    },
+  });
 
   const availableModels = useMemo(
     () =>
@@ -282,6 +331,17 @@ export function ChatComposer({
       (model) =>
         getModelKey(model.provider, model.modelId) === selectedModelKey,
     ) ?? null;
+  const canPersistThreadSelection = Boolean(threadId && threadSelection);
+  const selectionScopeKey = threadId ?? "__global__";
+  const hasThreadSelection = Boolean(threadSelection?.modelId);
+  const preferredModelId = hasThreadSelection
+    ? threadSelection?.modelId ?? null
+    : globalSelectionQuery.data?.modelId ?? null;
+  const preferredReasoningEffort = hasThreadSelection
+    ? threadSelection?.reasoningEffort ?? null
+    : ((globalSelectionQuery.data?.reasoningEffort as ReasoningEffort | null) ??
+      null);
+  const preferencesReady = hasThreadSelection || !globalSelectionQuery.isLoading;
 
   const hasWorkspace = Boolean(activeWorkspace);
   const hasModels = availableModels.length > 0;
@@ -327,6 +387,35 @@ export function ChatComposer({
 
     return `${selectedModel.displayName} may not support ${labels.join(", ")} as chat attachments.`;
   }, [selectedModel, unsupportedAttachmentKinds]);
+
+  const persistSelection = useCallback(
+    (
+      modelId: string,
+      reasoningEffort: ReasoningEffort | null,
+      options?: { skipGlobal?: boolean; skipThread?: boolean },
+    ) => {
+      if (!options?.skipGlobal) {
+        updateGlobalSelection.mutate({
+          modelId,
+          reasoningEffort,
+        });
+      }
+
+      if (!options?.skipThread && canPersistThreadSelection && threadId) {
+        updateThreadSelection.mutate({
+          modelId,
+          reasoningEffort,
+          threadId,
+        });
+      }
+    },
+    [
+      canPersistThreadSelection,
+      threadId,
+      updateGlobalSelection,
+      updateThreadSelection,
+    ],
+  );
 
   const placeholderText = "Ask follow-up changes";
 
@@ -398,22 +487,91 @@ export function ChatComposer({
   }, [editor, isLocked, isBusy, placeholderText]);
 
   useEffect(() => {
+    if (initializedSelectionScopeRef.current !== selectionScopeKey) {
+      initializedSelectionScopeRef.current = null;
+      threadPersistenceReadyRef.current = false;
+    }
+  }, [selectionScopeKey]);
+
+  useEffect(() => {
     if (availableModels.length === 0) {
       setSelectedModelKey(null);
+      setSelectedReasoningEffort(null);
+      initializedSelectionScopeRef.current = null;
       return;
     }
-    setSelectedModelKey((current) => {
-      if (
-        current &&
-        availableModels.some(
-          (m) => getModelKey(m.provider, m.modelId) === current,
-        )
-      )
-        return current;
-      const first = availableModels[0];
-      return first ? getModelKey(first.provider, first.modelId) : null;
-    });
-  }, [availableModels]);
+
+    if (!preferencesReady) {
+      return;
+    }
+
+    if (initializedSelectionScopeRef.current === selectionScopeKey) {
+      return;
+    }
+
+    const preferredModel =
+      preferredModelId
+        ? availableModels.find(
+            (model) => getModelKey(model.provider, model.modelId) === preferredModelId,
+          ) ?? null
+        : null;
+    const nextModel = preferredModel ?? availableModels[0] ?? null;
+    const nextModelKey = nextModel
+      ? getModelKey(nextModel.provider, nextModel.modelId)
+      : null;
+
+    setSelectedModelKey(nextModelKey);
+    setSelectedReasoningEffort(
+      nextModel
+        ? resolveReasoningEffort(
+            nextModel.provider,
+            nextModel.modelId,
+            preferredModel ? preferredReasoningEffort : null,
+          )
+        : null,
+    );
+    initializedSelectionScopeRef.current = selectionScopeKey;
+  }, [
+    availableModels,
+    preferredModelId,
+    preferredReasoningEffort,
+    preferencesReady,
+    selectionScopeKey,
+  ]);
+
+  useEffect(() => {
+    if (!selectedModelKey || availableModels.length === 0) {
+      return;
+    }
+
+    const stillAvailable = availableModels.some(
+      (model) => getModelKey(model.provider, model.modelId) === selectedModelKey,
+    );
+    if (stillAvailable) {
+      return;
+    }
+
+    const fallbackModel = availableModels[0];
+    if (!fallbackModel) {
+      setSelectedModelKey(null);
+      setSelectedReasoningEffort(null);
+      return;
+    }
+
+    const fallbackModelKey = getModelKey(
+      fallbackModel.provider,
+      fallbackModel.modelId,
+    );
+    const fallbackReasoningEffort = resolveReasoningEffort(
+      fallbackModel.provider,
+      fallbackModel.modelId,
+      null,
+    );
+
+    setSelectedModelKey(fallbackModelKey);
+    setSelectedReasoningEffort(fallbackReasoningEffort);
+    persistSelection(fallbackModelKey, fallbackReasoningEffort);
+  }, [availableModels, persistSelection, selectedModelKey]);
 
   useEffect(() => {
     if (!editor || promptSeedKey === undefined) return;
@@ -465,25 +623,53 @@ export function ChatComposer({
 
   useEffect(() => {
     if (!selectedModel) {
-      setSelectedReasoningEffort(null);
+      if (selectedReasoningEffort !== null) {
+        setSelectedReasoningEffort(null);
+      }
       return;
     }
-    const supported = getSupportedReasoningEfforts(
+
+    const nextReasoningEffort = resolveReasoningEffort(
       selectedModel.provider,
       selectedModel.modelId,
+      selectedReasoningEffort,
     );
-    if (supported.length === 0) {
-      setSelectedReasoningEffort(null);
+
+    if (nextReasoningEffort !== selectedReasoningEffort) {
+      setSelectedReasoningEffort(nextReasoningEffort);
+    }
+  }, [selectedModel, selectedReasoningEffort]);
+
+  useEffect(() => {
+    if (!canPersistThreadSelection || !threadSelection) {
+      threadPersistenceReadyRef.current = false;
       return;
     }
-    setSelectedReasoningEffort((current) => {
-      if (current && supported.includes(current)) return current;
-      return getDefaultReasoningEffort(
-        selectedModel.provider,
-        selectedModel.modelId,
-      );
+
+    if (!selectedModelKey || threadPersistenceReadyRef.current) {
+      return;
+    }
+
+    threadPersistenceReadyRef.current = true;
+
+    const persistedReasoningEffort = threadSelection.reasoningEffort ?? null;
+    if (
+      threadSelection.modelId === selectedModelKey &&
+      persistedReasoningEffort === selectedReasoningEffort
+    ) {
+      return;
+    }
+
+    persistSelection(selectedModelKey, selectedReasoningEffort, {
+      skipGlobal: true,
     });
-  }, [selectedModel]);
+  }, [
+    canPersistThreadSelection,
+    persistSelection,
+    selectedModelKey,
+    selectedReasoningEffort,
+    threadSelection,
+  ]);
 
   useEffect(() => {
     attachmentsRef.current = attachments;
@@ -551,6 +737,42 @@ export function ChatComposer({
     });
   }, []);
 
+  const handleSelectModel = useCallback(
+    (modelKey: string) => {
+      const nextModel = availableModels.find(
+        (model) => getModelKey(model.provider, model.modelId) === modelKey,
+      );
+      if (!nextModel) {
+        return;
+      }
+
+      const nextReasoningEffort = resolveReasoningEffort(
+        nextModel.provider,
+        nextModel.modelId,
+        selectedReasoningEffort,
+      );
+
+      setSelectedModelKey(modelKey);
+      setSelectedReasoningEffort(nextReasoningEffort);
+      setModelMenuOpen(false);
+      persistSelection(modelKey, nextReasoningEffort);
+    },
+    [availableModels, persistSelection, selectedReasoningEffort],
+  );
+
+  const handleSelectReasoningEffort = useCallback(
+    (effort: ReasoningEffort) => {
+      if (!selectedModelKey) {
+        return;
+      }
+
+      setSelectedReasoningEffort(effort);
+      setReasoningMenuOpen(false);
+      persistSelection(selectedModelKey, effort);
+    },
+    [persistSelection, selectedModelKey],
+  );
+
   const handleSend = useCallback(async () => {
     if (!editor || !selectedModelKey || !onSend || isBusy) return;
     const text = editor.getText().trim();
@@ -613,7 +835,7 @@ export function ChatComposer({
         type="file"
       />
 
-      <div className="w-full rounded-[18px] border border-border/50 dark:border-border/80 bg-background  dark:bg-surface p-2 shadow-[0_0_10px_rgba(0,0,0,0.05)]">
+      <div className="w-full rounded-[20px] border border-border/50 dark:border-border/80 bg-background  dark:bg-surface p-2 shadow-[0_0_10px_rgba(0,0,0,0.05)]">
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-1.5 px-2 pb-1.5">
             {attachments.map((attachment) => (
@@ -671,7 +893,7 @@ export function ChatComposer({
         <div className="flex h-10 items-center justify-between px-1.5">
           <div className="flex items-center gap-0.5">
             <button
-              className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:text-foreground disabled:opacity-30"
+              className="flex border cursor-pointer border-border/50 dark:bg-background/50 bg-surface h-6 w-6 items-center justify-center rounded-[9px] text-muted transition-colors hover:text-foreground disabled:opacity-30"
               disabled={!hasWorkspace}
               onClick={() => void handlePickFiles()}
               type="button"
@@ -738,10 +960,7 @@ export function ChatComposer({
                                   : "text-muted hover:bg-default hover:text-foreground"
                               }`}
                               key={modelKey}
-                              onClick={() => {
-                                setSelectedModelKey(modelKey);
-                                setModelMenuOpen(false);
-                              }}
+                              onClick={() => handleSelectModel(modelKey)}
                               type="button"
                             >
                               <HugeiconsIcon
@@ -802,10 +1021,7 @@ export function ChatComposer({
                                 : "text-muted hover:bg-default hover:text-foreground"
                             }`}
                             key={effort}
-                            onClick={() => {
-                              setSelectedReasoningEffort(effort);
-                              setReasoningMenuOpen(false);
-                            }}
+                            onClick={() => handleSelectReasoningEffort(effort)}
                             type="button"
                           >
                             {getReasoningEffortLabel(effort)}
@@ -838,7 +1054,7 @@ export function ChatComposer({
             ) : (
               <button
                 className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-accent-foreground transition-opacity hover:opacity-80 disabled:opacity-25 disabled:cursor-not-allowed"
-                disabled={isLocked}
+                disabled={isLocked || !selectedModelKey}
                 onClick={handleSend}
                 type="button"
               >

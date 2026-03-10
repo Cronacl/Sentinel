@@ -12,6 +12,7 @@ import {
   threadTogglePinSchema,
   threadUpdateMetaSchema,
 } from "@/schemas/workspace-thread.schema";
+import { threadChatSelectionSchema } from "@/schemas/chat-preferences.schema";
 import { setActiveMessage } from "@/lib/ai/chat/persistence";
 import { mapThreadMessagesToUIMessages } from "@/lib/ai/ui-messages";
 import { threadMessages, threads, workspaces } from "@/server/db/schema";
@@ -25,6 +26,8 @@ import {
 
 const threadSelect = {
   archivedAt: true,
+  chatModelId: true,
+  chatReasoningEffort: true,
   createdAt: true,
   id: true,
   pinnedAt: true,
@@ -187,6 +190,8 @@ export const threadsRouter = createTRPCRouter({
         messages: await mapThreadMessagesToUIMessages(messages as any[]),
         thread: {
           archivedAt: thread.archivedAt,
+          chatModelId: thread.chatModelId,
+          chatReasoningEffort: thread.chatReasoningEffort,
           createdAt: thread.createdAt,
           id: thread.id,
           pinnedAt: thread.pinnedAt,
@@ -282,6 +287,32 @@ export const threadsRouter = createTRPCRouter({
         .all();
 
       return updated!;
+    }),
+
+  updateChatSettings: protectedProcedure
+    .input(threadChatSelectionSchema)
+    .mutation(async ({ ctx, input }) => {
+      await getOwnedThreadOrThrow(ctx, input.threadId);
+
+      const [updated] = ctx.db
+        .update(threads)
+        .set({
+          chatModelId: input.modelId,
+          chatReasoningEffort: input.reasoningEffort ?? null,
+        })
+        .where(eq(threads.id, input.threadId))
+        .returning({
+          chatModelId: threads.chatModelId,
+          chatReasoningEffort: threads.chatReasoningEffort,
+          id: threads.id,
+        })
+        .all();
+
+      return {
+        modelId: updated!.chatModelId,
+        reasoningEffort: updated!.chatReasoningEffort,
+        threadId: updated!.id,
+      };
     }),
 
   archive: protectedProcedure

@@ -42,6 +42,8 @@ import { ChatScrollControl, useChatScrollControl } from "./chat-scroll-control";
 type ThreadScreenProps = {
   initialMessages: ThreadUIMessage[];
   thread: {
+    chatModelId: string | null;
+    chatReasoningEffort: string | null;
     id: string;
     pinnedAt: Date | null;
     summary: string | null;
@@ -68,6 +70,11 @@ export function ThreadScreen({
   const [editingMessage, setEditingMessage] = useState<ThreadUIMessage | null>(
     null,
   );
+
+  useEffect(() => {
+    setThreadTitle(thread.title);
+  }, [thread.title]);
+
   const handleData = useCallback<ChatOnDataCallback<ThreadUIMessage>>(
     (dataPart) => {
       if (
@@ -75,6 +82,17 @@ export function ThreadScreen({
         dataPart.data.threadId === thread.id
       ) {
         setThreadTitle(dataPart.data.title);
+        utils.threads.get.setData({ threadId: thread.id }, (current) =>
+          current
+            ? {
+                ...current,
+                thread: {
+                  ...current.thread,
+                  title: dataPart.data.title,
+                },
+              }
+            : current,
+        );
       }
 
       if (
@@ -490,6 +508,13 @@ export function ThreadScreen({
               promptSeed={editingPromptSeed}
               promptSeedKey={editingMessage?.id}
               status={status}
+              threadId={thread.id}
+              threadSelection={{
+                modelId: thread.chatModelId,
+                reasoningEffort:
+                  (thread.chatReasoningEffort as ReasoningEffort | null) ??
+                  null,
+              }}
             />
           </div>
         </div>
