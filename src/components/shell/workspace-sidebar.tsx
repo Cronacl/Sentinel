@@ -1,6 +1,18 @@
 "use client";
 
-import { Button, Spinner } from "@heroui/react";
+import {
+  AlertDialog,
+  Button,
+  Dropdown,
+  Form,
+  Input,
+  Label,
+  Modal,
+  ScrollShadow,
+  Spinner,
+  TextField,
+  useOverlayState,
+} from "@heroui/react";
 import {
   AddCircleHalfDotIcon,
   AiIdeaIcon,
@@ -10,6 +22,7 @@ import {
   FilterMailIcon,
   Folder01Icon,
   FolderAddIcon,
+  MoreHorizontalIcon,
   PencilEdit02Icon,
   PinIcon,
   PinOffIcon,
@@ -220,7 +233,7 @@ function ThreadItemTrailing({
   return (
     <span
       className={`relative flex h-6 shrink-0 items-center justify-end ${
-        hasTimestamp ? "w-[3rem]" : "w-[2rem]"
+        hasTimestamp ? "w-[2.5rem]" : "w-[2rem]"
       }`}
     >
       {hasTimestamp ? (
@@ -235,6 +248,67 @@ function ThreadItemTrailing({
         onPin={onPin}
         threadId={threadId}
       />
+    </span>
+  );
+}
+
+function WorkspaceItemActions({
+  onArchive,
+  onRename,
+  workspaceName,
+}: {
+  onArchive: () => void;
+  onRename: () => void;
+  workspaceName: string;
+}) {
+  return (
+    <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-1 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+      <Dropdown>
+        <Button
+          aria-label={`Workspace actions for ${workspaceName}`}
+          className="h-7 w-7 min-w-7"
+          isIconOnly
+          size="sm"
+          variant="ghost"
+          onClick={(event) => {
+            event.stopPropagation();
+          }}
+        >
+          <HugeiconsIcon
+            color="currentColor"
+            icon={MoreHorizontalIcon}
+            size={16}
+            strokeWidth={1.5}
+          />
+        </Button>
+        <Dropdown.Popover className="min-w-[180px]" placement="bottom end">
+          <Dropdown.Menu
+            onAction={(key) => {
+              if (key === "rename") onRename();
+              if (key === "archive") onArchive();
+            }}
+          >
+            <Dropdown.Item id="rename" textValue="Rename workspace">
+              <HugeiconsIcon
+                color="currentColor"
+                icon={PencilEdit02Icon}
+                size={16}
+                strokeWidth={1.5}
+              />
+              <Label>Rename workspace</Label>
+            </Dropdown.Item>
+            <Dropdown.Item id="archive" textValue="Delete workspace">
+              <HugeiconsIcon
+                color="currentColor"
+                icon={Archive02Icon}
+                size={16}
+                strokeWidth={1.5}
+              />
+              <Label>Delete workspace</Label>
+            </Dropdown.Item>
+          </Dropdown.Menu>
+        </Dropdown.Popover>
+      </Dropdown>
     </span>
   );
 }
@@ -291,7 +365,10 @@ function PinnedThreadsList({
                   size={12}
                   strokeWidth={1.5}
                 />
-                <span className="min-w-0 truncate" title={thread.title}>
+                <span
+                  className="min-w-0 max-w-[9rem] truncate"
+                  title={thread.title}
+                >
                   {thread.title}
                 </span>
               </span>
@@ -313,8 +390,9 @@ function PinnedThreadsList({
 const ThreadList = memo(function ThreadList({
   onPressThread,
   groups,
+  onRenameWorkspace,
+  onArchiveWorkspace,
   selectedThreadId,
-  selectedWorkspaceId,
   expandedWorkspaceIds,
   onPressWorkspace,
   onPin,
@@ -323,57 +401,64 @@ const ThreadList = memo(function ThreadList({
   expandedWorkspaceIds: Set<string>;
   groups: ThreadGroup;
   onArchive: (threadId: string) => void;
+  onArchiveWorkspace: (workspaceId: string) => void;
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
   onPressWorkspace: (workspaceId: string) => void;
+  onRenameWorkspace: (workspaceId: string) => void;
   selectedThreadId: string | null;
-  selectedWorkspaceId: string | null;
 }) {
   return (
-    <div className="flex flex-col gap-1 px-3 py-2">
+    <div className="flex flex-col gap-1 px-3 py-1">
       {groups.map((group) => {
         const isExpanded = expandedWorkspaceIds.has(group.workspace.id);
-        const isWorkspaceActive = selectedWorkspaceId === group.workspace.id;
+        const visibleThreads = group.threads.filter(
+          (thread) => thread.pinnedAt == null,
+        );
 
         return (
           <section key={group.workspace.id}>
-            <Button
-              className={`justify-start rounded-xl ${
-                isWorkspaceActive
-                  ? "text-foreground"
-                  : "text-muted hover:text-foreground"
-              }`}
-              fullWidth
-              onPress={() => onPressWorkspace(group.workspace.id)}
-              size="sm"
-              variant="ghost"
-            >
-              <div className="flex w-full min-w-0 items-center justify-between gap-2">
-                <span className="flex min-w-0 items-center gap-2">
-                  <HugeiconsIcon
-                    color="currentColor"
-                    icon={Folder01Icon}
-                    size={18}
-                    strokeWidth={1.5}
-                  />
+            <div className="group relative">
+              <Button
+                className="text-muted hover:bg-default/60 hover:text-foreground justify-start rounded-xl pr-10"
+                fullWidth
+                onPress={() => onPressWorkspace(group.workspace.id)}
+                size="sm"
+                variant="ghost"
+              >
+                <div className="flex w-full min-w-0 items-center gap-2">
+                  <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+                    <HugeiconsIcon
+                      className="transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0"
+                      color="currentColor"
+                      icon={Folder01Icon}
+                      size={18}
+                      strokeWidth={1.5}
+                    />
+                    <HugeiconsIcon
+                      className={`absolute transition-all duration-150 ${
+                        isExpanded ? "rotate-0" : "-rotate-90"
+                      } opacity-0 group-hover:opacity-100 group-focus-within:opacity-100`}
+                      color="currentColor"
+                      icon={ArrowDown01Icon}
+                      size={16}
+                      strokeWidth={1.8}
+                    />
+                  </span>
                   <span className="truncate">{group.workspace.name}</span>
-                </span>
-                <HugeiconsIcon
-                  className={`shrink-0 transition-transform ${
-                    isExpanded ? "rotate-0" : "-rotate-90"
-                  }`}
-                  color="currentColor"
-                  icon={ArrowDown01Icon}
-                  size={16}
-                  strokeWidth={1.5}
-                />
-              </div>
-            </Button>
+                </div>
+              </Button>
+              <WorkspaceItemActions
+                onArchive={() => onArchiveWorkspace(group.workspace.id)}
+                onRename={() => onRenameWorkspace(group.workspace.id)}
+                workspaceName={group.workspace.name}
+              />
+            </div>
 
             {isExpanded ? (
               <div className="mt-1 flex flex-col gap-0.5 pl-2">
-                {group.threads.length > 0 ? (
-                  group.threads.map((thread) => {
+                {visibleThreads.length > 0 ? (
+                  visibleThreads.map((thread) => {
                     const isActive = selectedThreadId === thread.id;
 
                     return (
@@ -451,7 +536,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
   selectedThreadId: string | null;
 }) {
   return (
-    <div className="flex flex-col gap-1 px-3 py-3">
+    <div className="flex flex-col gap-1 px-3 py-1">
       {items.map((item) => {
         const isActive = selectedThreadId === item.id;
 
@@ -544,6 +629,12 @@ export function WorkspaceSidebar() {
   const router = useRouter();
   const utils = api.useUtils();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [renameWorkspaceId, setRenameWorkspaceId] = useState<string | null>(
+    null,
+  );
+  const [deleteWorkspaceId, setDeleteWorkspaceId] = useState<string | null>(
+    null,
+  );
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [organizeBy, setOrganizeBy] = useState<OrganizeBy>("workspace");
   const [sortBy, setSortBy] = useState<SortBy>("updated");
@@ -552,9 +643,24 @@ export function WorkspaceSidebar() {
   );
   const preferencesRef = useRef<HTMLDivElement | null>(null);
   const pinActionLockRef = useRef(new Set<string>());
+  const renameWorkspaceState = useOverlayState({
+    onOpenChange: (isOpen) => {
+      if (!isOpen) {
+        setRenameWorkspaceId(null);
+      }
+    },
+  });
+  const deleteWorkspaceState = useOverlayState({
+    onOpenChange: (isOpen) => {
+      if (!isOpen) {
+        setDeleteWorkspaceId(null);
+      }
+    },
+  });
 
   const preferences = api.workspaces.getPreferences.useQuery();
   const currentWorkspace = api.workspaces.getCurrent.useQuery();
+  const workspaces = api.workspaces.list.useQuery();
   const selectedThreadId = useMemo(() => {
     const match = pathname.match(/\/thread\/([^/]+)/);
     return match?.[1] ?? null;
@@ -730,7 +836,81 @@ export function WorkspaceSidebar() {
         ];
       });
       void utils.threads.list.invalidate();
-      setExpandedWorkspaceIds((current) => new Set(current).add(workspace.id));
+    },
+  });
+
+  const renameWorkspace = api.workspaces.update.useMutation({
+    onSuccess: (workspace) => {
+      utils.workspaces.list.setData(undefined, (current) =>
+        current?.map((item) =>
+          item.id === workspace.id
+            ? {
+                ...item,
+                description: workspace.description,
+                name: workspace.name,
+                rootPath: workspace.rootPath,
+                updatedAt: workspace.updatedAt,
+              }
+            : item,
+        ),
+      );
+      utils.workspaces.getCurrent.setData(undefined, (current) =>
+        current?.id === workspace.id
+          ? {
+              ...current,
+              description: workspace.description,
+              name: workspace.name,
+              rootPath: workspace.rootPath,
+              updatedAt: workspace.updatedAt,
+            }
+          : current,
+      );
+      void utils.threads.list.invalidate();
+      renameWorkspaceState.close();
+    },
+  });
+
+  const archiveWorkspace = api.workspaces.archive.useMutation({
+    onSuccess: ({ selectedWorkspaceId, workspaceId }) => {
+      const selectedThreadState = selectedThreadId
+        ? findThreadState(selectedThreadId, groups, items)
+        : null;
+      const knownWorkspaces = utils.workspaces.list.getData() ?? [];
+      const nextSelectedWorkspace =
+        knownWorkspaces.find(
+          (workspace) => workspace.id === selectedWorkspaceId,
+        ) ?? null;
+
+      utils.workspaces.list.setData(
+        undefined,
+        (current) =>
+          current
+            ?.filter((workspace) => workspace.id !== workspaceId)
+            .map((workspace) => ({
+              ...workspace,
+              isSelected: workspace.id === selectedWorkspaceId,
+            })) ?? [],
+      );
+      utils.workspaces.getCurrent.setData(
+        undefined,
+        toCurrentWorkspace(nextSelectedWorkspace),
+      );
+      setExpandedWorkspaceIds((current) => {
+        const next = new Set(current);
+        next.delete(workspaceId);
+        return next;
+      });
+      void utils.threads.list.invalidate();
+
+      if (
+        (selectedThreadState?.workspaceId === workspaceId ||
+          selectedWorkspaceId == null) &&
+        pathname !== "/"
+      ) {
+        router.push("/");
+      }
+
+      deleteWorkspaceState.close();
     },
   });
 
@@ -799,19 +979,6 @@ export function WorkspaceSidebar() {
   }, [preferences.data]);
 
   useEffect(() => {
-    if (organizeBy !== "workspace" || groups.length === 0) {
-      return;
-    }
-
-    setExpandedWorkspaceIds((current) => {
-      if (current.size > 0) {
-        return current;
-      }
-      return new Set(groups.map((g) => g.workspace.id));
-    });
-  }, [groups, organizeBy]);
-
-  useEffect(() => {
     if (!isPreferencesOpen) {
       return;
     }
@@ -842,6 +1009,20 @@ export function WorkspaceSidebar() {
   }, [isPreferencesOpen]);
 
   const selectedWorkspaceId = currentWorkspace.data?.id ?? null;
+  const renameTargetWorkspace = useMemo(
+    () =>
+      (workspaces.data ?? []).find(
+        (workspace) => workspace.id === renameWorkspaceId,
+      ) ?? null,
+    [renameWorkspaceId, workspaces.data],
+  );
+  const deleteTargetWorkspace = useMemo(
+    () =>
+      (workspaces.data ?? []).find(
+        (workspace) => workspace.id === deleteWorkspaceId,
+      ) ?? null,
+    [deleteWorkspaceId, workspaces.data],
+  );
 
   const handlePreferencesChange = useCallback(
     (
@@ -898,6 +1079,53 @@ export function WorkspaceSidebar() {
     [router, selectWorkspace, selectedWorkspaceId, utils.threads.get],
   );
 
+  const handleOpenRenameWorkspace = useCallback(
+    (workspaceId: string) => {
+      setRenameWorkspaceId(workspaceId);
+      renameWorkspaceState.open();
+    },
+    [renameWorkspaceState],
+  );
+
+  const handleOpenDeleteWorkspace = useCallback(
+    (workspaceId: string) => {
+      setDeleteWorkspaceId(workspaceId);
+      deleteWorkspaceState.open();
+    },
+    [deleteWorkspaceState],
+  );
+
+  const handleRenameWorkspaceSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (!renameTargetWorkspace) {
+        return;
+      }
+
+      const formData = new FormData(event.currentTarget);
+      const name = String(formData.get("name") ?? "").trim();
+      if (!name) {
+        return;
+      }
+
+      void renameWorkspace.mutate({
+        description: renameTargetWorkspace.description ?? "",
+        name,
+        rootPath: renameTargetWorkspace.rootPath ?? undefined,
+        workspaceId: renameTargetWorkspace.id,
+      });
+    },
+    [renameTargetWorkspace, renameWorkspace],
+  );
+
+  const handleConfirmDeleteWorkspace = useCallback(() => {
+    if (!deleteTargetWorkspace) {
+      return;
+    }
+
+    void archiveWorkspace.mutate({ workspaceId: deleteTargetWorkspace.id });
+  }, [archiveWorkspace, deleteTargetWorkspace]);
+
   const isEmpty =
     organizeBy === "workspace" ? groups.length === 0 : items.length === 0;
   const showSidebarLoading =
@@ -925,9 +1153,7 @@ export function WorkspaceSidebar() {
                 key={item.href}
                 onPress={() => {
                   if (item.href === "/") {
-                    window.dispatchEvent(
-                      new Event("sentinel:new-thread"),
-                    );
+                    window.dispatchEvent(new Event("sentinel:new-thread"));
                     if (pathname !== "/") {
                       router.push("/");
                     }
@@ -1046,7 +1272,7 @@ export function WorkspaceSidebar() {
       </div>
 
       <div className="min-h-0 flex-1">
-        <div className="sentinel-scroll-shell h-full">
+        <ScrollShadow className="sentinel-scroll-shell h-full">
           <div className="sentinel-scroll-area h-full">
             {showSidebarLoading ? <WorkspaceSidebarLoadingState /> : null}
 
@@ -1065,11 +1291,12 @@ export function WorkspaceSidebar() {
                 expandedWorkspaceIds={expandedWorkspaceIds}
                 groups={groups}
                 onArchive={handleArchiveThread}
+                onArchiveWorkspace={handleOpenDeleteWorkspace}
                 onPin={handlePin}
                 onPressThread={handlePressThread}
                 onPressWorkspace={handlePressWorkspace}
+                onRenameWorkspace={handleOpenRenameWorkspace}
                 selectedThreadId={selectedThreadId}
-                selectedWorkspaceId={selectedWorkspaceId}
               />
             ) : null}
 
@@ -1110,7 +1337,7 @@ export function WorkspaceSidebar() {
               </div>
             ) : null}
           </div>
-        </div>
+        </ScrollShadow>
       </div>
 
       <div className="shrink-0 px-3 pb-3">
@@ -1136,6 +1363,101 @@ export function WorkspaceSidebar() {
         onCreate={(values) => createWorkspace.mutateAsync(values)}
         onOpenChange={setIsCreateOpen}
       />
+
+      <Modal.Root state={renameWorkspaceState}>
+        <Modal.Backdrop>
+          <Modal.Container placement="center" size="sm">
+            <Modal.Dialog className="border-separator w-full border sm:max-w-[400px]">
+              <Form className="contents" onSubmit={handleRenameWorkspaceSubmit}>
+                <Modal.Header className="items-start justify-between gap-4">
+                  <Modal.Heading className="text-base">
+                    Rename workspace
+                  </Modal.Heading>
+                  <Modal.CloseTrigger />
+                </Modal.Header>
+                <Modal.Body className="p-2">
+                  <TextField.Root
+                    autoFocus
+                    defaultValue={renameTargetWorkspace?.name ?? ""}
+                    isRequired
+                    key={renameTargetWorkspace?.id ?? "workspace-rename"}
+                    name="name"
+                  >
+                    <Label>Workspace name</Label>
+                    <Input.Root />
+                  </TextField.Root>
+                </Modal.Body>
+                <Modal.Footer>
+                  <Button
+                    onPress={() => renameWorkspaceState.close()}
+                    type="button"
+                    variant="ghost"
+                  >
+                    Cancel
+                  </Button>
+                  <Button isPending={renameWorkspace.isPending} type="submit">
+                    Rename
+                  </Button>
+                </Modal.Footer>
+              </Form>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal.Root>
+
+      <AlertDialog.Backdrop
+        isOpen={deleteWorkspaceState.isOpen}
+        onOpenChange={deleteWorkspaceState.setOpen}
+      >
+        <AlertDialog.Container placement="center" size="sm">
+          <AlertDialog.Dialog className="border-separator w-full border sm:max-w-[420px]">
+            <AlertDialog.CloseTrigger />
+            <AlertDialog.Header>
+              <AlertDialog.Icon status="danger" />
+              <AlertDialog.Heading>Delete workspace</AlertDialog.Heading>
+            </AlertDialog.Header>
+            <AlertDialog.Body>
+              <p className="text-sm text-foreground">
+                Delete{" "}
+                <span className="font-medium">
+                  {deleteTargetWorkspace?.name ?? "this workspace"}
+                </span>
+                ?
+              </p>
+              <p className="text-muted mt-1 text-xs leading-5">
+                This archives the workspace and also archives{" "}
+                <span className="font-medium text-foreground">
+                  {deleteTargetWorkspace?.threadCount ?? 0}{" "}
+                  {(deleteTargetWorkspace?.threadCount ?? 0) === 1
+                    ? "thread"
+                    : "threads"}
+                </span>{" "}
+                inside it. This action removes them from active lists.
+              </p>
+            </AlertDialog.Body>
+            <AlertDialog.Footer>
+              <Button
+                onPress={() => deleteWorkspaceState.close()}
+                variant="tertiary"
+              >
+                Cancel
+              </Button>
+              <Button
+                isPending={archiveWorkspace.isPending}
+                onPress={handleConfirmDeleteWorkspace}
+                variant="danger"
+              >
+                {({ isPending }) => (
+                  <>
+                    {isPending ? <Spinner color="current" size="sm" /> : null}
+                    Delete
+                  </>
+                )}
+              </Button>
+            </AlertDialog.Footer>
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
     </div>
   );
 }

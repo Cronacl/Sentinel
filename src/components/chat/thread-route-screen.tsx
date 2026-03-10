@@ -10,7 +10,12 @@ import { ThreadScreen } from "./thread-screen";
 
 export function ThreadRouteScreen({ threadId }: { threadId: string }) {
   const router = useRouter();
-  const threadQuery = api.threads.get.useQuery({ threadId });
+  const utils = api.useUtils();
+  const cachedThread = utils.threads.get.getData({ threadId });
+  const threadQuery = api.threads.get.useQuery(
+    { threadId },
+    cachedThread ? { initialData: cachedThread } : undefined,
+  );
 
   useEffect(() => {
     if (threadQuery.error?.data?.code === "NOT_FOUND") {

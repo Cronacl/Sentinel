@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { TRPCError } from "@trpc/server";
 import { and, count, eq, isNull, max, ne, sql } from "drizzle-orm";
 
@@ -13,6 +15,26 @@ import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
 import { getOwnedWorkspaceOrThrow } from "./workspace-thread-helpers";
 
+function normalizeWorkspaceRootPath(rootPath: string | null | undefined) {
+  if (!rootPath) {
+    return null;
+  }
+
+  const trimmed = rootPath.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const normalized = path.normalize(trimmed);
+  const root = path.parse(normalized).root;
+
+  if (normalized.length <= root.length) {
+    return normalized;
+  }
+
+  return normalized.replace(/[\\/]+$/, "");
+}
+
 async function assertWorkspaceRootPathAvailable(
   db: typeof import("@/server/db").db,
   userId: string,
@@ -26,6 +48,7 @@ async function assertWorkspaceRootPathAvailable(
   const conditions = [
     eq(workspaces.rootPath, rootPath),
     eq(workspaces.userId, userId),
+    eq(workspaces.isArchived, false),
   ];
 
   if (workspaceId) {
@@ -97,7 +120,7 @@ export const workspacesRouter = createTRPCRouter({
     .input(workspaceCreateSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const rootPath = input.rootPath?.trim() || null;
+      const rootPath = normalizeWorkspaceRootPath(input.rootPath);
 
       await assertWorkspaceRootPathAvailable(ctx.db, userId, rootPath);
 
@@ -127,7 +150,7 @@ export const workspacesRouter = createTRPCRouter({
     .input(workspaceUpdateSchema)
     .mutation(async ({ ctx, input }) => {
       await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
-      const rootPath = input.rootPath?.trim() || null;
+      const rootPath = normalizeWorkspaceRootPath(input.rootPath);
 
       await assertWorkspaceRootPathAvailable(
         ctx.db,
@@ -155,12 +178,6 @@ export const workspacesRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
 
-      ctx.db
-        .update(workspaces)
-        .set({ isArchived: true })
-        .where(eq(workspaces.id, workspace.id))
-        .run();
-
       let nextSelectedWorkspaceId = ctx.user.selectedWorkspaceId;
       if (ctx.user.selectedWorkspaceId === workspace.id) {
         const fallbackWorkspace = await ctx.db.query.workspaces.findFirst({
@@ -174,13 +191,35 @@ export const workspacesRouter = createTRPCRouter({
         });
 
         nextSelectedWorkspaceId = fallbackWorkspace?.id ?? null;
-
-        ctx.db
-          .update(users)
-          .set({ selectedWorkspaceId: nextSelectedWorkspaceId })
-          .where(eq(users.id, ctx.session.user.id))
-          .run();
       }
+
+      ctx.db.transaction((tx) => {
+        tx.update(threads)
+          .set({
+            archivedAt: sql`coalesce(${threads.archivedAt}, ${new Date()})`,
+            pinnedAt: null,
+          })
+          .where(
+            and(
+              eq(threads.workspaceId, workspace.id),
+              eq(threads.userId, ctx.session.user.id),
+              isNull(threads.archivedAt),
+            ),
+          )
+          .run();
+
+        tx.update(workspaces)
+          .set({ isArchived: true, rootPath: null })
+          .where(eq(workspaces.id, workspace.id))
+          .run();
+
+        if (ctx.user.selectedWorkspaceId === workspace.id) {
+          tx.update(users)
+            .set({ selectedWorkspaceId: nextSelectedWorkspaceId })
+            .where(eq(users.id, ctx.session.user.id))
+            .run();
+        }
+      });
 
       return {
         selectedWorkspaceId: nextSelectedWorkspaceId ?? null,

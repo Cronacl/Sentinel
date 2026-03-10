@@ -96,6 +96,9 @@ export const MarkdownContent = memo(function MarkdownContent({
           </td>
         );
       },
+      hr() {
+        return null;
+      },
     }),
     [isStreaming],
   );

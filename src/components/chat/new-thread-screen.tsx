@@ -250,11 +250,10 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     }
 
     hasHandedOffRef.current = true;
-    router.replace(`/thread/${draftThreadId}`);
+    window.history.replaceState(window.history.state, "", `/thread/${draftThreadId}`);
   }, [
     draftThreadId,
     hasMessages,
-    router,
     threadId,
   ]);
 

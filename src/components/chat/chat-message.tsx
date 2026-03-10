@@ -248,7 +248,7 @@ function AssistantMessage({
 
           return displayGroups.map((group, groupIndex) => (
             <div
-              className={`${groupIndex > 0 ? "border-t border-border/60 pt-4" : ""} flex flex-col gap-3`}
+              className={`${groupIndex > 0 ? "" : ""} flex flex-col gap-3`}
               key={`${message.id}:step:${groupIndex}`}
             >
               {group.map((entry) => {
