@@ -29,6 +29,7 @@ import { buildPersistedAssistantMessage } from "./finalize-assistant";
 import { resolveThreadChatModel } from "./model";
 import * as persist from "./persistence";
 import { createReasoningMetadataTracker } from "./reasoning-metadata";
+import { getSystemPrompt } from "./system-prompt";
 import { resolveThreadTitleModel } from "./title-model";
 import { generateThreadTitle } from "./title";
 import type { ThreadChatRequest, ThreadChatTrigger } from "./types";
@@ -307,6 +308,9 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
   persist.upsertMessage(request.threadId, placeholder);
   await persist.setActiveMessage(request.threadId, assistantId);
 
+  // ── System prompt ────────────────────────────────────────────
+  const systemPrompt = await getSystemPrompt(request.userId);
+
   // ── Build model transcript ────────────────────────────────────
   const modelTranscript = buildModelTranscript(request, transcript, allRecords);
 
@@ -327,6 +331,7 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
         model: resolvedModel.languageModel as Parameters<
           typeof streamText
         >[0]["model"],
+        system: systemPrompt,
         experimental_download: createAttachmentDownloadHandler(),
         experimental_transform: smoothStream({ chunking: "line" }),
         messages: await convertToModelMessages(modelTranscript),

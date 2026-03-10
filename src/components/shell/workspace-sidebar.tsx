@@ -536,7 +536,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
   selectedThreadId: string | null;
 }) {
   return (
-    <div className="flex flex-col gap-1 px-2 py-1">
+    <div className="flex flex-col gap-1 px-4 py-1">
       {items.map((item) => {
         const isActive = selectedThreadId === item.id;
 

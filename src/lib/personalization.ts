@@ -1,3 +1,5 @@
+import { lines, prompt, when } from "@/lib/prompt";
+
 export const PERSONALITY_PRESET_VALUES = [
   "friendly",
   "pragmatic",
@@ -40,7 +42,7 @@ export const PERSONALITY_PRESETS = [
   },
 ] as const;
 
-type PersonalizationPromptInput = {
+export type PersonalizationPromptInput = {
   aboutUser?: string | null;
   customInstructions?: string | null;
   nickname?: string | null;
@@ -48,26 +50,20 @@ type PersonalizationPromptInput = {
   personality?: PersonalityPreset | null;
 };
 
-export function buildPersonalizationPrompt({
-  aboutUser,
-  customInstructions,
-  nickname,
-  occupation,
-  personality,
-}: PersonalizationPromptInput) {
-  const preset = PERSONALITY_PRESETS.find(
-    (item) => item.value === (personality ?? DEFAULT_PERSONALITY_PRESET),
-  );
+export const buildPersonalizationPrompt = prompt<PersonalizationPromptInput>(
+  (v) => {
+    const preset = PERSONALITY_PRESETS.find(
+      (item) => item.value === (v.personality ?? DEFAULT_PERSONALITY_PRESET),
+    );
 
-  const sections = [
-    preset ? `Default personality: ${preset.prompt}` : null,
-    nickname?.trim() ? `User nickname: ${nickname.trim()}` : null,
-    occupation?.trim() ? `User occupation: ${occupation.trim()}` : null,
-    aboutUser?.trim() ? `About the user: ${aboutUser.trim()}` : null,
-    customInstructions?.trim()
-      ? `Custom instructions: ${customInstructions.trim()}`
-      : null,
-  ].filter(Boolean);
-
-  return sections.join("\n");
-}
+    return lines(
+      when(preset, () => `Default personality: ${preset!.prompt}`),
+      when(v.nickname?.trim(), () => `User nickname: ${v.nickname!.trim()}`),
+      when(v.occupation?.trim(), () => `User occupation: ${v.occupation!.trim()}`),
+      when(v.aboutUser?.trim(), () => `About the user: ${v.aboutUser!.trim()}`),
+      when(v.customInstructions?.trim(), () =>
+        `Custom instructions: ${v.customInstructions!.trim()}`,
+      ),
+    );
+  },
+);

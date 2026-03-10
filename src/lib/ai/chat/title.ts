@@ -1,6 +1,13 @@
 import { generateText } from "ai";
 
+import { lines } from "@/lib/prompt";
+
 import type { ResolvedThreadTitleModel } from "./types";
+
+const TITLE_SYSTEM_PROMPT = lines(
+  "Generate a concise chat thread title of 2 to 6 words.",
+  "Return only the title text with no quotes, markdown, labels, or trailing punctuation.",
+);
 
 function sanitizeGeneratedTitle(value: string) {
   const singleLine = value.replace(/\s+/g, " ").trim();
@@ -24,8 +31,7 @@ export async function generateThreadTitle({
   const result = await generateText({
     model: model.languageModel as Parameters<typeof generateText>[0]["model"],
     prompt: firstUserText,
-    system:
-      "Generate a concise chat thread title of 2 to 6 words. Return only the title text with no quotes, markdown, labels, or trailing punctuation.",
+    system: TITLE_SYSTEM_PROMPT,
     temperature: 0.2,
     ...(model.providerOptions ? { providerOptions: model.providerOptions } : {}),
   });
