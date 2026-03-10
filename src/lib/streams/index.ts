@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { createResumableStreamContext } from "resumable-stream/generic";
 
 import {
@@ -6,7 +7,7 @@ import {
 } from "./resumable-stream-adapter";
 
 export const streamContext = createResumableStreamContext({
-  waitUntil: null,
+  waitUntil: after,
   publisher: createInMemoryPublisher(),
   subscriber: createInMemorySubscriber(),
 });

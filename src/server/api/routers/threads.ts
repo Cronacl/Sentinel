@@ -12,7 +12,7 @@ import {
   threadTogglePinSchema,
   threadUpdateMetaSchema,
 } from "@/schemas/workspace-thread.schema";
-import { createDrizzleThreadChatPersistence } from "@/lib/ai/chat/persistence";
+import { setActiveMessage } from "@/lib/ai/chat/persistence";
 import { mapThreadMessagesToUIMessages } from "@/lib/ai/ui-messages";
 import { threadMessages, threads, workspaces } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
@@ -338,11 +338,7 @@ export const threadsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await getOwnedThreadOrThrow(ctx, input.threadId);
 
-      const persistence = createDrizzleThreadChatPersistence(ctx.db);
-      await persistence.setActiveMessage({
-        messageId: input.messageId,
-        threadId: input.threadId,
-      });
+      await setActiveMessage(input.threadId, input.messageId);
 
       return { ok: true };
     }),

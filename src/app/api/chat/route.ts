@@ -11,9 +11,7 @@ export async function POST(req: Request) {
     const session = await getLocalSession();
     const body = await req.json();
 
-    return await runThreadChat(body, {
-      userId: session.user.id,
-    });
+    return await runThreadChat(body, session.user.id);
   } catch (error) {
     return createThreadChatErrorResponse(error);
   }

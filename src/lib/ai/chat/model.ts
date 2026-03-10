@@ -4,35 +4,26 @@ import {
   normalizeThreadMessageMetadata,
   type ThreadMessageMetadata,
 } from "../thread-message-types";
+import type { PersistedThreadMessageRecord } from "../thread-branches";
 
-import type {
-  ResolvedThreadChatModel,
-  ThreadChatRequest,
-  ThreadConversationState,
-} from "./types";
+import type { ResolvedThreadChatModel, ThreadChatRequest } from "./types";
 
-/**
- * Resolves the AI SDK language model and reasoning provider options required
- * for the current chat request.
- */
 export async function resolveThreadChatModel(
   request: ThreadChatRequest,
-  conversation: ThreadConversationState,
+  targetMessage?: PersistedThreadMessageRecord,
 ): Promise<ResolvedThreadChatModel> {
+  const targetMeta = targetMessage
+    ? normalizeThreadMessageMetadata(
+        targetMessage.metadata as ThreadMessageMetadata | null | undefined,
+      )
+    : undefined;
+
   const requestedModelId =
     request.modelId ??
     request.message?.metadata?.model?.requestedModelId ??
     request.message?.metadata?.model?.responseModelId ??
-    (conversation.targetMessage
-      ? normalizeThreadMessageMetadata(
-          conversation.targetMessage.metadata as ThreadMessageMetadata | null | undefined,
-        ).model?.requestedModelId
-      : undefined) ??
-    (conversation.targetMessage
-      ? normalizeThreadMessageMetadata(
-          conversation.targetMessage.metadata as ThreadMessageMetadata | null | undefined,
-        ).model?.responseModelId
-      : undefined);
+    targetMeta?.model?.requestedModelId ??
+    targetMeta?.model?.responseModelId;
 
   if (!requestedModelId) {
     throw new Error("Model id is required for this chat operation.");
