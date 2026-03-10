@@ -159,7 +159,7 @@ export function CreateWorkspaceModal({
                   textFieldProps={{ isRequired: true }}
                 />
 
-                <div className="border-separator bg-background rounded-2xl border p-4">
+                <div className="border-separator mt-2 bg-background rounded-2xl border p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-foreground text-sm font-medium">

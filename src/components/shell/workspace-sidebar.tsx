@@ -220,7 +220,7 @@ function ThreadItemTrailing({
   return (
     <span
       className={`relative flex h-6 shrink-0 items-center justify-end ${
-        hasTimestamp ? "w-[4.5rem]" : "w-[3.25rem]"
+        hasTimestamp ? "w-[3rem]" : "w-[2rem]"
       }`}
     >
       {hasTimestamp ? (
@@ -268,7 +268,9 @@ function PinnedThreadsList({
           return (
             <div
               className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-sm transition-colors ${
-                isActive ? "bg-default text-foreground" : "text-muted"
+                isActive
+                  ? "font-medium bg-default text-foreground"
+                  : "text-muted"
               }`}
               key={thread.id}
               onClick={() => onPressThread(thread.workspace.id, thread.id)}
@@ -377,7 +379,9 @@ const ThreadList = memo(function ThreadList({
                     return (
                       <div
                         className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-sm transition-colors ${
-                          isActive ? "bg-default text-foreground" : "text-muted"
+                          isActive
+                            ? "font-medium bg-default text-foreground"
+                            : "text-muted"
                         }`}
                         key={thread.id}
                         onClick={() =>
@@ -454,7 +458,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
         return (
           <div
             className={`group hover:bg-default/60 min-w-0 cursor-pointer rounded-xl px-2 py-1 text-sm transition-colors ${
-              isActive ? "bg-default text-foreground" : "text-muted"
+              isActive ? "font-medium bg-default text-foreground" : "text-muted"
             }`}
             key={item.id}
             onClick={() => onPressThread(item.workspace.id, item.id)}
