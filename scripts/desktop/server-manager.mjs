@@ -1,5 +1,5 @@
+import { spawn } from "node:child_process";
 import path from "node:path";
-import { utilityProcess } from "electron";
 
 import { APP_HOST, APP_PORT, APP_URL } from "./constants.mjs";
 import { loadRuntimeEnv } from "./service-manager.mjs";
@@ -8,10 +8,32 @@ function wait(durationMs) {
   return new Promise((resolve) => setTimeout(resolve, durationMs));
 }
 
-export async function waitForAppServer(baseUrl, timeoutMs = 45_000) {
+function getPackagedServerRuntimePath() {
+  const executableName = path.basename(process.execPath);
+  const helperName = `${executableName} Helper (Plugin)`;
+
+  return path.join(
+    path.dirname(path.dirname(process.execPath)),
+    "Frameworks",
+    `${helperName}.app`,
+    "Contents",
+    "MacOS",
+    helperName,
+  );
+}
+
+export async function waitForAppServer(
+  baseUrl,
+  { getFailureReason, intervalMs = 200, timeoutMs = 20_000 } = {},
+) {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < timeoutMs) {
+    const failureReason = getFailureReason?.();
+    if (failureReason) {
+      throw failureReason;
+    }
+
     try {
       const response = await fetch(`${baseUrl}/api/health`);
       if (response.ok) {
@@ -19,7 +41,7 @@ export async function waitForAppServer(baseUrl, timeoutMs = 45_000) {
       }
     } catch {}
 
-    await wait(1_000);
+    await wait(intervalMs);
   }
 
   throw new Error("Sentinel app server did not become ready in time.");
@@ -36,7 +58,6 @@ export async function getAppServerStatus(baseUrl) {
 
 export async function startLocalServer(runtimePaths) {
   if (process.env.SENTINEL_APP_URL) {
-    await waitForAppServer(process.env.SENTINEL_APP_URL);
     return {
       process: null,
       url: process.env.SENTINEL_APP_URL,
@@ -48,7 +69,7 @@ export async function startLocalServer(runtimePaths) {
   }
 
   const env = await loadRuntimeEnv(runtimePaths);
-  const child = utilityProcess.fork(runtimePaths.serverEntryPath, [], {
+  const child = spawn(getPackagedServerRuntimePath(), [runtimePaths.serverEntryPath], {
     cwd: runtimePaths.isPackaged
       ? path.dirname(runtimePaths.serverEntryPath)
       : runtimePaths.appRoot,
@@ -61,11 +82,9 @@ export async function startLocalServer(runtimePaths) {
       PORT: String(APP_PORT),
     },
     stdio: "pipe",
-    serviceName: "Sentinel App Server",
-    ...(process.platform === "darwin"
-      ? { allowLoadingUnsignedLibraries: true }
-      : {}),
   });
+
+  let startupFailure = null;
 
   child.stdout?.on("data", (chunk) => {
     process.stdout.write(chunk);
@@ -75,8 +94,18 @@ export async function startLocalServer(runtimePaths) {
     process.stderr.write(chunk);
   });
 
+  child.once("exit", (code, signal) => {
+    startupFailure = new Error(
+      signal
+        ? `Sentinel app server exited with signal ${signal} before becoming ready.`
+        : `Sentinel app server exited with code ${code ?? 1} before becoming ready.`,
+    );
+  });
+
   try {
-    await waitForAppServer(APP_URL);
+    await waitForAppServer(APP_URL, {
+      getFailureReason: () => startupFailure,
+    });
   } catch (error) {
     child.kill();
     throw error;

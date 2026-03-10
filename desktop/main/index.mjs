@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, session } from "electron";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,17 +44,20 @@ function buildInlineHtml({ body, title }) {
             text-align: center;
           }
           .mark {
-            width: 36px;
-            height: 36px;
+            width: 56px;
+            height: 56px;
             border-radius: 12px;
             margin: 0 auto 18px;
             display: grid;
             place-items: center;
             background: #121212;
             border: 1px solid rgba(255,255,255,.08);
-            font-size: 15px;
-            font-weight: 700;
-            letter-spacing: .04em;
+          }
+          .mark svg {
+            width: 30px;
+            height: 30px;
+            display: block;
+            fill: currentColor;
           }
           h1 {
             margin: 0 0 10px;
@@ -93,7 +96,18 @@ function getLoadingPageUrl() {
   return buildInlineHtml({
     title: "Opening Sentinel",
     body: `
-      <div class="mark">S</div>
+      <div class="mark" aria-hidden="true">
+        <svg viewBox="0 0 201 200" xmlns="http://www.w3.org/2000/svg">
+          <g clip-path="url(#sentinel-logo-clip)">
+            <path d="M91.9711 91.6947C236.385 236.108 -35.8253 236.108 108.582 91.6947C-35.832 236.108 -35.832 -36.1018 108.582 108.305C-35.832 -36.1084 236.378 -36.1084 91.9711 108.305C236.385 -36.1084 236.385 236.102 91.9711 91.6947Z" />
+          </g>
+          <defs>
+            <clipPath id="sentinel-logo-clip">
+              <rect height="200" transform="translate(0.276367)" width="200" />
+            </clipPath>
+          </defs>
+        </svg>
+      </div>
       <h1>Opening Sentinel</h1>
       <p>Preparing your local workspace…</p>
       <div class="spinner" aria-hidden="true"></div>
@@ -108,6 +122,25 @@ function getRuntimePaths() {
     resourcesPath: process.resourcesPath,
     userDataPath: app.getPath("userData"),
   });
+}
+
+async function prepareDevSession() {
+  if (app.isPackaged) {
+    return;
+  }
+
+  const devSession = session.defaultSession;
+  devSession.webRequest.onBeforeSendHeaders((details, callback) => {
+    callback({
+      requestHeaders: {
+        ...details.requestHeaders,
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      },
+    });
+  });
+  await devSession.clearCache();
 }
 
 function createWindow() {
@@ -295,6 +328,7 @@ function registerIpc() {
 }
 
 app.whenReady().then(async () => {
+  await prepareDevSession();
   createWindow();
   registerIpc();
 

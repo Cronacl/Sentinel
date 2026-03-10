@@ -23,13 +23,9 @@ interface ShellContextValue {
   openRightSidebar: (content: ReactNode) => void;
   closeRightSidebar: () => void;
   setRightSidebarContent: (content: ReactNode | null) => void;
-
-  isMobile: boolean;
 }
 
 const ShellContext = createContext<ShellContextValue | null>(null);
-
-const MOBILE_BREAKPOINT = 1024;
 
 export function ShellProvider({ children }: PropsWithChildren) {
   const pathname = usePathname();
@@ -39,27 +35,13 @@ export function ShellProvider({ children }: PropsWithChildren) {
   const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
   const [rightSidebarContent, setRightSidebarContent] =
     useState<ReactNode | null>(null);
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
-
-  useEffect(() => {
-    if (isMobile) setLeftSidebarOpen(false);
-    else setLeftSidebarOpen(true);
-  }, [isMobile]);
 
   useEffect(() => {
     if (pathname !== initialPathRef.current) {
       setRightSidebarOpen(false);
-      if (isMobile) setLeftSidebarOpen(false);
     }
     initialPathRef.current = pathname;
-  }, [pathname, isMobile]);
+  }, [pathname]);
 
   const toggleLeftSidebar = useCallback(
     () => setLeftSidebarOpen((prev) => !prev),
@@ -96,7 +78,6 @@ export function ShellProvider({ children }: PropsWithChildren) {
         openRightSidebar,
         closeRightSidebar,
         setRightSidebarContent,
-        isMobile,
       }}
     >
       {children}

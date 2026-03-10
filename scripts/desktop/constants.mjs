@@ -1,3 +1,4 @@
+import os from "node:os";
 import path from "node:path";
 
 export const APP_HOST = "127.0.0.1";
@@ -10,10 +11,16 @@ export function createRuntimePaths({
   resourcesPath,
   userDataPath,
 }) {
+  const stableStateRoot = path.join(os.homedir(), ".sentinel");
+  const stableEnvPath = path.join(stableStateRoot, "desktop.env");
+  const legacyEnvPath = path.join(userDataPath, "desktop.env");
+
   return {
     appRoot,
-    envPath: path.join(userDataPath, "desktop.env"),
+    envPath: stableEnvPath,
     isPackaged,
+    legacyEnvPaths:
+      stableEnvPath === legacyEnvPath ? [] : [legacyEnvPath],
     serverEntryPath: isPackaged
       ? path.join(resourcesPath, "server", "server.js")
       : null,

@@ -11,6 +11,12 @@ function getKey(): Buffer {
   return Buffer.from(env.ENCRYPTION_KEY, "hex");
 }
 
+export function createCredentialDecryptionError(provider: string): Error {
+  return new Error(
+    `Provider "${provider}" credentials could not be decrypted. Re-save them in Settings > Providers.`,
+  );
+}
+
 export function encrypt(plaintext: string): string {
   const iv = randomBytes(IV_LENGTH);
   const cipher = createCipheriv(ALGORITHM, getKey(), iv, {

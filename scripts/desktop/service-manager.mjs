@@ -50,9 +50,25 @@ function serializeEnv(envObject) {
     .join("\n");
 }
 
+async function readRuntimeEnvFile(runtimePaths) {
+  const primary = await readTextFile(runtimePaths.envPath);
+  if (primary) {
+    return primary;
+  }
+
+  for (const legacyPath of runtimePaths.legacyEnvPaths ?? []) {
+    const legacy = await readTextFile(legacyPath);
+    if (legacy) {
+      return legacy;
+    }
+  }
+
+  return null;
+}
+
 export async function loadRuntimeEnv(runtimePaths) {
   const defaults = buildDefaultEnv();
-  const existing = await readTextFile(runtimePaths.envPath);
+  const existing = await readRuntimeEnvFile(runtimePaths);
   const overrides = getProcessRuntimeOverrides();
 
   if (!existing) {
@@ -70,7 +86,7 @@ export async function loadRuntimeEnv(runtimePaths) {
 }
 
 export async function ensureLocalEnv(runtimePaths) {
-  const existing = await readTextFile(runtimePaths.envPath);
+  const existing = await readRuntimeEnvFile(runtimePaths);
   const nextEnv = buildDefaultEnv();
   const overrides = getProcessRuntimeOverrides();
 

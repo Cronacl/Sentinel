@@ -6,7 +6,7 @@ import type { AIProvider } from "@/server/db/enums";
 import { db } from "@/server/db";
 import { modelPreferences, providerCredentials } from "@/server/db/schema";
 
-import { decrypt } from "./encrypt";
+import { createCredentialDecryptionError, decrypt } from "./encrypt";
 import { getModelsForProvider, isKnownModel } from "./models";
 import { createProviderInstance } from "./provider-factory";
 
@@ -69,7 +69,11 @@ export async function getProviderConfig(
     );
   }
 
-  return JSON.parse(decrypt(credential.encryptedConfig)) as ProviderConfig;
+  try {
+    return JSON.parse(decrypt(credential.encryptedConfig)) as ProviderConfig;
+  } catch {
+    throw createCredentialDecryptionError(provider);
+  }
 }
 
 export async function getLanguageModel(userId: string, compositeId: string) {

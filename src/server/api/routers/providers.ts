@@ -7,7 +7,11 @@ import {
   PROVIDER_CONFIG_SCHEMAS,
   validateProviderConfig,
 } from "@/lib/ai/config-schemas";
-import { decrypt, encrypt } from "@/lib/ai/encrypt";
+import {
+  createCredentialDecryptionError,
+  decrypt,
+  encrypt,
+} from "@/lib/ai/encrypt";
 import { PROVIDER_LIST } from "@/lib/ai/providers";
 import { modelPreferences, providerCredentials } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
@@ -58,10 +62,18 @@ export const providersRouter = createTRPCRouter({
 
       if (!credential) return null;
 
-      const config = JSON.parse(decrypt(credential.encryptedConfig)) as Record<
-        string,
-        unknown
-      >;
+      let config: Record<string, unknown>;
+      try {
+        config = JSON.parse(decrypt(credential.encryptedConfig)) as Record<
+          string,
+          unknown
+        >;
+      } catch {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: createCredentialDecryptionError(input.provider).message,
+        });
+      }
 
       return {
         provider: credential.provider,

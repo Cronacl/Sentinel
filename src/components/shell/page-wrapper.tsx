@@ -35,8 +35,8 @@ export function PageWrapper({
   flush = false,
   children,
 }: PageWrapperProps) {
-  const { leftSidebarOpen, isMobile } = useShell();
-  const showToggle = !leftSidebarOpen || isMobile;
+  const { leftSidebarOpen } = useShell();
+  const showToggle = !leftSidebarOpen;
 
   const hasHeader = title || showToggle || actions;
 
