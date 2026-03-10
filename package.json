@@ -5,19 +5,25 @@
   "description": "Sentinel local-first desktop app",
   "author": "Sentinel",
   "type": "module",
+  "packageManager": "bun@1.3.6",
+  "engines": {
+    "bun": "1.3.6",
+    "node": "21.7.3"
+  },
   "main": "desktop/main/index.mjs",
   "scripts": {
-    "build": "next build",
-    "build:desktop": "node ./scripts/desktop/clean.mjs && bun run build && node ./scripts/desktop/prepare-production.mjs && electron-builder --mac dmg",
-    "dev:desktop": "concurrently -k \"NEXT_PUBLIC_URL=http://127.0.0.1:3232 BETTER_AUTH_URL=http://127.0.0.1:3232 ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef bun run dev -- --port 3232\" \"NEXT_PUBLIC_URL=http://127.0.0.1:3232 BETTER_AUTH_URL=http://127.0.0.1:3232 ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef node ./scripts/desktop/dev-launch.mjs\"",
+    "preinstall": "node ./scripts/check-package-manager.mjs",
+    "build": "node ./scripts/rebuild-node-native.mjs && next build",
+    "build:desktop": "bun run ./scripts/desktop/clean.mjs && bun run build && bun run ./scripts/desktop/prepare-production.mjs && bun run ./scripts/desktop/rebuild-standalone-native.mjs && bun run ./scripts/desktop/prepare-shell.mjs && bun x electron-builder --mac dmg",
+    "dev:desktop": "concurrently -k \"bun run dev -- --port 3232\" \"bun run ./scripts/desktop/dev-launch.mjs\"",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "db:push": "npx drizzle-kit push",
-    "db:generate": "npx drizzle-kit generate",
-    "db:studio": "npx drizzle-kit studio",
-    "dev": "next dev --turbo",
-    "preview": "next build && next start",
-    "start": "next start",
+    "db:push": "bun x drizzle-kit push",
+    "db:generate": "bun x drizzle-kit generate",
+    "db:studio": "bun x drizzle-kit studio",
+    "dev": "node ./scripts/rebuild-node-native.mjs && next dev --turbo",
+    "preview": "node ./scripts/rebuild-node-native.mjs && next build && next start",
+    "start": "node ./scripts/rebuild-node-native.mjs && next start",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -44,7 +50,7 @@
     "@trpc/react-query": "^11.0.0",
     "@trpc/server": "^11.0.0",
     "ai": "^6.0.116",
-    "better-sqlite3": "^12.6.2",
+    "better-sqlite3": "12.6.2",
     "date-fns": "^4.1.0",
     "drizzle-orm": "^0.45.1",
     "highlight.js": "^11.11.1",
@@ -59,7 +65,7 @@
     "resumable-stream": "^2.2.10",
     "server-only": "^0.0.1",
     "shiki": "^4.0.1",
-    "sqlite-vec": "^0.1.7-alpha.2",
+    "sqlite-vec": "0.1.7-alpha.2",
     "superjson": "^2.2.1",
     "tailwind-variants": "^3.2.2",
     "zod": "^3.24.2"
@@ -73,8 +79,8 @@
     "@types/react-dom": "^19.0.0",
     "concurrently": "^9.2.1",
     "drizzle-kit": "^0.31.9",
-    "electron": "^40.8.0",
-    "electron-builder": "^26.8.1",
+    "electron": "40.8.0",
+    "electron-builder": "26.8.1",
     "postcss": "^8.5.3",
     "prettier": "^3.8.1",
     "prettier-plugin-tailwindcss": "^0.7.2",
@@ -84,11 +90,10 @@
   },
   "build": {
     "appId": "app.sentinel.desktop",
-    "asarUnpack": [
-      "node_modules/better-sqlite3/**",
-      "node_modules/sqlite-vec/**"
-    ],
+    "afterPack": "scripts/desktop/after-pack.cjs",
+    "beforeBuild": "scripts/desktop/before-build.cjs",
     "directories": {
+      "app": "dist/desktop-app",
       "buildResources": "build"
     },
     "electronDist": "node_modules/electron/dist",
@@ -101,15 +106,11 @@
     "files": [
       "desktop/**/*",
       "scripts/desktop/**/*",
-      "src/**/*",
-      "build/**/*",
-      ".env.example",
-      "next.config.js",
-      "package.json",
-      "node_modules/**/*"
+      "package.json"
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
+      "icon": "assets/icon.icns",
       "target": [
         "dmg"
       ]

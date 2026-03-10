@@ -1,5 +1,5 @@
-import { spawn } from "node:child_process";
 import path from "node:path";
+import { utilityProcess } from "electron";
 
 import { APP_HOST, APP_PORT, APP_URL } from "./constants.mjs";
 import { loadRuntimeEnv } from "./service-manager.mjs";
@@ -48,7 +48,7 @@ export async function startLocalServer(runtimePaths) {
   }
 
   const env = await loadRuntimeEnv(runtimePaths);
-  const child = spawn(process.execPath, [runtimePaths.serverEntryPath], {
+  const child = utilityProcess.fork(runtimePaths.serverEntryPath, [], {
     cwd: runtimePaths.isPackaged
       ? path.dirname(runtimePaths.serverEntryPath)
       : runtimePaths.appRoot,
@@ -60,10 +60,27 @@ export async function startLocalServer(runtimePaths) {
       NODE_ENV: "production",
       PORT: String(APP_PORT),
     },
-    stdio: "inherit",
+    stdio: "pipe",
+    serviceName: "Sentinel App Server",
+    ...(process.platform === "darwin"
+      ? { allowLoadingUnsignedLibraries: true }
+      : {}),
   });
 
-  await waitForAppServer(APP_URL);
+  child.stdout?.on("data", (chunk) => {
+    process.stdout.write(chunk);
+  });
+
+  child.stderr?.on("data", (chunk) => {
+    process.stderr.write(chunk);
+  });
+
+  try {
+    await waitForAppServer(APP_URL);
+  } catch (error) {
+    child.kill();
+    throw error;
+  }
 
   return {
     process: child,

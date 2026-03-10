@@ -1,17 +1,9 @@
 import { randomBytes } from "node:crypto";
-import path from "node:path";
 
-import { APP_URL } from "./constants.mjs";
 import { readTextFile, writeTextFile } from "./state.mjs";
 
 const RUNTIME_ENV_KEYS = [
-  "BETTER_AUTH_SECRET",
-  "BETTER_AUTH_URL",
   "ENCRYPTION_KEY",
-  "GOOGLE_CLIENT_ID",
-  "GOOGLE_CLIENT_SECRET",
-  "GOOGLE_REDIRECT_URI",
-  "NEXT_PUBLIC_URL",
   "SENTINEL_DB_PATH",
   "SENTINEL_STATE_PATH",
 ];
@@ -37,13 +29,7 @@ function parseDotEnv(content) {
 
 function buildDefaultEnv() {
   return {
-    BETTER_AUTH_SECRET: randomBytes(32).toString("hex"),
-    BETTER_AUTH_URL: APP_URL,
     ENCRYPTION_KEY: randomBytes(32).toString("hex"),
-    GOOGLE_CLIENT_ID: "",
-    GOOGLE_CLIENT_SECRET: "",
-    GOOGLE_REDIRECT_URI: `${APP_URL}/api/auth/callback/google`,
-    NEXT_PUBLIC_URL: APP_URL,
   };
 }
 
