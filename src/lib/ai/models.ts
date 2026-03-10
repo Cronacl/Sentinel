@@ -29,6 +29,7 @@ export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 type ReasoningConfig = {
   defaultEffort: ReasoningEffort;
   forceReasoning?: boolean;
+  providerOptionsMap?: Partial<Record<ReasoningEffort, SharedV3ProviderOptions>>;
   providerValueMap?: Partial<Record<ReasoningEffort, string>>;
   reasoningSummary?: "auto" | "concise" | "detailed";
   strategy:
@@ -81,6 +82,55 @@ const GEMINI_3_FLASH_REASONING_CONFIG: ReasoningConfig = {
   defaultEffort: "medium",
   strategy: "google-thinking-level",
   supportedEfforts: ["minimal", "low", "medium", "high"],
+};
+
+const GEMINI_2_5_FLASH_REASONING_CONFIG: ReasoningConfig = {
+  defaultEffort: "minimal",
+  providerOptionsMap: {
+    minimal: {
+      google: { thinkingConfig: { thinkingBudget: 0 } },
+    },
+    low: {
+      google: {
+        thinkingConfig: { thinkingBudget: 256, includeThoughts: true },
+      },
+    },
+    medium: {
+      google: {
+        thinkingConfig: { thinkingBudget: 1024, includeThoughts: true },
+      },
+    },
+    high: {
+      google: {
+        thinkingConfig: { thinkingBudget: 2048, includeThoughts: true },
+      },
+    },
+  },
+  strategy: "google-thinking-level",
+  supportedEfforts: ["minimal", "low", "medium", "high"],
+};
+
+const GEMINI_2_5_PRO_REASONING_CONFIG: ReasoningConfig = {
+  defaultEffort: "medium",
+  providerOptionsMap: {
+    low: {
+      google: {
+        thinkingConfig: { thinkingBudget: 1024, includeThoughts: true },
+      },
+    },
+    medium: {
+      google: {
+        thinkingConfig: { thinkingBudget: 2048, includeThoughts: true },
+      },
+    },
+    high: {
+      google: {
+        thinkingConfig: { thinkingBudget: 4096, includeThoughts: true },
+      },
+    },
+  },
+  strategy: "google-thinking-level",
+  supportedEfforts: ["low", "medium", "high"],
 };
 
 export const MODEL_CATALOG: Record<AIProvider, ModelMeta[]> = {
@@ -376,7 +426,7 @@ export const MODEL_CATALOG: Record<AIProvider, ModelMeta[]> = {
       id: "gemini-3-pro-preview",
       displayName: "Gemini 3 Pro Preview",
       description: "Next-gen Gemini preview model.",
-      capabilities: ["vision", "tool_use", "object_generation"],
+      capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
       contextWindow: 1_048_576,
       reasoning: GEMINI_3_PRO_REASONING_CONFIG,
     },
@@ -386,6 +436,7 @@ export const MODEL_CATALOG: Record<AIProvider, ModelMeta[]> = {
       description: "Most capable Gemini model with reasoning.",
       capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
       contextWindow: 1_048_576,
+      reasoning: GEMINI_2_5_PRO_REASONING_CONFIG,
     },
     {
       id: "gemini-2.5-flash",
@@ -393,6 +444,7 @@ export const MODEL_CATALOG: Record<AIProvider, ModelMeta[]> = {
       description: "Fast model with thinking capabilities.",
       capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
       contextWindow: 1_048_576,
+      reasoning: GEMINI_2_5_FLASH_REASONING_CONFIG,
     },
     {
       id: "gemini-2.5-flash-lite",
@@ -442,7 +494,7 @@ export const MODEL_CATALOG: Record<AIProvider, ModelMeta[]> = {
       id: "gemini-3-pro-preview",
       displayName: "Gemini 3 Pro Preview",
       description: "Next-gen Gemini preview model via Vertex AI.",
-      capabilities: ["vision", "tool_use", "object_generation"],
+      capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
       contextWindow: 1_048_576,
       reasoning: GEMINI_3_PRO_REASONING_CONFIG,
     },
@@ -452,6 +504,7 @@ export const MODEL_CATALOG: Record<AIProvider, ModelMeta[]> = {
       description: "Most capable Gemini model with reasoning via Vertex AI.",
       capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
       contextWindow: 1_048_576,
+      reasoning: GEMINI_2_5_PRO_REASONING_CONFIG,
     },
     {
       id: "gemini-2.5-flash",
@@ -459,6 +512,7 @@ export const MODEL_CATALOG: Record<AIProvider, ModelMeta[]> = {
       description: "Fast model with thinking capabilities via Vertex AI.",
       capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
       contextWindow: 1_048_576,
+      reasoning: GEMINI_2_5_FLASH_REASONING_CONFIG,
     },
     {
       id: "gemini-2.5-flash-lite",
@@ -574,7 +628,7 @@ function getProviderOptionsKey(provider: AIProvider) {
     case "google":
       return "google";
     case "google_vertex":
-      return "vertex";
+      return "google";
   }
 }
 
@@ -653,6 +707,12 @@ export function getReasoningProviderOptions(
   }
 
   const providerOptionsKey = getProviderOptionsKey(provider);
+  const mappedProviderOptions = config.providerOptionsMap?.[reasoningEffort];
+
+  if (mappedProviderOptions) {
+    return mappedProviderOptions;
+  }
+
   const providerValue =
     config.providerValueMap?.[reasoningEffort] ?? reasoningEffort;
 

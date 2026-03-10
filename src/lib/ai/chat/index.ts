@@ -29,6 +29,7 @@ import { buildPersistedAssistantMessage } from "./finalize-assistant";
 import { resolveThreadChatModel } from "./model";
 import * as persist from "./persistence";
 import { createReasoningMetadataTracker } from "./reasoning-metadata";
+import { resolveThreadTitleModel } from "./title-model";
 import { generateThreadTitle } from "./title";
 import type { ThreadChatRequest, ThreadChatTrigger } from "./types";
 
@@ -265,10 +266,17 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
             return null;
           }
 
-          return generateThreadTitle({
-            firstUserText: text,
-            model: resolvedModel,
-          });
+          return (async () => {
+            const titleModel = await resolveThreadTitleModel({
+              providerId: resolvedModel.providerId,
+              userId: request.userId,
+            });
+
+            return generateThreadTitle({
+              firstUserText: text,
+              model: titleModel,
+            });
+          })();
         })()
       : null;
 

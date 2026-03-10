@@ -1,6 +1,6 @@
 import { generateText } from "ai";
 
-import type { ResolvedThreadChatModel } from "./types";
+import type { ResolvedThreadTitleModel } from "./types";
 
 function sanitizeGeneratedTitle(value: string) {
   const singleLine = value.replace(/\s+/g, " ").trim();
@@ -19,7 +19,7 @@ export async function generateThreadTitle({
   model,
 }: {
   firstUserText: string;
-  model: ResolvedThreadChatModel;
+  model: ResolvedThreadTitleModel;
 }) {
   const result = await generateText({
     model: model.languageModel as Parameters<typeof generateText>[0]["model"],
@@ -27,6 +27,7 @@ export async function generateThreadTitle({
     system:
       "Generate a concise chat thread title of 2 to 6 words. Return only the title text with no quotes, markdown, labels, or trailing punctuation.",
     temperature: 0.2,
+    ...(model.providerOptions ? { providerOptions: model.providerOptions } : {}),
   });
 
   const title = sanitizeGeneratedTitle(result.text);

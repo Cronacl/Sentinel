@@ -22,13 +22,17 @@ export type ThreadChatRequest = {
   workspaceId: string;
 };
 
-export type ResolvedThreadChatModel = {
+type ResolvedThreadModel = {
   languageModel: unknown;
   providerId: AIProvider;
   providerOptions?: SharedV3ProviderOptions;
   requestedModelId: string;
   responseModelId: string;
 };
+
+export type ResolvedThreadChatModel = ResolvedThreadModel;
+
+export type ResolvedThreadTitleModel = ResolvedThreadModel;
 
 export type ThreadChatClock = {
   now(): number;
