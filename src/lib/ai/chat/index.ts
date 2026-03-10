@@ -1,6 +1,9 @@
 import {
   convertToModelMessages,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
   generateId,
+  smoothStream,
   streamText,
 } from "ai";
 
@@ -46,7 +49,8 @@ async function parseRequest(
   raw: unknown,
   userId: string,
 ): Promise<ThreadChatRequest> {
-  if (!raw || typeof raw !== "object") throw new InvalidThreadChatRequestError();
+  if (!raw || typeof raw !== "object")
+    throw new InvalidThreadChatRequestError();
   const input = raw as Record<string, unknown>;
 
   const threadId = str(input.id);
@@ -74,7 +78,9 @@ async function parseRequest(
   let message: ThreadUIMessage | undefined;
   if (needsMessage && input.message && typeof input.message === "object") {
     message = await validateThreadUIMessage(
-      normalizeThreadUIMessage(input.message as Parameters<typeof normalizeThreadUIMessage>[0]),
+      normalizeThreadUIMessage(
+        input.message as Parameters<typeof normalizeThreadUIMessage>[0],
+      ),
     );
   }
   if (needsMessage && !message) throw new InvalidThreadChatRequestError();
@@ -154,9 +160,7 @@ function getParentMessageId(
 ): string | null {
   switch (request.trigger) {
     case "submit-user-message":
-      return (
-        request.message?.id ?? getLatestVisibleMessageId(allRecords)
-      );
+      return request.message?.id ?? getLatestVisibleMessageId(allRecords);
     case "edit-user-message":
       return request.message?.id ?? null;
     case "retry-assistant-message":
@@ -178,11 +182,10 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
   // ── Stop-stream ───────────────────────────────────────────────
   if (request.trigger === "stop-stream") {
     if (request.messageId) {
-      await persist.updateMessageMetadata(
-        request.threadId,
-        request.messageId,
-        { errorMessage: "Generation stopped.", status: "cancelled" },
-      );
+      await persist.updateMessageMetadata(request.threadId, request.messageId, {
+        errorMessage: "Generation stopped.",
+        status: "cancelled",
+      });
     }
     persist.clearActiveStream(request.threadId);
     return new Response(null, { status: 204 });
@@ -246,6 +249,21 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
   // ── Resolve model ─────────────────────────────────────────────
   const resolvedModel = await resolveThreadChatModel(request, targetMessage);
 
+  const resolvedTitlePromise =
+    isNewThread && request.trigger === "submit-user-message"
+      ? (() => {
+          const text = getFirstUserText(baseMessages);
+          if (!text?.trim()) {
+            return null;
+          }
+
+          return generateThreadTitle({
+            firstUserText: text,
+            model: resolvedModel,
+          });
+        })()
+      : null;
+
   // ── Placeholder assistant message ─────────────────────────────
   const assistantId = crypto.randomUUID();
   const parentId = getParentMessageId(request, allRecords);
@@ -274,11 +292,7 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
   await persist.setActiveMessage(request.threadId, assistantId);
 
   // ── Build model transcript ────────────────────────────────────
-  const modelTranscript = buildModelTranscript(
-    request,
-    transcript,
-    allRecords,
-  );
+  const modelTranscript = buildModelTranscript(request, transcript, allRecords);
 
   // ── Reasoning metadata tracker ────────────────────────────────
   const tracker = createReasoningMetadataTracker({
@@ -290,30 +304,52 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
   // ── Stream ────────────────────────────────────────────────────
   let streamErrorMessage: string | undefined;
 
-  const result = streamText({
-    model: resolvedModel.languageModel as Parameters<typeof streamText>[0]["model"],
-    experimental_download: createAttachmentDownloadHandler(),
-    messages: await convertToModelMessages(modelTranscript),
-    onError: ({ error }) => {
-      streamErrorMessage =
-        error instanceof Error
-          ? error.message
-          : String(error ?? "Unknown error");
-    },
-    ...(resolvedModel.providerOptions
-      ? { providerOptions: resolvedModel.providerOptions }
-      : {}),
-  });
-
-  result.consumeStream();
-
-  return result.toUIMessageStreamResponse({
+  const stream = createUIMessageStream({
     originalMessages: modelTranscript,
-    generateMessageId: () => assistantId,
-    messageMetadata: ({ part }) => tracker.getMessageMetadata(part),
-    sendReasoning: true,
-    sendSources: true,
+    execute: async ({ writer }) => {
+      const result = streamText({
+        model: resolvedModel.languageModel as Parameters<
+          typeof streamText
+        >[0]["model"],
+        experimental_download: createAttachmentDownloadHandler(),
+        experimental_transform: smoothStream({ chunking: "line" }),
+        messages: await convertToModelMessages(modelTranscript),
+        onError: ({ error }) => {
+          streamErrorMessage =
+            error instanceof Error
+              ? error.message
+              : String(error ?? "Unknown error");
+        },
+        ...(resolvedModel.providerOptions
+          ? { providerOptions: resolvedModel.providerOptions }
+          : {}),
+      });
 
+      writer.merge(
+        result.toUIMessageStream({
+          originalMessages: modelTranscript,
+          generateMessageId: () => assistantId,
+          messageMetadata: ({ part }) => tracker.getMessageMetadata(part),
+          sendReasoning: true,
+          sendSources: true,
+        }),
+      );
+
+      if (resolvedTitlePromise) {
+        const title = await resolvedTitlePromise.catch(() => null);
+        if (title) {
+          persist.updateThreadTitle(request.threadId, title);
+          writer.write({
+            type: "data-thread-title",
+            data: { threadId: request.threadId, title },
+          });
+          writer.write({
+            type: "data-thread-invalidation",
+            data: { target: "all", threadId: request.threadId },
+          });
+        }
+      }
+    },
     onFinish: async ({ responseMessage }) => {
       const finalized = tracker.finalize(
         [...modelTranscript, responseMessage as ThreadUIMessage],
@@ -328,9 +364,7 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
         ...merged,
         id: assistantId,
         metadata: mergeThreadMessageMetadata(merged.metadata, {
-          ...(streamErrorMessage
-            ? { errorMessage: streamErrorMessage }
-            : {}),
+          ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
           finishReason: merged.metadata?.finishReason,
           isActive: true,
           status,
@@ -338,23 +372,23 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
       });
 
       persist.clearActiveStream(request.threadId);
-
-      if (isNewThread) {
-        const text = getFirstUserText(modelTranscript);
-        if (text?.trim()) {
-          const title = await generateThreadTitle({
-            firstUserText: text,
-            model: resolvedModel,
-          }).catch(() => null);
-          if (title) persist.updateThreadTitle(request.threadId, title);
-        }
-      }
     },
+  });
 
-    async consumeSseStream({ stream }) {
+  return createUIMessageStreamResponse({
+    headers: {
+      "Content-Encoding": "none",
+    },
+    stream,
+    async consumeSseStream({ stream: sseStream }) {
       const streamId = generateId();
-      await streamContext.createNewResumableStream(streamId, () => stream);
       persist.setActiveStream(request.threadId, streamId);
+      try {
+        await streamContext.createNewResumableStream(streamId, () => sseStream);
+      } catch (error) {
+        persist.clearActiveStream(request.threadId);
+        throw error;
+      }
     },
   });
 }

@@ -1,6 +1,4 @@
 "use client";
-
-import { memo, useMemo } from "react";
 import {
   ArrowLeft01Icon,
   ArrowReloadHorizontalIcon,
@@ -13,7 +11,6 @@ import type {
   ThreadMessageMetadata,
   ThreadUIMessage,
 } from "@/lib/ai/thread-message-types";
-import { getThreadMessageSyncToken as getMessageSyncToken } from "@/lib/ai/thread-message-types";
 
 import { CopyButton } from "./message-parts/copy-button";
 import { FilePart } from "./message-parts/file-part";
@@ -32,6 +29,35 @@ import {
   type MessagePart,
 } from "./message-parts/types";
 import { Button } from "@heroui/react";
+
+type DisplayReasoningEntry = {
+  durationMs?: number;
+  endPartIndex: number;
+  partIndex: number;
+  text: string;
+  type: "reasoning-block";
+};
+
+type DisplayRenderEntry =
+  | DisplayReasoningEntry
+  | Exclude<
+      ReturnType<typeof coalesceReasoningEntries>[number],
+      { type: "reasoning-block" }
+    >;
+
+function mergeReasoningText(current: string, next: string) {
+  if (!current) return next;
+  if (!next) return current;
+
+  const currentEndsWithWhitespace = /\s$/.test(current);
+  const nextStartsWithWhitespace = /^\s/.test(next);
+
+  if (currentEndsWithWhitespace || nextStartsWithWhitespace) {
+    return `${current}${next}`;
+  }
+
+  return `${current}\n\n${next}`;
+}
 
 function MessageActionButton({
   icon,
@@ -65,41 +91,6 @@ function MessageActionButton({
         />
       ) : null}
     </Button>
-  );
-}
-
-function MessageStatusPill({
-  status,
-  errorMessage,
-}: {
-  errorMessage?: string;
-  status?: ThreadMessageMetadata["status"];
-}) {
-  if (!status || status === "completed") {
-    return null;
-  }
-
-  let label: string | null = null;
-
-  if (status === "pending") {
-    label = "Pending";
-  } else if (status === "cancelled") {
-    label = "Stopped";
-  } else if (status === "error") {
-    label = "Failed";
-  }
-
-  if (!label) {
-    return null;
-  }
-
-  return (
-    <div
-      className="inline-flex max-w-full items-center rounded-full border border-border/50 bg-default/20 px-2.5 py-1 text-[11px] text-muted"
-      title={errorMessage}
-    >
-      <span className="truncate">{label}</span>
-    </div>
   );
 }
 
@@ -175,24 +166,22 @@ function AssistantMessage({
   isStreaming: boolean;
   message: ThreadUIMessage;
 }) {
-  const assistantText = useMemo(() => getAssistantText(message), [message]);
-  const groups = useMemo(
-    () => groupMessageParts(message.parts),
-    [message.parts],
-  );
-  const lastReasoningIndex = useMemo(() => {
-    let index = -1;
-    message.parts.forEach((part, partIndex) => {
-      if (part.type === "reasoning") {
-        index = partIndex;
-      }
-    });
-    return index;
-  }, [message.parts]);
+  const assistantText = getAssistantText(message);
+  const groups = groupMessageParts(message.parts);
+  let lastReasoningIndex = -1;
+  message.parts.forEach((part, partIndex) => {
+    if (part.type === "reasoning") {
+      lastReasoningIndex = partIndex;
+    }
+  });
 
   const metadata = message.metadata as ThreadMessageMetadata | undefined;
   const reasoningTokens = extractReasoningTokens(metadata);
   const reasoningMetadata = metadata?.reasoning;
+  const durationSource =
+    reasoningMetadata?.segmentDurationsMs ??
+    reasoningMetadata?.rawSegmentDurationsMs ??
+    [];
   const branchOptions = getBranchOptions(metadata);
   const rawStatus = getMessageStatus(metadata);
   const hasVisibleParts = groups.some((group) =>
@@ -237,84 +226,130 @@ function AssistantMessage({
   return (
     <div className="py-2">
       <div className="flex flex-col gap-2">
-        {groups.map((group, groupIndex) =>
-          (() => {
+        {(() => {
+          let reasoningBlockCursor = 0;
+          const displayGroups: DisplayRenderEntry[][] = [];
+
+          for (const group of groups) {
             const renderEntries = coalesceReasoningEntries(group);
-            let rawDurationCursor = 0;
+            const displayEntries: DisplayRenderEntry[] = renderEntries.map(
+              (entry) => {
+                if (entry.type !== "reasoning-block") {
+                  return entry;
+                }
 
-            return (
-              <div
-                className={`${groupIndex > 0 ? "border-t border-border/60 pt-4" : ""} flex flex-col gap-3`}
-                key={`${message.id}:step:${groupIndex}`}
-              >
-                {renderEntries.map((entry) => {
-                  if (entry.type === "reasoning-block") {
-                    const durationSource =
-                      reasoningMetadata?.segmentDurationsMs ??
-                      reasoningMetadata?.rawSegmentDurationsMs ??
-                      [];
-                    const blockDurationMs =
-                      reasoningMetadata?.segmentDurationsMs != null
-                        ? durationSource[entry.reasoningBlockIndex]
-                        : durationSource
-                            .slice(
-                              rawDurationCursor,
-                              rawDurationCursor + entry.rawPartCount,
-                            )
-                            .reduce((sum, value) => sum + value, 0);
+                const durationMs = durationSource[reasoningBlockCursor];
+                reasoningBlockCursor += 1;
 
-                    rawDurationCursor += entry.rawPartCount;
-
-                    return (
-                      <ReasoningPart
-                        activeSinceMs={reasoningMetadata?.activeSinceMs}
-                        durationMs={blockDurationMs}
-                        isLastStreamingPart={
-                          entry.endPartIndex === lastReasoningIndex
-                        }
-                        isStreaming={
-                          isStreaming &&
-                          entry.endPartIndex === lastReasoningIndex
-                        }
-                        key={`${message.id}:reasoning-block:${entry.partIndex}:${entry.endPartIndex}`}
-                        reasoningKey={`${message.id}:reasoning:${entry.partIndex}-${entry.endPartIndex}`}
-                        text={entry.text}
-                        tokenCount={
-                          entry.endPartIndex === lastReasoningIndex
-                            ? reasoningTokens
-                            : undefined
-                        }
-                      />
-                    );
-                  }
-
-                  const key = getPartKey(message.id, entry);
-                  const { part } = entry;
-
-                  if (part.type === "text") {
-                    return (
-                      <TextPart
-                        isStreaming={isStreaming && part.state === "streaming"}
-                        key={key}
-                        part={part}
-                      />
-                    );
-                  }
-
-                  if (part.type === "file") {
-                    return <FilePart key={key} part={part} />;
-                  }
-
-                  if (isToolPart(part)) {
-                    return <ToolPart key={key} part={part} />;
-                  }
-
-                  return null;
-                })}
-              </div>
+                return {
+                  durationMs,
+                  endPartIndex: entry.endPartIndex,
+                  partIndex: entry.partIndex,
+                  text: entry.text,
+                  type: "reasoning-block" as const,
+                };
+              },
             );
-          })(),
-        )}
+
+            const isReasoningOnlyGroup =
+              displayEntries.length > 0 &&
+              displayEntries.every((entry) => entry.type === "reasoning-block");
+            const previousGroup = displayGroups.at(-1);
+            const previousIsReasoningOnlyGroup =
+              previousGroup != null &&
+              previousGroup.length > 0 &&
+              previousGroup.every((entry) => entry.type === "reasoning-block");
+
+            if (
+              isReasoningOnlyGroup &&
+              previousGroup &&
+              previousIsReasoningOnlyGroup
+            ) {
+              const mergedBlocks = [...previousGroup, ...displayEntries].filter(
+                (entry): entry is DisplayReasoningEntry =>
+                  entry.type === "reasoning-block",
+              );
+              const firstBlock = mergedBlocks[0];
+              const lastBlock = mergedBlocks.at(-1);
+
+              if (firstBlock && lastBlock) {
+                displayGroups[displayGroups.length - 1] = [
+                  {
+                    durationMs: mergedBlocks.reduce(
+                      (sum, entry) => sum + (entry.durationMs ?? 0),
+                      0,
+                    ),
+                    endPartIndex: lastBlock.endPartIndex,
+                    partIndex: firstBlock.partIndex,
+                    text: mergedBlocks.reduce(
+                      (text, entry) => mergeReasoningText(text, entry.text),
+                      "",
+                    ),
+                    type: "reasoning-block",
+                  },
+                ];
+              }
+              continue;
+            }
+
+            displayGroups.push(displayEntries);
+          }
+
+          return displayGroups.map((group, groupIndex) => (
+            <div
+              className={`${groupIndex > 0 ? "border-t border-border/60 pt-4" : ""} flex flex-col gap-3`}
+              key={`${message.id}:step:${groupIndex}`}
+            >
+              {group.map((entry) => {
+                if (entry.type === "reasoning-block") {
+                  return (
+                    <ReasoningPart
+                      activeSinceMs={reasoningMetadata?.activeSinceMs}
+                      durationMs={entry.durationMs}
+                      isLastStreamingPart={
+                        entry.endPartIndex === lastReasoningIndex
+                      }
+                      isStreaming={
+                        isStreaming && entry.endPartIndex === lastReasoningIndex
+                      }
+                      key={`${message.id}:reasoning-block:${entry.partIndex}:${entry.endPartIndex}`}
+                      reasoningKey={`${message.id}:reasoning:${entry.partIndex}-${entry.endPartIndex}`}
+                      text={entry.text}
+                      tokenCount={
+                        entry.endPartIndex === lastReasoningIndex
+                          ? reasoningTokens
+                          : undefined
+                      }
+                    />
+                  );
+                }
+
+                const key = getPartKey(message.id, entry);
+                const { part } = entry;
+
+                if (part.type === "text") {
+                  return (
+                    <TextPart
+                      isStreaming={isStreaming && part.state === "streaming"}
+                      key={key}
+                      part={part}
+                    />
+                  );
+                }
+
+                if (part.type === "file") {
+                  return <FilePart key={key} part={part} />;
+                }
+
+                if (isToolPart(part)) {
+                  return <ToolPart key={key} part={part} />;
+                }
+
+                return null;
+              })}
+            </div>
+          ));
+        })()}
 
         {assistantText ||
         status === "completed" ||
@@ -323,10 +358,6 @@ function AssistantMessage({
         isStreaming ||
         branchOptions.length > 1 ? (
           <div className="flex flex-wrap items-center gap-1 pt-0.5 text-muted">
-            <MessageStatusPill
-              errorMessage={metadata?.errorMessage}
-              status={status}
-            />
             {!isStreaming && assistantText ? (
               <CopyButton text={assistantText} title="Copy answer" />
             ) : null}
@@ -437,7 +468,7 @@ type ChatMessageProps = {
   onSelectBranch?: (messageId: string) => void;
 };
 
-export const ChatMessage = memo(function ChatMessage({
+export function ChatMessage({
   message,
   isStreaming = false,
   onEdit,
@@ -463,28 +494,5 @@ export const ChatMessage = memo(function ChatMessage({
       onRetry={onRetry}
       onSelectBranch={onSelectBranch}
     />
-  );
-}, areChatMessagePropsEqual);
-
-function areChatMessagePropsEqual(
-  prev: ChatMessageProps,
-  next: ChatMessageProps,
-) {
-  if (
-    prev.isStreaming !== next.isStreaming ||
-    prev.onEdit !== next.onEdit ||
-    prev.onRegenerate !== next.onRegenerate ||
-    prev.onRetry !== next.onRetry ||
-    prev.onSelectBranch !== next.onSelectBranch
-  ) {
-    return false;
-  }
-
-  if (prev.message === next.message) {
-    return true;
-  }
-
-  return (
-    getMessageSyncToken(prev.message) === getMessageSyncToken(next.message)
   );
 }

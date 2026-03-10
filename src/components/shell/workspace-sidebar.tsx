@@ -261,8 +261,7 @@ function PinnedThreadsList({
   if (threads.length === 0) return null;
 
   return (
-    <div className="px-3 pt-3 pb-1">
-      <p className="text-muted/80 px-2 pb-2 text-[11px] font-medium">Pinned</p>
+    <div className="px-3 pt-2">
       <div className="flex flex-col gap-0.5">
         {threads.map((thread) => {
           const isActive = selectedThreadId === thread.id;
@@ -329,7 +328,7 @@ const ThreadList = memo(function ThreadList({
   selectedWorkspaceId: string | null;
 }) {
   return (
-    <div className="flex flex-col gap-1 px-3 py-3">
+    <div className="flex flex-col gap-1 px-3 py-2">
       {groups.map((group) => {
         const isExpanded = expandedWorkspaceIds.has(group.workspace.id);
         const isWorkspaceActive = selectedWorkspaceId === group.workspace.id;
@@ -337,7 +336,7 @@ const ThreadList = memo(function ThreadList({
         return (
           <section key={group.workspace.id}>
             <Button
-              className={`justify-start rounded-lg ${
+              className={`justify-start rounded-xl ${
                 isWorkspaceActive
                   ? "text-foreground"
                   : "text-muted hover:text-foreground"

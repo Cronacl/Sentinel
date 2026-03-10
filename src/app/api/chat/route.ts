@@ -5,6 +5,8 @@ import { runThreadChat } from "@/lib/ai/chat";
 import { getLocalSession } from "@/server/local-profile";
 
 export const maxDuration = 120;
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {

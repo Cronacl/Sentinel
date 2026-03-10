@@ -613,7 +613,7 @@ export function ChatComposer({
         type="file"
       />
 
-      <div className="w-full rounded-[18px] border border-border/50 dark:border-border/80 bg-background  dark:bg-background p-2 shadow-[0_0_10px_rgba(0,0,0,0.05)]">
+      <div className="w-full rounded-[18px] border border-border/50 dark:border-border/80 bg-background  dark:bg-surface p-2 shadow-[0_0_10px_rgba(0,0,0,0.05)]">
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-1.5 px-2 pb-1.5">
             {attachments.map((attachment) => (

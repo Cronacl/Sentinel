@@ -5,6 +5,9 @@ import { streamContext } from "@/lib/streams";
 import { db } from "@/server/db";
 import { threads } from "@/server/db/schema";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -25,7 +28,7 @@ export async function GET(
   );
 
   if (resumedStream == null) {
-    db.update(threads)
+    await db.update(threads)
       .set({ activeStreamId: null })
       .where(eq(threads.id, id))
       .run();
@@ -33,7 +36,10 @@ export async function GET(
     return new Response(null, { status: 204 });
   }
 
-  return new Response(resumedStream, {
-    headers: UI_MESSAGE_STREAM_HEADERS,
+  return new Response(resumedStream.pipeThrough(new TextEncoderStream()), {
+    headers: {
+      ...UI_MESSAGE_STREAM_HEADERS,
+      "Content-Encoding": "none",
+    },
   });
 }

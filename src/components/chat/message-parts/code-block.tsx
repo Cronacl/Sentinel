@@ -18,7 +18,7 @@ const highlighterPromise = createHighlighter({
 
 const highlightedHtmlCache = new Map<string, string>();
 const MAX_HIGHLIGHT_CACHE_SIZE = 200;
-const DEFAULT_MAX_LINES = 20;
+const DEFAULT_MAX_LINES = 10;
 
 const languageToVSCodeIcon: Record<string, string> = {
   bash: "vscode-icons:file-type-shell",
@@ -265,11 +265,11 @@ export function CodeBlock({
       className="sentinel-code-block group relative my-2 w-full max-w-xl overflow-hidden rounded-2xl border border-border/50 bg-background shadow-[0_0_10px_0_rgba(0,0,0,0.01)] dark:border-border/50 dark:bg-surface/50 dark:shadow-none"
       ref={containerRef}
     >
-      <div className="flex h-11 items-center justify-between border-b border-border/50 px-3 py-1.5">
+      <div className="flex h-9 items-center justify-between border-b border-border/50 px-3 py-1.5">
         {actualLanguage ? (
           <div className="flex items-center gap-1">
             {languageIcon ? (
-              <Icon className="text-lg text-default-700" icon={languageIcon} />
+              <Icon className="text-md text-default-700" icon={languageIcon} />
             ) : null}
             <span className="select-none text-xs font-medium text-default-600">
               {actualLanguage.charAt(0).toUpperCase() + actualLanguage.slice(1)}
@@ -281,7 +281,7 @@ export function CodeBlock({
 
         <button
           aria-label="Copy code"
-          className="flex items-center justify-center rounded-lg border border-default-200 bg-content1/20 p-1 hover:bg-content1/20 active:bg-content1"
+          className="flex items-center justify-center cursor-pointer rounded-lg border border-border/20 bg-surface/50 dark:bg-background/70 p-1 hover:bg-surface/20 active:bg-surface"
           onClick={() => void handleCopy()}
           type="button"
         >
@@ -296,7 +296,7 @@ export function CodeBlock({
               <HugeiconsIcon
                 color="currentColor"
                 icon={copied ? Tick01Icon : Copy01Icon}
-                size={16}
+                size={12}
                 strokeWidth={1.5}
               />
             </motion.div>
@@ -315,9 +315,9 @@ export function CodeBlock({
       </div>
 
       {isCollapsible ? (
-        <div className="border-t border-default-200/50 px-3 py-1.5 text-center">
+        <div className="border-t border-border/50 px-3 py-1.5 text-center">
           <button
-            className="inline-flex items-center rounded-full border border-default-200/50 bg-content1/20 px-3 py-1 text-xs text-default-600 hover:bg-content1/50 hover:text-default-800"
+            className="inline-flex items-center rounded-full border border-border/50 bg-surface/20 px-3 py-1 text-xs text-default-600 hover:bg-surface/50 hover:text-default-800"
             onClick={() => setIsCollapsed((value) => !value)}
             type="button"
           >

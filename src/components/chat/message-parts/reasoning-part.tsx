@@ -122,11 +122,11 @@ export const ReasoningPart = memo(function ReasoningPart({
     >
       <div className="flex w-full items-center justify-between gap-3 pr-1">
         <button
-          className="group flex min-w-0 flex-1 items-center gap-2 py-2 text-left text-default-600 transition-colors hover:text-foreground dark:text-default-400"
+          className="group flex min-w-0 flex-1 items-center gap-2 text-left text-default-600 transition-colors hover:text-foreground dark:text-default-400"
           onClick={handleOpen}
           type="button"
         >
-          <p className="flex min-w-0 items-center gap-2 text-sm font-medium text-foreground/70">
+          <p className="flex min-w-0 items-center gap-2 text-xs font-medium text-foreground/70">
             <span
               className={`truncate ${
                 isStreaming && isLastStreamingPart

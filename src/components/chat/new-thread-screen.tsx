@@ -144,10 +144,11 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         dataPart.type === "data-thread-invalidation" &&
         dataPart.data.threadId === draftThreadId
       ) {
+        void utils.threads.get.invalidate({ threadId: draftThreadId });
         void utils.threads.list.invalidate();
       }
     },
-    [draftThreadId, utils.threads.list],
+    [draftThreadId, utils.threads.get, utils.threads.list],
   );
 
   const handleFinish = useCallback(() => {
