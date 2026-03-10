@@ -131,6 +131,9 @@ export function useThreadChat({
             },
           };
         },
+        prepareReconnectToStreamRequest: ({ id }) => ({
+          api: `/api/chat/${id}/stream`,
+        }),
       }),
     [],
   );
@@ -152,6 +155,7 @@ export function useThreadChat({
     transport,
     onFinish,
     onError,
+    resume: true,
   });
   const lastSyncedSignatureRef = useRef(initialMessagesSignature);
   const syncedThreadIdRef = useRef(threadId);

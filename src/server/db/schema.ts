@@ -132,6 +132,7 @@ export const threads = sqliteTable(
       .$onUpdateFn(() => new Date()),
     archivedAt: integer("archived_at", { mode: "timestamp" }),
     pinnedAt: integer("pinned_at", { mode: "timestamp" }),
+    activeStreamId: text("active_stream_id"),
   },
   (table) => [
     index("thread_workspace_id_idx").on(table.workspaceId),

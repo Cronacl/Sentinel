@@ -2,8 +2,14 @@ import {
   convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
+  generateId,
   streamText,
 } from "ai";
+import { eq } from "drizzle-orm";
+
+import { db } from "@/server/db";
+import { threads } from "@/server/db/schema";
+import { streamContext } from "@/lib/streams";
 
 import {
   mergeThreadMessageMetadata,
@@ -124,6 +130,20 @@ async function persistUserOperationState(
   }
 }
 
+function clearActiveStream(threadId: string) {
+  db.update(threads)
+    .set({ activeStreamId: null })
+    .where(eq(threads.id, threadId))
+    .run();
+}
+
+function setActiveStream(threadId: string, streamId: string) {
+  db.update(threads)
+    .set({ activeStreamId: streamId })
+    .where(eq(threads.id, threadId))
+    .run();
+}
+
 export async function createThreadChatResponse({
   conversation,
   persistence,
@@ -147,10 +167,13 @@ export async function createThreadChatResponse({
       });
     }
 
+    clearActiveStream(conversation.request.threadId);
     return new Response(null, { status: 204 });
   }
 
   await persistUserOperationState(conversation, persistence);
+
+  clearActiveStream(conversation.request.threadId);
 
   const assistantMessageId = crypto.randomUUID();
   const placeholderMessage = createAssistantPlaceholderMessage({
@@ -271,9 +294,21 @@ export async function createThreadChatResponse({
         },
         threadId: conversation.request.threadId,
       });
+
+      clearActiveStream(conversation.request.threadId);
     },
     originalMessages: modelTranscript,
   });
 
-  return createUIMessageStreamResponse({ stream });
+  const threadId = conversation.request.threadId;
+
+  return createUIMessageStreamResponse({
+    stream,
+    async consumeSseStream({ stream: sseStream }) {
+      const streamId = generateId();
+
+      await streamContext.createNewResumableStream(streamId, () => sseStream);
+      setActiveStream(threadId, streamId);
+    },
+  });
 }
