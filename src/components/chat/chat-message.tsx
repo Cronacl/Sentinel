@@ -31,21 +31,6 @@ import {
 } from "./message-parts/types";
 import { Button } from "@heroui/react";
 
-type DisplayReasoningEntry = {
-  durationMs?: number;
-  endPartIndex: number;
-  partIndex: number;
-  text: string;
-  type: "reasoning-block";
-};
-
-type DisplayRenderEntry =
-  | DisplayReasoningEntry
-  | Exclude<
-      ReturnType<typeof coalesceReasoningEntries>[number],
-      { type: "reasoning-block" }
-    >;
-
 function mergeReasoningText(current: string, next: string) {
   if (!current) return next;
   if (!next) return current;
@@ -183,6 +168,19 @@ function AssistantMessage({
     reasoningMetadata?.segmentDurationsMs ??
     reasoningMetadata?.rawSegmentDurationsMs ??
     [];
+  const mergedReasoningText = message.parts.reduce((text, part) => {
+    if (part.type !== "reasoning") {
+      return text;
+    }
+
+    return mergeReasoningText(text, part.text);
+  }, "");
+  const hasMergedReasoning = mergedReasoningText.trim().length > 0;
+  const mergedReasoningDurationMs =
+    reasoningMetadata?.durationMs ??
+    (durationSource.length > 0
+      ? durationSource.reduce((sum, durationMs) => sum + durationMs, 0)
+      : undefined);
   const branchOptions = getBranchOptions(metadata);
   const rawStatus = getMessageStatus(metadata);
   const hasVisibleParts = groups.some((group) =>
@@ -227,74 +225,26 @@ function AssistantMessage({
   return (
     <div className="py-2">
       <div className="flex flex-col gap-2">
+        {hasMergedReasoning ? (
+          <ReasoningPart
+            activeSinceMs={reasoningMetadata?.activeSinceMs}
+            durationMs={mergedReasoningDurationMs}
+            isLastStreamingPart={lastReasoningIndex >= 0}
+            isStreaming={isStreaming && lastReasoningIndex >= 0}
+            reasoningKey={`${message.id}:reasoning`}
+            text={mergedReasoningText}
+            tokenCount={reasoningTokens}
+          />
+        ) : null}
+
         {(() => {
-          let reasoningBlockCursor = 0;
-          const displayGroups: DisplayRenderEntry[][] = [];
-
-          for (const group of groups) {
-            const renderEntries = coalesceReasoningEntries(group);
-            const displayEntries: DisplayRenderEntry[] = renderEntries.map(
-              (entry) => {
-                if (entry.type !== "reasoning-block") {
-                  return entry;
-                }
-
-                const durationMs = durationSource[reasoningBlockCursor];
-                reasoningBlockCursor += 1;
-
-                return {
-                  durationMs,
-                  endPartIndex: entry.endPartIndex,
-                  partIndex: entry.partIndex,
-                  text: entry.text,
-                  type: "reasoning-block" as const,
-                };
-              },
-            );
-
-            const isReasoningOnlyGroup =
-              displayEntries.length > 0 &&
-              displayEntries.every((entry) => entry.type === "reasoning-block");
-            const previousGroup = displayGroups.at(-1);
-            const previousIsReasoningOnlyGroup =
-              previousGroup != null &&
-              previousGroup.length > 0 &&
-              previousGroup.every((entry) => entry.type === "reasoning-block");
-
-            if (
-              isReasoningOnlyGroup &&
-              previousGroup &&
-              previousIsReasoningOnlyGroup
-            ) {
-              const mergedBlocks = [...previousGroup, ...displayEntries].filter(
-                (entry): entry is DisplayReasoningEntry =>
-                  entry.type === "reasoning-block",
-              );
-              const firstBlock = mergedBlocks[0];
-              const lastBlock = mergedBlocks.at(-1);
-
-              if (firstBlock && lastBlock) {
-                displayGroups[displayGroups.length - 1] = [
-                  {
-                    durationMs: mergedBlocks.reduce(
-                      (sum, entry) => sum + (entry.durationMs ?? 0),
-                      0,
-                    ),
-                    endPartIndex: lastBlock.endPartIndex,
-                    partIndex: firstBlock.partIndex,
-                    text: mergedBlocks.reduce(
-                      (text, entry) => mergeReasoningText(text, entry.text),
-                      "",
-                    ),
-                    type: "reasoning-block",
-                  },
-                ];
-              }
-              continue;
-            }
-
-            displayGroups.push(displayEntries);
-          }
+          const displayGroups = groups
+            .map((group) =>
+              coalesceReasoningEntries(group).filter(
+                (entry) => entry.type !== "reasoning-block",
+              ),
+            )
+            .filter((group) => group.length > 0);
 
           return displayGroups.map((group, groupIndex) => (
             <div
@@ -302,29 +252,6 @@ function AssistantMessage({
               key={`${message.id}:step:${groupIndex}`}
             >
               {group.map((entry) => {
-                if (entry.type === "reasoning-block") {
-                  return (
-                    <ReasoningPart
-                      activeSinceMs={reasoningMetadata?.activeSinceMs}
-                      durationMs={entry.durationMs}
-                      isLastStreamingPart={
-                        entry.endPartIndex === lastReasoningIndex
-                      }
-                      isStreaming={
-                        isStreaming && entry.endPartIndex === lastReasoningIndex
-                      }
-                      key={`${message.id}:reasoning-block:${entry.partIndex}:${entry.endPartIndex}`}
-                      reasoningKey={`${message.id}:reasoning:${entry.partIndex}-${entry.endPartIndex}`}
-                      text={entry.text}
-                      tokenCount={
-                        entry.endPartIndex === lastReasoningIndex
-                          ? reasoningTokens
-                          : undefined
-                      }
-                    />
-                  );
-                }
-
                 const key = getPartKey(message.id, entry);
                 const { part } = entry;
 
