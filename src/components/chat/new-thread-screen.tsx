@@ -232,7 +232,16 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   }, [threadId]);
 
   useEffect(() => {
-    if (threadId || !hasMessages || isBusy || !threadDetailsQuery.data) {
+    const handlePopState = () => {
+      router.refresh();
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [router]);
+
+  useEffect(() => {
+    if (threadId || !hasMessages) {
       return;
     }
 
@@ -245,9 +254,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   }, [
     draftThreadId,
     hasMessages,
-    isBusy,
     router,
-    threadDetailsQuery.data,
     threadId,
   ]);
 
@@ -388,7 +395,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                 {isWorkspaceMenuOpen && (
                   <motion.div
                     animate={{ opacity: 1, scale: 1, y: 0 }}
-                    className="absolute left-1/2 top-10 z-[200] w-[320px] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-background p-1 shadow-overlay backdrop-blur-xl"
+                    className="absolute left-1/2 top-10 z-[200] w-[320px] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-background p-1 shadow-overlay"
                     exit={{ opacity: 0, scale: 0.97, y: -6 }}
                     initial={{ opacity: 0, scale: 0.97, y: -6 }}
                     transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}

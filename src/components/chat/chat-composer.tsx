@@ -215,7 +215,7 @@ function ImagePreviewModal({
         onClick={onClose}
         transition={{ duration: 0.2 }}
       >
-        <div className="absolute inset-0 bg-overlay/70 backdrop-blur-sm" />
+        <div className="absolute inset-0 bg-overlay/90" />
         <motion.div
           animate={{ opacity: 1, scale: 1 }}
           className="relative z-10 flex max-h-[85vh] max-w-[85vw] flex-col items-center gap-3"
@@ -933,7 +933,7 @@ export function ChatComposer({
                 {modelMenuOpen && (
                   <motion.div
                     animate={{ opacity: 1, scale: 1, y: 0 }}
-                    className="absolute bottom-10 left-0 z-30 max-h-[280px] w-[280px] overflow-y-auto rounded-xl border border-border bg-overlay p-1 shadow-overlay backdrop-blur-xl"
+                    className="absolute bottom-10 left-0 z-30 max-h-[280px] w-[280px] overflow-y-auto rounded-xl border border-border bg-overlay p-1 shadow-overlay"
                     exit={{ opacity: 0, scale: 0.97, y: 6 }}
                     initial={{ opacity: 0, scale: 0.97, y: 6 }}
                     transition={{
@@ -1003,7 +1003,7 @@ export function ChatComposer({
                   {reasoningMenuOpen && (
                     <motion.div
                       animate={{ opacity: 1, scale: 1, y: 0 }}
-                      className="absolute bottom-10 left-0 z-30 w-[160px] overflow-hidden rounded-xl border border-border bg-overlay p-1 shadow-overlay backdrop-blur-xl"
+                      className="absolute bottom-10 left-0 z-30 w-[160px] overflow-hidden rounded-xl border border-border bg-overlay p-1 shadow-overlay"
                       exit={{ opacity: 0, scale: 0.97, y: 6 }}
                       initial={{ opacity: 0, scale: 0.97, y: 6 }}
                       transition={{

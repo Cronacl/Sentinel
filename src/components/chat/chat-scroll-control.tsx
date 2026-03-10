@@ -164,7 +164,7 @@ export function ChatScrollControl({
   return (
     <button
       aria-label={direction === "down" ? "Scroll to latest" : "Scroll to top"}
-      className="absolute right-8 z-40 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-xl border border-muted/20 bg-surface text-muted shadow-sm backdrop-blur-md transition-colors hover:text-foreground"
+      className="absolute right-8 z-40 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-xl border border-muted/20 bg-surface text-muted shadow-sm transition-colors hover:text-foreground"
       onClick={onClick}
       style={{ bottom: bottomOffset }}
       type="button"

@@ -925,9 +925,10 @@ export function WorkspaceSidebar() {
                 key={item.href}
                 onPress={() => {
                   if (item.href === "/") {
-                    if (pathname === "/") {
-                      window.dispatchEvent(new Event("sentinel:new-thread"));
-                    } else {
+                    window.dispatchEvent(
+                      new Event("sentinel:new-thread"),
+                    );
+                    if (pathname !== "/") {
                       router.push("/");
                     }
                   } else {
@@ -990,7 +991,7 @@ export function WorkspaceSidebar() {
             {isPreferencesOpen ? (
               <motion.div
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                className="absolute top-9 right-0 z-30 w-40 overflow-hidden rounded-2xl border border-border bg-overlay p-1.5 text-foreground shadow-overlay backdrop-blur-xl"
+                className="absolute top-9 right-0 z-30 w-40 overflow-hidden rounded-2xl border border-border bg-overlay p-1.5 text-foreground shadow-overlay"
                 exit={{ opacity: 0, scale: 0.97, y: -10 }}
                 initial={{ opacity: 0, scale: 0.97, y: -10 }}
                 transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}

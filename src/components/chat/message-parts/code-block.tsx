@@ -3,7 +3,6 @@
 import { Copy01Icon, Tick01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Icon } from "@iconify/react";
-import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   bundledLanguages,
@@ -285,22 +284,12 @@ export function CodeBlock({
           onClick={() => void handleCopy()}
           type="button"
         >
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={copied ? "copied" : "copy"}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              initial={{ opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.2 }}
-            >
-              <HugeiconsIcon
-                color="currentColor"
-                icon={copied ? Tick01Icon : Copy01Icon}
-                size={12}
-                strokeWidth={1.5}
-              />
-            </motion.div>
-          </AnimatePresence>
+          <HugeiconsIcon
+            color="currentColor"
+            icon={copied ? Tick01Icon : Copy01Icon}
+            size={12}
+            strokeWidth={1.5}
+          />
         </button>
       </div>
 

@@ -16,7 +16,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow = null;
 let serverState = null;
 
-app.disableHardwareAcceleration();
+// GPU acceleration is required for smooth backdrop-blur, shadows, and animations.
+// Only disable if a specific driver issue is confirmed on a target platform.
+// app.disableHardwareAcceleration();
 
 function buildInlineHtml({ body, title }) {
   return `data:text/html;charset=utf-8,${encodeURIComponent(`

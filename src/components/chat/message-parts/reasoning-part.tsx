@@ -52,7 +52,7 @@ export const ReasoningPart = memo(function ReasoningPart({
   text: string;
   tokenCount?: number;
 }) {
-  const { isOpen, open, setContent } = useRightSidebar();
+  const { isOpen, open } = useRightSidebar();
   const elapsedSeconds = useElapsedSeconds(
     isStreaming && isLastStreamingPart && activeSinceMs != null,
   );
@@ -92,16 +92,34 @@ export const ReasoningPart = memo(function ReasoningPart({
     return title;
   }, [isLastStreamingPart, isStreaming, liveDurationMs, title]);
 
+  const stateRef = useRef({
+    isLastStreamingPart,
+    isStreaming,
+    reasoningKey,
+    text,
+    title,
+    tokenCount,
+  });
+  stateRef.current = {
+    isLastStreamingPart,
+    isStreaming,
+    reasoningKey,
+    text,
+    title,
+    tokenCount,
+  };
+
   const syncSidebarState = useCallback(() => {
+    const s = stateRef.current;
     setReasoningSidebarState({
-      isLastStreamingPart,
-      isStreaming,
-      reasoning: text,
-      reasoningKey,
-      title,
-      tokenCount,
+      isLastStreamingPart: s.isLastStreamingPart,
+      isStreaming: s.isStreaming,
+      reasoning: s.text,
+      reasoningKey: s.reasoningKey,
+      title: s.title,
+      tokenCount: s.tokenCount,
     });
-  }, [isLastStreamingPart, isStreaming, reasoningKey, text, title, tokenCount]);
+  }, []);
 
   const handleOpen = useCallback(() => {
     syncSidebarState();
@@ -112,12 +130,11 @@ export const ReasoningPart = memo(function ReasoningPart({
     if (!isOpen) return;
     if (getReasoningSidebarState().reasoningKey !== reasoningKey) return;
     syncSidebarState();
-    setContent(<ReasoningSidebar />);
-  }, [isOpen, reasoningKey, setContent, syncSidebarState]);
+  }, [isOpen, reasoningKey, syncSidebarState, isStreaming, isLastStreamingPart, text, title, tokenCount]);
 
   return (
     <div
-      className="w-full overflow-hidden rounded-lg transition-all"
+      className="w-full overflow-hidden rounded-lg"
       aria-busy={isStreaming}
     >
       <div className="flex w-full items-center justify-between gap-3 pr-1">

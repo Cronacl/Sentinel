@@ -63,7 +63,8 @@ export const ReasoningSidebar = memo(function ReasoningSidebar() {
 
   useEffect(() => {
     return () => {
-      closeReasoningSidebarState();
+      if (parseTimeoutRef.current) clearTimeout(parseTimeoutRef.current);
+      if (renderTimeoutRef.current) clearTimeout(renderTimeoutRef.current);
     };
   }, []);
 
