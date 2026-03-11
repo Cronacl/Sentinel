@@ -117,6 +117,108 @@ function getLoadingPageUrl() {
   });
 }
 
+function escapeHtml(text) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function getPopupHtml(targetUrl) {
+  const escapedUrl = escapeHtml(targetUrl);
+  let hostname;
+  try {
+    hostname = escapeHtml(new URL(targetUrl).hostname);
+  } catch {
+    hostname = escapedUrl;
+  }
+
+  return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>${hostname} — Sentinel</title>
+<style>
+:root{color-scheme:dark}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:#090909;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.tb{height:38px;display:flex;align-items:center;padding:0 14px;-webkit-app-region:drag;background:#090909;border-bottom:1px solid rgba(255,255,255,.06);gap:10px;user-select:none}
+.tl{display:flex;align-items:center;gap:6px;-webkit-app-region:no-drag}
+.tl button{width:10px;height:10px;min-width:10px;min-height:10px;border-radius:50%;border:none;cursor:pointer;padding:0;transition:transform .1s}
+.tl button:hover{transform:scale(1.08)}
+.tc{background:#ff5f57}.tn{background:#febc2e}.tx{background:#28c840}
+.url{flex:1;min-width:0;text-align:center;font-size:11px;color:rgba(245,245,245,.4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em}
+.sp{width:52px;flex-shrink:0}
+.lb{height:2px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);background-size:200% 100%;animation:lbs 1.2s linear infinite;opacity:0;transition:opacity .2s}
+.lb.on{opacity:1}
+@keyframes lbs{0%{background-position:200% 0}100%{background-position:-200% 0}}
+webview{width:100%;height:calc(100% - 40px);border:none}
+</style>
+</head>
+<body>
+<div class="tb">
+<div class="tl">
+<button class="tc" id="bc" title="Close"></button>
+<button class="tn" id="bn" title="Minimize"></button>
+<button class="tx" id="bx" title="Maximize"></button>
+</div>
+<div class="url" id="ud">${hostname}</div>
+<div class="sp"></div>
+</div>
+<div class="lb" id="lb"></div>
+<webview id="wv" src="${escapedUrl}"></webview>
+<script>
+var wv=document.getElementById('wv'),ud=document.getElementById('ud'),lb=document.getElementById('lb');
+document.getElementById('bc').onclick=function(){window.sentinelDesktop&&window.sentinelDesktop.window.close()};
+document.getElementById('bn').onclick=function(){window.sentinelDesktop&&window.sentinelDesktop.window.minimize()};
+document.getElementById('bx').onclick=function(){window.sentinelDesktop&&window.sentinelDesktop.window.toggleMaximize()};
+wv.addEventListener('did-start-loading',function(){lb.classList.add('on')});
+wv.addEventListener('did-stop-loading',function(){lb.classList.remove('on')});
+wv.addEventListener('did-navigate',function(e){try{ud.textContent=new URL(e.url).hostname}catch(x){ud.textContent=e.url}});
+wv.addEventListener('page-title-updated',function(e){document.title=e.title+' \\u2014 Sentinel'});
+</script>
+</body>
+</html>`)}`;
+}
+
+function isExternalUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return false;
+    }
+    if (serverState?.url && url.startsWith(serverState.url)) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function createBrowserPopup(url) {
+  const popup = new BrowserWindow({
+    backgroundColor: "#090909",
+    frame: false,
+    height: 720,
+    minHeight: 400,
+    minWidth: 500,
+    title: "Sentinel",
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, "..", "preload", "index.mjs"),
+      sandbox: false,
+      webviewTag: true,
+    },
+    width: 1020,
+  });
+
+  void popup.loadURL(getPopupHtml(url));
+  popup.once("ready-to-show", () => popup.show());
+}
+
 function getRuntimePaths() {
   return createRuntimePaths({
     appRoot: app.isPackaged ? app.getAppPath() : process.cwd(),
@@ -205,6 +307,14 @@ function createWindow() {
       );
     },
   );
+
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isExternalUrl(url)) {
+      createBrowserPopup(url);
+      return { action: "deny" };
+    }
+    return { action: "deny" };
+  });
 
   void mainWindow.loadURL(getLoadingPageUrl());
   mainWindow.webContents.once("did-finish-load", showWindow);
@@ -308,23 +418,24 @@ function registerIpc() {
   });
 
   ipcMain.handle(DESKTOP_CHANNELS.APP_VERSION, async () => app.getVersion());
-  ipcMain.handle(DESKTOP_CHANNELS.WINDOW_CLOSE, async () => {
-    mainWindow?.close();
+  ipcMain.handle(DESKTOP_CHANNELS.WINDOW_CLOSE, async (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close();
   });
-  ipcMain.handle(DESKTOP_CHANNELS.WINDOW_MINIMIZE, async () => {
-    mainWindow?.minimize();
+  ipcMain.handle(DESKTOP_CHANNELS.WINDOW_MINIMIZE, async (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize();
   });
-  ipcMain.handle(DESKTOP_CHANNELS.WINDOW_TOGGLE_MAXIMIZE, async () => {
-    if (!mainWindow) {
+  ipcMain.handle(DESKTOP_CHANNELS.WINDOW_TOGGLE_MAXIMIZE, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) {
       return false;
     }
 
-    if (mainWindow.isMaximized()) {
-      mainWindow.unmaximize();
+    if (win.isMaximized()) {
+      win.unmaximize();
       return false;
     }
 
-    mainWindow.maximize();
+    win.maximize();
     return true;
   });
 }

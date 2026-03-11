@@ -1,10 +1,8 @@
-import {
-  DEFAULT_EXA_LIVECRAWL_MODE,
-  DEFAULT_EXA_SEARCH_TYPE,
-  type LivecrawlMode,
-  type SearchType,
-} from "@/lib/search";
+import type { LivecrawlMode, SearchType } from "@/lib/search";
 import type { SearchProviderId } from "@/server/db/enums";
+
+import { exaSearchProviderMeta } from "./exa/registry";
+import { searxngSearchProviderMeta } from "./searxng/registry";
 
 export type SearchProviderMeta = {
   defaultSettings: {
@@ -20,31 +18,8 @@ export type SearchProviderMeta = {
 };
 
 export const SEARCH_PROVIDERS: Record<SearchProviderId, SearchProviderMeta> = {
-  exa: {
-    defaultSettings: {
-      defaultLivecrawl: DEFAULT_EXA_LIVECRAWL_MODE,
-      defaultSearchType: DEFAULT_EXA_SEARCH_TYPE,
-    },
-    description:
-      "Exa web search with LLM-oriented summaries and crawl options.",
-    displayName: "Exa",
-    id: "exa",
-    supportsLivecrawlModes: ["never", "preferred", "always"],
-    supportsSearchTypes: ["auto", "fast", "deep"],
-  },
-  searxng: {
-    defaultSettings: {
-      defaultLivecrawl: "preferred",
-      defaultSearchType: "auto",
-    },
-    description:
-      "Self-hosted SearXNG metasearch instance for privacy-focused web search.",
-    displayName: "SearXNG",
-    installationDocsUrl: "https://docs.searxng.org/admin/installation.html",
-    id: "searxng",
-    supportsLivecrawlModes: ["preferred"],
-    supportsSearchTypes: ["auto"],
-  },
+  exa: exaSearchProviderMeta,
+  searxng: searxngSearchProviderMeta,
 };
 
 export const SEARCH_PROVIDER_LIST = Object.values(SEARCH_PROVIDERS);

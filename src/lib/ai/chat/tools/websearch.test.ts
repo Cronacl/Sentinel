@@ -190,8 +190,11 @@ describe("executeWebSearch", () => {
         "https://search.example.com/search",
       );
       expect(url.searchParams.get("format")).toBe("json");
-      expect(url.searchParams.get("categories")).toBeNull();
-      expect(url.searchParams.get("safesearch")).toBeNull();
+      expect(url.searchParams.get("categories")).toBe("general");
+      expect(url.searchParams.get("engines")).toBe(
+        __internal.SEARXNG_ENGINES,
+      );
+      expect(url.searchParams.get("safesearch")).toBe("0");
       expect(url.searchParams.get("q")).toBe("privacy search");
 
       const page = url.searchParams.get("pageno");
@@ -394,66 +397,11 @@ describe("executeWebSearch", () => {
     ]);
   });
 
-  it("falls back to the root SearXNG endpoint and resolves relative result URLs", async () => {
-    const fetchImpl = mock(async (input: string | URL | Request) => {
-      const url = new URL(String(input));
-
-      if (url.pathname === "/search") {
-        return new Response(
-          JSON.stringify({
-            results: [],
-          }),
-          {
-            headers: {
-              "content-type": "application/json",
-            },
-            status: 200,
-          },
-        );
-      }
-
-      return new Response(
-        JSON.stringify({
-          results: [
-            {
-              content: "Relative result",
-              title: "Proxy result",
-              url: "/url?u=https%3A%2F%2Fexample.com%2Farticle",
-            },
-          ],
-        }),
-        {
-          headers: {
-            "content-type": "application/json",
-          },
-          status: 200,
-        },
-      );
-    });
-    globalThis.fetch = fetchImpl as typeof fetch;
-
-    const result = await executeWebSearch({
-      input: {
-        provider: "searxng",
-        query: "root fallback",
-      },
-      runtime,
-    });
-
-    expect(new URL(String(fetchImpl.mock.calls[0]?.[0])).pathname).toBe(
-      "/search",
-    );
-    expect(new URL(String(fetchImpl.mock.calls[1]?.[0])).pathname).toBe("/");
-    expect(result.results[0]?.url).toBe(
-      "https://search.example.com/url?u=https%3A%2F%2Fexample.com%2Farticle",
-    );
-  });
-
   it("normalizes unsupported SearXNG overrides to the provider defaults", async () => {
     const fetchImpl = mock(async (input: string | URL | Request) => {
       const url = new URL(String(input));
       expect(url.searchParams.get("language")).toBeNull();
-      expect(url.searchParams.get("time_range")).toBeNull();
+      expect(url.searchParams.get("time_range")).toBe("None");
 
       return new Response(
         JSON.stringify({

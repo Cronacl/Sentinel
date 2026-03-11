@@ -1,10 +1,13 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
-import { Button, Disclosure, ScrollShadow, Spinner } from "@heroui/react";
+import { memo, useCallback } from "react";
+import { Button } from "@heroui/react";
 
+import { useRightSidebar } from "@/components/shell/shell-context";
 import { resolveSearchProviderOptions } from "@/lib/search";
 import type { RendererProps } from "../renderer";
+
+import { WebSearchSidebar } from "./websearch-sidebar";
 
 type WebSearchInput = {
   livecrawl?: "always" | "never" | "preferred";
@@ -112,60 +115,19 @@ function isWebSearchOutput(value: unknown): value is WebSearchOutput {
   );
 }
 
-function getStatusChipClass(tone: "danger" | "muted" | "success") {
-  switch (tone) {
-    case "success":
-      return "border-success/5 bg-success/10 text-success";
-    case "danger":
-      return "border-danger/20 bg-danger-soft text-danger-soft-foreground";
-    default:
-      return "border-border/60 bg-background/70 text-muted";
-  }
-}
-
-function getHostname(value: string) {
-  try {
-    return new URL(value).hostname;
-  } catch {
-    return value;
-  }
-}
-
-function truncate(value: string, length = 220) {
-  if (value.length <= length) {
-    return value;
-  }
-
-  return `${value.slice(0, length)}...`;
-}
-
-function getStatus(
-  part: RendererProps["part"],
+function resolveProvider(
+  input: WebSearchInput | null,
   output: WebSearchOutput | null,
 ) {
-  if (part.state === "approval-responded") {
-    return { label: "Running", tone: "muted" as const };
-  }
-
-  if (part.state === "approval-requested") {
-    return { label: "Needs approval", tone: "muted" as const };
-  }
-
-  if (part.state === "output-denied") {
-    return { label: "Denied", tone: "danger" as const };
-  }
-
-  if (part.state === "output-error") {
-    return { label: "Failed", tone: "danger" as const };
-  }
-
-  if (part.state === "output-available" && output) {
-    return output.resultCount > 0
-      ? { label: "Success", tone: "success" as const }
-      : { label: "No results", tone: "muted" as const };
-  }
-
-  return { label: "Running", tone: "muted" as const };
+  const id = output?.provider ?? input?.provider ?? "exa";
+  const options = resolveSearchProviderOptions({
+    defaultLivecrawl: "preferred",
+    defaultSearchType: "auto",
+    provider: id === "searxng" ? "searxng" : "exa",
+    requestedLivecrawl: input?.livecrawl,
+    requestedSearchType: input?.searchType,
+  });
+  return { id, ...options };
 }
 
 export const WebSearchTool = memo(function WebSearchTool({
@@ -173,180 +135,132 @@ export const WebSearchTool = memo(function WebSearchTool({
   onDeny,
   part,
 }: RendererProps) {
+  const { open } = useRightSidebar();
   const approval = "approval" in part ? part.approval : undefined;
   const approvalId = approval?.id;
-  const webSearchInput =
+  const input =
     "input" in part && isWebSearchInput(part.input) ? part.input : null;
-  const webSearchOutput =
+  const output =
     "output" in part && isWebSearchOutput(part.output) ? part.output : null;
-  const partErrorText = "errorText" in part ? part.errorText : undefined;
-  const showApprovalActions =
+  const errorText = "errorText" in part ? part.errorText : undefined;
+  const provider = resolveProvider(input, output);
+
+  const isRunning =
+    part.state === "approval-responded" ||
+    part.state === "input-streaming" ||
+    part.state === "input-available";
+  const needsApproval =
     part.state === "approval-requested" && approvalId && onApprove && onDeny;
-  const isRunningState = part.state === "approval-responded";
-  const isFinishedState =
-    part.state === "output-denied" ||
-    part.state === "output-error" ||
-    part.state === "output-available";
-  const [isExpanded, setIsExpanded] = useState(
-    part.state === "approval-requested" || isRunningState,
-  );
 
-  useEffect(() => {
-    setIsExpanded(part.state === "approval-requested" || isRunningState);
-  }, [isRunningState, part.state, part.toolCallId]);
+  const handleOpenSidebar = useCallback(() => {
+    if (!output || output.results.length === 0) return;
+    open(
+      <WebSearchSidebar
+        provider={provider.id}
+        query={output.query}
+        results={output.results}
+      />,
+    );
+  }, [open, output, provider.id]);
 
-  if (!webSearchInput) {
+  if (!input) {
     return null;
   }
 
-  const status = getStatus(part, webSearchOutput);
-  const provider =
-    webSearchOutput?.provider ?? webSearchInput.provider ?? "exa";
-  const normalizedOptions = resolveSearchProviderOptions({
-    defaultLivecrawl: "preferred",
-    defaultSearchType: "auto",
-    provider: provider === "searxng" ? "searxng" : "exa",
-    requestedLivecrawl: webSearchInput.livecrawl,
-    requestedSearchType: webSearchInput.searchType,
-  });
+  if (needsApproval) {
+    return (
+      <div className="rounded-xl border border-border/60 bg-surface/20 px-3 py-2.5">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="font-medium text-foreground/70">
+            Web search:
+          </span>
+          <span className="truncate text-muted">{input.query}</span>
+        </div>
+        <div className="mt-2.5 flex items-center gap-2">
+          <Button
+            className="h-7 min-w-0 px-3 text-[11px]"
+            onPress={() => onApprove?.(approvalId)}
+            size="sm"
+          >
+            Allow
+          </Button>
+          <Button
+            className="h-7 min-w-0 px-3 text-[11px]"
+            onPress={() => onDeny?.(approvalId)}
+            size="sm"
+            variant="tertiary"
+          >
+            Deny
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
-  return (
-    <Disclosure isExpanded={isExpanded} onExpandedChange={setIsExpanded}>
-      <div className="rounded-2xl border border-border/60 bg-surface/20 px-3 py-2">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="text-[12px] font-medium text-foreground">
-                Web search
-              </p>
-              <div
-                className={`rounded-full flex items-center gap-1 border px-1.5 py-0.5 text-[10px] ${getStatusChipClass(status.tone)}`}
-              >
-                {status.label === "Running" ? (
-                  <Spinner className="h-3 w-3" size="sm" />
-                ) : null}
-                <span className="truncate">{status.label}</span>
-              </div>
-            </div>
-            <p className="mt-0.5 truncate text-[11px] text-foreground/72">
-              {webSearchInput.query}
-            </p>
-            <p className="mt-1 text-[10px] text-muted">
-              {provider} •{" "}
-              {webSearchOutput?.resolvedSearchType ??
-                normalizedOptions.searchType}{" "}
-              •{" "}
-              {webSearchOutput?.resultCount ??
-                webSearchInput.resultCount ??
-                "?"}{" "}
-              results
+  if (isRunning) {
+    return (
+      <div className="w-full overflow-hidden rounded-lg">
+        <div className="flex w-full items-center justify-between gap-3 pr-1">
+          <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
+            <p className="flex min-w-0 items-center gap-2 text-xs font-medium text-foreground/70">
+              <span className="truncate sentinel-thinking-shimmer">
+                Searching the web...
+              </span>
             </p>
           </div>
+        </div>
+      </div>
+    );
+  }
 
-          {isFinishedState ? (
-            <Disclosure.Heading>
-              <Button
-                className="min-w-0 px-2 text-[11px]"
-                size="sm"
-                slot="trigger"
-                variant="ghost"
-              >
-                {isExpanded ? "Hide" : "Show"}
-              </Button>
-            </Disclosure.Heading>
+  if (part.state === "output-error") {
+    return (
+      <div className="w-full overflow-hidden rounded-lg">
+        <div className="flex w-full items-center gap-2 pr-1">
+          <p className="text-xs font-medium text-danger/80">
+            Search failed
+          </p>
+          {errorText ? (
+            <span className="truncate text-[11px] text-danger/60">
+              {errorText}
+            </span>
           ) : null}
         </div>
-
-        {showApprovalActions ? (
-          <div className="mt-3 flex items-center gap-2">
-            <Button
-              className="h-8 px-3 text-[11px]"
-              onPress={() => onApprove?.(approvalId)}
-              size="sm"
-            >
-              Allow
-            </Button>
-            <Button
-              className="h-8 px-3 text-[11px]"
-              onPress={() => onDeny?.(approvalId)}
-              size="sm"
-              variant="tertiary"
-            >
-              Deny
-            </Button>
-          </div>
-        ) : null}
-
-        <Disclosure.Content>
-          <div className="mt-3 space-y-3">
-            {part.state === "output-error" && partErrorText ? (
-              <div className="rounded-xl border border-danger/20 bg-danger-soft px-3 py-2 text-xs text-danger-soft-foreground">
-                {partErrorText}
-              </div>
-            ) : null}
-
-            {part.state === "output-denied" ? (
-              <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-xs text-muted">
-                Execution denied.
-              </div>
-            ) : null}
-
-            {webSearchOutput ? (
-              <>
-                <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-xs text-muted">
-                  {webSearchOutput.digest}
-                </div>
-
-                <div className="space-y-2">
-                  {webSearchOutput.results.map((result, index) => (
-                    <div
-                      className="rounded-xl border border-border/60 bg-background/70 px-3 py-3"
-                      key={`${result.url}-${index}`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-foreground">
-                            {result.title ?? getHostname(result.url)}
-                          </p>
-                          <p className="mt-0.5 truncate text-[11px] text-muted">
-                            {getHostname(result.url)}
-                          </p>
-                        </div>
-                        <a
-                          className="text-[11px] text-primary transition-opacity hover:opacity-80"
-                          href={result.url}
-                          rel="noreferrer"
-                          target="_blank"
-                        >
-                          Open
-                        </a>
-                      </div>
-
-                      {result.summary ? (
-                        <p className="mt-2 text-xs text-foreground/80">
-                          {truncate(result.summary, 320)}
-                        </p>
-                      ) : null}
-
-                      {result.author || result.publishedDate ? (
-                        <p className="mt-2 text-[11px] text-muted">
-                          {[result.author, result.publishedDate]
-                            .filter(Boolean)
-                            .join(" • ")}
-                        </p>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : isRunningState ? (
-              <ScrollShadow className="max-h-36 rounded-xl border border-border/60 bg-background/70 px-3 py-2 font-mono text-[11px] text-foreground/80">
-                Searching the web...
-              </ScrollShadow>
-            ) : null}
-          </div>
-        </Disclosure.Content>
       </div>
-    </Disclosure>
-  );
+    );
+  }
+
+  if (part.state === "output-denied") {
+    return (
+      <div className="w-full overflow-hidden rounded-lg">
+        <p className="text-xs font-medium text-muted">Search denied</p>
+      </div>
+    );
+  }
+
+  if (output) {
+    const count = output.resultCount;
+    const label =
+      count > 0
+        ? `Searched ${count} source${count !== 1 ? "s" : ""}`
+        : "No search results";
+
+    return (
+      <div className="w-full overflow-hidden rounded-lg">
+        <div className="flex w-full items-center justify-between gap-3 pr-1">
+          <button
+            className="group flex min-w-0 flex-1 items-center gap-2 text-left text-default-600 transition-colors hover:text-foreground dark:text-default-400"
+            onClick={handleOpenSidebar}
+            type="button"
+          >
+            <p className="flex min-w-0 items-center gap-2 text-xs font-medium text-foreground/70">
+              <span className="truncate">{label}</span>
+            </p>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 });

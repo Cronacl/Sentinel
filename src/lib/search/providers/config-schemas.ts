@@ -8,45 +8,37 @@ import {
 } from "@/lib/search";
 import type { SearchProviderId } from "@/server/db/enums";
 
-export const exaSearchProviderConfigSchema = z.object({
-  apiKey: z.string().min(1, "API key is required"),
-});
+import {
+  exaSearchProviderConfigSchema,
+  exaSearchProviderSettingsSchema,
+} from "./exa/config";
+import {
+  searxngSearchProviderConfigSchema,
+  searxngSearchProviderSettingsSchema,
+} from "./searxng/config";
 
-export const searxngSearchProviderConfigSchema = z.object({
-  baseURL: z.string().url("Base URL must be a valid URL"),
-});
+export {
+  exaSearchProviderConfigSchema,
+  exaSearchProviderSettingsSchema,
+  type ExaSearchProviderConfig,
+  type ExaSearchProviderSettings,
+} from "./exa/config";
 
-export const exaSearchProviderSettingsSchema = z.object({
-  defaultLivecrawl: z.enum(LIVECRAWL_MODE_VALUES),
-  defaultSearchType: z.enum(SEARCH_TYPE_VALUES),
-});
-
-export const searxngSearchProviderSettingsSchema = z.object({
-  defaultLivecrawl: z.literal("preferred"),
-  defaultSearchType: z.literal("auto"),
-});
-
-export type ExaSearchProviderConfig = z.infer<
-  typeof exaSearchProviderConfigSchema
->;
-export type ExaSearchProviderSettings = z.infer<
-  typeof exaSearchProviderSettingsSchema
->;
-export type SearxngSearchProviderConfig = z.infer<
-  typeof searxngSearchProviderConfigSchema
->;
-export type SearxngSearchProviderSettings = z.infer<
-  typeof searxngSearchProviderSettingsSchema
->;
+export {
+  searxngSearchProviderConfigSchema,
+  searxngSearchProviderSettingsSchema,
+  type SearxngSearchProviderConfig,
+  type SearxngSearchProviderSettings,
+} from "./searxng/config";
 
 export type SearchProviderConfigMap = {
-  exa: ExaSearchProviderConfig;
-  searxng: SearxngSearchProviderConfig;
+  exa: z.infer<typeof exaSearchProviderConfigSchema>;
+  searxng: z.infer<typeof searxngSearchProviderConfigSchema>;
 };
 
 export type SearchProviderSettingsMap = {
-  exa: ExaSearchProviderSettings;
-  searxng: SearxngSearchProviderSettings;
+  exa: z.infer<typeof exaSearchProviderSettingsSchema>;
+  searxng: z.infer<typeof searxngSearchProviderSettingsSchema>;
 };
 
 export const SEARCH_PROVIDER_CONFIG_SCHEMAS: Record<
