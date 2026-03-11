@@ -2,7 +2,7 @@ import {
   normalizeThreadUIMessage,
   normalizeThreadUIMessages,
   type ThreadUIMessage,
-} from "@/lib/ai/thread-message-types";
+} from "@/lib/ai/message-types";
 import {
   validateThreadUIMessage,
   validateThreadUIMessages,

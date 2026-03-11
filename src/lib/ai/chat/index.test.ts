@@ -133,15 +133,15 @@ mock.module("./system-prompt", () => ({
   getSystemPrompt,
 }));
 
-mock.module("./finalize-assistant", () => ({
+mock.module("./finalize", () => ({
   buildPersistedAssistantMessage,
 }));
 
-mock.module("./reasoning-metadata", () => ({
+mock.module("./reasoning", () => ({
   createReasoningMetadataTracker,
 }));
 
-mock.module("../thread-branches", () => ({
+mock.module("../branches", () => ({
   buildActiveThreadMessages,
   getLatestVisibleMessageId,
   getMessageRecordById,

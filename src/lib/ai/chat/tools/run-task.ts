@@ -9,8 +9,8 @@ import {
   type ShellCommandCompletedOutput,
   type ShellCommandRunningOutput,
   streamShellCommand,
-} from "./shell-session";
-import { isPathWithinRoot, resolveToolDirectory } from "./tool-path";
+} from "./shell";
+import { isPathWithinRoot, resolveToolDirectory } from "./paths";
 
 const runTaskNameSchema = z.enum([
   "build",

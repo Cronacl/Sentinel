@@ -14,7 +14,7 @@ import {
 } from "@/schemas/workspace-thread.schema";
 import { threadChatSelectionSchema } from "@/schemas/chat-preferences.schema";
 import { setActiveMessage } from "@/lib/ai/chat/persistence";
-import { disposeShellSession } from "@/lib/ai/chat/shell-session";
+import { disposeShellSession } from "@/lib/ai/chat/tools/shell";
 import { mapThreadMessagesToUIMessages } from "@/lib/ai/ui-messages";
 import { threadMessages, threads, workspaces } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";

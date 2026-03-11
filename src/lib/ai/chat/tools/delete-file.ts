@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import type { PermissionMode } from "@/lib/security";
 
-import { resolveToolPath } from "./tool-path";
+import { resolveToolPath } from "./paths";
 
 export const deleteFileInputSchema = z.object({
   path: z

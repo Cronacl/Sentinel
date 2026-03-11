@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import type { PermissionMode } from "@/lib/security";
 
-import { resolveToolPath } from "./tool-path";
+import { resolveToolPath } from "./paths";
 
 const DEFAULT_READ_LIMIT = 200;
 const MAX_READ_LIMIT = 400;

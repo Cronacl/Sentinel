@@ -6,7 +6,7 @@ import type { PermissionMode } from "@/lib/security";
 
 import { resolveRipgrepPath } from "./ripgrep";
 import path from "node:path";
-import { normalizeRelativePath, resolveToolDirectory } from "./tool-path";
+import { normalizeRelativePath, resolveToolDirectory } from "./paths";
 
 const GREP_MATCH_LIMIT = 100;
 const MAX_MATCH_PREVIEW_LENGTH = 280;

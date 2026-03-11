@@ -3,7 +3,7 @@ import { validateUIMessages, type UIMessage } from "ai";
 import {
   buildActiveThreadMessages,
   type PersistedThreadMessageRecord,
-} from "./thread-branches";
+} from "./branches";
 import {
   normalizeThreadMessageMetadata,
   normalizeThreadUIMessage,
@@ -11,7 +11,7 @@ import {
   type ThreadMessageMetadata,
   type ThreadUIMessage,
   threadMessageMetadataSchema,
-} from "./thread-message-types";
+} from "./message-types";
 
 function toJsonValue(value: unknown): unknown {
   if (value === undefined) {

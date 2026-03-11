@@ -12,7 +12,7 @@ import {
   normalizeThreadUIMessages,
   type ThreadUIMessage,
   threadMessageMetadataSchema,
-} from "@/lib/ai/thread-message-types";
+} from "@/lib/ai/message-types";
 
 type UseThreadChatOptions = {
   threadId: string;

@@ -8,7 +8,7 @@ const {
   executeShellCommand,
   getShellSessionCount,
   streamShellCommand,
-} = await import("./shell-session.ts");
+} = await import("./shell.ts");
 
 const workspaceRoot = process.cwd();
 

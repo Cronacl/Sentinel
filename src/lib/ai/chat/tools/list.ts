@@ -8,7 +8,7 @@ import {
   normalizeRelativePath,
   resolveToolDirectory,
   toPosixPath,
-} from "./tool-path";
+} from "./paths";
 
 export const DEFAULT_LIST_IGNORES = [
   ".git",

@@ -1,7 +1,7 @@
 import {
   mergeThreadMessageMetadata,
   type ThreadUIMessage,
-} from "../thread-message-types";
+} from "../message-types";
 
 export function buildPersistedAssistantMessage({
   assistantId,

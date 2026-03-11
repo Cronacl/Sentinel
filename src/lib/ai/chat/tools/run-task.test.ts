@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { disposeShellSession } from "./shell-session";
+import { disposeShellSession } from "./shell";
 import { resolveRunTaskCommand, streamRunTask } from "./run-task";
 
 async function createDirectory() {

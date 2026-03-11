@@ -15,7 +15,7 @@ import { PageWrapper } from "@/components/shell";
 import { SentinelLogoBadge } from "@/components/shared/logo";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import type { ReasoningEffort } from "@/lib/ai/models";
-import type { ThreadUIMessage } from "@/lib/ai/thread-message-types";
+import type { ThreadUIMessage } from "@/lib/ai/message-types";
 import { CreateWorkspaceModal } from "@/components/workspaces/create-workspace-modal";
 import { api } from "@/trpc/react";
 import type { ChatOnDataCallback } from "ai";

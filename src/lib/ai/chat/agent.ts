@@ -12,43 +12,43 @@ import {
   assertShellCommandAllowed,
   disposeShellSession,
   streamShellCommand,
-} from "./shell-session";
+} from "./tools/shell";
 import {
   executeCreateFile,
   createFileInputSchema,
   createFileOutputSchema,
-} from "./create-file";
+} from "./tools/create-file";
 import {
   executeDeleteFile,
   deleteFileInputSchema,
   deleteFileOutputSchema,
-} from "./delete-file";
+} from "./tools/delete-file";
 import {
   executeEdit,
   editInputSchema,
   editOutputSchema,
-} from "./edit";
+} from "./tools/edit";
 import {
   executeGrep,
   grepInputSchema,
   grepOutputSchema,
-} from "./grep";
+} from "./tools/grep";
 import {
   executeGlob,
   globInputSchema,
   globOutputSchema,
-} from "./glob";
-import { executeList, listInputSchema, listOutputSchema } from "./list";
+} from "./tools/glob";
+import { executeList, listInputSchema, listOutputSchema } from "./tools/list";
 import {
   executeRead,
   readInputSchema,
   readOutputSchema,
-} from "./read";
+} from "./tools/read";
 import {
   runTaskInputSchema,
   runTaskOutputSchema,
   streamRunTask,
-} from "./run-task";
+} from "./tools/run-task";
 
 const shellCommandSchema = z.object({
   command: z

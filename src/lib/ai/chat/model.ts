@@ -11,8 +11,8 @@ import { getEnabledModels, getLanguageModel, parseModelId } from "../resolver";
 import {
   normalizeThreadMessageMetadata,
   type ThreadMessageMetadata,
-} from "../thread-message-types";
-import type { PersistedThreadMessageRecord } from "../thread-branches";
+} from "../message-types";
+import type { PersistedThreadMessageRecord } from "../branches";
 
 import type { ResolvedThreadChatModel, ThreadChatRequest } from "./types";
 

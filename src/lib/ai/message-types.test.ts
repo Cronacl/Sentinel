@@ -6,7 +6,7 @@ import {
   getThreadMessageSyncToken,
   normalizeThreadUIMessage,
   prepareMessagesForModel,
-} from "./thread-message-types";
+} from "./message-types";
 
 describe("thread message normalization", () => {
   it("preserves empty reasoning parts when provider metadata is present", () => {

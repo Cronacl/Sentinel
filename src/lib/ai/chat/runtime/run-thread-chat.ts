@@ -12,16 +12,16 @@ import {
   normalizeThreadUIMessages,
   prepareMessagesForModel,
   type ThreadUIMessage,
-} from "@/lib/ai/thread-message-types";
+} from "@/lib/ai/message-types";
 
 import { createAttachmentDownloadHandler } from "../attachments";
-import { buildPersistedAssistantMessage } from "../finalize-assistant";
+import { buildPersistedAssistantMessage } from "../finalize";
 import { resolveThreadChatModel } from "../model";
 import * as persist from "../persistence";
-import { createReasoningMetadataTracker } from "../reasoning-metadata";
-import { disposeShellSession } from "../shell-session";
+import { createReasoningMetadataTracker } from "../reasoning";
+import { disposeShellSession } from "../tools/shell";
 import { getSystemPrompt } from "../system-prompt";
-import { createThreadAgent } from "../thread-agent";
+import { createThreadAgent } from "../agent";
 import { resolveThreadTitleModel } from "../title-model";
 import { generateThreadTitle } from "../title";
 import { parseRequest } from "./parse-request";

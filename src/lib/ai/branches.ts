@@ -6,7 +6,7 @@ import {
   normalizeThreadUIMessage,
   type ThreadMessageMetadata,
   type ThreadUIMessage,
-} from "./thread-message-types";
+} from "./message-types";
 
 export type PersistedThreadMessageRecord = {
   createdAt: Date;

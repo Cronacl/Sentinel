@@ -3,11 +3,11 @@ import {
   getLatestVisibleMessageId,
   getMessageRecordById,
   type PersistedThreadMessageRecord,
-} from "@/lib/ai/thread-branches";
+} from "@/lib/ai/branches";
 import {
   mergeThreadMessageMetadata,
   type ThreadUIMessage,
-} from "@/lib/ai/thread-message-types";
+} from "@/lib/ai/message-types";
 
 import type { ThreadChatRequest } from "../types";
 

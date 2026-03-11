@@ -11,7 +11,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import type {
   ThreadMessageMetadata,
   ThreadUIMessage,
-} from "@/lib/ai/thread-message-types";
+} from "@/lib/ai/message-types";
 
 import { FilePart } from "./message-parts/file";
 import { ReasoningPart } from "./message-parts/reasoning";

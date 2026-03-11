@@ -20,7 +20,7 @@ mock.module("ai", () => ({
   ToolLoopAgent: MockToolLoopAgent,
 }));
 
-const { createThreadAgent } = await import("./thread-agent.ts");
+const { createThreadAgent } = await import("./agent.ts");
 
 afterEach(() => {
   aiTestState.agentConfig = null;

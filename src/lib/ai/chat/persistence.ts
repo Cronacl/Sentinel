@@ -3,13 +3,13 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/server/db";
 import { threadMessages, threads } from "@/server/db/schema";
 
-import type { PersistedThreadMessageRecord } from "../thread-branches";
+import type { PersistedThreadMessageRecord } from "../branches";
 import {
   mergeThreadMessageMetadata,
   normalizeThreadMessageMetadata,
   type ThreadMessageMetadata,
   type ThreadUIMessage,
-} from "../thread-message-types";
+} from "../message-types";
 import { serializeThreadUIMessage } from "../ui-messages";
 
 export async function ensureThread(

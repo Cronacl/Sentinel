@@ -1,8 +1,8 @@
 import type {
   ThreadMessageMetadata,
   ThreadUIMessage,
-} from "../thread-message-types";
-import { mergeThreadMessageMetadata } from "../thread-message-types";
+} from "../message-types";
+import { mergeThreadMessageMetadata } from "../message-types";
 
 import type { ThreadChatClock } from "./types";
 

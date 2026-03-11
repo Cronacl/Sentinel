@@ -1,7 +1,7 @@
 import type {
   ThreadMessageMetadata,
   ThreadUIMessage,
-} from "@/lib/ai/thread-message-types";
+} from "@/lib/ai/message-types";
 
 export type MessagePart = ThreadUIMessage["parts"][number];
 export type PartEntry = { part: MessagePart; partIndex: number; type: "part" };

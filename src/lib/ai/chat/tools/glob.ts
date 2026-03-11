@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { PermissionMode } from "@/lib/security";
 
 import { DEFAULT_LIST_IGNORES } from "./list";
-import { normalizeRelativePath, resolveToolDirectory } from "./tool-path";
+import { normalizeRelativePath, resolveToolDirectory } from "./paths";
 
 const GLOB_LIMIT = 100;
 
