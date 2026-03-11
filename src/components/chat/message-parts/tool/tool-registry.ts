@@ -1,8 +1,10 @@
 import type { ToolPart } from "../types";
 import type { ToolRenderer } from "./tool-renderer";
 import { ShellToolPart } from "./shell-tool-part";
+import { WorkspaceListToolPart } from "./workspace-list-tool-part";
 
 const toolRenderers: Record<string, ToolRenderer> = {
+  list_workspace: WorkspaceListToolPart,
   shell_command: ShellToolPart,
 };
 

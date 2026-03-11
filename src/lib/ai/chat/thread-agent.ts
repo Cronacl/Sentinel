@@ -11,6 +11,11 @@ import {
   disposeShellSession,
   streamWorkspaceShellCommand,
 } from "./shell-session";
+import {
+  executeWorkspaceList,
+  workspaceListInputSchema,
+  workspaceListOutputSchema,
+} from "./workspace-list";
 
 const shellCommandSchema = z.object({
   command: z
@@ -57,8 +62,12 @@ function buildThreadAgentInstructions({
 }) {
   const shellGuidance = shellEnabled
     ? [
+        "You can use the list_workspace tool to inspect the linked workspace tree without approval.",
         "You can use the shell tool to inspect and work inside the selected workspace.",
         `Workspace root: ${workspaceRoot}`,
+        "Rules for workspace inspection:",
+        "- Prefer list_workspace when you need to discover folders or get a quick project tree.",
+        "- The list_workspace path must be relative to the workspace root.",
         "Rules for shell usage:",
         "- Propose only one command at a time.",
         "- Explain the command briefly in the rationale field.",
@@ -95,6 +104,17 @@ export function createThreadAgent({
 }) {
   const tools = shellEnabled
     ? {
+        list_workspace: tool({
+          description:
+            "List files and directories inside the linked workspace using a concise tree view.",
+          inputSchema: workspaceListInputSchema,
+          outputSchema: workspaceListOutputSchema,
+          execute: async (input) =>
+            executeWorkspaceList({
+              input,
+              workspaceRoot: workspaceRoot!,
+            }),
+        }),
         shell_command: tool({
           description:
             "Run a single shell command in the linked workspace after user approval.",

@@ -1,0 +1,308 @@
+import { readdir, stat } from "node:fs/promises";
+import path from "node:path";
+import { z } from "zod";
+
+export const DEFAULT_WORKSPACE_LIST_IGNORES = [
+  ".git",
+  ".next",
+  ".turbo",
+  ".yarn",
+  ".idea",
+  ".vscode",
+  ".cache",
+  "__pycache__",
+  "bin",
+  "build",
+  "coverage",
+  "dist",
+  "env",
+  "logs",
+  "node_modules",
+  "obj",
+  "target",
+  "temp",
+  "tmp",
+  "vendor",
+  "venv",
+  ".venv",
+];
+
+export const WORKSPACE_LIST_LIMIT = 160;
+
+const workspaceListEntrySchema = z.object({
+  depth: z.number().int().min(0),
+  kind: z.enum(["directory", "file"]),
+  name: z.string(),
+  path: z.string(),
+});
+
+export const workspaceListInputSchema = z.object({
+  ignore: z
+    .array(z.string().min(1))
+    .max(32)
+    .optional()
+    .describe(
+      "Optional relative path prefixes, names, or simple glob patterns to exclude from the listing.",
+    ),
+  path: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Workspace-relative directory path to inspect. Omit it to list the workspace root.",
+    ),
+});
+
+export const workspaceListOutputSchema = z.object({
+  directoryCount: z.number().int().min(0),
+  entries: z.array(workspaceListEntrySchema),
+  fileCount: z.number().int().min(0),
+  root: z.string(),
+  totalEntries: z.number().int().min(0),
+  tree: z.string(),
+  truncated: z.boolean(),
+});
+
+export type WorkspaceListInput = z.infer<typeof workspaceListInputSchema>;
+export type WorkspaceListOutput = z.infer<typeof workspaceListOutputSchema>;
+
+type WorkspaceListEntry = WorkspaceListOutput["entries"][number];
+
+function toPosixPath(value: string) {
+  return value.split(path.sep).join("/");
+}
+
+function normalizeRelativePath(value: string) {
+  const normalized = toPosixPath(value.trim()).replace(/\/+/g, "/");
+  if (!normalized || normalized === ".") {
+    return ".";
+  }
+
+  const withoutDotPrefix = normalized.replace(/^\.\//, "");
+  return withoutDotPrefix.replace(/\/$/, "") || ".";
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[|\\{}()[\]^$+?.*]/g, "\\$&");
+}
+
+function simpleGlobToRegExp(pattern: string) {
+  const normalized = normalizeRelativePath(pattern);
+  const regexSource = escapeRegExp(normalized)
+    .replace(/\\\*\\\*/g, ".*")
+    .replace(/\\\*/g, "[^/]*");
+
+  return new RegExp(`^${regexSource}(?:/.*)?$`);
+}
+
+function buildIgnoreMatcher(ignore: string[] | undefined) {
+  const defaultIgnoredNames = new Set(DEFAULT_WORKSPACE_LIST_IGNORES);
+  const normalizedPatterns = (ignore ?? [])
+    .map((pattern) => normalizeRelativePath(pattern))
+    .filter((pattern) => pattern !== ".");
+  const deepLiteralPatterns = normalizedPatterns
+    .filter((pattern) => pattern.endsWith("/**"))
+    .map((pattern) => pattern.slice(0, -3));
+  const globPatterns = normalizedPatterns
+    .filter((pattern) => pattern.includes("*") && !pattern.endsWith("/**"))
+    .map((pattern) => simpleGlobToRegExp(pattern));
+  const literalPatterns = normalizedPatterns.filter(
+    (pattern) => !pattern.includes("*") && !pattern.endsWith("/**"),
+  );
+
+  return (relativePath: string, name: string) => {
+    if (defaultIgnoredNames.has(name)) {
+      return true;
+    }
+
+    if (literalPatterns.some((pattern) => pattern === name)) {
+      return true;
+    }
+
+    if (
+      literalPatterns.some(
+        (pattern) =>
+          relativePath === pattern || relativePath.startsWith(`${pattern}/`),
+      )
+    ) {
+      return true;
+    }
+
+    if (
+      deepLiteralPatterns.some(
+        (pattern) =>
+          relativePath === pattern || relativePath.startsWith(`${pattern}/`),
+      )
+    ) {
+      return true;
+    }
+
+    return globPatterns.some(
+      (pattern) => pattern.test(relativePath) || pattern.test(name),
+    );
+  };
+}
+
+function sortEntriesByName(
+  left: Pick<WorkspaceListEntry, "name">,
+  right: Pick<WorkspaceListEntry, "name">,
+) {
+  return left.name.localeCompare(right.name, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function resolveWorkspaceDirectory(workspaceRoot: string, inputPath?: string) {
+  const requestedPath = inputPath?.trim() || ".";
+  if (path.isAbsolute(requestedPath)) {
+    throw new Error(
+      "The list_workspace tool only accepts paths relative to the linked workspace root.",
+    );
+  }
+
+  const resolvedDirectory = path.resolve(workspaceRoot, requestedPath);
+  const relativeFromWorkspace = path.relative(workspaceRoot, resolvedDirectory);
+
+  if (
+    relativeFromWorkspace.startsWith("..") ||
+    path.isAbsolute(relativeFromWorkspace)
+  ) {
+    throw new Error(
+      "The requested path must stay inside the linked workspace root.",
+    );
+  }
+
+  return {
+    relativeRoot: normalizeRelativePath(relativeFromWorkspace || "."),
+    resolvedDirectory,
+  };
+}
+
+function formatWorkspaceTree(root: string, entries: WorkspaceListEntry[]) {
+  const lines = [`${root === "." ? "." : root}/`];
+
+  for (const entry of entries) {
+    const indent = "  ".repeat(entry.depth + 1);
+    const suffix = entry.kind === "directory" ? "/" : "";
+    lines.push(`${indent}${entry.name}${suffix}`);
+  }
+
+  return lines.join("\n");
+}
+
+export async function executeWorkspaceList({
+  input,
+  workspaceRoot,
+}: {
+  input: WorkspaceListInput;
+  workspaceRoot: string;
+}): Promise<WorkspaceListOutput> {
+  const { relativeRoot, resolvedDirectory } = resolveWorkspaceDirectory(
+    workspaceRoot,
+    input.path,
+  );
+  const directoryStats = await stat(resolvedDirectory).catch(() => null);
+
+  if (!directoryStats) {
+    throw new Error(`Directory not found: ${relativeRoot}`);
+  }
+
+  if (!directoryStats.isDirectory()) {
+    throw new Error(`Path is not a directory: ${relativeRoot}`);
+  }
+
+  const shouldIgnore = buildIgnoreMatcher(input.ignore);
+  const entries: WorkspaceListEntry[] = [];
+  let directoryCount = 0;
+  let fileCount = 0;
+  let truncated = false;
+
+  const walk = async (currentAbsolutePath: string, currentRelativePath: string, depth: number) => {
+    const dirents = await readdir(currentAbsolutePath, {
+      withFileTypes: true,
+    });
+    const directories: Array<{
+      absolutePath: string;
+      name: string;
+      relativePath: string;
+    }> = [];
+    const files: Array<{ name: string; relativePath: string }> = [];
+
+    for (const dirent of dirents) {
+      const relativePath =
+        currentRelativePath === "."
+          ? dirent.name
+          : `${currentRelativePath}/${dirent.name}`;
+
+      if (shouldIgnore(relativePath, dirent.name)) {
+        continue;
+      }
+
+      if (dirent.isDirectory()) {
+        directories.push({
+          absolutePath: path.join(currentAbsolutePath, dirent.name),
+          name: dirent.name,
+          relativePath,
+        });
+        continue;
+      }
+
+      files.push({
+        name: dirent.name,
+        relativePath,
+      });
+    }
+
+    directories.sort(sortEntriesByName);
+    files.sort(sortEntriesByName);
+
+    for (const directory of directories) {
+      if (entries.length >= WORKSPACE_LIST_LIMIT) {
+        truncated = true;
+        return;
+      }
+
+      entries.push({
+        depth,
+        kind: "directory",
+        name: directory.name,
+        path: directory.relativePath,
+      });
+      directoryCount += 1;
+
+      await walk(directory.absolutePath, directory.relativePath, depth + 1);
+
+      if (truncated) {
+        return;
+      }
+    }
+
+    for (const file of files) {
+      if (entries.length >= WORKSPACE_LIST_LIMIT) {
+        truncated = true;
+        return;
+      }
+
+      entries.push({
+        depth,
+        kind: "file",
+        name: file.name,
+        path: file.relativePath,
+      });
+      fileCount += 1;
+    }
+  };
+
+  await walk(resolvedDirectory, relativeRoot, 0);
+
+  return {
+    directoryCount,
+    entries,
+    fileCount,
+    root: relativeRoot,
+    totalEntries: entries.length,
+    tree: formatWorkspaceTree(relativeRoot, entries),
+    truncated,
+  };
+}
