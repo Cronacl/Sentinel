@@ -158,7 +158,7 @@ export default function PersonalizationPage() {
                 <h2 className="text-foreground text-base font-medium">
                   Personality
                 </h2>
-                <p className="text-muted text-sm leading-6">
+                <p className="text-muted text-sm">
                   Choose the default tone Sentinel should use when responding.
                 </p>
               </div>
@@ -182,7 +182,7 @@ export default function PersonalizationPage() {
               <h2 className="text-foreground text-base font-medium">
                 About You
               </h2>
-              <p className="text-muted mt-1 text-sm leading-6">
+              <p className="text-muted mt-1 text-sm">
                 Give Sentinel a bit more context to personalize answers and
                 examples.
               </p>
@@ -221,7 +221,7 @@ export default function PersonalizationPage() {
               <h2 className="text-foreground text-base font-medium">
                 Custom Instructions
               </h2>
-              <p className="text-muted mt-1 text-sm leading-6">
+              <p className="text-muted mt-1 text-sm">
                 Add persistent instructions that Sentinel should follow across
                 conversations.
               </p>

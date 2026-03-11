@@ -4,11 +4,11 @@ import { afterEach, describe, expect, it, mock } from "bun:test";
 
 const getLanguageModel = mock(async () => ({ kind: "title-model" }));
 
-mock.module("../resolver", () => ({
+mock.module("../providers/resolver", () => ({
   getLanguageModel,
 }));
 
-const { getThreadTitleModelId } = await import("./title-model");
+const { getThreadTitleModelId } = await import("./title/model");
 
 afterEach(() => {
   mock.clearAllMocks();

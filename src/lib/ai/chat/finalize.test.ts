@@ -2,10 +2,10 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { buildActiveThreadMessages } from "../branches";
-import type { ThreadUIMessage } from "../message-types";
+import { buildActiveThreadMessages } from "../messages/branches";
+import type { ThreadUIMessage } from "../messages/types";
 
-import { buildPersistedAssistantMessage } from "./finalize";
+import { buildPersistedAssistantMessage } from "./runtime/finalize";
 
 describe("buildPersistedAssistantMessage", () => {
   it("preserves assistant lineage when finalizing a regenerated response", () => {

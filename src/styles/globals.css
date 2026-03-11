@@ -59,6 +59,7 @@
 
 html {
   color-scheme: light dark;
+  overflow: hidden;
 }
 
 body {
@@ -175,7 +176,7 @@ body {
 }
 .sentinel-prose h4 {
   font-size: 0.875em;
-  text-transform: uppercase;
+  text-transform:;
   letter-spacing: 0.05em;
 }
 

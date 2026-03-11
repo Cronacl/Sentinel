@@ -7,6 +7,8 @@ import { ListTool } from "./renderers/list";
 import { ReadTool } from "./renderers/read";
 import { RunTaskTool } from "./renderers/run-task";
 import { ShellTool } from "./renderers/shell";
+import { WebSearchTool } from "./renderers/websearch";
+import { WebFetchTool } from "./renderers/webfetch";
 
 const renderers: Record<string, Renderer> = {
   create_file: FileTool,
@@ -18,6 +20,8 @@ const renderers: Record<string, Renderer> = {
   read: ReadTool,
   run_task: RunTaskTool,
   shell_command: ShellTool,
+  websearch: WebSearchTool,
+  webfetch: WebFetchTool,
 };
 
 export function resolveRenderer(part: ToolPart): Renderer | undefined {

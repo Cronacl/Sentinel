@@ -181,7 +181,7 @@ export const ReadTool = memo(function ReadTool({
               </div>
 
               <div className="px-3.5 py-3">
-                <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] leading-6 text-foreground">
+                <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground">
                   {terminalText}
                 </ScrollShadow>
 

@@ -285,7 +285,7 @@ export function ControlledSwitchField<
               <div className="space-y-1">
                 <p className="text-sm font-medium">{label}</p>
                 {description ? (
-                  <p className="text-muted text-xs leading-5">{description}</p>
+                  <p className="text-muted text-xs">{description}</p>
                 ) : null}
               </div>
             </Switch.Content>
@@ -340,7 +340,7 @@ export function ControlledCheckboxField<
               <div className="space-y-1">
                 <p className="text-sm font-medium">{label}</p>
                 {description ? (
-                  <p className="text-muted text-xs leading-5">{description}</p>
+                  <p className="text-muted text-xs">{description}</p>
                 ) : null}
               </div>
             </Checkbox.Content>

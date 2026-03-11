@@ -1,11 +1,15 @@
+import { approvalsRouter } from "@/server/api/routers/approvals";
 import { appearanceRouter } from "@/server/api/routers/appearance";
 import { authRouter } from "@/server/api/routers/auth";
 import { chatPreferencesRouter } from "@/server/api/routers/chat-preferences";
+import { generalSettingsRouter } from "@/server/api/routers/general-settings";
 import { healthRouter } from "@/server/api/routers/health";
 import { messagesRouter } from "@/server/api/routers/messages";
 import { modelsRouter } from "@/server/api/routers/models";
 import { personalizationRouter } from "@/server/api/routers/personalization";
 import { providersRouter } from "@/server/api/routers/providers";
+import { searchProvidersRouter } from "@/server/api/routers/search-providers";
+import { searchSettingsRouter } from "@/server/api/routers/search-settings";
 import { securityRouter } from "@/server/api/routers/security";
 import { threadsRouter } from "@/server/api/routers/threads";
 import { createCallerFactory, createTRPCRouter } from "@/server/api/trpc";
@@ -17,14 +21,18 @@ import { workspacesRouter } from "@/server/api/routers/workspaces";
  * All routers added in /api/routers should be manually added here.
  */
 export const appRouter = createTRPCRouter({
+  approvals: approvalsRouter,
   appearance: appearanceRouter,
   auth: authRouter,
   chatPreferences: chatPreferencesRouter,
+  generalSettings: generalSettingsRouter,
   health: healthRouter,
   messages: messagesRouter,
   models: modelsRouter,
   personalization: personalizationRouter,
   providers: providersRouter,
+  searchProviders: searchProvidersRouter,
+  searchSettings: searchSettingsRouter,
   security: securityRouter,
   threads: threadsRouter,
   workspaces: workspacesRouter,

@@ -25,8 +25,8 @@ import { useRouter } from "next/navigation";
 
 import { PageWrapper } from "@/components/shell";
 import { useThreadChat } from "@/hooks/use-thread-chat";
-import type { ReasoningEffort } from "@/lib/ai/models";
-import type { ThreadUIMessage } from "@/lib/ai/message-types";
+import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import {
   applyOptimisticThreadPinUpdate,
   restoreOptimisticThreadPinUpdate,

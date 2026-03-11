@@ -87,7 +87,7 @@ export const FilePart = memo(function FilePart({
           <AttachmentIcon icon={attachmentIcon} size={18} />
         </div>
         <div className="space-y-1">
-          <p className="max-h-10 overflow-hidden text-[13px] leading-5 text-foreground/88">
+          <p className="max-h-10 overflow-hidden text-[13px] text-foreground/88">
             {part.filename ?? "Attachment"}
           </p>
           <p className="truncate text-[11px] text-foreground/42">

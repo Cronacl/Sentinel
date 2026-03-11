@@ -165,7 +165,7 @@ export function CreateWorkspaceModal({
                       <p className="text-foreground text-sm font-medium">
                         Linked folder
                       </p>
-                      <p className="text-muted mt-1 text-xs leading-5">
+                      <p className="text-muted mt-1 text-xs">
                         Pick a folder to store its real absolute path for future
                         file and shell operations.
                       </p>

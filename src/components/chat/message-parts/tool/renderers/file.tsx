@@ -367,7 +367,7 @@ export const FileTool = memo(function FileTool({
         </div>
 
         {part.state === "approval-requested" ? (
-          <p className="mt-1.5 line-clamp-2 text-[11px] leading-5 text-muted">
+          <p className="mt-1.5 line-clamp-2 text-[11px] text-muted">
             {rationale}
           </p>
         ) : null}
@@ -381,7 +381,7 @@ export const FileTool = memo(function FileTool({
 
               <div className="px-3.5 py-3">
                 {typeof body === "string" ? (
-                  <ScrollShadow className="max-h-[180px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] leading-6 text-foreground">
+                  <ScrollShadow className="max-h-[180px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground">
                     {body}
                   </ScrollShadow>
                 ) : (

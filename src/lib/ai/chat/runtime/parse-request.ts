@@ -2,11 +2,11 @@ import {
   normalizeThreadUIMessage,
   normalizeThreadUIMessages,
   type ThreadUIMessage,
-} from "@/lib/ai/message-types";
+} from "@/lib/ai/messages/types";
 import {
   validateThreadUIMessage,
   validateThreadUIMessages,
-} from "@/lib/ai/ui-messages";
+} from "@/lib/ai/messages/ui";
 
 import { InvalidThreadChatRequestError } from "../errors";
 import type { ThreadChatRequest, ThreadChatTrigger } from "../types";

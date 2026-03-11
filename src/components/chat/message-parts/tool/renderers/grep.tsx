@@ -171,7 +171,7 @@ export const GrepTool = memo(function GrepTool({
               /{pattern}/ in {root}
             </p>
             {include ? (
-              <p className="mt-1.5 line-clamp-2 text-[11px] leading-5 text-muted">
+              <p className="mt-1.5 line-clamp-2 text-[11px] text-muted">
                 Include: {include}
               </p>
             ) : null}
@@ -199,7 +199,7 @@ export const GrepTool = memo(function GrepTool({
               </div>
 
               <div className="px-3.5 py-3">
-                <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] leading-6 text-foreground">
+                <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground">
                   {terminalText}
                 </ScrollShadow>
 

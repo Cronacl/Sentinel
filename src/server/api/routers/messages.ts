@@ -11,7 +11,7 @@ import {
   serializeThreadUIMessage,
   validateThreadUIMessage,
   validateThreadUIMessages,
-} from "@/lib/ai/ui-messages";
+} from "@/lib/ai/messages/ui";
 import { threadMessages, threads } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 

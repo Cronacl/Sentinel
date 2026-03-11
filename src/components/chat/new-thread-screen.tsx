@@ -14,8 +14,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PageWrapper } from "@/components/shell";
 import { SentinelLogoBadge } from "@/components/shared/logo";
 import { useThreadChat } from "@/hooks/use-thread-chat";
-import type { ReasoningEffort } from "@/lib/ai/models";
-import type { ThreadUIMessage } from "@/lib/ai/message-types";
+import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import { CreateWorkspaceModal } from "@/components/workspaces/create-workspace-modal";
 import { api } from "@/trpc/react";
 import type { ChatOnDataCallback } from "ai";
@@ -377,7 +377,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
               markClassName="h-9 w-9"
             />
 
-            <h2 className="text-2xl font-medium tracking-tight text-foreground">
+            <h2 className="text-2xl font-medium text-foreground">
               What can I help you with?
             </h2>
 

@@ -248,7 +248,7 @@ export const ShellTool = memo(function ShellTool({
         </div>
 
         {part.state === "approval-requested" ? (
-          <p className="mt-1.5 line-clamp-2 text-[11px] leading-5 text-muted">
+          <p className="mt-1.5 line-clamp-2 text-[11px] text-muted">
             {shellInput.rationale}
           </p>
         ) : null}
@@ -261,7 +261,7 @@ export const ShellTool = memo(function ShellTool({
               </div>
 
               <div className="px-3.5 py-3">
-                <ScrollShadow className="max-h-[100px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] leading-6 text-foreground">
+                <ScrollShadow className="max-h-[100px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground">
                   {terminalText}
                 </ScrollShadow>
 

@@ -11,7 +11,7 @@ import {
   type ThreadMessageMetadata,
   type ThreadUIMessage,
   threadMessageMetadataSchema,
-} from "./message-types";
+} from "./types";
 
 function toJsonValue(value: unknown): unknown {
   if (value === undefined) {

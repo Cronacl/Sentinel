@@ -2,7 +2,7 @@ import { generateText } from "ai";
 
 import { lines } from "@/lib/prompt";
 
-import type { ResolvedThreadTitleModel } from "./types";
+import type { ResolvedThreadTitleModel } from "../types";
 
 const TITLE_SYSTEM_PROMPT = lines(
   "Generate a concise chat thread title of 2 to 6 words.",

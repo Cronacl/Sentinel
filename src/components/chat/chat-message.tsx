@@ -11,7 +11,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import type {
   ThreadMessageMetadata,
   ThreadUIMessage,
-} from "@/lib/ai/message-types";
+} from "@/lib/ai/messages/types";
 
 import { FilePart } from "./message-parts/file";
 import { ReasoningPart } from "./message-parts/reasoning";
@@ -371,7 +371,7 @@ function UserMessage({
             <div className="flex flex-col gap-2">
               {textParts.map((part, index) => (
                 <p
-                  className="whitespace-pre-wrap text-[13px] leading-6 text-foreground/96"
+                  className="whitespace-pre-wrap text-[13px] text-foreground/96"
                   key={`${message.id}:text:${index}`}
                 >
                   {part.text}

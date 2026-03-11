@@ -7,7 +7,7 @@ import {
   MODEL_CATALOG,
   getModelsForProvider,
   isKnownModel,
-} from "@/lib/ai/models";
+} from "@/lib/ai/providers/models";
 import { modelPreferences, providerCredentials } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 

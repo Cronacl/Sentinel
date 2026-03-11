@@ -6,6 +6,9 @@ export const AI_PROVIDERS = [
 ] as const;
 export type AIProvider = (typeof AI_PROVIDERS)[number];
 
+export const SEARCH_PROVIDERS = ["exa", "searxng"] as const;
+export type SearchProviderId = (typeof SEARCH_PROVIDERS)[number];
+
 export const PERSONALITY_PRESETS = [
   "friendly",
   "pragmatic",
@@ -20,10 +23,7 @@ export type PermissionMode = (typeof PERMISSION_MODES)[number];
 export const THEME_PREFERENCES = ["light", "dark", "system"] as const;
 export type ThemePreference = (typeof THEME_PREFERENCES)[number];
 
-export const THREAD_LIST_ORGANIZE_BY = [
-  "workspace",
-  "chronological",
-] as const;
+export const THREAD_LIST_ORGANIZE_BY = ["workspace", "chronological"] as const;
 export type ThreadListOrganizeBy = (typeof THREAD_LIST_ORGANIZE_BY)[number];
 
 export const THREAD_LIST_SORT_BY = ["created", "updated"] as const;

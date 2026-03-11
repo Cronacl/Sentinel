@@ -9,3 +9,5 @@ export { ListTool } from "./renderers/list";
 export { ReadTool } from "./renderers/read";
 export { RunTaskTool } from "./renderers/run-task";
 export { ShellTool } from "./renderers/shell";
+export { WebSearchTool } from "./renderers/websearch";
+export { WebFetchTool } from "./renderers/webfetch";

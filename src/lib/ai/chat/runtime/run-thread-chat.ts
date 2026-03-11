@@ -12,18 +12,18 @@ import {
   normalizeThreadUIMessages,
   prepareMessagesForModel,
   type ThreadUIMessage,
-} from "@/lib/ai/message-types";
+} from "@/lib/ai/messages/types";
 
-import { createAttachmentDownloadHandler } from "../attachments";
-import { buildPersistedAssistantMessage } from "../finalize";
+import { createAttachmentDownloadHandler } from "./attachments";
+import { buildPersistedAssistantMessage } from "./finalize";
 import { resolveThreadChatModel } from "../model";
 import * as persist from "../persistence";
-import { createReasoningMetadataTracker } from "../reasoning";
+import { createReasoningMetadataTracker } from "./reasoning";
 import { disposeShellSession } from "../tools/shell";
-import { getSystemPrompt } from "../system-prompt";
+import { getSystemPrompt } from "./system-prompt";
 import { createThreadAgent } from "../agent";
-import { resolveThreadTitleModel } from "../title-model";
-import { generateThreadTitle } from "../title";
+import { resolveThreadTitleModel } from "../title/model";
+import { generateThreadTitle } from "../title/generate";
 import { parseRequest } from "./parse-request";
 import {
   buildActiveThreadMessages,
@@ -31,7 +31,14 @@ import {
   getFirstUserText,
   getParentMessageId,
 } from "./transcript";
-import { getToolPermissionMode, getWorkspaceRootPath } from "./workspace";
+import {
+  getSearchProviderRuntime,
+  getSearchSettings,
+  getToolApprovalPolicies,
+  getToolPermissionMode,
+  getWebFetchSettings,
+  getWorkspaceRootPath,
+} from "./workspace";
 
 export async function runThreadChat(rawInput: unknown, userId: string) {
   const request = await parseRequest(rawInput, userId);
@@ -114,6 +121,10 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
     request.userId,
   );
   const permissionMode = await getToolPermissionMode(request.userId);
+  const searchSettings = await getSearchSettings(request.userId);
+  const searchProviders = await getSearchProviderRuntime(request.userId);
+  const toolApprovalPolicies = await getToolApprovalPolicies(request.userId);
+  const webFetchSettings = await getWebFetchSettings(request.userId);
   const toolsEnabled = Boolean(workspaceRoot);
   const continuationAssistant =
     request.trigger === "submit-tool-approval"
@@ -189,9 +200,13 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
     languageModel: resolvedModel.languageModel,
     permissionMode,
     providerOptions: resolvedModel.providerOptions,
+    searchProviders,
+    searchSettings,
     systemPrompt,
     threadId: request.threadId,
+    toolApprovalPolicies,
     toolsEnabled,
+    webFetchSettings,
   });
 
   const tracker = createReasoningMetadataTracker({

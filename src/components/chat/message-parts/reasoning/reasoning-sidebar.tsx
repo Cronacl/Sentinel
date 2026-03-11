@@ -35,7 +35,7 @@ const TimelineStep = memo(function TimelineStep({
       </div>
 
       <div className={`${isLast ? "pb-0" : "pb-8"} min-w-0`}>
-        <p className="mb-2 text-[15px] font-medium leading-[1.3] tracking-[-0.01em] text-foreground/88">
+        <p className="mb-2 text-[15px] font-medium text-foreground/88">
           {step.title}
         </p>
         {shouldRenderContent ? (
@@ -115,11 +115,11 @@ export const ReasoningSidebar = memo(function ReasoningSidebar() {
     <div className="flex h-full w-full flex-col bg-transparent px-7 pb-6 pt-8">
       <div className="mb-8 flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="text-[22px] font-medium leading-none tracking-[-0.02em] text-foreground/78">
+          <h2 className="text-[22px] font-medium text-foreground/78">
             {sidebarTitle}
           </h2>
           {tokenCount !== undefined ? (
-            <p className="mt-2 text-[13px] leading-none text-muted/90">
+            <p className="mt-2 text-[13px] text-muted/90">
               {formatTokenCount(tokenCount)} reasoning tokens
             </p>
           ) : null}
@@ -163,7 +163,7 @@ export const ReasoningSidebar = memo(function ReasoningSidebar() {
                   <div className="relative flex justify-center">
                     <div className="mt-[8px] h-[8px] w-[8px] rounded-full bg-foreground/80" />
                   </div>
-                  <div className="min-w-0 text-[15px] font-medium leading-none tracking-[-0.01em] text-foreground/88">
+                  <div className="min-w-0 text-[15px] font-medium text-foreground/88">
                     Done
                   </div>
                 </div>

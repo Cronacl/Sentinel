@@ -1318,7 +1318,7 @@ export function WorkspaceSidebar() {
                       ? "No workspaces yet"
                       : "No threads found"}
                   </p>
-                  <p className="text-muted mt-1 text-xs leading-5">
+                  <p className="text-muted mt-1 text-xs">
                     {organizeBy === "workspace"
                       ? "Create a workspace to start grouping threads by project root."
                       : "No threads match the current sidebar filters yet."}
@@ -1424,7 +1424,7 @@ export function WorkspaceSidebar() {
                 </span>
                 ?
               </p>
-              <p className="text-muted mt-1 text-xs leading-5">
+              <p className="text-muted mt-1 text-xs">
                 This archives the workspace and also archives{" "}
                 <span className="font-medium text-foreground">
                   {deleteTargetWorkspace?.threadCount ?? 0}{" "}

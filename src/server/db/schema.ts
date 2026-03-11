@@ -12,6 +12,7 @@ import {
   AI_PROVIDERS,
   PERMISSION_MODES,
   PERSONALITY_PRESETS,
+  SEARCH_PROVIDERS,
   THEME_PREFERENCES,
   THREAD_LIST_ORGANIZE_BY,
   THREAD_LIST_SORT_BY,
@@ -40,6 +41,12 @@ export const users = sqliteTable(
     permissionMode: text("permission_mode", { enum: PERMISSION_MODES })
       .notNull()
       .default("default"),
+    webFetchBatchEnabled: integer("webfetch_batch_enabled", {
+      mode: "boolean",
+    })
+      .notNull()
+      .default(false),
+    webFetchBatchLimit: integer("webfetch_batch_limit").notNull().default(10),
     themePreference: text("theme_preference", { enum: THEME_PREFERENCES })
       .notNull()
       .default("system"),
@@ -80,6 +87,9 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   threads: many(threads),
   credentials: many(providerCredentials),
   modelPreferences: many(modelPreferences),
+  searchProviderConfigs: many(searchProviderConfigs),
+  searchSettings: many(searchSettings),
+  toolApprovalPolicies: many(toolApprovalPolicies),
 }));
 
 export const workspaces = sqliteTable(
@@ -243,6 +253,117 @@ export const providerCredentialsRelations = relations(
   ({ one }) => ({
     user: one(users, {
       fields: [providerCredentials.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const searchProviderConfigs = sqliteTable(
+  "search_provider_config",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    userId: text("user_id").notNull(),
+    provider: text("provider", { enum: SEARCH_PROVIDERS }).notNull(),
+    encryptedConfig: text("encrypted_config").notNull(),
+    settings: text("settings", { mode: "json" }).notNull(),
+    isEnabled: integer("is_enabled", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("search_provider_config_user_provider_unique").on(
+      table.userId,
+      table.provider,
+    ),
+    index("search_provider_config_user_id_idx").on(table.userId),
+  ],
+);
+
+export const searchProviderConfigsRelations = relations(
+  searchProviderConfigs,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [searchProviderConfigs.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const searchSettings = sqliteTable(
+  "search_setting",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    userId: text("user_id").notNull(),
+    defaultProvider: text("default_provider", {
+      enum: SEARCH_PROVIDERS,
+    }).notNull(),
+    defaultResultCount: integer("default_result_count").notNull(),
+    maxResultCount: integer("max_result_count").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("search_setting_user_unique").on(table.userId),
+    index("search_setting_user_id_idx").on(table.userId),
+  ],
+);
+
+export const searchSettingsRelations = relations(searchSettings, ({ one }) => ({
+  user: one(users, {
+    fields: [searchSettings.userId],
+    references: [users.id],
+  }),
+}));
+
+export const toolApprovalPolicies = sqliteTable(
+  "tool_approval_policy",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    userId: text("user_id").notNull(),
+    toolName: text("tool_name").notNull(),
+    requireApproval: integer("require_approval", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("tool_approval_policy_user_tool_unique").on(
+      table.userId,
+      table.toolName,
+    ),
+    index("tool_approval_policy_user_id_idx").on(table.userId),
+  ],
+);
+
+export const toolApprovalPoliciesRelations = relations(
+  toolApprovalPolicies,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [toolApprovalPolicies.userId],
       references: [users.id],
     }),
   }),

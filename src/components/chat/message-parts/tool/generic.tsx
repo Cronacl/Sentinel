@@ -7,15 +7,13 @@ import { getToolName, getToolStateLabel, stringifyJson } from "../types";
 
 function JsonBlock({ value }: { value: unknown }) {
   return (
-    <pre className="mt-2 overflow-x-auto rounded-xl border border-border/60 bg-background/70 p-3 font-mono text-[12px] leading-5 text-muted">
+    <pre className="mt-2 overflow-x-auto rounded-xl border border-border/60 bg-background/70 p-3 font-mono text-[12px] text-muted">
       {stringifyJson(value)}
     </pre>
   );
 }
 
-export const GenericTool = memo(function GenericTool({
-  part,
-}: RendererProps) {
+export const GenericTool = memo(function GenericTool({ part }: RendererProps) {
   const toolName = getToolName(part);
   const stateLabel = getToolStateLabel(part.state);
   const hasInput = "input" in part && part.input !== undefined;
@@ -29,7 +27,7 @@ export const GenericTool = memo(function GenericTool({
           <p className="text-sm font-medium capitalize text-foreground">
             {toolName.replace(/[-_]/g, " ")}
           </p>
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">
+          <p className="text-[11px] text-muted">
             {stateLabel}
           </p>
         </div>
@@ -40,18 +38,14 @@ export const GenericTool = memo(function GenericTool({
 
       {hasInput ? (
         <div className="mt-3">
-          <p className="text-[11px] uppercase tracking-[0.14em] text-muted">
-            Input
-          </p>
+          <p className="text-[11px] text-muted">Input</p>
           <JsonBlock value={part.input} />
         </div>
       ) : null}
 
       {hasOutput ? (
         <div className="mt-3">
-          <p className="text-[11px] uppercase tracking-[0.14em] text-muted">
-            Output
-          </p>
+          <p className="text-[11px] text-muted">Output</p>
           <JsonBlock value={part.output} />
         </div>
       ) : null}

@@ -23,14 +23,14 @@ import {
   type ReasoningEffort,
   getDefaultReasoningEffort,
   getSupportedReasoningEfforts,
-} from "@/lib/ai/models";
+} from "@/lib/ai/providers/models";
 import {
   CHAT_ATTACHMENT_ACCEPT,
   getAttachmentIcon,
   getAttachmentTone,
   type AttachmentKind,
 } from "@/lib/files/chat-attachment-types";
-import { PROVIDERS } from "@/lib/ai/providers";
+import { PROVIDERS } from "@/lib/ai/providers/registry";
 import { api } from "@/trpc/react";
 
 import {
@@ -166,7 +166,7 @@ function AttachmentChip({
         )}
       </div>
       {!isImage ? (
-        <span className="rounded-full bg-default px-1.5 py-0.5 text-[10px] uppercase tracking-[0.12em] text-muted">
+        <span className="rounded-full bg-default px-1.5 py-0.5 text-[10px] text-muted">
           {attachment.fileType.label}
         </span>
       ) : null}
@@ -335,13 +335,14 @@ export function ChatComposer({
   const selectionScopeKey = threadId ?? "__global__";
   const hasThreadSelection = Boolean(threadSelection?.modelId);
   const preferredModelId = hasThreadSelection
-    ? threadSelection?.modelId ?? null
-    : globalSelectionQuery.data?.modelId ?? null;
+    ? (threadSelection?.modelId ?? null)
+    : (globalSelectionQuery.data?.modelId ?? null);
   const preferredReasoningEffort = hasThreadSelection
-    ? threadSelection?.reasoningEffort ?? null
+    ? (threadSelection?.reasoningEffort ?? null)
     : ((globalSelectionQuery.data?.reasoningEffort as ReasoningEffort | null) ??
       null);
-  const preferencesReady = hasThreadSelection || !globalSelectionQuery.isLoading;
+  const preferencesReady =
+    hasThreadSelection || !globalSelectionQuery.isLoading;
 
   const hasWorkspace = Boolean(activeWorkspace);
   const hasModels = availableModels.length > 0;
@@ -427,7 +428,7 @@ export function ChatComposer({
     editorProps: {
       attributes: {
         class:
-          "sentinel-composer-editor outline-none text-[14px] leading-6 text-foreground",
+          "sentinel-composer-editor outline-none text-[14px] text-foreground",
       },
       handleKeyDown: (_view, event) => {
         if (event.key === "Enter" && !event.shiftKey) {
@@ -509,12 +510,12 @@ export function ChatComposer({
       return;
     }
 
-    const preferredModel =
-      preferredModelId
-        ? availableModels.find(
-            (model) => getModelKey(model.provider, model.modelId) === preferredModelId,
-          ) ?? null
-        : null;
+    const preferredModel = preferredModelId
+      ? (availableModels.find(
+          (model) =>
+            getModelKey(model.provider, model.modelId) === preferredModelId,
+        ) ?? null)
+      : null;
     const nextModel = preferredModel ?? availableModels[0] ?? null;
     const nextModelKey = nextModel
       ? getModelKey(nextModel.provider, nextModel.modelId)
@@ -545,7 +546,8 @@ export function ChatComposer({
     }
 
     const stillAvailable = availableModels.some(
-      (model) => getModelKey(model.provider, model.modelId) === selectedModelKey,
+      (model) =>
+        getModelKey(model.provider, model.modelId) === selectedModelKey,
     );
     if (stillAvailable) {
       return;
@@ -862,7 +864,7 @@ export function ChatComposer({
         <div className="px-2">
           <div className="min-h-[28px]">
             {!editor ? (
-              <div className="pointer-events-none py-1 text-[14px] leading-6 text-muted/50">
+              <div className="pointer-events-none py-1 text-[14px] text-muted/50">
                 {placeholderText}
               </div>
             ) : null}
@@ -943,7 +945,7 @@ export function ChatComposer({
                   >
                     {groupedModels.map(([provider, models]) => (
                       <div key={provider}>
-                        <div className="px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-muted/50">
+                        <div className="px-3 pb-1 pt-2 text-[11px] font-medium text-muted/50">
                           {PROVIDERS[provider].displayName}
                         </div>
                         {models.map((model) => {

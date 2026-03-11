@@ -38,6 +38,9 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     "about_user" text,
     "personality_preset" text DEFAULT 'pragmatic' NOT NULL,
     "custom_instructions" text,
+    "permission_mode" text DEFAULT 'default' NOT NULL,
+    "webfetch_batch_enabled" integer DEFAULT false NOT NULL,
+    "webfetch_batch_limit" integer DEFAULT 10 NOT NULL,
     "theme_preference" text DEFAULT 'system' NOT NULL,
     "default_chat_model_id" text,
     "default_chat_reasoning_effort" text,
@@ -48,8 +51,12 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     "updated_at" integer NOT NULL
   )`);
 
-  db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS "user_email_unique" ON "user" ("email")`);
-  db.run(sql`CREATE INDEX IF NOT EXISTS "user_selected_workspace_idx" ON "user" ("selected_workspace_id")`);
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "user_email_unique" ON "user" ("email")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "user_selected_workspace_idx" ON "user" ("selected_workspace_id")`,
+  );
 
   db.run(sql`CREATE TABLE IF NOT EXISTS "workspace" (
     "id" text PRIMARY KEY NOT NULL,
@@ -62,8 +69,12 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     "updated_at" integer NOT NULL
   )`);
 
-  db.run(sql`CREATE INDEX IF NOT EXISTS "workspace_user_id_idx" ON "workspace" ("user_id")`);
-  db.run(sql`CREATE INDEX IF NOT EXISTS "workspace_user_id_archived_idx" ON "workspace" ("user_id", "is_archived")`);
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "workspace_user_id_idx" ON "workspace" ("user_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "workspace_user_id_archived_idx" ON "workspace" ("user_id", "is_archived")`,
+  );
 
   db.run(sql`CREATE TABLE IF NOT EXISTS "thread" (
     "id" text PRIMARY KEY NOT NULL,
@@ -78,10 +89,42 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     "archived_at" integer
   )`);
 
-  db.run(sql`CREATE INDEX IF NOT EXISTS "thread_workspace_id_idx" ON "thread" ("workspace_id")`);
-  db.run(sql`CREATE INDEX IF NOT EXISTS "thread_user_id_idx" ON "thread" ("user_id")`);
-  db.run(sql`CREATE INDEX IF NOT EXISTS "thread_workspace_archived_updated_idx" ON "thread" ("workspace_id", "archived_at", "updated_at")`);
-  db.run(sql`CREATE INDEX IF NOT EXISTS "thread_user_archived_updated_idx" ON "thread" ("user_id", "archived_at", "updated_at")`);
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "thread_workspace_id_idx" ON "thread" ("workspace_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "thread_user_id_idx" ON "thread" ("user_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "thread_workspace_archived_updated_idx" ON "thread" ("workspace_id", "archived_at", "updated_at")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "thread_user_archived_updated_idx" ON "thread" ("user_id", "archived_at", "updated_at")`,
+  );
+
+  try {
+    db.run(
+      sql`ALTER TABLE "user" ADD COLUMN "permission_mode" text DEFAULT 'default' NOT NULL`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(
+      sql`ALTER TABLE "user" ADD COLUMN "webfetch_batch_enabled" integer DEFAULT false NOT NULL`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(
+      sql`ALTER TABLE "user" ADD COLUMN "webfetch_batch_limit" integer DEFAULT 10 NOT NULL`,
+    );
+  } catch {
+    // column already exists
+  }
 
   try {
     db.run(sql`ALTER TABLE "user" ADD COLUMN "default_chat_model_id" text`);
@@ -90,7 +133,9 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
   }
 
   try {
-    db.run(sql`ALTER TABLE "user" ADD COLUMN "default_chat_reasoning_effort" text`);
+    db.run(
+      sql`ALTER TABLE "user" ADD COLUMN "default_chat_reasoning_effort" text`,
+    );
   } catch {
     // column already exists
   }
@@ -112,7 +157,9 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
   } catch {
     // column already exists
   }
-  db.run(sql`CREATE INDEX IF NOT EXISTS "thread_user_pinned_idx" ON "thread" ("user_id", "pinned_at")`);
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "thread_user_pinned_idx" ON "thread" ("user_id", "pinned_at")`,
+  );
 
   db.run(sql`CREATE TABLE IF NOT EXISTS "thread_message" (
     "id" text PRIMARY KEY NOT NULL,
@@ -125,8 +172,12 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     "updated_at" integer NOT NULL
   )`);
 
-  db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS "thread_message_thread_message_unique" ON "thread_message" ("thread_id", "message_id")`);
-  db.run(sql`CREATE INDEX IF NOT EXISTS "thread_message_thread_created_idx" ON "thread_message" ("thread_id", "created_at")`);
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "thread_message_thread_message_unique" ON "thread_message" ("thread_id", "message_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "thread_message_thread_created_idx" ON "thread_message" ("thread_id", "created_at")`,
+  );
 
   db.run(sql`CREATE TABLE IF NOT EXISTS "provider_credential" (
     "id" text PRIMARY KEY NOT NULL,
@@ -138,8 +189,63 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     "updated_at" integer NOT NULL
   )`);
 
-  db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS "provider_credential_user_provider_unique" ON "provider_credential" ("user_id", "provider")`);
-  db.run(sql`CREATE INDEX IF NOT EXISTS "provider_credential_user_id_idx" ON "provider_credential" ("user_id")`);
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "provider_credential_user_provider_unique" ON "provider_credential" ("user_id", "provider")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "provider_credential_user_id_idx" ON "provider_credential" ("user_id")`,
+  );
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS "search_provider_config" (
+    "id" text PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL,
+    "provider" text NOT NULL,
+    "encrypted_config" text NOT NULL,
+    "settings" text NOT NULL,
+    "is_enabled" integer DEFAULT true NOT NULL,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "search_provider_config_user_provider_unique" ON "search_provider_config" ("user_id", "provider")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "search_provider_config_user_id_idx" ON "search_provider_config" ("user_id")`,
+  );
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS "search_setting" (
+    "id" text PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL,
+    "default_provider" text NOT NULL,
+    "default_result_count" integer NOT NULL,
+    "max_result_count" integer NOT NULL,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "search_setting_user_unique" ON "search_setting" ("user_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "search_setting_user_id_idx" ON "search_setting" ("user_id")`,
+  );
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS "tool_approval_policy" (
+    "id" text PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL,
+    "tool_name" text NOT NULL,
+    "require_approval" integer DEFAULT true NOT NULL,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "tool_approval_policy_user_tool_unique" ON "tool_approval_policy" ("user_id", "tool_name")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "tool_approval_policy_user_id_idx" ON "tool_approval_policy" ("user_id")`,
+  );
 
   db.run(sql`CREATE TABLE IF NOT EXISTS "model_preference" (
     "id" text PRIMARY KEY NOT NULL,
@@ -151,8 +257,12 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     "created_at" integer NOT NULL
   )`);
 
-  db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS "model_preference_user_provider_model_unique" ON "model_preference" ("user_id", "provider", "model_id")`);
-  db.run(sql`CREATE INDEX IF NOT EXISTS "model_preference_user_id_idx" ON "model_preference" ("user_id")`);
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "model_preference_user_provider_model_unique" ON "model_preference" ("user_id", "provider", "model_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "model_preference_user_id_idx" ON "model_preference" ("user_id")`,
+  );
 }
 
 function initVectorDb(): Database.Database | null {

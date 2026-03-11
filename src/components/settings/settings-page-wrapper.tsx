@@ -22,7 +22,7 @@ export function SettingsPageWrapper({
             <div className="mb-6 flex items-start justify-between gap-4">
               <div className="app-region-no-drag min-w-0">
                 <div className="flex items-center gap-3">
-                  <h1 className="text-foreground text-xl font-medium tracking-tight">
+                  <h1 className="text-foreground text-xl font-medium">
                     {title}
                   </h1>
                 </div>

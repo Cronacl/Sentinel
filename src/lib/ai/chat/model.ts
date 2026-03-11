@@ -6,13 +6,13 @@ import { threads } from "@/server/db/schema";
 import {
   getReasoningProviderOptions,
   type ReasoningEffort,
-} from "../models";
-import { getEnabledModels, getLanguageModel, parseModelId } from "../resolver";
+} from "../providers/models";
+import { getEnabledModels, getLanguageModel, parseModelId } from "../providers/resolver";
 import {
   normalizeThreadMessageMetadata,
   type ThreadMessageMetadata,
-} from "../message-types";
-import type { PersistedThreadMessageRecord } from "../branches";
+} from "../messages/types";
+import type { PersistedThreadMessageRecord } from "../messages/branches";
 
 import type { ResolvedThreadChatModel, ThreadChatRequest } from "./types";
 

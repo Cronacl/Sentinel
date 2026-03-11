@@ -296,7 +296,7 @@ export default function SecuritySettingsPage() {
                   Permissions
                 </h2>
               </div>
-              <p className="text-muted text-sm leading-6">
+              <p className="text-muted text-sm">
                 Choose how broadly Sentinel tools can access your machine.
               </p>
             </div>
@@ -314,7 +314,7 @@ export default function SecuritySettingsPage() {
                 selectProps={{ className: "w-full max-w-md" }}
               />
 
-              <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-xs leading-6 text-muted">
+              <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-xs text-muted">
                 {currentWorkspace.data?.rootPath ? (
                   <>
                     Active workspace root:{" "}

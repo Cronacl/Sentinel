@@ -1,9 +1,9 @@
 import type { AIProvider } from "@/server/db/enums";
 
-import { toCompositeModelId } from "../models";
-import { getLanguageModel } from "../resolver";
+import { toCompositeModelId } from "../../providers/models";
+import { getLanguageModel } from "../../providers/resolver";
 
-import type { ResolvedThreadTitleModel } from "./types";
+import type { ResolvedThreadTitleModel } from "../types";
 
 const THREAD_TITLE_MODEL_IDS = {
   anthropic: "claude-haiku-4-5",

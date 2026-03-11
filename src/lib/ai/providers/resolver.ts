@@ -8,7 +8,7 @@ import { modelPreferences, providerCredentials } from "@/server/db/schema";
 
 import { createCredentialDecryptionError, decrypt } from "./encrypt";
 import { getModelsForProvider, isKnownModel } from "./models";
-import { createProviderInstance } from "./provider-factory";
+import { createProviderInstance } from "./factory";
 
 const VALID_PROVIDERS = new Set<string>([
   "openai",

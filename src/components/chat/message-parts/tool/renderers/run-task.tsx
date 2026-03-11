@@ -259,7 +259,7 @@ export const RunTaskTool = memo(function RunTaskTool({
         </div>
 
         {part.state === "approval-requested" ? (
-          <p className="mt-1.5 line-clamp-2 text-[11px] leading-5 text-muted">
+          <p className="mt-1.5 line-clamp-2 text-[11px] text-muted">
             {runTaskInput.rationale}
           </p>
         ) : null}
@@ -272,7 +272,7 @@ export const RunTaskTool = memo(function RunTaskTool({
               </div>
 
               <div className="px-3.5 py-3">
-                <ScrollShadow className="max-h-[180px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] leading-6 text-foreground">
+                <ScrollShadow className="max-h-[180px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground">
                   {terminalText}
                 </ScrollShadow>
 

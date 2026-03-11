@@ -1,10 +1,33 @@
 import { and, eq } from "drizzle-orm";
 
+import {
+  buildToolApprovalOverrideMap,
+  resolveToolApprovalPolicies,
+  type ToolApprovalPolicyMap,
+} from "@/lib/ai/chat/tool-approval-policy";
+import {
+  buildSearchProviderRuntimeMap,
+  type SearchProviderRuntimeMap,
+} from "@/lib/search/providers/runtime";
+import { normalizeSearchSettings, type SearchSettings } from "@/lib/search";
+import {
+  normalizeWebFetchSettings,
+  type WebFetchSettings,
+} from "@/lib/webfetch";
 import type { PermissionMode } from "@/server/db/enums";
 import { db } from "@/server/db";
-import { users, workspaces } from "@/server/db/schema";
+import {
+  searchProviderConfigs,
+  searchSettings,
+  toolApprovalPolicies,
+  users,
+  workspaces,
+} from "@/server/db/schema";
 
-export async function getWorkspaceRootPath(workspaceId: string, userId: string) {
+export async function getWorkspaceRootPath(
+  workspaceId: string,
+  userId: string,
+) {
   const workspace = await db.query.workspaces.findFirst({
     where: and(
       eq(workspaces.id, workspaceId),
@@ -17,11 +40,72 @@ export async function getWorkspaceRootPath(workspaceId: string, userId: string) 
   return workspace?.rootPath?.trim() || null;
 }
 
-export async function getToolPermissionMode(userId: string): Promise<PermissionMode> {
+export async function getToolPermissionMode(
+  userId: string,
+): Promise<PermissionMode> {
   const user = await db.query.users.findFirst({
     where: eq(users.id, userId),
     columns: { permissionMode: true },
   });
 
   return user?.permissionMode ?? "default";
+}
+
+export async function getWebFetchSettings(
+  userId: string,
+): Promise<WebFetchSettings> {
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: {
+      webFetchBatchEnabled: true,
+      webFetchBatchLimit: true,
+    },
+  });
+
+  return normalizeWebFetchSettings(user);
+}
+
+export async function getToolApprovalPolicies(
+  userId: string,
+): Promise<ToolApprovalPolicyMap> {
+  const rows = await db.query.toolApprovalPolicies.findMany({
+    where: eq(toolApprovalPolicies.userId, userId),
+    columns: {
+      requireApproval: true,
+      toolName: true,
+    },
+  });
+
+  return resolveToolApprovalPolicies(buildToolApprovalOverrideMap(rows));
+}
+
+export async function getSearchSettings(
+  userId: string,
+): Promise<SearchSettings> {
+  const row = await db.query.searchSettings.findFirst({
+    where: eq(searchSettings.userId, userId),
+    columns: {
+      defaultProvider: true,
+      defaultResultCount: true,
+      maxResultCount: true,
+    },
+  });
+
+  return normalizeSearchSettings(row ?? null);
+}
+
+export async function getSearchProviderRuntime(
+  userId: string,
+): Promise<SearchProviderRuntimeMap> {
+  const rows = await db.query.searchProviderConfigs.findMany({
+    where: eq(searchProviderConfigs.userId, userId),
+    columns: {
+      encryptedConfig: true,
+      isEnabled: true,
+      provider: true,
+      settings: true,
+    },
+  });
+
+  return buildSearchProviderRuntimeMap(rows);
 }

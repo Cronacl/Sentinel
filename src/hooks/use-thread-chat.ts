@@ -6,13 +6,13 @@ import { DefaultChatTransport } from "ai";
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from "ai";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
-import type { ReasoningEffort } from "@/lib/ai/models";
+import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import {
   getThreadMessageSyncToken,
   normalizeThreadUIMessages,
   type ThreadUIMessage,
   threadMessageMetadataSchema,
-} from "@/lib/ai/message-types";
+} from "@/lib/ai/messages/types";
 
 type UseThreadChatOptions = {
   threadId: string;

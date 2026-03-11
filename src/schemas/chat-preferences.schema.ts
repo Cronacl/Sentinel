@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { REASONING_EFFORTS } from "@/lib/ai/models";
+import { REASONING_EFFORTS } from "@/lib/ai/providers/models";
 
 const reasoningEffortSchema = z.enum(REASONING_EFFORTS);
 

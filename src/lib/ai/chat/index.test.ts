@@ -99,8 +99,31 @@ const setActiveStream = mock(() => {});
 const updateMessageMetadata = mock(async () => {});
 
 const createNewResumableStream = mock(async () => {});
-const findWorkspace = mock(async () => ({ rootPath: "/tmp/workspace-1" }));
-const findUser = mock(async () => ({ permissionMode: "default" }));
+const getWorkspaceRootPath = mock(async () => "/tmp/workspace-1");
+const getToolPermissionMode = mock(async () => "default");
+const getToolApprovalPolicies = mock(async () => ({
+  list: false,
+  glob: false,
+  read: false,
+  grep: false,
+  edit: true,
+  create_file: true,
+  delete_file: true,
+  run_task: true,
+  shell_command: true,
+  websearch: true,
+  webfetch: true,
+}));
+const getSearchSettings = mock(async () => ({
+  defaultProvider: "exa",
+  defaultResultCount: 5,
+  maxResultCount: 10,
+}));
+const getSearchProviderRuntime = mock(async () => ({}));
+const getWebFetchSettings = mock(async () => ({
+  batchEnabled: false,
+  batchLimit: 10,
+}));
 
 mock.module("ai", () => ({
   createAgentUIStream,
@@ -113,7 +136,7 @@ mock.module("ai", () => ({
   ToolLoopAgent: MockToolLoopAgent,
 }));
 
-mock.module("./attachments", () => ({
+mock.module("./runtime/attachments", () => ({
   createAttachmentDownloadHandler,
 }));
 
@@ -121,33 +144,33 @@ mock.module("./model", () => ({
   resolveThreadChatModel,
 }));
 
-mock.module("./title-model", () => ({
+mock.module("./title/model", () => ({
   resolveThreadTitleModel,
 }));
 
-mock.module("./title", () => ({
+mock.module("./title/generate", () => ({
   generateThreadTitle,
 }));
 
-mock.module("./system-prompt", () => ({
+mock.module("./runtime/system-prompt", () => ({
   getSystemPrompt,
 }));
 
-mock.module("./finalize", () => ({
+mock.module("./runtime/finalize", () => ({
   buildPersistedAssistantMessage,
 }));
 
-mock.module("./reasoning", () => ({
+mock.module("./runtime/reasoning", () => ({
   createReasoningMetadataTracker,
 }));
 
-mock.module("../branches", () => ({
+mock.module("../messages/branches", () => ({
   buildActiveThreadMessages,
   getLatestVisibleMessageId,
   getMessageRecordById,
 }));
 
-mock.module("../ui-messages", () => ({
+mock.module("../messages/ui", () => ({
   validateThreadUIMessage,
   validateThreadUIMessages,
 }));
@@ -170,28 +193,13 @@ mock.module("@/lib/streams", () => ({
   },
 }));
 
-mock.module("@/server/db", () => ({
-  db: {
-    query: {
-      users: {
-        findFirst: findUser,
-      },
-      workspaces: {
-        findFirst: findWorkspace,
-      },
-    },
-  },
-}));
-
-mock.module("@/server/db/schema", () => ({
-  users: {
-    id: "user.id",
-  },
-  workspaces: {
-    id: "workspace.id",
-    isArchived: "workspace.isArchived",
-    userId: "workspace.userId",
-  },
+mock.module("./runtime/workspace", () => ({
+  getSearchProviderRuntime,
+  getSearchSettings,
+  getToolApprovalPolicies,
+  getToolPermissionMode,
+  getWebFetchSettings,
+  getWorkspaceRootPath,
 }));
 
 const { runThreadChat } = await import("./index");
@@ -318,8 +326,31 @@ beforeEach(() => {
   loadThreadMessages.mockImplementation(async () => []);
   resolveThreadTitleModel.mockImplementation(async () => resolvedTitleModel);
   generateThreadTitle.mockImplementation(async () => "Fast title");
-  findUser.mockImplementation(async () => ({ permissionMode: "default" }));
-  findWorkspace.mockImplementation(async () => ({ rootPath: "/tmp/workspace-1" }));
+  getToolPermissionMode.mockImplementation(async () => "default");
+  getToolApprovalPolicies.mockImplementation(async () => ({
+    list: false,
+    glob: false,
+    read: false,
+    grep: false,
+    edit: true,
+    create_file: true,
+    delete_file: true,
+    run_task: true,
+    shell_command: true,
+    websearch: true,
+    webfetch: true,
+  }));
+  getSearchSettings.mockImplementation(async () => ({
+    defaultProvider: "exa",
+    defaultResultCount: 5,
+    maxResultCount: 10,
+  }));
+  getSearchProviderRuntime.mockImplementation(async () => ({}));
+  getWebFetchSettings.mockImplementation(async () => ({
+    batchEnabled: false,
+    batchLimit: 10,
+  }));
+  getWorkspaceRootPath.mockImplementation(async () => "/tmp/workspace-1");
 });
 
 afterEach(() => {
@@ -349,10 +380,13 @@ describe("runThreadChat title generation", () => {
     expect(aiTestState.agentConfig?.instructions).toContain(
       "Default directory: /tmp/workspace-1",
     );
-    expect(aiTestState.agentConfig?.instructions).toContain("Permission mode: default");
+    expect(aiTestState.agentConfig?.instructions).toContain(
+      "Permission mode: default",
+    );
     expect(aiTestState.agentConfig?.tools).toHaveProperty("list");
     expect(aiTestState.agentConfig?.tools).toHaveProperty("grep");
     expect(aiTestState.agentConfig?.tools).toHaveProperty("shell_command");
+    expect(aiTestState.agentConfig?.tools).toHaveProperty("websearch");
   });
 
   it("skips title generation for non-new threads", async () => {
@@ -368,7 +402,10 @@ describe("runThreadChat title generation", () => {
   });
 
   it("skips title generation for retry, regenerate, and edit flows", async () => {
-    await runThreadChat(createRetryRequest("retry-assistant-message"), "user-1");
+    await runThreadChat(
+      createRetryRequest("retry-assistant-message"),
+      "user-1",
+    );
     await runThreadChat(
       createRetryRequest("regenerate-assistant-message"),
       "user-1",
@@ -440,7 +477,10 @@ describe("runThreadChat approvals and lifecycle", () => {
         uiMessages: request.messages,
       }),
     );
-    expect(setActiveMessage).toHaveBeenCalledWith("thread-1", "assistant-existing");
+    expect(setActiveMessage).toHaveBeenCalledWith(
+      "thread-1",
+      "assistant-existing",
+    );
     expect(buildPersistedAssistantMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         assistantId: "assistant-existing",
@@ -460,21 +500,57 @@ describe("runThreadChat approvals and lifecycle", () => {
     );
 
     expect(response.status).toBe(204);
-    expect(updateMessageMetadata).toHaveBeenCalledWith("thread-1", "assistant-1", {
-      errorMessage: "Generation stopped.",
-      status: "cancelled",
-    });
+    expect(updateMessageMetadata).toHaveBeenCalledWith(
+      "thread-1",
+      "assistant-1",
+      {
+        errorMessage: "Generation stopped.",
+        status: "cancelled",
+      },
+    );
   });
 
   it("disables shell tooling when the workspace root is unavailable", async () => {
-    findWorkspace.mockImplementation(async () => ({ rootPath: null }));
+    getWorkspaceRootPath.mockImplementation(async () => null);
 
     await runThreadChat(createSubmitRequest(), "user-1");
 
-    expect(aiTestState.agentConfig?.tools).toBeUndefined();
+    expect(aiTestState.agentConfig?.tools).toMatchObject({
+      websearch: expect.any(Object),
+      webfetch: expect.any(Object),
+    });
+    expect(Object.keys(aiTestState.agentConfig?.tools ?? {})).toEqual([
+      "websearch",
+      "webfetch",
+    ]);
     expect(aiTestState.agentConfig?.instructions).toContain(
-      "Tool execution is currently unavailable because there is no selected workspace root.",
+      "Workspace tools are currently unavailable because there is no selected workspace root.",
     );
+  });
+
+  it("applies stored tool approval overrides to the runtime agent", async () => {
+    getToolApprovalPolicies.mockImplementation(async () => ({
+      list: true,
+      glob: false,
+      read: false,
+      grep: false,
+      edit: false,
+      create_file: true,
+      delete_file: true,
+      run_task: true,
+      shell_command: true,
+      websearch: true,
+      webfetch: true,
+    }));
+
+    await runThreadChat(createSubmitRequest(), "user-1");
+
+    expect(
+      await aiTestState.agentConfig?.tools.list.needsApproval({}, {}),
+    ).toBe(true);
+    expect(
+      await aiTestState.agentConfig?.tools.edit.needsApproval({}, {}),
+    ).toBe(false);
   });
 
   it("regenerates tool-bearing assistant messages from persisted transcript instead of stale client messages", async () => {

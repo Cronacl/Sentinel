@@ -6,13 +6,13 @@ import type { AIProvider } from "@/server/db/enums";
 import {
   PROVIDER_CONFIG_SCHEMAS,
   validateProviderConfig,
-} from "@/lib/ai/config-schemas";
+} from "@/lib/ai/providers/config-schemas";
 import {
   createCredentialDecryptionError,
   decrypt,
   encrypt,
-} from "@/lib/ai/encrypt";
-import { PROVIDER_LIST } from "@/lib/ai/providers";
+} from "@/lib/ai/providers/encrypt";
+import { PROVIDER_LIST } from "@/lib/ai/providers/registry";
 import { modelPreferences, providerCredentials } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 

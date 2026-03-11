@@ -5,10 +5,12 @@ import {
   AiIdeaIcon,
   ArrowLeft02Icon,
   Brain02Icon,
+  GlobalSearchIcon,
   Settings05Icon,
   ShieldUserIcon,
   TestTubeIcon,
   UserCircleIcon,
+  ValidationApprovalIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
@@ -29,6 +31,16 @@ const SETTINGS_NAV = [
     href: "/settings/personalization",
     label: "Personalization",
     icon: UserCircleIcon,
+  },
+  {
+    href: "/settings/approvals",
+    label: "Approvals",
+    icon: ValidationApprovalIcon,
+  },
+  {
+    href: "/settings/search",
+    label: "Search",
+    icon: GlobalSearchIcon,
   },
   { href: "/settings/security", label: "Security", icon: ShieldUserIcon },
   { href: "/settings/providers", label: "Providers", icon: TestTubeIcon },

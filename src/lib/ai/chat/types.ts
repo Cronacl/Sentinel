@@ -1,8 +1,8 @@
 import type { AIProvider } from "@/server/db/enums";
 import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
 
-import type { ReasoningEffort } from "../models";
-import type { ThreadUIMessage } from "../message-types";
+import type { ReasoningEffort } from "../providers/models";
+import type { ThreadUIMessage } from "../messages/types";
 
 export type ThreadChatTrigger =
   | "submit-user-message"

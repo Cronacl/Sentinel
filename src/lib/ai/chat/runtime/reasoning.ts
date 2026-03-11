@@ -1,10 +1,10 @@
 import type {
   ThreadMessageMetadata,
   ThreadUIMessage,
-} from "../message-types";
-import { mergeThreadMessageMetadata } from "../message-types";
+} from "../../messages/types";
+import { mergeThreadMessageMetadata } from "../../messages/types";
 
-import type { ThreadChatClock } from "./types";
+import type { ThreadChatClock } from "../types";
 
 type ReasoningStreamPart = {
   finishReason?: string;

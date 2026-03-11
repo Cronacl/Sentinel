@@ -24,10 +24,10 @@ export function AuthScreen(props: AuthScreenProps) {
           <Card.Header className="items-center space-y-3 py-1 text-center">
             <Logo className="text-foreground" />
             <div className="space-y-1.5">
-              <Card.Title className="text-foreground text-xl tracking-tight">
+              <Card.Title className="text-foreground text-xl">
                 {props.title}
               </Card.Title>
-              <Card.Description className="text-muted max-w-xs text-sm leading-6">
+              <Card.Description className="text-muted max-w-xs text-sm">
                 {props.description}
               </Card.Description>
             </div>
@@ -43,7 +43,7 @@ export function AuthScreen(props: AuthScreenProps) {
                 />
                 <span className="text-sm font-medium">Local desktop mode</span>
               </div>
-              <p className="text-muted text-sm leading-6">
+              <p className="text-muted text-sm">
                 Sentinel now runs with a single local profile. Open the app
                 directly and use the desktop runtime for local folders,
                 services, and threads.

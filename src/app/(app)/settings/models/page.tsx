@@ -11,7 +11,7 @@ import {
   ControlledTextField,
 } from "@/components/forms/controlled-fields";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
-import { PROVIDERS } from "@/lib/ai/providers";
+import { PROVIDERS } from "@/lib/ai/providers/registry";
 import {
   type CustomModelFormValues,
   customModelFormSchema,

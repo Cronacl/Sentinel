@@ -152,7 +152,7 @@ export const ListTool = memo(function ListTool({
               {shownRoot}
             </p>
             {listInput?.ignore?.length ? (
-              <p className="mt-1.5 line-clamp-2 text-[11px] leading-5 text-muted">
+              <p className="mt-1.5 line-clamp-2 text-[11px] text-muted">
                 Ignore: {listInput.ignore.join(", ")}
               </p>
             ) : null}
@@ -180,7 +180,7 @@ export const ListTool = memo(function ListTool({
               </div>
 
               <div className="px-3.5 py-3">
-                <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] leading-6 text-foreground">
+                <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground">
                   {terminalText}
                 </ScrollShadow>
 
