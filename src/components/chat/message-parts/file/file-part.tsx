@@ -9,7 +9,7 @@ import {
 } from "@/lib/files/chat-attachment-types";
 import { AttachmentIcon } from "@/components/chat/attachment-icon";
 
-import type { FilePart as FilePartType } from "./types";
+import type { FilePart as FilePartType } from "../types";
 
 function isImageFile(part: FilePartType) {
   return part.mediaType.startsWith("image/");

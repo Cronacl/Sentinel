@@ -6,13 +6,13 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 
 import { useRightSidebar } from "@/components/shell/shell-context";
 
-import { MarkdownContent } from "./markdown-content";
+import { MarkdownContent } from "../text";
+import { formatTokenCount } from "../types";
 import {
   closeReasoningSidebarState,
   useReasoningSidebarState,
 } from "./reasoning-sidebar-store";
 import { parseReasoning, type ReasoningStep } from "./reasoning-utils";
-import { formatTokenCount } from "./types";
 
 const TimelineStep = memo(function TimelineStep({
   connectsToNext,

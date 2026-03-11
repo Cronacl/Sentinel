@@ -3,6 +3,7 @@
 import { useChat } from "@ai-sdk/react";
 import type { ChatOnDataCallback, FileUIPart } from "ai";
 import { DefaultChatTransport } from "ai";
+import { lastAssistantMessageIsCompleteWithApprovalResponses } from "ai";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { ReasoningEffort } from "@/lib/ai/models";
@@ -37,6 +38,10 @@ function getLastUserMessage(messages: ThreadUIMessage[]) {
   return [...messages].reverse().find((message) => message.role === "user");
 }
 
+function getLastAssistantMessage(messages: ThreadUIMessage[]) {
+  return [...messages].reverse().find((message) => message.role === "assistant");
+}
+
 function getMessageSyncSignature(messages: ThreadUIMessage[]) {
   return messages.map(getThreadMessageSyncToken).join("||");
 }
@@ -66,17 +71,22 @@ export function useThreadChat({
           const requestBody = (body ?? {}) as Record<string, unknown>;
 
           if (trigger === "submit-message") {
+            const isToolApprovalSubmit =
+              lastAssistantMessageIsCompleteWithApprovalResponses({ messages }) &&
+              getLastAssistantMessage(messages)?.id === messages.at(-1)?.id;
+
             return {
               body: {
                 id,
                 message:
                   requestBody.trigger === "edit-user-message"
                     ? getLastUserMessage(messages)
-                    : messages[messages.length - 1],
+                    : getLastUserMessage(messages) ?? messages[messages.length - 1],
                 messageId:
                   typeof requestBody.messageId === "string"
                     ? requestBody.messageId
                     : messageId,
+                messages,
                 modelId:
                   typeof requestBody.modelId === "string"
                     ? requestBody.modelId
@@ -88,6 +98,8 @@ export function useThreadChat({
                 trigger:
                   requestBody.trigger === "edit-user-message"
                     ? "edit-user-message"
+                    : isToolApprovalSubmit
+                      ? "submit-tool-approval"
                     : "submit-user-message",
                 workspaceId:
                   typeof requestBody.workspaceId === "string"
@@ -102,6 +114,7 @@ export function useThreadChat({
               body: {
                 id,
                 messageId,
+                messages,
                 trigger:
                   requestBody.trigger === "retry-assistant-message"
                     ? "retry-assistant-message"
@@ -147,6 +160,7 @@ export function useThreadChat({
     messages: normalizedInitialMessages,
     messageMetadataSchema: threadMessageMetadataSchema,
     onData,
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     transport,
     onFinish,
     onError,

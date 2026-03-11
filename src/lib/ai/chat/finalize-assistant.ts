@@ -15,6 +15,7 @@ export function buildPersistedAssistantMessage({
   placeholder: ThreadUIMessage;
 }): ThreadUIMessage {
   const merged = finalAssistant ?? placeholder;
+  const placeholderMetadata = placeholder.metadata ?? {};
 
   return {
     ...merged,
@@ -22,9 +23,12 @@ export function buildPersistedAssistantMessage({
     metadata: mergeThreadMessageMetadata(
       mergeThreadMessageMetadata(placeholder.metadata, merged.metadata ?? {}),
       {
+        branchId: placeholderMetadata.branchId,
+        editedFromMessageId: placeholderMetadata.editedFromMessageId,
         ...(errorMessage ? { errorMessage } : {}),
         finishReason: merged.metadata?.finishReason,
         isActive: true,
+        parentMessageId: placeholderMetadata.parentMessageId ?? null,
         status: errorMessage ? "error" : "completed",
       },
     ),

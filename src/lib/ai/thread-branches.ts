@@ -95,6 +95,22 @@ function materializeNodes(records: PersistedThreadMessageRecord[]) {
   return sorted.map((record, index, all) => {
     const node = normalizeNode(record);
     if (node.hasExplicitParent || node.parentMessageId != null) {
+      if (
+        node.message.role === "assistant" &&
+        node.parentMessageId == null &&
+        !node.metadata.branchId
+      ) {
+        const previous = all[index - 1];
+        if (!previous) {
+          return node;
+        }
+
+        return {
+          ...node,
+          parentMessageId: previous.messageId,
+        };
+      }
+
       return node;
     }
 

@@ -218,6 +218,7 @@ export function ThreadScreen({
     onError: handleError,
   });
   const {
+    addToolApprovalResponse,
     editMessage,
     messages,
     regenerateMessage,
@@ -245,6 +246,24 @@ export function ThreadScreen({
       void sendMessage({ files, modelId, reasoningEffort, text });
     },
     [sendMessage],
+  );
+
+  const handleApproveTool = useCallback(
+    (approvalId: string) => {
+      void addToolApprovalResponse({ id: approvalId, approved: true });
+    },
+    [addToolApprovalResponse],
+  );
+
+  const handleDenyTool = useCallback(
+    (approvalId: string) => {
+      void addToolApprovalResponse({
+        id: approvalId,
+        approved: false,
+        reason: "User denied command",
+      });
+    },
+    [addToolApprovalResponse],
   );
 
   const handleEdit = useCallback((message: ThreadUIMessage) => {
@@ -471,13 +490,15 @@ export function ThreadScreen({
           ref={scrollAreaRef}
           className="sentinel-scroll-area flex h-[calc(100vh-44px)] flex-col"
         >
-          <div className="mx-auto w-full max-w-2xl flex-1 px-6 pt-4">
+          <div className="mx-auto w-full max-w-2xl flex-1 px-6 pt-4 pb-20">
             <div className="flex flex-col gap-4">
               {messages.map((message, idx) => (
                 <ChatMessage
                   key={message.id}
                   message={message}
                   isStreaming={isBusy && idx === messages.length - 1}
+                  onApproveTool={handleApproveTool}
+                  onDenyTool={handleDenyTool}
                   onEdit={handleEdit}
                   onRegenerate={handleRegenerate}
                   onRetry={handleRetry}

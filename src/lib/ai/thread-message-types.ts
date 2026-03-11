@@ -79,25 +79,57 @@ function getTextFingerprint(text: string) {
   return `${text.length}:${head}:${tail}`;
 }
 
+function getValueFingerprint(value: unknown) {
+  if (value == null) {
+    return "";
+  }
+
+  try {
+    return getTextFingerprint(JSON.stringify(value));
+  } catch {
+    return String(value);
+  }
+}
+
 function getPartSyncToken(part: ThreadUIMessage["parts"][number]) {
   switch (part.type) {
     case "text":
     case "reasoning":
-      return `${part.type}:${part.state ?? ""}:${getTextFingerprint(part.text)}`;
+      return [
+        part.type,
+        part.state ?? "",
+        getTextFingerprint(part.text),
+        getValueFingerprint(part.providerMetadata),
+      ].join(":");
     case "file":
       return [
         part.type,
         part.filename ?? "",
         part.mediaType,
         getTextFingerprint(part.url),
+        getValueFingerprint(part.providerMetadata),
       ].join(":");
     case "dynamic-tool":
-      return [part.type, part.toolCallId, part.toolName, part.state].join(":");
+      return [
+        part.type,
+        part.toolCallId,
+        part.toolName,
+        part.state,
+        getValueFingerprint(
+          "providerMetadata" in part ? part.providerMetadata : undefined,
+        ),
+      ].join(":");
     default:
       return [
         part.type,
         "toolCallId" in part ? String(part.toolCallId) : "",
         "state" in part ? String(part.state) : "",
+        getValueFingerprint(
+          "callProviderMetadata" in part ? part.callProviderMetadata : undefined,
+        ),
+        getValueFingerprint(
+          "providerMetadata" in part ? part.providerMetadata : undefined,
+        ),
       ].join(":");
   }
 }
@@ -122,6 +154,7 @@ function sanitizeThreadMessageParts(parts: unknown) {
     }
 
     const candidate = part as {
+      providerMetadata?: unknown;
       text?: unknown;
       type?: unknown;
       url?: unknown;
@@ -132,7 +165,10 @@ function sanitizeThreadMessageParts(parts: unknown) {
     }
 
     if (candidate.type === "text" || candidate.type === "reasoning") {
-      return typeof candidate.text === "string" && candidate.text.length > 0;
+      return (
+        typeof candidate.text === "string" &&
+        (candidate.text.length > 0 || candidate.providerMetadata != null)
+      );
     }
 
     if (candidate.type === "file") {
@@ -197,6 +233,31 @@ export function normalizeThreadUIMessages(
   return messages
     .map(normalizeThreadUIMessage)
     .filter((message) => message.parts.length > 0);
+}
+
+function isModelContentPart(part: ThreadUIMessage["parts"][number]): boolean {
+  const type = part.type;
+  if (type.startsWith("data-") || type.startsWith("source-")) return false;
+  return true;
+}
+
+/**
+ * Prepare messages for model consumption by stripping parts that have no model
+ * representation (data-*, source-*) and ensuring every message retains at
+ * least one model-facing part. Messages that would become empty after
+ * stripping are removed entirely.
+ */
+export function prepareMessagesForModel(
+  messages: ThreadUIMessage[],
+): ThreadUIMessage[] {
+  return messages
+    .map((message) => {
+      const modelParts = message.parts.filter(isModelContentPart);
+      if (modelParts.length === message.parts.length) return message;
+      if (modelParts.length === 0) return null;
+      return { ...message, parts: modelParts } as ThreadUIMessage;
+    })
+    .filter((message): message is ThreadUIMessage => message != null);
 }
 
 export function getThreadMessageSyncToken(message: ThreadUIMessage) {

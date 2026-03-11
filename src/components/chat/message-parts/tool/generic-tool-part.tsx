@@ -2,8 +2,8 @@
 
 import { memo } from "react";
 
-import type { ToolPart as ToolPartType } from "./types";
-import { getToolName, getToolStateLabel, stringifyJson } from "./types";
+import type { ToolRendererProps } from "./tool-renderer";
+import { getToolName, getToolStateLabel, stringifyJson } from "../types";
 
 function JsonBlock({ value }: { value: unknown }) {
   return (
@@ -13,25 +13,23 @@ function JsonBlock({ value }: { value: unknown }) {
   );
 }
 
-export const ToolPart = memo(function ToolPart({
+export const GenericToolPart = memo(function GenericToolPart({
   part,
-}: {
-  part: ToolPartType;
-}) {
+}: ToolRendererProps) {
   const toolName = getToolName(part);
   const stateLabel = getToolStateLabel(part.state);
-  const approval = "approval" in part ? part.approval : undefined;
   const hasInput = "input" in part && part.input !== undefined;
   const hasOutput = "output" in part && part.output !== undefined;
+  const partErrorText = "errorText" in part ? part.errorText : undefined;
 
   return (
-    <div className="rounded-2xl border border-border/70 bg-default/35 p-3">
+    <div className="rounded-xl border border-border/70 bg-default/30 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-medium capitalize text-foreground">
             {toolName.replace(/[-_]/g, " ")}
           </p>
-          <p className="text-xs uppercase tracking-[0.14em] text-muted">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">
             {stateLabel}
           </p>
         </div>
@@ -58,18 +56,9 @@ export const ToolPart = memo(function ToolPart({
         </div>
       ) : null}
 
-      {"errorText" in part && part.errorText ? (
+      {partErrorText ? (
         <div className="mt-3 rounded-xl border border-danger/20 bg-danger-soft px-3 py-2 text-xs text-danger-soft-foreground">
-          {part.errorText}
-        </div>
-      ) : null}
-
-      {approval ? (
-        <div className="mt-3">
-          <p className="text-[11px] uppercase tracking-[0.14em] text-muted">
-            Approval
-          </p>
-          <JsonBlock value={approval} />
+          {partErrorText}
         </div>
       ) : null}
     </div>

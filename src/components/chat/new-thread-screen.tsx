@@ -181,7 +181,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     onFinish: handleFinish,
     onError: handleError,
   });
-  const { messages, sendMessage, status, stop } = chat;
+  const { addToolApprovalResponse, messages, sendMessage, status, stop } = chat;
 
   const hasMessages = messages.length > 0;
   const isBusy = status === "submitted" || status === "streaming";
@@ -208,6 +208,24 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       void utils.threads.list.invalidate();
     },
     [sendMessage, utils.threads.list],
+  );
+
+  const handleApproveTool = useCallback(
+    (approvalId: string) => {
+      void addToolApprovalResponse({ id: approvalId, approved: true });
+    },
+    [addToolApprovalResponse],
+  );
+
+  const handleDenyTool = useCallback(
+    (approvalId: string) => {
+      void addToolApprovalResponse({
+        id: approvalId,
+        approved: false,
+        reason: "User denied command",
+      });
+    },
+    [addToolApprovalResponse],
   );
 
   useEffect(() => {
@@ -299,6 +317,8 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                     key={message.id}
                     message={message}
                     isStreaming={isBusy && idx === messages.length - 1}
+                    onApproveTool={handleApproveTool}
+                    onDenyTool={handleDenyTool}
                   />
                 ))}
 

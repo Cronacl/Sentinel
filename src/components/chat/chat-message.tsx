@@ -13,16 +13,16 @@ import type {
   ThreadUIMessage,
 } from "@/lib/ai/thread-message-types";
 
-import { CopyButton } from "./message-parts/copy-button";
-import { FilePart } from "./message-parts/file-part";
-import { ReasoningPart } from "./message-parts/reasoning-part";
-import { TextPart } from "./message-parts/text-part";
-import { ToolPart } from "./message-parts/tool-part";
+import { FilePart } from "./message-parts/file";
+import { ReasoningPart } from "./message-parts/reasoning";
+import { CopyButton } from "./message-parts/shared";
+import { TextPart } from "./message-parts/text";
+import { ToolPart } from "./message-parts/tool";
 import {
   coalesceReasoningEntries,
   extractReasoningTokens,
-  getBranchOptions,
   getMessageStatus,
+  getBranchOptions,
   getAssistantText,
   getPartKey,
   groupMessageParts,
@@ -140,12 +140,16 @@ function getAttachmentGridColumns(count: number) {
 }
 
 function AssistantMessage({
+  onApproveTool,
+  onDenyTool,
   onRegenerate,
   onRetry,
   onSelectBranch,
   isStreaming,
   message,
 }: {
+  onApproveTool?: (approvalId: string) => void;
+  onDenyTool?: (approvalId: string) => void;
   onRegenerate?: (messageId: string) => void;
   onRetry?: (messageId: string) => void;
   onSelectBranch?: (messageId: string) => void;
@@ -270,7 +274,14 @@ function AssistantMessage({
                 }
 
                 if (isToolPart(part)) {
-                  return <ToolPart key={key} part={part} />;
+                  return (
+                    <ToolPart
+                      key={key}
+                      onApprove={onApproveTool}
+                      onDeny={onDenyTool}
+                      part={part}
+                    />
+                  );
                 }
 
                 return null;
@@ -392,6 +403,8 @@ function UserMessage({
 }
 
 type ChatMessageProps = {
+  onApproveTool?: (approvalId: string) => void;
+  onDenyTool?: (approvalId: string) => void;
   message: ThreadUIMessage;
   isStreaming?: boolean;
   onEdit?: (message: ThreadUIMessage) => void;
@@ -403,6 +416,8 @@ type ChatMessageProps = {
 export const ChatMessage = memo(function ChatMessage({
   message,
   isStreaming = false,
+  onApproveTool,
+  onDenyTool,
   onEdit,
   onRegenerate,
   onRetry,
@@ -422,6 +437,8 @@ export const ChatMessage = memo(function ChatMessage({
     <AssistantMessage
       isStreaming={isStreaming}
       message={message}
+      onApproveTool={onApproveTool}
+      onDenyTool={onDenyTool}
       onRegenerate={onRegenerate}
       onRetry={onRetry}
       onSelectBranch={onSelectBranch}

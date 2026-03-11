@@ -6,6 +6,7 @@ import type { ThreadUIMessage } from "../thread-message-types";
 
 export type ThreadChatTrigger =
   | "submit-user-message"
+  | "submit-tool-approval"
   | "retry-assistant-message"
   | "regenerate-assistant-message"
   | "edit-user-message"
@@ -13,6 +14,7 @@ export type ThreadChatTrigger =
 
 export type ThreadChatRequest = {
   message?: ThreadUIMessage;
+  messages?: ThreadUIMessage[];
   messageId?: string;
   modelId?: string;
   reasoningEffort?: ReasoningEffort;

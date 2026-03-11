@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 
-import type { TextPart as TextPartType } from "./types";
+import type { TextPart as TextPartType } from "../types";
 import { MarkdownContent } from "./markdown-content";
 
 export const TextPart = memo(function TextPart({
