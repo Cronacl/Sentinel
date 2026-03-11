@@ -2,6 +2,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
+const aiTestState = ((globalThis as any).__sentinelAiTestState ??= {
+  agentConfig: null,
+});
+
 const aiState = {
   assistantResponseMessage: {
     id: "assistant-response",
@@ -34,6 +38,14 @@ const createUIMessageStreamResponse = mock(async ({ headers, stream }) => {
 });
 const generateId = mock(() => "stream-id");
 const smoothStream = mock(() => undefined);
+const stepCountIs = mock(() => ({ kind: "stop-when" }));
+const tool = mock((config) => config);
+
+class MockToolLoopAgent {
+  constructor(config) {
+    aiTestState.agentConfig = config;
+  }
+}
 
 const attachmentDownloadHandler = { kind: "download-handler" };
 const createAttachmentDownloadHandler = mock(() => attachmentDownloadHandler);
@@ -86,11 +98,9 @@ const updateThreadTitle = mock(() => {});
 const setActiveStream = mock(() => {});
 const updateMessageMetadata = mock(async () => {});
 
-const createThreadAgent = mock(() => ({ kind: "thread-agent", tools: {} }));
-const disposeShellSession = mock(async () => {});
-
 const createNewResumableStream = mock(async () => {});
 const findWorkspace = mock(async () => ({ rootPath: "/tmp/workspace-1" }));
+const findUser = mock(async () => ({ permissionMode: "default" }));
 
 mock.module("ai", () => ({
   createAgentUIStream,
@@ -98,6 +108,9 @@ mock.module("ai", () => ({
   createUIMessageStreamResponse,
   generateId,
   smoothStream,
+  stepCountIs,
+  tool,
+  ToolLoopAgent: MockToolLoopAgent,
 }));
 
 mock.module("./attachments", () => ({
@@ -126,14 +139,6 @@ mock.module("./finalize-assistant", () => ({
 
 mock.module("./reasoning-metadata", () => ({
   createReasoningMetadataTracker,
-}));
-
-mock.module("./thread-agent", () => ({
-  createThreadAgent,
-}));
-
-mock.module("./shell-session", () => ({
-  disposeShellSession,
 }));
 
 mock.module("../thread-branches", () => ({
@@ -168,6 +173,9 @@ mock.module("@/lib/streams", () => ({
 mock.module("@/server/db", () => ({
   db: {
     query: {
+      users: {
+        findFirst: findUser,
+      },
       workspaces: {
         findFirst: findWorkspace,
       },
@@ -176,6 +184,9 @@ mock.module("@/server/db", () => ({
 }));
 
 mock.module("@/server/db/schema", () => ({
+  users: {
+    id: "user.id",
+  },
   workspaces: {
     id: "workspace.id",
     isArchived: "workspace.isArchived",
@@ -295,6 +306,7 @@ function createRetryRequest(
 }
 
 beforeEach(() => {
+  aiTestState.agentConfig = null;
   aiState.streamChunks = [];
   aiState.assistantResponseMessage = {
     id: "assistant-response",
@@ -306,11 +318,13 @@ beforeEach(() => {
   loadThreadMessages.mockImplementation(async () => []);
   resolveThreadTitleModel.mockImplementation(async () => resolvedTitleModel);
   generateThreadTitle.mockImplementation(async () => "Fast title");
+  findUser.mockImplementation(async () => ({ permissionMode: "default" }));
   findWorkspace.mockImplementation(async () => ({ rootPath: "/tmp/workspace-1" }));
 });
 
 afterEach(() => {
   mock.clearAllMocks();
+  mock.restore();
 });
 
 describe("runThreadChat title generation", () => {
@@ -332,13 +346,13 @@ describe("runThreadChat title generation", () => {
       reasoningEffort: "high",
     });
     expect(updateThreadTitle).toHaveBeenCalledWith("thread-1", "Fast title");
-    expect(createThreadAgent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        shellEnabled: true,
-        threadId: "thread-1",
-        workspaceRoot: "/tmp/workspace-1",
-      }),
+    expect(aiTestState.agentConfig?.instructions).toContain(
+      "Default directory: /tmp/workspace-1",
     );
+    expect(aiTestState.agentConfig?.instructions).toContain("Permission mode: default");
+    expect(aiTestState.agentConfig?.tools).toHaveProperty("list");
+    expect(aiTestState.agentConfig?.tools).toHaveProperty("grep");
+    expect(aiTestState.agentConfig?.tools).toHaveProperty("shell_command");
   });
 
   it("skips title generation for non-new threads", async () => {
@@ -446,7 +460,6 @@ describe("runThreadChat approvals and lifecycle", () => {
     );
 
     expect(response.status).toBe(204);
-    expect(disposeShellSession).toHaveBeenCalledWith("thread-1");
     expect(updateMessageMetadata).toHaveBeenCalledWith("thread-1", "assistant-1", {
       errorMessage: "Generation stopped.",
       status: "cancelled",
@@ -458,10 +471,9 @@ describe("runThreadChat approvals and lifecycle", () => {
 
     await runThreadChat(createSubmitRequest(), "user-1");
 
-    expect(createThreadAgent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        shellEnabled: false,
-      }),
+    expect(aiTestState.agentConfig?.tools).toBeUndefined();
+    expect(aiTestState.agentConfig?.instructions).toContain(
+      "Tool execution is currently unavailable because there is no selected workspace root.",
     );
   });
 

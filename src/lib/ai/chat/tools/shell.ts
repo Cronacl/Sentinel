@@ -1,7 +1,10 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import crypto from "node:crypto";
+import { realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import type { PermissionMode } from "@/lib/security";
 
 const COMMAND_INACTIVITY_TIMEOUT_MS = 5 * 60_000;
 const COMMAND_MAX_DURATION_MS = 30 * 60_000;
@@ -48,6 +51,7 @@ type AsyncEventQueue<T> = {
 };
 
 type PendingExecution = {
+  allowedRoot?: string;
   command: string;
   eventQueue: AsyncEventQueue<ShellCommandStreamEvent>;
   inactivityTimeoutMs: number;
@@ -73,7 +77,8 @@ type PendingExecution = {
 };
 
 type ShellSession = {
-  cwd: string;
+  currentDirectory: string;
+  defaultDirectory: string;
   idleTimer: Timer | null;
   lastActivityAt: number;
   pending: PendingExecution | null;
@@ -329,7 +334,7 @@ function emitRunningUpdate(session: ShellSession, force = false) {
   pending.lastProgressAt = Date.now();
   pending.eventQueue.push({
     output: {
-      cwd: session.cwd,
+      cwd: session.currentDirectory,
       durationMs: Math.max(0, Date.now() - pending.startedAt),
       phase: "running",
       tail,
@@ -391,10 +396,26 @@ function appendPreviewContent(
   scheduleRunningUpdate(session, content.includes("\n"));
 }
 
+function toComparablePath(candidatePath: string) {
+  try {
+    return realpathSync.native(candidatePath);
+  } catch {
+    return path.resolve(candidatePath);
+  }
+}
+
+function isPathInsideRoot(candidatePath: string, allowedRoot: string) {
+  const normalizedCandidatePath = toComparablePath(candidatePath);
+  const normalizedAllowedRoot = toComparablePath(allowedRoot);
+  const relative = path.relative(normalizedAllowedRoot, normalizedCandidatePath);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
 function finalizePendingExecution(
   session: ShellSession,
   exitCode: number,
   marker: string,
+  nextDirectory?: string,
 ) {
   const pending = session.pending;
   if (!pending || pending.marker !== marker) {
@@ -405,9 +426,11 @@ function finalizePendingExecution(
   clearProgressTimer(pending);
   session.pending = null;
   resetIdleTimer(session);
+  const resolvedDirectory = nextDirectory?.trim() || session.currentDirectory;
+  session.currentDirectory = resolvedDirectory;
 
   const output: ShellCommandCompletedOutput = {
-    cwd: session.cwd,
+    cwd: resolvedDirectory,
     durationMs: Math.max(0, Date.now() - pending.startedAt),
     exitCode,
     phase: "completed",
@@ -415,6 +438,17 @@ function finalizePendingExecution(
     stdout: `${pending.stdout}${pending.stdoutCarry}`.trimEnd(),
     truncated: pending.truncated,
   };
+
+  if (pending.allowedRoot && !isPathInsideRoot(resolvedDirectory, pending.allowedRoot)) {
+    const error = new Error(
+      "Shell command left the selected workspace root and the session was reset.",
+    );
+    pending.eventQueue.push({ error, type: "error" });
+    pending.eventQueue.fail(error);
+    pending.rejectCompletion(error);
+    void disposeShellSession(session.threadId);
+    return;
+  }
 
   pending.eventQueue.push({ output, type: "completed" });
   pending.eventQueue.close();
@@ -482,7 +516,7 @@ function handleStdoutChunk(session: ShellSession, chunk: string) {
 
   appendStdoutContent(session, pending, combined.slice(0, exitMarkerIndex));
   const exitChunk = combined.slice(exitMarkerIndex);
-  const exitMatch = exitChunk.match(/^__sentinel_exit__:[^:]+:(-?\d+)\r?\n?/);
+  const exitMatch = exitChunk.match(/^__sentinel_exit__:[^:]+:(-?\d+):(.*)\r?\n?/);
 
   if (!exitMatch) {
     pending.stdoutCarry = exitChunk;
@@ -490,7 +524,12 @@ function handleStdoutChunk(session: ShellSession, chunk: string) {
   }
 
   pending.stdoutCarry = "";
-  finalizePendingExecution(session, Number(exitMatch[1] ?? 1), pending.marker);
+  finalizePendingExecution(
+    session,
+    Number(exitMatch[1] ?? 1),
+    pending.marker,
+    exitMatch[2],
+  );
 }
 
 function handleStreamChunk(
@@ -540,7 +579,8 @@ function createShellSession(threadId: string, cwd: string): ShellSession {
   });
 
   const session: ShellSession = {
-    cwd,
+    currentDirectory: cwd,
+    defaultDirectory: cwd,
     idleTimer: null,
     lastActivityAt: Date.now(),
     pending: null,
@@ -591,7 +631,7 @@ function getOrCreateSession(threadId: string, cwd: string) {
     return createShellSession(threadId, cwd);
   }
 
-  if (existing.cwd !== cwd) {
+  if (existing.defaultDirectory !== cwd) {
     void disposeShellSession(threadId);
     return createShellSession(threadId, cwd);
   }
@@ -603,10 +643,12 @@ function runCommandInSession(
   session: ShellSession,
   command: string,
   {
+    allowedRoot,
     maxOutputBytes = MAX_OUTPUT_BYTES,
     timeoutMs = COMMAND_MAX_DURATION_MS,
     inactivityTimeoutMs = COMMAND_INACTIVITY_TIMEOUT_MS,
   }: {
+    allowedRoot?: string;
     inactivityTimeoutMs?: number;
     maxOutputBytes?: number;
     timeoutMs?: number;
@@ -642,6 +684,7 @@ function runCommandInSession(
   }, timeoutMs);
 
   session.pending = {
+    allowedRoot,
     command,
     eventQueue,
     inactivityTimeoutMs,
@@ -672,7 +715,8 @@ function runCommandInSession(
     `printf '__sentinel_start__:${marker}\\n'`,
     command,
     "sentinel_exit_code=$?",
-    `printf '__sentinel_exit__:${marker}:%s\\n' "$sentinel_exit_code"`,
+    'sentinel_cwd="$(pwd)"',
+    `printf '__sentinel_exit__:${marker}:%s:%s\\n' "$sentinel_exit_code" "$sentinel_cwd"`,
   ].join("\n");
 
   session.process.stdin.write(`${payload}\n`);
@@ -683,25 +727,46 @@ function runCommandInSession(
   };
 }
 
-export async function* streamWorkspaceShellCommand({
+export function assertShellCommandAllowed(command: string) {
+  const forbiddenPatterns = [
+    /\bpushd\b/i,
+    /\bcd\s+~/i,
+    /\bcd\s+\//i,
+    /\bcd\s+\.\.(?:\s|$|\/|\\)/i,
+    /\bcd\s+-/i,
+  ];
+
+  if (forbiddenPatterns.some((pattern) => pattern.test(command))) {
+    throw new Error(
+      "Shell command violates default permissions mode by attempting to change directories outside the selected workspace root.",
+    );
+  }
+}
+
+export async function* streamShellCommand({
+  allowedRoot,
   command,
+  defaultDirectory,
   maxOutputBytes,
+  permissionMode,
   timeoutMs,
   inactivityTimeoutMs,
   threadId,
-  workspaceRoot,
 }: {
+  allowedRoot?: string;
   command: string;
+  defaultDirectory: string;
   inactivityTimeoutMs?: number;
   maxOutputBytes?: number;
+  permissionMode: PermissionMode;
   timeoutMs?: number;
   threadId: string;
-  workspaceRoot: string;
 }): AsyncIterable<ShellCommandStreamEvent> {
-  const session = getOrCreateSession(threadId, workspaceRoot);
+  const session = getOrCreateSession(threadId, defaultDirectory);
   await session.queue.catch(() => undefined);
 
   const execution = runCommandInSession(session, command, {
+    allowedRoot: permissionMode === "default" ? allowedRoot : undefined,
     inactivityTimeoutMs,
     maxOutputBytes,
     timeoutMs,
@@ -713,30 +778,36 @@ export async function* streamWorkspaceShellCommand({
   }
 }
 
-export async function executeWorkspaceShellCommand({
+export async function executeShellCommand({
+  allowedRoot,
   command,
+  defaultDirectory,
   maxOutputBytes,
+  permissionMode,
   timeoutMs,
   inactivityTimeoutMs,
   threadId,
-  workspaceRoot,
 }: {
+  allowedRoot?: string;
   command: string;
+  defaultDirectory: string;
   inactivityTimeoutMs?: number;
   maxOutputBytes?: number;
+  permissionMode: PermissionMode;
   timeoutMs?: number;
   threadId: string;
-  workspaceRoot: string;
 }) {
   let completed: ShellCommandCompletedOutput | null = null;
 
-  for await (const event of streamWorkspaceShellCommand({
+  for await (const event of streamShellCommand({
+    allowedRoot,
     command,
+    defaultDirectory,
     inactivityTimeoutMs,
     maxOutputBytes,
+    permissionMode,
     timeoutMs,
     threadId,
-    workspaceRoot,
   })) {
     if (event.type === "completed") {
       completed = event.output;

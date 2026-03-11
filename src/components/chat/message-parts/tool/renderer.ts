@@ -2,10 +2,10 @@ import type { ComponentType } from "react";
 
 import type { ToolPart as ToolPartType } from "../types";
 
-export type ToolRendererProps = {
+export type RendererProps = {
   onApprove?: (approvalId: string) => void;
   onDeny?: (approvalId: string) => void;
   part: ToolPartType;
 };
 
-export type ToolRenderer = ComponentType<ToolRendererProps>;
+export type Renderer = ComponentType<RendererProps>;

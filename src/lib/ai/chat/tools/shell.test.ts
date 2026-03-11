@@ -1,11 +1,14 @@
+// @ts-nocheck
+
 import { afterEach, describe, expect, it } from "bun:test";
 
 const {
+  assertShellCommandAllowed,
   disposeShellSession,
-  executeWorkspaceShellCommand,
+  executeShellCommand,
   getShellSessionCount,
-  streamWorkspaceShellCommand,
-} = await import("./shell-session");
+  streamShellCommand,
+} = await import("./shell-session.ts");
 
 const workspaceRoot = process.cwd();
 
@@ -20,15 +23,19 @@ afterEach(async () => {
 
 describe("shell session manager", () => {
   it("persists shell state across commands in the same thread", async () => {
-    const first = await executeWorkspaceShellCommand({
+    const first = await executeShellCommand({
+      allowedRoot: workspaceRoot,
       command: 'export SENTINEL_TEST_VALUE="persisted"; printf "$SENTINEL_TEST_VALUE"',
+      defaultDirectory: workspaceRoot,
+      permissionMode: "full",
       threadId: "thread-shell-test",
-      workspaceRoot,
     });
-    const second = await executeWorkspaceShellCommand({
+    const second = await executeShellCommand({
+      allowedRoot: workspaceRoot,
       command: 'printf "$SENTINEL_TEST_VALUE"',
+      defaultDirectory: workspaceRoot,
+      permissionMode: "full",
       threadId: "thread-shell-test",
-      workspaceRoot,
     });
 
     expect(first.stdout).toBe("persisted");
@@ -37,10 +44,12 @@ describe("shell session manager", () => {
   });
 
   it("truncates oversized stdout", async () => {
-    const result = await executeWorkspaceShellCommand({
+    const result = await executeShellCommand({
+      allowedRoot: workspaceRoot,
       command: 'node -e "process.stdout.write(\'a\'.repeat(70000))"',
+      defaultDirectory: workspaceRoot,
+      permissionMode: "full",
       threadId: "thread-shell-truncation",
-      workspaceRoot,
     });
 
     expect(result.truncated).toBe(true);
@@ -48,11 +57,13 @@ describe("shell session manager", () => {
   });
 
   it("resets the session when a command times out", async () => {
-    const timedOut = executeWorkspaceShellCommand({
+    const timedOut = executeShellCommand({
+      allowedRoot: workspaceRoot,
       command: "sleep 2",
+      defaultDirectory: workspaceRoot,
+      permissionMode: "full",
       timeoutMs: 100,
       threadId: "thread-shell-timeout",
-      workspaceRoot,
     });
 
     await expect(timedOut).rejects.toThrow(/maximum runtime/i);
@@ -60,13 +71,15 @@ describe("shell session manager", () => {
   });
 
   it("allows long-running commands to continue while they keep producing output", async () => {
-    const result = await executeWorkspaceShellCommand({
+    const result = await executeShellCommand({
+      allowedRoot: workspaceRoot,
       command:
         'i=0; while [ "$i" -lt 4 ]; do printf "%s\\n" "$i"; i=$((i + 1)); sleep 0.2; done',
+      defaultDirectory: workspaceRoot,
       inactivityTimeoutMs: 500,
+      permissionMode: "full",
       timeoutMs: 1_500,
       threadId: "thread-shell-activity",
-      workspaceRoot,
     });
 
     expect(result.exitCode).toBe(0);
@@ -77,10 +90,12 @@ describe("shell session manager", () => {
   it("streams running snapshots before the final completed result", async () => {
     const events = [];
 
-    for await (const event of streamWorkspaceShellCommand({
+    for await (const event of streamShellCommand({
+      allowedRoot: workspaceRoot,
       command: 'printf "one\\n"; sleep 0.1; printf "two\\n" >&2',
+      defaultDirectory: workspaceRoot,
+      permissionMode: "full",
       threadId: "thread-shell-stream",
-      workspaceRoot,
     })) {
       events.push(event);
     }
@@ -101,10 +116,12 @@ describe("shell session manager", () => {
   it("caps the running preview tail separately from the final output", async () => {
     const runningEvents = [];
 
-    for await (const event of streamWorkspaceShellCommand({
+    for await (const event of streamShellCommand({
+      allowedRoot: workspaceRoot,
       command: 'node -e "process.stdout.write(\'a\'.repeat(9000)); process.stdout.write(\'\\n\')"',
+      defaultDirectory: workspaceRoot,
+      permissionMode: "full",
       threadId: "thread-shell-tail",
-      workspaceRoot,
     })) {
       if (event.type === "running") {
         runningEvents.push(event.output);
@@ -118,5 +135,26 @@ describe("shell session manager", () => {
       8 * 1024,
     );
     expect(lastRunning?.truncated).toBe(true);
+  });
+
+  it("rejects obvious directory escape commands in default mode", () => {
+    expect(() => assertShellCommandAllowed("cd ..")).toThrow(/violates default permissions mode/i);
+    expect(() => assertShellCommandAllowed("pushd /tmp")).toThrow(
+      /violates default permissions mode/i,
+    );
+  });
+
+  it("resets the session if the shell leaves the allowed root in default mode", async () => {
+    const childDirectory = `${workspaceRoot}/sentinel`;
+
+    await expect(
+      executeShellCommand({
+        allowedRoot: childDirectory,
+        command: "cd ..",
+        defaultDirectory: childDirectory,
+        permissionMode: "default",
+        threadId: "thread-shell-test",
+      }),
+    ).rejects.toThrow(/selected workspace root/i);
   });
 });

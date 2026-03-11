@@ -1,6 +1,7 @@
 "use client";
 
-import { Button, Chip, Skeleton, Spinner } from "@heroui/react";
+import { Button, Chip, Form, Skeleton, Spinner } from "@heroui/react";
+import { zodResolver } from "@hookform/resolvers/zod";
 import {
   DatabaseIcon,
   RefreshIcon,
@@ -8,10 +9,17 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
 
+import { ControlledSelectField } from "@/components/forms/controlled-fields";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { getDesktopApi } from "@/lib/desktop/client";
 import type { DesktopServicesStatus } from "@/lib/desktop/contracts";
+import { PERMISSION_MODE_OPTIONS } from "@/lib/security";
+import {
+  type SecuritySettingsFormValues,
+  securitySettingsFormSchema,
+} from "@/schemas/security.schema";
 import { api } from "@/trpc/react";
 
 const DEFAULT_STATUS: DesktopServicesStatus = {
@@ -91,7 +99,10 @@ function RuntimeRow({
 }
 
 export default function SecuritySettingsPage() {
+  const utils = api.useUtils();
   const account = api.auth.me.useQuery();
+  const securitySettings = api.security.get.useQuery();
+  const currentWorkspace = api.workspaces.getCurrent.useQuery();
   const [services, setServices] =
     useState<DesktopServicesStatus>(DEFAULT_STATUS);
   const [version, setVersion] = useState("Desktop runtime");
@@ -99,6 +110,53 @@ export default function SecuritySettingsPage() {
   const [hasDesktopRuntime, setHasDesktopRuntime] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPending, setIsPending] = useState(false);
+  const [settingsError, setSettingsError] = useState("");
+
+  const form = useForm<SecuritySettingsFormValues>({
+    defaultValues: {
+      permissionMode: "default",
+    },
+    resolver: zodResolver(securitySettingsFormSchema),
+  });
+
+  useEffect(() => {
+    if (!securitySettings.data) {
+      return;
+    }
+
+    form.reset(securitySettings.data);
+  }, [form, securitySettings.data]);
+
+  const updateSecuritySettings = api.security.update.useMutation({
+    onMutate: async (values) => {
+      const previousSecuritySettings = utils.security.get.getData();
+
+      utils.security.get.setData(undefined, values);
+
+      return { previousSecuritySettings };
+    },
+    onSuccess: (data) => {
+      setSettingsError("");
+      utils.security.get.setData(undefined, data);
+      form.reset(data);
+    },
+    onError: (mutationError, _variables, context) => {
+      setSettingsError(mutationError.message);
+      if (context?.previousSecuritySettings) {
+        utils.security.get.setData(undefined, context.previousSecuritySettings);
+      }
+    },
+  });
+
+  const handleSecuritySubmit = async (values: SecuritySettingsFormValues) => {
+    setSettingsError("");
+
+    try {
+      await updateSecuritySettings.mutateAsync(values);
+    } catch {
+      // mutation state handles surfacing errors
+    }
+  };
 
   const loadRuntimeState = async (showPending = true) => {
     const desktop = getDesktopApi();
@@ -198,6 +256,18 @@ export default function SecuritySettingsPage() {
         </p>
       ) : null}
 
+      {securitySettings.error ? (
+        <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
+          {securitySettings.error.message}
+        </p>
+      ) : null}
+
+      {settingsError ? (
+        <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
+          {settingsError}
+        </p>
+      ) : null}
+
       <div className="flex flex-col gap-6">
         <section className="border-separator bg-surface rounded-xl border p-5">
           <div className="mb-5 space-y-1">
@@ -211,6 +281,72 @@ export default function SecuritySettingsPage() {
             />
           </div>
         </section>
+
+        <Form onSubmit={form.handleSubmit(handleSecuritySubmit)}>
+          <section className="border-separator bg-surface rounded-xl border p-5">
+            <div className="mb-5 space-y-1">
+              <div className="flex items-center gap-2">
+                <HugeiconsIcon
+                  color="currentColor"
+                  icon={Shield01Icon}
+                  size={18}
+                  strokeWidth={1.5}
+                />
+                <h2 className="text-foreground text-base font-medium">
+                  Permissions
+                </h2>
+              </div>
+              <p className="text-muted text-sm leading-6">
+                Choose how broadly Sentinel tools can access your machine.
+              </p>
+            </div>
+
+            <div className="space-y-5">
+              <ControlledSelectField
+                control={form.control}
+                label="Permission mode"
+                name="permissionMode"
+                options={PERMISSION_MODE_OPTIONS.map((option) => ({
+                  description: option.description,
+                  label: option.label,
+                  value: option.value,
+                }))}
+                selectProps={{ className: "w-full max-w-md" }}
+              />
+
+              <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-xs leading-6 text-muted">
+                {currentWorkspace.data?.rootPath ? (
+                  <>
+                    Active workspace root:{" "}
+                    <span className="font-mono text-foreground">
+                      {currentWorkspace.data.rootPath}
+                    </span>
+                  </>
+                ) : (
+                  "Tools remain unavailable until a workspace with a root path is selected."
+                )}
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <Button
+                isDisabled={
+                  updateSecuritySettings.isPending || !form.formState.isDirty
+                }
+                isPending={updateSecuritySettings.isPending}
+                size="sm"
+                type="submit"
+              >
+                {({ isPending }) => (
+                  <>
+                    {isPending ? <Spinner color="current" size="sm" /> : null}
+                    Save
+                  </>
+                )}
+              </Button>
+            </div>
+          </section>
+        </Form>
 
         <section className="border-separator bg-surface rounded-xl border p-5">
           <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

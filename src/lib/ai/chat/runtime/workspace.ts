@@ -1,7 +1,8 @@
 import { and, eq } from "drizzle-orm";
 
+import type { PermissionMode } from "@/server/db/enums";
 import { db } from "@/server/db";
-import { workspaces } from "@/server/db/schema";
+import { users, workspaces } from "@/server/db/schema";
 
 export async function getWorkspaceRootPath(workspaceId: string, userId: string) {
   const workspace = await db.query.workspaces.findFirst({
@@ -14,4 +15,13 @@ export async function getWorkspaceRootPath(workspaceId: string, userId: string) 
   });
 
   return workspace?.rootPath?.trim() || null;
+}
+
+export async function getToolPermissionMode(userId: string): Promise<PermissionMode> {
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: { permissionMode: true },
+  });
+
+  return user?.permissionMode ?? "default";
 }

@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 
-import type { ToolRendererProps } from "./tool-renderer";
+import type { RendererProps } from "./renderer";
 import { getToolName, getToolStateLabel, stringifyJson } from "../types";
 
 function JsonBlock({ value }: { value: unknown }) {
@@ -13,9 +13,9 @@ function JsonBlock({ value }: { value: unknown }) {
   );
 }
 
-export const GenericToolPart = memo(function GenericToolPart({
+export const GenericTool = memo(function GenericTool({
   part,
-}: ToolRendererProps) {
+}: RendererProps) {
   const toolName = getToolName(part);
   const stateLabel = getToolStateLabel(part.state);
   const hasInput = "input" in part && part.input !== undefined;

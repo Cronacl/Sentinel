@@ -6,6 +6,7 @@ import { messagesRouter } from "@/server/api/routers/messages";
 import { modelsRouter } from "@/server/api/routers/models";
 import { personalizationRouter } from "@/server/api/routers/personalization";
 import { providersRouter } from "@/server/api/routers/providers";
+import { securityRouter } from "@/server/api/routers/security";
 import { threadsRouter } from "@/server/api/routers/threads";
 import { createCallerFactory, createTRPCRouter } from "@/server/api/trpc";
 import { workspacesRouter } from "@/server/api/routers/workspaces";
@@ -24,6 +25,7 @@ export const appRouter = createTRPCRouter({
   models: modelsRouter,
   personalization: personalizationRouter,
   providers: providersRouter,
+  security: securityRouter,
   threads: threadsRouter,
   workspaces: workspacesRouter,
 });

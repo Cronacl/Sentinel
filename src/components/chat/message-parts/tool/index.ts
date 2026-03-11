@@ -1,5 +1,11 @@
-export { GenericToolPart } from "./generic-tool-part";
-export { ShellToolPart } from "./shell-tool-part";
-export { ToolPart } from "./tool-part";
-export { resolveToolRenderer } from "./tool-registry";
-export type { ToolRenderer, ToolRendererProps } from "./tool-renderer";
+export { GenericTool } from "./generic";
+export { ToolPart } from "./part";
+export { resolveRenderer } from "./registry";
+export type { Renderer, RendererProps } from "./renderer";
+export { FileTool } from "./renderers/file";
+export { GlobTool } from "./renderers/glob";
+export { GrepTool } from "./renderers/grep";
+export { ListTool } from "./renderers/list";
+export { ReadTool } from "./renderers/read";
+export { RunTaskTool } from "./renderers/run-task";
+export { ShellTool } from "./renderers/shell";

@@ -3,17 +3,22 @@
 import { memo, useEffect, useState } from "react";
 import { Button, Disclosure, ScrollShadow, Spinner } from "@heroui/react";
 
-import type { ToolRendererProps } from "./tool-renderer";
+import type { RendererProps } from "../renderer";
 
-type ShellToolInput = {
-  command: string;
+type RunTaskToolInput = {
+  path?: string;
   rationale: string;
+  task: "build" | "format" | "lint" | "test" | "typecheck";
 };
 
-type ShellToolOutput = {
+type RunTaskToolOutput = {
+  command: string;
   cwd: string;
   durationMs: number;
+  packageManager: "bun" | "npm" | "pnpm" | "yarn";
   phase: "completed" | "running";
+  script: string;
+  task: "build" | "format" | "lint" | "test" | "typecheck";
   truncated: boolean;
 } & (
   | {
@@ -28,35 +33,44 @@ type ShellToolOutput = {
     }
 );
 
-function isShellToolInput(value: unknown): value is ShellToolInput {
+function isRunTaskInput(value: unknown): value is RunTaskToolInput {
+  const candidate = value as { path?: unknown; rationale?: unknown; task?: unknown };
+
   return (
-    !!value &&
-    typeof value === "object" &&
-    "command" in value &&
-    typeof value.command === "string" &&
-    "rationale" in value &&
-    typeof value.rationale === "string"
+    !!candidate &&
+    typeof candidate === "object" &&
+    typeof candidate.rationale === "string" &&
+    typeof candidate.task === "string" &&
+    (candidate.path === undefined || typeof candidate.path === "string")
   );
 }
 
-function isShellToolOutput(value: unknown): value is ShellToolOutput {
+function isRunTaskOutput(value: unknown): value is RunTaskToolOutput {
   const candidate = value as {
+    command?: unknown;
     cwd?: unknown;
     durationMs?: unknown;
     exitCode?: unknown;
+    packageManager?: unknown;
     phase?: unknown;
+    script?: unknown;
     stderr?: unknown;
     stdout?: unknown;
     tail?: unknown;
+    task?: unknown;
     truncated?: unknown;
   };
 
   return (
     !!candidate &&
-    typeof value === "object" &&
+    typeof candidate === "object" &&
+    typeof candidate.command === "string" &&
     typeof candidate.cwd === "string" &&
     typeof candidate.durationMs === "number" &&
+    typeof candidate.packageManager === "string" &&
     (candidate.phase === "running" || candidate.phase === "completed") &&
+    typeof candidate.script === "string" &&
+    typeof candidate.task === "string" &&
     typeof candidate.truncated === "boolean" &&
     (candidate.phase === "running"
       ? typeof candidate.tail === "string"
@@ -66,20 +80,16 @@ function isShellToolOutput(value: unknown): value is ShellToolOutput {
   );
 }
 
-function isRunningShellOutput(
-  output: ShellToolOutput | null,
-): output is Extract<ShellToolOutput, { phase: "running" }> {
+function isRunningOutput(
+  output: RunTaskToolOutput | null,
+): output is Extract<RunTaskToolOutput, { phase: "running" }> {
   return output?.phase === "running";
 }
 
-function isCompletedShellOutput(
-  output: ShellToolOutput | null,
-): output is Extract<ShellToolOutput, { phase: "completed" }> {
+function isCompletedOutput(
+  output: RunTaskToolOutput | null,
+): output is Extract<RunTaskToolOutput, { phase: "completed" }> {
   return output?.phase === "completed";
-}
-
-function formatDuration(durationMs: number) {
-  return `${(durationMs / 1000).toFixed(durationMs >= 1000 ? 1 : 2)}s`;
 }
 
 function getStatusChipClass(tone: "danger" | "muted" | "success") {
@@ -93,8 +103,8 @@ function getStatusChipClass(tone: "danger" | "muted" | "success") {
   }
 }
 
-function getShellStatus(part: ToolRendererProps["part"], output: ShellToolOutput | null) {
-  if (part.state === "approval-responded" || isRunningShellOutput(output)) {
+function getStatus(part: RendererProps["part"], output: RunTaskToolOutput | null) {
+  if (part.state === "approval-responded" || isRunningOutput(output)) {
     return { label: "Running", tone: "muted" as const };
   }
 
@@ -110,11 +120,7 @@ function getShellStatus(part: ToolRendererProps["part"], output: ShellToolOutput
     return { label: "Failed", tone: "danger" as const };
   }
 
-  if (part.state === "output-available") {
-    if (!isCompletedShellOutput(output)) {
-      return { label: "Running", tone: "muted" as const };
-    }
-
+  if (part.state === "output-available" && isCompletedOutput(output)) {
     return output.exitCode === 0
       ? { label: "Success", tone: "success" as const }
       : { label: "Failed", tone: "danger" as const };
@@ -123,18 +129,19 @@ function getShellStatus(part: ToolRendererProps["part"], output: ShellToolOutput
   return { label: "Running", tone: "muted" as const };
 }
 
-function buildShellTerminalText({
+function buildBody({
   errorText,
   input,
   output,
   state,
 }: {
   errorText?: string;
-  input: ShellToolInput;
-  output: ShellToolOutput | null;
-  state: ToolRendererProps["part"]["state"];
+  input: RunTaskToolInput;
+  output: RunTaskToolOutput | null;
+  state: RendererProps["part"]["state"];
 }) {
-  const lines = [`$ ${input.command}`];
+  const command = output?.command ?? input.task;
+  const lines = [`$ ${command}`];
 
   if (state === "output-denied") {
     lines.push("Execution denied.");
@@ -165,50 +172,53 @@ function buildShellTerminalText({
 
   if (errorText) {
     lines.push(errorText);
-    return lines.join("\n");
   }
 
   return lines.join("\n");
 }
 
-export const ShellToolPart = memo(function ShellToolPart({
+function formatDuration(durationMs: number) {
+  return `${(durationMs / 1000).toFixed(durationMs >= 1000 ? 1 : 2)}s`;
+}
+
+export const RunTaskTool = memo(function RunTaskTool({
   onApprove,
   onDeny,
   part,
-}: ToolRendererProps) {
+}: RendererProps) {
   const approval = "approval" in part ? part.approval : undefined;
+  const approvalId = approval?.id;
   const hasInput = "input" in part && part.input !== undefined;
   const hasOutput = "output" in part && part.output !== undefined;
-  const shellInput = hasInput && isShellToolInput(part.input) ? part.input : null;
-  const shellOutput = hasOutput && isShellToolOutput(part.output) ? part.output : null;
+  const runTaskInput = hasInput && isRunTaskInput(part.input) ? part.input : null;
+  const runTaskOutput = hasOutput && isRunTaskOutput(part.output) ? part.output : null;
   const partErrorText = "errorText" in part ? part.errorText : undefined;
-  const approvalId = approval?.id;
   const showApprovalActions =
     part.state === "approval-requested" && approvalId && onApprove && onDeny;
-  const isRunningShellState =
+  const isRunningState =
     part.state === "approval-responded" ||
-    (part.state === "output-available" && isRunningShellOutput(shellOutput));
-  const isFinishedShellState =
+    (part.state === "output-available" && isRunningOutput(runTaskOutput));
+  const isFinishedState =
     part.state === "output-denied" ||
     part.state === "output-error" ||
-    (part.state === "output-available" && isCompletedShellOutput(shellOutput));
+    (part.state === "output-available" && isCompletedOutput(runTaskOutput));
   const [isExpanded, setIsExpanded] = useState(
-    part.state === "approval-requested" || isRunningShellState,
+    part.state === "approval-requested" || isRunningState,
   );
 
   useEffect(() => {
-    setIsExpanded(part.state === "approval-requested" || isRunningShellState);
-  }, [isRunningShellState, part.state, part.toolCallId]);
+    setIsExpanded(part.state === "approval-requested" || isRunningState);
+  }, [isRunningState, part.state, part.toolCallId]);
 
-  if (!shellInput) {
+  if (!runTaskInput) {
     return null;
   }
 
-  const status = getShellStatus(part, shellOutput);
-  const terminalText = buildShellTerminalText({
+  const status = getStatus(part, runTaskOutput);
+  const terminalText = buildBody({
     errorText: partErrorText,
-    input: shellInput,
-    output: shellOutput,
+    input: runTaskInput,
+    output: runTaskOutput,
     state: part.state,
   });
 
@@ -218,22 +228,23 @@ export const ShellToolPart = memo(function ShellToolPart({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <p className="text-[12px] font-medium text-foreground">Shell</p>
+              <p className="text-[12px] font-medium text-foreground">Run task</p>
               <div
                 className={`rounded-full flex items-center gap-1 border px-1.5 py-0.5 text-[10px] ${getStatusChipClass(status.tone)}`}
               >
                 {status.label === "Running" ? (
-                  <Spinner className="w-3 h-3" size="sm" />
+                  <Spinner className="h-3 w-3" size="sm" />
                 ) : null}
                 <span className="truncate">{status.label}</span>
               </div>
             </div>
             <p className="mt-0.5 truncate font-mono text-[11px] text-foreground/72">
-              $ {shellInput.command}
+              {runTaskInput.task}
+              {runTaskInput.path ? ` in ${runTaskInput.path}` : ""}
             </p>
           </div>
 
-          {isFinishedShellState ? (
+          {isFinishedState ? (
             <Disclosure.Heading>
               <Button
                 slot="trigger"
@@ -249,7 +260,7 @@ export const ShellToolPart = memo(function ShellToolPart({
 
         {part.state === "approval-requested" ? (
           <p className="mt-1.5 line-clamp-2 text-[11px] leading-5 text-muted">
-            {shellInput.rationale}
+            {runTaskInput.rationale}
           </p>
         ) : null}
 
@@ -257,19 +268,22 @@ export const ShellToolPart = memo(function ShellToolPart({
           <Disclosure.Body>
             <div className="mt-2 overflow-hidden rounded-2xl border border-border/20 bg-surface">
               <div className="border-b border-border/50 px-3.5 py-2 text-[9px] text-foreground">
-                Shell
+                Run task
               </div>
 
               <div className="px-3.5 py-3">
-                <ScrollShadow className="max-h-[100px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] leading-6 text-foreground">
+                <ScrollShadow className="max-h-[180px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] leading-6 text-foreground">
                   {terminalText}
                 </ScrollShadow>
 
-                {shellOutput ? (
+                {runTaskOutput ? (
                   <div className="mt-3 flex items-center justify-between gap-3 text-[10px] text-foreground">
                     <span className="truncate">
-                      {formatDuration(shellOutput.durationMs)}
-                      {shellOutput.truncated ? " · truncated" : ""}
+                      {runTaskOutput.script}
+                      {runTaskOutput.phase === "completed"
+                        ? ` · ${formatDuration(runTaskOutput.durationMs)}`
+                        : ""}
+                      {runTaskOutput.truncated ? " · truncated" : ""}
                     </span>
                     <span className="shrink-0 text-white/72">{status.label}</span>
                   </div>

@@ -31,7 +31,7 @@ import {
   getFirstUserText,
   getParentMessageId,
 } from "./transcript";
-import { getWorkspaceRootPath } from "./workspace";
+import { getToolPermissionMode, getWorkspaceRootPath } from "./workspace";
 
 export async function runThreadChat(rawInput: unknown, userId: string) {
   const request = await parseRequest(rawInput, userId);
@@ -113,7 +113,8 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
     request.workspaceId,
     request.userId,
   );
-  const shellEnabled = Boolean(workspaceRoot);
+  const permissionMode = await getToolPermissionMode(request.userId);
+  const toolsEnabled = Boolean(workspaceRoot);
   const continuationAssistant =
     request.trigger === "submit-tool-approval"
       ? [...modelTranscript]
@@ -184,12 +185,13 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
   const systemPrompt = await getSystemPrompt(request.userId);
   const agent = createThreadAgent({
     attachmentDownload: createAttachmentDownloadHandler(),
+    ...(workspaceRoot ? { defaultDirectory: workspaceRoot } : {}),
     languageModel: resolvedModel.languageModel,
+    permissionMode,
     providerOptions: resolvedModel.providerOptions,
-    shellEnabled,
     systemPrompt,
     threadId: request.threadId,
-    ...(workspaceRoot ? { workspaceRoot } : {}),
+    toolsEnabled,
   });
 
   const tracker = createReasoningMetadataTracker({

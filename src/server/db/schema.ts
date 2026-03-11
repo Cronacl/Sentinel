@@ -10,6 +10,7 @@ import { createId } from "@paralleldrive/cuid2";
 
 import {
   AI_PROVIDERS,
+  PERMISSION_MODES,
   PERSONALITY_PRESETS,
   THEME_PREFERENCES,
   THREAD_LIST_ORGANIZE_BY,
@@ -36,6 +37,9 @@ export const users = sqliteTable(
       .notNull()
       .default("pragmatic"),
     customInstructions: text("custom_instructions"),
+    permissionMode: text("permission_mode", { enum: PERMISSION_MODES })
+      .notNull()
+      .default("default"),
     themePreference: text("theme_preference", { enum: THEME_PREFERENCES })
       .notNull()
       .default("system"),

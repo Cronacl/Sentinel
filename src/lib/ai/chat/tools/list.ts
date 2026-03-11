@@ -2,7 +2,15 @@ import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 
-export const DEFAULT_WORKSPACE_LIST_IGNORES = [
+import type { PermissionMode } from "@/lib/security";
+import {
+  isPathWithinRoot,
+  normalizeRelativePath,
+  resolveToolDirectory,
+  toPosixPath,
+} from "./tool-path";
+
+export const DEFAULT_LIST_IGNORES = [
   ".git",
   ".next",
   ".turbo",
@@ -27,35 +35,35 @@ export const DEFAULT_WORKSPACE_LIST_IGNORES = [
   ".venv",
 ];
 
-export const WORKSPACE_LIST_LIMIT = 160;
+export const LIST_LIMIT = 160;
 
-const workspaceListEntrySchema = z.object({
+const listEntrySchema = z.object({
   depth: z.number().int().min(0),
   kind: z.enum(["directory", "file"]),
   name: z.string(),
   path: z.string(),
 });
 
-export const workspaceListInputSchema = z.object({
+export const listInputSchema = z.object({
   ignore: z
     .array(z.string().min(1))
     .max(32)
     .optional()
     .describe(
-      "Optional relative path prefixes, names, or simple glob patterns to exclude from the listing.",
+      "Optional path prefixes, names, or simple glob patterns to exclude from the listing.",
     ),
   path: z
     .string()
     .min(1)
     .optional()
     .describe(
-      "Workspace-relative directory path to inspect. Omit it to list the workspace root.",
+      "Directory path to inspect. In default permissions mode this must be relative to the selected workspace root.",
     ),
 });
 
-export const workspaceListOutputSchema = z.object({
+export const listOutputSchema = z.object({
   directoryCount: z.number().int().min(0),
-  entries: z.array(workspaceListEntrySchema),
+  entries: z.array(listEntrySchema),
   fileCount: z.number().int().min(0),
   root: z.string(),
   totalEntries: z.number().int().min(0),
@@ -63,24 +71,10 @@ export const workspaceListOutputSchema = z.object({
   truncated: z.boolean(),
 });
 
-export type WorkspaceListInput = z.infer<typeof workspaceListInputSchema>;
-export type WorkspaceListOutput = z.infer<typeof workspaceListOutputSchema>;
+export type ListInput = z.infer<typeof listInputSchema>;
+export type ListOutput = z.infer<typeof listOutputSchema>;
 
-type WorkspaceListEntry = WorkspaceListOutput["entries"][number];
-
-function toPosixPath(value: string) {
-  return value.split(path.sep).join("/");
-}
-
-function normalizeRelativePath(value: string) {
-  const normalized = toPosixPath(value.trim()).replace(/\/+/g, "/");
-  if (!normalized || normalized === ".") {
-    return ".";
-  }
-
-  const withoutDotPrefix = normalized.replace(/^\.\//, "");
-  return withoutDotPrefix.replace(/\/$/, "") || ".";
-}
+type ListEntry = ListOutput["entries"][number];
 
 function escapeRegExp(value: string) {
   return value.replace(/[|\\{}()[\]^$+?.*]/g, "\\$&");
@@ -96,7 +90,7 @@ function simpleGlobToRegExp(pattern: string) {
 }
 
 function buildIgnoreMatcher(ignore: string[] | undefined) {
-  const defaultIgnoredNames = new Set(DEFAULT_WORKSPACE_LIST_IGNORES);
+  const defaultIgnoredNames = new Set(DEFAULT_LIST_IGNORES);
   const normalizedPatterns = (ignore ?? [])
     .map((pattern) => normalizeRelativePath(pattern))
     .filter((pattern) => pattern !== ".");
@@ -144,8 +138,8 @@ function buildIgnoreMatcher(ignore: string[] | undefined) {
 }
 
 function sortEntriesByName(
-  left: Pick<WorkspaceListEntry, "name">,
-  right: Pick<WorkspaceListEntry, "name">,
+  left: Pick<ListEntry, "name">,
+  right: Pick<ListEntry, "name">,
 ) {
   return left.name.localeCompare(right.name, undefined, {
     numeric: true,
@@ -153,33 +147,7 @@ function sortEntriesByName(
   });
 }
 
-function resolveWorkspaceDirectory(workspaceRoot: string, inputPath?: string) {
-  const requestedPath = inputPath?.trim() || ".";
-  if (path.isAbsolute(requestedPath)) {
-    throw new Error(
-      "The list_workspace tool only accepts paths relative to the linked workspace root.",
-    );
-  }
-
-  const resolvedDirectory = path.resolve(workspaceRoot, requestedPath);
-  const relativeFromWorkspace = path.relative(workspaceRoot, resolvedDirectory);
-
-  if (
-    relativeFromWorkspace.startsWith("..") ||
-    path.isAbsolute(relativeFromWorkspace)
-  ) {
-    throw new Error(
-      "The requested path must stay inside the linked workspace root.",
-    );
-  }
-
-  return {
-    relativeRoot: normalizeRelativePath(relativeFromWorkspace || "."),
-    resolvedDirectory,
-  };
-}
-
-function formatWorkspaceTree(root: string, entries: WorkspaceListEntry[]) {
+function formatTree(root: string, entries: ListEntry[]) {
   const lines = [`${root === "." ? "." : root}/`];
 
   for (const entry of entries) {
@@ -191,34 +159,42 @@ function formatWorkspaceTree(root: string, entries: WorkspaceListEntry[]) {
   return lines.join("\n");
 }
 
-export async function executeWorkspaceList({
+export async function executeList({
+  defaultDirectory,
   input,
-  workspaceRoot,
+  permissionMode,
 }: {
-  input: WorkspaceListInput;
-  workspaceRoot: string;
-}): Promise<WorkspaceListOutput> {
-  const { relativeRoot, resolvedDirectory } = resolveWorkspaceDirectory(
-    workspaceRoot,
-    input.path,
-  );
+  defaultDirectory: string;
+  input: ListInput;
+  permissionMode: PermissionMode;
+}): Promise<ListOutput> {
+  const { resolvedDirectory, rootLabel } = resolveToolDirectory({
+    defaultDirectory,
+    permissionMode,
+    requestedPath: input.path,
+    toolName: "list",
+  });
   const directoryStats = await stat(resolvedDirectory).catch(() => null);
 
   if (!directoryStats) {
-    throw new Error(`Directory not found: ${relativeRoot}`);
+    throw new Error(`Directory not found: ${rootLabel}`);
   }
 
   if (!directoryStats.isDirectory()) {
-    throw new Error(`Path is not a directory: ${relativeRoot}`);
+    throw new Error(`Path is not a directory: ${rootLabel}`);
   }
 
   const shouldIgnore = buildIgnoreMatcher(input.ignore);
-  const entries: WorkspaceListEntry[] = [];
+  const entries: ListEntry[] = [];
   let directoryCount = 0;
   let fileCount = 0;
   let truncated = false;
 
-  const walk = async (currentAbsolutePath: string, currentRelativePath: string, depth: number) => {
+  const walk = async (
+    currentAbsolutePath: string,
+    currentRelativePath: string,
+    depth: number,
+  ) => {
     const dirents = await readdir(currentAbsolutePath, {
       withFileTypes: true,
     });
@@ -258,7 +234,7 @@ export async function executeWorkspaceList({
     files.sort(sortEntriesByName);
 
     for (const directory of directories) {
-      if (entries.length >= WORKSPACE_LIST_LIMIT) {
+      if (entries.length >= LIST_LIMIT) {
         truncated = true;
         return;
       }
@@ -279,7 +255,7 @@ export async function executeWorkspaceList({
     }
 
     for (const file of files) {
-      if (entries.length >= WORKSPACE_LIST_LIMIT) {
+      if (entries.length >= LIST_LIMIT) {
         truncated = true;
         return;
       }
@@ -294,15 +270,15 @@ export async function executeWorkspaceList({
     }
   };
 
-  await walk(resolvedDirectory, relativeRoot, 0);
+  await walk(resolvedDirectory, ".", 0);
 
   return {
     directoryCount,
     entries,
     fileCount,
-    root: relativeRoot,
+    root: rootLabel,
     totalEntries: entries.length,
-    tree: formatWorkspaceTree(relativeRoot, entries),
+    tree: formatTree(rootLabel, entries),
     truncated,
   };
 }
