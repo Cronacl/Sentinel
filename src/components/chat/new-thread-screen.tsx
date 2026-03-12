@@ -268,12 +268,12 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     }
 
     hasHandedOffRef.current = true;
-    window.history.replaceState(window.history.state, "", `/thread/${draftThreadId}`);
-  }, [
-    draftThreadId,
-    hasMessages,
-    threadId,
-  ]);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `/thread/${draftThreadId}`,
+    );
+  }, [draftThreadId, hasMessages, threadId]);
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -414,7 +414,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                 {isWorkspaceMenuOpen && (
                   <motion.div
                     animate={{ opacity: 1, scale: 1, y: 0 }}
-                    className="absolute left-1/2 top-10 z-[200] w-[320px] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-background p-1 shadow-overlay"
+                    className="absolute max-h-56 overflow-y-auto left-1/2 top-10 z-[200] w-[320px] -translate-x-1/2 rounded-xl border border-border bg-background p-1 shadow-overlay"
                     exit={{ opacity: 0, scale: 0.97, y: -6 }}
                     initial={{ opacity: 0, scale: 0.97, y: -6 }}
                     transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
