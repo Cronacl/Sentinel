@@ -30,6 +30,11 @@ import { executeEdit, editInputSchema, editOutputSchema } from "./tools/edit";
 import { executeGrep, grepInputSchema, grepOutputSchema } from "./tools/grep";
 import { executeGlob, globInputSchema, globOutputSchema } from "./tools/glob";
 import { executeList, listInputSchema, listOutputSchema } from "./tools/list";
+import {
+  executeMultiEdit,
+  multieditInputSchema,
+  multieditOutputSchema,
+} from "./tools/multiedit";
 import { executeRead, readInputSchema, readOutputSchema } from "./tools/read";
 import {
   runTaskInputSchema,
@@ -123,6 +128,7 @@ function buildThreadAgentInstructions({
         webSearchGuidance,
         webFetchBatchGuidance,
         `You can use the edit tool for file changes ${approvalMode("edit")}.`,
+        `You can use the multiedit tool for several exact-text changes in the same file ${approvalMode("multiedit")}.`,
         `You can use the create_file tool for new files ${approvalMode("create_file")}.`,
         `You can use the delete_file tool for file removal ${approvalMode("delete_file")}.`,
         `You can use run_task for standard project scripts like test, lint, build, and typecheck ${approvalMode("run_task")}.`,
@@ -140,6 +146,7 @@ function buildThreadAgentInstructions({
         "- When using the searxng provider, use searchType auto and leave livecrawl unset.",
         "- Prefer format=markdown for web pages unless the user explicitly needs plain text or raw HTML.",
         "- Use batch webfetch only when comparing or gathering multiple URLs is clearly useful.",
+        "- Prefer multiedit instead of repeated edit calls when you need several exact replacements in one file.",
         "- Prefer edit, create_file, and delete_file for direct file changes instead of shell commands.",
         "- Prefer run_task for standard package scripts instead of raw shell commands.",
         "- In default permissions mode, list and grep must stay inside the selected workspace root.",
@@ -316,6 +323,18 @@ export function createThreadAgent({
             outputSchema: editOutputSchema,
             execute: async (input) =>
               executeEdit({
+                defaultDirectory: defaultDirectory!,
+                input,
+                permissionMode,
+              }),
+          }),
+          multiedit: tool({
+            description: `Apply multiple exact-text edits to the same file in one step. ${approvalSentence("multiedit")}`,
+            inputSchema: multieditInputSchema,
+            needsApproval: () => toolApprovalPolicies.multiedit,
+            outputSchema: multieditOutputSchema,
+            execute: async (input) =>
+              executeMultiEdit({
                 defaultDirectory: defaultDirectory!,
                 input,
                 permissionMode,

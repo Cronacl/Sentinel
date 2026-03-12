@@ -15,11 +15,11 @@ export const editInputSchema = z.object({
     .describe(
       "File path to modify. In default permissions mode this must be relative to the selected workspace root.",
     ),
-  rationale: z
-    .string()
-    .min(1)
-    .describe("Why this edit is needed."),
-  replaceAll: z.boolean().optional().describe("Replace every occurrence instead of exactly one."),
+  rationale: z.string().min(1).describe("Why this edit is needed."),
+  replaceAll: z
+    .boolean()
+    .optional()
+    .describe("Replace every occurrence instead of exactly one."),
 });
 
 export const editOutputSchema = z.object({
@@ -31,19 +31,19 @@ export const editOutputSchema = z.object({
 export type EditInput = z.infer<typeof editInputSchema>;
 export type EditOutput = z.infer<typeof editOutputSchema>;
 
-function detectLineEnding(text: string) {
+export function detectLineEnding(text: string) {
   return text.includes("\r\n") ? "\r\n" : "\n";
 }
 
-function normalizeLineEndings(text: string) {
+export function normalizeLineEndings(text: string) {
   return text.replaceAll("\r\n", "\n");
 }
 
-function convertToLineEnding(text: string, lineEnding: "\n" | "\r\n") {
+export function convertToLineEnding(text: string, lineEnding: "\n" | "\r\n") {
   return lineEnding === "\n" ? text : text.replaceAll("\n", "\r\n");
 }
 
-function countOccurrences(content: string, search: string) {
+export function countOccurrences(content: string, search: string) {
   if (!search) {
     return 0;
   }
@@ -73,7 +73,9 @@ export async function executeEdit({
   permissionMode: PermissionMode;
 }): Promise<EditOutput> {
   if (input.oldString === input.newString) {
-    throw new Error("No changes to apply because oldString and newString are identical.");
+    throw new Error(
+      "No changes to apply because oldString and newString are identical.",
+    );
   }
 
   const { label, resolvedPath } = resolveToolPath({

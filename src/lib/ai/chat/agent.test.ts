@@ -55,6 +55,7 @@ describe("createThreadAgent", () => {
     expect(aiTestState.agentConfig.tools).toHaveProperty("read");
     expect(aiTestState.agentConfig.tools).toHaveProperty("grep");
     expect(aiTestState.agentConfig.tools).toHaveProperty("edit");
+    expect(aiTestState.agentConfig.tools).toHaveProperty("multiedit");
     expect(aiTestState.agentConfig.tools).toHaveProperty("create_file");
     expect(aiTestState.agentConfig.tools).toHaveProperty("delete_file");
     expect(aiTestState.agentConfig.tools).toHaveProperty("run_task");
@@ -80,6 +81,9 @@ describe("createThreadAgent", () => {
     expect(await aiTestState.agentConfig.tools.edit.needsApproval({}, {})).toBe(
       true,
     );
+    expect(
+      await aiTestState.agentConfig.tools.multiedit.needsApproval({}, {}),
+    ).toBe(true);
     expect(
       await aiTestState.agentConfig.tools.websearch.needsApproval({}, {}),
     ).toBe(true);

@@ -4,6 +4,7 @@ export const TOOL_APPROVAL_TOOL_NAMES = [
   "read",
   "grep",
   "edit",
+  "multiedit",
   "create_file",
   "delete_file",
   "run_task",
@@ -59,6 +60,13 @@ export const TOOL_APPROVAL_METADATA: Record<
     label: "Edit",
     riskSummary:
       "Sentinel can modify existing files without stopping for confirmation.",
+  },
+  multiedit: {
+    defaultRequireApproval: true,
+    description: "Apply multiple exact text replacements in one file.",
+    label: "Multi edit",
+    riskSummary:
+      "Sentinel can apply several coordinated file edits without stopping for confirmation.",
   },
   create_file: {
     defaultRequireApproval: true,

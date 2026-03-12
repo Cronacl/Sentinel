@@ -14,6 +14,7 @@ const renderers: Record<string, Renderer> = {
   create_file: FileTool,
   delete_file: FileTool,
   edit: FileTool,
+  multiedit: FileTool,
   grep: GrepTool,
   glob: GlobTool,
   list: ListTool,

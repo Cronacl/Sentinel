@@ -21,6 +21,28 @@ type EditOutput = {
   replacements: number;
 };
 
+type MultiEditInput = {
+  edits: Array<{
+    newString: string;
+    oldString: string;
+    replaceAll?: boolean;
+  }>;
+  path: string;
+  rationale: string;
+};
+
+type MultiEditOutput = {
+  bytesWritten: number;
+  edits: Array<{
+    index: number;
+    replacements: number;
+    replaceAll: boolean;
+  }>;
+  editsApplied: number;
+  path: string;
+  replacements: number;
+};
+
 type CreateFileInput = {
   content: string;
   path: string;
@@ -98,12 +120,17 @@ function isEditInput(value: unknown): value is EditInput {
     typeof candidate.oldString === "string" &&
     typeof candidate.path === "string" &&
     typeof candidate.rationale === "string" &&
-    (candidate.replaceAll === undefined || typeof candidate.replaceAll === "boolean")
+    (candidate.replaceAll === undefined ||
+      typeof candidate.replaceAll === "boolean")
   );
 }
 
 function isEditOutput(value: unknown): value is EditOutput {
-  const candidate = value as { bytesWritten?: unknown; path?: unknown; replacements?: unknown };
+  const candidate = value as {
+    bytesWritten?: unknown;
+    path?: unknown;
+    replacements?: unknown;
+  };
   return (
     !!candidate &&
     typeof candidate === "object" &&
@@ -113,8 +140,65 @@ function isEditOutput(value: unknown): value is EditOutput {
   );
 }
 
+function isMultiEditInput(value: unknown): value is MultiEditInput {
+  const candidate = value as {
+    edits?: unknown;
+    path?: unknown;
+    rationale?: unknown;
+  };
+
+  return (
+    !!candidate &&
+    typeof candidate === "object" &&
+    Array.isArray(candidate.edits) &&
+    candidate.edits.every(
+      (edit) =>
+        !!edit &&
+        typeof edit === "object" &&
+        typeof (edit as { newString?: unknown }).newString === "string" &&
+        typeof (edit as { oldString?: unknown }).oldString === "string" &&
+        ((edit as { replaceAll?: unknown }).replaceAll === undefined ||
+          typeof (edit as { replaceAll?: unknown }).replaceAll === "boolean"),
+    ) &&
+    typeof candidate.path === "string" &&
+    typeof candidate.rationale === "string"
+  );
+}
+
+function isMultiEditOutput(value: unknown): value is MultiEditOutput {
+  const candidate = value as {
+    bytesWritten?: unknown;
+    edits?: unknown;
+    editsApplied?: unknown;
+    path?: unknown;
+    replacements?: unknown;
+  };
+
+  return (
+    !!candidate &&
+    typeof candidate === "object" &&
+    typeof candidate.bytesWritten === "number" &&
+    Array.isArray(candidate.edits) &&
+    candidate.edits.every(
+      (edit) =>
+        !!edit &&
+        typeof edit === "object" &&
+        typeof (edit as { index?: unknown }).index === "number" &&
+        typeof (edit as { replacements?: unknown }).replacements === "number" &&
+        typeof (edit as { replaceAll?: unknown }).replaceAll === "boolean",
+    ) &&
+    typeof candidate.editsApplied === "number" &&
+    typeof candidate.path === "string" &&
+    typeof candidate.replacements === "number"
+  );
+}
+
 function isCreateFileInput(value: unknown): value is CreateFileInput {
-  const candidate = value as { content?: unknown; path?: unknown; rationale?: unknown };
+  const candidate = value as {
+    content?: unknown;
+    path?: unknown;
+    rationale?: unknown;
+  };
   return (
     !!candidate &&
     typeof candidate === "object" &&
@@ -125,7 +209,11 @@ function isCreateFileInput(value: unknown): value is CreateFileInput {
 }
 
 function isCreateFileOutput(value: unknown): value is CreateFileOutput {
-  const candidate = value as { bytesWritten?: unknown; lineCount?: unknown; path?: unknown };
+  const candidate = value as {
+    bytesWritten?: unknown;
+    lineCount?: unknown;
+    path?: unknown;
+  };
   return (
     !!candidate &&
     typeof candidate === "object" &&
@@ -202,6 +290,8 @@ function buildUnifiedDiff({
 
 function getHeader(toolName: string) {
   switch (toolName) {
+    case "multiedit":
+      return "Multi edit";
     case "create_file":
       return "Create file";
     case "delete_file":
@@ -214,6 +304,10 @@ function getHeader(toolName: string) {
 function getPathAndRationale(part: RendererProps["part"], toolName: string) {
   if ("input" in part && part.input !== undefined) {
     if (toolName === "edit" && isEditInput(part.input)) {
+      return { path: part.input.path, rationale: part.input.rationale };
+    }
+
+    if (toolName === "multiedit" && isMultiEditInput(part.input)) {
       return { path: part.input.path, rationale: part.input.rationale };
     }
 
@@ -247,6 +341,19 @@ function buildBody(
       ].join("\n");
     }
 
+    if (toolName === "multiedit" && isMultiEditOutput(part.output)) {
+      return [
+        `Edited ${part.output.path}`,
+        `${part.output.editsApplied} edit${part.output.editsApplied === 1 ? "" : "s"} applied`,
+        `${part.output.replacements} replacement${part.output.replacements === 1 ? "" : "s"} applied`,
+        ...part.output.edits.map(
+          (edit) =>
+            `Edit ${edit.index}: ${edit.replacements} replacement${edit.replacements === 1 ? "" : "s"}${edit.replaceAll ? " (replace all)" : ""}`,
+        ),
+        `${part.output.bytesWritten} bytes written`,
+      ].join("\n");
+    }
+
     if (toolName === "create_file" && isCreateFileOutput(part.output)) {
       return [
         `Created ${part.output.path}`,
@@ -272,6 +379,26 @@ function buildBody(
             before: part.input.oldString,
             path: part.input.path,
           })}
+          language="diff"
+        />
+      );
+    }
+
+    if (toolName === "multiedit" && isMultiEditInput(part.input)) {
+      return (
+        <CodeBlock
+          code={part.input.edits
+            .map((edit, index) =>
+              [
+                `# Edit ${index + 1}${edit.replaceAll ? " (replace all)" : ""}`,
+                buildUnifiedDiff({
+                  after: edit.newString,
+                  before: edit.oldString,
+                  path: part.input.path,
+                }),
+              ].join("\n"),
+            )
+            .join("\n\n")}
           language="diff"
         />
       );
@@ -337,7 +464,9 @@ export const FileTool = memo(function FileTool({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <p className="text-[12px] font-medium text-foreground">{header}</p>
+              <p className="text-[12px] font-medium text-foreground">
+                {header}
+              </p>
               <div
                 className={`rounded-full flex items-center gap-1 border px-1.5 py-0.5 text-[10px] ${getStatusChipClass(status.tone)}`}
               >
@@ -391,7 +520,9 @@ export const FileTool = memo(function FileTool({
                 {part.state === "output-available" ? (
                   <div className="mt-3 flex items-center justify-between gap-3 text-[10px] text-foreground">
                     <span className="truncate">{path}</span>
-                    <span className="shrink-0 text-white/72">{status.label}</span>
+                    <span className="shrink-0 text-white/72">
+                      {status.label}
+                    </span>
                   </div>
                 ) : null}
               </div>

@@ -91,6 +91,10 @@ describe("approvalsRouter", () => {
       requireApproval: true,
       toolName: "edit",
     });
+    expect(result.find((tool) => tool.toolName === "multiedit")).toMatchObject({
+      requireApproval: true,
+      toolName: "multiedit",
+    });
   });
 
   it("persists a custom override and returns effective policies", async () => {
