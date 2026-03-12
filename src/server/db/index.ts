@@ -231,6 +231,28 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     sql`CREATE INDEX IF NOT EXISTS "search_setting_user_id_idx" ON "search_setting" ("user_id")`,
   );
 
+  db.run(sql`CREATE TABLE IF NOT EXISTS "memory_setting" (
+    "id" text PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL,
+    "enabled" integer DEFAULT false NOT NULL,
+    "auto_save_enabled" integer DEFAULT true NOT NULL,
+    "default_scope" text DEFAULT 'global' NOT NULL,
+    "retrieval_limit" integer DEFAULT 6 NOT NULL,
+    "auto_save_per_turn_limit" integer DEFAULT 3 NOT NULL,
+    "memory_provider" text DEFAULT 'openai' NOT NULL,
+    "memory_model" text DEFAULT 'text-embedding-3-small' NOT NULL,
+    "memory_dimensions" integer DEFAULT 1536 NOT NULL,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "memory_setting_user_unique" ON "memory_setting" ("user_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "memory_setting_user_id_idx" ON "memory_setting" ("user_id")`,
+  );
+
   db.run(sql`CREATE TABLE IF NOT EXISTS "tool_approval_policy" (
     "id" text PRIMARY KEY NOT NULL,
     "user_id" text NOT NULL,
@@ -313,6 +335,47 @@ function initVectorDb(): Database.Database | null {
       CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_embeddings USING vec0(
         chunk_id TEXT PRIMARY KEY,
         embedding float[1536]
+      );
+
+      CREATE TABLE IF NOT EXISTS memory_items (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        workspace_id TEXT,
+        kind TEXT NOT NULL,
+        content TEXT NOT NULL,
+        summary TEXT,
+        fingerprint TEXT NOT NULL,
+        source_thread_id TEXT,
+        source_message_id TEXT,
+        salience REAL DEFAULT 0.5 NOT NULL,
+        is_pinned INTEGER DEFAULT false NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        last_accessed_at INTEGER,
+        embedding_provider TEXT NOT NULL,
+        embedding_model TEXT NOT NULL,
+        embedding_dimensions INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS memory_items_user_idx
+        ON memory_items (user_id);
+      CREATE INDEX IF NOT EXISTS memory_items_user_workspace_idx
+        ON memory_items (user_id, workspace_id);
+      CREATE INDEX IF NOT EXISTS memory_items_user_kind_idx
+        ON memory_items (user_id, kind);
+      CREATE UNIQUE INDEX IF NOT EXISTS memory_items_user_scope_fingerprint_unique
+        ON memory_items (user_id, coalesce(workspace_id, ''), kind, fingerprint);
+
+      CREATE VIRTUAL TABLE IF NOT EXISTS memory_embeddings_1536 USING vec0(
+        memory_id TEXT PRIMARY KEY,
+        embedding float[1536]
+      );
+      CREATE VIRTUAL TABLE IF NOT EXISTS memory_embeddings_2048 USING vec0(
+        memory_id TEXT PRIMARY KEY,
+        embedding float[2048]
+      );
+      CREATE VIRTUAL TABLE IF NOT EXISTS memory_embeddings_3072 USING vec0(
+        memory_id TEXT PRIMARY KEY,
+        embedding float[3072]
       );
     `);
 

@@ -205,8 +205,8 @@ export function searchByEmbedding(
        JOIN knowledge_sources s ON s.id = c.source_id
        WHERE c.workspace_id = ?
          AND e.embedding MATCH ?
-       ORDER BY e.distance
-       LIMIT ?`,
+         AND e.k = ?
+       ORDER BY e.distance`,
     )
     .all(workspaceId, buffer, limit) as Array<{
     chunk_id: string;

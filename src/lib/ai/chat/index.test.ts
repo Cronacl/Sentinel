@@ -1,6 +1,7 @@
 // @ts-nocheck
 
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { z } from "zod";
 
 const aiTestState = ((globalThis as any).__sentinelAiTestState ??= {
   agentConfig: null,
@@ -68,6 +69,9 @@ const resolvedTitleModel = {
 const resolveThreadTitleModel = mock(async () => resolvedTitleModel);
 const generateThreadTitle = mock(async () => "Fast title");
 const getSystemPrompt = mock(async () => "System prompt");
+const retrieveRelevantMemories = mock(async () => []);
+const buildMemoryPromptLines = mock(() => []);
+const autosaveConversationMemories = mock(async () => []);
 
 const buildPersistedAssistantMessage = mock(
   ({ assistantId, finalAssistant, placeholder }) =>
@@ -101,6 +105,16 @@ const updateMessageMetadata = mock(async () => {});
 const createNewResumableStream = mock(async () => {});
 const getWorkspaceRootPath = mock(async () => "/tmp/workspace-1");
 const getToolPermissionMode = mock(async () => "default");
+const getMemorySettings = mock(async () => ({
+  autoSaveEnabled: true,
+  autoSavePerTurnLimit: 3,
+  defaultScope: "global",
+  enabled: false,
+  memoryDimensions: 1536,
+  memoryModel: "text-embedding-3-small",
+  memoryProvider: "openai",
+  retrievalLimit: 6,
+}));
 const getToolApprovalPolicies = mock(async () => ({
   list: false,
   glob: false,
@@ -112,6 +126,9 @@ const getToolApprovalPolicies = mock(async () => ({
   delete_file: true,
   run_task: true,
   shell_command: true,
+  search_memory: false,
+  save_memory: false,
+  forget_memory: false,
   websearch: true,
   webfetch: true,
 }));
@@ -157,6 +174,53 @@ mock.module("./runtime/system-prompt", () => ({
   getSystemPrompt,
 }));
 
+mock.module("@/lib/memory/service", () => ({
+  autosaveConversationMemories,
+  buildMemoryPromptLines,
+  extractLatestUserText: (messages: Array<any>) =>
+    messages
+      .filter((message) => message.role === "user")
+      .flatMap((message) => message.parts ?? [])
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("\n"),
+  retrieveRelevantMemories,
+}));
+
+mock.module("./tools/search-memory", () => ({
+  executeSearchMemory: mock(async () => ({
+    query: "query",
+    resolvedScope: "global",
+    resultCount: 0,
+    results: [],
+  })),
+  searchMemoryInputSchema: z.object({}),
+  searchMemoryOutputSchema: z.object({}),
+}));
+
+mock.module("./tools/save-memory", () => ({
+  executeSaveMemory: mock(async () => ({
+    kind: "preference",
+    memoryId: "memory-1",
+    scope: "global",
+    status: "created",
+    summary: null,
+  })),
+  saveMemoryInputSchema: z.object({}),
+  saveMemoryOutputSchema: z.object({}),
+}));
+
+mock.module("./tools/forget-memory", () => ({
+  executeForgetMemory: mock(async () => ({
+    deleted: true,
+    kind: "preference",
+    memoryId: "memory-1",
+    summary: null,
+  })),
+  forgetMemoryInputSchema: z.object({}),
+  forgetMemoryOutputSchema: z.object({}),
+}));
+
 mock.module("./runtime/finalize", () => ({
   buildPersistedAssistantMessage,
 }));
@@ -195,6 +259,7 @@ mock.module("@/lib/streams", () => ({
 }));
 
 mock.module("./runtime/workspace", () => ({
+  getMemorySettings,
   getSearchProviderRuntime,
   getSearchSettings,
   getToolApprovalPolicies,
@@ -327,7 +392,20 @@ beforeEach(() => {
   loadThreadMessages.mockImplementation(async () => []);
   resolveThreadTitleModel.mockImplementation(async () => resolvedTitleModel);
   generateThreadTitle.mockImplementation(async () => "Fast title");
+  retrieveRelevantMemories.mockImplementation(async () => []);
+  buildMemoryPromptLines.mockImplementation(() => []);
+  autosaveConversationMemories.mockImplementation(async () => []);
   getToolPermissionMode.mockImplementation(async () => "default");
+  getMemorySettings.mockImplementation(async () => ({
+    autoSaveEnabled: true,
+    autoSavePerTurnLimit: 3,
+    defaultScope: "global",
+    enabled: false,
+    memoryDimensions: 1536,
+    memoryModel: "text-embedding-3-small",
+    memoryProvider: "openai",
+    retrievalLimit: 6,
+  }));
   getToolApprovalPolicies.mockImplementation(async () => ({
     list: false,
     glob: false,
@@ -339,6 +417,9 @@ beforeEach(() => {
     delete_file: true,
     run_task: true,
     shell_command: true,
+    search_memory: false,
+    save_memory: false,
+    forget_memory: false,
     websearch: true,
     webfetch: true,
   }));
@@ -388,6 +469,9 @@ describe("runThreadChat title generation", () => {
     expect(aiTestState.agentConfig?.tools).toHaveProperty("list");
     expect(aiTestState.agentConfig?.tools).toHaveProperty("grep");
     expect(aiTestState.agentConfig?.tools).toHaveProperty("shell_command");
+    expect(aiTestState.agentConfig?.tools).toHaveProperty("search_memory");
+    expect(aiTestState.agentConfig?.tools).toHaveProperty("save_memory");
+    expect(aiTestState.agentConfig?.tools).toHaveProperty("forget_memory");
     expect(aiTestState.agentConfig?.tools).toHaveProperty("websearch");
   });
 
@@ -518,10 +602,16 @@ describe("runThreadChat approvals and lifecycle", () => {
     await runThreadChat(createSubmitRequest(), "user-1");
 
     expect(aiTestState.agentConfig?.tools).toMatchObject({
+      search_memory: expect.any(Object),
+      save_memory: expect.any(Object),
+      forget_memory: expect.any(Object),
       websearch: expect.any(Object),
       webfetch: expect.any(Object),
     });
     expect(Object.keys(aiTestState.agentConfig?.tools ?? {})).toEqual([
+      "search_memory",
+      "save_memory",
+      "forget_memory",
       "websearch",
       "webfetch",
     ]);
@@ -542,6 +632,9 @@ describe("runThreadChat approvals and lifecycle", () => {
       delete_file: true,
       run_task: true,
       shell_command: true,
+      search_memory: false,
+      save_memory: false,
+      forget_memory: false,
       websearch: true,
       webfetch: true,
     }));
@@ -554,6 +647,55 @@ describe("runThreadChat approvals and lifecycle", () => {
     expect(
       await aiTestState.agentConfig?.tools.edit.needsApproval({}, {}),
     ).toBe(false);
+  });
+
+  it("retrieves memory for the system prompt and autosaves after success", async () => {
+    getMemorySettings.mockImplementation(async () => ({
+      autoSaveEnabled: true,
+      autoSavePerTurnLimit: 3,
+      defaultScope: "global",
+      enabled: true,
+      memoryDimensions: 1536,
+      memoryModel: "text-embedding-3-small",
+      memoryProvider: "openai",
+      retrievalLimit: 6,
+    }));
+    retrieveRelevantMemories.mockImplementation(async () => [
+      {
+        content: "Prefers concise answers.",
+        id: "memory-1",
+        kind: "preference",
+        scope: "global",
+        score: 0.9,
+        summary: "Prefers concise answers.",
+        workspaceId: null,
+      },
+    ]);
+    buildMemoryPromptLines.mockImplementation(() => [
+      "[Global] preference: Prefers concise answers.",
+    ]);
+
+    await runThreadChat(createSubmitRequest(), "user-1");
+
+    expect(retrieveRelevantMemories).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: "Summarize the refactor",
+        settings: expect.objectContaining({ enabled: true }),
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      }),
+    );
+    expect(getSystemPrompt).toHaveBeenCalledWith("user-1", {
+      memory: ["[Global] preference: Prefers concise answers."],
+    });
+    expect(autosaveConversationMemories).toHaveBeenCalledWith(
+      expect.objectContaining({
+        settings: expect.objectContaining({ enabled: true }),
+        threadId: "thread-1",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      }),
+    );
   });
 
   it("regenerates tool-bearing assistant messages from persisted transcript instead of stale client messages", async () => {

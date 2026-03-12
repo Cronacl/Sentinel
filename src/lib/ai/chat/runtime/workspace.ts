@@ -10,6 +10,7 @@ import {
   type SearchProviderRuntimeMap,
 } from "@/lib/search/providers/runtime";
 import { normalizeSearchSettings, type SearchSettings } from "@/lib/search";
+import { normalizeMemorySettings, type MemorySettings } from "@/lib/memory";
 import {
   normalizeWebFetchSettings,
   type WebFetchSettings,
@@ -19,6 +20,7 @@ import { db } from "@/server/db";
 import {
   searchProviderConfigs,
   searchSettings,
+  memorySettings,
   toolApprovalPolicies,
   users,
   workspaces,
@@ -108,4 +110,24 @@ export async function getSearchProviderRuntime(
   });
 
   return buildSearchProviderRuntimeMap(rows);
+}
+
+export async function getMemorySettings(
+  userId: string,
+): Promise<MemorySettings> {
+  const row = await db.query.memorySettings.findFirst({
+    where: eq(memorySettings.userId, userId),
+    columns: {
+      autoSaveEnabled: true,
+      autoSavePerTurnLimit: true,
+      defaultScope: true,
+      enabled: true,
+      memoryDimensions: true,
+      memoryModel: true,
+      memoryProvider: true,
+      retrievalLimit: true,
+    },
+  });
+
+  return normalizeMemorySettings(row ?? null);
 }

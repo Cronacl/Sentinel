@@ -89,6 +89,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   modelPreferences: many(modelPreferences),
   searchProviderConfigs: many(searchProviderConfigs),
   searchSettings: many(searchSettings),
+  memorySettings: many(memorySettings),
   toolApprovalPolicies: many(toolApprovalPolicies),
 }));
 
@@ -327,6 +328,48 @@ export const searchSettings = sqliteTable(
 export const searchSettingsRelations = relations(searchSettings, ({ one }) => ({
   user: one(users, {
     fields: [searchSettings.userId],
+    references: [users.id],
+  }),
+}));
+
+export const memorySettings = sqliteTable(
+  "memory_setting",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    userId: text("user_id").notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+    autoSaveEnabled: integer("auto_save_enabled", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    defaultScope: text("default_scope").notNull().default("global"),
+    retrievalLimit: integer("retrieval_limit").notNull().default(6),
+    autoSavePerTurnLimit: integer("auto_save_per_turn_limit")
+      .notNull()
+      .default(3),
+    memoryProvider: text("memory_provider", { enum: AI_PROVIDERS })
+      .notNull()
+      .default("openai"),
+    memoryModel: text("memory_model").notNull().default("text-embedding-3-small"),
+    memoryDimensions: integer("memory_dimensions").notNull().default(1536),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("memory_setting_user_unique").on(table.userId),
+    index("memory_setting_user_id_idx").on(table.userId),
+  ],
+);
+
+export const memorySettingsRelations = relations(memorySettings, ({ one }) => ({
+  user: one(users, {
+    fields: [memorySettings.userId],
     references: [users.id],
   }),
 }));

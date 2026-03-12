@@ -42,6 +42,11 @@ const SETTINGS_NAV = [
     label: "Search",
     icon: GlobalSearchIcon,
   },
+  {
+    href: "/settings/memory",
+    label: "Memory",
+    icon: AiIdeaIcon,
+  },
   { href: "/settings/security", label: "Security", icon: ShieldUserIcon },
   { href: "/settings/providers", label: "Providers", icon: TestTubeIcon },
   { href: "/settings/models", label: "Models", icon: Brain02Icon },

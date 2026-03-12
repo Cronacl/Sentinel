@@ -22,6 +22,12 @@ import { createReasoningMetadataTracker } from "./reasoning";
 import { disposeShellSession } from "../tools/shell";
 import { getSystemPrompt } from "./system-prompt";
 import { createThreadAgent } from "../agent";
+import {
+  autosaveConversationMemories,
+  buildMemoryPromptLines,
+  extractLatestUserText,
+  retrieveRelevantMemories,
+} from "@/lib/memory/service";
 import { resolveThreadTitleModel } from "../title/model";
 import { generateThreadTitle } from "../title/generate";
 import { parseRequest } from "./parse-request";
@@ -34,6 +40,7 @@ import {
 import {
   getSearchProviderRuntime,
   getSearchSettings,
+  getMemorySettings,
   getToolApprovalPolicies,
   getToolPermissionMode,
   getWebFetchSettings,
@@ -121,6 +128,7 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
     request.userId,
   );
   const permissionMode = await getToolPermissionMode(request.userId);
+  const memorySettings = await getMemorySettings(request.userId);
   const searchSettings = await getSearchSettings(request.userId);
   const searchProviders = await getSearchProviderRuntime(request.userId);
   const toolApprovalPolicies = await getToolApprovalPolicies(request.userId);
@@ -193,20 +201,33 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
   persist.upsertMessage(request.threadId, placeholder);
   await persist.setActiveMessage(request.threadId, assistantId);
 
-  const systemPrompt = await getSystemPrompt(request.userId);
+  const memoryQuery = extractLatestUserText(baseMessages);
+  const retrievedMemories = await retrieveRelevantMemories({
+    query: memoryQuery,
+    settings: memorySettings,
+    userId: request.userId,
+    workspaceId: request.workspaceId,
+  }).catch(() => []);
+  const systemPrompt = await getSystemPrompt(request.userId, {
+    memory: buildMemoryPromptLines(retrievedMemories),
+  });
   const agent = createThreadAgent({
     attachmentDownload: createAttachmentDownloadHandler(),
     ...(workspaceRoot ? { defaultDirectory: workspaceRoot } : {}),
     languageModel: resolvedModel.languageModel,
+    memorySettings,
     permissionMode,
     providerOptions: resolvedModel.providerOptions,
     searchProviders,
     searchSettings,
+    sourceMessageId: parentId,
     systemPrompt,
     threadId: request.threadId,
+    userId: request.userId,
     toolApprovalPolicies,
     toolsEnabled,
     webFetchSettings,
+    workspaceId: request.workspaceId,
   });
 
   const tracker = createReasoningMetadataTracker({
@@ -270,6 +291,19 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
           placeholder,
         }),
       );
+
+      if (!streamErrorMessage) {
+        void autosaveConversationMemories({
+          messages: [...modelTranscript, responseMessage as ThreadUIMessage],
+          model: resolvedModel.languageModel,
+          providerOptions: resolvedModel.providerOptions,
+          settings: memorySettings,
+          sourceMessageId: assistantId,
+          threadId: request.threadId,
+          userId: request.userId,
+          workspaceId: request.workspaceId,
+        });
+      }
 
       persist.clearActiveStream(request.threadId);
     },

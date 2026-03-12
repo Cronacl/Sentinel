@@ -9,6 +9,9 @@ export const TOOL_APPROVAL_TOOL_NAMES = [
   "delete_file",
   "run_task",
   "shell_command",
+  "search_memory",
+  "save_memory",
+  "forget_memory",
   "websearch",
   "webfetch",
 ] as const;
@@ -96,6 +99,27 @@ export const TOOL_APPROVAL_METADATA: Record<
     label: "Shell command",
     riskSummary:
       "Sentinel can execute shell commands immediately in the workspace.",
+  },
+  search_memory: {
+    defaultRequireApproval: false,
+    description: "Search long-term memory for relevant user or project context.",
+    label: "Search memory",
+    riskSummary:
+      "Sentinel can recall previously stored memory immediately during conversation.",
+  },
+  save_memory: {
+    defaultRequireApproval: false,
+    description: "Store durable user or workspace context for future chats.",
+    label: "Save memory",
+    riskSummary:
+      "Sentinel can save durable preferences, workflows, and project context without pausing.",
+  },
+  forget_memory: {
+    defaultRequireApproval: false,
+    description: "Delete a previously stored memory item.",
+    label: "Forget memory",
+    riskSummary:
+      "Sentinel can remove previously stored memories immediately without pausing.",
   },
   websearch: {
     defaultRequireApproval: true,

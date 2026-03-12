@@ -8,6 +8,7 @@ import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
 import type { PermissionMode } from "@/lib/security";
 import type { SearchProviderRuntimeMap } from "@/lib/search/providers/runtime";
 import type { SearchSettings } from "@/lib/search";
+import type { MemorySettings } from "@/lib/memory";
 import { z } from "zod";
 
 import type { ToolApprovalPolicyMap } from "./tool-approval-policy";
@@ -35,12 +36,27 @@ import {
   multieditInputSchema,
   multieditOutputSchema,
 } from "./tools/multiedit";
+import {
+  executeForgetMemory,
+  forgetMemoryInputSchema,
+  forgetMemoryOutputSchema,
+} from "./tools/forget-memory";
 import { executeRead, readInputSchema, readOutputSchema } from "./tools/read";
 import {
   runTaskInputSchema,
   runTaskOutputSchema,
   streamRunTask,
 } from "./tools/run-task";
+import {
+  executeSaveMemory,
+  saveMemoryInputSchema,
+  saveMemoryOutputSchema,
+} from "./tools/save-memory";
+import {
+  executeSearchMemory,
+  searchMemoryInputSchema,
+  searchMemoryOutputSchema,
+} from "./tools/search-memory";
 import {
   executeWebSearch,
   webSearchInputSchema,
@@ -89,17 +105,21 @@ const shellCommandOutputSchema = z.discriminatedUnion("phase", [
 
 function buildThreadAgentInstructions({
   defaultDirectory,
+  memorySettings,
   permissionMode,
   searchProviders,
   searchSettings,
+  sourceMessageId,
   systemPrompt,
   toolApprovalPolicies,
   webFetchSettings,
 }: {
   defaultDirectory?: string;
+  memorySettings: MemorySettings;
   permissionMode: PermissionMode;
   searchProviders: SearchProviderRuntimeMap;
   searchSettings: SearchSettings;
+  sourceMessageId?: string | null;
   systemPrompt: string;
   toolApprovalPolicies: ToolApprovalPolicyMap;
   webFetchSettings: WebFetchSettings;
@@ -123,6 +143,9 @@ function buildThreadAgentInstructions({
         `You can use the glob tool to find files by pattern ${approvalMode("glob")}.`,
         `You can use the read tool to inspect file contents ${approvalMode("read")}.`,
         `You can use the grep tool to search file contents inside the linked project ${approvalMode("grep")}.`,
+        `You can use search_memory to recall durable user or workspace context ${approvalMode("search_memory")}.`,
+        `You can use save_memory to store durable facts that should help future conversations ${approvalMode("save_memory")}.`,
+        `You can use forget_memory to remove outdated or incorrect memory ${approvalMode("forget_memory")}.`,
         `You can use the websearch tool to discover candidate web sources ${approvalMode("websearch")}.`,
         `You can use the webfetch tool to read documentation, API references, changelogs, and user-shared URLs ${approvalMode("webfetch")}.`,
         webSearchGuidance,
@@ -140,6 +163,10 @@ function buildThreadAgentInstructions({
         "- Prefer glob when you know the filename pattern you need.",
         "- Prefer read when you need file contents or a bounded slice of a file.",
         "- Prefer grep when you need to search code or text content by pattern.",
+        "- Prefer search_memory before asking the user to repeat stable preferences, habits, or project constraints.",
+        "- Use save_memory only for durable facts, preferences, workflows, and recurring project context.",
+        "- Never save secrets, API keys, access tokens, passwords, or one-off task state to memory.",
+        "- Use forget_memory when the user explicitly says a previously stored fact is outdated or wrong.",
         "- Prefer websearch when you need to discover sources, articles, docs, or references for a topic.",
         "- Prefer webfetch when the answer depends on web documentation or a URL shared in the conversation.",
         "- Prefer webfetch after websearch when you need to open one specific result in full.",
@@ -160,9 +187,15 @@ function buildThreadAgentInstructions({
         "- When a task can run for several minutes, state that clearly before asking for approval.",
         "- Prefer read-only inspection before mutations or installs.",
         "- When a tool requests approval, wait for the user approval workflow to continue.",
+        memorySettings.enabled
+          ? `Long-term memory is enabled with ${memorySettings.memoryProvider}:${memorySettings.memoryModel}.${sourceMessageId ? ` Current source message id: ${sourceMessageId}.` : ""}`
+          : "Long-term memory is disabled. Do not use memory tools until the user enables Memory in Settings.",
       ].join("\n")
     : [
         "Workspace tools are currently unavailable because there is no selected workspace root.",
+        `You can still use search_memory to recall prior context ${approvalMode("search_memory")}.`,
+        `You can still use save_memory to store durable context ${approvalMode("save_memory")}.`,
+        `You can still use forget_memory to remove outdated memory ${approvalMode("forget_memory")}.`,
         `You can still use the websearch tool to discover sources ${approvalMode("websearch")}.`,
         `You can still use the webfetch tool to read documentation, API references, changelogs, and user-shared URLs ${approvalMode("webfetch")}.`,
         webSearchGuidance,
@@ -177,34 +210,89 @@ export function createThreadAgent({
   attachmentDownload,
   defaultDirectory,
   languageModel,
+  memorySettings,
   permissionMode,
   providerOptions,
   searchProviders,
   searchSettings,
+  sourceMessageId,
   systemPrompt,
   threadId,
+  userId,
   toolApprovalPolicies,
   toolsEnabled,
   webFetchSettings,
+  workspaceId,
 }: {
   attachmentDownload?: Experimental_DownloadFunction;
   defaultDirectory?: string;
   languageModel: unknown;
+  memorySettings: MemorySettings;
   permissionMode: PermissionMode;
   providerOptions?: SharedV3ProviderOptions;
   searchProviders: SearchProviderRuntimeMap;
   searchSettings: SearchSettings;
+  sourceMessageId?: string | null;
   systemPrompt: string;
   threadId: string;
+  userId: string;
   toolApprovalPolicies: ToolApprovalPolicyMap;
   toolsEnabled: boolean;
   webFetchSettings: WebFetchSettings;
+  workspaceId?: string | null;
 }) {
   const approvalSentence = (toolName: keyof ToolApprovalPolicyMap) =>
     toolApprovalPolicies[toolName]
       ? "Requires approval."
       : "Runs without approval.";
   const tools = {
+    search_memory: tool({
+      description: `Search Sentinel's long-term memory for durable user or workspace context. ${approvalSentence("search_memory")}`,
+      inputSchema: searchMemoryInputSchema,
+      needsApproval: () => toolApprovalPolicies.search_memory,
+      outputSchema: searchMemoryOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeSearchMemory({
+          abortSignal,
+          input,
+          runtime: {
+            settings: memorySettings,
+            userId,
+            workspaceId,
+          },
+        }),
+    }),
+    save_memory: tool({
+      description: `Save durable user or workspace context for future chats. ${approvalSentence("save_memory")}`,
+      inputSchema: saveMemoryInputSchema,
+      needsApproval: () => toolApprovalPolicies.save_memory,
+      outputSchema: saveMemoryOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeSaveMemory({
+          abortSignal,
+          input,
+          runtime: {
+            settings: memorySettings,
+            sourceMessageId,
+            threadId,
+            userId,
+            workspaceId,
+          },
+        }),
+    }),
+    forget_memory: tool({
+      description: `Delete a stored memory that is outdated or incorrect. ${approvalSentence("forget_memory")}`,
+      inputSchema: forgetMemoryInputSchema,
+      needsApproval: () => toolApprovalPolicies.forget_memory,
+      outputSchema: forgetMemoryOutputSchema,
+      execute: async (input) =>
+        executeForgetMemory({
+          input,
+          runtime: {
+            userId,
+          },
+        }),
+    }),
     websearch: tool({
       description: `Search the web for source discovery and summarized results. ${approvalSentence("websearch")}`,
       inputSchema: webSearchInputSchema,
@@ -462,9 +550,11 @@ export function createThreadAgent({
       : {}),
     instructions: buildThreadAgentInstructions({
       defaultDirectory,
+      memorySettings,
       permissionMode,
       searchProviders,
       searchSettings,
+      sourceMessageId,
       systemPrompt,
       toolApprovalPolicies,
       webFetchSettings,

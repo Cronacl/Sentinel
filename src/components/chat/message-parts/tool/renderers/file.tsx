@@ -385,16 +385,17 @@ function buildBody(
     }
 
     if (toolName === "multiedit" && isMultiEditInput(part.input)) {
+      const input = part.input;
       return (
         <CodeBlock
-          code={part.input.edits
+          code={input.edits
             .map((edit, index) =>
               [
                 `# Edit ${index + 1}${edit.replaceAll ? " (replace all)" : ""}`,
                 buildUnifiedDiff({
                   after: edit.newString,
                   before: edit.oldString,
-                  path: part.input.path,
+                  path: input.path,
                 }),
               ].join("\n"),
             )

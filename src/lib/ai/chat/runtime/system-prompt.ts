@@ -1,11 +1,14 @@
 import { eq } from "drizzle-orm";
 
-import { lines, prompt, section, when } from "@/lib/prompt";
+import { each, lines, prompt, section, when } from "@/lib/prompt";
 import { buildPersonalizationPrompt } from "@/lib/personalization";
 import { db } from "@/server/db";
 import { users } from "@/server/db/schema";
 
-const buildSystemPrompt = prompt<{ personalization: string }>((v) =>
+const buildSystemPrompt = prompt<{
+  memory: string[];
+  personalization: string;
+}>((v) =>
   lines(
     section("Identity", [
       "You are Sentinel -- an intelligent, versatile AI assistant.",
@@ -20,11 +23,19 @@ const buildSystemPrompt = prompt<{ personalization: string }>((v) =>
       "Never fabricate sources, URLs, or citations.",
     ]),
 
+    when(
+      v.memory.length > 0,
+      section("Memory", each(v.memory, (memory) => `- ${memory}`)),
+    ),
+
     when(v.personalization, v.personalization),
   ),
 );
 
-export async function getSystemPrompt(userId: string): Promise<string> {
+export async function getSystemPrompt(
+  userId: string,
+  options?: { memory?: string[] },
+): Promise<string> {
   const user = await db.query.users.findFirst({
     where: eq(users.id, userId),
     columns: {
@@ -46,5 +57,8 @@ export async function getSystemPrompt(userId: string): Promise<string> {
       })
     : "";
 
-  return buildSystemPrompt({ personalization });
+  return buildSystemPrompt({
+    memory: options?.memory ?? [],
+    personalization,
+  });
 }
