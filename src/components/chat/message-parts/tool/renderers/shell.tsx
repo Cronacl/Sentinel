@@ -227,7 +227,7 @@ export const ShellTool = memo(function ShellTool({
       summary={summary}
       isRunning={isRunningShellState}
       isError={isErrorState}
-      isExpandable={isFinishedShellState}
+      isExpandable={isFinishedShellState || isRunningShellState}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
       errorText={partErrorText && part.state !== "output-error" ? partErrorText : undefined}
