@@ -3,9 +3,11 @@ import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
 
 import type { ReasoningEffort } from "../providers/models";
 import type { ThreadUIMessage } from "../messages/types";
+import type { ThreadMode, ThreadPlanAnswer } from "@/lib/plan";
 
 export type ThreadChatTrigger =
   | "submit-user-message"
+  | "submit-plan-answer"
   | "submit-tool-approval"
   | "retry-assistant-message"
   | "regenerate-assistant-message"
@@ -17,8 +19,11 @@ export type ThreadChatRequest = {
   messages?: ThreadUIMessage[];
   messageId?: string;
   modelId?: string;
+  planAnswers?: ThreadPlanAnswer[];
+  planQuestionSetId?: string;
   reasoningEffort?: ReasoningEffort;
   threadId: string;
+  threadMode?: ThreadMode;
   trigger: ThreadChatTrigger;
   userId: string;
   workspaceId: string;

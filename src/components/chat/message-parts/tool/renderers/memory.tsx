@@ -128,7 +128,7 @@ function MemoryResultBody({
                 <span className="text-muted">{result.scope}</span>
                 <span className="text-muted">{result.id}</span>
               </div>
-              <p className="text-foreground mt-1 text-sm leading-6">
+              <p className="text-foreground mt-1 text-sm">
                 {result.summary ?? result.content}
               </p>
             </div>
@@ -193,43 +193,38 @@ export const MemoryTool = memo(function MemoryTool({
 
   return (
     <Disclosure.Root
-      className="border-border/60 bg-surface/20 overflow-hidden rounded-xl border"
+      className="border-border/60 bg-surface/20 overflow-hidden rounded-2xl border"
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
     >
-      <div className="px-3 py-2.5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-medium text-foreground">
-                {getLabel(toolName)}
-              </p>
-              <span
-                className={`rounded-full border px-2 py-0.5 text-[11px] ${getStatusTone(part)}`}
-              >
-                {part.state === "approval-requested"
-                  ? "Needs approval"
-                  : part.state === "output-error"
-                    ? "Failed"
-                    : part.state === "output-denied"
-                      ? "Denied"
-                      : part.state === "output-available"
-                        ? "Completed"
-                        : "Running"}
-              </span>
-            </div>
-            <p className="text-muted mt-1 truncate text-sm">
-              {getSummary(part, toolName)}
-            </p>
-          </div>
-
-          <Disclosure.Trigger className="text-muted text-sm transition-colors hover:text-foreground">
+      <div className="px-3 py-1.5">
+        <div className="flex items-center gap-2">
+          <p className="shrink-0 text-[12px] font-medium text-foreground">
+            {getLabel(toolName)}
+          </p>
+          <span
+            className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] ${getStatusTone(part)}`}
+          >
+            {part.state === "approval-requested"
+              ? "Needs approval"
+              : part.state === "output-error"
+                ? "Failed"
+                : part.state === "output-denied"
+                  ? "Denied"
+                  : part.state === "output-available"
+                    ? "Completed"
+                    : "Running"}
+          </span>
+          <p className="text-muted min-w-0 flex-1 truncate text-[11px]">
+            {getSummary(part, toolName)}
+          </p>
+          <Disclosure.Trigger className="text-muted shrink-0 text-[10px] transition-colors hover:text-foreground">
             {isExpanded ? "Hide" : "Show"}
           </Disclosure.Trigger>
         </div>
 
         {part.state === "approval-requested" && approvalId ? (
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-2 flex items-center gap-2">
             <Button
               className="h-7 min-w-0 px-3 text-[11px]"
               onPress={() => onApprove?.(approvalId)}
@@ -250,15 +245,15 @@ export const MemoryTool = memo(function MemoryTool({
       </div>
 
       <Disclosure.Content>
-        <div className="border-border/60 border-t px-3 py-3">
+        <div className="border-border/60 border-t px-3 py-2">
           {isRunning ? (
-            <p className="text-muted text-sm">Working with memory...</p>
+            <p className="text-muted text-[11px]">Working with memory...</p>
           ) : part.state === "output-error" ? (
-            <p className="text-danger-soft-foreground text-sm">
+            <p className="text-danger-soft-foreground text-[11px]">
               {errorText ?? "Memory operation failed."}
             </p>
           ) : part.state === "output-denied" ? (
-            <p className="text-muted text-sm">Memory operation denied.</p>
+            <p className="text-muted text-[11px]">Memory operation denied.</p>
           ) : (
             <MemoryResultBody
               output={output ?? null}

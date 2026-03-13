@@ -224,26 +224,21 @@ export const RunTaskTool = memo(function RunTaskTool({
 
   return (
     <Disclosure isExpanded={isExpanded} onExpandedChange={setIsExpanded}>
-      <div className="rounded-2xl border border-border/60 bg-surface/20 px-3 py-2">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="text-[12px] font-medium text-foreground">Run task</p>
-              <div
-                className={`rounded-full flex items-center gap-1 border px-1.5 py-0.5 text-[10px] ${getStatusChipClass(status.tone)}`}
-              >
-                {status.label === "Running" ? (
-                  <Spinner className="h-3 w-3" size="sm" />
-                ) : null}
-                <span className="truncate">{status.label}</span>
-              </div>
-            </div>
-            <p className="mt-0.5 truncate font-mono text-[11px] text-foreground/72">
-              {runTaskInput.task}
-              {runTaskInput.path ? ` in ${runTaskInput.path}` : ""}
-            </p>
+      <div className="rounded-2xl border border-border/60 bg-surface/20 px-3 py-1.5">
+        <div className="flex items-center gap-2">
+          <p className="shrink-0 text-[12px] font-medium text-foreground">Run task</p>
+          <div
+            className={`shrink-0 rounded-full flex items-center gap-1 border px-1.5 py-0.5 text-[10px] ${getStatusChipClass(status.tone)}`}
+          >
+            {status.label === "Running" ? (
+              <Spinner className="h-3 w-3" size="sm" />
+            ) : null}
+            <span className="truncate">{status.label}</span>
           </div>
-
+          <p className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground/72">
+            {runTaskInput.task}
+            {runTaskInput.path ? ` in ${runTaskInput.path}` : ""}
+          </p>
           {isFinishedState ? (
             <Disclosure.Heading>
               <Button
@@ -266,18 +261,18 @@ export const RunTaskTool = memo(function RunTaskTool({
 
         <Disclosure.Content>
           <Disclosure.Body>
-            <div className="mt-2 overflow-hidden rounded-2xl border border-border/20 bg-surface">
-              <div className="border-b border-border/50 px-3.5 py-2 text-[9px] text-foreground">
+            <div className="mt-1.5 overflow-hidden rounded-2xl border border-border/20 bg-surface">
+              <div className="border-b border-border/50 px-3.5 py-1.5 text-[9px] text-foreground">
                 Run task
               </div>
 
-              <div className="px-3.5 py-3">
+              <div className="px-3.5 py-2">
                 <ScrollShadow className="max-h-[180px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground">
                   {terminalText}
                 </ScrollShadow>
 
                 {runTaskOutput ? (
-                  <div className="mt-3 flex items-center justify-between gap-3 text-[10px] text-foreground">
+                  <div className="mt-2 flex items-center justify-between gap-3 text-[10px] text-foreground">
                     <span className="truncate">
                       {runTaskOutput.script}
                       {runTaskOutput.phase === "completed"
@@ -294,7 +289,7 @@ export const RunTaskTool = memo(function RunTaskTool({
         </Disclosure.Content>
 
         {showApprovalActions ? (
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-1.5 flex flex-wrap gap-2">
             <Button
               size="sm"
               onPress={() => {
@@ -322,7 +317,7 @@ export const RunTaskTool = memo(function RunTaskTool({
         ) : null}
 
         {partErrorText && part.state !== "output-error" ? (
-          <div className="mt-3 rounded-xl border border-danger/20 bg-danger-soft px-3 py-2 text-xs text-danger-soft-foreground">
+          <div className="mt-2 rounded-xl border border-danger/20 bg-danger-soft px-3 py-2 text-xs text-danger-soft-foreground">
             {partErrorText}
           </div>
         ) : null}

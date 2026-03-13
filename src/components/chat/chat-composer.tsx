@@ -6,8 +6,10 @@ import StarterKit from "@tiptap/starter-kit";
 import { EditorContent, useEditor } from "@tiptap/react";
 import {
   Add01Icon,
+  AiIdeaIcon,
   ArrowDown01Icon,
   ArrowUp02Icon,
+  Attachment01Icon,
   Brain02Icon,
   Cancel01Icon,
 } from "@hugeicons/core-free-icons";
@@ -30,6 +32,7 @@ import {
   getAttachmentTone,
   type AttachmentKind,
 } from "@/lib/files/chat-attachment-types";
+import { applyThreadSettingsCacheUpdate } from "@/lib/threads/cache";
 import { PROVIDERS } from "@/lib/ai/providers/registry";
 import { api } from "@/trpc/react";
 
@@ -53,6 +56,7 @@ type ChatComposerProps = {
     modelId: string;
     reasoningEffort?: ReasoningEffort | null;
     text: string;
+    threadMode?: "chat" | "plan";
   }) => void;
   onStop?: () => void;
   onCancelEdit?: () => void;
@@ -61,9 +65,12 @@ type ChatComposerProps = {
   promptSeed?: string;
   promptSeedKey?: string | number;
   status?: "submitted" | "streaming" | "ready" | "error";
+  draftMode?: "chat" | "plan" | null;
+  persistThreadSelection?: boolean;
   threadId?: string;
   threadSelection?: {
     modelId: string | null;
+    mode?: "chat" | "plan";
     reasoningEffort?: ReasoningEffort | null;
   } | null;
 };
@@ -209,7 +216,7 @@ function ImagePreviewModal({
     <AnimatePresence>
       <motion.div
         animate={{ opacity: 1 }}
-        className="fixed inset-0 z-50 flex items-center justify-center"
+        className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center"
         exit={{ opacity: 0 }}
         initial={{ opacity: 0 }}
         onClick={onClose}
@@ -258,10 +265,12 @@ function ImagePreviewModal({
 export function ChatComposer({
   activeWorkspace,
   attachmentSeed = [],
+  draftMode = null,
   isEditing = false,
   onCancelEdit,
   onSend,
   onStop,
+  persistThreadSelection,
   promptSeed,
   promptSeedKey,
   status = "ready",
@@ -279,6 +288,11 @@ export function ChatComposer({
     useState<ReasoningEffort | null>(null);
   const [previewAttachment, setPreviewAttachment] =
     useState<ComposerAttachment | null>(null);
+  const [composerMenuOpen, setComposerMenuOpen] = useState(false);
+  const [planMode, setPlanMode] = useState(false);
+  const composerMenuRef = useRef<HTMLDivElement | null>(null);
+  const planModeInitScopeRef = useRef<string | null>(null);
+  const lastSyncedThreadModeRef = useRef<string | null>(null);
   const attachmentsRef = useRef<ComposerAttachment[]>([]);
   const threadPersistenceReadyRef = useRef(false);
   const modelMenuRef = useRef<HTMLDivElement | null>(null);
@@ -287,24 +301,65 @@ export function ChatComposer({
   const globalSelectionQuery = api.chatPreferences.get.useQuery();
   const initializedSelectionScopeRef = useRef<string | null>(null);
   const updateGlobalSelection = api.chatPreferences.updateGlobal.useMutation({
+    onMutate: (input) => {
+      const previous = utils.chatPreferences.get.getData();
+      utils.chatPreferences.get.setData(undefined, (current) => ({
+        mode:
+          input.mode !== undefined
+            ? (input.mode ?? null)
+            : (current?.mode ?? null),
+        modelId:
+          input.modelId !== undefined
+            ? input.modelId
+            : (current?.modelId ?? null),
+        reasoningEffort:
+          input.reasoningEffort !== undefined
+            ? (input.reasoningEffort ?? null)
+            : (current?.reasoningEffort ?? null),
+      }));
+      return { previous };
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previous) {
+        utils.chatPreferences.get.setData(undefined, context.previous);
+      }
+    },
     onSuccess: (data) => {
       utils.chatPreferences.get.setData(undefined, data);
     },
   });
   const updateThreadSelection = api.threads.updateChatSettings.useMutation({
+    onMutate: (input) => {
+      applyThreadSettingsCacheUpdate({
+        patch: {
+          ...(input.modelId === undefined
+            ? {}
+            : { chatModelId: input.modelId }),
+          ...(input.reasoningEffort === undefined
+            ? {}
+            : { chatReasoningEffort: input.reasoningEffort ?? null }),
+          ...(input.mode === undefined ? {} : { mode: input.mode }),
+        },
+        threadId: input.threadId,
+        utils,
+        workspaceId: activeWorkspace?.id,
+      });
+    },
+    onError: (_error, input) => {
+      void utils.threads.get.invalidate({ threadId: input.threadId });
+      void utils.threads.list.invalidate();
+    },
     onSuccess: (data) => {
-      utils.threads.get.setData({ threadId: data.threadId }, (current) =>
-        current
-          ? {
-              ...current,
-              thread: {
-                ...current.thread,
-                chatModelId: data.modelId,
-                chatReasoningEffort: data.reasoningEffort ?? null,
-              },
-            }
-          : current,
-      );
+      applyThreadSettingsCacheUpdate({
+        patch: {
+          chatModelId: data.modelId,
+          chatReasoningEffort: data.reasoningEffort ?? null,
+          mode: data.mode,
+        },
+        threadId: data.threadId,
+        utils,
+        workspaceId: activeWorkspace?.id,
+      });
     },
   });
 
@@ -331,7 +386,9 @@ export function ChatComposer({
       (model) =>
         getModelKey(model.provider, model.modelId) === selectedModelKey,
     ) ?? null;
-  const canPersistThreadSelection = Boolean(threadId && threadSelection);
+  const canPersistThreadSelection = Boolean(
+    threadId && threadSelection && (persistThreadSelection ?? true),
+  );
   const selectionScopeKey = threadId ?? "__global__";
   const hasThreadSelection = Boolean(threadSelection?.modelId);
   const preferredModelId = hasThreadSelection
@@ -393,10 +450,15 @@ export function ChatComposer({
     (
       modelId: string,
       reasoningEffort: ReasoningEffort | null,
-      options?: { skipGlobal?: boolean; skipThread?: boolean },
+      options?: {
+        mode?: "chat" | "plan";
+        skipGlobal?: boolean;
+        skipThread?: boolean;
+      },
     ) => {
       if (!options?.skipGlobal) {
         updateGlobalSelection.mutate({
+          mode: options?.mode,
           modelId,
           reasoningEffort,
         });
@@ -404,6 +466,7 @@ export function ChatComposer({
 
       if (!options?.skipThread && canPersistThreadSelection && threadId) {
         updateThreadSelection.mutate({
+          ...(options?.mode === undefined ? {} : { mode: options.mode }),
           modelId,
           reasoningEffort,
           threadId,
@@ -541,6 +604,38 @@ export function ChatComposer({
   ]);
 
   useEffect(() => {
+    if (!preferencesReady) return;
+
+    const currentThreadMode = threadSelection?.mode ?? null;
+
+    if (planModeInitScopeRef.current !== selectionScopeKey) {
+      planModeInitScopeRef.current = selectionScopeKey;
+      lastSyncedThreadModeRef.current = currentThreadMode;
+      const preferredMode = currentThreadMode
+        ? currentThreadMode
+        : draftMode
+          ? draftMode
+        : (globalSelectionQuery.data?.mode ?? "chat");
+      setPlanMode(preferredMode === "plan");
+      return;
+    }
+
+    if (
+      currentThreadMode &&
+      currentThreadMode !== lastSyncedThreadModeRef.current
+    ) {
+      lastSyncedThreadModeRef.current = currentThreadMode;
+      setPlanMode(currentThreadMode === "plan");
+    }
+  }, [
+    draftMode,
+    globalSelectionQuery.data?.mode,
+    preferencesReady,
+    selectionScopeKey,
+    threadSelection?.mode,
+  ]);
+
+  useEffect(() => {
     if (!selectedModelKey || availableModels.length === 0) {
       return;
     }
@@ -618,6 +713,12 @@ export function ChatComposer({
         !reasoningMenuRef.current.contains(event.target)
       )
         setReasoningMenuOpen(false);
+      if (
+        composerMenuRef.current &&
+        event.target instanceof Node &&
+        !composerMenuRef.current.contains(event.target)
+      )
+        setComposerMenuOpen(false);
     };
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
@@ -655,18 +756,22 @@ export function ChatComposer({
     threadPersistenceReadyRef.current = true;
 
     const persistedReasoningEffort = threadSelection.reasoningEffort ?? null;
+    const selectedMode = planMode ? "plan" : "chat";
     if (
       threadSelection.modelId === selectedModelKey &&
-      persistedReasoningEffort === selectedReasoningEffort
+      persistedReasoningEffort === selectedReasoningEffort &&
+      threadSelection.mode === selectedMode
     ) {
       return;
     }
 
     persistSelection(selectedModelKey, selectedReasoningEffort, {
+      mode: selectedMode,
       skipGlobal: true,
     });
   }, [
     canPersistThreadSelection,
+    planMode,
     persistSelection,
     selectedModelKey,
     selectedReasoningEffort,
@@ -775,6 +880,36 @@ export function ChatComposer({
     [persistSelection, selectedModelKey],
   );
 
+  const handleTogglePlanMode = useCallback(() => {
+    setPlanMode((prev) => {
+      const next = !prev;
+      if (selectedModelKey) {
+        persistSelection(selectedModelKey, selectedReasoningEffort, {
+          mode: next ? "plan" : "chat",
+        });
+      } else {
+        updateGlobalSelection.mutate({
+          mode: next ? "plan" : "chat",
+        });
+        if (canPersistThreadSelection && threadId) {
+          updateThreadSelection.mutate({
+            mode: next ? "plan" : "chat",
+            threadId,
+          });
+        }
+      }
+      return next;
+    });
+  }, [
+    canPersistThreadSelection,
+    persistSelection,
+    selectedModelKey,
+    selectedReasoningEffort,
+    threadId,
+    updateGlobalSelection,
+    updateThreadSelection,
+  ]);
+
   const handleSend = useCallback(async () => {
     if (!editor || !selectedModelKey || !onSend || isBusy) return;
     const text = editor.getText().trim();
@@ -793,6 +928,7 @@ export function ChatComposer({
         modelId: selectedModelKey,
         reasoningEffort: selectedReasoningEffort,
         text,
+        threadMode: planMode ? "plan" : "chat",
       });
     } catch {
       setAttachmentError("Unable to attach one or more selected files.");
@@ -807,6 +943,7 @@ export function ChatComposer({
     editor,
     isBusy,
     onSend,
+    planMode,
     selectedModelKey,
     selectedReasoningEffort,
   ]);
@@ -837,7 +974,7 @@ export function ChatComposer({
         type="file"
       />
 
-      <div className="w-full rounded-[20px] border border-border/50 dark:border-border/80 bg-background  dark:bg-surface p-2 shadow-[0_0_10px_rgba(0,0,0,0.05)]">
+      <div className="pointer-events-auto w-full rounded-[20px] border border-border/50 dark:border-border/80 bg-background  dark:bg-surface p-2 shadow-[0_0_10px_rgba(0,0,0,0.05)]">
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-1.5 px-2 pb-1.5">
             {attachments.map((attachment) => (
@@ -894,19 +1031,84 @@ export function ChatComposer({
 
         <div className="flex h-10 items-center justify-between px-1.5">
           <div className="flex items-center gap-0.5">
-            <button
-              className="flex border cursor-pointer border-border/50 dark:bg-background/50 bg-surface h-6 w-6 items-center justify-center rounded-[9px] text-muted transition-colors hover:text-foreground disabled:opacity-30"
-              disabled={!hasWorkspace}
-              onClick={() => void handlePickFiles()}
-              type="button"
-            >
-              <HugeiconsIcon
-                color="currentColor"
-                icon={Add01Icon}
-                size={18}
-                strokeWidth={1.5}
-              />
-            </button>
+            <div className="relative" ref={composerMenuRef}>
+              <button
+                className="flex border cursor-pointer border-border/50 dark:bg-background/50 bg-surface h-6 w-6 items-center justify-center rounded-[9px] text-muted transition-colors hover:text-foreground disabled:opacity-30"
+                disabled={!hasWorkspace}
+                onClick={() => setComposerMenuOpen((o) => !o)}
+                type="button"
+              >
+                <HugeiconsIcon
+                  color="currentColor"
+                  icon={Add01Icon}
+                  size={18}
+                  strokeWidth={1.5}
+                />
+              </button>
+
+              <AnimatePresence>
+                {composerMenuOpen && (
+                  <motion.div
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    className="absolute bottom-10 left-0 z-30 w-[220px] rounded-xl border border-border bg-overlay p-1 shadow-overlay"
+                    exit={{ opacity: 0, scale: 0.97, y: 6 }}
+                    initial={{ opacity: 0, scale: 0.97, y: 6 }}
+                    transition={{
+                      duration: 0.15,
+                      ease: [0.22, 1, 0.36, 1],
+                    }}
+                  >
+                    <button
+                      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground"
+                      onClick={() => {
+                        setComposerMenuOpen(false);
+                        void handlePickFiles();
+                      }}
+                      type="button"
+                    >
+                      <HugeiconsIcon
+                        color="currentColor"
+                        icon={Attachment01Icon}
+                        size={15}
+                        strokeWidth={1.5}
+                      />
+                      <span>Add photos & files</span>
+                    </button>
+
+                    <div className="mx-2 my-0.5 h-px bg-separator" />
+
+                    <button
+                      className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground"
+                      onClick={handleTogglePlanMode}
+                      type="button"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <HugeiconsIcon
+                          color="currentColor"
+                          icon={AiIdeaIcon}
+                          size={15}
+                          strokeWidth={1.5}
+                        />
+                        <span>Plan mode</span>
+                      </span>
+                      <span
+                        role="switch"
+                        aria-checked={planMode}
+                        className={`relative inline-flex h-[18px] w-8 shrink-0 items-center rounded-full transition-colors ${
+                          planMode ? "bg-accent" : "bg-default"
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                            planMode ? "translate-x-[14px]" : "translate-x-[2px]"
+                          }`}
+                        />
+                      </span>
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
             <div className="relative" ref={modelMenuRef}>
               <button
@@ -1033,6 +1235,19 @@ export function ChatComposer({
                     </motion.div>
                   )}
                 </AnimatePresence>
+              </div>
+            )}
+
+            {planMode && (
+              <div className="ml-1 flex items-center gap-1 border-l border-border/50 pl-2">
+                <HugeiconsIcon
+                  className="text-foreground"
+                  color="currentColor"
+                  icon={AiIdeaIcon}
+                  size={13}
+                  strokeWidth={1.5}
+                />
+                <span className="text-[13px] text-foreground">Plan</span>
               </div>
             )}
           </div>

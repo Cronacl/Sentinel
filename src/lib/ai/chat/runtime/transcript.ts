@@ -37,6 +37,7 @@ export function buildModelTranscript(
         (request.message ? [...transcript, request.message] : transcript);
 
     case "submit-tool-approval":
+    case "submit-plan-answer":
       return sourceTranscript;
 
     case "edit-user-message": {
@@ -87,7 +88,8 @@ export function getParentMessageId(
   switch (request.trigger) {
     case "submit-user-message":
       return request.message?.id ?? getLatestVisibleMessageId(allRecords);
-    case "submit-tool-approval": {
+    case "submit-tool-approval":
+    case "submit-plan-answer": {
       const assistantMessage = [...(request.messages ?? [])]
         .reverse()
         .find((message) => message.role === "assistant");

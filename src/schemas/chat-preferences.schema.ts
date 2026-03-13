@@ -1,14 +1,41 @@
 import { z } from "zod";
 
 import { REASONING_EFFORTS } from "@/lib/ai/providers/models";
+import { THREAD_MODES } from "@/lib/plan";
 
 const reasoningEffortSchema = z.enum(REASONING_EFFORTS);
 
-export const chatSelectionSchema = z.object({
-  modelId: z.string().trim().min(1, "Model ID is required."),
+const chatSelectionFieldsSchema = z.object({
+  mode: z.enum(THREAD_MODES).nullish(),
+  modelId: z.string().trim().min(1, "Model ID is required.").optional(),
   reasoningEffort: reasoningEffortSchema.nullish(),
 });
 
-export const threadChatSelectionSchema = chatSelectionSchema.extend({
-  threadId: z.string().min(1),
-});
+function hasChatSelectionUpdate(value: {
+  mode?: (typeof THREAD_MODES)[number] | null;
+  modelId?: string;
+  reasoningEffort?: (typeof REASONING_EFFORTS)[number] | null;
+}) {
+  return (
+    value.mode !== undefined ||
+    value.modelId !== undefined ||
+    value.reasoningEffort !== undefined
+  );
+}
+
+export const chatSelectionSchema = chatSelectionFieldsSchema.refine(
+  hasChatSelectionUpdate,
+  {
+    message: "At least one setting must be provided.",
+    path: ["modelId"],
+  },
+);
+
+export const threadChatSelectionSchema = chatSelectionFieldsSchema
+  .extend({
+    threadId: z.string().min(1),
+  })
+  .refine(hasChatSelectionUpdate, {
+    message: "At least one setting must be provided.",
+    path: ["threadId"],
+  });

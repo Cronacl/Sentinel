@@ -101,7 +101,7 @@ const ResultCard = memo(function ResultCard({
             ) : null}
           </div>
           {result.summary ? (
-            <p className="mt-1.5 line-clamp-2 text-[12px] leading-normal text-foreground/70">
+            <p className="mt-1.5 line-clamp-2 text-[12px] text-foreground/70">
               {truncate(result.summary, 240)}
             </p>
           ) : null}

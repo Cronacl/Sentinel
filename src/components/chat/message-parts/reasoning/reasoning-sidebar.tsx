@@ -1,7 +1,6 @@
 "use client";
 
-import { Cancel01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
+import { CloseButton, ScrollShadow } from "@heroui/react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 
 import { useRightSidebar } from "@/components/shell/shell-context";
@@ -112,34 +111,27 @@ export const ReasoningSidebar = memo(function ReasoningSidebar() {
       : title || "Thinking";
 
   return (
-    <div className="flex h-full w-full flex-col bg-transparent px-7 pb-6 pt-8">
-      <div className="mb-8 flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h2 className="text-[22px] font-medium text-foreground/78">
+    <div className="flex h-full w-full flex-col">
+      <header className="flex shrink-0 items-start gap-3 border-b border-border/20 px-5 pb-4 pt-5">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[15px] font-semibold leading-snug text-foreground">
             {sidebarTitle}
           </h2>
           {tokenCount !== undefined ? (
-            <p className="mt-2 text-[13px] text-muted/90">
+            <p className="mt-1.5 text-[11px] text-muted">
               {formatTokenCount(tokenCount)} reasoning tokens
             </p>
           ) : null}
         </div>
-        <button
-          className="flex h-8 w-8 items-center justify-center rounded-full text-muted/80 transition-colors hover:text-foreground/80"
-          onClick={handleClose}
-          type="button"
-        >
-          <HugeiconsIcon
-            color="currentColor"
-            icon={Cancel01Icon}
-            size={16}
-            strokeWidth={1.5}
-          />
-        </button>
-      </div>
+        <CloseButton
+          aria-label="Close reasoning sidebar"
+          className="mt-0.5 shrink-0"
+          onPress={handleClose}
+        />
+      </header>
 
-      <div className="sentinel-scroll-shell min-h-0 flex-1">
-        <div className="sentinel-scroll-area flex h-full flex-col">
+      <div className="min-h-0 flex-1">
+        <ScrollShadow className="h-full px-7 pb-6 pt-5" orientation="vertical">
           {parsedSteps.length === 0 ? (
             <div className="flex items-center justify-center py-8 text-sm text-default-400">
               No thinking content available
@@ -170,7 +162,7 @@ export const ReasoningSidebar = memo(function ReasoningSidebar() {
               ) : null}
             </div>
           )}
-        </div>
+        </ScrollShadow>
       </div>
     </div>
   );

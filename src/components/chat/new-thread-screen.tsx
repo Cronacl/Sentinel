@@ -16,6 +16,7 @@ import { SentinelLogoBadge } from "@/components/shared/logo";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
+import { applyThreadSettingsCacheUpdate } from "@/lib/threads/cache";
 import { CreateWorkspaceModal } from "@/components/workspaces/create-workspace-modal";
 import { api } from "@/trpc/react";
 import type { ChatOnDataCallback } from "ai";
@@ -38,6 +39,14 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [generatedTitle, setGeneratedTitle] = useState<string | null>(null);
+  const [draftThreadMode, setDraftThreadMode] = useState<
+    "chat" | "plan" | null
+  >(null);
+  const [draftThreadSelection, setDraftThreadSelection] = useState<{
+    modelId: string | null;
+    mode: "chat" | "plan";
+    reasoningEffort: ReasoningEffort | null;
+  } | null>(null);
   const [draftThreadId, setDraftThreadId] = useState(
     () => threadId ?? crypto.randomUUID(),
   );
@@ -51,6 +60,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   } = useChatScrollControl(draftThreadId);
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
   const hasHandedOffRef = useRef(false);
+  const startPlanImplementationLockRef = useRef(false);
 
   const selectWorkspace = api.workspaces.select.useMutation({
     onMutate: async ({ workspaceId }) => {
@@ -151,6 +161,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
               }
             : current,
         );
+        void utils.threads.list.invalidate();
       }
 
       if (
@@ -181,7 +192,14 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     onFinish: handleFinish,
     onError: handleError,
   });
-  const { addToolApprovalResponse, messages, sendMessage, status, stop } = chat;
+  const {
+    addToolApprovalResponse,
+    answerPlanQuestions,
+    messages,
+    sendMessage,
+    status,
+    stop,
+  } = chat;
 
   const hasMessages = messages.length > 0;
   const isBusy = status === "submitted" || status === "streaming";
@@ -190,24 +208,78 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     { enabled: hasMessages },
   );
 
+  useEffect(() => {
+    if (!isBusy) {
+      startPlanImplementationLockRef.current = false;
+    }
+  }, [isBusy]);
+
   const handleSend = useCallback(
     ({
       files,
       modelId,
       reasoningEffort,
       text,
+      threadMode = "chat",
     }: {
       files?: FileUIPart[];
       modelId: string;
       reasoningEffort?: ReasoningEffort | null;
       text: string;
+      threadMode?: "chat" | "plan";
     }) => {
       setChatError(null);
       setGeneratedTitle(null);
-      void sendMessage({ files, modelId, reasoningEffort, text });
+      setDraftThreadMode(threadMode);
+      setDraftThreadSelection({
+        modelId,
+        mode: threadMode,
+        reasoningEffort: reasoningEffort ?? null,
+      });
+      if (selectedWorkspace) {
+        const now = new Date();
+        utils.threads.get.setData(
+          { threadId: draftThreadId },
+          (current) =>
+            ({
+              messages: current?.messages ?? [],
+              thread: {
+                archivedAt: current?.thread.archivedAt ?? null,
+                chatModelId: modelId,
+                chatReasoningEffort: reasoningEffort ?? null,
+                createdAt: current?.thread.createdAt ?? now,
+                id: draftThreadId,
+                mode: threadMode,
+                pinnedAt: current?.thread.pinnedAt ?? null,
+                summary: current?.thread.summary ?? null,
+                title:
+                  current?.thread.title ||
+                  text.trim().slice(0, 60) ||
+                  "New thread",
+                updatedAt: now,
+              },
+              workspace:
+                current?.workspace ?? {
+                  createdAt: selectedWorkspace.createdAt,
+                  description: selectedWorkspace.description,
+                  id: selectedWorkspace.id,
+                  name: selectedWorkspace.name,
+                  rootPath: selectedWorkspace.rootPath,
+                  updatedAt: selectedWorkspace.updatedAt,
+                },
+            }),
+        );
+      }
+      void sendMessage({ files, modelId, reasoningEffort, text, threadMode });
       void utils.threads.list.invalidate();
     },
-    [sendMessage, utils.threads.list],
+    [
+      draftThreadId,
+      selectedWorkspace,
+      sendMessage,
+      utils.threads.get,
+      utils.threads.list,
+    ],
   );
 
   const handleApproveTool = useCallback(
@@ -228,6 +300,99 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     [addToolApprovalResponse],
   );
 
+  const handleAnswerPlanQuestions = useCallback(
+    ({
+      answers,
+      assistantMessageId,
+      questionSetId,
+    }: {
+      answers: Parameters<typeof answerPlanQuestions>[0]["answers"];
+      assistantMessageId: string;
+      questionSetId: string;
+    }) => {
+      void answerPlanQuestions({ answers, assistantMessageId, questionSetId });
+    },
+    [answerPlanQuestions],
+  );
+
+  const handleStartPlanImplementation = useCallback(() => {
+    if (isBusy || startPlanImplementationLockRef.current) {
+      return;
+    }
+    startPlanImplementationLockRef.current = true;
+
+    const cachedThread = utils.threads.get.getData({ threadId: draftThreadId })?.thread;
+    const globalSelection = utils.chatPreferences.get.getData();
+    const resolvedSelection = threadDetailsQuery.data
+      ? {
+          modelId:
+            threadDetailsQuery.data.thread.chatModelId ??
+            draftThreadSelection?.modelId ??
+            globalSelection?.modelId ??
+            null,
+          reasoningEffort:
+            ((threadDetailsQuery.data.thread.chatReasoningEffort as
+              | ReasoningEffort
+              | null) ??
+              draftThreadSelection?.reasoningEffort) ??
+            ((globalSelection?.reasoningEffort as ReasoningEffort | null) ??
+              null),
+        }
+      : {
+          modelId:
+            draftThreadSelection?.modelId ??
+            cachedThread?.chatModelId ??
+            globalSelection?.modelId ??
+            null,
+          reasoningEffort:
+            draftThreadSelection?.reasoningEffort ??
+            ((cachedThread?.chatReasoningEffort as ReasoningEffort | null) ??
+              null) ??
+            ((globalSelection?.reasoningEffort as ReasoningEffort | null) ??
+              null),
+        };
+
+    if (!resolvedSelection.modelId) {
+      startPlanImplementationLockRef.current = false;
+      setChatError("Select a model before starting implementation.");
+      return;
+    }
+
+    setChatError(null);
+    setDraftThreadMode("chat");
+    setDraftThreadSelection({
+      modelId: resolvedSelection.modelId,
+      mode: "chat",
+      reasoningEffort: resolvedSelection.reasoningEffort,
+    });
+    applyThreadSettingsCacheUpdate({
+      patch: {
+        chatModelId: resolvedSelection.modelId,
+        chatReasoningEffort: resolvedSelection.reasoningEffort,
+        mode: "chat",
+      },
+      threadId: draftThreadId,
+      utils,
+      workspaceId: selectedWorkspace?.id,
+    });
+
+    void sendMessage({
+      modelId: resolvedSelection.modelId,
+      reasoningEffort: resolvedSelection.reasoningEffort,
+      text: "Implement Plan",
+      threadMode: "chat",
+    });
+    void utils.threads.list.invalidate();
+  }, [
+    draftThreadId,
+    draftThreadSelection,
+    isBusy,
+    selectedWorkspace?.id,
+    sendMessage,
+    threadDetailsQuery.data,
+    utils,
+  ]);
+
   useEffect(() => {
     if (!threadId) return;
     hasHandedOffRef.current = false;
@@ -241,13 +406,15 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       hasHandedOffRef.current = false;
       setChatError(null);
       setGeneratedTitle(null);
+      setDraftThreadMode(utils.chatPreferences.get.getData()?.mode ?? null);
+      setDraftThreadSelection(null);
       setDraftThreadId(crypto.randomUUID());
     };
 
     window.addEventListener("sentinel:new-thread", handleNewThread);
     return () =>
       window.removeEventListener("sentinel:new-thread", handleNewThread);
-  }, [threadId]);
+  }, [threadId, utils.chatPreferences.get]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -273,7 +440,8 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       "",
       `/thread/${draftThreadId}`,
     );
-  }, [draftThreadId, hasMessages, threadId]);
+    router.refresh();
+  }, [draftThreadId, hasMessages, router, threadId]);
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -291,6 +459,23 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   }, []);
 
   if (hasMessages) {
+    const resolvedThreadSelection = threadDetailsQuery.data
+      ? {
+          modelId:
+            threadDetailsQuery.data.thread.chatModelId ??
+            draftThreadSelection?.modelId ??
+            null,
+          mode:
+            threadDetailsQuery.data.thread.mode ??
+            draftThreadSelection?.mode,
+          reasoningEffort:
+            ((threadDetailsQuery.data.thread.chatReasoningEffort as
+              | ReasoningEffort
+              | null) ??
+              draftThreadSelection?.reasoningEffort) ??
+            null,
+        }
+      : draftThreadSelection;
     const firstText =
       messages[0]?.parts
         ?.find(
@@ -318,9 +503,11 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                     message={message}
                     isStreaming={isBusy && idx === messages.length - 1}
                     onApproveTool={handleApproveTool}
-                    onDenyTool={handleDenyTool}
-                  />
-                ))}
+                  onAnswerPlanQuestions={handleAnswerPlanQuestions}
+                  onDenyTool={handleDenyTool}
+                  onStartPlanImplementation={handleStartPlanImplementation}
+                />
+              ))}
 
                 {chatError && (
                   <div className="rounded-lg border border-danger-soft-hover bg-danger-soft px-3 py-2.5">
@@ -334,25 +521,17 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
 
             <div
               ref={composerDockRef}
-              className="sticky bottom-0 z-50 mx-auto w-full max-w-2xl px-6 pb-3 pt-2"
+              className="pointer-events-none sticky bottom-0 z-50 mx-auto w-full max-w-2xl px-6 pb-3 pt-2"
             >
               <ChatComposer
                 activeWorkspace={selectedWorkspace}
+                draftMode={resolvedThreadSelection?.mode ?? draftThreadMode}
                 onSend={handleSend}
                 onStop={stop}
+                persistThreadSelection={Boolean(threadDetailsQuery.data)}
                 status={status}
                 threadId={draftThreadId}
-                threadSelection={
-                  threadDetailsQuery.data
-                    ? {
-                        modelId: threadDetailsQuery.data.thread.chatModelId,
-                        reasoningEffort:
-                          (threadDetailsQuery.data.thread
-                            .chatReasoningEffort as ReasoningEffort | null) ??
-                          null,
-                      }
-                    : null
-                }
+                threadSelection={resolvedThreadSelection}
               />
             </div>
           </div>
@@ -480,12 +659,16 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             </div>
           </div>
 
-          <div className="sticky bottom-0 z-50 mx-auto w-full max-w-2xl px-6 pb-3 pt-2">
+          <div className="pointer-events-none sticky bottom-0 z-50 mx-auto w-full max-w-2xl px-6 pb-3 pt-2">
             <ChatComposer
               activeWorkspace={selectedWorkspace}
+              draftMode={draftThreadMode}
               onSend={handleSend}
               onStop={stop}
+              persistThreadSelection={false}
               status={status}
+              threadId={draftThreadId}
+              threadSelection={draftThreadSelection}
             />
           </div>
         </div>

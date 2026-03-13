@@ -17,7 +17,14 @@ const aiState = {
   streamChunks: [],
 };
 
-const createAgentUIStream = mock(async () => ({ kind: "agent-ui-stream" }));
+const createAgentUIStream = mock(async (args) => {
+  if (aiTestState.agentConfig?.prepareCall && args.options) {
+    aiTestState.prepared = aiTestState.agentConfig.prepareCall({
+      options: args.options,
+    });
+  }
+  return { kind: "agent-ui-stream" };
+});
 const createUIMessageStream = mock(({ execute, onFinish }) => {
   const writer = {
     merge: mock(() => {}),
@@ -38,6 +45,7 @@ const createUIMessageStreamResponse = mock(async ({ headers, stream }) => {
   return new Response("ok", { headers, status: 200 });
 });
 const generateId = mock(() => "stream-id");
+const hasToolCall = mock((toolName) => ({ kind: "has-tool-call", toolName }));
 const smoothStream = mock(() => undefined);
 const stepCountIs = mock(() => ({ kind: "stop-when" }));
 const tool = mock((config) => config);
@@ -93,6 +101,7 @@ const validateThreadUIMessage = mock(async (message) => message);
 const validateThreadUIMessages = mock(async (messages) => messages);
 
 const loadThreadMessages = mock(async () => []);
+const loadThread = mock(async () => null);
 const ensureThread = mock(async () => ({ created: true }));
 const updateThreadChatSettings = mock(() => {});
 const upsertMessage = mock(() => {});
@@ -142,12 +151,22 @@ const getWebFetchSettings = mock(async () => ({
   batchEnabled: false,
   batchLimit: 10,
 }));
+const getThreadPlanState = mock(async () => ({
+  pendingQuestionSet: null,
+  plan: null,
+}));
+const answerThreadPlanQuestionSet = mock(async () => ({
+  answers: [],
+  questionSetId: "question-set-1",
+  status: "answered",
+}));
 
 mock.module("ai", () => ({
   createAgentUIStream,
   createUIMessageStream,
   createUIMessageStreamResponse,
   generateId,
+  hasToolCall,
   smoothStream,
   stepCountIs,
   tool,
@@ -221,6 +240,109 @@ mock.module("./tools/forget-memory", () => ({
   forgetMemoryOutputSchema: z.object({}),
 }));
 
+mock.module("./tools/create-plan", () => ({
+  createPlanInputSchema: z.object({}),
+  createPlanOutputSchema: z.object({}),
+  executeCreatePlan: mock(async () => ({
+    audience: "technical",
+    document: "# Plan\n\n## Overview\n\nSummary",
+    goal: "Goal",
+    planId: "plan-1",
+    status: "created",
+    summary: "Summary",
+    taskCount: 2,
+    title: "Plan",
+  })),
+}));
+
+mock.module("./tools/update-plan", () => ({
+  executeUpdatePlan: mock(async () => ({
+    audience: "technical",
+    document: "# Plan\n\n## Overview\n\nSummary",
+    goal: "Goal",
+    planId: "plan-1",
+    summary: "Summary",
+    title: "Plan",
+  })),
+  updatePlanInputSchema: z.object({}),
+  updatePlanOutputSchema: z.object({}),
+}));
+
+mock.module("./tools/manage-task", () => ({
+  executeManageTask: mock(async () => ({
+    action: "update",
+    planId: "plan-1",
+    task: {
+      description: null,
+      id: "task-1",
+      status: "pending",
+      title: "Task",
+    },
+  })),
+  manageTaskInputSchema: z.object({}),
+  manageTaskOutputSchema: z.object({}),
+}));
+
+mock.module("./tools/ask-question", () => {
+  const askQuestionInputItemSchema = z.object({
+    allowMultiple: z.boolean().optional().describe("When true the user can select multiple options."),
+    header: z.string().trim().min(1).max(80),
+    id: z.string().trim().min(1).max(80).optional(),
+    options: z.array(z.object({
+      description: z.string().trim().min(1).max(400),
+      label: z.string().trim().min(1).max(160),
+    })).min(2).max(8),
+    question: z.string().trim().min(1).max(400),
+  });
+
+  const askQuestionInputSchema = z.object({
+    questions: z.array(askQuestionInputItemSchema).min(1).max(6),
+  });
+
+  const askQuestionOutputSchema = z.object({
+    answers: z.any().nullable(),
+    questionSetId: z.string(),
+    questions: z.any().array().min(1).max(3),
+    status: z.enum(["pending", "answered"]),
+  });
+
+  function trimToLength(v, max) { return v.trim().slice(0, max).trim(); }
+
+  function sanitizeAskQuestionInput(input) {
+    const questions = input.questions.slice(0, 3).map((q) => {
+      const seen = new Set();
+      const options = q.options
+        .map((o) => ({ description: trimToLength(o.description, 240), label: trimToLength(o.label, 80) }))
+        .filter((o) => o.label.length > 0 && o.description.length > 0 && !seen.has(o.label.toLowerCase()) && seen.add(o.label.toLowerCase()))
+        .slice(0, 4);
+      return {
+        ...(q.allowMultiple ? { allowMultiple: true } : {}),
+        header: trimToLength(q.header, 24),
+        id: q.id ? trimToLength(q.id, 80) : undefined,
+        options,
+        question: trimToLength(q.question, 240),
+      };
+    }).filter((q) => q.options.length >= 2);
+    if (questions.length === 0) throw new Error("Need at least one question with 2+ options");
+    return { questions };
+  }
+
+  async function executeAskQuestion({ input, runtime }) {
+    const sanitized = sanitizeAskQuestionInput(input);
+    const { createThreadPlanQuestionSet } = await import("@/lib/plan/service");
+    const questions = sanitized.questions.map((q, i) => ({ ...q, id: q.id || `q-${i}` }));
+    const qs = await createThreadPlanQuestionSet({ questions, threadId: runtime.threadId });
+    return { answers: null, questionSetId: qs.id, questions: qs.questions, status: "pending" };
+  }
+
+  return {
+    askQuestionInputSchema,
+    askQuestionOutputSchema,
+    executeAskQuestion,
+    sanitizeAskQuestionInput,
+  };
+});
+
 mock.module("./runtime/finalize", () => ({
   buildPersistedAssistantMessage,
 }));
@@ -243,6 +365,7 @@ mock.module("../messages/ui", () => ({
 mock.module("./persistence", () => ({
   clearActiveStream,
   ensureThread,
+  loadThread,
   loadThreadMessages,
   setActiveMessage,
   setActiveStream,
@@ -256,6 +379,17 @@ mock.module("@/lib/streams", () => ({
   streamContext: {
     createNewResumableStream,
   },
+}));
+
+mock.module("@/lib/plan/service", () => ({
+  answerThreadPlanQuestionSet,
+  createThreadPlanQuestionSet: mock(
+    async ({ questions }: { questions: unknown[] }) => ({
+      id: "qs-1",
+      questions,
+    }),
+  ),
+  getThreadPlanState,
 }));
 
 mock.module("./runtime/workspace", () => ({
@@ -381,6 +515,7 @@ function createRetryRequest(
 
 beforeEach(() => {
   aiTestState.agentConfig = null;
+  aiTestState.prepared = null;
   aiState.streamChunks = [];
   aiState.assistantResponseMessage = {
     id: "assistant-response",
@@ -390,6 +525,7 @@ beforeEach(() => {
   };
 
   loadThreadMessages.mockImplementation(async () => []);
+  loadThread.mockImplementation(async () => null);
   resolveThreadTitleModel.mockImplementation(async () => resolvedTitleModel);
   generateThreadTitle.mockImplementation(async () => "Fast title");
   retrieveRelevantMemories.mockImplementation(async () => []);
@@ -433,6 +569,15 @@ beforeEach(() => {
     batchEnabled: false,
     batchLimit: 10,
   }));
+  getThreadPlanState.mockImplementation(async () => ({
+    pendingQuestionSet: null,
+    plan: null,
+  }));
+  answerThreadPlanQuestionSet.mockImplementation(async () => ({
+    answers: [],
+    questionSetId: "question-set-1",
+    status: "answered",
+  }));
   getWorkspaceRootPath.mockImplementation(async () => "/tmp/workspace-1");
 });
 
@@ -456,26 +601,32 @@ describe("runThreadChat title generation", () => {
       model: resolvedTitleModel,
     });
     expect(updateThreadChatSettings).toHaveBeenCalledWith("thread-1", {
+      mode: "chat",
       modelId: "openai:gpt-5.2",
       reasoningEffort: "high",
     });
     expect(updateThreadTitle).toHaveBeenCalledWith("thread-1", "Fast title");
-    expect(aiTestState.agentConfig?.instructions).toContain(
+    expect(aiTestState.prepared?.instructions).toContain(
       "Default directory: /tmp/workspace-1",
     );
-    expect(aiTestState.agentConfig?.instructions).toContain(
+    expect(aiTestState.prepared?.instructions).toContain(
       "Permission mode: default",
     );
-    expect(aiTestState.agentConfig?.tools).toHaveProperty("list");
-    expect(aiTestState.agentConfig?.tools).toHaveProperty("grep");
-    expect(aiTestState.agentConfig?.tools).toHaveProperty("shell_command");
-    expect(aiTestState.agentConfig?.tools).toHaveProperty("search_memory");
-    expect(aiTestState.agentConfig?.tools).toHaveProperty("save_memory");
-    expect(aiTestState.agentConfig?.tools).toHaveProperty("forget_memory");
-    expect(aiTestState.agentConfig?.tools).toHaveProperty("websearch");
+    expect(aiTestState.prepared?.tools).toHaveProperty("list");
+    expect(aiTestState.prepared?.tools).toHaveProperty("grep");
+    expect(aiTestState.prepared?.tools).toHaveProperty("shell_command");
+    expect(aiTestState.prepared?.tools).toHaveProperty("search_memory");
+    expect(aiTestState.prepared?.tools).toHaveProperty("save_memory");
+    expect(aiTestState.prepared?.tools).toHaveProperty("forget_memory");
+    expect(aiTestState.prepared?.tools).toHaveProperty("websearch");
   });
 
   it("skips title generation for non-new threads", async () => {
+    loadThread.mockImplementation(async () => ({
+      archivedAt: null,
+      id: "thread-1",
+      mode: "chat",
+    }));
     loadThreadMessages.mockImplementation(async () => [
       createPersistedUserMessage("Existing conversation"),
     ]);
@@ -528,6 +679,7 @@ describe("runThreadChat title generation", () => {
       "user-1",
       "workspace-1",
       "   ",
+      "chat",
     );
     expect(resolveThreadTitleModel).not.toHaveBeenCalled();
     expect(generateThreadTitle).not.toHaveBeenCalled();
@@ -601,21 +753,23 @@ describe("runThreadChat approvals and lifecycle", () => {
 
     await runThreadChat(createSubmitRequest(), "user-1");
 
-    expect(aiTestState.agentConfig?.tools).toMatchObject({
+    expect(aiTestState.prepared?.tools).toMatchObject({
       search_memory: expect.any(Object),
       save_memory: expect.any(Object),
       forget_memory: expect.any(Object),
       websearch: expect.any(Object),
       webfetch: expect.any(Object),
     });
-    expect(Object.keys(aiTestState.agentConfig?.tools ?? {})).toEqual([
-      "search_memory",
-      "save_memory",
-      "forget_memory",
-      "websearch",
-      "webfetch",
-    ]);
-    expect(aiTestState.agentConfig?.instructions).toContain(
+    const toolNames = Object.keys(aiTestState.prepared?.tools ?? {});
+    expect(toolNames).toContain("search_memory");
+    expect(toolNames).toContain("save_memory");
+    expect(toolNames).toContain("forget_memory");
+    expect(toolNames).toContain("websearch");
+    expect(toolNames).toContain("webfetch");
+    expect(toolNames).not.toContain("list");
+    expect(toolNames).not.toContain("edit");
+    expect(toolNames).not.toContain("shell_command");
+    expect(aiTestState.prepared?.instructions).toContain(
       "Workspace tools are currently unavailable because there is no selected workspace root.",
     );
   });
@@ -642,11 +796,145 @@ describe("runThreadChat approvals and lifecycle", () => {
     await runThreadChat(createSubmitRequest(), "user-1");
 
     expect(
-      await aiTestState.agentConfig?.tools.list.needsApproval({}, {}),
+      await aiTestState.prepared?.tools.list.needsApproval({}, {}),
     ).toBe(true);
     expect(
-      await aiTestState.agentConfig?.tools.edit.needsApproval({}, {}),
+      await aiTestState.prepared?.tools.edit.needsApproval({}, {}),
     ).toBe(false);
+  });
+
+  it("builds a planning-only agent for plan-mode threads", async () => {
+    await runThreadChat(
+      {
+        ...createSubmitRequest(),
+        threadMode: "plan",
+      },
+      "user-1",
+    );
+
+    expect(Object.keys(aiTestState.prepared?.tools ?? {})).toEqual([
+      "list",
+      "glob",
+      "read",
+      "grep",
+      "create_plan",
+      "update_plan",
+      "manage_task",
+      "ask_question",
+    ]);
+    expect(aiTestState.prepared?.instructions).toContain(
+      "This thread is in plan mode.",
+    );
+    expect(aiTestState.prepared?.instructions).toContain(
+      "Gather context from available tools first",
+    );
+    expect(ensureThread).toHaveBeenCalledWith(
+      "thread-1",
+      "user-1",
+      "workspace-1",
+      "Summarize the refactor",
+      "plan",
+    );
+  });
+
+  it("applies a requested mode change before building an existing thread turn", async () => {
+    loadThread.mockImplementation(async () => ({
+      archivedAt: null,
+      id: "thread-1",
+      mode: "chat",
+    }));
+
+    await runThreadChat(
+      {
+        ...createSubmitRequest(),
+        threadMode: "plan",
+      },
+      "user-1",
+    );
+
+    expect(Object.keys(aiTestState.prepared?.tools ?? {})).toEqual([
+      "list",
+      "glob",
+      "read",
+      "grep",
+      "create_plan",
+      "update_plan",
+      "manage_task",
+      "ask_question",
+    ]);
+    expect(updateThreadChatSettings).toHaveBeenCalledWith("thread-1", {
+      mode: "plan",
+      modelId: "openai:gpt-5.2",
+      reasoningEffort: "high",
+    });
+  });
+
+  it("persists plan answers before continuing a plan-mode assistant turn", async () => {
+    loadThread.mockImplementation(async () => ({
+      archivedAt: null,
+      id: "thread-1",
+      mode: "plan",
+    }));
+
+    const assistantMessage = {
+      id: "assistant-plan",
+      metadata: {
+        branchId: "branch-1",
+        parentMessageId: "user-message-1",
+        status: "completed",
+      },
+      parts: [
+        {
+          output: {
+            answers: [
+              {
+                answer: "Thread-scoped",
+                optionLabel: "Thread-scoped",
+                questionId: "q-1",
+              },
+            ],
+            questionSetId: "question-set-1",
+            questions: [],
+            status: "answered",
+          },
+          state: "output-available",
+          toolCallId: "tool-call-plan-1",
+          type: "tool-ask_question",
+        },
+      ],
+      role: "assistant",
+    };
+
+    await runThreadChat(
+      {
+        id: "thread-1",
+        messages: [createUserMessage("Plan this"), assistantMessage],
+        planAnswers: [
+          {
+            answer: "Thread-scoped",
+            optionLabel: "Thread-scoped",
+            questionId: "q-1",
+          },
+        ],
+        planQuestionSetId: "question-set-1",
+        trigger: "submit-plan-answer",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+
+    expect(answerThreadPlanQuestionSet).toHaveBeenCalledWith({
+      answers: [
+        {
+          answer: "Thread-scoped",
+          optionLabel: "Thread-scoped",
+          questionId: "q-1",
+        },
+      ],
+      questionSetId: "question-set-1",
+      threadId: "thread-1",
+    });
+    expect(setActiveMessage).toHaveBeenCalledWith("thread-1", "assistant-plan");
   });
 
   it("retrieves memory for the system prompt and autosaves after success", async () => {

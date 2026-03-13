@@ -28,6 +28,11 @@ import {
   extractLatestUserText,
   retrieveRelevantMemories,
 } from "@/lib/memory/service";
+import {
+  getThreadPlanState,
+  answerThreadPlanQuestionSet,
+} from "@/lib/plan/service";
+import { buildPlanPromptLines, normalizeThreadMode } from "@/lib/plan";
 import { resolveThreadTitleModel } from "../title/model";
 import { generateThreadTitle } from "../title/generate";
 import { parseRequest } from "./parse-request";
@@ -63,8 +68,12 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
   }
 
   const allRecords = await persist.loadThreadMessages(request.threadId);
+  const existingThread = await persist.loadThread(request.threadId);
   const transcript = buildActiveThreadMessages(allRecords);
-  const isNewThread = allRecords.length === 0;
+  const threadMode = normalizeThreadMode(
+    request.threadMode ?? existingThread?.mode,
+  );
+  const isNewThread = !existingThread;
   const targetMessage = request.messageId
     ? allRecords.find((m) => m.messageId === request.messageId)
     : undefined;
@@ -83,14 +92,24 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
     request.userId,
     request.workspaceId,
     fallbackTitle,
+    threadMode,
   );
 
-  if (request.modelId) {
-    persist.updateThreadChatSettings(request.threadId, {
-      modelId: request.modelId,
-      reasoningEffort: request.reasoningEffort ?? null,
+  if (request.trigger === "submit-plan-answer" && request.planQuestionSetId) {
+    await answerThreadPlanQuestionSet({
+      answers: request.planAnswers ?? [],
+      questionSetId: request.planQuestionSetId,
+      threadId: request.threadId,
     });
   }
+
+  persist.updateThreadChatSettings(request.threadId, {
+    ...(request.modelId ? { modelId: request.modelId } : {}),
+    ...(request.reasoningEffort !== undefined
+      ? { reasoningEffort: request.reasoningEffort ?? null }
+      : {}),
+    mode: threadMode,
+  });
 
   if (
     request.message &&
@@ -134,8 +153,12 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
   const toolApprovalPolicies = await getToolApprovalPolicies(request.userId);
   const webFetchSettings = await getWebFetchSettings(request.userId);
   const toolsEnabled = Boolean(workspaceRoot);
+  const planState = await getThreadPlanState({
+    threadId: request.threadId,
+  }).catch(() => ({ pendingQuestionSet: null, plan: null }));
   const continuationAssistant =
-    request.trigger === "submit-tool-approval"
+    request.trigger === "submit-tool-approval" ||
+    request.trigger === "submit-plan-answer"
       ? [...modelTranscript]
           .reverse()
           .find((message) => message.role === "assistant")
@@ -208,26 +231,18 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
     userId: request.userId,
     workspaceId: request.workspaceId,
   }).catch(() => []);
-  const systemPrompt = await getSystemPrompt(request.userId, {
+  const baseSystemPrompt = await getSystemPrompt(request.userId, {
     memory: buildMemoryPromptLines(retrievedMemories),
   });
+  const planPromptLines = buildPlanPromptLines(planState.plan);
+  const systemPrompt =
+    planPromptLines.length > 0
+      ? [baseSystemPrompt, ...planPromptLines].filter(Boolean).join("\n\n")
+      : baseSystemPrompt;
   const agent = createThreadAgent({
     attachmentDownload: createAttachmentDownloadHandler(),
-    ...(workspaceRoot ? { defaultDirectory: workspaceRoot } : {}),
     languageModel: resolvedModel.languageModel,
-    memorySettings,
-    permissionMode,
     providerOptions: resolvedModel.providerOptions,
-    searchProviders,
-    searchSettings,
-    sourceMessageId: parentId,
-    systemPrompt,
-    threadId: request.threadId,
-    userId: request.userId,
-    toolApprovalPolicies,
-    toolsEnabled,
-    webFetchSettings,
-    workspaceId: request.workspaceId,
   });
 
   const tracker = createReasoningMetadataTracker({
@@ -253,6 +268,22 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
               ? error.message
               : String(error ?? "Unknown error");
           return streamErrorMessage;
+        },
+        options: {
+          ...(workspaceRoot ? { defaultDirectory: workspaceRoot } : {}),
+          memorySettings,
+          permissionMode,
+          searchProviders,
+          searchSettings,
+          sourceMessageId: parentId,
+          systemPrompt,
+          threadId: request.threadId,
+          threadMode,
+          toolApprovalPolicies,
+          toolsEnabled,
+          userId: request.userId,
+          webFetchSettings,
+          workspaceId: request.workspaceId,
         },
         originalMessages: modelTranscript as never,
         sendReasoning: true,

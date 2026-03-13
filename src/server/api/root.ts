@@ -8,6 +8,7 @@ import { memoryRouter } from "@/server/api/routers/memory";
 import { memorySettingsRouter } from "@/server/api/routers/memory-settings";
 import { messagesRouter } from "@/server/api/routers/messages";
 import { modelsRouter } from "@/server/api/routers/models";
+import { planRouter } from "@/server/api/routers/plan";
 import { personalizationRouter } from "@/server/api/routers/personalization";
 import { providersRouter } from "@/server/api/routers/providers";
 import { searchProvidersRouter } from "@/server/api/routers/search-providers";
@@ -33,6 +34,7 @@ export const appRouter = createTRPCRouter({
   memorySettings: memorySettingsRouter,
   messages: messagesRouter,
   models: modelsRouter,
+  plan: planRouter,
   personalization: personalizationRouter,
   providers: providersRouter,
   searchProviders: searchProvidersRouter,

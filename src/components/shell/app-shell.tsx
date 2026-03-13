@@ -123,7 +123,7 @@ export function AppShell({ children }: PropsWithChildren) {
   return (
     <ShellProvider>
       <ShellWarmCache />
-      <div className="flex h-dvh overflow-hidden">
+      <div className="flex h-dvh overflow-clip">
         <LeftSidebar>
           <div className="flex h-full flex-col">
             <SidebarWindowChrome />
@@ -133,7 +133,7 @@ export function AppShell({ children }: PropsWithChildren) {
           </div>
         </LeftSidebar>
 
-        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip">
           {children}
         </main>
 

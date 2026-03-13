@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 
 import { db } from "@/server/db";
 import { threadMessages, threads } from "@/server/db/schema";
+import type { ThreadMode } from "@/lib/plan";
 
 import type { PersistedThreadMessageRecord } from "../messages/branches";
 import {
@@ -17,15 +18,16 @@ export async function ensureThread(
   userId: string,
   workspaceId: string,
   title: string,
+  mode: ThreadMode = "chat",
 ) {
   const existing = await db.query.threads.findFirst({
     where: eq(threads.id, threadId),
-    columns: { id: true },
+    columns: { id: true, mode: true },
   });
 
   if (!existing) {
     db.insert(threads)
-      .values({ id: threadId, title, userId, workspaceId })
+      .values({ id: threadId, mode, title, userId, workspaceId })
       .onConflictDoNothing({ target: threads.id })
       .run();
   }
@@ -33,17 +35,34 @@ export async function ensureThread(
   return { created: !existing };
 }
 
+export async function loadThread(threadId: string) {
+  return db.query.threads.findFirst({
+    where: eq(threads.id, threadId),
+    columns: {
+      archivedAt: true,
+      id: true,
+      mode: true,
+    },
+  });
+}
+
 export function updateThreadChatSettings(
   threadId: string,
   settings: {
-    modelId: string;
+    mode?: ThreadMode | null;
+    modelId?: string | null;
     reasoningEffort?: string | null;
   },
 ) {
   db.update(threads)
     .set({
-      chatModelId: settings.modelId,
-      chatReasoningEffort: settings.reasoningEffort ?? null,
+      ...(settings.modelId === undefined
+        ? {}
+        : { chatModelId: settings.modelId ?? null }),
+      ...(settings.reasoningEffort === undefined
+        ? {}
+        : { chatReasoningEffort: settings.reasoningEffort ?? null }),
+      ...(settings.mode === undefined ? {} : { mode: settings.mode ?? "chat" }),
       updatedAt: new Date(),
     })
     .where(eq(threads.id, threadId))

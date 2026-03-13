@@ -82,6 +82,7 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     "user_id" text NOT NULL,
     "title" text NOT NULL,
     "summary" text,
+    "mode" text DEFAULT 'chat' NOT NULL,
     "chat_model_id" text,
     "chat_reasoning_effort" text,
     "created_at" integer NOT NULL,
@@ -136,6 +137,18 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     db.run(
       sql`ALTER TABLE "user" ADD COLUMN "default_chat_reasoning_effort" text`,
     );
+  } catch {}
+
+  try {
+    db.run(
+      sql`ALTER TABLE "user" ADD COLUMN "default_chat_mode" text`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(sql`ALTER TABLE "thread" ADD COLUMN "mode" text DEFAULT 'chat' NOT NULL`);
   } catch {
     // column already exists
   }
@@ -177,6 +190,70 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
   );
   db.run(
     sql`CREATE INDEX IF NOT EXISTS "thread_message_thread_created_idx" ON "thread_message" ("thread_id", "created_at")`,
+  );
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS "thread_plan" (
+    "id" text PRIMARY KEY NOT NULL,
+    "thread_id" text NOT NULL,
+    "title" text NOT NULL,
+    "goal" text NOT NULL,
+    "summary" text NOT NULL,
+    "audience" text DEFAULT 'technical' NOT NULL,
+    "document" text DEFAULT '' NOT NULL,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "thread_plan_thread_id_unique" ON "thread_plan" ("thread_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "thread_plan_thread_id_idx" ON "thread_plan" ("thread_id")`,
+  );
+
+  try {
+    db.run(
+      sql`ALTER TABLE "thread_plan" ADD COLUMN "audience" text DEFAULT 'technical' NOT NULL`,
+    );
+  } catch {}
+
+  try {
+    db.run(
+      sql`ALTER TABLE "thread_plan" ADD COLUMN "document" text DEFAULT '' NOT NULL`,
+    );
+  } catch {}
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS "thread_plan_task" (
+    "id" text PRIMARY KEY NOT NULL,
+    "plan_id" text NOT NULL,
+    "title" text NOT NULL,
+    "description" text,
+    "status" text DEFAULT 'pending' NOT NULL,
+    "sort_order" integer DEFAULT 0 NOT NULL,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "thread_plan_task_plan_id_idx" ON "thread_plan_task" ("plan_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "thread_plan_task_plan_sort_idx" ON "thread_plan_task" ("plan_id", "sort_order")`,
+  );
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS "thread_plan_question" (
+    "id" text PRIMARY KEY NOT NULL,
+    "thread_id" text NOT NULL,
+    "questions" text NOT NULL,
+    "response" text,
+    "status" text DEFAULT 'pending' NOT NULL,
+    "answered_at" integer,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "thread_plan_question_thread_id_idx" ON "thread_plan_question" ("thread_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "thread_plan_question_thread_status_idx" ON "thread_plan_question" ("thread_id", "status")`,
   );
 
   db.run(sql`CREATE TABLE IF NOT EXISTS "provider_credential" (

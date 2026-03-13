@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { REASONING_EFFORTS } from "@/lib/ai/providers/models";
+import { THREAD_MODES } from "@/lib/plan";
 
 export const threadListOrganizeBySchema = z.enum([
   "workspace",
@@ -90,6 +92,7 @@ export const threadListSchema = z
   .optional();
 
 export const threadCreateSchema = z.object({
+  mode: z.enum(THREAD_MODES).optional().default("chat"),
   summary: optionalText(500).optional().default(""),
   threadId: z.string().uuid().optional(),
   title: z.string().trim().min(1, "Thread title is required.").max(200),
@@ -109,6 +112,26 @@ export const threadUpdateMetaSchema = z.object({
   summary: optionalText(500).optional(),
   threadId: z.string().min(1),
 });
+
+const reasoningEffortSchema = z.enum(REASONING_EFFORTS);
+
+export const threadSettingsSchema = z
+  .object({
+    mode: z.enum(THREAD_MODES).optional(),
+    modelId: z.string().trim().min(1).optional(),
+    reasoningEffort: reasoningEffortSchema.nullish(),
+    threadId: z.string().min(1),
+  })
+  .refine(
+    (value) =>
+      value.mode !== undefined ||
+      value.modelId !== undefined ||
+      value.reasoningEffort !== undefined,
+    {
+      message: "At least one setting must be provided.",
+      path: ["threadId"],
+    },
+  );
 
 export const threadArchiveSchema = z.object({
   threadId: z.string().min(1),

@@ -28,6 +28,7 @@ import { useThreadChat } from "@/hooks/use-thread-chat";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import {
+  applyThreadSettingsCacheUpdate,
   applyOptimisticThreadPinUpdate,
   restoreOptimisticThreadPinUpdate,
 } from "@/lib/threads/cache";
@@ -45,6 +46,7 @@ type ThreadScreenProps = {
     chatModelId: string | null;
     chatReasoningEffort: string | null;
     id: string;
+    mode: "chat" | "plan";
     pinnedAt: Date | null;
     summary: string | null;
     title: string;
@@ -67,6 +69,12 @@ export function ThreadScreen({
   const router = useRouter();
   const utils = api.useUtils();
   const [threadTitle, setThreadTitle] = useState(thread.title);
+  const [threadSelectionState, setThreadSelectionState] = useState({
+    modelId: thread.chatModelId,
+    mode: thread.mode,
+    reasoningEffort:
+      (thread.chatReasoningEffort as ReasoningEffort | null) ?? null,
+  });
   const [editingMessage, setEditingMessage] = useState<ThreadUIMessage | null>(
     null,
   );
@@ -74,6 +82,15 @@ export function ThreadScreen({
   useEffect(() => {
     setThreadTitle(thread.title);
   }, [thread.title]);
+
+  useEffect(() => {
+    setThreadSelectionState({
+      modelId: thread.chatModelId,
+      mode: thread.mode,
+      reasoningEffort:
+        (thread.chatReasoningEffort as ReasoningEffort | null) ?? null,
+    });
+  }, [thread.chatModelId, thread.chatReasoningEffort, thread.mode]);
 
   const handleData = useCallback<ChatOnDataCallback<ThreadUIMessage>>(
     (dataPart) => {
@@ -93,23 +110,26 @@ export function ThreadScreen({
               }
             : current,
         );
+        void utils.threads.list.invalidate();
       }
 
       if (
         dataPart.type === "data-thread-invalidation" &&
         dataPart.data.threadId === thread.id
       ) {
+        void utils.plan.get.invalidate({ threadId: thread.id });
         void utils.threads.get.invalidate({ threadId: thread.id });
         void utils.threads.list.invalidate();
       }
     },
-    [thread.id, utils.threads.get, utils.threads.list],
+    [thread.id, utils.plan.get, utils.threads.get, utils.threads.list],
   );
 
   const handleFinish = useCallback(() => {
+    void utils.plan.get.invalidate({ threadId: thread.id });
     void utils.threads.get.invalidate({ threadId: thread.id });
     void utils.threads.list.invalidate();
-  }, [thread.id, utils.threads.get, utils.threads.list]);
+  }, [thread.id, utils.plan.get, utils.threads.get, utils.threads.list]);
 
   const handleError = useCallback((error: Error) => {
     setChatError(error.message);
@@ -155,6 +175,7 @@ export function ThreadScreen({
   const [chatError, setChatError] = useState<string | null>(null);
   const isPinned = thread.pinnedAt != null;
   const pinToggleLockRef = useRef(false);
+  const startPlanImplementationLockRef = useRef(false);
 
   const togglePin = api.threads.togglePin.useMutation({
     onMutate: async ({ pinned }) => {
@@ -219,6 +240,7 @@ export function ThreadScreen({
   });
   const {
     addToolApprovalResponse,
+    answerPlanQuestions,
     editMessage,
     messages,
     regenerateMessage,
@@ -230,22 +252,51 @@ export function ThreadScreen({
 
   const isBusy = status === "submitted" || status === "streaming";
 
+  useEffect(() => {
+    if (!isBusy) {
+      startPlanImplementationLockRef.current = false;
+    }
+  }, [isBusy]);
+
   const handleSend = useCallback(
     ({
       files,
       modelId,
       reasoningEffort,
       text,
+      threadMode,
     }: {
       files?: FileUIPart[];
       modelId: string;
       reasoningEffort?: ReasoningEffort | null;
       text: string;
+      threadMode?: "chat" | "plan";
     }) => {
       setChatError(null);
-      void sendMessage({ files, modelId, reasoningEffort, text });
+      setThreadSelectionState({
+        modelId,
+        mode: threadMode ?? threadSelectionState.mode,
+        reasoningEffort: reasoningEffort ?? null,
+      });
+      applyThreadSettingsCacheUpdate({
+        patch: {
+          chatModelId: modelId,
+          chatReasoningEffort: reasoningEffort ?? null,
+          mode: threadMode ?? threadSelectionState.mode,
+        },
+        threadId: thread.id,
+        utils,
+        workspaceId: workspace.id,
+      });
+      void sendMessage({
+        files,
+        modelId,
+        reasoningEffort,
+        text,
+        threadMode: threadMode ?? threadSelectionState.mode,
+      });
     },
-    [sendMessage],
+    [sendMessage, thread.id, threadSelectionState.mode, utils, workspace.id],
   );
 
   const handleApproveTool = useCallback(
@@ -264,6 +315,21 @@ export function ThreadScreen({
       });
     },
     [addToolApprovalResponse],
+  );
+
+  const handleAnswerPlanQuestions = useCallback(
+    ({
+      answers,
+      assistantMessageId,
+      questionSetId,
+    }: {
+      answers: Parameters<typeof answerPlanQuestions>[0]["answers"];
+      assistantMessageId: string;
+      questionSetId: string;
+    }) => {
+      void answerPlanQuestions({ answers, assistantMessageId, questionSetId });
+    },
+    [answerPlanQuestions],
   );
 
   const handleEdit = useCallback((message: ThreadUIMessage) => {
@@ -388,6 +454,55 @@ export function ThreadScreen({
     [setActiveBranch, thread.id],
   );
 
+  const handleStartPlanImplementation = useCallback(() => {
+    if (isBusy || startPlanImplementationLockRef.current) {
+      return;
+    }
+    startPlanImplementationLockRef.current = true;
+
+    const cachedThread = utils.threads.get.getData({ threadId: thread.id })?.thread;
+    const globalSelection = utils.chatPreferences.get.getData();
+    const modelId =
+      threadSelectionState.modelId ??
+      cachedThread?.chatModelId ??
+      globalSelection?.modelId ??
+      null;
+    const reasoningEffort =
+      threadSelectionState.reasoningEffort ??
+      ((cachedThread?.chatReasoningEffort as ReasoningEffort | null) ?? null) ??
+      ((globalSelection?.reasoningEffort as ReasoningEffort | null) ?? null);
+
+    if (!modelId) {
+      startPlanImplementationLockRef.current = false;
+      setChatError("Select a model before starting implementation.");
+      return;
+    }
+
+    setChatError(null);
+    setThreadSelectionState({
+      modelId,
+      mode: "chat",
+      reasoningEffort,
+    });
+    applyThreadSettingsCacheUpdate({
+      patch: {
+        chatModelId: modelId,
+        chatReasoningEffort: reasoningEffort,
+        mode: "chat",
+      },
+      threadId: thread.id,
+      utils,
+      workspaceId: workspace.id,
+    });
+
+    void sendMessage({
+      modelId,
+      reasoningEffort,
+      text: "Implement Plan",
+      threadMode: "chat",
+    });
+  }, [isBusy, sendMessage, thread.id, threadSelectionState, utils, workspace.id]);
+
   useEffect(() => {
     if (
       currentWorkspace.isLoading ||
@@ -498,8 +613,10 @@ export function ThreadScreen({
                   message={message}
                   isStreaming={isBusy && idx === messages.length - 1}
                   onApproveTool={handleApproveTool}
+                  onAnswerPlanQuestions={handleAnswerPlanQuestions}
                   onDenyTool={handleDenyTool}
                   onEdit={handleEdit}
+                  onStartPlanImplementation={handleStartPlanImplementation}
                   onRegenerate={handleRegenerate}
                   onRetry={handleRetry}
                   onSelectBranch={handleSelectBranch}
@@ -517,7 +634,7 @@ export function ThreadScreen({
           </div>
           <div
             ref={composerDockRef}
-            className="sticky bottom-0 z-50 mx-auto w-full max-w-2xl px-6 pb-3 pt-2"
+            className="pointer-events-none sticky bottom-0 z-50 mx-auto w-full max-w-2xl px-6 pb-3 pt-2"
           >
             <ChatComposer
               activeWorkspace={workspace}
@@ -531,10 +648,9 @@ export function ThreadScreen({
               status={status}
               threadId={thread.id}
               threadSelection={{
-                modelId: thread.chatModelId,
-                reasoningEffort:
-                  (thread.chatReasoningEffort as ReasoningEffort | null) ??
-                  null,
+                modelId: threadSelectionState.modelId,
+                mode: threadSelectionState.mode,
+                reasoningEffort: threadSelectionState.reasoningEffort,
               }}
             />
           </div>

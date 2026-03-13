@@ -31,3 +31,25 @@ export type ThreadListSortBy = (typeof THREAD_LIST_SORT_BY)[number];
 
 export const THREAD_MESSAGE_ROLES = ["system", "user", "assistant"] as const;
 export type ThreadMessageRole = (typeof THREAD_MESSAGE_ROLES)[number];
+
+export const THREAD_MODES = ["chat", "plan"] as const;
+export type ThreadMode = (typeof THREAD_MODES)[number];
+
+export const THREAD_PLAN_TASK_STATUSES = [
+  "pending",
+  "in_progress",
+  "completed",
+  "blocked",
+] as const;
+export type ThreadPlanTaskStatus = (typeof THREAD_PLAN_TASK_STATUSES)[number];
+
+export const THREAD_PLAN_QUESTION_STATUSES = [
+  "pending",
+  "answered",
+  "cancelled",
+] as const;
+export type ThreadPlanQuestionStatus =
+  (typeof THREAD_PLAN_QUESTION_STATUSES)[number];
+
+export const THREAD_PLAN_AUDIENCES = ["technical", "general"] as const;
+export type ThreadPlanAudience = (typeof THREAD_PLAN_AUDIENCES)[number];

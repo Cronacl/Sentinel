@@ -6,6 +6,7 @@ import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
 export const chatPreferencesRouter = createTRPCRouter({
   get: protectedProcedure.query(({ ctx }) => ({
+    mode: ctx.user.defaultChatMode ?? null,
     modelId: ctx.user.defaultChatModelId ?? null,
     reasoningEffort: ctx.user.defaultChatReasoningEffort ?? null,
   })),
@@ -13,18 +14,33 @@ export const chatPreferencesRouter = createTRPCRouter({
   updateGlobal: protectedProcedure
     .input(chatSelectionSchema)
     .mutation(({ ctx, input }) => {
+      const currentMode = ctx.user.defaultChatMode ?? null;
+      const currentModelId = ctx.user.defaultChatModelId ?? null;
+      const currentReasoningEffort = ctx.user.defaultChatReasoningEffort ?? null;
+
       ctx.db
         .update(users)
         .set({
-          defaultChatModelId: input.modelId,
-          defaultChatReasoningEffort: input.reasoningEffort ?? null,
+          ...(input.mode !== undefined
+            ? { defaultChatMode: input.mode ?? null }
+            : {}),
+          ...(input.modelId !== undefined
+            ? { defaultChatModelId: input.modelId }
+            : {}),
+          ...(input.reasoningEffort !== undefined
+            ? { defaultChatReasoningEffort: input.reasoningEffort ?? null }
+            : {}),
         })
         .where(eq(users.id, ctx.session.user.id))
         .run();
 
       return {
-        modelId: input.modelId,
-        reasoningEffort: input.reasoningEffort ?? null,
+        mode: input.mode !== undefined ? (input.mode ?? null) : currentMode,
+        modelId: input.modelId !== undefined ? input.modelId : currentModelId,
+        reasoningEffort:
+          input.reasoningEffort !== undefined
+            ? (input.reasoningEffort ?? null)
+            : currentReasoningEffort,
       };
     }),
 });

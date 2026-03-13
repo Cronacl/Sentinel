@@ -1,18 +1,21 @@
 "use client";
 
-import { useChat } from "@ai-sdk/react";
+import { Chat, useChat } from "@ai-sdk/react";
 import type { ChatOnDataCallback, FileUIPart } from "ai";
 import { DefaultChatTransport } from "ai";
 import { lastAssistantMessageIsCompleteWithApprovalResponses } from "ai";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import type { ThreadMode, ThreadPlanAnswer } from "@/lib/plan";
 import {
   getThreadMessageSyncToken,
   normalizeThreadUIMessages,
   type ThreadUIMessage,
   threadMessageMetadataSchema,
 } from "@/lib/ai/messages/types";
+
+import { prepareThreadChatRequestBody } from "./thread-chat-transport";
 
 type UseThreadChatOptions = {
   threadId: string;
@@ -28,19 +31,26 @@ type SendThreadMessageInput = {
   modelId: string;
   reasoningEffort?: ReasoningEffort | null;
   text: string;
+  threadMode?: ThreadMode;
 };
 
 type EditThreadMessageInput = SendThreadMessageInput & {
   targetMessageId: string;
 };
 
-function getLastUserMessage(messages: ThreadUIMessage[]) {
-  return [...messages].reverse().find((message) => message.role === "user");
-}
+type AnswerPlanQuestionsInput = {
+  answers: ThreadPlanAnswer[];
+  assistantMessageId: string;
+  questionSetId: string;
+};
 
-function getLastAssistantMessage(messages: ThreadUIMessage[]) {
-  return [...messages].reverse().find((message) => message.role === "assistant");
-}
+type InternalChatRequestOptions = {
+  body?: object;
+  headers?: Headers | Record<string, string>;
+  messageId?: string;
+  metadata?: unknown;
+  trigger: "regenerate-message" | "resume-stream" | "submit-message";
+};
 
 function getMessageSyncSignature(messages: ThreadUIMessage[]) {
   return messages.map(getThreadMessageSyncToken).join("||");
@@ -67,78 +77,15 @@ export function useThreadChat({
           messages,
           trigger,
           body,
-        }) => {
-          const requestBody = (body ?? {}) as Record<string, unknown>;
-
-          if (trigger === "submit-message") {
-            const isToolApprovalSubmit =
-              lastAssistantMessageIsCompleteWithApprovalResponses({ messages }) &&
-              getLastAssistantMessage(messages)?.id === messages.at(-1)?.id;
-
-            return {
-              body: {
-                id,
-                message:
-                  requestBody.trigger === "edit-user-message"
-                    ? getLastUserMessage(messages)
-                    : getLastUserMessage(messages) ?? messages[messages.length - 1],
-                messageId:
-                  typeof requestBody.messageId === "string"
-                    ? requestBody.messageId
-                    : messageId,
-                messages,
-                modelId:
-                  typeof requestBody.modelId === "string"
-                    ? requestBody.modelId
-                    : undefined,
-                reasoningEffort:
-                  typeof requestBody.reasoningEffort === "string"
-                    ? requestBody.reasoningEffort
-                    : undefined,
-                trigger:
-                  requestBody.trigger === "edit-user-message"
-                    ? "edit-user-message"
-                    : isToolApprovalSubmit
-                      ? "submit-tool-approval"
-                    : "submit-user-message",
-                workspaceId:
-                  typeof requestBody.workspaceId === "string"
-                    ? requestBody.workspaceId
-                    : workspaceIdRef.current,
-              },
-            };
-          }
-
-          if (trigger === "regenerate-message") {
-            return {
-              body: {
-                id,
-                messageId,
-                messages,
-                trigger:
-                  requestBody.trigger === "retry-assistant-message"
-                    ? "retry-assistant-message"
-                    : "regenerate-assistant-message",
-                workspaceId:
-                  typeof requestBody.workspaceId === "string"
-                    ? requestBody.workspaceId
-                    : workspaceIdRef.current,
-              },
-            };
-          }
-
-          return {
-            body: {
-              ...requestBody,
-              id,
-              ...(messageId ? { messageId } : {}),
-              workspaceId:
-                typeof requestBody.workspaceId === "string"
-                  ? requestBody.workspaceId
-                  : workspaceIdRef.current,
-            },
-          };
-        },
+        }) =>
+          prepareThreadChatRequestBody({
+            body: body as Record<string, unknown> | undefined,
+            id,
+            messageId,
+            messages,
+            trigger,
+            workspaceId: workspaceIdRef.current,
+          }),
         prepareReconnectToStreamRequest: ({ id }) => ({
           api: `/api/chat/${id}/stream`,
         }),
@@ -155,15 +102,40 @@ export function useThreadChat({
     [normalizedInitialMessages],
   );
 
+  const chatInstanceRef = useRef<Chat<ThreadUIMessage> | null>(null);
+
+  if (!chatInstanceRef.current || chatInstanceRef.current.id !== threadId) {
+    chatInstanceRef.current = new Chat<ThreadUIMessage>({
+      id: threadId,
+      messages: normalizedInitialMessages,
+      messageMetadataSchema: threadMessageMetadataSchema,
+      onData,
+      onError,
+      onFinish,
+      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+      transport,
+    });
+  }
+
+  const chatInstance = chatInstanceRef.current;
+  const internalChat = chatInstance as unknown as {
+    makeRequest?: (options: InternalChatRequestOptions) => Promise<void>;
+    onData?: ChatOnDataCallback<ThreadUIMessage>;
+    onError?: (error: Error) => void;
+    onFinish?: (() => void) | undefined;
+    sendAutomaticallyWhen?: (options: {
+      messages: ThreadUIMessage[];
+    }) => boolean | PromiseLike<boolean>;
+  };
+
+  internalChat.onData = onData;
+  internalChat.onError = onError;
+  internalChat.onFinish = onFinish;
+  internalChat.sendAutomaticallyWhen =
+    lastAssistantMessageIsCompleteWithApprovalResponses;
+
   const chat = useChat<ThreadUIMessage>({
-    id: threadId,
-    messages: normalizedInitialMessages,
-    messageMetadataSchema: threadMessageMetadataSchema,
-    onData,
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
-    transport,
-    onFinish,
-    onError,
+    chat: chatInstance,
     resume: true,
   });
   const lastSyncedSignatureRef = useRef(initialMessagesSignature);
@@ -196,7 +168,13 @@ export function useThreadChat({
   ]);
 
   const sendMessage = useCallback(
-    ({ files, modelId, reasoningEffort, text }: SendThreadMessageInput) => {
+    ({
+      files,
+      modelId,
+      reasoningEffort,
+      text,
+      threadMode,
+    }: SendThreadMessageInput) => {
       return chat.sendMessage(
         {
           ...(files && files.length > 0 ? { files } : {}),
@@ -207,6 +185,7 @@ export function useThreadChat({
           body: {
             modelId,
             ...(reasoningEffort ? { reasoningEffort } : {}),
+            ...(threadMode ? { threadMode } : {}),
             trigger: "submit-user-message",
             workspaceId: workspaceIdRef.current,
           },
@@ -214,6 +193,61 @@ export function useThreadChat({
       );
     },
     [chat],
+  );
+
+  const answerPlanQuestions = useCallback(
+    ({ answers, assistantMessageId, questionSetId }: AnswerPlanQuestionsInput) => {
+      const nextMessages = chat.messages.map((message) => {
+        if (message.id !== assistantMessageId) {
+          return message;
+        }
+
+        return {
+          ...message,
+          parts: message.parts.map((part) => {
+            const isAskQuestionPart =
+              part.type === "tool-ask_question" ||
+              (part.type === "dynamic-tool" && part.toolName === "ask_question");
+
+            if (
+              !isAskQuestionPart ||
+              part.state !== "output-available" ||
+              !("output" in part) ||
+              !part.output ||
+              typeof part.output !== "object" ||
+              !("questionSetId" in part.output) ||
+              part.output.questionSetId !== questionSetId
+            ) {
+              return part;
+            }
+
+            return {
+              ...part,
+              output: {
+                ...part.output,
+                answers,
+                status: "answered",
+              },
+            };
+          }),
+        };
+      });
+
+      chat.setMessages(nextMessages);
+
+      return internalChat.makeRequest?.({
+        body: {
+          planAnswers: answers,
+          planQuestionSetId: questionSetId,
+          threadMode: "plan",
+          trigger: "submit-plan-answer",
+          workspaceId: workspaceIdRef.current,
+        },
+        messageId: assistantMessageId,
+        trigger: "regenerate-message",
+      });
+    },
+    [chat, internalChat],
   );
 
   const editMessage = useCallback(
@@ -283,6 +317,7 @@ export function useThreadChat({
 
   return {
     ...chat,
+    answerPlanQuestions,
     editMessage,
     regenerateMessage,
     retryMessage,

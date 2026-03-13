@@ -141,7 +141,9 @@ function getAttachmentGridColumns(count: number) {
 
 function AssistantMessage({
   onApproveTool,
+  onAnswerPlanQuestions,
   onDenyTool,
+  onStartPlanImplementation,
   onRegenerate,
   onRetry,
   onSelectBranch,
@@ -149,7 +151,17 @@ function AssistantMessage({
   message,
 }: {
   onApproveTool?: (approvalId: string) => void;
+  onAnswerPlanQuestions?: (input: {
+    answers: Array<{
+      answer: string;
+      optionLabel?: string | null;
+      questionId: string;
+    }>;
+    assistantMessageId: string;
+    questionSetId: string;
+  }) => void;
   onDenyTool?: (approvalId: string) => void;
+  onStartPlanImplementation?: () => void;
   onRegenerate?: (messageId: string) => void;
   onRetry?: (messageId: string) => void;
   onSelectBranch?: (messageId: string) => void;
@@ -228,7 +240,7 @@ function AssistantMessage({
 
   return (
     <div className="py-2">
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1">
         {hasMergedReasoning ? (
           <ReasoningPart
             activeSinceMs={reasoningMetadata?.activeSinceMs}
@@ -252,7 +264,7 @@ function AssistantMessage({
 
           return displayGroups.map((group, groupIndex) => (
             <div
-              className={`${groupIndex > 0 ? "" : ""} flex flex-col gap-3`}
+              className={`${groupIndex > 0 ? "" : ""} flex flex-col gap-1`}
               key={`${message.id}:step:${groupIndex}`}
             >
               {group.map((entry) => {
@@ -278,7 +290,14 @@ function AssistantMessage({
                     <ToolPart
                       key={key}
                       onApprove={onApproveTool}
+                      onAnswerPlanQuestions={(input) =>
+                        onAnswerPlanQuestions?.({
+                          ...input,
+                          assistantMessageId: message.id,
+                        })
+                      }
                       onDeny={onDenyTool}
+                      onStartPlanImplementation={onStartPlanImplementation}
                       part={part}
                     />
                   );
@@ -404,7 +423,17 @@ function UserMessage({
 
 type ChatMessageProps = {
   onApproveTool?: (approvalId: string) => void;
+  onAnswerPlanQuestions?: (input: {
+    answers: Array<{
+      answer: string;
+      optionLabel?: string | null;
+      questionId: string;
+    }>;
+    assistantMessageId: string;
+    questionSetId: string;
+  }) => void;
   onDenyTool?: (approvalId: string) => void;
+  onStartPlanImplementation?: () => void;
   message: ThreadUIMessage;
   isStreaming?: boolean;
   onEdit?: (message: ThreadUIMessage) => void;
@@ -417,7 +446,9 @@ export const ChatMessage = memo(function ChatMessage({
   message,
   isStreaming = false,
   onApproveTool,
+  onAnswerPlanQuestions,
   onDenyTool,
+  onStartPlanImplementation,
   onEdit,
   onRegenerate,
   onRetry,
@@ -438,7 +469,9 @@ export const ChatMessage = memo(function ChatMessage({
       isStreaming={isStreaming}
       message={message}
       onApproveTool={onApproveTool}
+      onAnswerPlanQuestions={onAnswerPlanQuestions}
       onDenyTool={onDenyTool}
+      onStartPlanImplementation={onStartPlanImplementation}
       onRegenerate={onRegenerate}
       onRetry={onRetry}
       onSelectBranch={onSelectBranch}

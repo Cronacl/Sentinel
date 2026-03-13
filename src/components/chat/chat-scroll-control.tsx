@@ -48,19 +48,19 @@ export function useChatScrollControl(threadKey: string) {
     setIsButtonVisible(true);
     setButtonDirection((currentDirection) => {
       if (delta < -2 && canScrollDown) {
-        return "down";
+        return "up";
       }
 
       if (delta > 2 && canScrollUp) {
-        return "up";
+        return "down";
       }
 
       if (!canScrollDown && canScrollUp) {
-        return "up";
+        return "down";
       }
 
       if (!canScrollUp && canScrollDown) {
-        return "down";
+        return "up";
       }
 
       return currentDirection;

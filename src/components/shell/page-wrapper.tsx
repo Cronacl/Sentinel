@@ -41,7 +41,7 @@ export function PageWrapper({
   const hasHeader = title || showToggle || actions;
 
   return (
-    <div className="flex h-full w-full items-start flex-col overflow-hidden">
+    <div className="flex h-full w-full items-start flex-col overflow-clip">
       {hasHeader && (
         <header
           className="app-region-no-drag flex shrink-0 items-center gap-3 px-4 lg:px-6"
@@ -69,9 +69,9 @@ export function PageWrapper({
       )}
 
       {flush ? (
-        <div className="w-full flex-1 overflow-hidden">{children}</div>
+        <div className="w-full flex-1 overflow-clip">{children}</div>
       ) : (
-        <div className="sentinel-scroll-shell flex w-full flex-1 overflow-hidden">
+        <div className="sentinel-scroll-shell flex w-full flex-1 overflow-clip">
           <div className="sentinel-scroll-area h-[calc(100vh-44px)] w-full px-4 py-4 lg:px-5 lg:py-5">
             {children}
           </div>

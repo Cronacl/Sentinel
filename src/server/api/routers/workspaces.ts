@@ -196,7 +196,7 @@ export const workspacesRouter = createTRPCRouter({
       ctx.db.transaction((tx) => {
         tx.update(threads)
           .set({
-            archivedAt: sql`coalesce(${threads.archivedAt}, ${new Date()})`,
+            archivedAt: sql`coalesce(${threads.archivedAt}, ${Math.floor(Date.now() / 1000)})`,
             pinnedAt: null,
           })
           .where(

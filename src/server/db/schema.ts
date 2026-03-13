@@ -16,7 +16,11 @@ import {
   THEME_PREFERENCES,
   THREAD_LIST_ORGANIZE_BY,
   THREAD_LIST_SORT_BY,
+  THREAD_PLAN_AUDIENCES,
   THREAD_MESSAGE_ROLES,
+  THREAD_MODES,
+  THREAD_PLAN_QUESTION_STATUSES,
+  THREAD_PLAN_TASK_STATUSES,
 } from "./enums";
 
 export const users = sqliteTable(
@@ -51,6 +55,7 @@ export const users = sqliteTable(
       .notNull()
       .default("system"),
     defaultChatModelId: text("default_chat_model_id"),
+    defaultChatMode: text("default_chat_mode", { enum: THREAD_MODES }),
     defaultChatReasoningEffort: text("default_chat_reasoning_effort"),
     selectedWorkspaceId: text("selected_workspace_id"),
     threadListOrganizeBy: text("thread_list_organize_by", {
@@ -140,6 +145,7 @@ export const threads = sqliteTable(
     userId: text("user_id").notNull(),
     title: text("title").notNull(),
     summary: text("summary"),
+    mode: text("mode", { enum: THREAD_MODES }).notNull().default("chat"),
     chatModelId: text("chat_model_id"),
     chatReasoningEffort: text("chat_reasoning_effort"),
     createdAt: integer("created_at", { mode: "timestamp" })
@@ -180,6 +186,8 @@ export const threadsRelations = relations(threads, ({ one, many }) => ({
     references: [users.id],
   }),
   messages: many(threadMessages),
+  plans: many(threadPlans),
+  planQuestions: many(threadPlanQuestions),
 }));
 
 export const threadMessages = sqliteTable(
@@ -219,6 +227,116 @@ export const threadMessagesRelations = relations(threadMessages, ({ one }) => ({
     references: [threads.id],
   }),
 }));
+
+export const threadPlans = sqliteTable(
+  "thread_plan",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    threadId: text("thread_id").notNull(),
+    title: text("title").notNull(),
+    goal: text("goal").notNull(),
+    summary: text("summary").notNull(),
+    audience: text("audience", { enum: THREAD_PLAN_AUDIENCES })
+      .notNull()
+      .default("technical"),
+    document: text("document").notNull().default(""),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("thread_plan_thread_id_unique").on(table.threadId),
+    index("thread_plan_thread_id_idx").on(table.threadId),
+  ],
+);
+
+export const threadPlansRelations = relations(threadPlans, ({ one, many }) => ({
+  thread: one(threads, {
+    fields: [threadPlans.threadId],
+    references: [threads.id],
+  }),
+  tasks: many(threadPlanTasks),
+}));
+
+export const threadPlanTasks = sqliteTable(
+  "thread_plan_task",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    planId: text("plan_id").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    status: text("status", { enum: THREAD_PLAN_TASK_STATUSES })
+      .notNull()
+      .default("pending"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("thread_plan_task_plan_id_idx").on(table.planId),
+    index("thread_plan_task_plan_sort_idx").on(table.planId, table.sortOrder),
+  ],
+);
+
+export const threadPlanTasksRelations = relations(threadPlanTasks, ({ one }) => ({
+  plan: one(threadPlans, {
+    fields: [threadPlanTasks.planId],
+    references: [threadPlans.id],
+  }),
+}));
+
+export const threadPlanQuestions = sqliteTable(
+  "thread_plan_question",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    threadId: text("thread_id").notNull(),
+    questions: text("questions", { mode: "json" }).notNull(),
+    response: text("response", { mode: "json" }),
+    status: text("status", { enum: THREAD_PLAN_QUESTION_STATUSES })
+      .notNull()
+      .default("pending"),
+    answeredAt: integer("answered_at", { mode: "timestamp" }),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("thread_plan_question_thread_id_idx").on(table.threadId),
+    index("thread_plan_question_thread_status_idx").on(
+      table.threadId,
+      table.status,
+    ),
+  ],
+);
+
+export const threadPlanQuestionsRelations = relations(
+  threadPlanQuestions,
+  ({ one }) => ({
+    thread: one(threads, {
+      fields: [threadPlanQuestions.threadId],
+      references: [threads.id],
+    }),
+  }),
+);
 
 export const providerCredentials = sqliteTable(
   "provider_credential",

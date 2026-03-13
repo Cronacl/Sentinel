@@ -19,7 +19,7 @@
   --accent-foreground: oklch(100% 0 0);
   --default-hover: #f0f0f0;
   --default: #f0f0f0;
-
+  --overlay: #f5f5f5;
   --code-bg: #f5f5f5;
   --code-border: #e5e5e5;
   --hljs-keyword: #cf222e;
@@ -42,7 +42,7 @@
   --accent-foreground: oklch(0% 0 0);
   --default-hover: #202020;
   --default: #121212;
-
+  --overlay: #1c1c1c;
   --code-bg: #0d0d0d;
   --code-border: #262626;
   --hljs-keyword: #ff7b72;
@@ -59,16 +59,19 @@
 
 html {
   color-scheme: light dark;
-  overflow: hidden;
+  overflow: clip;
+  height: 100%;
 }
 
 body {
   font-family: var(--font-sans), sans-serif;
+  overflow: clip;
+  height: 100%;
 }
 
 .sentinel-scroll-shell {
   position: relative;
-  overflow: hidden;
+  overflow: clip;
 }
 
 .sentinel-scroll-area {

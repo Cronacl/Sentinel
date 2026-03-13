@@ -9,10 +9,10 @@ import {
   threadRenameSchema,
   threadSearchSchema,
   threadSetActiveBranchSchema,
+  threadSettingsSchema,
   threadTogglePinSchema,
   threadUpdateMetaSchema,
 } from "@/schemas/workspace-thread.schema";
-import { threadChatSelectionSchema } from "@/schemas/chat-preferences.schema";
 import { setActiveMessage } from "@/lib/ai/chat/persistence";
 import { disposeShellSession } from "@/lib/ai/chat/tools/shell";
 import { mapThreadMessagesToUIMessages } from "@/lib/ai/messages/ui";
@@ -31,6 +31,7 @@ const threadSelect = {
   chatReasoningEffort: true,
   createdAt: true,
   id: true,
+  mode: true,
   pinnedAt: true,
   summary: true,
   title: true,
@@ -157,6 +158,7 @@ export const threadsRouter = createTRPCRouter({
         .insert(threads)
         .values({
           ...(input.threadId ? { id: input.threadId } : {}),
+          mode: input.mode,
           summary: input.summary.trim() || null,
           title: input.title.trim(),
           userId: ctx.session.user.id,
@@ -195,6 +197,7 @@ export const threadsRouter = createTRPCRouter({
           chatReasoningEffort: thread.chatReasoningEffort,
           createdAt: thread.createdAt,
           id: thread.id,
+          mode: thread.mode,
           pinnedAt: thread.pinnedAt,
           summary: thread.summary,
           title: thread.title,
@@ -253,6 +256,7 @@ export const threadsRouter = createTRPCRouter({
           archivedAt: threads.archivedAt,
           createdAt: threads.createdAt,
           id: threads.id,
+          mode: threads.mode,
           pinnedAt: threads.pinnedAt,
           summary: threads.summary,
           title: threads.title,
@@ -280,6 +284,7 @@ export const threadsRouter = createTRPCRouter({
           archivedAt: threads.archivedAt,
           createdAt: threads.createdAt,
           id: threads.id,
+          mode: threads.mode,
           pinnedAt: threads.pinnedAt,
           summary: threads.summary,
           title: threads.title,
@@ -291,26 +296,33 @@ export const threadsRouter = createTRPCRouter({
     }),
 
   updateChatSettings: protectedProcedure
-    .input(threadChatSelectionSchema)
+    .input(threadSettingsSchema)
     .mutation(async ({ ctx, input }) => {
       await getOwnedThreadOrThrow(ctx, input.threadId);
 
       const [updated] = ctx.db
         .update(threads)
         .set({
-          chatModelId: input.modelId,
-          chatReasoningEffort: input.reasoningEffort ?? null,
+          ...(input.modelId === undefined
+            ? {}
+            : { chatModelId: input.modelId }),
+          ...(input.reasoningEffort === undefined
+            ? {}
+            : { chatReasoningEffort: input.reasoningEffort ?? null }),
+          ...(input.mode === undefined ? {} : { mode: input.mode }),
         })
         .where(eq(threads.id, input.threadId))
         .returning({
           chatModelId: threads.chatModelId,
           chatReasoningEffort: threads.chatReasoningEffort,
           id: threads.id,
+          mode: threads.mode,
         })
         .all();
 
       return {
         modelId: updated!.chatModelId,
+        mode: updated!.mode,
         reasoningEffort: updated!.chatReasoningEffort,
         threadId: updated!.id,
       };
@@ -330,6 +342,7 @@ export const threadsRouter = createTRPCRouter({
           archivedAt: threads.archivedAt,
           createdAt: threads.createdAt,
           id: threads.id,
+          mode: threads.mode,
           pinnedAt: threads.pinnedAt,
           summary: threads.summary,
           title: threads.title,
@@ -356,6 +369,7 @@ export const threadsRouter = createTRPCRouter({
           archivedAt: threads.archivedAt,
           createdAt: threads.createdAt,
           id: threads.id,
+          mode: threads.mode,
           pinnedAt: threads.pinnedAt,
           summary: threads.summary,
           title: threads.title,

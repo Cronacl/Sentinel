@@ -481,7 +481,7 @@ export default function MemorySettingsPage() {
 
             <div className="mb-4 grid gap-3 md:grid-cols-2">
               <label className="space-y-1">
-                <span className="text-muted text-xs font-medium uppercase tracking-wide">
+                <span className="text-muted text-xs font-medium">
                   Search
                 </span>
                 <input
@@ -493,7 +493,7 @@ export default function MemorySettingsPage() {
               </label>
 
               <label className="space-y-1">
-                <span className="text-muted text-xs font-medium uppercase tracking-wide">
+                <span className="text-muted text-xs font-medium">
                   Workspace
                 </span>
                 <select
@@ -511,7 +511,7 @@ export default function MemorySettingsPage() {
               </label>
 
               <label className="space-y-1">
-                <span className="text-muted text-xs font-medium uppercase tracking-wide">
+                <span className="text-muted text-xs font-medium">
                   Scope
                 </span>
                 <select
@@ -530,7 +530,7 @@ export default function MemorySettingsPage() {
               </label>
 
               <label className="space-y-1">
-                <span className="text-muted text-xs font-medium uppercase tracking-wide">
+                <span className="text-muted text-xs font-medium">
                   Kind
                 </span>
                 <select
@@ -549,7 +549,7 @@ export default function MemorySettingsPage() {
               </label>
 
               <label className="space-y-1">
-                <span className="text-muted text-xs font-medium uppercase tracking-wide">
+                <span className="text-muted text-xs font-medium">
                   Pinned
                 </span>
                 <select
@@ -599,7 +599,7 @@ export default function MemorySettingsPage() {
                           ) : null}
                         </div>
 
-                        <p className="text-foreground text-sm leading-6">
+                        <p className="text-foreground text-sm">
                           {memory.content}
                         </p>
 

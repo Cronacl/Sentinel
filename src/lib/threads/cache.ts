@@ -4,6 +4,11 @@ import { api, type RouterOutputs } from "@/trpc/react";
 type TrpcUtils = ReturnType<typeof api.useUtils>;
 type ThreadGetData = RouterOutputs["threads"]["get"];
 type ThreadListData = RouterOutputs["threads"]["list"];
+type ThreadSettingsPatch = {
+  chatModelId?: string | null;
+  chatReasoningEffort?: string | null;
+  mode?: "chat" | "plan";
+};
 
 type ThreadPinCacheSnapshot = {
   lists: Array<{
@@ -78,6 +83,54 @@ function updateThreadPinInListData<T extends ThreadListData | undefined>(
   } as T;
 }
 
+function applyThreadSettingsPatch<
+  T extends {
+    chatModelId: string | null;
+    chatReasoningEffort: string | null;
+    mode: "chat" | "plan";
+  },
+>(thread: T, patch: ThreadSettingsPatch) {
+  return {
+    ...thread,
+    ...(patch.chatModelId === undefined
+      ? {}
+      : { chatModelId: patch.chatModelId }),
+    ...(patch.chatReasoningEffort === undefined
+      ? {}
+      : { chatReasoningEffort: patch.chatReasoningEffort }),
+    ...(patch.mode === undefined ? {} : { mode: patch.mode }),
+  };
+}
+
+function updateThreadSettingsInListData<T extends ThreadListData | undefined>(
+  data: T,
+  threadId: string,
+  patch: ThreadSettingsPatch,
+): T {
+  if (!data) {
+    return data;
+  }
+
+  if ("groups" in data) {
+    return {
+      ...data,
+      groups: (data.groups ?? []).map((group) => ({
+        ...group,
+        threads: group.threads.map((thread) =>
+          thread.id === threadId ? applyThreadSettingsPatch(thread, patch) : thread,
+        ),
+      })),
+    } as T;
+  }
+
+  return {
+    ...data,
+    items: (data.items ?? []).map((item) =>
+      item.id === threadId ? applyThreadSettingsPatch(item, patch) : item,
+    ),
+  } as T;
+}
+
 export function applyOptimisticThreadPinUpdate({
   pinnedAt,
   threadId,
@@ -133,5 +186,32 @@ export function restoreOptimisticThreadPinUpdate(
 
   for (const entry of snapshot.lists) {
     utils.threads.list.setData(entry.input, entry.data);
+  }
+}
+
+export function applyThreadSettingsCacheUpdate({
+  patch,
+  threadId,
+  utils,
+  workspaceId,
+}: {
+  patch: ThreadSettingsPatch;
+  threadId: string;
+  utils: TrpcUtils;
+  workspaceId?: string;
+}) {
+  utils.threads.get.setData({ threadId }, (current) =>
+    current
+      ? {
+          ...current,
+          thread: applyThreadSettingsPatch(current.thread, patch),
+        }
+      : current,
+  );
+
+  for (const input of getThreadListInputs(workspaceId)) {
+    utils.threads.list.setData(input, (current) =>
+      updateThreadSettingsInListData(current, threadId, patch),
+    );
   }
 }
