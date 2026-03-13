@@ -266,9 +266,9 @@ body {
 }
 
 .sentinel-reasoning-timeline-prose {
-  font-size: 14px;
-  line-height: 1.7;
-  color: color-mix(in srgb, var(--foreground) 56%, transparent);
+  font-size: 12px;
+  line-height: 1.6;
+  color: color-mix(in srgb, var(--foreground) 46%, transparent);
 }
 
 .sentinel-reasoning-timeline-prose > *:first-child {
@@ -280,8 +280,8 @@ body {
 }
 
 .sentinel-reasoning-timeline-prose p {
-  margin-top: 0.55em;
-  margin-bottom: 0.55em;
+  margin-top: 0.4em;
+  margin-bottom: 0.4em;
 }
 
 .sentinel-reasoning-timeline-prose strong,
@@ -289,32 +289,32 @@ body {
 .sentinel-reasoning-timeline-prose h2,
 .sentinel-reasoning-timeline-prose h3,
 .sentinel-reasoning-timeline-prose h4 {
-  color: color-mix(in srgb, var(--foreground) 68%, transparent);
+  color: color-mix(in srgb, var(--foreground) 60%, transparent);
   font-weight: 500;
 }
 
 .sentinel-reasoning-timeline-prose ul,
 .sentinel-reasoning-timeline-prose ol {
-  margin-top: 0.5em;
-  margin-bottom: 0.5em;
-  padding-left: 1.25em;
+  margin-top: 0.35em;
+  margin-bottom: 0.35em;
+  padding-left: 1.1em;
 }
 
 .sentinel-reasoning-timeline-prose li {
-  margin-top: 0.2em;
-  margin-bottom: 0.2em;
+  margin-top: 0.15em;
+  margin-bottom: 0.15em;
 }
 
 .sentinel-reasoning-timeline-prose code {
-  font-size: 0.9em;
+  font-size: 0.88em;
 }
 
 .sentinel-reasoning-timeline-prose blockquote {
-  border-left: 2px solid color-mix(in srgb, var(--border) 80%, transparent);
-  color: color-mix(in srgb, var(--foreground) 52%, transparent);
-  margin-top: 0.7em;
-  margin-bottom: 0.7em;
-  padding-left: 0.9em;
+  border-left: 2px solid color-mix(in srgb, var(--border) 60%, transparent);
+  color: color-mix(in srgb, var(--foreground) 40%, transparent);
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  padding-left: 0.75em;
 }
 
 .sentinel-thinking-shimmer {
