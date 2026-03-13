@@ -269,19 +269,6 @@ export default function SecuritySettingsPage() {
       ) : null}
 
       <div className="flex flex-col gap-6">
-        <section className="border-separator bg-surface rounded-xl border p-5">
-          <div className="mb-5 space-y-1">
-            <h2 className="text-foreground text-base font-medium">Account</h2>
-          </div>
-
-          <div className="space-y-2">
-            <InfoRow
-              label="Account email"
-              value={account.data?.email || "local@sentinel.app"}
-            />
-          </div>
-        </section>
-
         <Form onSubmit={form.handleSubmit(handleSecuritySubmit)}>
           <section className="border-separator bg-surface rounded-xl border p-5">
             <div className="mb-5 space-y-1">
