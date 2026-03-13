@@ -27,7 +27,6 @@ export const MCP_SERVER_CATALOG: readonly McpCatalogEntry[] = [
     config: {
       args: ["@playwright/mcp@latest"],
       command: "npx",
-      cwd: "~/code",
       envPassthrough: [],
       envVars: [],
     },

@@ -1,5 +1,8 @@
 import { createMCPClient } from "@ai-sdk/mcp";
 import { Experimental_StdioMCPTransport } from "@ai-sdk/mcp/mcp-stdio";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 import type {
   McpHttpRuntimeEntry,
@@ -60,6 +63,15 @@ const MCP_MUTATING_TOOL_PATTERNS = [
 const cachedToolServers = new Map<string, Promise<CachedMcpServerTools>>();
 const cachedKeyByServerId = new Map<string, string>();
 
+function slugifyToolNamespace(value: string) {
+  const slug = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return slug || "server";
+}
+
 function requireEnvValue(envVar: string, serverName: string) {
   const value = process.env[envVar]?.trim();
 
@@ -107,11 +119,46 @@ function resolveStdioEnv(entry: McpStdioRuntimeEntry) {
   return env;
 }
 
-function getResolvedStdioCwd(
+function expandHomeDirectory(input: string) {
+  if (input === "~") {
+    return os.homedir();
+  }
+
+  if (input.startsWith("~/")) {
+    return path.join(os.homedir(), input.slice(2));
+  }
+
+  return input;
+}
+
+export function getResolvedStdioCwd(
   entry: McpStdioRuntimeEntry,
   workspaceRoot: string | null,
 ) {
-  return entry.config.cwd || workspaceRoot || undefined;
+  const configured = entry.config.cwd?.trim();
+
+  if (!configured) {
+    return workspaceRoot || undefined;
+  }
+
+  const expanded = expandHomeDirectory(configured);
+
+  if (fs.existsSync(expanded)) {
+    return expanded;
+  }
+
+  if (workspaceRoot && fs.existsSync(workspaceRoot)) {
+    console.warn(
+      `[MCP] Working directory "${configured}" for "${entry.name}" does not exist. Falling back to workspace root.`,
+    );
+    return workspaceRoot;
+  }
+
+  console.warn(
+    `[MCP] Working directory "${configured}" for "${entry.name}" does not exist. Launching without cwd override.`,
+  );
+
+  return undefined;
 }
 
 function getMcpServerCacheKey(
@@ -146,13 +193,14 @@ function shouldRequireMcpApproval(toolName: string, description?: string) {
 
 function namespaceMcpTools(entry: McpServerRuntimeEntry, tools: McpToolMap) {
   const namespaced: McpToolMap = {};
+  const namespace = slugifyToolNamespace(entry.catalogId ?? entry.name);
 
   for (const [toolName, toolConfig] of Object.entries(tools)) {
     const description = toolConfig.description ?? toolName;
 
-    namespaced[`mcp_${entry.id}__${toolName}`] = {
+    namespaced[`mcp_${namespace}__${toolName}`] = {
       ...toolConfig,
-      description: `[MCP ${entry.name}] ${description}`,
+      description: `${entry.name} MCP: ${description}`,
       needsApproval: () => shouldRequireMcpApproval(toolName, description),
     };
   }

@@ -1,10 +1,6 @@
 import { each, lines, section, when } from "@/lib/prompt";
 import type { ToolApprovalPolicyMap } from "./tool-approval-policy";
-import {
-  TOOL_CATALOG,
-  getActiveCategories,
-  getToolsInCategory,
-} from "./tools";
+import { TOOL_CATALOG, getActiveCategories, getToolsInCategory } from "./tools";
 import type { ThreadAgentCallOptions } from "./agent";
 
 // ---------------------------------------------------------------------------
@@ -25,9 +21,7 @@ function toolAvailabilityLines(
   policies: ToolApprovalPolicyMap,
   verb: "can use" | "can still use" = "can use",
 ): string {
-  const entries = toolNames
-    .map((name) => TOOL_CATALOG[name])
-    .filter(Boolean);
+  const entries = toolNames.map((name) => TOOL_CATALOG[name]).filter(Boolean);
 
   if (entries.length === 0) return "";
 
@@ -37,6 +31,30 @@ function toolAvailabilityLines(
       const entry = TOOL_CATALOG[name]!;
       return `You ${verb} ${entry.label} ${entry.capability} ${approvalLabel(policies, name)}.`;
     },
+  );
+}
+
+function formatMcpToolLabel(toolName: string) {
+  return toolName
+    .replace(/^mcp_/, "")
+    .replace(/__/g, " -> ")
+    .replace(/_/g, " ");
+}
+
+function mcpAvailabilityLines(toolNames: string[]): string {
+  const mcpNames = toolNames.filter((name) => name.startsWith("mcp_"));
+
+  if (mcpNames.length === 0) {
+    return "";
+  }
+
+  return lines(
+    "External MCP tools are available for connected integrations.",
+    each(
+      mcpNames,
+      (name) =>
+        `Use ${formatMcpToolLabel(name)} when it directly matches the user's request.`,
+    ),
   );
 }
 
@@ -95,6 +113,15 @@ function shellRules(): string[] {
     "When a task may run for several minutes, state that clearly before asking for approval.",
     "Prefer read-only inspection before mutations or installs.",
     "When a tool requests approval, wait for the user approval workflow to continue.",
+  ];
+}
+
+function mcpRules(): string[] {
+  return [
+    "Use MCP tools when the integration can answer or perform the task more directly than workspace or web tools.",
+    "Prefer read-only MCP actions before mutating actions when exploring a browser or external system.",
+    "For browser MCP tools, inspect tabs, snapshots, screenshots, or console state before clicking or typing.",
+    "If an MCP tool requests approval, wait for the approval workflow before continuing.",
   ];
 }
 
@@ -218,7 +245,8 @@ function buildChatInstructions(
     ? `Long-term memory is enabled with ${memorySettings.memoryProvider}:${memorySettings.memoryModel}.${sourceMessageId ? ` Current source message id: ${sourceMessageId}.` : ""}`
     : "Long-term memory is disabled. Do not use memory tools until the user enables Memory in Settings.";
 
-  const hasWorkspace = Boolean(defaultDirectory) && categories.has("inspection");
+  const hasWorkspace =
+    Boolean(defaultDirectory) && categories.has("inspection");
 
   return lines(
     systemPrompt.trim(),
@@ -231,10 +259,14 @@ function buildChatInstructions(
       if (categories.has("web")) allRules.push(...webRules());
       if (categories.has("mutation")) allRules.push(...mutationRules());
       if (categories.has("execution")) allRules.push(...executionRules());
+      if (activeToolNames.some((name) => name.startsWith("mcp_"))) {
+        allRules.push(...mcpRules());
+      }
       allRules.push(...permissionRules(permissionMode));
 
       return lines(
         toolAvailabilityLines(activeToolNames, toolApprovalPolicies),
+        mcpAvailabilityLines(activeToolNames),
         when(categories.has("web"), webSearchGuidance),
         when(categories.has("web"), webFetchBatchGuidance),
         `Default directory: ${defaultDirectory}\nPermission mode: ${permissionMode}.`,
@@ -257,6 +289,9 @@ function buildChatInstructions(
       const allRules: string[] = [];
       if (categories.has("memory")) allRules.push(...memoryRules());
       if (categories.has("web")) allRules.push(...webRules());
+      if (activeToolNames.some((name) => name.startsWith("mcp_"))) {
+        allRules.push(...mcpRules());
+      }
 
       return lines(
         "Workspace tools are currently unavailable because there is no selected workspace root.",
@@ -267,6 +302,7 @@ function buildChatInstructions(
               "can still use",
             )
           : "",
+        mcpAvailabilityLines(activeToolNames),
         when(categories.has("web"), webSearchGuidance),
         when(categories.has("web"), webFetchBatchGuidance),
         allRules.length > 0 ? section("Usage Guidelines", allRules) : "",

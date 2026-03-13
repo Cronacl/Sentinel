@@ -1,6 +1,7 @@
 // @ts-nocheck
 
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import os from "node:os";
 
 const close = mock(async () => undefined);
 const createMCPClient = mock(async (config) => ({
@@ -43,7 +44,8 @@ mock.module("@/lib/ai/providers/encrypt", () => ({
 }));
 
 const { buildMcpServerRuntimeEntries } = await import("./runtime");
-const { loadMcpTools, resetMcpToolCache } = await import("./tools");
+const { getResolvedStdioCwd, loadMcpTools, resetMcpToolCache } =
+  await import("./tools");
 
 beforeEach(() => {
   close.mockReset();
@@ -233,6 +235,27 @@ describe("mcp runtime", () => {
     expect(
       await result.tools.mcp_playwright__browser_tabs.needsApproval(),
     ).toBe(false);
+  });
+
+  it("expands home-relative stdio working directories", () => {
+    const resolved = getResolvedStdioCwd(
+      {
+        config: {
+          args: ["@playwright/mcp@latest"],
+          command: "npx",
+          cwd: "~",
+          envPassthrough: [],
+          envVars: [],
+        },
+        id: "playwright",
+        isEnabled: true,
+        name: "Playwright",
+        transport: "stdio",
+      },
+      "/tmp/workspace",
+    );
+
+    expect(resolved).toBe(os.homedir());
   });
 
   it("skips servers with missing env vars", async () => {
