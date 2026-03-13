@@ -25,20 +25,22 @@ const TimelineStep = memo(function TimelineStep({
   step: ReasoningStep;
 }) {
   return (
-    <div className="grid grid-cols-[22px_minmax(0,1fr)] gap-x-5">
+    <div className="grid grid-cols-[14px_minmax(0,1fr)] gap-x-3">
       <div className="relative flex justify-center">
-        <div className="mt-[9px] h-[8px] w-[8px] rounded-full bg-foreground/50" />
+        <div className="mt-[7px] h-[6px] w-[6px] rounded-full bg-foreground/40" />
         {connectsToNext ? (
-          <div className="absolute left-1/2 top-[25px] h-[calc(100%-6px)] w-px -translate-x-1/2 bg-border/75" />
+          <div className="absolute left-1/2 top-[18px] bottom-0 w-px -translate-x-1/2 bg-border/50" />
         ) : null}
       </div>
 
-      <div className={`${isLast ? "pb-0" : "pb-8"} min-w-0`}>
-        <p className="mb-2 text-[15px] font-medium text-foreground/88">
+      <div className={`${isLast ? "pb-0" : "pb-4"} min-w-0`}>
+        <p className="text-[13px] font-medium text-foreground/80">
           {step.title}
         </p>
-        {shouldRenderContent ? (
-          <MarkdownContent text={step.content} variant="reasoning-timeline" />
+        {shouldRenderContent && step.content ? (
+          <div className="mt-1">
+            <MarkdownContent text={step.content} variant="reasoning-timeline" />
+          </div>
         ) : null}
       </div>
     </div>
@@ -112,52 +114,55 @@ export const ReasoningSidebar = memo(function ReasoningSidebar() {
 
   return (
     <div className="flex h-full w-full flex-col">
-      <header className="flex shrink-0 items-start gap-3 border-b border-border/20 px-5 pb-4 pt-5">
+      <header className="flex shrink-0 items-center gap-3 border-b border-border/20 px-4 py-3">
         <div className="min-w-0 flex-1">
-          <h2 className="text-[15px] font-semibold leading-snug text-foreground">
+          <h2 className="truncate text-[13px] font-medium text-foreground">
             {sidebarTitle}
           </h2>
           {tokenCount !== undefined ? (
-            <p className="mt-1.5 text-[11px] text-muted">
+            <p className="mt-0.5 text-[11px] text-foreground/40">
               {formatTokenCount(tokenCount)} reasoning tokens
             </p>
           ) : null}
         </div>
         <CloseButton
           aria-label="Close reasoning sidebar"
-          className="mt-0.5 shrink-0"
+          className="shrink-0"
           onPress={handleClose}
         />
       </header>
 
       <div className="min-h-0 flex-1">
-        <ScrollShadow className="h-full px-7 pb-6 pt-5" orientation="vertical">
+        <ScrollShadow className="h-full px-4 pb-4 pt-3" orientation="vertical">
           {parsedSteps.length === 0 ? (
-            <div className="flex items-center justify-center py-8 text-sm text-default-400">
+            <p className="py-6 text-center text-[12px] text-foreground/30">
               No thinking content available
-            </div>
+            </p>
           ) : (
             <div className="relative flex flex-col">
-              {parsedSteps.map((step, index) => (
-                <TimelineStep
-                  connectsToNext={
-                    index < parsedSteps.length - 1 || showDoneIndicator
-                  }
-                  isLast={index === parsedSteps.length - 1}
-                  key={`reasoning-step-${index}-${step.title.slice(0, 20)}`}
-                  shouldRenderContent={index < renderedCount}
-                  step={step}
-                />
-              ))}
+              {parsedSteps.map((step, index) => {
+                const isLast = index === parsedSteps.length - 1;
+                return (
+                  <TimelineStep
+                    connectsToNext={
+                      index < parsedSteps.length - 1 || showDoneIndicator
+                    }
+                    isLast={isLast && !showDoneIndicator}
+                    key={`reasoning-step-${index}-${step.title.slice(0, 20)}`}
+                    shouldRenderContent={index < renderedCount}
+                    step={step}
+                  />
+                );
+              })}
 
               {showDoneIndicator ? (
-                <div className="grid grid-cols-[22px_minmax(0,1fr)] gap-x-5 pt-2">
+                <div className="grid grid-cols-[14px_minmax(0,1fr)] gap-x-3">
                   <div className="relative flex justify-center">
-                    <div className="mt-[8px] h-[8px] w-[8px] rounded-full bg-foreground/80" />
+                    <div className="mt-[7px] h-[6px] w-[6px] rounded-full bg-foreground/60" />
                   </div>
-                  <div className="min-w-0 text-[15px] font-medium text-foreground/88">
+                  <p className="text-[13px] font-medium text-foreground/60">
                     Done
-                  </div>
+                  </p>
                 </div>
               ) : null}
             </div>

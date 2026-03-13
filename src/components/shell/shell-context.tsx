@@ -8,6 +8,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -66,20 +67,33 @@ export function ShellProvider({ children }: PropsWithChildren) {
     setRightSidebarOpen(false);
   }, []);
 
+  const value = useMemo<ShellContextValue>(
+    () => ({
+      leftSidebarOpen,
+      toggleLeftSidebar,
+      setLeftSidebarOpen,
+      rightSidebarOpen,
+      rightSidebarContent,
+      toggleRightSidebar,
+      openRightSidebar,
+      closeRightSidebar,
+      setRightSidebarContent,
+    }),
+    [
+      leftSidebarOpen,
+      toggleLeftSidebar,
+      setLeftSidebarOpen,
+      rightSidebarOpen,
+      rightSidebarContent,
+      toggleRightSidebar,
+      openRightSidebar,
+      closeRightSidebar,
+      setRightSidebarContent,
+    ],
+  );
+
   return (
-    <ShellContext.Provider
-      value={{
-        leftSidebarOpen,
-        toggleLeftSidebar,
-        setLeftSidebarOpen,
-        rightSidebarOpen,
-        rightSidebarContent,
-        toggleRightSidebar,
-        openRightSidebar,
-        closeRightSidebar,
-        setRightSidebarContent,
-      }}
-    >
+    <ShellContext.Provider value={value}>
       {children}
     </ShellContext.Provider>
   );
@@ -99,11 +113,21 @@ export function useRightSidebar() {
     rightSidebarOpen,
     toggleRightSidebar,
   } = useShell();
-  return {
-    open: openRightSidebar,
-    close: closeRightSidebar,
-    toggle: toggleRightSidebar,
-    setContent: setRightSidebarContent,
-    isOpen: rightSidebarOpen,
-  };
+
+  return useMemo(
+    () => ({
+      open: openRightSidebar,
+      close: closeRightSidebar,
+      toggle: toggleRightSidebar,
+      setContent: setRightSidebarContent,
+      isOpen: rightSidebarOpen,
+    }),
+    [
+      openRightSidebar,
+      closeRightSidebar,
+      toggleRightSidebar,
+      setRightSidebarContent,
+      rightSidebarOpen,
+    ],
+  );
 }

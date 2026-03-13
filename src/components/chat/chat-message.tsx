@@ -1,5 +1,5 @@
 "use client";
-import { memo } from "react";
+import { memo, useCallback, useMemo } from "react";
 import {
   ArrowLeft01Icon,
   ArrowReloadHorizontalIcon,
@@ -169,7 +169,7 @@ function AssistantMessage({
   message: ThreadUIMessage;
 }) {
   const assistantText = getAssistantText(message);
-  const groups = groupMessageParts(message.parts);
+  const groups = useMemo(() => groupMessageParts(message.parts), [message.parts]);
   let lastReasoningIndex = -1;
   message.parts.forEach((part, partIndex) => {
     if (part.type === "reasoning") {
@@ -212,6 +212,25 @@ function AssistantMessage({
     rawStatus ??
     (isStreaming ? "streaming" : hasVisibleParts ? "completed" : undefined);
 
+  const stableOnAnswerPlanQuestions = useCallback(
+    (input: { answers: Array<{ answer: string; optionLabel?: string | null; questionId: string }>; questionSetId: string }) => {
+      onAnswerPlanQuestions?.({ ...input, assistantMessageId: message.id });
+    },
+    [onAnswerPlanQuestions, message.id],
+  );
+
+  const displayGroups = useMemo(
+    () =>
+      groups
+        .map((group) =>
+          coalesceReasoningEntries(group).filter(
+            (entry) => entry.type !== "reasoning-block",
+          ),
+        )
+        .filter((group) => group.length > 0),
+    [groups],
+  );
+
   if (!hasVisibleParts && isStreaming) {
     return (
       <div className="py-2">
@@ -253,16 +272,7 @@ function AssistantMessage({
           />
         ) : null}
 
-        {(() => {
-          const displayGroups = groups
-            .map((group) =>
-              coalesceReasoningEntries(group).filter(
-                (entry) => entry.type !== "reasoning-block",
-              ),
-            )
-            .filter((group) => group.length > 0);
-
-          return displayGroups.map((group, groupIndex) => (
+        {displayGroups.map((group, groupIndex) => (
             <div
               className={`${groupIndex > 0 ? "" : ""} flex flex-col gap-1`}
               key={`${message.id}:step:${groupIndex}`}
@@ -290,12 +300,7 @@ function AssistantMessage({
                     <ToolPart
                       key={key}
                       onApprove={onApproveTool}
-                      onAnswerPlanQuestions={(input) =>
-                        onAnswerPlanQuestions?.({
-                          ...input,
-                          assistantMessageId: message.id,
-                        })
-                      }
+                      onAnswerPlanQuestions={stableOnAnswerPlanQuestions}
                       onDeny={onDenyTool}
                       onStartPlanImplementation={onStartPlanImplementation}
                       part={part}
@@ -306,8 +311,7 @@ function AssistantMessage({
                 return null;
               })}
             </div>
-          ));
-        })()}
+          ))}
 
         {assistantText ||
         status === "completed" ||

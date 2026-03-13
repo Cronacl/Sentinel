@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { type ReactNode, memo } from "react";
 import { Disclosure } from "@heroui/react";
 
 type ToolLayoutProps = {
@@ -16,7 +16,7 @@ type ToolLayoutProps = {
   errorText?: string;
 };
 
-export function ToolLayout({
+export const ToolLayout = memo(function ToolLayout({
   summary,
   isRunning,
   isError,
@@ -62,18 +62,20 @@ export function ToolLayout({
 
         {actions ? <div className="mt-1 ml-5">{actions}</div> : null}
 
-        <Disclosure.Content>
-          <Disclosure.Body>
-            <div className="mt-1 overflow-hidden rounded-xl border border-border/40 bg-surface/20">
-              <div className="px-3 py-2">{children}</div>
-              {footer ? (
-                <div className="border-t border-border/30 px-3 py-1.5 text-[10px] text-foreground/50">
-                  {footer}
-                </div>
-              ) : null}
-            </div>
-          </Disclosure.Body>
-        </Disclosure.Content>
+        {canToggle && isExpanded ? (
+          <Disclosure.Content>
+            <Disclosure.Body>
+              <div className="mt-1 overflow-hidden rounded-xl border border-border/40 bg-surface/20">
+                <div className="px-3 py-2">{children}</div>
+                {footer ? (
+                  <div className="border-t border-border/30 px-3 py-1.5 text-[10px] text-foreground/50">
+                    {footer}
+                  </div>
+                ) : null}
+              </div>
+            </Disclosure.Body>
+          </Disclosure.Content>
+        ) : null}
 
         {errorText ? (
           <div className="mt-1 rounded-lg border border-danger/20 bg-danger-soft px-3 py-1.5 text-[11px] text-danger-soft-foreground">
@@ -83,4 +85,4 @@ export function ToolLayout({
       </div>
     </Disclosure>
   );
-}
+});
