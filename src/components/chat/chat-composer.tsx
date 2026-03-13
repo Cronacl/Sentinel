@@ -1019,7 +1019,7 @@ export function ChatComposer({
         )}
 
         <div className="flex h-10 items-center justify-between px-1.5">
-          <div className="flex items-center gap-0.5">
+          <div className="flex items-center gap-2">
             <div className="relative" ref={composerMenuRef}>
               <button
                 className="flex border cursor-pointer border-border/50 dark:bg-background/50 bg-surface h-8 w-8 items-center justify-center rounded-xl text-muted transition-colors hover:text-foreground disabled:opacity-30"

@@ -78,7 +78,7 @@ const ResultCard = memo(function ResultCard({
 
   return (
     <a
-      className="group block rounded-3xl border border-border/60 bg-background/50 px-3.5 py-3 hover:bg-background/20 transition-all duration-200"
+      className="group block rounded-xl border border-border/40 bg-background/50 px-3 py-2.5 transition-colors hover:bg-background/30"
       href={result.url}
       rel="noreferrer"
       target="_blank"

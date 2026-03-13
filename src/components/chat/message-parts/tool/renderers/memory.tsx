@@ -1,9 +1,11 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { memo, useEffect, useState } from "react";
-import { Button, Disclosure } from "@heroui/react";
+import { Button } from "@heroui/react";
 
 import type { RendererProps } from "../renderer";
+import { ToolLayout } from "./tool-layout";
 
 type SearchMemoryInput = {
   limit?: number;
@@ -56,46 +58,52 @@ function getToolName(part: RendererProps["part"]) {
   return part.type === "dynamic-tool" ? part.toolName : part.type.slice(5);
 }
 
-function getLabel(toolName: string) {
-  switch (toolName) {
-    case "search_memory":
-      return "Search memory";
-    case "save_memory":
-      return "Save memory";
-    default:
-      return "Forget memory";
-  }
-}
+function buildSummary(
+  part: RendererProps["part"],
+  toolName: string,
+): ReactNode {
+  const isError = part.state === "output-error" || part.state === "output-denied";
+  const isDone = part.state === "output-available";
 
-function getStatusTone(part: RendererProps["part"]) {
-  if (part.state === "output-error" || part.state === "output-denied") {
-    return "border-danger/20 bg-danger-soft text-danger-soft-foreground";
-  }
+  if (toolName === "search_memory") {
+    const input = "input" in part ? (part.input as SearchMemoryInput | undefined) : undefined;
+    const output = isDone && "output" in part ? (part.output as SearchMemoryOutput | undefined) : undefined;
 
-  if (part.state === "output-available") {
-    return "border-success/5 bg-success/10 text-success";
-  }
-
-  return "border-border/60 bg-background/70 text-muted";
-}
-
-function getSummary(part: RendererProps["part"], toolName: string) {
-  if (toolName === "search_memory" && "input" in part) {
-    const input = part.input as SearchMemoryInput | undefined;
-    return input?.query ?? "Search long-term memory";
-  }
-
-  if (toolName === "save_memory" && "input" in part) {
-    const input = part.input as SaveMemoryInput | undefined;
-    return input?.summary ?? input?.content ?? "Save a durable memory";
+    if (isError) return <>Memory search failed</>;
+    if (output) {
+      return (
+        <>
+          Searched memory
+          <span className="ml-1.5 text-[11px] text-foreground/40">
+            {output.resultCount} result{output.resultCount === 1 ? "" : "s"}
+          </span>
+        </>
+      );
+    }
+    return (
+      <>
+        Searching memory for &ldquo;{input?.query ?? "..."}&rdquo;
+      </>
+    );
   }
 
-  if (toolName === "forget_memory" && "input" in part) {
-    const input = part.input as ForgetMemoryInput | undefined;
-    return input?.memoryId ?? "Remove a stored memory";
+  if (toolName === "save_memory") {
+    const output = isDone && "output" in part ? (part.output as SaveMemoryOutput | undefined) : undefined;
+    if (isError) return <>Failed to save memory</>;
+    if (output) {
+      return (
+        <>
+          {output.status === "created" ? "Saved" : "Updated"} {output.kind} memory
+        </>
+      );
+    }
+    return <>Saving memory...</>;
   }
 
-  return "Memory operation";
+  const output = isDone && "output" in part ? (part.output as ForgetMemoryOutput | undefined) : undefined;
+  if (isError) return <>Failed to forget memory</>;
+  if (output) return <>Forgot {output.kind} memory</>;
+  return <>Forgetting memory...</>;
 }
 
 function MemoryResultBody({
@@ -105,35 +113,26 @@ function MemoryResultBody({
   output: ForgetMemoryOutput | SaveMemoryOutput | SearchMemoryOutput | null;
   toolName: string;
 }) {
-  if (!output) {
-    return null;
-  }
+  if (!output) return null;
 
   if (toolName === "search_memory") {
     const data = output as SearchMemoryOutput;
     return (
-      <div className="space-y-3">
-        <div className="text-muted text-xs">
-          {data.resultCount} result{data.resultCount === 1 ? "" : "s"} •{" "}
-          {data.resolvedScope}
-        </div>
-        <div className="space-y-2">
-          {data.results.map((result) => (
-            <div
-              className="border-separator bg-background/60 rounded-lg border px-3 py-2.5"
-              key={result.id}
-            >
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="font-medium text-foreground">{result.kind}</span>
-                <span className="text-muted">{result.scope}</span>
-                <span className="text-muted">{result.id}</span>
-              </div>
-              <p className="text-foreground mt-1 text-sm">
-                {result.summary ?? result.content}
-              </p>
+      <div className="space-y-2">
+        {data.results.map((result) => (
+          <div
+            className="rounded-lg border border-border/30 bg-background/40 px-2.5 py-2"
+            key={result.id}
+          >
+            <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-foreground/50">
+              <span className="font-medium text-foreground/70">{result.kind}</span>
+              <span>{result.scope}</span>
             </div>
-          ))}
-        </div>
+            <p className="mt-0.5 text-[12px] text-foreground/80">
+              {result.summary ?? result.content}
+            </p>
+          </div>
+        ))}
       </div>
     );
   }
@@ -141,21 +140,20 @@ function MemoryResultBody({
   if (toolName === "save_memory") {
     const data = output as SaveMemoryOutput;
     return (
-      <div className="text-sm">
-        <p className="text-foreground">
-          {data.status === "created" ? "Stored" : "Updated"} {data.kind} memory
-          in {data.scope} scope.
+      <div className="text-[11px]">
+        <p className="text-foreground/70">
+          {data.status === "created" ? "Stored" : "Updated"} {data.kind} memory in {data.scope} scope.
         </p>
-        <p className="text-muted mt-1">{data.memoryId}</p>
+        <p className="mt-0.5 text-foreground/40">{data.memoryId}</p>
       </div>
     );
   }
 
   const data = output as ForgetMemoryOutput;
   return (
-    <div className="text-sm">
-      <p className="text-foreground">Removed stored {data.kind} memory.</p>
-      <p className="text-muted mt-1">{data.memoryId}</p>
+    <div className="text-[11px]">
+      <p className="text-foreground/70">Removed {data.kind} memory.</p>
+      <p className="mt-0.5 text-foreground/40">{data.memoryId}</p>
     </div>
   );
 }
@@ -168,7 +166,6 @@ export const MemoryTool = memo(function MemoryTool({
   const toolName = getToolName(part);
   const approval = "approval" in part ? part.approval : undefined;
   const approvalId = approval?.id;
-  const [isExpanded, setIsExpanded] = useState(false);
   const output =
     "output" in part
       ? (part.output as
@@ -182,6 +179,16 @@ export const MemoryTool = memo(function MemoryTool({
     part.state === "approval-responded" ||
     part.state === "input-streaming" ||
     part.state === "input-available";
+  const isFinished =
+    part.state === "output-available" ||
+    part.state === "output-error" ||
+    part.state === "output-denied";
+  const isDenied = part.state === "output-denied";
+  const isError = part.state === "output-error";
+  const showApprovalActions =
+    part.state === "approval-requested" && approvalId && onApprove && onDeny;
+
+  const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
     setIsExpanded(
@@ -191,40 +198,43 @@ export const MemoryTool = memo(function MemoryTool({
     );
   }, [part.state]);
 
+  const summary = buildSummary(part, toolName);
+
+  const body = isRunning ? (
+    <p className="text-[11px] text-foreground/50">Working with memory...</p>
+  ) : isError ? (
+    <p className="text-[11px] text-danger-soft-foreground">
+      {errorText ?? "Memory operation failed."}
+    </p>
+  ) : isDenied ? (
+    <p className="text-[11px] text-muted">Memory operation denied.</p>
+  ) : (
+    <MemoryResultBody output={output ?? null} toolName={toolName} />
+  );
+
+  const footer =
+    toolName === "search_memory" && output
+      ? (
+          <span>
+            {(output as SearchMemoryOutput).resultCount} result
+            {(output as SearchMemoryOutput).resultCount === 1 ? "" : "s"} · {(output as SearchMemoryOutput).resolvedScope}
+          </span>
+        )
+      : null;
+
   return (
-    <Disclosure.Root
-      className="border-border/60 bg-surface/20 overflow-hidden rounded-2xl border"
+    <ToolLayout
+      summary={summary}
+      isRunning={isRunning}
+      isError={isError || isDenied}
+      isExpandable={isFinished}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-    >
-      <div className="px-3 py-1.5">
-        <div className="flex items-center gap-2">
-          <p className="shrink-0 text-[12px] font-medium text-foreground">
-            {getLabel(toolName)}
-          </p>
-          <span
-            className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] ${getStatusTone(part)}`}
-          >
-            {part.state === "approval-requested"
-              ? "Needs approval"
-              : part.state === "output-error"
-                ? "Failed"
-                : part.state === "output-denied"
-                  ? "Denied"
-                  : part.state === "output-available"
-                    ? "Completed"
-                    : "Running"}
-          </span>
-          <p className="text-muted min-w-0 flex-1 truncate text-[11px]">
-            {getSummary(part, toolName)}
-          </p>
-          <Disclosure.Trigger className="text-muted shrink-0 text-[10px] transition-colors hover:text-foreground">
-            {isExpanded ? "Hide" : "Show"}
-          </Disclosure.Trigger>
-        </div>
-
-        {part.state === "approval-requested" && approvalId ? (
-          <div className="mt-2 flex items-center gap-2">
+      errorText={errorText && part.state !== "output-error" ? errorText : undefined}
+      footer={footer}
+      actions={
+        showApprovalActions ? (
+          <div className="flex items-center gap-2">
             <Button
               className="h-7 min-w-0 px-3 text-[11px]"
               onPress={() => onApprove?.(approvalId)}
@@ -241,27 +251,10 @@ export const MemoryTool = memo(function MemoryTool({
               Deny
             </Button>
           </div>
-        ) : null}
-      </div>
-
-      <Disclosure.Content>
-        <div className="border-border/60 border-t px-3 py-2">
-          {isRunning ? (
-            <p className="text-muted text-[11px]">Working with memory...</p>
-          ) : part.state === "output-error" ? (
-            <p className="text-danger-soft-foreground text-[11px]">
-              {errorText ?? "Memory operation failed."}
-            </p>
-          ) : part.state === "output-denied" ? (
-            <p className="text-muted text-[11px]">Memory operation denied.</p>
-          ) : (
-            <MemoryResultBody
-              output={output ?? null}
-              toolName={toolName}
-            />
-          )}
-        </div>
-      </Disclosure.Content>
-    </Disclosure.Root>
+        ) : undefined
+      }
+    >
+      {body}
+    </ToolLayout>
   );
 });

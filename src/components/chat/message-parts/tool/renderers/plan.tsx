@@ -9,7 +9,6 @@ import {
   Label,
   Radio,
   RadioGroup,
-  Spinner,
 } from "@heroui/react";
 import {
   ArrowLeft01Icon,
@@ -33,6 +32,7 @@ import {
   syncPlanSidebarDraft,
 } from "@/components/chat/plan-sidebar-store";
 
+import { ToolLayout } from "./tool-layout";
 import {
   getPlanDraft,
   getPlanToolName,
@@ -87,17 +87,6 @@ type AskQuestionOutput = {
   status: "answered" | "pending";
 };
 
-function getStatusChipClass(tone: "danger" | "muted" | "success") {
-  switch (tone) {
-    case "success":
-      return "border-success/5 bg-success/10 text-success";
-    case "danger":
-      return "border-danger/20 bg-danger-soft text-danger-soft-foreground";
-    default:
-      return "border-border/60 bg-background/70 text-muted";
-  }
-}
-
 function getTaskStatusIcon(
   status: NonNullable<ManageTaskOutput["task"]>["status"],
 ) {
@@ -107,16 +96,13 @@ function getTaskStatusIcon(
   return TimeQuarterPassIcon;
 }
 
-function getTaskStatusChipClass(
+function getTaskStatusTextClass(
   status: NonNullable<ManageTaskOutput["task"]>["status"],
 ) {
-  if (status === "completed")
-    return "border-success/10 bg-success/10 text-success";
-  if (status === "in_progress")
-    return "border-accent/10 bg-accent/10 text-accent";
-  if (status === "blocked")
-    return "border-danger/15 bg-danger-soft text-danger-soft-foreground";
-  return "border-border/50 bg-background/60 text-muted";
+  if (status === "completed") return "text-success";
+  if (status === "in_progress") return "text-accent";
+  if (status === "blocked") return "text-danger";
+  return "text-foreground/40";
 }
 
 function getPlanStatus(
@@ -147,87 +133,41 @@ function getPlanStatus(
   return { label: "Running", tone: "muted" as const };
 }
 
-function getToolLabel(toolName: PlanToolName) {
-  switch (toolName) {
-    case "create_plan":
-      return "Plan";
-    case "update_plan":
-      return "Plan";
-    case "manage_task":
-      return "Task updated";
-    default:
-      return "Clarification";
+function buildManageTaskSummary(output?: unknown): string {
+  if (!output) return "Processing task…";
+  const value = output as ManageTaskOutput;
+  if (!value.task) {
+    return value.action === "delete" ? "Removed task" : "Updated task";
   }
+  return `${value.task.title} · ${getTaskStatusLabel(value.task.status)}`;
 }
 
-function buildSummary(
-  toolName: PlanToolName,
-  output?: unknown,
-  draft?: PlanDocumentDraft | null,
-) {
-  if (toolName === "create_plan" && (output || draft)) {
-    const value = (output as CreatePlanOutput | undefined) ?? draft!;
-    const taskCount =
-      typeof (value as CreatePlanOutput | PlanDocumentDraft).taskCount ===
-      "number"
-        ? (value as CreatePlanOutput | PlanDocumentDraft).taskCount
-        : 0;
-    return `${value.title} · ${getPlanAudienceLabel(value.audience)} · ${taskCount} task${taskCount === 1 ? "" : "s"}`;
+function buildAskQuestionSummary(output?: unknown): string {
+  if (!output) return "Waiting for input";
+  const value = output as AskQuestionOutput;
+  if (value.status === "answered") {
+    return `${value.answers?.length ?? value.questions.length}/${value.questions.length} answered`;
   }
-  if (toolName === "update_plan" && (output || draft)) {
-    const value = (output as UpdatePlanOutput | undefined) ?? draft!;
-    return `${value.title} · ${getPlanAudienceLabel(value.audience)}`;
-  }
-  if (toolName === "manage_task" && output) {
-    const value = output as ManageTaskOutput;
-    if (!value.task) {
-      return value.action === "delete" ? "Removed task" : "Updated task";
-    }
-    return `${value.task.title} · ${getTaskStatusLabel(value.task.status)}`;
-  }
-  if (toolName === "ask_question" && output) {
-    const value = output as AskQuestionOutput;
-    if (value.status === "answered") {
-      return `${value.answers?.length ?? value.questions.length}/${value.questions.length} answered`;
-    }
-    return `${value.questions.length} question${value.questions.length === 1 ? "" : "s"}`;
-  }
-  if (draft && (toolName === "create_plan" || toolName === "update_plan")) {
-    return `${draft.title} · ${getPlanAudienceLabel(draft.audience)}`;
-  }
-  return toolName === "ask_question" ? "Waiting for input" : "Processing…";
+  return `${value.questions.length} question${value.questions.length === 1 ? "" : "s"}`;
 }
 
 function AnsweredQuestions({ output }: { output: AskQuestionOutput }) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1">
       {output.questions.map((question, index) => {
         const answer = output.answers?.find(
           (candidate) => candidate.questionId === question.id,
         );
         return (
-          <div
-            className="rounded-xl border border-border/20 bg-background/50 px-2.5 py-2"
-            key={question.id}
-          >
-            <div className="flex items-center gap-1.5">
-              <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-success-soft text-[8px] font-medium text-success">
-                {index + 1}
-              </span>
-              <span className="text-[10px] text-muted">{question.header}</span>
-            </div>
-            <p className="mt-0.5 text-[11px] font-medium text-foreground">
-              {question.question}
-            </p>
-            <div className="mt-1 flex items-start gap-1.5">
-              <HugeiconsIcon
-                className="mt-px shrink-0 text-success"
-                color="currentColor"
-                icon={Tick01Icon}
-                size={10}
-                strokeWidth={2}
-              />
-              <p className="text-[10px] text-foreground/80">
+          <div className="flex items-start gap-2 py-0.5" key={question.id}>
+            <span className="mt-px flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-success-soft text-[8px] font-medium text-success">
+              {index + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] text-foreground/70">
+                {question.question}
+              </p>
+              <p className="mt-0.5 text-[10px] text-foreground/50">
                 {answer?.answer ?? "No answer recorded."}
               </p>
             </div>
@@ -334,17 +274,21 @@ function QuestionBody({
 
   if (output.status === "answered" && output.answers) {
     return (
-      <div className="rounded-2xl border border-border/60 bg-surface/20 px-3 py-1.5">
-        <div className="mb-1.5 flex items-center gap-2">
-          <p className="text-[12px] font-medium text-foreground">
-            Clarification captured
-          </p>
-          <div className="flex items-center gap-1 rounded-full border border-success/5 bg-success/10 px-1.5 py-0.5 text-[10px] text-success">
-            <span className="truncate">Done</span>
-          </div>
-        </div>
+      <ToolLayout
+        summary={
+          <>
+            Clarification
+            <span className="ml-1.5 text-[11px] text-foreground/40">
+              {output.answers.length}/{output.questions.length} answered
+            </span>
+          </>
+        }
+        isExpanded={false}
+        onExpandedChange={() => {}}
+        isExpandable
+      >
         <AnsweredQuestions output={output} />
-      </div>
+      </ToolLayout>
     );
   }
 
@@ -363,22 +307,16 @@ function QuestionBody({
   const controlClass = "size-3 shrink-0";
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border/60 bg-surface/20">
+    <div className="overflow-hidden rounded-xl border border-border/40 bg-surface/20">
       <div className="border-b border-border/30 px-3 py-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-[12px] font-medium text-foreground">
-            Clarification
-          </p>
-          <div className="flex items-center gap-1 rounded-full border border-border/60 bg-background/70 px-1.5 py-0.5 text-[10px] text-muted">
-            <Spinner className="h-3 w-3" size="sm" />
-            <span className="truncate">Waiting</span>
-          </div>
-          <span className="text-[10px] text-muted">
+        <p className="text-[13px] sentinel-thinking-shimmer">
+          Clarification
+          <span className="ml-1.5 text-[11px]">
             {output.questions.length} question
             {output.questions.length === 1 ? "" : "s"}
           </span>
-        </div>
-        <p className="mt-1.5 text-xs font-medium text-foreground">
+        </p>
+        <p className="mt-1.5 text-[13px] font-medium text-foreground">
           {currentQuestion.question}
         </p>
       </div>
@@ -584,7 +522,7 @@ function QuestionBody({
   );
 }
 
-function renderManageTask(output: ManageTaskOutput) {
+function ManageTaskBody({ output }: { output: ManageTaskOutput }) {
   const actionLabel =
     output.action === "create"
       ? "Created"
@@ -594,52 +532,162 @@ function renderManageTask(output: ManageTaskOutput) {
 
   if (!output.task) {
     return (
-      <div className="px-3.5 py-3">
-        <p className="text-[11px] text-muted">
-          {actionLabel} task successfully.
-        </p>
-      </div>
+      <p className="text-[11px] text-foreground/50">
+        {actionLabel} task successfully.
+      </p>
     );
   }
 
   const StatusIcon = getTaskStatusIcon(output.task.status);
 
   return (
-    <div className="px-3.5 py-3">
-      <div className="flex items-start gap-2">
-        <HugeiconsIcon
-          className={`mt-px shrink-0 ${
-            output.task.status === "completed"
-              ? "text-success"
-              : output.task.status === "in_progress"
-                ? "text-accent"
-                : output.task.status === "blocked"
-                  ? "text-danger"
-                  : "text-muted/60"
-          }`}
-          color="currentColor"
-          icon={StatusIcon}
-          size={12}
-          strokeWidth={1.5}
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-medium text-foreground">
-              {output.task.title}
-            </span>
-            <span
-              className={`rounded-full border px-1.5 py-px text-[9px] ${getTaskStatusChipClass(output.task.status)}`}
-            >
-              {actionLabel} · {getTaskStatusLabel(output.task.status)}
-            </span>
-          </div>
-          {output.task.description ? (
-            <p className="mt-0.5 text-[10px] text-muted">
-              {output.task.description}
+    <div className="flex items-start gap-2">
+      <HugeiconsIcon
+        className={`mt-px shrink-0 ${getTaskStatusTextClass(output.task.status)}`}
+        color="currentColor"
+        icon={StatusIcon}
+        size={12}
+        strokeWidth={1.5}
+      />
+      <div className="min-w-0 flex-1">
+        <span className="text-[11px] font-medium text-foreground/80">
+          {output.task.title}
+        </span>
+        <span
+          className={`ml-1.5 text-[10px] ${getTaskStatusTextClass(output.task.status)}`}
+        >
+          {actionLabel} · {getTaskStatusLabel(output.task.status)}
+        </span>
+        {output.task.description ? (
+          <p className="mt-0.5 text-[10px] text-foreground/40">
+            {output.task.description}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function PlanDocCard({
+  draft,
+  handleOpenSidebar,
+  isRunning,
+  onStartPlanImplementation,
+  part,
+  toolName,
+}: {
+  draft: PlanDocumentDraft | null;
+  handleOpenSidebar: () => void;
+  isRunning: boolean;
+  onStartPlanImplementation?: () => void;
+  part: RendererProps["part"];
+  toolName: PlanToolName;
+}) {
+  const output = "output" in part ? part.output : undefined;
+  const errorText = "errorText" in part ? part.errorText : undefined;
+  const value =
+    (output as CreatePlanOutput | UpdatePlanOutput | undefined) ?? draft;
+
+  if (!value) {
+    return (
+      <p className={`text-[13px] ${isRunning ? "sentinel-thinking-shimmer" : "text-foreground/70"}`}>
+        {toolName === "create_plan" ? "Drafting" : "Updating"} plan…
+      </p>
+    );
+  }
+
+  const taskCount =
+    "taskCount" in value && typeof value.taskCount === "number"
+      ? value.taskCount
+      : (draft?.tasks?.length ?? 0);
+  const tasks = draft?.tasks ?? [];
+  const isError =
+    part.state === "output-error" || part.state === "output-denied";
+  const isDone = part.state === "output-available";
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-border/40 bg-surface/20">
+      <div className="px-3.5 py-2.5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className={`text-[13px] font-medium ${isRunning ? "sentinel-thinking-shimmer" : "text-foreground"}`}>
+              {value.title || "Untitled plan"}
             </p>
+            {value.summary ? (
+              <p className="mt-1 line-clamp-2 text-[11px] text-foreground/50">
+                {value.summary}
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[10px] text-foreground/40">
+          <span>{getPlanAudienceLabel(value.audience)}</span>
+          {taskCount > 0 ? (
+            <>
+              <span>·</span>
+              <span>
+                {taskCount} task{taskCount === 1 ? "" : "s"}
+              </span>
+            </>
+          ) : null}
+          {isDone ? (
+            <>
+              <span>·</span>
+              <span className="text-success">
+                {toolName === "create_plan" ? "Created" : "Updated"}
+              </span>
+            </>
+          ) : null}
+          {isError ? (
+            <>
+              <span>·</span>
+              <span className="text-danger">
+                {part.state === "output-denied" ? "Denied" : "Failed"}
+              </span>
+            </>
           ) : null}
         </div>
+
+        {tasks.length > 0 ? (
+          <div className="mt-2.5 flex gap-0.5">
+            {tasks.map((task, i) => (
+              <div
+                key={i}
+                className="h-1 flex-1 rounded-full bg-foreground/15"
+                title={task.title}
+              />
+            ))}
+          </div>
+        ) : null}
       </div>
+
+      <div className="flex items-center gap-1.5 border-t border-border/30 px-3.5 py-1.5">
+        <Button
+          className="h-6 min-w-0 px-2.5 text-[10px]"
+          onPress={handleOpenSidebar}
+          size="sm"
+          variant="primary"
+        >
+          Open
+        </Button>
+        {isDone && onStartPlanImplementation ? (
+          <Button
+            className="h-6 min-w-0 px-2.5 text-[10px]"
+            onPress={onStartPlanImplementation}
+            size="sm"
+            variant="primary"
+          >
+            Start
+          </Button>
+        ) : null}
+      </div>
+
+      {errorText && part.state === "output-error" ? (
+        <div className="border-t border-danger/10 px-3.5 py-1.5 text-[11px] text-danger">
+          {errorText}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -749,7 +797,10 @@ export const PlanTool = memo(function PlanTool({
     if (shouldAutoExpand && autoExpandedRef.current !== part.toolCallId) {
       autoExpandedRef.current = part.toolCallId;
       setIsExpanded(true);
-    } else if (!shouldAutoExpand && autoExpandedRef.current === part.toolCallId) {
+    } else if (
+      !shouldAutoExpand &&
+      autoExpandedRef.current === part.toolCallId
+    ) {
       autoExpandedRef.current = null;
       setIsExpanded(false);
     }
@@ -777,112 +828,87 @@ export const PlanTool = memo(function PlanTool({
     );
   }
 
-  const hasExpandableBody = !isPlanDoc;
+  const isRunning =
+    status.label === "Running" ||
+    status.label === "Drafting" ||
+    status.label === "Waiting";
 
-  const cardHeader = (
-    <div className="flex items-center gap-2">
-      <p className="shrink-0 text-[12px] font-medium text-foreground">
-        {getToolLabel(toolName)}
-      </p>
-      <div
-        className={`shrink-0 flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] ${getStatusChipClass(status.tone)}`}
-      >
-        {(status.label === "Running" ||
-          status.label === "Drafting" ||
-          status.label === "Waiting") && (
-          <Spinner className="h-3 w-3" size="sm" />
-        )}
-        <span className="truncate">{status.label}</span>
-      </div>
-      <p className="min-w-0 flex-1 truncate text-[11px] text-foreground/72">
-        {buildSummary(toolName, output, planDraft)}
-      </p>
-      <div className="flex shrink-0 items-center gap-1">
-        {isPlanDoc &&
-        part.state === "output-available" &&
-        onStartPlanImplementation ? (
-          <Button
-            className="h-auto min-w-0 px-2 py-0.5 bg-background text-[10px] text-foreground transition-colors hover:text-foreground"
-            onPress={onStartPlanImplementation}
-            size="sm"
-            type="button"
-            variant="tertiary"
-          >
-            Start
-          </Button>
-        ) : null}
-        {planDraft ? (
-          <Button
-            className="h-auto min-w-0 px-2 py-0.5 bg-background text-[10px] text-foreground transition-colors hover:text-foreground"
-            onPress={handleOpenSidebar}
-            size="sm"
-            type="button"
-            variant="tertiary"
-          >
-            Open
-          </Button>
-        ) : null}
-        {hasExpandableBody && isFinishedState ? (
-          <Button
-            className="h-auto min-w-0 px-2 py-0.5 bg-background text-[10px] text-foreground transition-colors hover:text-foreground"
-            onPress={() => setIsExpanded((prev) => !prev)}
-            size="sm"
-            type="button"
-            variant="tertiary"
-          >
-            {isExpanded ? "Hide" : "Show"}
-          </Button>
-        ) : null}
-      </div>
-    </div>
-  );
-
-  const cardError =
-    errorText && part.state !== "output-error" ? (
-      <div className="mt-2 rounded-xl border border-danger/20 bg-danger-soft px-3 py-2 text-xs text-danger-soft-foreground">
-        {errorText}
-      </div>
-    ) : null;
-
-  if (!hasExpandableBody) {
+  if (isPlanDoc) {
     return (
-      <div className="rounded-2xl border border-border/60 bg-surface/20 px-3 py-1.5">
-        {cardHeader}
-        {cardError}
-      </div>
+      <PlanDocCard
+        draft={planDraft}
+        handleOpenSidebar={handleOpenSidebar}
+        isRunning={isRunning}
+        onStartPlanImplementation={onStartPlanImplementation}
+        part={part}
+        toolName={toolName}
+      />
     );
   }
 
-  return (
-    <div className="rounded-2xl border border-border/60 bg-surface/20 px-3 py-1.5">
-      {cardHeader}
+  if (toolName === "manage_task") {
+    const taskSummary = buildManageTaskSummary(output);
+    return (
+      <ToolLayout
+        summary={
+          <>
+            Task updated
+            <span className="ml-1.5 text-[11px] text-foreground/40">
+              {taskSummary}
+            </span>
+          </>
+        }
+        isRunning={isRunning}
+        isError={status.tone === "danger"}
+        isExpandable={isFinishedState}
+        isExpanded={isExpanded}
+        onExpandedChange={setIsExpanded}
+        errorText={
+          errorText && part.state !== "output-error" ? errorText : undefined
+        }
+      >
+        {part.state === "output-error" ? (
+          <p className="text-[11px] text-danger">
+            {errorText ?? "Task operation failed."}
+          </p>
+        ) : output ? (
+          <ManageTaskBody output={output as ManageTaskOutput} />
+        ) : null}
+      </ToolLayout>
+    );
+  }
 
-      {isExpanded && (
-        <div className="mt-1.5 overflow-hidden rounded-2xl border border-border/20 bg-surface">
-          <div className="border-b border-border/50 px-3.5 py-1.5 text-[9px] text-foreground">
-            {getToolLabel(toolName)}
-          </div>
-          {part.state === "output-error" ? (
-            <div className="px-3.5 py-2">
-              <p className="text-[11px] text-danger-soft-foreground">
-                {errorText ?? "Planning action failed."}
-              </p>
-            </div>
-          ) : toolName === "manage_task" && output ? (
-            renderManageTask(output as ManageTaskOutput)
-          ) : toolName === "ask_question" && output ? (
-            <div className="px-3.5 py-2">
-              <AnsweredQuestions output={output as AskQuestionOutput} />
-            </div>
-          ) : (
-            <div className="px-3.5 py-2">
-              <p className="text-[11px] text-muted">Processing…</p>
-            </div>
-          )}
-        </div>
-      )}
+  if (toolName === "ask_question") {
+    const questionSummary = buildAskQuestionSummary(output);
+    return (
+      <ToolLayout
+        summary={
+          <>
+            Clarification
+            <span className="ml-1.5 text-[11px] text-foreground/40">
+              {questionSummary}
+            </span>
+          </>
+        }
+        isRunning={isRunning}
+        isError={status.tone === "danger"}
+        isExpandable={isFinishedState}
+        isExpanded={isExpanded}
+        onExpandedChange={setIsExpanded}
+        errorText={
+          errorText && part.state !== "output-error" ? errorText : undefined
+        }
+      >
+        {part.state === "output-error" ? (
+          <p className="text-[11px] text-danger">
+            {errorText ?? "Clarification failed."}
+          </p>
+        ) : output ? (
+          <AnsweredQuestions output={output as AskQuestionOutput} />
+        ) : null}
+      </ToolLayout>
+    );
+  }
 
-      {cardError}
-    </div>
-  );
+  return null;
 });

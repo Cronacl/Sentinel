@@ -1,9 +1,11 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { memo, useEffect, useState } from "react";
-import { Button, Disclosure, ScrollShadow, Spinner } from "@heroui/react";
+import { ScrollShadow } from "@heroui/react";
 
 import type { RendererProps } from "../renderer";
+import { ToolLayout } from "./tool-layout";
 
 type ListToolInput = {
   ignore?: string[];
@@ -62,48 +64,38 @@ function isListToolOutput(value: unknown): value is ListToolOutput {
   );
 }
 
-function getStatusChipClass(tone: "danger" | "muted" | "success") {
-  switch (tone) {
-    case "success":
-      return "border-success/5 bg-success/10 text-success";
-    case "danger":
-      return "border-danger/20 bg-danger-soft text-danger-soft-foreground";
-    default:
-      return "border-border/60 bg-background/70 text-muted";
-  }
-}
-
-function getListStatus(part: RendererProps["part"], output: ListToolOutput | null) {
+function buildSummary(
+  part: RendererProps["part"],
+  shownRoot: string,
+  output: ListToolOutput | null,
+): ReactNode {
   if (part.state === "output-error") {
-    return { label: "Failed", tone: "danger" as const };
+    return (
+      <>
+        Failed to list{" "}
+        <span className="font-mono text-[12px]">{shownRoot}</span>
+      </>
+    );
   }
 
   if (part.state === "output-available" && output) {
-    return { label: "Success", tone: "success" as const };
+    return (
+      <>
+        Listed{" "}
+        <span className="font-mono text-[12px]">{shownRoot}</span>
+        <span className="ml-1.5 text-[11px] text-foreground/40">
+          {output.directoryCount} dir{output.directoryCount === 1 ? "" : "s"}, {output.fileCount} file{output.fileCount === 1 ? "" : "s"}
+        </span>
+      </>
+    );
   }
 
-  return { label: "Running", tone: "muted" as const };
-}
-
-function buildListBody({
-  errorText,
-  input,
-  output,
-}: {
-  errorText?: string;
-  input: ListToolInput | null;
-  output: ListToolOutput | null;
-}) {
-  if (output?.tree.trim()) {
-    return output.tree;
-  }
-
-  if (errorText) {
-    return errorText;
-  }
-
-  const requestedPath = input?.path?.trim() || ".";
-  return `Listing ${requestedPath}`;
+  return (
+    <>
+      Listing{" "}
+      <span className="font-mono text-[12px]">{shownRoot}</span>
+    </>
+  );
 }
 
 export const ListTool = memo(function ListTool({
@@ -114,10 +106,10 @@ export const ListTool = memo(function ListTool({
   const listInput = hasInput && isListToolInput(part.input) ? part.input : null;
   const listOutput = hasOutput && isListToolOutput(part.output) ? part.output : null;
   const partErrorText = "errorText" in part ? part.errorText : undefined;
-  const status = getListStatus(part, listOutput);
   const isFinishedState =
     part.state === "output-error" ||
     (part.state === "output-available" && Boolean(listOutput));
+  const isErrorState = part.state === "output-error";
   const [isExpanded, setIsExpanded] = useState(!isFinishedState);
 
   useEffect(() => {
@@ -126,75 +118,33 @@ export const ListTool = memo(function ListTool({
 
   const requestedPath = listInput?.path?.trim() || ".";
   const shownRoot = listOutput?.root ?? requestedPath;
-  const terminalText = buildListBody({
-    errorText: partErrorText,
-    input: listInput,
-    output: listOutput,
-  });
+  const summary = buildSummary(part, shownRoot, listOutput);
+
+  const bodyText = listOutput?.tree.trim()
+    ? listOutput.tree
+    : partErrorText ?? `Listing ${requestedPath}`;
+
+  const footer = listOutput ? (
+    <span>
+      {listOutput.directoryCount} dir{listOutput.directoryCount === 1 ? "" : "s"} · {listOutput.fileCount} file{listOutput.fileCount === 1 ? "" : "s"} · {listOutput.totalEntries} shown
+      {listOutput.truncated ? " · truncated" : ""}
+    </span>
+  ) : null;
 
   return (
-    <Disclosure isExpanded={isExpanded} onExpandedChange={setIsExpanded}>
-      <div className="rounded-2xl border border-border/60 bg-surface/20 px-3 py-1.5">
-        <div className="flex items-center gap-2">
-          <p className="shrink-0 text-[12px] font-medium text-foreground">List</p>
-          <div
-            className={`shrink-0 rounded-full flex items-center gap-1 border px-1.5 py-0.5 text-[10px] ${getStatusChipClass(status.tone)}`}
-          >
-            {status.label === "Running" ? (
-              <Spinner className="h-3 w-3" size="sm" />
-            ) : null}
-            <span className="truncate">{status.label}</span>
-          </div>
-          <p className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground/72">
-            {shownRoot}
-          </p>
-          {isFinishedState ? (
-            <Disclosure.Heading>
-              <Button
-                slot="trigger"
-                size="sm"
-                variant="tertiary"
-                className="h-auto min-w-0 px-2 py-0.5 bg-background text-[10px] text-foreground transition-colors hover:text-foreground"
-              >
-                {isExpanded ? "Hide" : "Show"}
-              </Button>
-            </Disclosure.Heading>
-          ) : null}
-        </div>
-
-        <Disclosure.Content>
-          <Disclosure.Body>
-            <div className="mt-1.5 overflow-hidden rounded-2xl border border-border/20 bg-surface">
-              <div className="border-b border-border/50 px-3.5 py-1.5 text-[9px] text-foreground">
-                List
-              </div>
-
-              <div className="px-3.5 py-2">
-                <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground">
-                  {terminalText}
-                </ScrollShadow>
-
-                {listOutput ? (
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-[10px] text-foreground">
-                    <span className="truncate">
-                      {listOutput.directoryCount} dirs · {listOutput.fileCount} files ·{" "}
-                      {listOutput.totalEntries} shown
-                      {listOutput.truncated ? " · truncated" : ""}
-                    </span>
-                    <span className="shrink-0 text-white/72">{status.label}</span>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </Disclosure.Body>
-        </Disclosure.Content>
-
-        {partErrorText && part.state !== "output-error" ? (
-          <div className="mt-2 rounded-xl border border-danger/20 bg-danger-soft px-3 py-2 text-xs text-danger-soft-foreground">
-            {partErrorText}
-          </div>
-        ) : null}
-      </div>
-    </Disclosure>
+    <ToolLayout
+      summary={summary}
+      isRunning={!isFinishedState}
+      isError={isErrorState}
+      isExpandable={isFinishedState}
+      isExpanded={isExpanded}
+      onExpandedChange={setIsExpanded}
+      errorText={partErrorText && part.state !== "output-error" ? partErrorText : undefined}
+      footer={footer}
+    >
+      <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
+        {bodyText}
+      </ScrollShadow>
+    </ToolLayout>
   );
 });

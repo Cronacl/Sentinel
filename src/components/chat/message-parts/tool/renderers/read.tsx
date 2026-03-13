@@ -1,9 +1,11 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { memo, useEffect, useState } from "react";
-import { Button, Disclosure, ScrollShadow, Spinner } from "@heroui/react";
+import { ScrollShadow } from "@heroui/react";
 
 import type { RendererProps } from "../renderer";
+import { ToolLayout } from "./tool-layout";
 
 type ReadToolInput = {
   limit?: number;
@@ -66,51 +68,42 @@ function isReadToolOutput(value: unknown): value is ReadToolOutput {
   );
 }
 
-function getStatusChipClass(tone: "danger" | "muted" | "success") {
-  switch (tone) {
-    case "success":
-      return "border-success/5 bg-success/10 text-success";
-    case "danger":
-      return "border-danger/20 bg-danger-soft text-danger-soft-foreground";
-    default:
-      return "border-border/60 bg-background/70 text-muted";
-  }
-}
-
-function getReadStatus(part: RendererProps["part"], output: ReadToolOutput | null) {
+function buildSummary(
+  part: RendererProps["part"],
+  shownPath: string,
+  output: ReadToolOutput | null,
+): ReactNode {
   if (part.state === "output-error") {
-    return { label: "Failed", tone: "danger" as const };
+    return (
+      <>
+        Failed to read{" "}
+        <span className="font-mono text-[12px]">{shownPath}</span>
+      </>
+    );
   }
 
   if (part.state === "output-available" && output) {
-    return { label: "Success", tone: "success" as const };
+    const detail =
+      output.kind === "file"
+        ? `${output.totalLines ?? 0} lines`
+        : `${output.totalEntries ?? 0} entries`;
+    return (
+      <>
+        Read{" "}
+        <span className="font-mono text-[12px]">{output.path}</span>
+        <span className="ml-1.5 text-[11px] text-foreground/40">
+          {detail}
+        </span>
+      </>
+    );
   }
 
-  return { label: "Running", tone: "muted" as const };
-}
-
-function buildReadBody({
-  errorText,
-  input,
-  output,
-}: {
-  errorText?: string;
-  input: ReadToolInput | null;
-  output: ReadToolOutput | null;
-}) {
-  if (output?.content?.trim()) {
-    return output.content;
-  }
-
-  if (output?.kind === "directory" && output.entries.length > 0) {
-    return output.entries.join("\n");
-  }
-
-  if (errorText) {
-    return errorText;
-  }
-
-  return `Reading ${input?.path ?? "."}`;
+  return (
+    <>
+      Reading{" "}
+      <span className="font-mono text-[12px]">{shownPath}</span>
+    </>
+  );
 }
 
 export const ReadTool = memo(function ReadTool({
@@ -121,10 +114,10 @@ export const ReadTool = memo(function ReadTool({
   const readInput = hasInput && isReadToolInput(part.input) ? part.input : null;
   const readOutput = hasOutput && isReadToolOutput(part.output) ? part.output : null;
   const partErrorText = "errorText" in part ? part.errorText : undefined;
-  const status = getReadStatus(part, readOutput);
   const isFinishedState =
     part.state === "output-error" ||
     (part.state === "output-available" && Boolean(readOutput));
+  const isErrorState = part.state === "output-error";
   const [isExpanded, setIsExpanded] = useState(!isFinishedState);
 
   useEffect(() => {
@@ -132,78 +125,39 @@ export const ReadTool = memo(function ReadTool({
   }, [isFinishedState, part.toolCallId]);
 
   const shownPath = readOutput?.path ?? readInput?.path ?? ".";
-  const terminalText = buildReadBody({
-    errorText: partErrorText,
-    input: readInput,
-    output: readOutput,
-  });
+  const summary = buildSummary(part, shownPath, readOutput);
+
+  const bodyText = readOutput?.content?.trim()
+    ? readOutput.content
+    : readOutput?.kind === "directory" && readOutput.entries.length > 0
+      ? readOutput.entries.join("\n")
+      : partErrorText ?? `Reading ${readInput?.path ?? "."}`;
+
+  const footer = readOutput ? (
+    <span>
+      {readOutput.kind === "file"
+        ? `${readOutput.totalLines ?? 0} lines`
+        : `${readOutput.totalEntries ?? 0} entries`}
+      {readOutput.truncated && readOutput.nextOffset
+        ? ` · next offset ${readOutput.nextOffset}`
+        : ""}
+    </span>
+  ) : null;
 
   return (
-    <Disclosure isExpanded={isExpanded} onExpandedChange={setIsExpanded}>
-      <div className="rounded-2xl border border-border/60 bg-surface/20 px-3 py-1.5">
-        <div className="flex items-center gap-2">
-          <p className="shrink-0 text-[12px] font-medium text-foreground">Read</p>
-          <div
-            className={`shrink-0 rounded-full flex items-center gap-1 border px-1.5 py-0.5 text-[10px] ${getStatusChipClass(status.tone)}`}
-          >
-            {status.label === "Running" ? (
-              <Spinner className="h-3 w-3" size="sm" />
-            ) : null}
-            <span className="truncate">{status.label}</span>
-          </div>
-          <p className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground/72">
-            {shownPath}
-          </p>
-          {isFinishedState ? (
-            <Disclosure.Heading>
-              <Button
-                slot="trigger"
-                size="sm"
-                variant="tertiary"
-                className="h-auto min-w-0 px-2 py-0.5 bg-background text-[10px] text-foreground transition-colors hover:text-foreground"
-              >
-                {isExpanded ? "Hide" : "Show"}
-              </Button>
-            </Disclosure.Heading>
-          ) : null}
-        </div>
-
-        <Disclosure.Content>
-          <Disclosure.Body>
-            <div className="mt-1.5 overflow-hidden rounded-2xl border border-border/20 bg-surface">
-              <div className="border-b border-border/50 px-3.5 py-1.5 text-[9px] text-foreground">
-                Read
-              </div>
-
-              <div className="px-3.5 py-2">
-                <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground">
-                  {terminalText}
-                </ScrollShadow>
-
-                {readOutput ? (
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-[10px] text-foreground">
-                    <span className="truncate">
-                      {readOutput.kind === "file"
-                        ? `${readOutput.totalLines ?? 0} lines`
-                        : `${readOutput.totalEntries ?? 0} entries`}
-                      {readOutput.truncated && readOutput.nextOffset
-                        ? ` · next offset ${readOutput.nextOffset}`
-                        : ""}
-                    </span>
-                    <span className="shrink-0 text-white/72">{status.label}</span>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </Disclosure.Body>
-        </Disclosure.Content>
-
-        {partErrorText && part.state !== "output-error" ? (
-          <div className="mt-2 rounded-xl border border-danger/20 bg-danger-soft px-3 py-2 text-xs text-danger-soft-foreground">
-            {partErrorText}
-          </div>
-        ) : null}
-      </div>
-    </Disclosure>
+    <ToolLayout
+      summary={summary}
+      isRunning={!isFinishedState}
+      isError={isErrorState}
+      isExpandable={isFinishedState}
+      isExpanded={isExpanded}
+      onExpandedChange={setIsExpanded}
+      errorText={partErrorText && part.state !== "output-error" ? partErrorText : undefined}
+      footer={footer}
+    >
+      <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
+        {bodyText}
+      </ScrollShadow>
+    </ToolLayout>
   );
 });

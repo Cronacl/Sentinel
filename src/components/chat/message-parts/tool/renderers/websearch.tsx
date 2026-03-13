@@ -1,11 +1,12 @@
 "use client";
 
-import { memo, useCallback } from "react";
+import { memo, useCallback, useState } from "react";
 import { Button } from "@heroui/react";
 
 import { useRightSidebar } from "@/components/shell/shell-context";
 import { resolveSearchProviderOptions } from "@/lib/search";
 import type { RendererProps } from "../renderer";
+import { ToolLayout } from "./tool-layout";
 
 import { WebSearchSidebar } from "./websearch-sidebar";
 
@@ -130,6 +131,14 @@ function resolveProvider(
   return { id, ...options };
 }
 
+function getDomain(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
 export const WebSearchTool = memo(function WebSearchTool({
   onApprove,
   onDeny,
@@ -149,8 +158,13 @@ export const WebSearchTool = memo(function WebSearchTool({
     part.state === "approval-responded" ||
     part.state === "input-streaming" ||
     part.state === "input-available";
+  const isDenied = part.state === "output-denied";
+  const isError = part.state === "output-error";
+  const isFinished = part.state === "output-available";
   const needsApproval =
     part.state === "approval-requested" && approvalId && onApprove && onDeny;
+
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const handleOpenSidebar = useCallback(() => {
     if (!output || output.results.length === 0) return;
@@ -163,104 +177,100 @@ export const WebSearchTool = memo(function WebSearchTool({
     );
   }, [open, output, provider.id]);
 
-  if (!input) {
-    return null;
-  }
+  if (!input) return null;
 
-  if (needsApproval) {
-    return (
-      <div className="rounded-xl border border-border/60 bg-surface/20 px-3 py-2.5">
-        <div className="flex items-center gap-2 text-xs">
-          <span className="font-medium text-foreground/70">
-            Web search:
+  const summary = (() => {
+    if (isDenied) return "Search denied";
+    if (isError) return "Search failed";
+    if (isRunning) return <>Searching for &ldquo;{input.query}&rdquo;</>;
+    if (needsApproval) return <>Search web for &ldquo;{input.query}&rdquo;</>;
+    if (output) {
+      const count = output.resultCount;
+      return (
+        <>
+          Searched {count} source{count !== 1 ? "s" : ""}
+          <span className="ml-1.5 text-[11px] text-foreground/40">
+            for &ldquo;{output.query}&rdquo;
           </span>
-          <span className="truncate text-muted">{input.query}</span>
-        </div>
-        <div className="mt-2.5 flex items-center gap-2">
-          <Button
-            className="h-7 min-w-0 px-3 text-[11px]"
-            onPress={() => onApprove?.(approvalId)}
-            size="sm"
-          >
-            Allow
-          </Button>
-          <Button
-            className="h-7 min-w-0 px-3 text-[11px]"
-            onPress={() => onDeny?.(approvalId)}
-            size="sm"
-            variant="tertiary"
-          >
-            Deny
-          </Button>
-        </div>
-      </div>
-    );
-  }
+        </>
+      );
+    }
+    return <>Searching for &ldquo;{input.query}&rdquo;</>;
+  })();
 
-  if (isRunning) {
-    return (
-      <div className="w-full overflow-hidden rounded-lg">
-        <div className="flex w-full items-center justify-between gap-3 pr-1">
-          <div className="flex min-w-0 flex-1 items-center gap-2 text-left">
-            <p className="flex min-w-0 items-center gap-2 text-xs font-medium text-foreground/70">
-              <span className="truncate sentinel-thinking-shimmer">
-                Searching the web...
-              </span>
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (part.state === "output-error") {
-    return (
-      <div className="w-full overflow-hidden rounded-lg">
-        <div className="flex w-full items-center gap-2 pr-1">
-          <p className="text-xs font-medium text-danger/80">
-            Search failed
-          </p>
-          {errorText ? (
-            <span className="truncate text-[11px] text-danger/60">
-              {errorText}
+  const resultsList =
+    output && output.results.length > 0 ? (
+      <div className="space-y-1">
+        {output.results.map((result, i) => (
+          <a
+            key={i}
+            className="flex items-baseline gap-2 rounded px-1 py-0.5 transition-colors hover:bg-foreground/5"
+            href={result.url}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            <span className="shrink-0 text-[10px] text-foreground/25">
+              {i + 1}
             </span>
-          ) : null}
-        </div>
+            <span className="min-w-0 flex-1 truncate text-[11px] text-foreground/70">
+              {result.title ?? getDomain(result.url)}
+            </span>
+            <span className="shrink-0 truncate text-[10px] text-foreground/30">
+              {getDomain(result.url)}
+            </span>
+          </a>
+        ))}
       </div>
-    );
-  }
+    ) : null;
 
-  if (part.state === "output-denied") {
-    return (
-      <div className="w-full overflow-hidden rounded-lg">
-        <p className="text-xs font-medium text-muted">Search denied</p>
-      </div>
-    );
-  }
+  const footer = output ? (
+    <div className="flex items-center justify-between">
+      <span>{output.resultCount} results via {provider.id}</span>
+      {output.results.length > 0 ? (
+        <button
+          className="text-foreground/70 transition-colors hover:text-foreground"
+          onClick={handleOpenSidebar}
+          type="button"
+        >
+          Open in sidebar
+        </button>
+      ) : null}
+    </div>
+  ) : null;
 
-  if (output) {
-    const count = output.resultCount;
-    const label =
-      count > 0
-        ? `Searched ${count} source${count !== 1 ? "s" : ""}`
-        : "No search results";
-
-    return (
-      <div className="w-full overflow-hidden rounded-lg">
-        <div className="flex w-full items-center justify-between gap-3 pr-1">
-          <button
-            className="group flex min-w-0 flex-1 items-center gap-2 text-left text-default-600 transition-colors hover:text-foreground dark:text-default-400"
-            onClick={handleOpenSidebar}
-            type="button"
-          >
-            <p className="flex min-w-0 items-center gap-2 text-xs font-medium text-foreground/70">
-              <span className="truncate">{label}</span>
-            </p>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return null;
+  return (
+    <ToolLayout
+      summary={summary}
+      isRunning={isRunning}
+      isError={isError || isDenied}
+      isExpandable={isFinished && !!resultsList}
+      isExpanded={isExpanded}
+      onExpandedChange={setIsExpanded}
+      errorText={isError ? errorText : undefined}
+      actions={
+        needsApproval ? (
+          <div className="flex items-center gap-2">
+            <Button
+              className="h-7 min-w-0 px-3 text-[11px]"
+              onPress={() => onApprove?.(approvalId)}
+              size="sm"
+            >
+              Allow
+            </Button>
+            <Button
+              className="h-7 min-w-0 px-3 text-[11px]"
+              onPress={() => onDeny?.(approvalId)}
+              size="sm"
+              variant="ghost"
+            >
+              Deny
+            </Button>
+          </div>
+        ) : undefined
+      }
+      footer={footer}
+    >
+      {resultsList}
+    </ToolLayout>
+  );
 });

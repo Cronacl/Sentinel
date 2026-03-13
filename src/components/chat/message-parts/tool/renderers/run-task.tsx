@@ -1,9 +1,11 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { memo, useEffect, useState } from "react";
-import { Button, Disclosure, ScrollShadow, Spinner } from "@heroui/react";
+import { Button, ScrollShadow } from "@heroui/react";
 
 import type { RendererProps } from "../renderer";
+import { ToolLayout } from "./tool-layout";
 
 type RunTaskToolInput = {
   path?: string;
@@ -92,54 +94,65 @@ function isCompletedOutput(
   return output?.phase === "completed";
 }
 
-function getStatusChipClass(tone: "danger" | "muted" | "success") {
-  switch (tone) {
-    case "success":
-      return "border-success/5 bg-success/10 text-success";
-    case "danger":
-      return "border-danger/20 bg-danger-soft text-danger-soft-foreground";
-    default:
-      return "border-border/60 bg-background/70 text-muted";
-  }
+function formatDuration(durationMs: number) {
+  return `${(durationMs / 1000).toFixed(durationMs >= 1000 ? 1 : 2)}s`;
 }
 
-function getStatus(part: RendererProps["part"], output: RunTaskToolOutput | null) {
-  if (part.state === "approval-responded" || isRunningOutput(output)) {
-    return { label: "Running", tone: "muted" as const };
-  }
-
-  if (part.state === "approval-requested") {
-    return { label: "Needs approval", tone: "muted" as const };
-  }
-
+function buildSummary(
+  part: RendererProps["part"],
+  input: RunTaskToolInput,
+  output: RunTaskToolOutput | null,
+): ReactNode {
   if (part.state === "output-denied") {
-    return { label: "Denied", tone: "danger" as const };
+    return <>Task denied</>;
   }
 
   if (part.state === "output-error") {
-    return { label: "Failed", tone: "danger" as const };
+    return (
+      <>
+        Task <span className="font-medium">{input.task}</span> failed
+        {input.path ? <span className="text-foreground/40"> in {input.path}</span> : null}
+      </>
+    );
   }
 
-  if (part.state === "output-available" && isCompletedOutput(output)) {
-    return output.exitCode === 0
-      ? { label: "Success", tone: "success" as const }
-      : { label: "Failed", tone: "danger" as const };
+  if (isCompletedOutput(output)) {
+    const succeeded = output.exitCode === 0;
+    return (
+      <>
+        Ran <span className="font-medium">{output.task}</span>
+        {input.path ? <span className="text-foreground/40"> in {input.path}</span> : null}
+        <span className="ml-1.5 text-[11px] text-foreground/40">
+          {formatDuration(output.durationMs)}
+          {!succeeded ? ` · exit ${output.exitCode}` : ""}
+        </span>
+      </>
+    );
   }
 
-  return { label: "Running", tone: "muted" as const };
+  if (part.state === "approval-requested") {
+    return (
+      <>
+        Run <span className="font-medium">{input.task}</span>
+        {input.path ? <span className="text-foreground/40"> in {input.path}</span> : null}
+      </>
+    );
+  }
+
+  return (
+    <>
+      Running <span className="font-medium">{input.task}</span>
+      {input.path ? <span className="text-foreground/40"> in {input.path}</span> : null}
+    </>
+  );
 }
 
-function buildBody({
-  errorText,
-  input,
-  output,
-  state,
-}: {
-  errorText?: string;
-  input: RunTaskToolInput;
-  output: RunTaskToolOutput | null;
-  state: RendererProps["part"]["state"];
-}) {
+function buildBody(
+  input: RunTaskToolInput,
+  output: RunTaskToolOutput | null,
+  state: RendererProps["part"]["state"],
+  errorText?: string,
+) {
   const command = output?.command ?? input.task;
   const lines = [`$ ${command}`];
 
@@ -150,35 +163,19 @@ function buildBody({
 
   if (output) {
     if (output.phase === "running") {
-      if (output.tail.trim()) {
-        lines.push(output.tail.trimEnd());
-      }
+      if (output.tail.trim()) lines.push(output.tail.trimEnd());
       return lines.join("\n");
     }
-
     const stdout = output.stdout.trimEnd();
     const stderr = output.stderr.trimEnd();
-    if (stdout) {
-      lines.push(stdout);
-    }
-    if (stderr) {
-      lines.push(stderr);
-    }
-    if (!stdout && !stderr) {
-      lines.push("(no output)");
-    }
+    if (stdout) lines.push(stdout);
+    if (stderr) lines.push(stderr);
+    if (!stdout && !stderr) lines.push("(no output)");
     return lines.join("\n");
   }
 
-  if (errorText) {
-    lines.push(errorText);
-  }
-
+  if (errorText) lines.push(errorText);
   return lines.join("\n");
-}
-
-function formatDuration(durationMs: number) {
-  return `${(durationMs / 1000).toFixed(durationMs >= 1000 ? 1 : 2)}s`;
 }
 
 export const RunTaskTool = memo(function RunTaskTool({
@@ -202,6 +199,10 @@ export const RunTaskTool = memo(function RunTaskTool({
     part.state === "output-denied" ||
     part.state === "output-error" ||
     (part.state === "output-available" && isCompletedOutput(runTaskOutput));
+  const isErrorState =
+    part.state === "output-denied" ||
+    part.state === "output-error" ||
+    (isCompletedOutput(runTaskOutput) && runTaskOutput.exitCode !== 0);
   const [isExpanded, setIsExpanded] = useState(
     part.state === "approval-requested" || isRunningState,
   );
@@ -210,118 +211,67 @@ export const RunTaskTool = memo(function RunTaskTool({
     setIsExpanded(part.state === "approval-requested" || isRunningState);
   }, [isRunningState, part.state, part.toolCallId]);
 
-  if (!runTaskInput) {
-    return null;
-  }
+  if (!runTaskInput) return null;
 
-  const status = getStatus(part, runTaskOutput);
-  const terminalText = buildBody({
-    errorText: partErrorText,
-    input: runTaskInput,
-    output: runTaskOutput,
-    state: part.state,
-  });
+  const summary = buildSummary(part, runTaskInput, runTaskOutput);
+  const terminalText = buildBody(runTaskInput, runTaskOutput, part.state, partErrorText);
+
+  const footer = runTaskOutput ? (
+    <div className="flex items-center justify-between">
+      <span>
+        {runTaskOutput.script} · {formatDuration(runTaskOutput.durationMs)}
+        {runTaskOutput.truncated ? " · truncated" : ""}
+      </span>
+      {isCompletedOutput(runTaskOutput) ? (
+        <span className={runTaskOutput.exitCode === 0 ? "text-success" : "text-danger"}>
+          {runTaskOutput.exitCode === 0 ? "Success" : `Exit ${runTaskOutput.exitCode}`}
+        </span>
+      ) : null}
+    </div>
+  ) : null;
 
   return (
-    <Disclosure isExpanded={isExpanded} onExpandedChange={setIsExpanded}>
-      <div className="rounded-2xl border border-border/60 bg-surface/20 px-3 py-1.5">
-        <div className="flex items-center gap-2">
-          <p className="shrink-0 text-[12px] font-medium text-foreground">Run task</p>
-          <div
-            className={`shrink-0 rounded-full flex items-center gap-1 border px-1.5 py-0.5 text-[10px] ${getStatusChipClass(status.tone)}`}
-          >
-            {status.label === "Running" ? (
-              <Spinner className="h-3 w-3" size="sm" />
-            ) : null}
-            <span className="truncate">{status.label}</span>
-          </div>
-          <p className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground/72">
-            {runTaskInput.task}
-            {runTaskInput.path ? ` in ${runTaskInput.path}` : ""}
-          </p>
-          {isFinishedState ? (
-            <Disclosure.Heading>
-              <Button
-                slot="trigger"
-                size="sm"
-                variant="tertiary"
-                className="h-auto min-w-0 px-2 py-0.5 bg-background text-[10px] text-foreground transition-colors hover:text-foreground"
-              >
-                {isExpanded ? "Hide" : "Show"}
-              </Button>
-            </Disclosure.Heading>
+    <ToolLayout
+      summary={summary}
+      isRunning={isRunningState}
+      isError={isErrorState}
+      isExpandable={isFinishedState}
+      isExpanded={isExpanded}
+      onExpandedChange={setIsExpanded}
+      errorText={partErrorText && part.state !== "output-error" ? partErrorText : undefined}
+      footer={footer}
+      actions={
+        <>
+          {part.state === "approval-requested" ? (
+            <p className="mb-1.5 line-clamp-2 text-[11px] text-muted">{runTaskInput.rationale}</p>
           ) : null}
-        </div>
-
-        {part.state === "approval-requested" ? (
-          <p className="mt-1.5 line-clamp-2 text-[11px] text-muted">
-            {runTaskInput.rationale}
-          </p>
-        ) : null}
-
-        <Disclosure.Content>
-          <Disclosure.Body>
-            <div className="mt-1.5 overflow-hidden rounded-2xl border border-border/20 bg-surface">
-              <div className="border-b border-border/50 px-3.5 py-1.5 text-[9px] text-foreground">
-                Run task
-              </div>
-
-              <div className="px-3.5 py-2">
-                <ScrollShadow className="max-h-[180px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground">
-                  {terminalText}
-                </ScrollShadow>
-
-                {runTaskOutput ? (
-                  <div className="mt-2 flex items-center justify-between gap-3 text-[10px] text-foreground">
-                    <span className="truncate">
-                      {runTaskOutput.script}
-                      {runTaskOutput.phase === "completed"
-                        ? ` · ${formatDuration(runTaskOutput.durationMs)}`
-                        : ""}
-                      {runTaskOutput.truncated ? " · truncated" : ""}
-                    </span>
-                    <span className="shrink-0 text-white/72">{status.label}</span>
-                  </div>
-                ) : null}
-              </div>
+          {showApprovalActions ? (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                className="h-7 min-w-0 px-3 text-[11px]"
+                onPress={() => approvalId && onApprove?.(approvalId)}
+                type="button"
+              >
+                Approve
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 min-w-0 px-3 text-[11px]"
+                onPress={() => approvalId && onDeny?.(approvalId)}
+                type="button"
+              >
+                Deny
+              </Button>
             </div>
-          </Disclosure.Body>
-        </Disclosure.Content>
-
-        {showApprovalActions ? (
-          <div className="mt-1.5 flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              onPress={() => {
-                if (approvalId) {
-                  onApprove?.(approvalId);
-                }
-              }}
-              type="button"
-            >
-              Approve
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onPress={() => {
-                if (approvalId) {
-                  onDeny?.(approvalId);
-                }
-              }}
-              type="button"
-            >
-              Deny
-            </Button>
-          </div>
-        ) : null}
-
-        {partErrorText && part.state !== "output-error" ? (
-          <div className="mt-2 rounded-xl border border-danger/20 bg-danger-soft px-3 py-2 text-xs text-danger-soft-foreground">
-            {partErrorText}
-          </div>
-        ) : null}
-      </div>
-    </Disclosure>
+          ) : null}
+        </>
+      }
+    >
+      <ScrollShadow className="max-h-[160px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
+        {terminalText}
+      </ScrollShadow>
+    </ToolLayout>
   );
 });

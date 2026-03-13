@@ -1,9 +1,11 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { memo, useEffect, useState } from "react";
-import { Button, Disclosure, ScrollShadow, Spinner } from "@heroui/react";
+import { ScrollShadow } from "@heroui/react";
 
 import type { RendererProps } from "../renderer";
+import { ToolLayout } from "./tool-layout";
 
 type GlobToolInput = {
   path?: string;
@@ -52,51 +54,42 @@ function isGlobToolOutput(value: unknown): value is GlobToolOutput {
   );
 }
 
-function getStatusChipClass(tone: "danger" | "muted" | "success") {
-  switch (tone) {
-    case "success":
-      return "border-success/5 bg-success/10 text-success";
-    case "danger":
-      return "border-danger/20 bg-danger-soft text-danger-soft-foreground";
-    default:
-      return "border-border/60 bg-background/70 text-muted";
-  }
-}
-
-function getGlobStatus(part: RendererProps["part"], output: GlobToolOutput | null) {
+function buildSummary(
+  part: RendererProps["part"],
+  pattern: string,
+  output: GlobToolOutput | null,
+): ReactNode {
   if (part.state === "output-error") {
-    return { label: "Failed", tone: "danger" as const };
+    return (
+      <>
+        Glob failed for <span className="font-mono text-[12px]">{pattern}</span>
+      </>
+    );
   }
 
   if (part.state === "output-available" && output) {
-    return { label: "Success", tone: "success" as const };
-  }
-
-  return { label: "Running", tone: "muted" as const };
-}
-
-function buildGlobBody({
-  errorText,
-  output,
-  pattern,
-}: {
-  errorText?: string;
-  output: GlobToolOutput | null;
-  pattern: string;
-}) {
-  if (output) {
     if (output.files.length === 0) {
-      return `No files matched ${pattern}`;
+      return (
+        <>
+          No files matched <span className="font-mono text-[12px]">{pattern}</span>
+        </>
+      );
     }
-
-    return output.files.join("\n");
+    return (
+      <>
+        Found{" "}
+        <span className="text-foreground/50">{output.totalFiles}</span>{" "}
+        file{output.totalFiles === 1 ? "" : "s"} matching{" "}
+        <span className="font-mono text-[12px]">{pattern}</span>
+      </>
+    );
   }
 
-  if (errorText) {
-    return errorText;
-  }
-
-  return `Searching for ${pattern}`;
+  return (
+    <>
+      Searching for <span className="font-mono text-[12px]">{pattern}</span>
+    </>
+  );
 }
 
 export const GlobTool = memo(function GlobTool({
@@ -107,10 +100,10 @@ export const GlobTool = memo(function GlobTool({
   const globInput = hasInput && isGlobToolInput(part.input) ? part.input : null;
   const globOutput = hasOutput && isGlobToolOutput(part.output) ? part.output : null;
   const partErrorText = "errorText" in part ? part.errorText : undefined;
-  const status = getGlobStatus(part, globOutput);
   const isFinishedState =
     part.state === "output-error" ||
     (part.state === "output-available" && Boolean(globOutput));
+  const isErrorState = part.state === "output-error";
   const [isExpanded, setIsExpanded] = useState(!isFinishedState);
 
   useEffect(() => {
@@ -118,77 +111,35 @@ export const GlobTool = memo(function GlobTool({
   }, [isFinishedState, part.toolCallId]);
 
   const pattern = globOutput?.pattern ?? globInput?.pattern ?? "";
-  const root = globOutput?.root ?? globInput?.path ?? ".";
-  const terminalText = buildGlobBody({
-    errorText: partErrorText,
-    output: globOutput,
-    pattern,
-  });
+  const summary = buildSummary(part, pattern, globOutput);
+
+  const bodyText = globOutput
+    ? globOutput.files.length === 0
+      ? `No files matched ${pattern}`
+      : globOutput.files.join("\n")
+    : partErrorText ?? `Searching for ${pattern}`;
+
+  const footer = globOutput ? (
+    <span>
+      {globOutput.totalFiles} file{globOutput.totalFiles === 1 ? "" : "s"}
+      {globOutput.truncated ? ` · showing ${globOutput.shownFiles}` : ""}
+    </span>
+  ) : null;
 
   return (
-    <Disclosure isExpanded={isExpanded} onExpandedChange={setIsExpanded}>
-      <div className="rounded-2xl border border-border/60 bg-surface/20 px-3 py-1.5">
-        <div className="flex items-center gap-2">
-          <p className="shrink-0 text-[12px] font-medium text-foreground">Glob</p>
-          <div
-            className={`shrink-0 rounded-full flex items-center gap-1 border px-1.5 py-0.5 text-[10px] ${getStatusChipClass(status.tone)}`}
-          >
-            {status.label === "Running" ? (
-              <Spinner className="h-3 w-3" size="sm" />
-            ) : null}
-            <span className="truncate">{status.label}</span>
-          </div>
-          <p className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground/72">
-            {pattern} in {root}
-          </p>
-          {isFinishedState ? (
-            <Disclosure.Heading>
-              <Button
-                slot="trigger"
-                size="sm"
-                variant="tertiary"
-                className="h-auto min-w-0 px-2 py-0.5 bg-background text-[10px] text-foreground transition-colors hover:text-foreground"
-              >
-                {isExpanded ? "Hide" : "Show"}
-              </Button>
-            </Disclosure.Heading>
-          ) : null}
-        </div>
-
-        <Disclosure.Content>
-          <Disclosure.Body>
-            <div className="mt-1.5 overflow-hidden rounded-2xl border border-border/20 bg-surface">
-              <div className="border-b border-border/50 px-3.5 py-1.5 text-[9px] text-foreground">
-                Glob
-              </div>
-
-              <div className="px-3.5 py-2">
-                <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground">
-                  {terminalText}
-                </ScrollShadow>
-
-                {globOutput ? (
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-[10px] text-foreground">
-                    <span className="truncate">
-                      {globOutput.totalFiles} files
-                      {globOutput.truncated
-                        ? ` · showing ${globOutput.shownFiles}`
-                        : ""}
-                    </span>
-                    <span className="shrink-0 text-white/72">{status.label}</span>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          </Disclosure.Body>
-        </Disclosure.Content>
-
-        {partErrorText && part.state !== "output-error" ? (
-          <div className="mt-2 rounded-xl border border-danger/20 bg-danger-soft px-3 py-2 text-xs text-danger-soft-foreground">
-            {partErrorText}
-          </div>
-        ) : null}
-      </div>
-    </Disclosure>
+    <ToolLayout
+      summary={summary}
+      isRunning={!isFinishedState}
+      isError={isErrorState}
+      isExpandable={isFinishedState}
+      isExpanded={isExpanded}
+      onExpandedChange={setIsExpanded}
+      errorText={partErrorText && part.state !== "output-error" ? partErrorText : undefined}
+      footer={footer}
+    >
+      <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
+        {bodyText}
+      </ScrollShadow>
+    </ToolLayout>
   );
 });
