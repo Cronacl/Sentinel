@@ -42,6 +42,7 @@ const SETTINGS_NAV = [
     label: "Search",
     icon: GlobalSearchIcon,
   },
+  { href: "/settings/mcp", label: "MCP Servers", icon: TestTubeIcon },
   {
     href: "/settings/memory",
     label: "Memory",

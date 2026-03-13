@@ -2,6 +2,7 @@ import {
   hasToolCall,
   stepCountIs,
   ToolLoopAgent,
+  type ToolSet,
   type Experimental_DownloadFunction,
 } from "ai";
 import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
@@ -24,6 +25,7 @@ import { buildThreadAgentInstructions } from "./instructions";
 const threadAgentCallOptionsSchema = z.object({
   defaultDirectory: z.string().optional(),
   memorySettings: z.custom<MemorySettings>(),
+  mcpTools: z.custom<ToolSet>().optional(),
   permissionMode: z.custom<PermissionMode>(),
   searchProviders: z.custom<SearchProviderRuntimeMap>(),
   searchSettings: z.custom<SearchSettings>(),

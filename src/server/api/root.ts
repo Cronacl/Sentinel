@@ -6,6 +6,7 @@ import { generalSettingsRouter } from "@/server/api/routers/general-settings";
 import { healthRouter } from "@/server/api/routers/health";
 import { memoryRouter } from "@/server/api/routers/memory";
 import { memorySettingsRouter } from "@/server/api/routers/memory-settings";
+import { mcpServersRouter } from "@/server/api/routers/mcp-servers";
 import { messagesRouter } from "@/server/api/routers/messages";
 import { modelsRouter } from "@/server/api/routers/models";
 import { planRouter } from "@/server/api/routers/plan";
@@ -32,6 +33,7 @@ export const appRouter = createTRPCRouter({
   health: healthRouter,
   memory: memoryRouter,
   memorySettings: memorySettingsRouter,
+  mcpServers: mcpServersRouter,
   messages: messagesRouter,
   models: modelsRouter,
   plan: planRouter,

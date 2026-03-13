@@ -140,15 +140,15 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
   } catch {}
 
   try {
-    db.run(
-      sql`ALTER TABLE "user" ADD COLUMN "default_chat_mode" text`,
-    );
+    db.run(sql`ALTER TABLE "user" ADD COLUMN "default_chat_mode" text`);
   } catch {
     // column already exists
   }
 
   try {
-    db.run(sql`ALTER TABLE "thread" ADD COLUMN "mode" text DEFAULT 'chat' NOT NULL`);
+    db.run(
+      sql`ALTER TABLE "thread" ADD COLUMN "mode" text DEFAULT 'chat' NOT NULL`,
+    );
   } catch {
     // column already exists
   }
@@ -172,6 +172,32 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
   }
   db.run(
     sql`CREATE INDEX IF NOT EXISTS "thread_user_pinned_idx" ON "thread" ("user_id", "pinned_at")`,
+  );
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS "mcp_server_config" (
+    "id" text PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL,
+    "name" text NOT NULL,
+    "catalog_id" text,
+    "transport" text NOT NULL,
+    "encrypted_config" text NOT NULL,
+    "is_enabled" integer DEFAULT true NOT NULL,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+  try {
+    db.run(sql`ALTER TABLE "mcp_server_config" ADD COLUMN "catalog_id" text`);
+  } catch {
+    // column already exists
+  }
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "mcp_server_config_user_catalog_unique" ON "mcp_server_config" ("user_id", "catalog_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "mcp_server_config_user_id_idx" ON "mcp_server_config" ("user_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "mcp_server_config_user_enabled_idx" ON "mcp_server_config" ("user_id", "is_enabled")`,
   );
 
   db.run(sql`CREATE TABLE IF NOT EXISTS "thread_message" (

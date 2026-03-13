@@ -63,7 +63,11 @@ import {
   multieditOutputSchema,
 } from "./multiedit";
 import { executeRead, readInputSchema, readOutputSchema } from "./read";
-import { runTaskInputSchema, runTaskOutputSchema, streamRunTask } from "./run-task";
+import {
+  runTaskInputSchema,
+  runTaskOutputSchema,
+  streamRunTask,
+} from "./run-task";
 import {
   executeSaveMemory,
   saveMemoryInputSchema,
@@ -95,7 +99,11 @@ import {
   webSearchOutputSchema,
 } from "./websearch";
 
-export { TOOL_CATALOG, getActiveCategories, getToolsInCategory } from "./catalog";
+export {
+  TOOL_CATALOG,
+  getActiveCategories,
+  getToolsInCategory,
+} from "./catalog";
 export type { ToolCategory, ToolCatalogEntry } from "./catalog";
 
 // ---------------------------------------------------------------------------
@@ -150,7 +158,11 @@ function buildInspectionTools(options: ThreadAgentCallOptions) {
       needsApproval: () => toolApprovalPolicies.list,
       outputSchema: listOutputSchema,
       execute: async (input) =>
-        executeList({ defaultDirectory: defaultDirectory!, input, permissionMode }),
+        executeList({
+          defaultDirectory: defaultDirectory!,
+          input,
+          permissionMode,
+        }),
     }),
     glob: tool({
       description: globDescription,
@@ -158,7 +170,11 @@ function buildInspectionTools(options: ThreadAgentCallOptions) {
       needsApproval: () => toolApprovalPolicies.glob,
       outputSchema: globOutputSchema,
       execute: async (input) =>
-        executeGlob({ defaultDirectory: defaultDirectory!, input, permissionMode }),
+        executeGlob({
+          defaultDirectory: defaultDirectory!,
+          input,
+          permissionMode,
+        }),
     }),
     read: tool({
       description: readDescription,
@@ -166,7 +182,11 @@ function buildInspectionTools(options: ThreadAgentCallOptions) {
       needsApproval: () => toolApprovalPolicies.read,
       outputSchema: readOutputSchema,
       execute: async (input) =>
-        executeRead({ defaultDirectory: defaultDirectory!, input, permissionMode }),
+        executeRead({
+          defaultDirectory: defaultDirectory!,
+          input,
+          permissionMode,
+        }),
     }),
     grep: tool({
       description: grepDescription,
@@ -174,7 +194,11 @@ function buildInspectionTools(options: ThreadAgentCallOptions) {
       needsApproval: () => toolApprovalPolicies.grep,
       outputSchema: grepOutputSchema,
       execute: async (input) =>
-        executeGrep({ defaultDirectory: defaultDirectory!, input, permissionMode }),
+        executeGrep({
+          defaultDirectory: defaultDirectory!,
+          input,
+          permissionMode,
+        }),
     }),
   };
 }
@@ -189,7 +213,11 @@ function buildMutationTools(options: ThreadAgentCallOptions) {
       needsApproval: () => toolApprovalPolicies.edit,
       outputSchema: editOutputSchema,
       execute: async (input) =>
-        executeEdit({ defaultDirectory: defaultDirectory!, input, permissionMode }),
+        executeEdit({
+          defaultDirectory: defaultDirectory!,
+          input,
+          permissionMode,
+        }),
     }),
     multiedit: tool({
       description: multieditDescription,
@@ -197,7 +225,11 @@ function buildMutationTools(options: ThreadAgentCallOptions) {
       needsApproval: () => toolApprovalPolicies.multiedit,
       outputSchema: multieditOutputSchema,
       execute: async (input) =>
-        executeMultiEdit({ defaultDirectory: defaultDirectory!, input, permissionMode }),
+        executeMultiEdit({
+          defaultDirectory: defaultDirectory!,
+          input,
+          permissionMode,
+        }),
     }),
     create_file: tool({
       description: createFileDescription,
@@ -205,7 +237,11 @@ function buildMutationTools(options: ThreadAgentCallOptions) {
       needsApproval: () => toolApprovalPolicies.create_file,
       outputSchema: createFileOutputSchema,
       execute: async (input) =>
-        executeCreateFile({ defaultDirectory: defaultDirectory!, input, permissionMode }),
+        executeCreateFile({
+          defaultDirectory: defaultDirectory!,
+          input,
+          permissionMode,
+        }),
     }),
     delete_file: tool({
       description: deleteFileDescription,
@@ -213,7 +249,11 @@ function buildMutationTools(options: ThreadAgentCallOptions) {
       needsApproval: () => toolApprovalPolicies.delete_file,
       outputSchema: deleteFileOutputSchema,
       execute: async (input) =>
-        executeDeleteFile({ defaultDirectory: defaultDirectory!, input, permissionMode }),
+        executeDeleteFile({
+          defaultDirectory: defaultDirectory!,
+          input,
+          permissionMode,
+        }),
     }),
   };
 }
@@ -344,8 +384,12 @@ function buildMemoryTools(options: ThreadAgentCallOptions) {
 }
 
 function buildWebTools(options: ThreadAgentCallOptions) {
-  const { searchProviders, searchSettings, toolApprovalPolicies, webFetchSettings } =
-    options;
+  const {
+    searchProviders,
+    searchSettings,
+    toolApprovalPolicies,
+    webFetchSettings,
+  } = options;
 
   return {
     websearch: tool({
@@ -440,43 +484,6 @@ function buildPlanTools(options: ThreadAgentCallOptions) {
   };
 }
 
-function buildPlanToolSchemas(options: ThreadAgentCallOptions) {
-  const { threadId } = options;
-  const unavailable = async () => {
-    throw new Error(
-      "This tool is only available in plan mode. Use the workspace tools to implement the plan.",
-    );
-  };
-
-  return {
-    create_plan: tool({
-      description: createPlanDescription,
-      inputSchema: createPlanInputSchema,
-      outputSchema: createPlanOutputSchema,
-      execute: unavailable,
-    }),
-    update_plan: tool({
-      description: updatePlanDescription,
-      inputSchema: updatePlanInputSchema,
-      outputSchema: updatePlanOutputSchema,
-      execute: unavailable,
-    }),
-    manage_task: tool({
-      description: manageTaskDescription,
-      inputSchema: manageTaskInputSchema,
-      outputSchema: manageTaskOutputSchema,
-      execute: async (input) =>
-        executeManageTask({ input, runtime: { threadId } }),
-    }),
-    ask_question: tool({
-      description: askQuestionDescription,
-      inputSchema: askQuestionInputSchema,
-      outputSchema: askQuestionOutputSchema,
-      execute: unavailable,
-    }),
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Public API: single entry point for all tool assembly
 // ---------------------------------------------------------------------------
@@ -490,8 +497,8 @@ export function buildTools(options: ThreadAgentCallOptions) {
   }
 
   return {
-    ...buildPlanToolSchemas(options),
     ...buildMemoryTools(options),
+    ...(options.mcpTools ?? {}),
     ...buildWebTools(options),
     ...(options.toolsEnabled
       ? {

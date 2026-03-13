@@ -6,6 +6,10 @@ import {
   type ToolApprovalPolicyMap,
 } from "@/lib/ai/chat/tool-approval-policy";
 import {
+  buildMcpServerRuntimeEntries,
+  type McpServerRuntimeEntry,
+} from "@/lib/mcp/runtime";
+import {
   buildSearchProviderRuntimeMap,
   type SearchProviderRuntimeMap,
 } from "@/lib/search/providers/runtime";
@@ -18,6 +22,7 @@ import {
 import type { PermissionMode } from "@/server/db/enums";
 import { db } from "@/server/db";
 import {
+  mcpServerConfigs,
   searchProviderConfigs,
   searchSettings,
   memorySettings,
@@ -110,6 +115,24 @@ export async function getSearchProviderRuntime(
   });
 
   return buildSearchProviderRuntimeMap(rows);
+}
+
+export async function getMcpServerRuntime(
+  userId: string,
+): Promise<McpServerRuntimeEntry[]> {
+  const rows = await db.query.mcpServerConfigs.findMany({
+    where: eq(mcpServerConfigs.userId, userId),
+    columns: {
+      catalogId: true,
+      encryptedConfig: true,
+      id: true,
+      isEnabled: true,
+      name: true,
+      transport: true,
+    },
+  });
+
+  return buildMcpServerRuntimeEntries(rows);
 }
 
 export async function getMemorySettings(

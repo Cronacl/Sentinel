@@ -9,6 +9,17 @@ export type AIProvider = (typeof AI_PROVIDERS)[number];
 export const SEARCH_PROVIDERS = ["exa", "searxng"] as const;
 export type SearchProviderId = (typeof SEARCH_PROVIDERS)[number];
 
+export const MCP_TRANSPORTS = ["stdio", "http"] as const;
+export type MCPTransportId = (typeof MCP_TRANSPORTS)[number];
+
+export const MCP_SERVER_CATALOG_IDS = [
+  "linear",
+  "notion",
+  "figma",
+  "playwright",
+] as const;
+export type McpServerCatalogId = (typeof MCP_SERVER_CATALOG_IDS)[number];
+
 export const PERSONALITY_PRESETS = [
   "friendly",
   "pragmatic",

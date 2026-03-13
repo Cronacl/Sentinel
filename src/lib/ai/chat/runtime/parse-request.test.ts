@@ -1,7 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 
 mock.module("@/lib/ai/messages/ui", () => ({
-  validateThreadUIMessage: mock(async (message) => message),
+  validateThreadUIMessage: mock(async (message: unknown) => message),
 }));
 
 const { parseRequest } = await import("./parse-request");

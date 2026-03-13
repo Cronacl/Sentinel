@@ -10,6 +10,8 @@ import { createId } from "@paralleldrive/cuid2";
 
 import {
   AI_PROVIDERS,
+  MCP_SERVER_CATALOG_IDS,
+  MCP_TRANSPORTS,
   PERMISSION_MODES,
   PERSONALITY_PRESETS,
   SEARCH_PROVIDERS,
@@ -91,6 +93,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   ownedWorkspaces: many(workspaces, { relationName: "ownedWorkspaces" }),
   threads: many(threads),
   credentials: many(providerCredentials),
+  mcpServerConfigs: many(mcpServerConfigs),
   modelPreferences: many(modelPreferences),
   searchProviderConfigs: many(searchProviderConfigs),
   searchSettings: many(searchSettings),
@@ -291,12 +294,15 @@ export const threadPlanTasks = sqliteTable(
   ],
 );
 
-export const threadPlanTasksRelations = relations(threadPlanTasks, ({ one }) => ({
-  plan: one(threadPlans, {
-    fields: [threadPlanTasks.planId],
-    references: [threadPlans.id],
+export const threadPlanTasksRelations = relations(
+  threadPlanTasks,
+  ({ one }) => ({
+    plan: one(threadPlans, {
+      fields: [threadPlanTasks.planId],
+      references: [threadPlans.id],
+    }),
   }),
-}));
+);
 
 export const threadPlanQuestions = sqliteTable(
   "thread_plan_question",
@@ -372,6 +378,51 @@ export const providerCredentialsRelations = relations(
   ({ one }) => ({
     user: one(users, {
       fields: [providerCredentials.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const mcpServerConfigs = sqliteTable(
+  "mcp_server_config",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    userId: text("user_id").notNull(),
+    name: text("name").notNull(),
+    catalogId: text("catalog_id", { enum: MCP_SERVER_CATALOG_IDS }),
+    transport: text("transport", { enum: MCP_TRANSPORTS }).notNull(),
+    encryptedConfig: text("encrypted_config").notNull(),
+    isEnabled: integer("is_enabled", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("mcp_server_config_user_catalog_unique").on(
+      table.userId,
+      table.catalogId,
+    ),
+    index("mcp_server_config_user_id_idx").on(table.userId),
+    index("mcp_server_config_user_enabled_idx").on(
+      table.userId,
+      table.isEnabled,
+    ),
+  ],
+);
+
+export const mcpServerConfigsRelations = relations(
+  mcpServerConfigs,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [mcpServerConfigs.userId],
       references: [users.id],
     }),
   }),
@@ -469,7 +520,9 @@ export const memorySettings = sqliteTable(
     memoryProvider: text("memory_provider", { enum: AI_PROVIDERS })
       .notNull()
       .default("openai"),
-    memoryModel: text("memory_model").notNull().default("text-embedding-3-small"),
+    memoryModel: text("memory_model")
+      .notNull()
+      .default("text-embedding-3-small"),
     memoryDimensions: integer("memory_dimensions").notNull().default(1536),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()

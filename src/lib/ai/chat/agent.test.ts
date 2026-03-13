@@ -102,13 +102,21 @@ mock.module("./tools/manage-task", () => ({
 
 mock.module("./tools/ask-question", () => {
   const askQuestionInputItemSchema = z.object({
-    allowMultiple: z.boolean().optional().describe("When true the user can select multiple options."),
+    allowMultiple: z
+      .boolean()
+      .optional()
+      .describe("When true the user can select multiple options."),
     header: z.string().trim().min(1).max(80),
     id: z.string().trim().min(1).max(80).optional(),
-    options: z.array(z.object({
-      description: z.string().trim().min(1).max(400),
-      label: z.string().trim().min(1).max(160),
-    })).min(2).max(8),
+    options: z
+      .array(
+        z.object({
+          description: z.string().trim().min(1).max(400),
+          label: z.string().trim().min(1).max(160),
+        }),
+      )
+      .min(2)
+      .max(8),
     question: z.string().trim().min(1).max(400),
   });
 
@@ -123,33 +131,59 @@ mock.module("./tools/ask-question", () => {
     status: z.enum(["pending", "answered"]),
   });
 
-  function trimToLength(v, max) { return v.trim().slice(0, max).trim(); }
+  function trimToLength(v, max) {
+    return v.trim().slice(0, max).trim();
+  }
 
   function sanitizeAskQuestionInput(input) {
-    const questions = input.questions.slice(0, 3).map((q) => {
-      const seen = new Set();
-      const options = q.options
-        .map((o) => ({ description: trimToLength(o.description, 240), label: trimToLength(o.label, 80) }))
-        .filter((o) => o.label.length > 0 && o.description.length > 0 && !seen.has(o.label.toLowerCase()) && seen.add(o.label.toLowerCase()))
-        .slice(0, 4);
-      return {
-        ...(q.allowMultiple ? { allowMultiple: true } : {}),
-        header: trimToLength(q.header, 24),
-        id: q.id ? trimToLength(q.id, 80) : undefined,
-        options,
-        question: trimToLength(q.question, 240),
-      };
-    }).filter((q) => q.options.length >= 2);
-    if (questions.length === 0) throw new Error("Need at least one question with 2+ options");
+    const questions = input.questions
+      .slice(0, 3)
+      .map((q) => {
+        const seen = new Set();
+        const options = q.options
+          .map((o) => ({
+            description: trimToLength(o.description, 240),
+            label: trimToLength(o.label, 80),
+          }))
+          .filter(
+            (o) =>
+              o.label.length > 0 &&
+              o.description.length > 0 &&
+              !seen.has(o.label.toLowerCase()) &&
+              seen.add(o.label.toLowerCase()),
+          )
+          .slice(0, 4);
+        return {
+          ...(q.allowMultiple ? { allowMultiple: true } : {}),
+          header: trimToLength(q.header, 24),
+          id: q.id ? trimToLength(q.id, 80) : undefined,
+          options,
+          question: trimToLength(q.question, 240),
+        };
+      })
+      .filter((q) => q.options.length >= 2);
+    if (questions.length === 0)
+      throw new Error("Need at least one question with 2+ options");
     return { questions };
   }
 
   async function executeAskQuestion({ input, runtime }) {
     const sanitized = sanitizeAskQuestionInput(input);
     const { createThreadPlanQuestionSet } = await import("@/lib/plan/service");
-    const questions = sanitized.questions.map((q, i) => ({ ...q, id: q.id || `q-${i}` }));
-    const qs = await createThreadPlanQuestionSet({ questions, threadId: runtime.threadId });
-    return { answers: null, questionSetId: qs.id, questions: qs.questions, status: "pending" };
+    const questions = sanitized.questions.map((q, i) => ({
+      ...q,
+      id: q.id || `q-${i}`,
+    }));
+    const qs = await createThreadPlanQuestionSet({
+      questions,
+      threadId: runtime.threadId,
+    });
+    return {
+      answers: null,
+      questionSetId: qs.id,
+      questions: qs.questions,
+      status: "pending",
+    };
   }
 
   return {
@@ -189,6 +223,13 @@ describe("createThreadAgent", () => {
   it("registers workspace inspection tools and guidance", async () => {
     const prepared = prepareWith({
       defaultDirectory: "/tmp/workspace",
+      mcpTools: {
+        mcp_server__list_files: {
+          description: "List files from MCP",
+          execute: async () => ({ ok: true }),
+          needsApproval: () => true,
+        },
+      },
       memorySettings: defaultMemorySettings,
       permissionMode: "default",
       searchProviders: {},
@@ -209,6 +250,7 @@ describe("createThreadAgent", () => {
     });
 
     expect(prepared.tools).toHaveProperty("search_memory");
+    expect(prepared.tools).toHaveProperty("mcp_server__list_files");
     expect(prepared.tools).toHaveProperty("save_memory");
     expect(prepared.tools).toHaveProperty("forget_memory");
     expect(prepared.tools).toHaveProperty("websearch");
@@ -223,6 +265,10 @@ describe("createThreadAgent", () => {
     expect(prepared.tools).toHaveProperty("delete_file");
     expect(prepared.tools).toHaveProperty("run_task");
     expect(prepared.tools).toHaveProperty("shell_command");
+    expect(prepared.tools).not.toHaveProperty("create_plan");
+    expect(prepared.tools).not.toHaveProperty("update_plan");
+    expect(prepared.tools).not.toHaveProperty("manage_task");
+    expect(prepared.tools).not.toHaveProperty("ask_question");
     expect(prepared.instructions).toContain("Permission mode: default");
     expect(prepared.instructions).toContain("read");
     expect(prepared.instructions).toContain("run_task");
@@ -280,6 +326,10 @@ describe("createThreadAgent", () => {
     expect(toolNames).toContain("webfetch");
     expect(toolNames).not.toContain("list");
     expect(toolNames).not.toContain("edit");
+    expect(toolNames).not.toContain("create_plan");
+    expect(toolNames).not.toContain("update_plan");
+    expect(toolNames).not.toContain("manage_task");
+    expect(toolNames).not.toContain("ask_question");
     expect(prepared.instructions).toContain(
       "Workspace tools are currently unavailable because there is no selected workspace root.",
     );
@@ -359,9 +409,7 @@ describe("createThreadAgent", () => {
       "manage_task",
       "ask_question",
     ]);
-    expect(prepared.instructions).toContain(
-      "This thread is in plan mode.",
-    );
+    expect(prepared.instructions).toContain("This thread is in plan mode.");
     expect(prepared.instructions).toContain(
       "Gather context from available tools first",
     );

@@ -8,6 +8,7 @@
         "@ai-sdk/anthropic": "^3.0.58",
         "@ai-sdk/google": "^3.0.43",
         "@ai-sdk/google-vertex": "^4.0.80",
+        "@ai-sdk/mcp": "^1.0.25",
         "@ai-sdk/openai": "^3.0.41",
         "@ai-sdk/provider": "^3.0.8",
         "@ai-sdk/react": "^3.0.118",
@@ -80,6 +81,8 @@
     "@ai-sdk/google": ["@ai-sdk/google@3.0.43", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.19" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-NGCgP5g8HBxrNdxvF8Dhww+UKfqAkZAmyYBvbu9YLoBkzAmGKDBGhVptN/oXPB5Vm0jggMdoLycZ8JReQM8Zqg=="],
 
     "@ai-sdk/google-vertex": ["@ai-sdk/google-vertex@4.0.80", "", { "dependencies": { "@ai-sdk/anthropic": "3.0.58", "@ai-sdk/google": "3.0.43", "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.19", "google-auth-library": "^10.5.0" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-CZbiI3AEZQjVYUI2duLFH3ONYkUbsoi0AiTEYNaNKC+ZVnteXwmzJB0W7miaDViV66pWh2VpjNgIJnYXCtNgfw=="],
+
+    "@ai-sdk/mcp": ["@ai-sdk/mcp@1.0.25", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.19", "pkce-challenge": "^5.0.0" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-vMlXUPGHGDE2vzLcPR8sw7Dhz2OBjtPU5lB+lIuC1hNQo4REuUC08P0e96/hzBKf4oQYJ8Zo6uP8AG2qThyFbg=="],
 
     "@ai-sdk/openai": ["@ai-sdk/openai@3.0.41", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.19" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-IZ42A+FO+vuEQCVNqlnAPYQnnUpUfdJIwn1BEDOBywiEHa23fw7PahxVtlX9zm3/zMvTW4JKPzWyvAgDu+SQ2A=="],
 
@@ -1438,6 +1441,8 @@
     "picocolors": ["picocolors@1.1.1", "", {}, "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="],
 
     "picomatch": ["picomatch@4.0.3", "", {}, "sha512-5gTmgEY/sqK6gFXLIsQNH19lWb4ebPDLA4SdLP7dsWkIXHWlG66oPuVvXSGFPppYZz8ZDZq0dYYrbHfBCVUb1Q=="],
+
+    "pkce-challenge": ["pkce-challenge@5.0.1", "", {}, "sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ=="],
 
     "plist": ["plist@3.1.0", "", { "dependencies": { "@xmldom/xmldom": "^0.8.8", "base64-js": "^1.5.1", "xmlbuilder": "^15.1.1" } }, "sha512-uysumyrvkUX0rX/dEVqt8gC3sTBzd4zoWfLeS29nb53imdaXVvLINYXTI2GNqzaMuvacNx4uJQ8+b3zXR0pkgQ=="],
 

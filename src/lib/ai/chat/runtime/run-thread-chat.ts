@@ -22,6 +22,7 @@ import { createReasoningMetadataTracker } from "./reasoning";
 import { disposeShellSession } from "../tools/shell";
 import { getSystemPrompt } from "./system-prompt";
 import { createThreadAgent } from "../agent";
+import { loadMcpTools } from "@/lib/mcp/tools";
 import {
   autosaveConversationMemories,
   buildMemoryPromptLines,
@@ -46,6 +47,7 @@ import {
   getSearchProviderRuntime,
   getSearchSettings,
   getMemorySettings,
+  getMcpServerRuntime,
   getToolApprovalPolicies,
   getToolPermissionMode,
   getWebFetchSettings,
@@ -142,20 +144,30 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
   persist.clearActiveStream(request.threadId);
 
   const resolvedModel = await resolveThreadChatModel(request, targetMessage);
-  const workspaceRoot = await getWorkspaceRootPath(
-    request.workspaceId,
-    request.userId,
-  );
-  const permissionMode = await getToolPermissionMode(request.userId);
-  const memorySettings = await getMemorySettings(request.userId);
-  const searchSettings = await getSearchSettings(request.userId);
-  const searchProviders = await getSearchProviderRuntime(request.userId);
-  const toolApprovalPolicies = await getToolApprovalPolicies(request.userId);
-  const webFetchSettings = await getWebFetchSettings(request.userId);
+  const [
+    workspaceRoot,
+    permissionMode,
+    memorySettings,
+    mcpServers,
+    searchSettings,
+    searchProviders,
+    toolApprovalPolicies,
+    webFetchSettings,
+    planState,
+  ] = await Promise.all([
+    getWorkspaceRootPath(request.workspaceId, request.userId),
+    getToolPermissionMode(request.userId),
+    getMemorySettings(request.userId),
+    getMcpServerRuntime(request.userId),
+    getSearchSettings(request.userId),
+    getSearchProviderRuntime(request.userId),
+    getToolApprovalPolicies(request.userId),
+    getWebFetchSettings(request.userId),
+    getThreadPlanState({
+      threadId: request.threadId,
+    }).catch(() => ({ pendingQuestionSet: null, plan: null })),
+  ]);
   const toolsEnabled = Boolean(workspaceRoot);
-  const planState = await getThreadPlanState({
-    threadId: request.threadId,
-  }).catch(() => ({ pendingQuestionSet: null, plan: null }));
   const continuationAssistant =
     request.trigger === "submit-tool-approval" ||
     request.trigger === "submit-plan-answer"
@@ -224,6 +236,14 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
   persist.upsertMessage(request.threadId, placeholder);
   await persist.setActiveMessage(request.threadId, assistantId);
 
+  const mcpRuntimePromise =
+    threadMode === "chat"
+      ? loadMcpTools({
+          entries: mcpServers,
+          workspaceRoot,
+        })
+      : Promise.resolve({ closeAll: async () => {}, tools: {} });
+
   const memoryQuery = extractLatestUserText(baseMessages);
   const retrievedMemories = await retrieveRelevantMemories({
     query: memoryQuery,
@@ -253,44 +273,57 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
 
   const agentMessages = prepareMessagesForModel(modelTranscript);
   let streamErrorMessage: string | undefined;
+  let closeMcpTools = async () => {};
 
   const stream = createUIMessageStream({
     originalMessages: modelTranscript,
     execute: async ({ writer }) => {
-      const result = await createAgentUIStream({
-        agent,
-        experimental_transform: smoothStream({ chunking: "line" }),
-        generateMessageId: () => assistantId,
-        messageMetadata: ({ part }) => tracker.getMessageMetadata(part),
-        onError: (error) => {
-          streamErrorMessage =
-            error instanceof Error
-              ? error.message
-              : String(error ?? "Unknown error");
-          return streamErrorMessage;
-        },
-        options: {
-          ...(workspaceRoot ? { defaultDirectory: workspaceRoot } : {}),
-          memorySettings,
-          permissionMode,
-          searchProviders,
-          searchSettings,
-          sourceMessageId: parentId,
-          systemPrompt,
-          threadId: request.threadId,
-          threadMode,
-          toolApprovalPolicies,
-          toolsEnabled,
-          userId: request.userId,
-          webFetchSettings,
-          workspaceId: request.workspaceId,
-        },
-        originalMessages: modelTranscript as never,
-        sendReasoning: true,
-        sendSources: true,
-        uiMessages: agentMessages as never,
-      });
-      writer.merge(result as ReadableStream<any>);
+      try {
+        const mcpRuntime =
+          threadMode === "chat"
+            ? await mcpRuntimePromise
+            : { closeAll: async () => {}, tools: {} };
+        closeMcpTools = mcpRuntime.closeAll;
+
+        const result = await createAgentUIStream({
+          agent,
+          experimental_transform: smoothStream({ chunking: "line" }),
+          generateMessageId: () => assistantId,
+          messageMetadata: ({ part }) => tracker.getMessageMetadata(part),
+          onError: (error) => {
+            streamErrorMessage =
+              error instanceof Error
+                ? error.message
+                : String(error ?? "Unknown error");
+            return streamErrorMessage;
+          },
+          options: {
+            ...(workspaceRoot ? { defaultDirectory: workspaceRoot } : {}),
+            mcpTools: mcpRuntime.tools,
+            memorySettings,
+            permissionMode,
+            searchProviders,
+            searchSettings,
+            sourceMessageId: parentId,
+            systemPrompt,
+            threadId: request.threadId,
+            threadMode,
+            toolApprovalPolicies,
+            toolsEnabled,
+            userId: request.userId,
+            webFetchSettings,
+            workspaceId: request.workspaceId,
+          },
+          originalMessages: modelTranscript as never,
+          sendReasoning: true,
+          sendSources: true,
+          uiMessages: agentMessages as never,
+        });
+        writer.merge(result as ReadableStream<any>);
+      } catch (error) {
+        await closeMcpTools();
+        throw error;
+      }
 
       if (resolvedTitlePromise) {
         const title = await resolvedTitlePromise.catch(() => null);
@@ -308,6 +341,7 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
       }
     },
     onFinish: async ({ responseMessage }) => {
+      await closeMcpTools();
       const finalized = tracker.finalize(
         [...modelTranscript, responseMessage as ThreadUIMessage],
         responseMessage as ThreadUIMessage,

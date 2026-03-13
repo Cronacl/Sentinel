@@ -766,6 +766,10 @@ describe("runThreadChat approvals and lifecycle", () => {
     expect(toolNames).toContain("forget_memory");
     expect(toolNames).toContain("websearch");
     expect(toolNames).toContain("webfetch");
+    expect(toolNames).not.toContain("create_plan");
+    expect(toolNames).not.toContain("update_plan");
+    expect(toolNames).not.toContain("manage_task");
+    expect(toolNames).not.toContain("ask_question");
     expect(toolNames).not.toContain("list");
     expect(toolNames).not.toContain("edit");
     expect(toolNames).not.toContain("shell_command");
