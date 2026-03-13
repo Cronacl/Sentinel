@@ -240,6 +240,7 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
     threadMode === "chat"
       ? loadMcpTools({
           entries: mcpServers,
+          userId: request.userId,
           workspaceRoot,
         })
       : Promise.resolve({ closeAll: async () => {}, tools: {} });

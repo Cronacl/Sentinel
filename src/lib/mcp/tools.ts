@@ -4,6 +4,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import {
+  buildMcpOAuthRedirectUrl,
+  createMcpOAuthProvider,
+  getDefaultAppOrigin,
+  hasMcpOAuthState,
+  requiresMcpOAuth,
+} from "@/lib/mcp/oauth";
 import type {
   McpHttpRuntimeEntry,
   McpServerRuntimeEntry,
@@ -211,6 +218,7 @@ function namespaceMcpTools(entry: McpServerRuntimeEntry, tools: McpToolMap) {
 async function createCachedServerTools(
   entry: McpServerRuntimeEntry,
   workspaceRoot: string | null,
+  userId: string,
 ): Promise<CachedMcpServerTools> {
   let client: {
     close: () => Promise<void>;
@@ -218,8 +226,29 @@ async function createCachedServerTools(
   };
 
   if (entry.transport === "http") {
+    const shouldUseOAuth =
+      requiresMcpOAuth(entry) ||
+      (await hasMcpOAuthState({ serverId: entry.id, userId }));
+
     client = await createMCPClient({
       transport: {
+        ...(shouldUseOAuth
+          ? {
+              authProvider: createMcpOAuthProvider({
+                onRedirect() {
+                  throw new Error(
+                    `MCP server "${entry.name}" requires authentication in Settings > MCP servers.`,
+                  );
+                },
+                redirectUrl: buildMcpOAuthRedirectUrl(
+                  getDefaultAppOrigin(),
+                  entry.id,
+                ),
+                serverId: entry.id,
+                userId,
+              }),
+            }
+          : {}),
         headers: resolveHttpHeaders(entry),
         type: "http",
         url: entry.config.url,
@@ -268,6 +297,7 @@ async function closeCachedServerKey(cacheKey: string) {
 async function getCachedServerTools(
   entry: McpServerRuntimeEntry,
   workspaceRoot: string | null,
+  userId: string,
 ) {
   const nextKey = getMcpServerCacheKey(entry, workspaceRoot);
   const previousKey = cachedKeyByServerId.get(entry.id);
@@ -280,7 +310,7 @@ async function getCachedServerTools(
     void closeCachedServerKey(previousKey);
   }
 
-  const pending = createCachedServerTools(entry, workspaceRoot).catch(
+  const pending = createCachedServerTools(entry, workspaceRoot, userId).catch(
     (error) => {
       cachedToolServers.delete(nextKey);
       if (cachedKeyByServerId.get(entry.id) === nextKey) {
@@ -304,13 +334,18 @@ export async function resetMcpToolCache() {
 
 export async function loadMcpTools(args: {
   entries: readonly McpServerRuntimeEntry[];
+  userId: string;
   workspaceRoot: string | null;
 }) {
   const tools: McpToolMap = {};
 
   for (const entry of args.entries.filter((item) => item.isEnabled)) {
     try {
-      const cached = await getCachedServerTools(entry, args.workspaceRoot);
+      const cached = await getCachedServerTools(
+        entry,
+        args.workspaceRoot,
+        args.userId,
+      );
 
       if (!cached) {
         continue;

@@ -125,8 +125,9 @@ function escapeHtml(text) {
     .replace(/>/g, "&gt;");
 }
 
-function getPopupHtml(targetUrl) {
+function getPopupHtml(targetUrl, appOrigin) {
   const escapedUrl = escapeHtml(targetUrl);
+  const escapedAppOrigin = escapeHtml(appOrigin);
   let hostname;
   try {
     hostname = escapeHtml(new URL(targetUrl).hostname);
@@ -175,7 +176,15 @@ document.getElementById('bn').onclick=function(){window.sentinelDesktop&&window.
 document.getElementById('bx').onclick=function(){window.sentinelDesktop&&window.sentinelDesktop.window.toggleMaximize()};
 wv.addEventListener('did-start-loading',function(){lb.classList.add('on')});
 wv.addEventListener('did-stop-loading',function(){lb.classList.remove('on')});
-wv.addEventListener('did-navigate',function(e){try{ud.textContent=new URL(e.url).hostname}catch(x){ud.textContent=e.url}});
+wv.addEventListener('did-navigate',function(e){
+  try{
+    var url=new URL(e.url);
+    ud.textContent=url.hostname;
+    if(url.origin==='${escapedAppOrigin}'&&url.pathname==='/api/mcp/oauth/callback'){
+      setTimeout(function(){window.sentinelDesktop&&window.sentinelDesktop.window.close()},600);
+    }
+  }catch(x){ud.textContent=e.url}
+});
 wv.addEventListener('page-title-updated',function(e){document.title=e.title+' \\u2014 Sentinel'});
 </script>
 </body>
@@ -215,7 +224,14 @@ function createBrowserPopup(url) {
     width: 1020,
   });
 
-  void popup.loadURL(getPopupHtml(url));
+  void popup.loadURL(
+    getPopupHtml(
+      url,
+      serverState?.url ??
+        process.env.SENTINEL_APP_URL ??
+        "http://127.0.0.1:3232",
+    ),
+  );
   popup.once("ready-to-show", () => popup.show());
 }
 

@@ -4,9 +4,14 @@ import { and, eq } from "drizzle-orm";
 
 import { encrypt } from "@/lib/ai/providers/encrypt";
 import { getMcpCatalogEntry } from "@/lib/mcp/catalog";
+import { beginMcpServerOAuth, requiresMcpOAuth } from "@/lib/mcp/oauth";
 import { validateMcpServerConfig } from "@/lib/mcp/config";
-import { parseStoredMcpServer } from "@/lib/mcp/runtime";
 import {
+  parseStoredMcpServer,
+  type McpHttpRuntimeEntry,
+} from "@/lib/mcp/runtime";
+import {
+  mcpServerBeginOAuthSchema,
   mcpServerDeleteSchema,
   mcpServerGetSchema,
   mcpServerToggleSchema,
@@ -84,6 +89,54 @@ export const mcpServersRouter = createTRPCRouter({
               : "MCP server settings could not be read.",
         });
       }
+    }),
+
+  beginOAuth: protectedProcedure
+    .input(mcpServerBeginOAuthSchema)
+    .mutation(async ({ ctx, input }) => {
+      const row = await ctx.db.query.mcpServerConfigs.findFirst({
+        where: and(
+          eq(mcpServerConfigs.id, input.id),
+          eq(mcpServerConfigs.userId, ctx.session.user.id),
+        ),
+      });
+
+      if (!row) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "MCP server not found.",
+        });
+      }
+
+      const parsed = parseStoredMcpServer(row);
+
+      if (parsed.transport !== "http") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "OAuth is only supported for HTTP MCP servers.",
+        });
+      }
+
+      if (!requiresMcpOAuth(parsed)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This MCP server does not support OAuth authentication.",
+        });
+      }
+
+      const appOrigin =
+        ctx.headers.get("origin") ??
+        (() => {
+          const referer = ctx.headers.get("referer");
+          return referer ? new URL(referer).origin : null;
+        })() ??
+        "http://127.0.0.1:3232";
+
+      return beginMcpServerOAuth({
+        appOrigin,
+        entry: parsed as McpHttpRuntimeEntry,
+        userId: ctx.session.user.id,
+      });
     }),
 
   upsert: protectedProcedure

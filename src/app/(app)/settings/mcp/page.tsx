@@ -5,7 +5,7 @@ import { Settings05Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { getMcpCatalogIconComponent } from "@/components/settings/mcp-catalog-icons";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
@@ -58,11 +58,13 @@ function McpSettingsSkeleton() {
 }
 
 function RecommendedServerRow({
+  onAuthenticate,
   onInstall,
   onOpenSettings,
   onToggle,
   server,
 }: {
+  onAuthenticate: (serverId: string) => void;
   onInstall: (catalogId: McpServerCatalogId) => void;
   onOpenSettings: (serverId: string) => void;
   onToggle: (serverId: string, isEnabled: boolean) => void;
@@ -121,9 +123,9 @@ function RecommendedServerRow({
           </Button>
         ) : installedServer ? (
           <>
-            {server.transport === "http" ? (
+            {server.transport === "http" && server.requiresAuthentication ? (
               <Button
-                onPress={() => onOpenSettings(installedServer.id)}
+                onPress={() => onAuthenticate(installedServer.id)}
                 size="sm"
                 variant="secondary"
               >
@@ -207,6 +209,44 @@ export default function McpSettingsPage() {
     },
   });
 
+  const beginOAuth = api.mcpServers.beginOAuth.useMutation({
+    onError: (error) => {
+      setMutationError(error.message);
+    },
+    onSuccess: async (result) => {
+      setMutationError("");
+
+      if (result.status === "authorized") {
+        await utils.mcpServers.list.invalidate();
+        return;
+      }
+
+      window.open(result.authorizationUrl, "_blank", "noopener,noreferrer");
+    },
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const channel = new BroadcastChannel("sentinel-mcp-oauth");
+    const onMessage = (event: MessageEvent<{ success?: boolean }>) => {
+      if (!event.data?.success) {
+        return;
+      }
+
+      void utils.mcpServers.list.invalidate();
+    };
+
+    channel.addEventListener("message", onMessage);
+
+    return () => {
+      channel.removeEventListener("message", onMessage);
+      channel.close();
+    };
+  }, [utils.mcpServers.list]);
+
   const customServers =
     servers.data?.filter((server) => !server.catalogId) ?? [];
   const installedCatalogServers = new Map(
@@ -239,6 +279,11 @@ export default function McpSettingsPage() {
         name: catalog.name,
       }),
     );
+  };
+
+  const handleAuthenticate = async (serverId: string) => {
+    setMutationError("");
+    await beginOAuth.mutateAsync({ id: serverId });
   };
 
   return (
@@ -388,6 +433,9 @@ export default function McpSettingsPage() {
               {recommendedServers.map((server) => (
                 <RecommendedServerRow
                   key={server.id}
+                  onAuthenticate={(serverId) =>
+                    void handleAuthenticate(serverId)
+                  }
                   onInstall={(catalogId) => void handleInstall(catalogId)}
                   onOpenSettings={(serverId) =>
                     router.push(`/settings/mcp/${serverId}`)

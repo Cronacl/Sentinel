@@ -52,7 +52,7 @@ function McpServerFormSkeleton() {
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-foreground text-sm font-semibold">{children}</h3>;
+  return <h3 className="text-foreground text-sm font-medium">{children}</h3>;
 }
 
 function KeyValueRows({

@@ -84,7 +84,7 @@ export const MarkdownContent = memo(function MarkdownContent({
       },
       th({ children }) {
         return (
-          <th className="border-b border-border bg-default/30 px-3 py-2 text-left text-xs font-semibold text-muted">
+          <th className="border-b border-border bg-default/30 px-3 py-2 text-left text-xs font-medium text-muted">
             {children}
           </th>
         );

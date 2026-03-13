@@ -14,6 +14,11 @@ const update = mock(() => ({ set: updateSet }));
 const deleteRun = mock(() => undefined);
 const deleteWhere = mock(() => ({ run: deleteRun }));
 const deleteConfig = mock(() => ({ where: deleteWhere }));
+const beginMcpServerOAuth = mock(async () => ({
+  authorizationUrl: "https://figma.com/oauth",
+  status: "redirect",
+}));
+const requiresMcpOAuth = mock(() => true);
 
 mock.module("@/server/api/trpc", () => ({
   createTRPCRouter: (routes: Record<string, any>) => routes,
@@ -45,6 +50,11 @@ mock.module("@/lib/ai/providers/encrypt", () => ({
   encrypt: (value: string) => `encrypted:${value}`,
 }));
 
+mock.module("@/lib/mcp/oauth", () => ({
+  beginMcpServerOAuth,
+  requiresMcpOAuth,
+}));
+
 const { mcpServersRouter } = await import("./mcp-servers");
 
 beforeEach(() => {
@@ -60,6 +70,8 @@ beforeEach(() => {
   deleteRun.mockReset();
   deleteWhere.mockReset();
   deleteConfig.mockReset();
+  beginMcpServerOAuth.mockReset();
+  requiresMcpOAuth.mockReset();
 
   findFirst.mockImplementation(async () => null);
   findMany.mockImplementation(async () => []);
@@ -70,6 +82,11 @@ beforeEach(() => {
   update.mockImplementation(() => ({ set: updateSet }));
   deleteWhere.mockImplementation(() => ({ run: deleteRun }));
   deleteConfig.mockImplementation(() => ({ where: deleteWhere }));
+  beginMcpServerOAuth.mockImplementation(async () => ({
+    authorizationUrl: "https://figma.com/oauth",
+    status: "redirect",
+  }));
+  requiresMcpOAuth.mockImplementation(() => true);
 });
 
 afterEach(() => {
@@ -308,6 +325,50 @@ describe("mcpServersRouter", () => {
       isEnabled: false,
       name: "Playwright",
       transport: "stdio",
+    });
+  });
+
+  it("starts OAuth for an installed HTTP catalog server", async () => {
+    findFirst.mockImplementationOnce(async () => ({
+      catalogId: "figma",
+      encryptedConfig: JSON.stringify({
+        headers: [],
+        headersFromEnv: [],
+        url: "https://mcp.figma.com/mcp",
+      }),
+      id: "server-figma",
+      isEnabled: true,
+      name: "Figma",
+      transport: "http",
+      userId: "user-1",
+    }));
+
+    const result = await mcpServersRouter.beginOAuth({
+      ctx: {
+        db: {
+          query: {
+            mcpServerConfigs: {
+              findFirst,
+            },
+          },
+        },
+        headers: new Headers({ origin: "http://127.0.0.1:3232" }),
+        session: { user: { id: "user-1" } },
+      },
+      input: { id: "server-figma" },
+    });
+
+    expect(beginMcpServerOAuth).toHaveBeenCalledWith({
+      appOrigin: "http://127.0.0.1:3232",
+      entry: expect.objectContaining({
+        id: "server-figma",
+        transport: "http",
+      }),
+      userId: "user-1",
+    });
+    expect(result).toEqual({
+      authorizationUrl: "https://figma.com/oauth",
+      status: "redirect",
     });
   });
 

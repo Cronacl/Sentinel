@@ -138,6 +138,8 @@ export const mcpServerGetSchema = z.object({
   id: z.string().trim().min(1),
 });
 
+export const mcpServerBeginOAuthSchema = mcpServerGetSchema;
+
 export const mcpServerDeleteSchema = mcpServerGetSchema;
 
 export const mcpServerToggleSchema = z.object({

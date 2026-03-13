@@ -43,6 +43,33 @@ mock.module("@/lib/ai/providers/encrypt", () => ({
   encrypt: (value: string) => value,
 }));
 
+mock.module("@/lib/mcp/oauth", () => ({
+  buildMcpOAuthRedirectUrl: (_origin: string, serverId: string) =>
+    `http://127.0.0.1:3232/api/mcp/oauth/callback?serverId=${serverId}`,
+  createMcpOAuthProvider: () => ({
+    clientInformation: () => undefined,
+    clientMetadata: {
+      client_name: "Sentinel",
+      grant_types: ["authorization_code", "refresh_token"],
+      redirect_uris: ["http://127.0.0.1:3232/api/mcp/oauth/callback"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+    },
+    codeVerifier: () => "",
+    invalidateCredentials: () => undefined,
+    redirectToAuthorization: () => undefined,
+    redirectUrl: "http://127.0.0.1:3232/api/mcp/oauth/callback",
+    saveClientInformation: () => undefined,
+    saveCodeVerifier: () => undefined,
+    saveTokens: () => undefined,
+    state: () => "state",
+    tokens: () => undefined,
+  }),
+  getDefaultAppOrigin: () => "http://127.0.0.1:3232",
+  hasMcpOAuthState: async () => false,
+  requiresMcpOAuth: () => false,
+}));
+
 const { buildMcpServerRuntimeEntries } = await import("./runtime");
 const { getResolvedStdioCwd, loadMcpTools, resetMcpToolCache } =
   await import("./tools");
@@ -139,6 +166,7 @@ describe("mcp runtime", () => {
           transport: "stdio",
         },
       ],
+      userId: "user-1",
       workspaceRoot: "/tmp/workspace",
     });
 
@@ -185,6 +213,7 @@ describe("mcp runtime", () => {
           transport: "stdio",
         },
       ],
+      userId: "user-1",
       workspaceRoot: "/tmp/workspace",
     });
 
@@ -226,6 +255,7 @@ describe("mcp runtime", () => {
           transport: "stdio",
         },
       ],
+      userId: "user-1",
       workspaceRoot: "/tmp/workspace",
     });
 
@@ -278,6 +308,7 @@ describe("mcp runtime", () => {
           transport: "http",
         },
       ],
+      userId: "user-1",
       workspaceRoot: null,
     });
 

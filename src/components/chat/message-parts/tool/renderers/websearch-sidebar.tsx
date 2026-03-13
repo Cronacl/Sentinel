@@ -53,7 +53,7 @@ function FaviconImage({ url }: { url: string }) {
 
   if (failed) {
     return (
-      <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-foreground/8 text-[8px] font-bold text-foreground/40">
+      <div className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm bg-foreground/8 text-[8px] font-medium text-foreground/40">
         {getHostname(url).charAt(0).toUpperCase()}
       </div>
     );

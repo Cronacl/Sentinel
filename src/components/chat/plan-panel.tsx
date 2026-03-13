@@ -179,9 +179,7 @@ export function PlanPanel({ threadId }: { threadId: string }) {
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-medium text-muted">
-                Plan
-              </span>
+              <span className="text-[11px] font-medium text-muted">Plan</span>
               <AudienceChip audience={resolvedPlan.audience} />
               <span className="rounded-full border border-border/40 bg-background/60 px-2 py-0.5 text-[10px] text-muted">
                 {progressLabel}
@@ -190,7 +188,7 @@ export function PlanPanel({ threadId }: { threadId: string }) {
                 Updated {formatRelativeTime(resolvedPlan.updatedAt)}
               </span>
             </div>
-            <p className="mt-2 text-sm font-semibold text-foreground">
+            <p className="mt-2 text-sm font-medium text-foreground">
               {resolvedPlan.title}
             </p>
             <p className="mt-1 text-xs text-muted">{summaryPreview}</p>
@@ -329,8 +327,8 @@ export function PlanPanel({ threadId }: { threadId: string }) {
                               </div>
                               {task.description ? (
                                 <p className="mt-1 text-[11px] text-muted">
-                                {task.description}
-                              </p>
+                                  {task.description}
+                                </p>
                               ) : null}
                               <div className="mt-3 flex flex-wrap items-center gap-1 opacity-100 transition-opacity lg:opacity-0 lg:group-hover:opacity-100">
                                 {taskActionButtons.map(([status, label]) => (
