@@ -5,6 +5,7 @@ import {
   Button,
   Chip,
   Form,
+  Pagination,
   Skeleton,
   Spinner,
 } from "@heroui/react";
@@ -64,6 +65,8 @@ const PINNED_OPTIONS = [
   { label: "Unpinned", value: "unpinned" },
 ];
 
+const MEMORIES_PER_PAGE = 10;
+
 type MemoryProfileOption = {
   description: string;
   label: string;
@@ -92,6 +95,91 @@ function MemorySettingsSkeleton() {
   );
 }
 
+function getPageNumbers(page: number, totalPages: number) {
+  const pages: (number | "ellipsis")[] = [];
+
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) {
+      pages.push(i);
+    }
+    return pages;
+  }
+
+  pages.push(1);
+  if (page > 3) pages.push("ellipsis");
+
+  const start = Math.max(2, page - 1);
+  const end = Math.min(totalPages - 1, page + 1);
+  for (let i = start; i <= end; i++) {
+    pages.push(i);
+  }
+
+  if (page < totalPages - 2) pages.push("ellipsis");
+  pages.push(totalPages);
+
+  return pages;
+}
+
+function MemoryPagination({
+  page,
+  totalPages,
+  startItem,
+  endItem,
+  filteredCount,
+  onPageChange,
+}: {
+  page: number;
+  totalPages: number;
+  startItem: number;
+  endItem: number;
+  filteredCount: number;
+  onPageChange: (page: number) => void;
+}) {
+  return (
+    <Pagination className="mt-4 w-full" size="sm">
+      <Pagination.Summary>
+        Showing {startItem}–{endItem} of {filteredCount} memories
+      </Pagination.Summary>
+      <Pagination.Content>
+        <Pagination.Item>
+          <Pagination.Previous
+            isDisabled={page === 1}
+            onPress={() => onPageChange(page - 1)}
+          >
+            <Pagination.PreviousIcon />
+            <span>Previous</span>
+          </Pagination.Previous>
+        </Pagination.Item>
+        {getPageNumbers(page, totalPages).map((p, i) =>
+          p === "ellipsis" ? (
+            <Pagination.Item key={`ellipsis-${i}`}>
+              <Pagination.Ellipsis />
+            </Pagination.Item>
+          ) : (
+            <Pagination.Item key={p}>
+              <Pagination.Link
+                isActive={p === page}
+                onPress={() => onPageChange(p)}
+              >
+                {p}
+              </Pagination.Link>
+            </Pagination.Item>
+          ),
+        )}
+        <Pagination.Item>
+          <Pagination.Next
+            isDisabled={page === totalPages}
+            onPress={() => onPageChange(page + 1)}
+          >
+            <span>Next</span>
+            <Pagination.NextIcon />
+          </Pagination.Next>
+        </Pagination.Item>
+      </Pagination.Content>
+    </Pagination>
+  );
+}
+
 function formatDate(timestamp: number | null) {
   if (!timestamp) {
     return "Never";
@@ -116,11 +204,16 @@ export default function MemorySettingsPage() {
     "all",
   );
   const [workspaceFilter, setWorkspaceFilter] = useState<string>("all");
+  const [page, setPage] = useState(1);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [pendingDeleteMemory, setPendingDeleteMemory] =
     useState<ManagedMemoryItem | null>(null);
   const [actionError, setActionError] = useState("");
   const deferredQuery = useDeferredValue(query);
+
+  useEffect(() => {
+    setPage(1);
+  }, [deferredQuery, scopeFilter, kindFilter, pinnedFilter, workspaceFilter]);
 
   const memorySettings = api.memorySettings.get.useQuery();
   const providerStatuses = api.providers.list.useQuery();
@@ -282,6 +375,15 @@ export default function MemorySettingsPage() {
   };
 
   const totalMemories = memories.data?.total ?? 0;
+  const allItems = memories.data?.items ?? [];
+  const filteredCount = allItems.length;
+  const totalPages = Math.max(1, Math.ceil(filteredCount / MEMORIES_PER_PAGE));
+  const safePage = Math.min(page, totalPages);
+  const startIndex = (safePage - 1) * MEMORIES_PER_PAGE;
+  const paginatedItems = allItems.slice(startIndex, startIndex + MEMORIES_PER_PAGE);
+  const startItem = filteredCount > 0 ? startIndex + 1 : 0;
+  const endItem = Math.min(startIndex + MEMORIES_PER_PAGE, filteredCount);
+
   const selectedProfile =
     MEMORY_EMBEDDING_PROFILES.find(
       (profile) => profile.id === form.watch("memoryProfileId"),
@@ -573,8 +675,8 @@ export default function MemorySettingsPage() {
                 Array.from({ length: 3 }).map((_, index) => (
                   <Skeleton className="h-28 w-full rounded-xl" key={index} />
                 ))
-              ) : memories.data?.items.length ? (
-                memories.data.items.map((memory) => (
+              ) : paginatedItems.length > 0 ? (
+                paginatedItems.map((memory) => (
                   <article
                     className="border-separator bg-background/40 rounded-xl border p-4"
                     key={memory.id}
@@ -670,6 +772,17 @@ export default function MemorySettingsPage() {
                 </div>
               )}
             </div>
+
+            {filteredCount > MEMORIES_PER_PAGE && (
+              <MemoryPagination
+                page={safePage}
+                totalPages={totalPages}
+                startItem={startItem}
+                endItem={endItem}
+                filteredCount={filteredCount}
+                onPageChange={setPage}
+              />
+            )}
           </section>
         </div>
       )}
