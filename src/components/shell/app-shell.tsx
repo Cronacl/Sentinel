@@ -6,6 +6,7 @@ import {
   ArrowLeft02Icon,
   Brain02Icon,
   GlobalSearchIcon,
+  McpServerIcon,
   Settings05Icon,
   ShieldUserIcon,
   TestTubeIcon,
@@ -42,7 +43,7 @@ const SETTINGS_NAV = [
     label: "Search",
     icon: GlobalSearchIcon,
   },
-  { href: "/settings/mcp", label: "MCP Servers", icon: TestTubeIcon },
+  { href: "/settings/mcp", label: "MCP Servers", icon: McpServerIcon },
   {
     href: "/settings/memory",
     label: "Memory",
