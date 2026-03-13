@@ -83,15 +83,6 @@ export function ThreadScreen({
     setThreadTitle(thread.title);
   }, [thread.title]);
 
-  useEffect(() => {
-    setThreadSelectionState({
-      modelId: thread.chatModelId,
-      mode: thread.mode,
-      reasoningEffort:
-        (thread.chatReasoningEffort as ReasoningEffort | null) ?? null,
-    });
-  }, [thread.chatModelId, thread.chatReasoningEffort, thread.mode]);
-
   const handleData = useCallback<ChatOnDataCallback<ThreadUIMessage>>(
     (dataPart) => {
       if (
@@ -251,6 +242,16 @@ export function ThreadScreen({
   } = chat;
 
   const isBusy = status === "submitted" || status === "streaming";
+
+  useEffect(() => {
+    if (isBusy) return;
+    setThreadSelectionState({
+      modelId: thread.chatModelId,
+      mode: thread.mode,
+      reasoningEffort:
+        (thread.chatReasoningEffort as ReasoningEffort | null) ?? null,
+    });
+  }, [thread.chatModelId, thread.chatReasoningEffort, thread.mode, isBusy]);
 
   useEffect(() => {
     if (!isBusy) {

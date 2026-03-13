@@ -237,7 +237,7 @@ function ThreadItemTrailing({
       }`}
     >
       {hasTimestamp ? (
-        <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center text-xs text-muted transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0">
+        <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center text-xs text-foreground/40 transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0">
           {formatRelativeTime(updatedAt)}
         </span>
       ) : null}
@@ -344,7 +344,7 @@ function PinnedThreadsList({
               className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-sm transition-colors ${
                 isActive
                   ? "font-medium bg-default text-foreground"
-                  : "text-muted"
+                  : "text-foreground/60 hover:text-foreground"
               }`}
               key={thread.id}
               onClick={() => onPressThread(thread.workspace.id, thread.id)}
@@ -359,7 +359,7 @@ function PinnedThreadsList({
             >
               <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
                 <HugeiconsIcon
-                  className="shrink-0 text-muted"
+                  className="shrink-0 text-foreground/40"
                   color="currentColor"
                   icon={PinIcon}
                   size={12}
@@ -387,6 +387,8 @@ function PinnedThreadsList({
   );
 }
 
+const THREADS_PER_PAGE = 6;
+
 const ThreadList = memo(function ThreadList({
   onPressThread,
   groups,
@@ -397,6 +399,8 @@ const ThreadList = memo(function ThreadList({
   onPressWorkspace,
   onPin,
   onArchive,
+  threadVisibleCounts,
+  onShowMore,
 }: {
   expandedWorkspaceIds: Set<string>;
   groups: ThreadGroup;
@@ -406,21 +410,27 @@ const ThreadList = memo(function ThreadList({
   onPressThread: (workspaceId: string, threadId: string) => void;
   onPressWorkspace: (workspaceId: string) => void;
   onRenameWorkspace: (workspaceId: string) => void;
+  onShowMore: (workspaceId: string) => void;
   selectedThreadId: string | null;
+  threadVisibleCounts: Map<string, number>;
 }) {
   return (
     <div className="flex flex-col gap-1 px-3 py-1">
       {groups.map((group) => {
         const isExpanded = expandedWorkspaceIds.has(group.workspace.id);
-        const visibleThreads = group.threads.filter(
+        const allThreads = group.threads.filter(
           (thread) => thread.pinnedAt == null,
         );
+        const limit =
+          threadVisibleCounts.get(group.workspace.id) ?? THREADS_PER_PAGE;
+        const visibleThreads = allThreads.slice(0, limit);
+        const hasMore = allThreads.length > limit;
 
         return (
           <section key={group.workspace.id}>
             <div className="group relative">
               <Button
-                className="text-muted hover:bg-default/60 hover:text-foreground justify-start rounded-xl pr-10"
+                className="text-foreground/70 hover:bg-default/60 hover:text-foreground justify-start rounded-xl pr-10"
                 fullWidth
                 onPress={() => onPressWorkspace(group.workspace.id)}
                 size="sm"
@@ -458,58 +468,69 @@ const ThreadList = memo(function ThreadList({
             {isExpanded ? (
               <div className="mt-1 flex flex-col gap-0.5 pl-2">
                 {visibleThreads.length > 0 ? (
-                  visibleThreads.map((thread) => {
-                    const isActive = selectedThreadId === thread.id;
+                  <>
+                    {visibleThreads.map((thread) => {
+                      const isActive = selectedThreadId === thread.id;
 
-                    return (
-                      <div
-                        className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-sm transition-colors ${
-                          isActive
-                            ? "font-medium bg-default text-foreground"
-                            : "text-muted"
-                        }`}
-                        key={thread.id}
-                        onClick={() =>
-                          onPressThread(group.workspace.id, thread.id)
-                        }
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            onPressThread(group.workspace.id, thread.id);
+                      return (
+                        <div
+                          className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-sm transition-colors ${
+                            isActive
+                              ? "font-medium bg-default text-foreground"
+                              : "text-foreground/60 hover:text-foreground"
+                          }`}
+                          key={thread.id}
+                          onClick={() =>
+                            onPressThread(group.workspace.id, thread.id)
                           }
-                        }}
-                      >
-                        <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-                          {thread.pinnedAt != null && (
-                            <HugeiconsIcon
-                              className="shrink-0 text-muted"
-                              color="currentColor"
-                              icon={PinIcon}
-                              size={11}
-                              strokeWidth={1.5}
-                            />
-                          )}
-                          <span
-                            className="min-w-0 truncate text-sm"
-                            title={thread.title}
-                          >
-                            {thread.title}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              onPressThread(group.workspace.id, thread.id);
+                            }
+                          }}
+                        >
+                          <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+                            {thread.pinnedAt != null && (
+                              <HugeiconsIcon
+                                className="shrink-0 text-foreground/40"
+                                color="currentColor"
+                                icon={PinIcon}
+                                size={11}
+                                strokeWidth={1.5}
+                              />
+                            )}
+                            <span
+                              className="min-w-0 truncate text-sm"
+                              title={thread.title}
+                            >
+                              {thread.title}
+                            </span>
                           </span>
-                        </span>
-                        <ThreadItemTrailing
-                          isPinned={thread.pinnedAt != null}
-                          onArchive={onArchive}
-                          onPin={onPin}
-                          threadId={thread.id}
-                          updatedAt={thread.updatedAt}
-                        />
-                      </div>
-                    );
-                  })
+                          <ThreadItemTrailing
+                            isPinned={thread.pinnedAt != null}
+                            onArchive={onArchive}
+                            onPin={onPin}
+                            threadId={thread.id}
+                            updatedAt={thread.updatedAt}
+                          />
+                        </div>
+                      );
+                    })}
+                    {hasMore && (
+                      <button
+                        className="cursor-pointer px-2 py-1.5 text-left text-xs text-foreground/40 transition-colors hover:text-foreground/70"
+                        onClick={() => onShowMore(group.workspace.id)}
+                        type="button"
+                      >
+                        Show more
+                      </button>
+                    )}
+                  </>
                 ) : (
-                  <div className="text-muted px-3 py-2 text-xs">
+                  <div className="text-foreground/40 px-3 py-2 text-xs">
                     No threads yet.
                   </div>
                 )}
@@ -528,22 +549,31 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
   selectedThreadId,
   onPin,
   onArchive,
+  visibleCount,
+  onShowMore,
 }: {
   items: ChronologicalThreadItem;
   onArchive: (threadId: string) => void;
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
+  onShowMore: () => void;
   selectedThreadId: string | null;
+  visibleCount: number;
 }) {
+  const visibleItems = items.slice(0, visibleCount);
+  const hasMore = items.length > visibleCount;
+
   return (
     <div className="flex flex-col gap-1 px-4 py-1">
-      {items.map((item) => {
+      {visibleItems.map((item) => {
         const isActive = selectedThreadId === item.id;
 
         return (
           <div
             className={`group hover:bg-default/60 min-w-0 cursor-pointer rounded-xl px-1 py-1 text-sm transition-colors ${
-              isActive ? "font-medium bg-default text-foreground" : "text-muted"
+              isActive
+                ? "font-medium bg-default text-foreground"
+                : "text-foreground/60 hover:text-foreground"
             }`}
             key={item.id}
             onClick={() => onPressThread(item.workspace.id, item.id)}
@@ -560,7 +590,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
               <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
                 {item.pinnedAt != null && (
                   <HugeiconsIcon
-                    className="shrink-0 text-muted"
+                    className="shrink-0 text-foreground/40"
                     color="currentColor"
                     icon={PinIcon}
                     size={11}
@@ -582,6 +612,15 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
           </div>
         );
       })}
+      {hasMore && (
+        <button
+          className="cursor-pointer px-3 py-1.5 text-left text-xs text-foreground/40 transition-colors hover:text-foreground/70"
+          onClick={onShowMore}
+          type="button"
+        >
+          Show more
+        </button>
+      )}
     </div>
   );
 });
@@ -641,6 +680,10 @@ export function WorkspaceSidebar() {
   const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState<Set<string>>(
     new Set(),
   );
+  const [threadVisibleCounts, setThreadVisibleCounts] = useState<
+    Map<string, number>
+  >(new Map());
+  const [chronologicalVisibleCount, setChronologicalVisibleCount] = useState(6);
   const preferencesRef = useRef<HTMLDivElement | null>(null);
   const pinActionLockRef = useRef(new Set<string>());
   const renameWorkspaceState = useOverlayState({
@@ -979,6 +1022,28 @@ export function WorkspaceSidebar() {
   }, [preferences.data]);
 
   useEffect(() => {
+    if (
+      !selectedThreadId ||
+      organizeBy !== "workspace" ||
+      groups.length === 0
+    ) {
+      return;
+    }
+
+    for (const group of groups) {
+      if (group.threads.some((t) => t.id === selectedThreadId)) {
+        setExpandedWorkspaceIds((current) => {
+          if (current.has(group.workspace.id)) return current;
+          const next = new Set(current);
+          next.add(group.workspace.id);
+          return next;
+        });
+        break;
+      }
+    }
+  }, [selectedThreadId, groups, organizeBy]);
+
+  useEffect(() => {
     if (!isPreferencesOpen) {
       return;
     }
@@ -1044,6 +1109,19 @@ export function WorkspaceSidebar() {
     },
     [organizeBy, sortBy, updatePreferences],
   );
+
+  const handleShowMoreThreads = useCallback((workspaceId: string) => {
+    setThreadVisibleCounts((current) => {
+      const next = new Map(current);
+      const currentCount = next.get(workspaceId) ?? THREADS_PER_PAGE;
+      next.set(workspaceId, currentCount + THREADS_PER_PAGE);
+      return next;
+    });
+  }, []);
+
+  const handleShowMoreChronological = useCallback(() => {
+    setChronologicalVisibleCount((c) => c + THREADS_PER_PAGE);
+  }, []);
 
   const handleToggleWorkspace = useCallback((workspaceId: string) => {
     setExpandedWorkspaceIds((current) => {
@@ -1147,7 +1225,7 @@ export function WorkspaceSidebar() {
                 className={`justify-start rounded-lg ${
                   isActive
                     ? "text-foreground"
-                    : "text-muted hover:text-foreground"
+                    : "text-foreground/60 hover:text-foreground"
                 }`}
                 fullWidth
                 key={item.href}
@@ -1179,7 +1257,7 @@ export function WorkspaceSidebar() {
 
       <div className="flex shrink-0 items-center gap-1 px-4">
         <div className="min-w-0 flex-1">
-          <h2 className="text-muted/80 px-2 text-xs font-medium">Threads</h2>
+          <h2 className="text-foreground/45 px-2 text-xs font-medium uppercase tracking-wide">Threads</h2>
         </div>
 
         <Button
@@ -1296,7 +1374,9 @@ export function WorkspaceSidebar() {
                 onPressThread={handlePressThread}
                 onPressWorkspace={handlePressWorkspace}
                 onRenameWorkspace={handleOpenRenameWorkspace}
+                onShowMore={handleShowMoreThreads}
                 selectedThreadId={selectedThreadId}
+                threadVisibleCounts={threadVisibleCounts}
               />
             ) : null}
 
@@ -1306,7 +1386,9 @@ export function WorkspaceSidebar() {
                 onArchive={handleArchiveThread}
                 onPin={handlePin}
                 onPressThread={handlePressThread}
+                onShowMore={handleShowMoreChronological}
                 selectedThreadId={selectedThreadId}
+                visibleCount={chronologicalVisibleCount}
               />
             ) : null}
 
@@ -1318,7 +1400,7 @@ export function WorkspaceSidebar() {
                       ? "No workspaces yet"
                       : "No threads found"}
                   </p>
-                  <p className="text-muted mt-1 text-xs">
+                  <p className="text-foreground/45 mt-1 text-xs">
                     {organizeBy === "workspace"
                       ? "Create a workspace to start grouping threads by project root."
                       : "No threads match the current sidebar filters yet."}
@@ -1342,7 +1424,7 @@ export function WorkspaceSidebar() {
 
       <div className="shrink-0 px-3 pb-3">
         <Button
-          className="text-muted hover:text-foreground justify-start rounded-lg"
+          className="text-foreground/60 hover:text-foreground justify-start rounded-lg"
           fullWidth
           onPress={() => router.push("/settings")}
           size="sm"

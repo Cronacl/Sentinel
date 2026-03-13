@@ -18,12 +18,16 @@ export function ThreadRouteScreen({ threadId }: { threadId: string }) {
   );
 
   useEffect(() => {
-    if (threadQuery.error?.data?.code === "NOT_FOUND") {
+    if (threadQuery.error?.data?.code === "NOT_FOUND" && !threadQuery.data) {
       router.replace("/");
     }
-  }, [router, threadQuery.error?.data?.code]);
+  }, [router, threadQuery.error?.data?.code, threadQuery.data]);
 
-  if (threadQuery.error && threadQuery.error.data?.code !== "NOT_FOUND") {
+  if (
+    threadQuery.error &&
+    threadQuery.error.data?.code !== "NOT_FOUND" &&
+    !threadQuery.data
+  ) {
     return (
       <PageWrapper flush title="Thread">
         <div className="flex h-[calc(100vh-44px)] items-center justify-center px-4">

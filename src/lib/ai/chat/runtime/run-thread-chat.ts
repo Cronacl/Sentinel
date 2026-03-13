@@ -103,7 +103,7 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
     });
   }
 
-  persist.updateThreadChatSettings(request.threadId, {
+  await persist.updateThreadChatSettings(request.threadId, {
     ...(request.modelId ? { modelId: request.modelId } : {}),
     ...(request.reasoningEffort !== undefined
       ? { reasoningEffort: request.reasoningEffort ?? null }

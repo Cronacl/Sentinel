@@ -15,6 +15,11 @@ import {
   threadMessageMetadataSchema,
 } from "@/lib/ai/messages/types";
 
+import {
+  getChatInstance,
+  scheduleChatInstanceCleanup,
+  setChatInstance,
+} from "./chat-instance-registry";
 import { prepareThreadChatRequestBody } from "./thread-chat-transport";
 
 type UseThreadChatOptions = {
@@ -105,16 +110,23 @@ export function useThreadChat({
   const chatInstanceRef = useRef<Chat<ThreadUIMessage> | null>(null);
 
   if (!chatInstanceRef.current || chatInstanceRef.current.id !== threadId) {
-    chatInstanceRef.current = new Chat<ThreadUIMessage>({
-      id: threadId,
-      messages: normalizedInitialMessages,
-      messageMetadataSchema: threadMessageMetadataSchema,
-      onData,
-      onError,
-      onFinish,
-      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
-      transport,
-    });
+    const existing = getChatInstance(threadId);
+    if (existing) {
+      chatInstanceRef.current = existing;
+    } else {
+      chatInstanceRef.current = new Chat<ThreadUIMessage>({
+        id: threadId,
+        messages: normalizedInitialMessages,
+        messageMetadataSchema: threadMessageMetadataSchema,
+        onData,
+        onError,
+        onFinish,
+        sendAutomaticallyWhen:
+          lastAssistantMessageIsCompleteWithApprovalResponses,
+        transport,
+      });
+      setChatInstance(threadId, chatInstanceRef.current);
+    }
   }
 
   const chatInstance = chatInstanceRef.current;
@@ -145,7 +157,9 @@ export function useThreadChat({
     if (syncedThreadIdRef.current !== threadId) {
       syncedThreadIdRef.current = threadId;
       lastSyncedSignatureRef.current = initialMessagesSignature;
-      chat.setMessages(normalizedInitialMessages);
+      if (chat.status !== "submitted" && chat.status !== "streaming") {
+        chat.setMessages(normalizedInitialMessages);
+      }
       return;
     }
 
@@ -166,6 +180,12 @@ export function useThreadChat({
     normalizedInitialMessages,
     threadId,
   ]);
+
+  useEffect(() => {
+    return () => {
+      scheduleChatInstanceCleanup(threadId);
+    };
+  }, [threadId]);
 
   const sendMessage = useCallback(
     ({

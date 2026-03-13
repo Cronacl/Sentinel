@@ -168,17 +168,19 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         dataPart.type === "data-thread-invalidation" &&
         dataPart.data.threadId === draftThreadId
       ) {
+        void utils.plan.get.invalidate({ threadId: draftThreadId });
         void utils.threads.get.invalidate({ threadId: draftThreadId });
         void utils.threads.list.invalidate();
       }
     },
-    [draftThreadId, utils.threads.get, utils.threads.list],
+    [draftThreadId, utils.plan.get, utils.threads.get, utils.threads.list],
   );
 
   const handleFinish = useCallback(() => {
+    void utils.plan.get.invalidate({ threadId: draftThreadId });
     void utils.threads.get.invalidate({ threadId: draftThreadId });
     void utils.threads.list.invalidate();
-  }, [draftThreadId, utils.threads.get, utils.threads.list]);
+  }, [draftThreadId, utils.plan.get, utils.threads.get, utils.threads.list]);
 
   const handleError = useCallback((error: Error) => {
     setChatError(error.message);
@@ -271,14 +273,19 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         );
       }
       void sendMessage({ files, modelId, reasoningEffort, text, threadMode });
-      void utils.threads.list.invalidate();
+      if (!threadId && !hasHandedOffRef.current) {
+        hasHandedOffRef.current = true;
+        window.history.replaceState(null, "", `/thread/${draftThreadId}`);
+        router.replace(`/thread/${draftThreadId}`);
+      }
     },
     [
       draftThreadId,
+      router,
       selectedWorkspace,
       sendMessage,
+      threadId,
       utils.threads.get,
-      utils.threads.list,
     ],
   );
 
@@ -394,6 +401,11 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   ]);
 
   useEffect(() => {
+    if (threadId) return;
+    router.prefetch(`/thread/${draftThreadId}`);
+  }, [draftThreadId, router, threadId]);
+
+  useEffect(() => {
     if (!threadId) return;
     hasHandedOffRef.current = false;
     setDraftThreadId(threadId);
@@ -415,33 +427,6 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     return () =>
       window.removeEventListener("sentinel:new-thread", handleNewThread);
   }, [threadId, utils.chatPreferences.get]);
-
-  useEffect(() => {
-    const handlePopState = () => {
-      router.refresh();
-    };
-
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, [router]);
-
-  useEffect(() => {
-    if (threadId || !hasMessages) {
-      return;
-    }
-
-    if (hasHandedOffRef.current) {
-      return;
-    }
-
-    hasHandedOffRef.current = true;
-    window.history.replaceState(
-      window.history.state,
-      "",
-      `/thread/${draftThreadId}`,
-    );
-    router.refresh();
-  }, [draftThreadId, hasMessages, router, threadId]);
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
