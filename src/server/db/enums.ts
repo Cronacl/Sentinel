@@ -16,6 +16,7 @@ export const MCP_SERVER_CATALOG_IDS = [
   "linear",
   "notion",
   "figma",
+  "git",
   "playwright",
 ] as const;
 export type McpServerCatalogId = (typeof MCP_SERVER_CATALOG_IDS)[number];

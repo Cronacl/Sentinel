@@ -25,6 +25,21 @@ export type McpCatalogEntry = McpCatalogHttpEntry | McpCatalogStdioEntry;
 export const MCP_SERVER_CATALOG: readonly McpCatalogEntry[] = [
   {
     config: {
+      args: ["mcp-server-git"],
+      command: "uvx",
+      envPassthrough: [],
+      envVars: [],
+    },
+    description:
+      "Inspect repository status, diffs, history, branches, and commits from Git.",
+    id: "git",
+    installLabel: "Install with uvx",
+    name: "Git",
+    transport: "stdio",
+    vendor: "Model Context Protocol",
+  },
+  {
+    config: {
       args: ["@playwright/mcp@latest"],
       command: "npx",
       envPassthrough: [],
