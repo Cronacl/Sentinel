@@ -130,7 +130,7 @@ function PlanSidebarBody({ plan }: { plan: SidebarPlanData }) {
       {taskCount > 0 ? (
         <section className="mt-5">
           <div className="mb-2.5 flex items-center justify-between gap-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+            <p className="text-[11px] font-semibold  tracking-wider text-muted">
               Tasks
             </p>
             <span className="text-[10px] text-muted">
@@ -148,9 +148,7 @@ function PlanSidebarBody({ plan }: { plan: SidebarPlanData }) {
                     {task.title}
                   </span>
                   {task.status ? (
-                    <span
-                      className={`text-[10px] ${getTaskTone(task.status)}`}
-                    >
+                    <span className={`text-[10px] ${getTaskTone(task.status)}`}>
                       {getTaskStatusLabel(task.status)}
                     </span>
                   ) : null}
@@ -167,7 +165,7 @@ function PlanSidebarBody({ plan }: { plan: SidebarPlanData }) {
       ) : null}
 
       <section className="mt-5">
-        <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted">
+        <p className="mb-2.5 text-[11px] font-semibold  tracking-wider text-muted">
           Document
         </p>
         <div className="[&_.sentinel-prose]:text-[13px] [&_.sentinel-prose_h1]:text-[1.15em] [&_.sentinel-prose_h2]:text-[1.05em] [&_.sentinel-prose_h3]:text-[0.95em]">
@@ -253,8 +251,7 @@ export function PlanSidebar() {
       );
     }
   } else if (viewState.kind === "draft" && viewState.draftSnapshot) {
-    title =
-      viewState.draftSnapshot.title?.trim() || "Plan draft";
+    title = viewState.draftSnapshot.title?.trim() || "Plan draft";
     content = <PlanSidebarBody plan={viewState.draftSnapshot} />;
   } else {
     content = (

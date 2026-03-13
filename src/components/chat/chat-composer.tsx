@@ -1,6 +1,6 @@
 "use client";
 
-import { Spinner } from "@heroui/react";
+import { Label, Spinner, Switch } from "@heroui/react";
 import Placeholder from "@tiptap/extension-placeholder";
 import StarterKit from "@tiptap/starter-kit";
 import { EditorContent, useEditor } from "@tiptap/react";
@@ -10,7 +10,6 @@ import {
   ArrowDown01Icon,
   ArrowUp02Icon,
   Attachment01Icon,
-  Brain02Icon,
   Cancel01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -19,6 +18,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FileUIPart } from "ai";
 
+import { ProviderIcon } from "@/components/icons/provider-icon";
 import type { AIProvider } from "@/server/db/enums";
 import {
   getModelAttachmentCapabilities,
@@ -33,7 +33,6 @@ import {
   type AttachmentKind,
 } from "@/lib/files/chat-attachment-types";
 import { applyThreadSettingsCacheUpdate } from "@/lib/threads/cache";
-import { PROVIDERS } from "@/lib/ai/providers/registry";
 import { api } from "@/trpc/react";
 
 import {
@@ -371,16 +370,6 @@ export function ChatComposer({
     [modelsQuery.data],
   );
 
-  const groupedModels = useMemo(() => {
-    const groups = new Map<AIProvider, typeof availableModels>();
-    for (const model of availableModels) {
-      const current = groups.get(model.provider) ?? [];
-      current.push(model);
-      groups.set(model.provider, current);
-    }
-    return Array.from(groups.entries());
-  }, [availableModels]);
-
   const selectedModel =
     availableModels.find(
       (model) =>
@@ -615,7 +604,7 @@ export function ChatComposer({
         ? currentThreadMode
         : draftMode
           ? draftMode
-        : (globalSelectionQuery.data?.mode ?? "chat");
+          : (globalSelectionQuery.data?.mode ?? "chat");
       setPlanMode(preferredMode === "plan");
       return;
     }
@@ -974,7 +963,7 @@ export function ChatComposer({
         type="file"
       />
 
-      <div className="pointer-events-auto w-full rounded-[20px] border border-border/50 dark:border-border/80 bg-background  dark:bg-surface p-2 shadow-[0_0_10px_rgba(0,0,0,0.05)]">
+      <div className="pointer-events-auto w-full rounded-[20px] border border-border/50 dark:border-border/80 bg-background  dark:bg-surface p-2.5 shadow-[0_0_10px_rgba(0,0,0,0.05)]">
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-1.5 px-2 pb-1.5">
             {attachments.map((attachment) => (
@@ -1033,7 +1022,7 @@ export function ChatComposer({
           <div className="flex items-center gap-0.5">
             <div className="relative" ref={composerMenuRef}>
               <button
-                className="flex border cursor-pointer border-border/50 dark:bg-background/50 bg-surface h-6 w-6 items-center justify-center rounded-[9px] text-muted transition-colors hover:text-foreground disabled:opacity-30"
+                className="flex border cursor-pointer border-border/50 dark:bg-background/50 bg-surface h-8 w-8 items-center justify-center rounded-xl text-muted transition-colors hover:text-foreground disabled:opacity-30"
                 disabled={!hasWorkspace}
                 onClick={() => setComposerMenuOpen((o) => !o)}
                 type="button"
@@ -1050,7 +1039,7 @@ export function ChatComposer({
                 {composerMenuOpen && (
                   <motion.div
                     animate={{ opacity: 1, scale: 1, y: 0 }}
-                    className="absolute bottom-10 left-0 z-30 w-[220px] rounded-xl border border-border bg-overlay p-1 shadow-overlay"
+                    className="absolute bottom-10 left-0 z-30 w-48 rounded-xl border border-border bg-overlay p-1 shadow-overlay"
                     exit={{ opacity: 0, scale: 0.97, y: 6 }}
                     initial={{ opacity: 0, scale: 0.97, y: 6 }}
                     transition={{
@@ -1059,7 +1048,7 @@ export function ChatComposer({
                     }}
                   >
                     <button
-                      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground"
+                      className="flex w-full items-center gap-2.5 rounded-xl px-2 py-1 text-left text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground"
                       onClick={() => {
                         setComposerMenuOpen(false);
                         void handlePickFiles();
@@ -1078,7 +1067,7 @@ export function ChatComposer({
                     <div className="mx-2 my-0.5 h-px bg-separator" />
 
                     <button
-                      className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground"
+                      className="flex w-full items-center justify-between gap-2 rounded-xl px-2 py-1 text-left text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground"
                       onClick={handleTogglePlanMode}
                       type="button"
                     >
@@ -1091,28 +1080,28 @@ export function ChatComposer({
                         />
                         <span>Plan mode</span>
                       </span>
-                      <span
-                        role="switch"
-                        aria-checked={planMode}
-                        className={`relative inline-flex h-[18px] w-8 shrink-0 items-center rounded-full transition-colors ${
-                          planMode ? "bg-accent" : "bg-default"
-                        }`}
+
+                      <Switch
+                        size="sm"
+                        isSelected={planMode}
+                        // @ts-expect-error - onValueChange is not a valid prop for SwitchRootProps
+                        onValueChange={handleTogglePlanMode as any}
                       >
-                        <span
-                          className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${
-                            planMode ? "translate-x-[14px]" : "translate-x-[2px]"
-                          }`}
-                        />
-                      </span>
+                        <Switch.Control>
+                          <Switch.Thumb>
+                            <Switch.Icon />
+                          </Switch.Thumb>
+                        </Switch.Control>
+                      </Switch>
                     </button>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
 
-            <div className="relative" ref={modelMenuRef}>
+            <div className="relative ml-1" ref={modelMenuRef}>
               <button
-                className="flex h-8 items-center gap-1 rounded-full px-2.5 text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground disabled:opacity-30"
+                className="flex h-8 cursor-pointer border border-border/50 dark:border-border/80 items-center gap-1 rounded-xl px-2 text-[13px] text-muted transition-colors bg-background hover:bg-default hover:text-foreground disabled:opacity-30"
                 disabled={!hasModels || modelsQuery.isLoading}
                 onClick={() => setModelMenuOpen((o) => !o)}
                 type="button"
@@ -1120,8 +1109,16 @@ export function ChatComposer({
                 {modelsQuery.isLoading ? (
                   <Spinner color="current" size="sm" />
                 ) : (
-                  <span className="max-w-[160px] truncate">
-                    {selectedModel?.displayName ?? "No model"}
+                  <span className="flex min-w-0 items-center gap-2">
+                    {selectedModel ? (
+                      <ProviderIcon
+                        className="h-3 w-3"
+                        provider={selectedModel.provider}
+                      />
+                    ) : null}
+                    <span className="max-w-[160px] truncate">
+                      {selectedModel?.displayName ?? "No model"}
+                    </span>
                   </span>
                 )}
                 <HugeiconsIcon
@@ -1137,7 +1134,7 @@ export function ChatComposer({
                 {modelMenuOpen && (
                   <motion.div
                     animate={{ opacity: 1, scale: 1, y: 0 }}
-                    className="absolute bottom-10 left-0 z-30 max-h-[280px] w-[280px] overflow-y-auto rounded-xl border border-border bg-overlay p-1 shadow-overlay"
+                    className="absolute bottom-10 left-0 z-30 max-h-[280px] w-48 overflow-y-auto rounded-2xl border border-border bg-overlay p-1 shadow-overlay"
                     exit={{ opacity: 0, scale: 0.97, y: 6 }}
                     initial={{ opacity: 0, scale: 0.97, y: 6 }}
                     transition={{
@@ -1145,42 +1142,33 @@ export function ChatComposer({
                       ease: [0.22, 1, 0.36, 1],
                     }}
                   >
-                    {groupedModels.map(([provider, models]) => (
-                      <div key={provider}>
-                        <div className="px-3 pb-1 pt-2 text-[11px] font-medium text-muted/50">
-                          {PROVIDERS[provider].displayName}
-                        </div>
-                        {models.map((model) => {
-                          const modelKey = getModelKey(
-                            model.provider,
-                            model.modelId,
-                          );
-                          const isSelected = selectedModelKey === modelKey;
-                          return (
-                            <button
-                              className={`flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm transition-colors ${
-                                isSelected
-                                  ? "bg-default text-foreground"
-                                  : "text-muted hover:bg-default hover:text-foreground"
-                              }`}
-                              key={modelKey}
-                              onClick={() => handleSelectModel(modelKey)}
-                              type="button"
-                            >
-                              <HugeiconsIcon
-                                color="currentColor"
-                                icon={Brain02Icon}
-                                size={13}
-                                strokeWidth={1.5}
-                              />
-                              <span className="truncate text-[13px]">
-                                {model.displayName}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ))}
+                    {availableModels.map((model) => {
+                      const modelKey = getModelKey(
+                        model.provider,
+                        model.modelId,
+                      );
+                      const isSelected = selectedModelKey === modelKey;
+                      return (
+                        <button
+                          className={`flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm transition-colors ${
+                            isSelected
+                              ? "bg-default text-foreground"
+                              : "text-muted hover:bg-default hover:text-foreground"
+                          }`}
+                          key={modelKey}
+                          onClick={() => handleSelectModel(modelKey)}
+                          type="button"
+                        >
+                          <ProviderIcon
+                            className="h-4 w-4"
+                            provider={model.provider}
+                          />
+                          <span className="truncate text-[13px]">
+                            {model.displayName}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -1189,7 +1177,7 @@ export function ChatComposer({
             {supportsReasoning && (
               <div className="relative" ref={reasoningMenuRef}>
                 <button
-                  className="flex h-8 items-center gap-1 rounded-full px-2.5 text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground"
+                  className="flex h-8 cursor-pointer border border-border/50 dark:border-border/80 items-center gap-1 rounded-xl px-2 text-[13px] text-muted transition-colors bg-background hover:bg-default hover:text-foreground"
                   onClick={() => setReasoningMenuOpen((open) => !open)}
                   type="button"
                 >
@@ -1207,7 +1195,7 @@ export function ChatComposer({
                   {reasoningMenuOpen && (
                     <motion.div
                       animate={{ opacity: 1, scale: 1, y: 0 }}
-                      className="absolute bottom-10 left-0 z-30 w-[160px] overflow-hidden rounded-xl border border-border bg-overlay p-1 shadow-overlay"
+                      className="absolute bottom-10 -left-5 z-30 w-24 overflow-hidden rounded-2xl border border-border bg-overlay p-1 shadow-overlay"
                       exit={{ opacity: 0, scale: 0.97, y: 6 }}
                       initial={{ opacity: 0, scale: 0.97, y: 6 }}
                       transition={{

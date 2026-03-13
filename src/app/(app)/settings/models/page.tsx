@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import type { AIProvider } from "@/server/db/enums";
+import { ProviderIcon } from "@/components/icons/provider-icon";
 import {
   ControlledSelectField,
   ControlledTextField,
@@ -273,6 +274,12 @@ export default function ModelsPage() {
         {grouped.map(([provider, providerModels]) => (
           <section key={provider}>
             <div className="mb-3 flex items-center gap-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/80">
+                <ProviderIcon
+                  className="h-[18px] w-[18px]"
+                  provider={provider}
+                />
+              </div>
               <h2 className="text-foreground text-sm font-medium">
                 {PROVIDERS[provider]?.displayName ?? provider}
               </h2>
@@ -289,34 +296,43 @@ export default function ModelsPage() {
                   key={model.modelId}
                   className="flex items-center gap-3 px-4 py-2.5"
                 >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-foreground text-sm font-medium">
-                        {model.displayName}
-                      </span>
-                      {model.isCustom ? (
-                        <Chip size="sm" variant="soft">
-                          Custom
-                        </Chip>
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/80">
+                      <ProviderIcon
+                        className="h-[18px] w-[18px]"
+                        provider={model.provider as ProviderKey}
+                      />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-foreground text-sm font-medium">
+                          {model.displayName}
+                        </span>
+                        {model.isCustom ? (
+                          <Chip size="sm" variant="soft">
+                            Custom
+                          </Chip>
+                        ) : null}
+                      </div>
+                      <p className="text-muted mt-0.5 text-xs">
+                        {model.description}
+                      </p>
+                      {model.capabilities.length > 0 ? (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {model.capabilities.map((capability) => (
+                            <Chip
+                              color="default"
+                              key={capability}
+                              size="sm"
+                              variant="soft"
+                            >
+                              {CAPABILITY_LABEL[capability] ?? capability}
+                            </Chip>
+                          ))}
+                        </div>
                       ) : null}
                     </div>
-                    <p className="text-muted mt-0.5 text-xs">
-                      {model.description}
-                    </p>
-                    {model.capabilities.length > 0 ? (
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {model.capabilities.map((capability) => (
-                          <Chip
-                            color="default"
-                            key={capability}
-                            size="sm"
-                            variant="soft"
-                          >
-                            {CAPABILITY_LABEL[capability] ?? capability}
-                          </Chip>
-                        ))}
-                      </div>
-                    ) : null}
                   </div>
 
                   <div className="flex shrink-0 items-center gap-2">

@@ -3,6 +3,7 @@
 import { Button, Chip, Skeleton, Switch } from "@heroui/react";
 import { useState } from "react";
 
+import { ProviderIcon } from "@/components/icons/provider-icon";
 import { ProviderConfigModal } from "@/components/settings/provider-config-modal";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { api } from "@/trpc/react";
@@ -98,6 +99,10 @@ export default function ProvidersPage() {
             key={p.id}
             className="border-separator bg-surface flex items-center gap-4 rounded-xl border px-4 py-2.5"
           >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/80">
+              <ProviderIcon className="h-5 w-5" provider={p.id} />
+            </div>
+
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="text-foreground text-sm font-medium">
