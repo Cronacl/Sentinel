@@ -3,7 +3,7 @@
 import type { PropsWithChildren, ReactNode } from "react";
 
 interface SettingsPageWrapperProps extends PropsWithChildren {
-  title: string;
+  title: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
 }

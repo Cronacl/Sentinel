@@ -18,6 +18,7 @@ import { useMemo, useState } from "react";
 
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { api, type RouterOutputs } from "@/trpc/react";
+import { SidebarToggle, useShell } from "@/components/shell";
 
 type SkillListItem = RouterOutputs["skills"]["list"]["skills"][number];
 
@@ -104,7 +105,7 @@ function SkillRow({ skill }: { skill: SkillListItem }) {
 
   return (
     <Link
-      className="border-separator bg-surface hover:bg-surface/50 group flex items-center gap-3 rounded-2xl border p-4 transition-colors"
+      className="border-separator bg-surface hover:bg-surface/50 group flex items-center gap-3 rounded-2xl border p-3 transition-colors"
       href={`/skills/${encodeURIComponent(skill.name)}`}
       prefetch
     >
@@ -148,6 +149,7 @@ function SkillRow({ skill }: { skill: SkillListItem }) {
 }
 
 export default function SkillsPage() {
+  const { leftSidebarOpen } = useShell();
   const [query, setQuery] = useState("");
 
   const skills = api.skills.list.useQuery(undefined, {
@@ -215,7 +217,12 @@ export default function SkillsPage() {
         </>
       }
       subtitle="Browse discovered skills from your workspace and home directories."
-      title="Skills"
+      title={
+        <div>
+          {!leftSidebarOpen ? <SidebarToggle /> : null}
+          Skills
+        </div>
+      }
     >
       {skills.error ? (
         <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">

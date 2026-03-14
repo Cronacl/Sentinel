@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import { MarkdownContent } from "@/components/chat/message-parts/text";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { api } from "@/trpc/react";
+import { SidebarToggle, useShell } from "../shell";
 
 const SOURCE_LABEL = {
   agents: "Agents",
@@ -86,6 +87,7 @@ function DetailSkeleton() {
 }
 
 export function SkillDetailScreen({ skillName }: { skillName: string }) {
+  const { leftSidebarOpen } = useShell();
   const [copiedLabel, setCopiedLabel] = useState<"name" | "path" | null>(null);
 
   const skill = api.skills.get.useQuery(
@@ -124,8 +126,12 @@ export function SkillDetailScreen({ skillName }: { skillName: string }) {
           </Button>
         </Link>
       }
-      subtitle="Skill details"
-      title={formatSkillTitle(resolvedName)}
+      title={
+        <div>
+          {!leftSidebarOpen ? <SidebarToggle /> : null}
+          {formatSkillTitle(resolvedName)}
+        </div>
+      }
     >
       {skill.error ? (
         <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
