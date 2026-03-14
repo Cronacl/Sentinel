@@ -6,16 +6,30 @@ import {
   ArrowLeft01Icon,
   BrushIcon,
   CubeIcon,
-  GithubIcon,
+  NoteEditIcon,
   NotebookIcon,
+  PaintBoardIcon,
   SparklesIcon,
+  TestTube01Icon,
+  WebDesign02Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import Link from "next/link";
+import type { ComponentType, SVGProps } from "react";
 import { useEffect, useState } from "react";
 
 import { MarkdownContent } from "@/components/chat/message-parts/text";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
+import {
+  CloudflareIcon,
+  FigmaIcon,
+  GitHubIcon,
+  PdfIcon,
+  PlaywrightIcon,
+  PowerPointIcon,
+  VercelIcon,
+  WordIcon,
+} from "@/components/skills/skill-icons";
 import { api } from "@/trpc/react";
 import { SidebarToggle, useShell } from "../shell";
 
@@ -38,14 +52,52 @@ function formatSkillTitle(name: string) {
     .join(" ");
 }
 
-function getSkillIcon(name: string) {
+type BrandIconEntry = {
+  type: "brand";
+  component: ComponentType<SVGProps<SVGSVGElement>>;
+};
+type HugeIconEntry = { type: "huge"; icon: IconSvgElement };
+
+const SKILL_ICON_MAP: Record<string, BrandIconEntry | HugeIconEntry> = {
+  "vercel-deploy": { type: "brand", component: VercelIcon },
+  playwright: { type: "brand", component: PlaywrightIcon },
+  slides: { type: "brand", component: PowerPointIcon },
+  doc: { type: "brand", component: WordIcon },
+  pdf: { type: "brand", component: PdfIcon },
+  "gh-fix-ci": { type: "brand", component: GitHubIcon },
+  "gh-address-comments": { type: "brand", component: GitHubIcon },
+  "figma-implement-design": { type: "brand", component: FigmaIcon },
+  "cloudflare-deploy": { type: "brand", component: CloudflareIcon },
+  "frontend-design": { type: "huge", icon: PaintBoardIcon },
+  "mcp-builder": { type: "huge", icon: WebDesign02Icon },
+  "webapp-testing": { type: "huge", icon: TestTube01Icon },
+  "doc-coauthoring": { type: "huge", icon: NoteEditIcon },
+  "ai-sdk": { type: "huge", icon: AiIdeaIcon },
+  "openai-docs": { type: "huge", icon: NotebookIcon },
+  "skill-creator": { type: "huge", icon: BrushIcon },
+  "skill-installer": { type: "huge", icon: SparklesIcon },
+  "github-fix-ci": { type: "brand", component: GitHubIcon },
+};
+
+function SkillIcon({ name, size = 16 }: { name: string; size?: number }) {
   const normalized = name.trim().toLowerCase();
-  if (normalized === "ai-sdk") return AiIdeaIcon;
-  if (normalized === "github-fix-ci") return GithubIcon;
-  if (normalized === "openai-docs") return NotebookIcon;
-  if (normalized === "skill-creator") return BrushIcon;
-  if (normalized === "skill-installer") return SparklesIcon;
-  return CubeIcon;
+  const entry = SKILL_ICON_MAP[normalized];
+
+  if (entry?.type === "brand") {
+    const BrandComponent = entry.component;
+    return <BrandComponent width={size} height={size} />;
+  }
+
+  const hugeIcon =
+    entry?.type === "huge" ? entry.icon : (CubeIcon as IconSvgElement);
+  return (
+    <HugeiconsIcon
+      color="currentColor"
+      icon={hugeIcon}
+      size={size}
+      strokeWidth={1.5}
+    />
+  );
 }
 
 function DetailSkeleton() {
@@ -108,7 +160,6 @@ export function SkillDetailScreen({ skillName }: { skillName: string }) {
   };
 
   const resolvedName = skill.data?.name ?? skillName;
-  const SkillIcon = getSkillIcon(resolvedName);
   const loadedSkill = skill.data ?? null;
 
   return (
@@ -168,12 +219,7 @@ export function SkillDetailScreen({ skillName }: { skillName: string }) {
           <section className="bg-surface/50 rounded-3xl border border-border/50 p-4">
             <div className="flex items-start gap-3">
               <div className="border-border/50 bg-background/80 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border text-foreground/80">
-                <HugeiconsIcon
-                  color="currentColor"
-                  icon={SkillIcon}
-                  size={18}
-                  strokeWidth={1.5}
-                />
+                <SkillIcon name={resolvedName} size={18} />
               </div>
 
               <div className="min-w-0 flex-1">

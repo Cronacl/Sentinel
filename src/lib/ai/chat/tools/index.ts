@@ -120,7 +120,9 @@ const shellCommandInputSchema = z.object({
   command: z
     .string()
     .min(1)
-    .describe("One shell command to run in the linked workspace root."),
+    .describe(
+      "One shell command to run in the linked workspace root or discovered skill directory.",
+    ),
   rationale: z
     .string()
     .min(1)
@@ -155,12 +157,8 @@ const shellCommandOutputSchema = z.discriminatedUnion("phase", [
 // ---------------------------------------------------------------------------
 
 function buildInspectionTools(options: ThreadAgentCallOptions) {
-  const {
-    defaultDirectory,
-    permissionMode,
-    skillRoots,
-    toolApprovalPolicies,
-  } = options;
+  const { defaultDirectory, permissionMode, skillRoots, toolApprovalPolicies } =
+    options;
   const filesystemRoot = defaultDirectory ?? skillRoots[0];
 
   return {
@@ -288,36 +286,41 @@ function buildExecutionTools(options: ThreadAgentCallOptions) {
     ...(defaultDirectory
       ? {
           run_task: tool({
-      description: runTaskDescription,
-      inputSchema: runTaskInputSchema,
-      needsApproval: () => toolApprovalPolicies.run_task,
-      outputSchema: runTaskOutputSchema,
-      toModelOutput: ({ output }) => ({
-        type: "json" as const,
-        value: output.phase === "completed" ? output : { phase: "running" },
-      }),
-      execute: async function* (input, { abortSignal }) {
-        const abortShell = () => {
-          void disposeShellSession(threadId);
-        };
-        abortSignal?.addEventListener("abort", abortShell, { once: true });
-        try {
-          for await (const event of streamRunTask({
-            allowedRoot:
-              permissionMode === "default" ? defaultDirectory! : undefined,
-            defaultDirectory: defaultDirectory!,
-            input,
-            permissionMode,
-            threadId,
-          })) {
-            if (event.type === "error") throw event.error;
-            if (event.output) yield event.output;
-          }
-        } finally {
-          abortSignal?.removeEventListener("abort", abortShell);
-        }
-      },
-    }),
+            description: runTaskDescription,
+            inputSchema: runTaskInputSchema,
+            needsApproval: () => toolApprovalPolicies.run_task,
+            outputSchema: runTaskOutputSchema,
+            toModelOutput: ({ output }) => ({
+              type: "json" as const,
+              value:
+                output.phase === "completed" ? output : { phase: "running" },
+            }),
+            execute: async function* (input, { abortSignal }) {
+              const abortShell = () => {
+                void disposeShellSession(threadId);
+              };
+              abortSignal?.addEventListener("abort", abortShell, {
+                once: true,
+              });
+              try {
+                for await (const event of streamRunTask({
+                  allowedRoot:
+                    permissionMode === "default"
+                      ? defaultDirectory!
+                      : undefined,
+                  defaultDirectory: defaultDirectory!,
+                  input,
+                  permissionMode,
+                  threadId,
+                })) {
+                  if (event.type === "error") throw event.error;
+                  if (event.output) yield event.output;
+                }
+              } finally {
+                abortSignal?.removeEventListener("abort", abortShell);
+              }
+            },
+          }),
         }
       : {}),
     shell_command: tool({
@@ -344,7 +347,10 @@ function buildExecutionTools(options: ThreadAgentCallOptions) {
           for await (const event of streamShellCommand({
             allowedRoots:
               permissionMode === "default"
-                ? [...(defaultDirectory ? [defaultDirectory] : []), ...skillRoots]
+                ? [
+                    ...(defaultDirectory ? [defaultDirectory] : []),
+                    ...skillRoots,
+                  ]
                 : undefined,
             command,
             defaultDirectory: filesystemRoot!,
@@ -363,7 +369,7 @@ function buildExecutionTools(options: ThreadAgentCallOptions) {
 }
 
 function buildSkillTools(options: ThreadAgentCallOptions) {
-  const { availableSkills, defaultDirectory } = options;
+  const { availableSkills, defaultDirectory, globalSkillsBasePath } = options;
 
   if (availableSkills.length === 0) {
     return {};
@@ -376,6 +382,7 @@ function buildSkillTools(options: ThreadAgentCallOptions) {
       outputSchema: loadSkillOutputSchema,
       execute: async (input) =>
         executeLoadSkill({
+          globalBase: globalSkillsBasePath ?? null,
           input,
           workspaceRoot: defaultDirectory ?? null,
         }),

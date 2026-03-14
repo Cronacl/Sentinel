@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, mock } from "bun:test";
 const findFirst = mock(
   async () =>
     ({
+      skillsBasePath: "/tmp/custom-skills",
       webFetchBatchEnabled: true,
       webFetchBatchLimit: 12,
     }) as const,
@@ -62,6 +63,7 @@ describe("generalSettingsRouter", () => {
 
     expect(findFirst).toHaveBeenCalled();
     expect(result).toEqual({
+      skillsBasePath: "/tmp/custom-skills",
       webFetchBatchEnabled: true,
       webFetchBatchLimit: 12,
     });
@@ -80,6 +82,7 @@ describe("generalSettingsRouter", () => {
         },
       },
       input: {
+        skillsBasePath: "/tmp/custom-skills",
         webFetchBatchEnabled: true,
         webFetchBatchLimit: 10,
       },
@@ -87,11 +90,13 @@ describe("generalSettingsRouter", () => {
 
     expect(update).toHaveBeenCalled();
     expect(set).toHaveBeenCalledWith({
+      skillsBasePath: "/tmp/custom-skills",
       webFetchBatchEnabled: true,
       webFetchBatchLimit: 10,
     });
     expect(run).toHaveBeenCalled();
     expect(result).toEqual({
+      skillsBasePath: "/tmp/custom-skills",
       webFetchBatchEnabled: true,
       webFetchBatchLimit: 10,
     });

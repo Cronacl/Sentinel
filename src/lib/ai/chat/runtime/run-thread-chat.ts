@@ -49,6 +49,7 @@ import {
   getSearchSettings,
   getMemorySettings,
   getMcpServerRuntime,
+  getSkillsBasePath,
   getToolApprovalPolicies,
   getToolPermissionMode,
   getWebFetchSettings,
@@ -155,6 +156,7 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
     toolApprovalPolicies,
     webFetchSettings,
     planState,
+    skillsBasePath,
   ] = await Promise.all([
     getWorkspaceRootPath(request.workspaceId, request.userId),
     getToolPermissionMode(request.userId),
@@ -167,8 +169,12 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
     getThreadPlanState({
       threadId: request.threadId,
     }).catch(() => ({ pendingQuestionSet: null, plan: null })),
+    getSkillsBasePath(request.userId),
   ]);
-  const skillSnapshot = await getSkillSnapshot({ workspaceRoot }).catch(() => ({
+  const skillSnapshot = await getSkillSnapshot({
+    workspaceRoot,
+    globalBase: skillsBasePath,
+  }).catch(() => ({
     revision: 0,
     skillRoots: [],
     skills: [],
@@ -308,6 +314,7 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
           options: {
             availableSkills: skillSnapshot.skills,
             ...(workspaceRoot ? { defaultDirectory: workspaceRoot } : {}),
+            globalSkillsBasePath: skillsBasePath,
             mcpTools: mcpRuntime.tools,
             memorySettings,
             permissionMode,

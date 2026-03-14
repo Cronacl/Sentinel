@@ -41,6 +41,7 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     "permission_mode" text DEFAULT 'default' NOT NULL,
     "webfetch_batch_enabled" integer DEFAULT false NOT NULL,
     "webfetch_batch_limit" integer DEFAULT 10 NOT NULL,
+    "skills_base_path" text,
     "theme_preference" text DEFAULT 'system' NOT NULL,
     "default_chat_model_id" text,
     "default_chat_reasoning_effort" text,
@@ -123,6 +124,12 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     db.run(
       sql`ALTER TABLE "user" ADD COLUMN "webfetch_batch_limit" integer DEFAULT 10 NOT NULL`,
     );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(sql`ALTER TABLE "user" ADD COLUMN "skills_base_path" text`);
   } catch {
     // column already exists
   }

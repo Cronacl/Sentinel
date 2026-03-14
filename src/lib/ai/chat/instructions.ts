@@ -121,6 +121,8 @@ function skillRules(): string[] {
   return [
     "Use load_skill before guessing skill instructions from memory.",
     "After loading a skill, treat returned directory paths as the base for bundled references and scripts.",
+    "If a loaded skill mentions older default homes such as ~/.codex/skills or $CODEX_HOME/skills, ignore those examples and use the returned directory instead.",
+    'When a loaded skill suggests running a bundled script, prefer the absolute path directly or export a variable in one command and use it in a later command. Do not use `VAR=/path "$VAR" ...` in one shell command.',
     "Load only the skills that directly match the current task.",
   ];
 }
@@ -197,8 +199,7 @@ function buildPlanInstructions(
   const categories = getActiveCategories(activeToolNames);
   const hasInspection = categories.has("inspection");
   const hasSkills = categories.has("skill") && availableSkills.length > 0;
-  const hasFilesystemRoots =
-    Boolean(defaultDirectory) || skillRoots.length > 0;
+  const hasFilesystemRoots = Boolean(defaultDirectory) || skillRoots.length > 0;
 
   return lines(
     systemPrompt.trim(),
@@ -304,7 +305,8 @@ function buildChatInstructions(
     : "Long-term memory is disabled. Do not use memory tools until the user enables Memory in Settings.";
 
   const hasFilesystemRoots =
-    categories.has("inspection") && (Boolean(defaultDirectory) || skillRoots.length > 0);
+    categories.has("inspection") &&
+    (Boolean(defaultDirectory) || skillRoots.length > 0);
   const hasSkills = categories.has("skill") && availableSkills.length > 0;
 
   return lines(

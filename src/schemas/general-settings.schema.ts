@@ -12,6 +12,14 @@ export const generalSettingsFormSchema = z.object({
     .int()
     .min(MIN_WEBFETCH_BATCH_LIMIT)
     .max(MAX_WEBFETCH_BATCH_LIMIT),
+  skillsBasePath: z
+    .string()
+    .trim()
+    .refine((v) => v === "" || v.startsWith("/"), {
+      message: "Must be an absolute path (starting with /).",
+    })
+    .transform((v) => (v === "" ? null : v))
+    .nullable(),
 });
 
 export type GeneralSettingsFormValues = z.infer<

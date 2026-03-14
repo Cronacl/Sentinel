@@ -63,6 +63,7 @@ type ConventionalSkillRoot = {
 type SkillRegistryEntry = {
   debounceTimer: ReturnType<typeof setTimeout> | null;
   fingerprint: string | null;
+  globalBase: string | null;
   key: string;
   refreshPromise: Promise<SkillSnapshot> | null;
   snapshot: SkillSnapshot | null;
@@ -149,8 +150,11 @@ async function safeRealpath(candidatePath: string) {
   return await realpath(candidatePath).catch(() => path.resolve(candidatePath));
 }
 
-function buildConventionalRoots(workspaceRoot: string | null) {
-  const homeDirectory = process.env.HOME?.trim() || os.homedir();
+function buildConventionalRoots(
+  workspaceRoot: string | null,
+  globalBase?: string | null,
+) {
+  const homeDirectory = globalBase?.trim() || process.env.HOME?.trim() || os.homedir();
 
   return SOURCE_PRECEDENCE.map((entry, index) => {
     const baseDirectory =
@@ -313,8 +317,11 @@ function toSkillSnapshot(
   };
 }
 
-async function discoverSkillState(workspaceRoot: string | null) {
-  const roots = buildConventionalRoots(workspaceRoot);
+async function discoverSkillState(
+  workspaceRoot: string | null,
+  globalBase?: string | null,
+) {
+  const roots = buildConventionalRoots(workspaceRoot, globalBase);
   const allDiscovered: DiscoveredSkill[] = [];
   const seenRealFiles = new Set<string>();
 
@@ -376,8 +383,11 @@ async function nearestExistingDirectory(candidatePath: string) {
   }
 }
 
-async function buildWatchTargets(workspaceRoot: string | null) {
-  const { effectiveSkills, roots } = await discoverSkillState(workspaceRoot);
+async function buildWatchTargets(
+  workspaceRoot: string | null,
+  globalBase?: string | null,
+) {
+  const { effectiveSkills, roots } = await discoverSkillState(workspaceRoot, globalBase);
   const targets = new Map<string, string>();
 
   for (const root of roots) {
@@ -408,7 +418,7 @@ async function refreshEntry(entry: SkillRegistryEntry) {
   }
 
   entry.refreshPromise = (async () => {
-    const { effectiveSkills } = await discoverSkillState(entry.workspaceRoot);
+    const { effectiveSkills } = await discoverSkillState(entry.workspaceRoot, entry.globalBase);
     const { fingerprint, snapshot } = toSkillSnapshot(
       effectiveSkills,
       entry.snapshot,
@@ -433,7 +443,7 @@ function closeWatchers(entry: SkillRegistryEntry) {
 }
 
 async function syncWatchers(entry: SkillRegistryEntry) {
-  const { targets } = await buildWatchTargets(entry.workspaceRoot);
+  const { targets } = await buildWatchTargets(entry.workspaceRoot, entry.globalBase);
   const nextTargets = new Map<string, string>();
 
   for (const target of targets) {
@@ -476,17 +486,24 @@ async function syncWatchers(entry: SkillRegistryEntry) {
   }
 }
 
-function getOrCreateEntry(workspaceRoot: string | null) {
+function getOrCreateEntry(
+  workspaceRoot: string | null,
+  globalBase?: string | null,
+) {
   const key = toRegistryKey(workspaceRoot);
   const existing = skillRegistry.get(key);
 
   if (existing) {
+    if (globalBase !== undefined) {
+      existing.globalBase = globalBase || null;
+    }
     return existing;
   }
 
   const entry: SkillRegistryEntry = {
     debounceTimer: null,
     fingerprint: null,
+    globalBase: globalBase || null,
     key,
     refreshPromise: null,
     snapshot: null,
@@ -500,11 +517,14 @@ function getOrCreateEntry(workspaceRoot: string | null) {
 
 export async function discoverSkills({
   workspaceRoot,
+  globalBase,
 }: {
   workspaceRoot: string | null;
+  globalBase?: string | null;
 }) {
   const { effectiveSkills } = await discoverSkillState(
     workspaceRoot ? path.resolve(workspaceRoot) : null,
+    globalBase,
   );
 
   return effectiveSkills.map<SkillMetadata>((skill) => ({
@@ -520,10 +540,12 @@ export async function discoverSkills({
 
 export async function watchSkillRoots({
   workspaceRoot,
+  globalBase,
 }: {
   workspaceRoot: string | null;
+  globalBase?: string | null;
 }) {
-  const entry = getOrCreateEntry(workspaceRoot ? path.resolve(workspaceRoot) : null);
+  const entry = getOrCreateEntry(workspaceRoot ? path.resolve(workspaceRoot) : null, globalBase);
   await refreshEntry(entry);
   await syncWatchers(entry);
   return entry.snapshot;
@@ -531,11 +553,13 @@ export async function watchSkillRoots({
 
 export async function getSkillSnapshot({
   workspaceRoot,
+  globalBase,
 }: {
   workspaceRoot: string | null;
+  globalBase?: string | null;
 }) {
-  const entry = getOrCreateEntry(workspaceRoot ? path.resolve(workspaceRoot) : null);
-  await watchSkillRoots({ workspaceRoot: entry.workspaceRoot });
+  const entry = getOrCreateEntry(workspaceRoot ? path.resolve(workspaceRoot) : null, globalBase);
+  await watchSkillRoots({ workspaceRoot: entry.workspaceRoot, globalBase: entry.globalBase });
 
   if (!entry.snapshot) {
     throw new Error("Skill snapshot is unavailable.");
@@ -547,12 +571,14 @@ export async function getSkillSnapshot({
 export async function loadSkillByName({
   name,
   workspaceRoot,
+  globalBase,
 }: {
   name: string;
   workspaceRoot: string | null;
+  globalBase?: string | null;
 }) {
   const normalizedName = normalizeSkillName(name);
-  const roots = buildConventionalRoots(workspaceRoot ? path.resolve(workspaceRoot) : null);
+  const roots = buildConventionalRoots(workspaceRoot ? path.resolve(workspaceRoot) : null, globalBase);
   const seenRealFiles = new Set<string>();
 
   for (const root of roots) {

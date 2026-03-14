@@ -6,31 +6,45 @@ import {
   ArrowRight01Icon,
   BrushIcon,
   CubeIcon,
+  Delete02Icon,
   GithubIcon,
+  NoteEditIcon,
   NotebookIcon,
+  PaintBoardIcon,
   PlusSignIcon,
   RefreshIcon,
   SparklesIcon,
+  TestTube01Icon,
+  WebDesign02Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import type { ComponentType, SVGProps } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
+import { CustomSkillInstallSidebar } from "@/components/skills/custom-skill-install-sidebar";
+import {
+  CloudflareIcon,
+  FigmaIcon,
+  GitHubIcon,
+  PdfIcon,
+  PlaywrightIcon,
+  PowerPointIcon,
+  VercelIcon,
+  WordIcon,
+} from "@/components/skills/skill-icons";
 import { api, type RouterOutputs } from "@/trpc/react";
-import { SidebarToggle, useShell } from "@/components/shell";
+import { SidebarToggle, useRightSidebar, useShell } from "@/components/shell";
 
 type SkillListItem = RouterOutputs["skills"]["list"]["skills"][number];
+type RegistryItem = RouterOutputs["skills"]["registry"][number];
+type InstalledSkillAction = Pick<SkillListItem, "name" | "scope">;
 
 const SOURCE_LABEL = {
   agents: "Agents",
   claude: "Claude",
   sentinel: "Sentinel",
-} as const;
-
-const SCOPE_LABEL = {
-  global: "Home",
-  workspace: "Workspace",
 } as const;
 
 function formatSkillTitle(name: string) {
@@ -54,30 +68,73 @@ function matchesSkill(
   return haystack.includes(query.toLowerCase());
 }
 
-function getSkillIcon(name: string) {
+function matchesRegistrySkill(
+  skill: Pick<RegistryItem, "name" | "displayName" | "description" | "repoUrl">,
+  query: string,
+) {
+  if (!query) {
+    return true;
+  }
+
+  const haystack =
+    `${skill.name} ${skill.displayName} ${skill.description} ${skill.repoUrl}`.toLowerCase();
+  return haystack.includes(query.toLowerCase());
+}
+
+type BrandIconEntry = {
+  type: "brand";
+  component: ComponentType<SVGProps<SVGSVGElement>>;
+};
+type HugeIconEntry = { type: "huge"; icon: IconSvgElement };
+
+const SKILL_ICON_MAP: Record<string, BrandIconEntry | HugeIconEntry> = {
+  "vercel-deploy": { type: "brand", component: VercelIcon },
+  playwright: { type: "brand", component: PlaywrightIcon },
+  slides: { type: "brand", component: PowerPointIcon },
+  doc: { type: "brand", component: WordIcon },
+  pdf: { type: "brand", component: PdfIcon },
+  "gh-fix-ci": { type: "brand", component: GitHubIcon },
+  "gh-address-comments": { type: "brand", component: GitHubIcon },
+  "figma-implement-design": { type: "brand", component: FigmaIcon },
+  "cloudflare-deploy": { type: "brand", component: CloudflareIcon },
+  "frontend-design": { type: "huge", icon: PaintBoardIcon },
+  "mcp-builder": { type: "huge", icon: WebDesign02Icon },
+  "webapp-testing": { type: "huge", icon: TestTube01Icon },
+  "doc-coauthoring": { type: "huge", icon: NoteEditIcon },
+  "ai-sdk": { type: "huge", icon: AiIdeaIcon },
+  "openai-docs": { type: "huge", icon: NotebookIcon },
+  "skill-creator": { type: "huge", icon: BrushIcon },
+  "skill-installer": { type: "huge", icon: SparklesIcon },
+  "github-fix-ci": { type: "brand", component: GitHubIcon },
+};
+
+function SkillIcon({ name, size = 16 }: { name: string; size?: number }) {
   const normalized = name.trim().toLowerCase();
+  const entry = SKILL_ICON_MAP[normalized];
 
-  if (normalized === "ai-sdk") {
-    return AiIdeaIcon;
+  if (entry?.type === "brand") {
+    const BrandComponent = entry.component;
+    return <BrandComponent width={size} height={size} />;
   }
 
-  if (normalized === "github-fix-ci") {
-    return GithubIcon;
-  }
+  const hugeIcon =
+    entry?.type === "huge" ? entry.icon : (CubeIcon as IconSvgElement);
+  return (
+    <HugeiconsIcon
+      color="currentColor"
+      icon={hugeIcon}
+      size={size}
+      strokeWidth={1.5}
+    />
+  );
+}
 
-  if (normalized === "openai-docs") {
-    return NotebookIcon;
+function repoLabel(repoUrl: string) {
+  try {
+    return new URL(repoUrl).pathname.replace(/^\//, "").replace(/\/$/, "");
+  } catch {
+    return repoUrl;
   }
-
-  if (normalized === "skill-creator") {
-    return BrushIcon;
-  }
-
-  if (normalized === "skill-installer") {
-    return SparklesIcon;
-  }
-
-  return CubeIcon;
 }
 
 function SkillsSkeleton() {
@@ -100,66 +157,252 @@ function SkillsSkeleton() {
   );
 }
 
-function SkillRow({ skill }: { skill: SkillListItem }) {
-  const SkillIcon = getSkillIcon(skill.name);
-
+function InstalledSkillRow({
+  skill,
+  onUninstall,
+  isUninstalling,
+}: {
+  skill: SkillListItem;
+  onUninstall: ((skill: InstalledSkillAction) => void) | null;
+  isUninstalling: boolean;
+}) {
   return (
-    <Link
-      className="border-separator bg-surface hover:bg-surface/50 group flex items-center gap-3 rounded-2xl border p-3 transition-colors"
-      href={`/skills/${encodeURIComponent(skill.name)}`}
-      prefetch
-    >
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-border/50 bg-background/50 text-foreground/75">
-        <HugeiconsIcon
-          color="currentColor"
-          icon={SkillIcon}
-          size={16}
-          strokeWidth={1.5}
-        />
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-foreground truncate text-sm font-medium">
-            {formatSkillTitle(skill.name)}
-          </span>
-          <Chip
-            className="hidden sm:inline-flex border border-border/50 bg-background/80 text-foreground/75"
-            size="sm"
-            variant="tertiary"
-          >
-            {SOURCE_LABEL[skill.sourceKind]}
-          </Chip>
+    <div className="border-separator bg-surface group flex items-center gap-3 rounded-2xl border p-3 transition-colors">
+      <Link
+        className="flex min-w-0 flex-1 items-center gap-3 hover:opacity-80 transition-opacity"
+        href={`/skills/${encodeURIComponent(skill.name)}`}
+        prefetch
+      >
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-border/50 bg-background/50 text-foreground/75">
+          <SkillIcon name={skill.name} />
         </div>
-        <p className="text-muted mt-0.5 truncate text-xs">
-          {skill.description}
-        </p>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-foreground truncate text-sm font-medium">
+              {formatSkillTitle(skill.name)}
+            </span>
+            <Chip
+              className="hidden sm:inline-flex border border-border/50 bg-background/80 text-foreground/75"
+              size="sm"
+              variant="tertiary"
+            >
+              {SOURCE_LABEL[skill.sourceKind]}
+            </Chip>
+          </div>
+          <p className="text-muted mt-0.5 truncate text-xs">
+            {skill.description}
+          </p>
+        </div>
+      </Link>
+
+      <div className="flex items-center gap-1.5 shrink-0">
+        {onUninstall ? (
+          <Button
+            isDisabled={isUninstalling}
+            isPending={isUninstalling}
+            onPress={() =>
+              onUninstall({ name: skill.name, scope: skill.scope })
+            }
+            size="sm"
+            variant="ghost"
+          >
+            {({ isPending }) =>
+              isPending ? (
+                <Spinner color="current" size="sm" />
+              ) : (
+                <HugeiconsIcon
+                  color="currentColor"
+                  icon={Delete02Icon}
+                  size={14}
+                  strokeWidth={1.5}
+                />
+              )
+            }
+          </Button>
+        ) : null}
+        <Link href={`/skills/${encodeURIComponent(skill.name)}`} prefetch>
+          <div className="text-muted opacity-0 transition-opacity group-hover:opacity-100">
+            <HugeiconsIcon
+              color="currentColor"
+              icon={ArrowRight01Icon}
+              size={16}
+              strokeWidth={1.5}
+            />
+          </div>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function RegistrySkillRow({
+  entry,
+  onInstall,
+  isInstalling,
+  installError,
+}: {
+  entry: RegistryItem & { installed: boolean };
+  onInstall: (entry: RegistryItem) => void;
+  isInstalling: boolean;
+  installError: string | null;
+}) {
+  return (
+    <div className="border-separator bg-surface rounded-2xl border p-3 transition-colors">
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-border/50 bg-background/50 text-foreground/75">
+          <SkillIcon name={entry.name} />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-foreground truncate text-sm font-medium">
+              {entry.displayName}
+            </span>
+          </div>
+          <p className="text-muted mt-0.5 truncate text-xs">
+            {entry.description}
+          </p>
+          <a
+            className="text-muted hover:text-foreground mt-0.5 inline-flex items-center gap-1 text-[11px] transition-colors"
+            href={entry.repoUrl}
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            <HugeiconsIcon
+              color="currentColor"
+              icon={GithubIcon}
+              size={11}
+              strokeWidth={1.5}
+            />
+            {repoLabel(entry.repoUrl)}
+          </a>
+        </div>
+
+        <div className="shrink-0">
+          <Button
+            isDisabled={isInstalling}
+            isPending={isInstalling}
+            onPress={() => onInstall(entry)}
+            size="sm"
+            variant="secondary"
+          >
+            {({ isPending }) => (
+              <>
+                {isPending ? <Spinner color="current" size="sm" /> : null}
+                {isPending ? "Installing..." : "Install"}
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
-      <div className="text-muted shrink-0 opacity-0 transition-opacity group-hover:opacity-100">
-        <HugeiconsIcon
-          color="currentColor"
-          icon={ArrowRight01Icon}
-          size={16}
-          strokeWidth={1.5}
-        />
-      </div>
-    </Link>
+      {installError ? (
+        <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mt-2 rounded-xl border px-3 py-2 text-xs">
+          {installError}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
 export default function SkillsPage() {
   const { leftSidebarOpen } = useShell();
+  const { open: openRightSidebar } = useRightSidebar();
   const [query, setQuery] = useState("");
+  const [installErrors, setInstallErrors] = useState<Record<string, string>>(
+    {},
+  );
+  const [installingSkills, setInstallingSkills] = useState<Set<string>>(
+    new Set(),
+  );
+  const [uninstallingSkills, setUninstallingSkills] = useState<Set<string>>(
+    new Set(),
+  );
+
+  const utils = api.useUtils();
 
   const skills = api.skills.list.useQuery(undefined, {
     refetchInterval: 2_000,
   });
 
+  const registry = api.skills.registry.useQuery();
+
+  const installMutation = api.skills.install.useMutation();
+  const uninstallMutation = api.skills.uninstall.useMutation();
+
   const allSkills = skills.data?.skills ?? [];
-  const filteredSkills = useMemo(
+  const registryEntries = registry.data ?? [];
+
+  const registryByName = useMemo(
+    () => new Map(registryEntries.map((e) => [e.name.trim().toLowerCase(), e])),
+    [registryEntries],
+  );
+
+  const filteredInstalled = useMemo(
     () => allSkills.filter((skill) => matchesSkill(skill, query)),
     [allSkills, query],
+  );
+
+  const availableRegistry = useMemo(
+    () =>
+      registryEntries
+        .filter((e) => !e.installed)
+        .filter((e) => matchesRegistrySkill(e, query)),
+    [registryEntries, query],
+  );
+
+  const handleInstall = useCallback(
+    async (entry: RegistryItem) => {
+      setInstallingSkills((prev) => new Set(prev).add(entry.name));
+      setInstallErrors((prev) => {
+        const next = { ...prev };
+        delete next[entry.name];
+        return next;
+      });
+
+      try {
+        await installMutation.mutateAsync({
+          name: entry.name,
+          scope: "global",
+        });
+        void utils.skills.list.invalidate();
+        void utils.skills.registry.invalidate();
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Installation failed.";
+        setInstallErrors((prev) => ({ ...prev, [entry.name]: message }));
+      } finally {
+        setInstallingSkills((prev) => {
+          const next = new Set(prev);
+          next.delete(entry.name);
+          return next;
+        });
+      }
+    },
+    [installMutation, utils],
+  );
+
+  const handleUninstall = useCallback(
+    async ({ name, scope }: InstalledSkillAction) => {
+      const uninstallKey = `${scope}:${name}`;
+      setUninstallingSkills((prev) => new Set(prev).add(uninstallKey));
+
+      try {
+        await uninstallMutation.mutateAsync({ name, scope });
+        void utils.skills.list.invalidate();
+        void utils.skills.registry.invalidate();
+      } catch {
+        // failure surfaced by mutation state
+      } finally {
+        setUninstallingSkills((prev) => {
+          const next = new Set(prev);
+          next.delete(uninstallKey);
+          return next;
+        });
+      }
+    },
+    [uninstallMutation, utils],
   );
 
   const newSkillHref = allSkills.some(
@@ -168,13 +411,22 @@ export default function SkillsPage() {
     ? "/skills/skill-creator"
     : "https://agentskills.io/specification";
 
+  const handleOpenInstallSidebar = useCallback(() => {
+    openRightSidebar(
+      <CustomSkillInstallSidebar createSkillHref={newSkillHref} />,
+    );
+  }, [newSkillHref, openRightSidebar]);
+
   return (
     <SettingsPageWrapper
       actions={
         <>
           <Button
             isDisabled={skills.isFetching}
-            onPress={() => void skills.refetch()}
+            onPress={() => {
+              void skills.refetch();
+              void registry.refetch();
+            }}
             size="sm"
             variant="tertiary"
           >
@@ -195,28 +447,27 @@ export default function SkillsPage() {
               </>
             )}
           </Button>
-          <Link
-            href={newSkillHref}
-            rel={
-              newSkillHref.startsWith("http")
-                ? "noopener noreferrer"
-                : undefined
-            }
-            target={newSkillHref.startsWith("http") ? "_blank" : undefined}
+          <Button
+            onPress={handleOpenInstallSidebar}
+            size="sm"
+            variant="secondary"
           >
-            <Button size="sm" variant="secondary">
-              <HugeiconsIcon
-                color="currentColor"
-                icon={PlusSignIcon}
-                size={16}
-                strokeWidth={1.5}
-              />
-              New skill
-            </Button>
-          </Link>
+            <HugeiconsIcon
+              color="currentColor"
+              icon={PlusSignIcon}
+              size={16}
+              strokeWidth={1.5}
+            />
+            New skill
+          </Button>
         </>
       }
-      subtitle="Browse discovered skills from your workspace and home directories."
+      subtitle={
+        <div className="max-w-sm">
+          Browse discovered skills and install recommended skills from the
+          registry.
+        </div>
+      }
       title={
         <div>
           {!leftSidebarOpen ? <SidebarToggle /> : null}
@@ -233,41 +484,95 @@ export default function SkillsPage() {
       <div className="flex flex-col gap-6">
         <Input
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search skills"
+          placeholder="Search installed and available skills"
           value={query}
           variant="secondary"
         />
 
-        <section className="grid grid-cols-1 gap-1 md:grid-cols-2">
-          {skills.isPending && !skills.data ? (
-            <SkillsSkeleton />
-          ) : filteredSkills.length ? (
-            filteredSkills.map((skill) => (
-              <SkillRow
-                key={`${skill.scope}:${skill.sourceKind}:${skill.skillFile}`}
-                skill={skill}
-              />
-            ))
-          ) : allSkills.length ? (
-            <div className="border-separator bg-surface rounded-xl border p-5">
-              <h2 className="text-foreground text-sm font-medium">
-                No matching skills
-              </h2>
-              <p className="text-muted mt-1 text-sm">
-                Try a different search term.
-              </p>
-            </div>
-          ) : (
-            <div className="border-separator bg-surface rounded-xl border p-5">
-              <h2 className="text-foreground text-sm font-medium">
-                No skills discovered
-              </h2>
-              <p className="text-muted mt-1 text-sm">
-                Add a skill under `.sentinel/skills`, `.agents/skills`, or
-                `.claude/skills` to see it here.
-              </p>
-            </div>
-          )}
+        <section>
+          <h2 className="text-foreground mb-3 text-sm font-medium">
+            Installed
+          </h2>
+          <div className="grid grid-cols-1 gap-1 md:grid-cols-2">
+            {skills.isPending && !skills.data ? (
+              <SkillsSkeleton />
+            ) : filteredInstalled.length ? (
+              filteredInstalled.map((skill) => {
+                const match = registryByName.get(
+                  skill.name.trim().toLowerCase(),
+                );
+                return (
+                  <InstalledSkillRow
+                    isUninstalling={uninstallingSkills.has(
+                      `${skill.scope}:${skill.name}`,
+                    )}
+                    key={`${skill.scope}:${skill.sourceKind}:${skill.skillFile}`}
+                    onUninstall={match ? handleUninstall : null}
+                    skill={skill}
+                  />
+                );
+              })
+            ) : allSkills.length ? (
+              <div className="border-separator bg-surface rounded-xl border p-5">
+                <h2 className="text-foreground text-sm font-medium">
+                  No matching skills
+                </h2>
+                <p className="text-muted mt-1 text-sm">
+                  Try a different search term.
+                </p>
+              </div>
+            ) : (
+              <div className="border-separator bg-surface rounded-xl border p-5 col-span-full">
+                <h2 className="text-foreground text-sm font-medium">
+                  No skills installed
+                </h2>
+                <p className="text-muted mt-1 text-sm">
+                  Install a recommended skill below, or add one under{" "}
+                  <code className="text-foreground/80">.sentinel/skills</code>.
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section>
+          <h2 className="text-foreground mb-3 text-sm font-medium">
+            Recommended
+          </h2>
+          <div className="grid grid-cols-1 gap-1 md:grid-cols-2">
+            {registry.isPending && !registry.data ? (
+              <SkillsSkeleton />
+            ) : availableRegistry.length ? (
+              availableRegistry.map((entry) => (
+                <RegistrySkillRow
+                  entry={entry}
+                  installError={installErrors[entry.name] ?? null}
+                  isInstalling={installingSkills.has(entry.name)}
+                  key={entry.name}
+                  onInstall={handleInstall}
+                />
+              ))
+            ) : registryEntries.length &&
+              registryEntries.every((e) => e.installed) ? (
+              <div className="border-separator bg-surface rounded-xl border p-5 col-span-full">
+                <h2 className="text-foreground text-sm font-medium">
+                  All recommended skills installed
+                </h2>
+                <p className="text-muted mt-1 text-sm">
+                  You have installed every skill from the curated registry.
+                </p>
+              </div>
+            ) : (
+              <div className="border-separator bg-surface rounded-xl border p-5 col-span-full">
+                <h2 className="text-foreground text-sm font-medium">
+                  No matching skills
+                </h2>
+                <p className="text-muted mt-1 text-sm">
+                  Try a different search term.
+                </p>
+              </div>
+            )}
+          </div>
         </section>
       </div>
     </SettingsPageWrapper>

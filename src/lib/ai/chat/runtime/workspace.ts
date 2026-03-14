@@ -135,6 +135,17 @@ export async function getMcpServerRuntime(
   return buildMcpServerRuntimeEntries(rows);
 }
 
+export async function getSkillsBasePath(
+  userId: string,
+): Promise<string | null> {
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: { skillsBasePath: true },
+  });
+
+  return user?.skillsBasePath ?? null;
+}
+
 export async function getMemorySettings(
   userId: string,
 ): Promise<MemorySettings> {

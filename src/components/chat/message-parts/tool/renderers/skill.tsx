@@ -34,7 +34,8 @@ function getSummary(part: RendererProps["part"]) {
     return output ? `Loaded skill ${output.name}` : "Loaded skill";
   }
 
-  const input = "input" in part ? (part.input as LoadSkillInput | undefined) : undefined;
+  const input =
+    "input" in part ? (part.input as LoadSkillInput | undefined) : undefined;
   return `Loading skill ${input?.name ?? "..."}`;
 }
 
@@ -42,7 +43,8 @@ export const SkillTool = memo(function SkillTool({ part }: RendererProps) {
   const output =
     "output" in part ? (part.output as LoadSkillOutput | undefined) : undefined;
   const errorText = "errorText" in part ? part.errorText : undefined;
-  const isError = part.state === "output-error" || part.state === "output-denied";
+  const isError =
+    part.state === "output-error" || part.state === "output-denied";
   const isRunning =
     part.state === "input-streaming" ||
     part.state === "input-available" ||
@@ -52,9 +54,7 @@ export const SkillTool = memo(function SkillTool({ part }: RendererProps) {
   );
 
   useEffect(() => {
-    setIsExpanded(
-      part.state === "output-available" || part.state === "output-error",
-    );
+    setIsExpanded(part.state === "output-error");
   }, [part.state, part.toolCallId]);
 
   return (

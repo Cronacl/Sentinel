@@ -6,6 +6,17 @@ import { z } from "zod";
 const tool = mock((config) => config);
 const hasToolCall = mock((toolName) => ({ kind: "has-tool-call", toolName }));
 const stepCountIs = mock(() => ({ kind: "stop-when" }));
+const executeLoadSkillMock = mock(async () => ({
+  content: "# Loaded skill",
+  description: "Helpful skill",
+  directory: "/tmp/skill-dir",
+  files: ["references/guide.md"],
+  name: "helpful-skill",
+  preview: "# Loaded skill",
+  scope: "workspace",
+  skillFile: "/tmp/skill-dir/SKILL.md",
+  sourceKind: "sentinel",
+}));
 const aiTestState = ((globalThis as any).__sentinelAiTestState ??= {
   agentConfig: null,
 });
@@ -58,17 +69,7 @@ mock.module("./tools/forget-memory", () => ({
 }));
 
 mock.module("./tools/load-skill", () => ({
-  executeLoadSkill: mock(async () => ({
-    content: "# Loaded skill",
-    description: "Helpful skill",
-    directory: "/tmp/skill-dir",
-    files: ["references/guide.md"],
-    name: "helpful-skill",
-    preview: "# Loaded skill",
-    scope: "workspace",
-    skillFile: "/tmp/skill-dir/SKILL.md",
-    sourceKind: "sentinel",
-  })),
+  executeLoadSkill: executeLoadSkillMock,
   loadSkillInputSchema: z.object({}),
   loadSkillOutputSchema: z.object({}),
 }));
@@ -267,8 +268,7 @@ describe("createThreadAgent", () => {
           name: "helpful-skill",
           preview: "# Helpful skill",
           scope: "workspace",
-          skillFile:
-            "/tmp/workspace/.sentinel/skills/helpful-skill/SKILL.md",
+          skillFile: "/tmp/workspace/.sentinel/skills/helpful-skill/SKILL.md",
           sourceKind: "sentinel",
         },
       ],
@@ -309,6 +309,10 @@ describe("createThreadAgent", () => {
     expect(prepared.instructions).toContain("Permission mode: default");
     expect(prepared.instructions).toContain("## Skills");
     expect(prepared.instructions).toContain("helpful-skill: Helpful skill");
+    expect(prepared.instructions).toContain("~/.codex/skills");
+    expect(prepared.instructions).toContain(
+      'Do not use `VAR=/path "$VAR" ...` in one shell command.',
+    );
     expect(prepared.instructions).toContain("read");
     expect(prepared.instructions).toContain("run_task");
     expect(prepared.instructions).toContain("grep");
@@ -419,7 +423,53 @@ describe("createThreadAgent", () => {
     expect(Object.keys(prepared.tools)).not.toContain("edit");
     expect(Object.keys(prepared.tools)).not.toContain("run_task");
     expect(prepared.instructions).toContain("No workspace root is selected.");
-    expect(prepared.instructions).toContain("Skill roots: /tmp/skills/helpful-skill");
+    expect(prepared.instructions).toContain(
+      "Skill roots: /tmp/skills/helpful-skill",
+    );
+    expect(prepared.instructions).toContain("~/.codex/skills");
+  });
+
+  it("passes the configured global skills base into load_skill execution", async () => {
+    const prepared = prepareWith({
+      availableSkills: [
+        {
+          description: "Helpful skill",
+          directory: "/Users/test/.sentinel/skills/helpful-skill",
+          name: "helpful-skill",
+          preview: "# Helpful skill",
+          scope: "global",
+          skillFile: "/Users/test/.sentinel/skills/helpful-skill/SKILL.md",
+          sourceKind: "sentinel",
+        },
+      ],
+      globalSkillsBasePath: "/Users/test",
+      memorySettings: defaultMemorySettings,
+      permissionMode: "default",
+      searchProviders: {},
+      searchSettings: {
+        defaultProvider: "exa",
+        defaultResultCount: 5,
+        maxResultCount: 10,
+      },
+      skillRoots: ["/Users/test/.sentinel/skills/helpful-skill"],
+      sourceMessageId: "user-message-skill-load",
+      systemPrompt: "System prompt",
+      threadId: "thread-skill-load",
+      threadMode: "chat",
+      userId: "user-1",
+      toolApprovalPolicies: getDefaultToolApprovalPolicies(),
+      toolsEnabled: false,
+      webFetchSettings: { batchEnabled: false, batchLimit: 10 },
+      workspaceId: "workspace-1",
+    });
+
+    await prepared.tools.load_skill.execute({ name: "helpful-skill" });
+
+    expect(executeLoadSkillMock).toHaveBeenCalledWith({
+      globalBase: "/Users/test",
+      input: { name: "helpful-skill" },
+      workspaceRoot: null,
+    });
   });
 
   it("uses per-tool approval overrides when deciding whether to pause", async () => {
@@ -436,8 +486,7 @@ describe("createThreadAgent", () => {
           name: "helpful-skill",
           preview: "# Helpful skill",
           scope: "workspace",
-          skillFile:
-            "/tmp/workspace/.sentinel/skills/helpful-skill/SKILL.md",
+          skillFile: "/tmp/workspace/.sentinel/skills/helpful-skill/SKILL.md",
           sourceKind: "sentinel",
         },
       ],
@@ -481,8 +530,7 @@ describe("createThreadAgent", () => {
           name: "helpful-skill",
           preview: "# Helpful skill",
           scope: "workspace",
-          skillFile:
-            "/tmp/workspace/.sentinel/skills/helpful-skill/SKILL.md",
+          skillFile: "/tmp/workspace/.sentinel/skills/helpful-skill/SKILL.md",
           sourceKind: "sentinel",
         },
       ],

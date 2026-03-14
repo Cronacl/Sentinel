@@ -53,6 +53,7 @@ export const users = sqliteTable(
       .notNull()
       .default(false),
     webFetchBatchLimit: integer("webfetch_batch_limit").notNull().default(10),
+    skillsBasePath: text("skills_base_path"),
     themePreference: text("theme_preference", { enum: THEME_PREFERENCES })
       .notNull()
       .default("system"),

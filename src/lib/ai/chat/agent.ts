@@ -25,6 +25,7 @@ import { buildThreadAgentInstructions } from "./instructions";
 
 const threadAgentCallOptionsSchema = z.object({
   defaultDirectory: z.string().optional(),
+  globalSkillsBasePath: z.string().nullable().optional(),
   memorySettings: z.custom<MemorySettings>(),
   mcpTools: z.custom<ToolSet>().optional(),
   permissionMode: z.custom<PermissionMode>(),

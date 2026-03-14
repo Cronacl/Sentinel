@@ -18,7 +18,10 @@ export function normalizeRelativePath(value: string) {
 
 export function isPathWithinRoot(candidatePath: string, allowedRoot: string) {
   const relative = path.relative(allowedRoot, candidatePath);
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  return (
+    relative === "" ||
+    (!relative.startsWith("..") && !path.isAbsolute(relative))
+  );
 }
 
 export function isPathWithinAnyRoot(
@@ -47,7 +50,10 @@ export function resolveToolPath({
   const normalizedExtraAllowedRoots = (extraAllowedRoots ?? []).map((root) =>
     path.resolve(root),
   );
-  const allowedRoots = [path.resolve(defaultDirectory), ...normalizedExtraAllowedRoots];
+  const allowedRoots = [
+    path.resolve(defaultDirectory),
+    ...normalizedExtraAllowedRoots,
+  ];
   const allowsAbsolutePath =
     path.isAbsolute(rawPath) &&
     isPathWithinAnyRoot(path.resolve(rawPath), normalizedExtraAllowedRoots);
@@ -71,13 +77,15 @@ export function resolveToolPath({
     !isPathWithinAnyRoot(resolvedPath, allowedRoots)
   ) {
     throw new Error(
-      "The requested path must stay inside the selected workspace root.",
+      "The requested path must stay inside the selected workspace root or a discovered skill directory.",
     );
   }
 
   const label = path.isAbsolute(rawPath)
     ? toPosixPath(path.normalize(resolvedPath))
-    : normalizeRelativePath(path.relative(defaultDirectory, resolvedPath) || ".");
+    : normalizeRelativePath(
+        path.relative(defaultDirectory, resolvedPath) || ".",
+      );
 
   return {
     label,

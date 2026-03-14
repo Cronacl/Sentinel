@@ -115,13 +115,13 @@ export const runTaskDescription = lines(
 );
 
 export const shellCommandDescription = lines(
-  "Run a single shell command in the linked workspace.",
+  "Run a single shell command in the linked workspace or discovered skill directory.",
   [
-    "- Executes one shell command at a time in the workspace root.",
+    "- Executes one shell command at a time in the current linked filesystem root.",
     "- Streams output so intermediate progress is visible before completion.",
     "- Returns exit code, stdout, stderr, and working directory on completion.",
     "- Requires a rationale explaining why the command is needed and what you expect to learn.",
-    "- In default permissions mode, commands are restricted to safe operations.",
+    "- In default permissions mode, commands must stay inside the selected workspace root or discovered skill directories.",
     "- Avoid full-screen or interactive TUI programs.",
     "- Prefer non-interactive flags for scaffolding, installs, and builds.",
     "- Prefer run_task for standard project scripts (test, lint, build, format, typecheck).",
@@ -201,6 +201,7 @@ export const loadSkillDescription = lines(
     "- Returns the skill base directory, source scope, source kind, and a sample of bundled files.",
     "- Use this tool when the user's request matches a listed skill description.",
     "- Relative resource paths mentioned in the skill are relative to the returned directory.",
+    "- Sentinel prepends runtime guidance so the returned directory takes priority over any stale home-directory examples embedded in the skill text.",
     "- This tool is always available when skills are discovered and does not require approval.",
   ].join("\n"),
 );

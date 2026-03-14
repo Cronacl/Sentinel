@@ -34,28 +34,28 @@ export const TOOL_APPROVAL_METADATA: Record<
     description: "List files and folders in a compact tree.",
     label: "List",
     riskSummary:
-      "Sentinel can inspect directory trees in the selected project without stopping for confirmation.",
+      "Sentinel can inspect directory trees in the selected project or discovered skill directories without stopping for confirmation.",
   },
   glob: {
     defaultRequireApproval: false,
     description: "Find files by glob pattern.",
     label: "Glob",
     riskSummary:
-      "Sentinel can discover matching files in the selected project without stopping for confirmation.",
+      "Sentinel can discover matching files in the selected project or discovered skill directories without stopping for confirmation.",
   },
   read: {
     defaultRequireApproval: false,
     description: "Read file contents or bounded slices.",
     label: "Read",
     riskSummary:
-      "Sentinel can inspect file contents in the selected project without stopping for confirmation.",
+      "Sentinel can inspect file contents in the selected project or discovered skill directories without stopping for confirmation.",
   },
   grep: {
     defaultRequireApproval: false,
     description: "Search project content with ripgrep.",
     label: "Grep",
     riskSummary:
-      "Sentinel can search code and text across the selected project without stopping for confirmation.",
+      "Sentinel can search code and text across the selected project or discovered skill directories without stopping for confirmation.",
   },
   edit: {
     defaultRequireApproval: true,
@@ -95,14 +95,16 @@ export const TOOL_APPROVAL_METADATA: Record<
   },
   shell_command: {
     defaultRequireApproval: true,
-    description: "Run a single shell command in the workspace.",
+    description:
+      "Run a single shell command in the workspace or a discovered skill directory.",
     label: "Shell command",
     riskSummary:
-      "Sentinel can execute shell commands immediately in the workspace.",
+      "Sentinel can execute shell commands immediately in the workspace or discovered skill directories.",
   },
   search_memory: {
     defaultRequireApproval: false,
-    description: "Search long-term memory for relevant user or project context.",
+    description:
+      "Search long-term memory for relevant user or project context.",
     label: "Search memory",
     riskSummary:
       "Sentinel can recall previously stored memory immediately during conversation.",

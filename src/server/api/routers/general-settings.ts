@@ -15,6 +15,7 @@ export const generalSettingsRouter = createTRPCRouter({
       columns: {
         webFetchBatchEnabled: true,
         webFetchBatchLimit: true,
+        skillsBasePath: true,
       },
     });
 
@@ -23,6 +24,7 @@ export const generalSettingsRouter = createTRPCRouter({
         user?.webFetchBatchEnabled ?? DEFAULT_WEBFETCH_BATCH_ENABLED,
       webFetchBatchLimit:
         user?.webFetchBatchLimit ?? DEFAULT_WEBFETCH_BATCH_LIMIT,
+      skillsBasePath: user?.skillsBasePath ?? null,
     };
   }),
 
@@ -34,6 +36,7 @@ export const generalSettingsRouter = createTRPCRouter({
         .set({
           webFetchBatchEnabled: input.webFetchBatchEnabled,
           webFetchBatchLimit: input.webFetchBatchLimit,
+          skillsBasePath: input.skillsBasePath,
         })
         .where(eq(users.id, ctx.session.user.id))
         .run();
@@ -41,6 +44,7 @@ export const generalSettingsRouter = createTRPCRouter({
       return {
         webFetchBatchEnabled: input.webFetchBatchEnabled,
         webFetchBatchLimit: input.webFetchBatchLimit,
+        skillsBasePath: input.skillsBasePath,
       };
     }),
 });

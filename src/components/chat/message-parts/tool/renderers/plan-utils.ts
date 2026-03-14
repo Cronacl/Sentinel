@@ -1,5 +1,7 @@
 "use client";
 
+import { useRef } from "react";
+
 import type { ThreadPlanAudience } from "@/lib/plan";
 
 export type PlanToolName =
@@ -180,4 +182,47 @@ export function getPlanDraft(
     tasks,
     title,
   };
+}
+
+function areDraftTasksEqual(
+  a: PlanDocumentDraft["tasks"],
+  b: PlanDocumentDraft["tasks"],
+) {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  return a.every(
+    (t, i) => t.title === b[i]?.title && t.description === b[i]?.description,
+  );
+}
+
+function areDraftsEqual(
+  a: PlanDocumentDraft | null,
+  b: PlanDocumentDraft | null,
+) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.audience === b.audience &&
+    a.document === b.document &&
+    a.goal === b.goal &&
+    a.isStreaming === b.isStreaming &&
+    a.summary === b.summary &&
+    a.taskCount === b.taskCount &&
+    a.title === b.title &&
+    areDraftTasksEqual(a.tasks, b.tasks)
+  );
+}
+
+export function useStablePlanDraft(
+  toolName: PlanToolName | null,
+  part: PlanDraftPart,
+): PlanDocumentDraft | null {
+  const ref = useRef<PlanDocumentDraft | null>(null);
+  const next = getPlanDraft(toolName, part);
+
+  if (!areDraftsEqual(ref.current, next)) {
+    ref.current = next;
+  }
+
+  return ref.current;
 }

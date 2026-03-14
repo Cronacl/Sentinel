@@ -172,9 +172,11 @@ function createAsyncEventQueue<T>(): AsyncEventQueue<T> {
           return;
         }
 
-        const nextValue = await new Promise<IteratorResult<T>>((resolve, reject) => {
-          resolvers.push({ reject, resolve });
-        });
+        const nextValue = await new Promise<IteratorResult<T>>(
+          (resolve, reject) => {
+            resolvers.push({ reject, resolve });
+          },
+        );
 
         if (nextValue.done) {
           return;
@@ -206,7 +208,9 @@ function appendChunk(
     };
   }
 
-  const truncatedChunk = chunkBuffer.subarray(0, remainingBytes).toString("utf8");
+  const truncatedChunk = chunkBuffer
+    .subarray(0, remainingBytes)
+    .toString("utf8");
   return {
     next: current + truncatedChunk,
     nextBytes: maxOutputBytes,
@@ -229,20 +233,25 @@ function appendTailChunk(
   }
 
   return {
-    next: nextBuffer.subarray(nextBuffer.byteLength - maxOutputBytes).toString("utf8"),
+    next: nextBuffer
+      .subarray(nextBuffer.byteLength - maxOutputBytes)
+      .toString("utf8"),
     truncated: true,
   };
 }
 
 function getShellCommand() {
   const preferredShell = process.env.SHELL?.trim();
-  const preferredShellName = preferredShell ? path.basename(preferredShell) : null;
+  const preferredShellName = preferredShell
+    ? path.basename(preferredShell)
+    : null;
   const shellCandidates = [
     "bash",
     "sh",
     "/bin/bash",
     "/usr/bin/bash",
-    preferredShell && (preferredShellName === "bash" || preferredShellName === "zsh")
+    preferredShell &&
+    (preferredShellName === "bash" || preferredShellName === "zsh")
       ? preferredShell
       : null,
     os.platform() === "darwin" ? "/bin/zsh" : null,
@@ -399,7 +408,11 @@ function appendPreviewContent(
   }
 
   resetInactivityTimer(session, pending, pending.inactivityTimeoutMs);
-  const appended = appendTailChunk(pending.previewTail, content, MAX_LIVE_TAIL_BYTES);
+  const appended = appendTailChunk(
+    pending.previewTail,
+    content,
+    MAX_LIVE_TAIL_BYTES,
+  );
   pending.previewTail = appended.next;
   pending.previewTruncated ||= appended.truncated;
   scheduleRunningUpdate(session, content.includes("\n"));
@@ -416,8 +429,14 @@ function toComparablePath(candidatePath: string) {
 function isPathInsideRoot(candidatePath: string, allowedRoot: string) {
   const normalizedCandidatePath = toComparablePath(candidatePath);
   const normalizedAllowedRoot = toComparablePath(allowedRoot);
-  const relative = path.relative(normalizedAllowedRoot, normalizedCandidatePath);
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  const relative = path.relative(
+    normalizedAllowedRoot,
+    normalizedCandidatePath,
+  );
+  return (
+    relative === "" ||
+    (!relative.startsWith("..") && !path.isAbsolute(relative))
+  );
 }
 
 function normalizeAllowedRoots({
@@ -435,7 +454,10 @@ function normalizeAllowedRoots({
   return Array.from(new Set(roots));
 }
 
-function isPathInsideAllowedRoots(candidatePath: string, allowedRoots: readonly string[]) {
+function isPathInsideAllowedRoots(
+  candidatePath: string,
+  allowedRoots: readonly string[],
+) {
   return allowedRoots.some((allowedRoot) =>
     isPathInsideRoot(candidatePath, allowedRoot),
   );
@@ -479,7 +501,7 @@ function finalizePendingExecution(
     !isPathInsideAllowedRoots(resolvedDirectory, allowedRoots)
   ) {
     const error = new Error(
-      "Shell command left the selected workspace root and the session was reset.",
+      "Shell command left the selected workspace root or discovered skill directories and the session was reset.",
     );
     pending.eventQueue.push({ error, type: "error" });
     pending.eventQueue.fail(error);
@@ -554,7 +576,9 @@ function handleStdoutChunk(session: ShellSession, chunk: string) {
 
   appendStdoutContent(session, pending, combined.slice(0, exitMarkerIndex));
   const exitChunk = combined.slice(exitMarkerIndex);
-  const exitMatch = exitChunk.match(/^__sentinel_exit__:[^:]+:(-?\d+):(.*)\r?\n?/);
+  const exitMatch = exitChunk.match(
+    /^__sentinel_exit__:[^:]+:(-?\d+):(.*)\r?\n?/,
+  );
 
   if (!exitMatch) {
     pending.stdoutCarry = exitChunk;
@@ -580,7 +604,8 @@ function handleStreamChunk(
     return;
   }
 
-  const chunk = typeof rawChunk === "string" ? rawChunk : rawChunk.toString("utf8");
+  const chunk =
+    typeof rawChunk === "string" ? rawChunk : rawChunk.toString("utf8");
   if (streamName === "stdout") {
     handleStdoutChunk(session, chunk);
     return;
@@ -703,10 +728,12 @@ function runCommandInSession(
   let resolveCompletion!: (result: ShellCommandCompletedOutput) => void;
   let rejectCompletion!: (error: Error) => void;
 
-  const completion = new Promise<ShellCommandCompletedOutput>((resolve, reject) => {
-    resolveCompletion = resolve;
-    rejectCompletion = reject;
-  });
+  const completion = new Promise<ShellCommandCompletedOutput>(
+    (resolve, reject) => {
+      resolveCompletion = resolve;
+      rejectCompletion = reject;
+    },
+  );
 
   const maxDurationTimeout = createTimer(() => {
     const pending = session.pending;
@@ -783,7 +810,7 @@ export function assertShellCommandAllowed(
 
   if (forbiddenPatterns.some((pattern) => pattern.test(command))) {
     throw new Error(
-      "Shell command violates default permissions mode by attempting to change directories outside the selected workspace root.",
+      "Shell command violates default permissions mode by attempting to change directories outside the selected workspace root or discovered skill directories.",
     );
   }
 
@@ -809,7 +836,7 @@ export function assertShellCommandAllowed(
     }
 
     throw new Error(
-      "Shell command violates default permissions mode by attempting to change directories outside the selected workspace root.",
+      "Shell command violates default permissions mode by attempting to change directories outside the selected workspace root or discovered skill directories.",
     );
   }
 }
@@ -916,7 +943,9 @@ export async function disposeShellSession(threadId: string) {
   if (pending) {
     clearExecutionTimers(pending);
     clearProgressTimer(pending);
-    const error = new Error("Shell session was closed before the command completed.");
+    const error = new Error(
+      "Shell session was closed before the command completed.",
+    );
     pending.eventQueue.push({ error, type: "error" });
     pending.eventQueue.fail(error);
     pending.rejectCompletion(error);

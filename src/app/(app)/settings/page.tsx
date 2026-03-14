@@ -14,6 +14,7 @@ import { useForm } from "react-hook-form";
 import {
   ControlledNumberField,
   ControlledSwitchField,
+  ControlledTextField,
 } from "@/components/forms/controlled-fields";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import {
@@ -84,6 +85,7 @@ export default function GeneralSettingsPage() {
     defaultValues: {
       webFetchBatchEnabled: DEFAULT_WEBFETCH_BATCH_ENABLED,
       webFetchBatchLimit: DEFAULT_WEBFETCH_BATCH_LIMIT,
+      skillsBasePath: null,
     },
     resolver: zodResolver(generalSettingsFormSchema),
   });
@@ -197,6 +199,7 @@ export default function GeneralSettingsPage() {
     "webFetchBatchEnabled",
   );
   const webFetchBatchLimit = generalSettingsForm.watch("webFetchBatchLimit");
+  const skillsBasePath = generalSettingsForm.watch("skillsBasePath");
 
   return (
     <SettingsPageWrapper
@@ -318,6 +321,75 @@ export default function GeneralSettingsPage() {
                   {webFetchBatchEnabled
                     ? `batch fetches enabled, up to ${webFetchBatchLimit} URLs per call.`
                     : "single-URL fetches only."}
+                </div>
+              </div>
+
+              <div className="mt-5 flex justify-end">
+                <Button
+                  isDisabled={
+                    updateGeneralSettings.isPending ||
+                    !generalSettingsForm.formState.isDirty
+                  }
+                  isPending={updateGeneralSettings.isPending}
+                  size="sm"
+                  type="submit"
+                >
+                  {({ isPending }) => (
+                    <>
+                      {isPending ? <Spinner color="current" size="sm" /> : null}
+                      Save
+                    </>
+                  )}
+                </Button>
+              </div>
+            </section>
+
+            <section className="border-separator bg-surface rounded-xl border p-5">
+              <div className="mb-5 space-y-1">
+                <h2 className="text-foreground text-base font-medium">
+                  Skills directory
+                </h2>
+                <p className="text-muted text-sm">
+                  Override where Sentinel looks for global skills. Leave empty
+                  to use the default home directory.
+                </p>
+              </div>
+
+              <div className="space-y-5">
+                <ControlledTextField
+                  control={generalSettingsForm.control}
+                  description="Absolute path to use as the base for global skill discovery (e.g. /Users/you/my-skills)."
+                  inputProps={{
+                    placeholder: "~/.sentinel/skills (default)",
+                    className: "w-full font-mono text-sm",
+                  }}
+                  label="Custom skills base path"
+                  name="skillsBasePath"
+                  textFieldProps={{ className: "w-full max-w-lg" }}
+                />
+
+                <div className="flex items-center gap-3">
+                  <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-xs text-muted flex-1">
+                    Skills will be discovered at:{" "}
+                    <span className="font-mono text-foreground">
+                      {skillsBasePath
+                        ? `${skillsBasePath}/.sentinel/skills/`
+                        : "~/.sentinel/skills/"}
+                    </span>
+                  </div>
+                  {skillsBasePath ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onPress={() => {
+                        generalSettingsForm.setValue("skillsBasePath", null, {
+                          shouldDirty: true,
+                        });
+                      }}
+                    >
+                      Reset to default
+                    </Button>
+                  ) : null}
                 </div>
               </div>
 

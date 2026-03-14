@@ -34,8 +34,8 @@ import {
 
 import { ToolLayout } from "./tool-layout";
 import {
-  getPlanDraft,
   getPlanToolName,
+  useStablePlanDraft,
   type PlanDocumentDraft,
   type PlanToolName,
 } from "./plan-utils";
@@ -568,7 +568,7 @@ function ManageTaskBody({ output }: { output: ManageTaskOutput }) {
   );
 }
 
-function PlanDocCard({
+const PlanDocCard = memo(function PlanDocCard({
   draft,
   handleOpenSidebar,
   isRunning,
@@ -590,7 +590,9 @@ function PlanDocCard({
 
   if (!value) {
     return (
-      <p className={`text-[13px] ${isRunning ? "sentinel-thinking-shimmer" : "text-foreground/70"}`}>
+      <p
+        className={`text-[13px] ${isRunning ? "sentinel-thinking-shimmer" : "text-foreground/70"}`}
+      >
         {toolName === "create_plan" ? "Drafting" : "Updating"} plan…
       </p>
     );
@@ -610,7 +612,9 @@ function PlanDocCard({
       <div className="px-3.5 py-2.5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className={`text-[13px] font-medium ${isRunning ? "sentinel-thinking-shimmer" : "text-foreground"}`}>
+            <p
+              className={`text-[13px] font-medium ${isRunning ? "sentinel-thinking-shimmer" : "text-foreground"}`}
+            >
               {value.title || "Untitled plan"}
             </p>
             {value.summary ? (
@@ -648,26 +652,14 @@ function PlanDocCard({
             </>
           ) : null}
         </div>
-
-        {tasks.length > 0 ? (
-          <div className="mt-2.5 flex gap-0.5">
-            {tasks.map((task, i) => (
-              <div
-                key={i}
-                className="h-1 flex-1 rounded-full bg-foreground/15"
-                title={task.title}
-              />
-            ))}
-          </div>
-        ) : null}
       </div>
 
-      <div className="flex items-center gap-1.5 border-t border-border/30 px-3.5 py-1.5">
+      <div className="flex items-center justify-end w-full gap-1.5 border-t border-border/30 px-3.5 py-1.5">
         <Button
           className="h-6 min-w-0 px-2.5 text-[10px]"
           onPress={handleOpenSidebar}
           size="sm"
-          variant="primary"
+          variant="outline"
         >
           Open
         </Button>
@@ -690,7 +682,7 @@ function PlanDocCard({
       ) : null}
     </div>
   );
-}
+});
 
 export const PlanTool = memo(function PlanTool({
   onAnswerPlanQuestions,
@@ -702,82 +694,63 @@ export const PlanTool = memo(function PlanTool({
   const [isExpanded, setIsExpanded] = useState(false);
   const output = "output" in part ? part.output : undefined;
   const errorText = "errorText" in part ? part.errorText : undefined;
-  const planDraft = useMemo(
-    () => getPlanDraft(toolName, part),
-    [part, toolName],
-  );
+  const planDraft = useStablePlanDraft(toolName, part);
   const isPlanDoc = toolName === "create_plan" || toolName === "update_plan";
 
-  const syncPlanSidebar = useCallback(() => {
-    if (!toolName || !planDraft) {
-      return;
-    }
+  const statusLabel =
+    part.state === "output-available"
+      ? toolName === "create_plan"
+        ? "Created"
+        : "Updated"
+      : "Drafting";
 
+  const buildSidebarSnapshot = useCallback(() => {
+    if (!planDraft) return null;
+    return {
+      audience: planDraft.audience,
+      document: planDraft.document,
+      goal: planDraft.goal,
+      isStreaming: planDraft.isStreaming,
+      statusLabel,
+      summary: planDraft.summary,
+      taskCount: planDraft.taskCount,
+      tasks: planDraft.tasks,
+      title: planDraft.title,
+    };
+  }, [planDraft, statusLabel]);
+
+  const syncPlanSidebar = useCallback(() => {
+    if (!toolName) return;
+    const snapshot = buildSidebarSnapshot();
+    if (!snapshot) return;
     setPlanSidebarState({
       kind: "draft",
-      snapshot: {
-        audience: planDraft.audience,
-        document: planDraft.document,
-        goal: planDraft.goal,
-        isStreaming: planDraft.isStreaming,
-        statusLabel:
-          part.state === "output-available"
-            ? toolName === "create_plan"
-              ? "Created"
-              : "Updated"
-            : "Drafting",
-        summary: planDraft.summary,
-        taskCount: planDraft.taskCount,
-        tasks: planDraft.tasks,
-        title: planDraft.title,
-      },
+      snapshot,
       sourceKey: part.toolCallId,
     });
-  }, [part.state, part.toolCallId, planDraft, toolName]);
+  }, [buildSidebarSnapshot, part.toolCallId, toolName]);
 
   const handleOpenSidebar = useCallback(() => {
-    if (!planDraft) {
-      return;
-    }
-
+    if (!planDraft) return;
     syncPlanSidebar();
     open(<PlanSidebar />);
   }, [open, planDraft, syncPlanSidebar]);
 
   useEffect(() => {
-    if (!isOpen || !planDraft || !isPlanDoc) {
-      return;
-    }
+    if (!isOpen || !planDraft || !isPlanDoc) return;
 
     const currentSidebar = getPlanSidebarState();
-    if (currentSidebar.kind !== "draft") {
+    if (
+      currentSidebar.kind !== "draft" ||
+      currentSidebar.sourceKey !== part.toolCallId
+    ) {
       return;
     }
 
-    if (currentSidebar.sourceKey !== part.toolCallId) {
-      return;
-    }
-
-    syncPlanSidebarDraft({
-      snapshot: {
-        audience: planDraft.audience,
-        document: planDraft.document,
-        goal: planDraft.goal,
-        isStreaming: planDraft.isStreaming,
-        statusLabel:
-          part.state === "output-available"
-            ? toolName === "create_plan"
-              ? "Created"
-              : "Updated"
-            : "Drafting",
-        summary: planDraft.summary,
-        taskCount: planDraft.taskCount,
-        tasks: planDraft.tasks,
-        title: planDraft.title,
-      },
-      sourceKey: part.toolCallId,
-    });
-  }, [isOpen, isPlanDoc, part.state, part.toolCallId, planDraft, toolName]);
+    const snapshot = buildSidebarSnapshot();
+    if (!snapshot) return;
+    syncPlanSidebarDraft({ snapshot, sourceKey: part.toolCallId });
+  }, [buildSidebarSnapshot, isOpen, isPlanDoc, part.toolCallId, planDraft]);
 
   const autoExpandedRef = useRef<string | null>(null);
 
