@@ -7,6 +7,7 @@ import { buildSystemPrompt } from "./system-prompt-builder";
 function createPromptContext(memoryPromptLines: string[] = []) {
   return buildThreadPromptContext({
     availableSkills: [],
+    enabledMcpServers: [],
     mcpToolNames: [],
     memoryPromptLines,
     memorySettings: {
@@ -49,22 +50,46 @@ describe("buildSystemPrompt", () => {
     });
 
     expect(prompt).toContain("## Identity");
+    expect(prompt).toContain("## Application Context");
     expect(prompt).toContain("## Core Operating Model");
     expect(prompt).toContain("## Response Discipline");
     expect(prompt).toContain("## Context Priorities");
+    expect(prompt).toContain("## Research Discipline");
+    expect(prompt).toContain("## General Task Handling");
+    expect(prompt).toContain("## Autonomy");
+    expect(prompt).toContain("## Tool Calling Discipline");
     expect(prompt).toContain("## Mutation Discipline");
+    expect(prompt).toContain("## Git Safety");
     expect(prompt).toContain("## Capability Boundaries");
     expect(prompt).toContain("## Memory");
     expect(prompt).toContain("## Personalization");
 
     expect(prompt.indexOf("## Identity")).toBeLessThan(
+      prompt.indexOf("## Application Context"),
+    );
+    expect(prompt.indexOf("## Application Context")).toBeLessThan(
       prompt.indexOf("## Core Operating Model"),
     );
     expect(prompt.indexOf("## Core Operating Model")).toBeLessThan(
       prompt.indexOf("## Response Discipline"),
     );
+    expect(prompt.indexOf("## Context Priorities")).toBeLessThan(
+      prompt.indexOf("## Research Discipline"),
+    );
     expect(prompt).toContain("coding-first workspace agent");
+    expect(prompt).toContain("present yourself simply as Sentinel");
     expect(prompt).toContain("Only act on tools, permissions, and integrations");
+    expect(prompt).toContain("Prefer primary sources, official documentation");
+    expect(prompt).toContain(
+      "avoid unnecessary tool use when the request can be answered directly",
+    );
+    expect(prompt).toContain(
+      "Do not stop to ask for confirmation when the user has already made the goal clear",
+    );
+    expect(prompt).toContain(
+      "Do not ask the user for optional tool parameters unless they materially change the outcome",
+    );
+    expect(prompt).toContain("Never create commits unless the user explicitly asks for a commit");
     expect(prompt).toContain("[Global] preference: Prefers concise answers.");
   });
 

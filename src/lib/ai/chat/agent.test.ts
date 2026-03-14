@@ -231,6 +231,7 @@ function prepareWith(options) {
   createThreadAgent({ languageModel: { kind: "model" } });
   const promptContext = buildThreadPromptContext({
     availableSkills: options.availableSkills ?? [],
+    enabledMcpServers: options.enabledMcpServers ?? [],
     mcpToolNames: Object.keys(options.mcpTools ?? {}),
     memoryPromptLines: options.memoryPromptLines ?? [],
     memorySettings: options.memorySettings,
@@ -290,6 +291,16 @@ describe("createThreadAgent", () => {
           sourceKind: "sentinel",
         },
       ],
+      enabledMcpServers: [
+        {
+          catalogId: "playwright",
+          id: "mcp-1",
+          name: "Playwright",
+          namespace: "playwright",
+          toolCount: 1,
+          transport: "http",
+        },
+      ],
       skillRoots: ["/tmp/workspace/.sentinel/skills/helpful-skill"],
       sourceMessageId: "user-message-1",
       systemPrompt: "System prompt",
@@ -328,8 +339,11 @@ describe("createThreadAgent", () => {
     expect(prepared.instructions).toContain("Permission mode: default.");
     expect(prepared.instructions).toContain("## Capability Manifest");
     expect(prepared.instructions).toContain("## Discovered Skills");
-    expect(prepared.instructions).toContain("## MCP Tools");
-    expect(prepared.instructions).toContain("helpful-skill: Helpful skill");
+    expect(prepared.instructions).toContain("## Enabled MCP Servers");
+    expect(prepared.instructions).toContain(
+      "helpful-skill [workspace/sentinel]: Helpful skill",
+    );
+    expect(prepared.instructions).toContain("mcp_playwright__*");
     expect(prepared.instructions).toContain("~/.codex/skills");
     expect(prepared.instructions).toContain("the read tool");
     expect(prepared.instructions).toContain("run_task");

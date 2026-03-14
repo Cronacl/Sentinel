@@ -94,9 +94,9 @@ function buildCapabilityManifest(
     promptContext.availableSkills.length > 0
       ? `Discovered skills: ${promptContext.availableSkills.length} available. Treat them as routing hints until load_skill is called.`
       : "Discovered skills: none.",
-    promptContext.mcpToolNames.length > 0
-      ? `External MCP tools: ${promptContext.mcpToolNames.length} available. Use them only when the integration is more direct than workspace or web tools.`
-      : "External MCP tools: none.",
+    promptContext.enabledMcpServers.length > 0
+      ? `Enabled MCP servers: ${promptContext.enabledMcpServers.length}. Use them when the task targets those external systems or when the integration is more direct than workspace or web tools.`
+      : "Enabled MCP servers: none.",
   ]);
 }
 
@@ -113,26 +113,66 @@ function buildSkillsSection(promptContext: ThreadPromptContext) {
   return lines(
     "## Discovered Skills",
     "Discovered skills stay latent until you call load_skill. Load only the skills that directly match the current task.",
-    visible.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n"),
+    "Use a skill when the request clearly matches a specialized workflow, toolchain, provider, or domain that the skill description covers.",
+    "How to use skills: pick the best matching discovered skill, call load_skill, then follow the loaded instructions and treat the returned directory as the source of truth for bundled resources.",
+    visible
+      .map(
+        (skill) =>
+          `- ${skill.name} [${skill.scope}/${skill.sourceKind}]: ${skill.description}`,
+      )
+      .join("\n"),
     remaining > 0 ? `- ... and ${remaining} more discovered skills.` : "",
   );
 }
 
+function mcpServerUsageHint(server: ThreadPromptContext["enabledMcpServers"][number]) {
+  switch (server.catalogId) {
+    case "playwright":
+      return "Use for browser inspection and automation tasks; start with read-only browser state before clicks or typing.";
+    case "linear":
+      return "Use for issues, projects, cycles, and team workflow data when the task targets Linear.";
+    case "notion":
+      return "Use for pages, documents, and database content when the task depends on Notion workspace knowledge.";
+    case "figma":
+      return "Use for design files, components, and design-system context when the task depends on Figma assets.";
+    case "git":
+      return "Use for repository hosting and review workflows when the task targets the external Git integration.";
+    default:
+      return "Use when this integration can answer or perform the task more directly than workspace or web tools.";
+  }
+}
+
 function buildMcpToolsSection(promptContext: ThreadPromptContext) {
-  if (promptContext.mcpToolNames.length === 0) {
+  if (promptContext.enabledMcpServers.length === 0) {
     return "";
   }
 
   const { remaining, visible } = truncateList(
-    promptContext.mcpToolNames,
+    promptContext.enabledMcpServers,
     MCP_SUMMARY_LIMIT,
   );
+  const loadedToolExamples = truncateList(promptContext.mcpToolNames, MCP_SUMMARY_LIMIT);
 
   return lines(
-    "## MCP Tools",
-    "Prefer MCP tools when they can answer or perform the task more directly than workspace or web tools.",
-    visible.map((toolName) => `- ${formatMcpToolLabel(toolName)}`).join("\n"),
-    remaining > 0 ? `- ... and ${remaining} more MCP tools.` : "",
+    "## Enabled MCP Servers",
+    "Prefer MCP integrations when the user is asking about a connected external system or when the integration can answer or perform the task more directly than workspace or web tools.",
+    "How to use MCP servers: identify the relevant integration, prefer read-only tools first, and then choose namespaced tools that begin with the server namespace shown below.",
+    visible
+      .map((server) => {
+        const toolCountLabel =
+          server.toolCount > 0 ? `${server.toolCount} tools loaded` : "tools load on demand";
+        return `- ${server.name} [${server.transport}${server.catalogId ? `/${server.catalogId}` : ""}] via \`mcp_${server.namespace}__*\` (${toolCountLabel}): ${mcpServerUsageHint(server)}`;
+      })
+      .join("\n"),
+    remaining > 0 ? `- ... and ${remaining} more enabled MCP servers.` : "",
+    loadedToolExamples.visible.length > 0
+      ? lines(
+          "Loaded MCP tool examples:",
+          loadedToolExamples.visible
+            .map((toolName) => `- ${formatMcpToolLabel(toolName)}`)
+            .join("\n"),
+        )
+      : "",
   );
 }
 
@@ -159,6 +199,9 @@ function buildDecisionHeuristics(
     );
     heuristics.push(
       `${step++}. After load_skill, use the returned skill directory as the source of truth for scripts, references, and assets. Ignore stale home-directory examples such as ~/.codex/skills or $CODEX_HOME/skills.`,
+    );
+    heuristics.push(
+      `${step++}. Reach for a skill when the task matches a specialized provider, framework, workflow, or domain described by the discovered skill list; otherwise continue with the base tools.`,
     );
   }
 
@@ -190,14 +233,32 @@ function buildDecisionHeuristics(
     heuristics.push(
       `${step++}. When using the searxng provider, use searchType auto and leave livecrawl unset. Use batch webfetch only when comparing multiple pages is clearly useful.`,
     );
-  }
-
-  if (promptContext.mcpToolNames.length > 0) {
     heuristics.push(
-      `${step++}. Prefer read-only MCP actions before mutating ones, especially when exploring browsers or external systems.`,
+      `${step++}. For research tasks, prefer direct evidence over speculation, synthesize across sources when useful, and distinguish sourced facts from your own inference.`,
     );
   }
 
+  if (promptContext.enabledMcpServers.length > 0) {
+    heuristics.push(
+      `${step++}. Reach for an MCP server when the user is asking about a connected external system or when that integration is the most direct source of truth.`,
+    );
+    heuristics.push(
+      `${step++}. Prefer read-only MCP actions before mutating ones, especially when exploring browsers or external systems.`,
+    );
+    heuristics.push(
+      `${step++}. Choose MCP tools by namespace: identify the relevant enabled server first, then use namespaced tools from that integration instead of guessing across unrelated servers.`,
+    );
+  }
+
+  heuristics.push(
+    `${step++}. If the request is a general writing, brainstorming, explanation, or transformation task that does not require fresh external or workspace context, answer directly without unnecessary tool calls.`,
+  );
+  heuristics.push(
+    `${step++}. When using tools, infer only clearly supported required inputs from context, avoid asking for optional parameters by default, and ask the user only when missing information materially blocks the next step.`,
+  );
+  heuristics.push(
+    `${step++}. Be proactive when the next step is clear, low-risk, and allowed: continue without extra confirmation, and reserve questions for ambiguities that materially change scope, risk, or output.`,
+  );
   heuristics.push(
     `${step++}. If the available context or tools still leave a material ambiguity, ask the user instead of guessing.`,
   );
@@ -232,6 +293,8 @@ function buildChatModeOverlay(
   return section("Mode Overlay", [
     "Chat mode is active. You may inspect, execute, and mutate only through capabilities that are available in this call.",
     "Sequence stateful work as inspect -> decide -> mutate -> validate whenever the task changes workspace state.",
+    "Do not ask the user to confirm every obvious intermediate step. Make progress until a real decision, approval boundary, or material ambiguity blocks you.",
+    "Do not mention Sentinel's internal implementation details unless they are directly relevant to the task.",
     permissionOverlay(promptContext),
     !promptContext.workspaceRoot && promptContext.skillRoots.length > 0
       ? "No workspace root is selected. Keep file and shell work inside discovered skill directories, and do not imply that workspace-only mutation tools or run_task are available."
@@ -254,6 +317,8 @@ function buildPlanModeOverlay(
     "Plan mode is active. You are a read-only planning specialist.",
     "Understand the request, gather context, and produce a thorough implementation plan rather than executing the work.",
     "Do not attempt file edits, shell commands, web access, or memory operations while planning.",
+    "Be proactive in gathering discoverable context before asking questions, and avoid asking for confirmation when the planning direction is already clear.",
+    "Do not mention Sentinel's internal implementation details unless they are directly relevant to the task.",
     "Use create_plan when the thread has no plan yet. Use update_plan to refine the existing plan without collapsing useful detail.",
     "Use manage_task for task lifecycle updates after a plan exists.",
     "Use ask_question only when a remaining ambiguity materially changes the plan, and keep it to 1 to 3 questions with 2 to 4 options each.",

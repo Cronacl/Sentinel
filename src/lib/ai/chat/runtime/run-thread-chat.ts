@@ -22,7 +22,10 @@ import { createReasoningMetadataTracker } from "./reasoning";
 import { disposeShellSession } from "../tools/shell";
 import { getSystemPrompt } from "./system-prompt";
 import { createThreadAgent } from "../agent";
-import { buildThreadPromptContext } from "../prompt-context";
+import {
+  buildThreadPromptContext,
+  createMcpPromptNamespace,
+} from "../prompt-context";
 import { loadMcpTools } from "@/lib/mcp/tools";
 import {
   autosaveConversationMemories,
@@ -291,9 +294,27 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
             ? await mcpRuntimePromise
             : { closeAll: async () => {}, tools: {} };
         closeMcpTools = mcpRuntime.closeAll;
+        const mcpToolNames = Object.keys(mcpRuntime.tools);
         const promptContext = buildThreadPromptContext({
           availableSkills: skillSnapshot.skills,
-          mcpToolNames: Object.keys(mcpRuntime.tools),
+          enabledMcpServers: mcpServers
+            .filter((entry) => entry.isEnabled)
+            .map((entry) => {
+              const namespace = createMcpPromptNamespace(
+                entry.catalogId ?? entry.name,
+              );
+              return {
+                ...(entry.catalogId ? { catalogId: entry.catalogId } : {}),
+                id: entry.id,
+                name: entry.name,
+                namespace,
+                toolCount: mcpToolNames.filter((toolName) =>
+                  toolName.startsWith(`mcp_${namespace}__`),
+                ).length,
+                transport: entry.transport,
+              };
+            }),
+          mcpToolNames,
           memoryPromptLines: buildMemoryPromptLines(retrievedMemories),
           memorySettings,
           permissionMode,

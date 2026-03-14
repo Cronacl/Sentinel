@@ -7,6 +7,7 @@ import { buildThreadAgentInstructions } from "./instructions";
 function createPromptContext(overrides: Record<string, unknown> = {}) {
   return buildThreadPromptContext({
     availableSkills: [],
+    enabledMcpServers: [],
     mcpToolNames: [],
     memoryPromptLines: [],
     memorySettings: {
@@ -61,6 +62,16 @@ describe("buildThreadAgentInstructions", () => {
           sourceKind: "sentinel",
         },
       ],
+      enabledMcpServers: [
+        {
+          catalogId: "playwright",
+          id: "mcp-1",
+          name: "Playwright",
+          namespace: "playwright",
+          toolCount: 1,
+          transport: "http",
+        },
+      ],
       mcpToolNames: ["mcp_server__list_files"],
       memoryPromptLines: ["[Global] preference: Prefers concise answers."],
       memorySettings: {
@@ -101,13 +112,35 @@ describe("buildThreadAgentInstructions", () => {
       "the list tool: to browse directory structure without approval.",
     );
     expect(instructions).toContain("## Discovered Skills");
-    expect(instructions).toContain("helpful-skill: Helpful skill");
-    expect(instructions).toContain("## MCP Tools");
+    expect(instructions).toContain("helpful-skill [workspace/sentinel]: Helpful skill");
+    expect(instructions).toContain("## Enabled MCP Servers");
+    expect(instructions).toContain("mcp_playwright__*");
+    expect(instructions).toContain("Use for browser inspection and automation tasks");
     expect(instructions).toContain("server -> list files");
     expect(instructions).toContain("## Decision Heuristics");
     expect(instructions).toContain("Prefer run_task for standard scripts");
+    expect(instructions).toContain("Reach for a skill when the task matches a specialized provider");
+    expect(instructions).toContain("Reach for an MCP server when the user is asking about a connected external system");
+    expect(instructions).toContain(
+      "For research tasks, prefer direct evidence over speculation",
+    );
+    expect(instructions).toContain(
+      "If the request is a general writing, brainstorming, explanation, or transformation task",
+    );
+    expect(instructions).toContain(
+      "infer only clearly supported required inputs from context",
+    );
+    expect(instructions).toContain(
+      "Be proactive when the next step is clear, low-risk, and allowed",
+    );
     expect(instructions).toContain("## Mode Overlay");
     expect(instructions).toContain("Chat mode is active.");
+    expect(instructions).toContain(
+      "Do not ask the user to confirm every obvious intermediate step.",
+    );
+    expect(instructions).toContain(
+      "Do not mention Sentinel's internal implementation details unless they are directly relevant to the task.",
+    );
   });
 
   it("renders plan-mode overlays without execution guidance", () => {
@@ -132,6 +165,12 @@ describe("buildThreadAgentInstructions", () => {
     expect(instructions).toContain(
       "Use create_plan when the thread has no plan yet.",
     );
+    expect(instructions).toContain(
+      "Be proactive in gathering discoverable context before asking questions",
+    );
+    expect(instructions).toContain(
+      "Do not mention Sentinel's internal implementation details unless they are directly relevant to the task.",
+    );
     expect(instructions).not.toContain("Prefer run_task for standard scripts");
   });
 
@@ -146,6 +185,13 @@ describe("buildThreadAgentInstructions", () => {
         skillFile: `/tmp/skills/skill-${index + 1}/SKILL.md`,
         sourceKind: "sentinel" as const,
       })),
+      enabledMcpServers: Array.from({ length: 8 }, (_, index) => ({
+        id: `mcp-${index + 1}`,
+        name: `Server ${index + 1}`,
+        namespace: `server_${index + 1}`,
+        toolCount: 1,
+        transport: "http" as const,
+      })),
       mcpToolNames: Array.from(
         { length: 8 },
         (_, index) => `mcp_server__tool_${index + 1}`,
@@ -159,7 +205,7 @@ describe("buildThreadAgentInstructions", () => {
     });
 
     expect(instructions).toContain("... and 2 more discovered skills.");
-    expect(instructions).toContain("... and 2 more MCP tools.");
+    expect(instructions).toContain("... and 2 more enabled MCP servers.");
   });
 
   it("omits empty optional sections cleanly", () => {
@@ -172,6 +218,6 @@ describe("buildThreadAgentInstructions", () => {
     });
 
     expect(instructions).not.toContain("## Discovered Skills");
-    expect(instructions).not.toContain("## MCP Tools");
+    expect(instructions).not.toContain("## Enabled MCP Servers");
   });
 });

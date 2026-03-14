@@ -1,4 +1,5 @@
 import type { MemorySettings } from "@/lib/memory";
+import type { MCPTransportId } from "@/server/db/enums";
 import type { ThreadMode, ThreadPlanAudience } from "@/lib/plan";
 import type { PermissionMode } from "@/lib/security";
 import type { SearchSettings } from "@/lib/search";
@@ -17,8 +18,18 @@ export type ThreadPromptPlanSummary = {
   title: string;
 };
 
+export type ThreadPromptMcpServer = {
+  catalogId?: string;
+  id: string;
+  name: string;
+  namespace: string;
+  toolCount: number;
+  transport: MCPTransportId;
+};
+
 export type ThreadPromptContext = {
   availableSkills: SkillMetadata[];
+  enabledMcpServers: ThreadPromptMcpServer[];
   mcpToolNames: string[];
   memoryPromptLines: string[];
   memorySettings: MemorySettings;
@@ -42,12 +53,24 @@ function uniqueStrings(values: string[]) {
   );
 }
 
+export function createMcpPromptNamespace(value: string) {
+  const slug = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return slug || "server";
+}
+
 export function buildThreadPromptContext(
   input: ThreadPromptContext,
 ): ThreadPromptContext {
   return {
     ...input,
     availableSkills: [...input.availableSkills],
+    enabledMcpServers: [...input.enabledMcpServers].sort((left, right) =>
+      left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
+    ),
     mcpToolNames: uniqueStrings(input.mcpToolNames),
     memoryPromptLines: input.memoryPromptLines
       .map((line) => line.trim())
