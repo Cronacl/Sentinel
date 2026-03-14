@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { PageWrapper } from "@/components/shell";
 import { SentinelLogoBadge } from "@/components/shared/logo";
+import { useOutsideClick } from "@/hooks/use-outside-click";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
@@ -240,37 +241,30 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       });
       if (selectedWorkspace) {
         const now = new Date();
-        utils.threads.get.setData(
-          { threadId: draftThreadId },
-          (current) =>
-            ({
-              messages: current?.messages ?? [],
-              thread: {
-                archivedAt: current?.thread.archivedAt ?? null,
-                chatModelId: modelId,
-                chatReasoningEffort: reasoningEffort ?? null,
-                createdAt: current?.thread.createdAt ?? now,
-                id: draftThreadId,
-                mode: threadMode,
-                pinnedAt: current?.thread.pinnedAt ?? null,
-                summary: current?.thread.summary ?? null,
-                title:
-                  current?.thread.title ||
-                  text.trim().slice(0, 60) ||
-                  "New thread",
-                updatedAt: now,
-              },
-              workspace:
-                current?.workspace ?? {
-                  createdAt: selectedWorkspace.createdAt,
-                  description: selectedWorkspace.description,
-                  id: selectedWorkspace.id,
-                  name: selectedWorkspace.name,
-                  rootPath: selectedWorkspace.rootPath,
-                  updatedAt: selectedWorkspace.updatedAt,
-                },
-            }),
-        );
+        utils.threads.get.setData({ threadId: draftThreadId }, (current) => ({
+          messages: current?.messages ?? [],
+          thread: {
+            archivedAt: current?.thread.archivedAt ?? null,
+            chatModelId: modelId,
+            chatReasoningEffort: reasoningEffort ?? null,
+            createdAt: current?.thread.createdAt ?? now,
+            id: draftThreadId,
+            mode: threadMode,
+            pinnedAt: current?.thread.pinnedAt ?? null,
+            summary: current?.thread.summary ?? null,
+            title:
+              current?.thread.title || text.trim().slice(0, 60) || "New thread",
+            updatedAt: now,
+          },
+          workspace: current?.workspace ?? {
+            createdAt: selectedWorkspace.createdAt,
+            description: selectedWorkspace.description,
+            id: selectedWorkspace.id,
+            name: selectedWorkspace.name,
+            rootPath: selectedWorkspace.rootPath,
+            updatedAt: selectedWorkspace.updatedAt,
+          },
+        }));
       }
       void sendMessage({ files, modelId, reasoningEffort, text, threadMode });
       if (!threadId && !hasHandedOffRef.current) {
@@ -328,7 +322,9 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     }
     startPlanImplementationLockRef.current = true;
 
-    const cachedThread = utils.threads.get.getData({ threadId: draftThreadId })?.thread;
+    const cachedThread = utils.threads.get.getData({
+      threadId: draftThreadId,
+    })?.thread;
     const globalSelection = utils.chatPreferences.get.getData();
     const resolvedSelection = threadDetailsQuery.data
       ? {
@@ -338,12 +334,11 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             globalSelection?.modelId ??
             null,
           reasoningEffort:
-            ((threadDetailsQuery.data.thread.chatReasoningEffort as
-              | ReasoningEffort
-              | null) ??
-              draftThreadSelection?.reasoningEffort) ??
-            ((globalSelection?.reasoningEffort as ReasoningEffort | null) ??
-              null),
+            (threadDetailsQuery.data.thread
+              .chatReasoningEffort as ReasoningEffort | null) ??
+            draftThreadSelection?.reasoningEffort ??
+            (globalSelection?.reasoningEffort as ReasoningEffort | null) ??
+            null,
         }
       : {
           modelId:
@@ -353,10 +348,9 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             null,
           reasoningEffort:
             draftThreadSelection?.reasoningEffort ??
-            ((cachedThread?.chatReasoningEffort as ReasoningEffort | null) ??
-              null) ??
-            ((globalSelection?.reasoningEffort as ReasoningEffort | null) ??
-              null),
+            (cachedThread?.chatReasoningEffort as ReasoningEffort | null) ??
+            (globalSelection?.reasoningEffort as ReasoningEffort | null) ??
+            null,
         };
 
     if (!resolvedSelection.modelId) {
@@ -428,20 +422,12 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       window.removeEventListener("sentinel:new-thread", handleNewThread);
   }, [threadId, utils.chatPreferences.get]);
 
-  useEffect(() => {
-    const handlePointerDown = (event: MouseEvent) => {
-      if (
-        workspaceMenuRef.current &&
-        event.target instanceof Node &&
-        !workspaceMenuRef.current.contains(event.target)
-      ) {
-        setIsWorkspaceMenuOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, []);
+  useOutsideClick([
+    {
+      onOutsideClick: () => setIsWorkspaceMenuOpen(false),
+      ref: workspaceMenuRef,
+    },
+  ]);
 
   if (hasMessages) {
     const resolvedThreadSelection = threadDetailsQuery.data
@@ -451,13 +437,11 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             draftThreadSelection?.modelId ??
             null,
           mode:
-            threadDetailsQuery.data.thread.mode ??
-            draftThreadSelection?.mode,
+            threadDetailsQuery.data.thread.mode ?? draftThreadSelection?.mode,
           reasoningEffort:
-            ((threadDetailsQuery.data.thread.chatReasoningEffort as
-              | ReasoningEffort
-              | null) ??
-              draftThreadSelection?.reasoningEffort) ??
+            (threadDetailsQuery.data.thread
+              .chatReasoningEffort as ReasoningEffort | null) ??
+            draftThreadSelection?.reasoningEffort ??
             null,
         }
       : draftThreadSelection;
@@ -488,11 +472,11 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                     message={message}
                     isStreaming={isBusy && idx === messages.length - 1}
                     onApproveTool={handleApproveTool}
-                  onAnswerPlanQuestions={handleAnswerPlanQuestions}
-                  onDenyTool={handleDenyTool}
-                  onStartPlanImplementation={handleStartPlanImplementation}
-                />
-              ))}
+                    onAnswerPlanQuestions={handleAnswerPlanQuestions}
+                    onDenyTool={handleDenyTool}
+                    onStartPlanImplementation={handleStartPlanImplementation}
+                  />
+                ))}
 
                 {chatError && (
                   <div className="rounded-lg border border-danger-soft-hover bg-danger-soft px-3 py-2.5">

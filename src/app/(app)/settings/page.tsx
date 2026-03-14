@@ -27,6 +27,7 @@ import {
   DEFAULT_WEBFETCH_BATCH_ENABLED,
   DEFAULT_WEBFETCH_BATCH_LIMIT,
 } from "@/lib/webfetch";
+import { useOptimisticMutation } from "@/hooks/use-optimistic-mutation";
 import {
   type GeneralSettingsFormValues,
   generalSettingsFormSchema,
@@ -98,37 +99,39 @@ export default function GeneralSettingsPage() {
     setThemePreference(appearance.themePreference);
   }, [appearance]);
 
-  const updateAppearance = api.appearance.update.useMutation({
-    onMutate: async (nextValues) => {
-      const previousAppearance = utils.appearance.get.getData();
-
-      utils.appearance.get.setData(undefined, {
+  const updateAppearance = api.appearance.update.useMutation(
+    useOptimisticMutation({
+      applyOptimisticUpdate: (
+        _current,
+        nextValues: { themePreference: ThemePreference },
+      ) => ({
         themePreference: nextValues.themePreference,
-      });
-
-      return { previousAppearance };
-    },
-    onSuccess: (data) => {
-      setSubmitError("");
-      setThemePreference(data.themePreference);
-      applyThemePreference(data.themePreference);
-      window.dispatchEvent(new Event("sentinel-theme-change"));
-    },
-    onError: (mutationError, _variables, context) => {
-      setSubmitError(mutationError.message);
-      const previousTheme =
-        context?.previousAppearance?.themePreference ??
-        appearance?.themePreference;
-      if (previousTheme) {
-        utils.appearance.get.setData(undefined, {
-          themePreference: previousTheme,
-        });
-        setThemePreference(previousTheme);
-        applyThemePreference(previousTheme);
+      }),
+      getData: () => utils.appearance.get.getData(),
+      onError: (mutationError, _variables, context) => {
+        setSubmitError(mutationError.message);
+        const previousTheme =
+          context.previousData?.themePreference ?? appearance?.themePreference;
+        if (previousTheme) {
+          utils.appearance.get.setData(undefined, {
+            themePreference: previousTheme,
+          });
+          setThemePreference(previousTheme);
+          applyThemePreference(previousTheme);
+          window.dispatchEvent(new Event("sentinel-theme-change"));
+        }
+      },
+      onSuccess: (data) => {
+        setSubmitError("");
+        setThemePreference(data.themePreference);
+        applyThemePreference(data.themePreference);
         window.dispatchEvent(new Event("sentinel-theme-change"));
-      }
-    },
-  });
+      },
+      setData: (value) => {
+        utils.appearance.get.setData(undefined, value);
+      },
+    }),
+  );
 
   useEffect(() => {
     if (!generalSettings.data) {
@@ -138,29 +141,24 @@ export default function GeneralSettingsPage() {
     generalSettingsForm.reset(generalSettings.data);
   }, [generalSettings.data, generalSettingsForm]);
 
-  const updateGeneralSettings = api.generalSettings.update.useMutation({
-    onMutate: async (values) => {
-      const previousGeneralSettings = utils.generalSettings.get.getData();
-
-      utils.generalSettings.get.setData(undefined, values);
-
-      return { previousGeneralSettings };
-    },
-    onSuccess: (data) => {
-      setGeneralSettingsError("");
-      utils.generalSettings.get.setData(undefined, data);
-      generalSettingsForm.reset(data);
-    },
-    onError: (mutationError, _variables, context) => {
-      setGeneralSettingsError(mutationError.message);
-      if (context?.previousGeneralSettings) {
-        utils.generalSettings.get.setData(
-          undefined,
-          context.previousGeneralSettings,
-        );
-      }
-    },
-  });
+  const updateGeneralSettings = api.generalSettings.update.useMutation(
+    useOptimisticMutation({
+      applyOptimisticUpdate: (_current, values: GeneralSettingsFormValues) =>
+        values,
+      getData: () => utils.generalSettings.get.getData(),
+      onError: (mutationError) => {
+        setGeneralSettingsError(mutationError.message);
+      },
+      onSuccess: (data) => {
+        setGeneralSettingsError("");
+        utils.generalSettings.get.setData(undefined, data);
+        generalSettingsForm.reset(data);
+      },
+      setData: (value) => {
+        utils.generalSettings.get.setData(undefined, value);
+      },
+    }),
+  );
 
   const handleThemeChange = async (nextTheme: ThemePreference) => {
     if (nextTheme === themePreference || updateAppearance.isPending) {

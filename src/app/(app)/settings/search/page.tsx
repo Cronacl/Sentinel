@@ -21,6 +21,7 @@ import {
   MAX_SEARCH_RESULT_COUNT,
   MIN_SEARCH_RESULT_COUNT,
 } from "@/lib/search";
+import { useOptimisticMutation } from "@/hooks/use-optimistic-mutation";
 import {
   type SearchSettingsFormValues,
   searchSettingsFormSchema,
@@ -100,27 +101,24 @@ export default function SearchSettingsPage() {
     form.reset(searchSettings.data);
   }, [form, searchSettings.data]);
 
-  const updateSearchSettings = api.searchSettings.update.useMutation({
-    onMutate: async (values) => {
-      const previousSearchSettings = utils.searchSettings.get.getData();
-      utils.searchSettings.get.setData(undefined, values);
-      return { previousSearchSettings };
-    },
-    onSuccess: (data) => {
-      setSettingsError("");
-      utils.searchSettings.get.setData(undefined, data);
-      form.reset(data);
-    },
-    onError: (error, _input, context) => {
-      setSettingsError(error.message);
-      if (context?.previousSearchSettings) {
-        utils.searchSettings.get.setData(
-          undefined,
-          context.previousSearchSettings,
-        );
-      }
-    },
-  });
+  const updateSearchSettings = api.searchSettings.update.useMutation(
+    useOptimisticMutation({
+      applyOptimisticUpdate: (_current, values: SearchSettingsFormValues) =>
+        values,
+      getData: () => utils.searchSettings.get.getData(),
+      onError: (error) => {
+        setSettingsError(error.message);
+      },
+      onSuccess: (data) => {
+        setSettingsError("");
+        utils.searchSettings.get.setData(undefined, data);
+        form.reset(data);
+      },
+      setData: (value) => {
+        utils.searchSettings.get.setData(undefined, value);
+      },
+    }),
+  );
 
   const toggleProvider = api.searchProviders.toggle.useMutation({
     onMutate: async ({ isEnabled, provider }) => {

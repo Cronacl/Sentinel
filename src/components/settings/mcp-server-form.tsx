@@ -9,15 +9,17 @@ import {
   Tabs,
   TextField,
 } from "@heroui/react";
-import { Delete02Icon, PlusSignIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver, type UseFormReturn } from "react-hook-form";
 import { ZodError } from "zod";
 
+import {
+  McpHttpTransportSection,
+  McpStdioTransportSection,
+} from "@/components/settings/mcp-server-form-sections";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { getMcpCatalogEntry } from "@/lib/mcp/catalog";
 import {
@@ -26,6 +28,8 @@ import {
   mcpServerFormSchema,
   normalizeMcpServerFormValues,
   type McpServerFormValues,
+  type McpServerHttpFormValues,
+  type McpServerStdioFormValues,
 } from "@/schemas/mcp-server.schema";
 import { api } from "@/trpc/react";
 
@@ -33,9 +37,6 @@ type McpServerFormProps = {
   mode: "create" | "edit";
   serverId?: string;
 };
-
-type KeyValueRow = { key: string; value: string };
-type ValueRow = { value: string };
 
 function McpServerFormSkeleton() {
   return (
@@ -51,145 +52,12 @@ function McpServerFormSkeleton() {
   );
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-foreground text-sm font-medium">{children}</h3>;
-}
-
-function KeyValueRows({
-  rows,
-  fieldPrefix,
-  register,
-  onRemove,
-  isBusy,
-}: {
-  fieldPrefix: string;
-  isBusy: boolean;
-  onRemove: (index: number) => void;
-  register: ReturnType<typeof useForm>["register"];
-  rows: KeyValueRow[];
-}) {
-  return (
-    <div className="space-y-2">
-      {rows.map((_, index) => (
-        <div
-          className="grid grid-cols-[1fr_1fr_auto] gap-2"
-          key={`${fieldPrefix}-${index}`}
-        >
-          <Input
-            {...register(`${fieldPrefix}.${index}.key` as never)}
-            placeholder="Key"
-            variant="secondary"
-          />
-          <Input
-            {...register(`${fieldPrefix}.${index}.value` as never)}
-            placeholder="Value"
-            variant="secondary"
-          />
-          <Button
-            isDisabled={isBusy}
-            isIconOnly
-            onPress={() => onRemove(index)}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            <HugeiconsIcon
-              color="currentColor"
-              icon={Delete02Icon}
-              size={15}
-              strokeWidth={1.5}
-            />
-          </Button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ValueRows({
-  rows,
-  fieldPrefix,
-  register,
-  onRemove,
-  isBusy,
-  placeholder = "Value",
-}: {
-  fieldPrefix: string;
-  isBusy: boolean;
-  onRemove: (index: number) => void;
-  placeholder?: string;
-  register: ReturnType<typeof useForm>["register"];
-  rows: ValueRow[];
-}) {
-  return (
-    <div className="space-y-2">
-      {rows.map((_, index) => (
-        <div
-          className="grid grid-cols-[1fr_auto] gap-2"
-          key={`${fieldPrefix}-${index}`}
-        >
-          <Input
-            {...register(`${fieldPrefix}.${index}.value` as never)}
-            placeholder={placeholder}
-            variant="secondary"
-          />
-          <Button
-            isDisabled={isBusy}
-            isIconOnly
-            onPress={() => onRemove(index)}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            <HugeiconsIcon
-              color="currentColor"
-              icon={Delete02Icon}
-              size={15}
-              strokeWidth={1.5}
-            />
-          </Button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function AddButton({ label, onPress }: { label: string; onPress: () => void }) {
-  return (
-    <Button
-      className="w-full"
-      onPress={onPress}
-      size="sm"
-      type="button"
-      variant="tertiary"
-    >
-      <HugeiconsIcon
-        color="currentColor"
-        icon={PlusSignIcon}
-        size={14}
-        strokeWidth={1.5}
-      />
-      {label}
-    </Button>
-  );
-}
-
-function appendKeyValueRow(
-  rows: KeyValueRow[] | undefined,
-  setRows: (rows: KeyValueRow[]) => void,
-) {
-  setRows([...(rows ?? []), { key: "", value: "" }]);
-}
-
-function appendValueRow(
-  rows: ValueRow[] | undefined,
-  setRows: (rows: ValueRow[]) => void,
-) {
-  setRows([...(rows ?? []), { value: "" }]);
-}
-
 function getFirstZodError(error: ZodError) {
   return error.issues[0]?.message ?? "Invalid MCP server configuration.";
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <h3 className="text-foreground text-sm font-medium">{children}</h3>;
 }
 
 export function McpServerForm({ mode, serverId }: McpServerFormProps) {
@@ -197,9 +65,9 @@ export function McpServerForm({ mode, serverId }: McpServerFormProps) {
   const utils = api.useUtils();
   const [submitError, setSubmitError] = useState("");
 
-  const form = useForm<any>({
+  const form = useForm<McpServerFormValues>({
     defaultValues: createDefaultMcpServerFormValues(),
-    resolver: zodResolver(mcpServerFormSchema) as never,
+    resolver: zodResolver(mcpServerFormSchema) as Resolver<McpServerFormValues>,
   });
 
   const query = api.mcpServers.get.useQuery(
@@ -254,13 +122,15 @@ export function McpServerForm({ mode, serverId }: McpServerFormProps) {
   }, [form, query.data]);
 
   const transport = form.watch("transport");
-  const headers = (form.watch("headers") as KeyValueRow[] | undefined) ?? [];
+  const httpForm = form as UseFormReturn<McpServerHttpFormValues>;
+  const stdioForm = form as UseFormReturn<McpServerStdioFormValues>;
+  const headers = transport === "http" ? httpForm.watch("headers") : [];
   const headersFromEnv =
-    (form.watch("headersFromEnv") as KeyValueRow[] | undefined) ?? [];
-  const args = (form.watch("args") as ValueRow[] | undefined) ?? [];
-  const envVars = (form.watch("envVars") as KeyValueRow[] | undefined) ?? [];
+    transport === "http" ? httpForm.watch("headersFromEnv") : [];
+  const args = transport === "stdio" ? stdioForm.watch("args") : [];
+  const envVars = transport === "stdio" ? stdioForm.watch("envVars") : [];
   const envPassthrough =
-    (form.watch("envPassthrough") as ValueRow[] | undefined) ?? [];
+    transport === "stdio" ? stdioForm.watch("envPassthrough") : [];
   const isBusy = save.isPending || remove.isPending;
   const isCatalogServer = Boolean(catalogEntry);
 
@@ -431,182 +301,20 @@ export function McpServerForm({ mode, serverId }: McpServerFormProps) {
           className={`${isCatalogServer ? "" : "mt-4 "}rounded-xl border border-separator p-5`}
         >
           {transport === "http" ? (
-            <div className="space-y-6">
-              <TextField fullWidth name="url" type="url">
-                <SectionLabel>URL</SectionLabel>
-                <Input
-                  {...form.register("url")}
-                  placeholder="https://mcp.example.com/mcp"
-                  variant="secondary"
-                />
-              </TextField>
-
-              <TextField fullWidth name="bearerTokenEnvVar">
-                <SectionLabel>Bearer token env var</SectionLabel>
-                <Input
-                  {...form.register("bearerTokenEnvVar")}
-                  placeholder="MCP_BEARER_TOKEN"
-                  variant="secondary"
-                />
-              </TextField>
-
-              <div className="space-y-3">
-                <SectionLabel>Headers</SectionLabel>
-                <KeyValueRows
-                  fieldPrefix="headers"
-                  isBusy={isBusy}
-                  onRemove={(index) =>
-                    form.setValue(
-                      "headers" as never,
-                      headers.filter((_, i) => i !== index) as never,
-                      { shouldDirty: true },
-                    )
-                  }
-                  register={form.register}
-                  rows={headers}
-                />
-                <AddButton
-                  label="Add header"
-                  onPress={() =>
-                    appendKeyValueRow(headers, (rows) =>
-                      form.setValue("headers" as never, rows as never, {
-                        shouldDirty: true,
-                      }),
-                    )
-                  }
-                />
-              </div>
-
-              <div className="space-y-3">
-                <SectionLabel>Headers from environment variables</SectionLabel>
-                <KeyValueRows
-                  fieldPrefix="headersFromEnv"
-                  isBusy={isBusy}
-                  onRemove={(index) =>
-                    form.setValue(
-                      "headersFromEnv" as never,
-                      headersFromEnv.filter((_, i) => i !== index) as never,
-                      { shouldDirty: true },
-                    )
-                  }
-                  register={form.register}
-                  rows={headersFromEnv}
-                />
-                <AddButton
-                  label="Add variable"
-                  onPress={() =>
-                    appendKeyValueRow(headersFromEnv, (rows) =>
-                      form.setValue("headersFromEnv" as never, rows as never, {
-                        shouldDirty: true,
-                      }),
-                    )
-                  }
-                />
-              </div>
-            </div>
+            <McpHttpTransportSection
+              form={httpForm}
+              headers={headers}
+              headersFromEnv={headersFromEnv}
+              isBusy={isBusy}
+            />
           ) : (
-            <div className="space-y-6">
-              <TextField fullWidth name="command">
-                <SectionLabel>Command to launch</SectionLabel>
-                <Input
-                  {...form.register("command")}
-                  placeholder="openai-dev-mcp serve-sqlite"
-                  variant="secondary"
-                />
-              </TextField>
-
-              <div className="space-y-3">
-                <SectionLabel>Arguments</SectionLabel>
-                <ValueRows
-                  fieldPrefix="args"
-                  isBusy={isBusy}
-                  onRemove={(index) =>
-                    form.setValue(
-                      "args" as never,
-                      args.filter((_, i) => i !== index) as never,
-                      { shouldDirty: true },
-                    )
-                  }
-                  placeholder="Argument"
-                  register={form.register}
-                  rows={args}
-                />
-                <AddButton
-                  label="Add argument"
-                  onPress={() =>
-                    appendValueRow(args, (rows) =>
-                      form.setValue("args" as never, rows as never, {
-                        shouldDirty: true,
-                      }),
-                    )
-                  }
-                />
-              </div>
-
-              <div className="space-y-3">
-                <SectionLabel>Environment variables</SectionLabel>
-                <KeyValueRows
-                  fieldPrefix="envVars"
-                  isBusy={isBusy}
-                  onRemove={(index) =>
-                    form.setValue(
-                      "envVars" as never,
-                      envVars.filter((_, i) => i !== index) as never,
-                      { shouldDirty: true },
-                    )
-                  }
-                  register={form.register}
-                  rows={envVars}
-                />
-                <AddButton
-                  label="Add environment variable"
-                  onPress={() =>
-                    appendKeyValueRow(envVars, (rows) =>
-                      form.setValue("envVars" as never, rows as never, {
-                        shouldDirty: true,
-                      }),
-                    )
-                  }
-                />
-              </div>
-
-              <div className="space-y-3">
-                <SectionLabel>Environment variable passthrough</SectionLabel>
-                <ValueRows
-                  fieldPrefix="envPassthrough"
-                  isBusy={isBusy}
-                  onRemove={(index) =>
-                    form.setValue(
-                      "envPassthrough" as never,
-                      envPassthrough.filter((_, i) => i !== index) as never,
-                      { shouldDirty: true },
-                    )
-                  }
-                  placeholder="ENV_VAR_NAME"
-                  register={form.register}
-                  rows={envPassthrough}
-                />
-                <AddButton
-                  label="Add variable"
-                  onPress={() =>
-                    appendValueRow(envPassthrough, (rows) =>
-                      form.setValue("envPassthrough" as never, rows as never, {
-                        shouldDirty: true,
-                      }),
-                    )
-                  }
-                />
-              </div>
-
-              <TextField fullWidth name="cwd">
-                <SectionLabel>Working directory</SectionLabel>
-                <Input
-                  {...form.register("cwd")}
-                  placeholder="~/code"
-                  variant="secondary"
-                />
-              </TextField>
-            </div>
+            <McpStdioTransportSection
+              args={args}
+              envPassthrough={envPassthrough}
+              envVars={envVars}
+              form={stdioForm}
+              isBusy={isBusy}
+            />
           )}
         </Surface>
 

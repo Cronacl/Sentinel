@@ -15,6 +15,7 @@ import {
   DEFAULT_PERSONALITY_PRESET,
   PERSONALITY_PRESETS,
 } from "@/lib/personalization";
+import { useOptimisticMutation } from "@/hooks/use-optimistic-mutation";
 import {
   type PersonalizationFormValues,
   personalizationFormSchema,
@@ -95,29 +96,24 @@ export default function PersonalizationPage() {
     });
   }, [form, personalization]);
 
-  const savePersonalization = api.personalization.upsert.useMutation({
-    onMutate: async (values) => {
-      const previousPersonalization = utils.personalization.get.getData();
-
-      utils.personalization.get.setData(undefined, values);
-
-      return { previousPersonalization };
-    },
-    onSuccess: (data) => {
-      setSubmitError("");
-      utils.personalization.get.setData(undefined, data);
-      form.reset(data);
-    },
-    onError: (mutationError, _variables, context) => {
-      setSubmitError(mutationError.message);
-      if (context?.previousPersonalization) {
-        utils.personalization.get.setData(
-          undefined,
-          context.previousPersonalization,
-        );
-      }
-    },
-  });
+  const savePersonalization = api.personalization.upsert.useMutation(
+    useOptimisticMutation({
+      applyOptimisticUpdate: (_current, values: PersonalizationFormValues) =>
+        values,
+      getData: () => utils.personalization.get.getData(),
+      onError: (mutationError) => {
+        setSubmitError(mutationError.message);
+      },
+      onSuccess: (data) => {
+        setSubmitError("");
+        utils.personalization.get.setData(undefined, data);
+        form.reset(data);
+      },
+      setData: (value) => {
+        utils.personalization.get.setData(undefined, value);
+      },
+    }),
+  );
 
   const handleSubmit = async (values: PersonalizationFormValues) => {
     setSubmitError("");

@@ -149,6 +149,14 @@ export const mcpServerToggleSchema = z.object({
 
 export type McpServerUpsertInput = z.infer<typeof mcpServerUpsertSchema>;
 export type McpServerFormValues = z.infer<typeof mcpServerFormSchema>;
+export type McpServerHttpFormValues = Extract<
+  McpServerFormValues,
+  { transport: "http" }
+>;
+export type McpServerStdioFormValues = Extract<
+  McpServerFormValues,
+  { transport: "stdio" }
+>;
 
 export function normalizeMcpServerFormValues(
   values: McpServerFormValues,

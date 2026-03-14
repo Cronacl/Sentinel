@@ -15,6 +15,7 @@ import { ControlledSelectField } from "@/components/forms/controlled-fields";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { getDesktopApi } from "@/lib/desktop/client";
 import type { DesktopServicesStatus } from "@/lib/desktop/contracts";
+import { useOptimisticMutation } from "@/hooks/use-optimistic-mutation";
 import { PERMISSION_MODE_OPTIONS } from "@/lib/security";
 import {
   type SecuritySettingsFormValues,
@@ -127,26 +128,24 @@ export default function SecuritySettingsPage() {
     form.reset(securitySettings.data);
   }, [form, securitySettings.data]);
 
-  const updateSecuritySettings = api.security.update.useMutation({
-    onMutate: async (values) => {
-      const previousSecuritySettings = utils.security.get.getData();
-
-      utils.security.get.setData(undefined, values);
-
-      return { previousSecuritySettings };
-    },
-    onSuccess: (data) => {
-      setSettingsError("");
-      utils.security.get.setData(undefined, data);
-      form.reset(data);
-    },
-    onError: (mutationError, _variables, context) => {
-      setSettingsError(mutationError.message);
-      if (context?.previousSecuritySettings) {
-        utils.security.get.setData(undefined, context.previousSecuritySettings);
-      }
-    },
-  });
+  const updateSecuritySettings = api.security.update.useMutation(
+    useOptimisticMutation({
+      applyOptimisticUpdate: (_current, values: SecuritySettingsFormValues) =>
+        values,
+      getData: () => utils.security.get.getData(),
+      onError: (mutationError) => {
+        setSettingsError(mutationError.message);
+      },
+      onSuccess: (data) => {
+        setSettingsError("");
+        utils.security.get.setData(undefined, data);
+        form.reset(data);
+      },
+      setData: (value) => {
+        utils.security.get.setData(undefined, value);
+      },
+    }),
+  );
 
   const handleSecuritySubmit = async (values: SecuritySettingsFormValues) => {
     setSettingsError("");

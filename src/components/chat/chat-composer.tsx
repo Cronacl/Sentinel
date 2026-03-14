@@ -1,52 +1,40 @@
 "use client";
 
-import { Label, Spinner, Switch } from "@heroui/react";
 import Placeholder from "@tiptap/extension-placeholder";
 import StarterKit from "@tiptap/starter-kit";
 import { EditorContent, useEditor } from "@tiptap/react";
-import {
-  Add01Icon,
-  AiIdeaIcon,
-  ArrowDown01Icon,
-  ArrowUp02Icon,
-  Attachment01Icon,
-  Cancel01Icon,
-} from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FileUIPart } from "ai";
 
-import { ProviderIcon } from "@/components/icons/provider-icon";
-import type { AIProvider } from "@/server/db/enums";
 import {
   getModelAttachmentCapabilities,
   type ReasoningEffort,
-  getDefaultReasoningEffort,
   getSupportedReasoningEfforts,
 } from "@/lib/ai/providers/models";
-import {
-  CHAT_ATTACHMENT_ACCEPT,
-  getAttachmentIcon,
-  getAttachmentTone,
-  type AttachmentKind,
-} from "@/lib/files/chat-attachment-types";
 import {
   getCompositeModelId,
   normalizeSelectedModelId,
 } from "@/lib/ai/providers/model-selection";
 import { applyThreadSettingsCacheUpdate } from "@/lib/threads/cache";
 import { api } from "@/trpc/react";
+import { useOutsideClick } from "@/hooks/use-outside-click";
 
+import { AttachmentManager } from "./attachment-manager";
 import {
   convertComposerAttachmentsToFileParts,
   createComposerAttachmentFromFilePart,
   createBrowserAttachments,
-  isImageAttachment,
   type ComposerAttachment,
 } from "./chat-attachments";
-import { AttachmentIcon } from "./attachment-icon";
+import { ComposerToolbar } from "./composer-toolbar";
+import {
+  getAttachmentKindLabel,
+  getReasoningEffortLabel,
+  resolveReasoningEffort,
+  supportsAttachmentKind,
+} from "./chat-composer-helpers";
+import { ModelSelector } from "./model-selector";
 
 type ChatComposerProps = {
   activeWorkspace?: {
@@ -77,189 +65,6 @@ type ChatComposerProps = {
     reasoningEffort?: ReasoningEffort | null;
   } | null;
 };
-
-function getReasoningEffortLabel(effort: ReasoningEffort) {
-  return effort.charAt(0).toUpperCase() + effort.slice(1);
-}
-
-function resolveReasoningEffort(
-  provider: AIProvider,
-  modelId: string,
-  preferredEffort?: ReasoningEffort | null,
-) {
-  const supportedEfforts = getSupportedReasoningEfforts(provider, modelId);
-  if (supportedEfforts.length === 0) {
-    return null;
-  }
-
-  if (preferredEffort && supportedEfforts.includes(preferredEffort)) {
-    return preferredEffort;
-  }
-
-  return getDefaultReasoningEffort(provider, modelId);
-}
-
-function getAttachmentKindLabel(kind: AttachmentKind) {
-  switch (kind) {
-    case "image":
-      return "images";
-    case "document":
-      return "documents";
-    case "code-text":
-      return "text/code files";
-    case "archive":
-      return "archives";
-    case "audio":
-      return "audio files";
-    case "video":
-      return "video files";
-    default:
-      return "files";
-  }
-}
-
-function supportsAttachmentKind(
-  kind: AttachmentKind,
-  capabilities: ReturnType<typeof getModelAttachmentCapabilities>,
-) {
-  switch (kind) {
-    case "image":
-      return capabilities.supportsImages;
-    case "document":
-      return capabilities.supportsDocuments;
-    case "code-text":
-      return capabilities.supportsCodeTextFiles;
-    default:
-      return false;
-  }
-}
-
-function AttachmentChip({
-  attachment,
-  onRemove,
-  onPreview,
-}: {
-  attachment: ComposerAttachment;
-  onRemove: () => void;
-  onPreview: () => void;
-}) {
-  const isImage = isImageAttachment(attachment);
-  const attachmentIcon = getAttachmentIcon(attachment.fileType);
-  const attachmentTone = getAttachmentTone(attachment.fileType.displayType);
-
-  return (
-    <div
-      role="button"
-      onClick={isImage && attachment.previewUrl ? onPreview : undefined}
-      className="group relative flex max-w-[200px] cursor-pointer items-center gap-2 rounded-full border border-border bg-background py-1 pl-1 pr-3 text-xs transition-colors hover:bg-surface"
-    >
-      <div className="flex shrink-0 items-center justify-center">
-        {isImage && attachment.previewUrl ? (
-          <div className="h-6 w-6 overflow-hidden rounded-full">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              alt=""
-              className="h-full w-full object-cover"
-              src={attachment.previewUrl}
-            />
-          </div>
-        ) : (
-          <div
-            className={`flex h-6 w-6 items-center justify-center rounded-full ${attachmentTone.backgroundClassName} ${attachmentTone.textClassName}`}
-          >
-            <AttachmentIcon icon={attachmentIcon} size={12} strokeWidth={1.9} />
-          </div>
-        )}
-      </div>
-      {!isImage ? (
-        <span className="rounded-full bg-default px-1.5 py-0.5 text-[10px] text-muted">
-          {attachment.fileType.label}
-        </span>
-      ) : null}
-      <span className="min-w-0 truncate text-muted">{attachment.name}</span>
-      <button
-        className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full bg-surface text-foreground group-hover:flex"
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove();
-        }}
-        type="button"
-      >
-        <HugeiconsIcon
-          color="currentColor"
-          icon={Cancel01Icon}
-          size={10}
-          strokeWidth={2}
-        />
-      </button>
-    </div>
-  );
-}
-
-function ImagePreviewModal({
-  attachment,
-  onClose,
-}: {
-  attachment: ComposerAttachment;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        animate={{ opacity: 1 }}
-        className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center"
-        exit={{ opacity: 0 }}
-        initial={{ opacity: 0 }}
-        onClick={onClose}
-        transition={{ duration: 0.2 }}
-      >
-        <div className="absolute inset-0 bg-overlay/90" />
-        <motion.div
-          animate={{ opacity: 1, scale: 1 }}
-          className="relative z-10 flex max-h-[85vh] max-w-[85vw] flex-col items-center gap-3"
-          exit={{ opacity: 0, scale: 0.95 }}
-          initial={{ opacity: 0, scale: 0.95 }}
-          onClick={(e) => e.stopPropagation()}
-          transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <div className="relative overflow-hidden rounded-xl">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              alt={attachment.name}
-              className="max-h-[80vh] max-w-[80vw] object-contain"
-              src={attachment.previewUrl}
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-overlay-foreground/70">
-              {attachment.name}
-            </span>
-            <button
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-default text-foreground transition-colors hover:bg-default-hover"
-              onClick={onClose}
-              type="button"
-            >
-              <HugeiconsIcon
-                color="currentColor"
-                icon={Cancel01Icon}
-                size={16}
-                strokeWidth={2}
-              />
-            </button>
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  );
-}
 
 export function ChatComposer({
   activeWorkspace,
@@ -372,8 +177,8 @@ export function ChatComposer({
 
   const selectedModel =
     availableModels.find(
-        (model) =>
-          getCompositeModelId(model.provider, model.modelId) === selectedModelKey,
+      (model) =>
+        getCompositeModelId(model.provider, model.modelId) === selectedModelKey,
     ) ?? null;
   const canPersistThreadSelection = Boolean(
     threadId && threadSelection && (persistThreadSelection ?? true),
@@ -400,7 +205,6 @@ export function ChatComposer({
         selectedModel.modelId,
       )
     : [];
-  const supportsReasoning = supportedReasoningEfforts.length > 0;
   const reasoningLabel = selectedReasoningEffort
     ? getReasoningEffortLabel(selectedReasoningEffort)
     : null;
@@ -694,30 +498,20 @@ export function ChatComposer({
     setAttachments(attachmentSeed.map(createComposerAttachmentFromFilePart));
   }, [attachmentSeed, promptSeedKey]);
 
-  useEffect(() => {
-    const handlePointerDown = (event: MouseEvent) => {
-      if (
-        modelMenuRef.current &&
-        event.target instanceof Node &&
-        !modelMenuRef.current.contains(event.target)
-      )
-        setModelMenuOpen(false);
-      if (
-        reasoningMenuRef.current &&
-        event.target instanceof Node &&
-        !reasoningMenuRef.current.contains(event.target)
-      )
-        setReasoningMenuOpen(false);
-      if (
-        composerMenuRef.current &&
-        event.target instanceof Node &&
-        !composerMenuRef.current.contains(event.target)
-      )
-        setComposerMenuOpen(false);
-    };
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, []);
+  useOutsideClick([
+    {
+      onOutsideClick: () => setModelMenuOpen(false),
+      ref: modelMenuRef,
+    },
+    {
+      onOutsideClick: () => setReasoningMenuOpen(false),
+      ref: reasoningMenuRef,
+    },
+    {
+      onOutsideClick: () => setComposerMenuOpen(false),
+      ref: composerMenuRef,
+    },
+  ]);
 
   useEffect(() => {
     if (!selectedModel) {
@@ -841,7 +635,7 @@ export function ChatComposer({
 
   const handleSelectModel = useCallback(
     (modelKey: string) => {
-    const nextModel = availableModels.find(
+      const nextModel = availableModels.find(
         (model) =>
           getCompositeModelId(model.provider, model.modelId) === modelKey,
       );
@@ -961,28 +755,18 @@ export function ChatComposer({
 
   return (
     <>
-      <input
-        accept={CHAT_ATTACHMENT_ACCEPT}
-        ref={fileInputRef}
-        className="hidden"
-        multiple
-        onChange={handleFileInputChange}
-        type="file"
-      />
-
       <div className="pointer-events-auto w-full rounded-[20px] border border-border/50 dark:border-border/80 bg-background  dark:bg-surface p-2.5 shadow-[0_0_10px_rgba(0,0,0,0.05)]">
-        {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 px-2 pb-1.5">
-            {attachments.map((attachment) => (
-              <AttachmentChip
-                attachment={attachment}
-                key={attachment.id}
-                onPreview={() => setPreviewAttachment(attachment)}
-                onRemove={() => removeAttachment(attachment.id)}
-              />
-            ))}
-          </div>
-        )}
+        <AttachmentManager
+          attachmentError={attachmentError}
+          attachmentWarning={attachmentWarning}
+          attachments={attachments}
+          fileInputRef={fileInputRef}
+          onFileInputChange={handleFileInputChange}
+          onPreviewClose={() => setPreviewAttachment(null)}
+          onPreviewOpen={setPreviewAttachment}
+          onRemoveAttachment={removeAttachment}
+          previewAttachment={previewAttachment}
+        />
 
         {isEditing ? (
           <button
@@ -1011,283 +795,44 @@ export function ChatComposer({
           </div>
         )}
 
-        {attachmentError && (
-          <div className="px-3 pb-1">
-            <p className="text-danger-soft-foreground text-xs">
-              {attachmentError}
-            </p>
-          </div>
-        )}
-
-        {attachmentWarning && !attachmentError && (
-          <div className="px-3 pb-1">
-            <p className="text-[11px] text-amber-200/75">{attachmentWarning}</p>
-          </div>
-        )}
-
-        <div className="flex h-10 items-center justify-between px-1.5">
-          <div className="flex items-center gap-2">
-            <div className="relative" ref={composerMenuRef}>
-              <button
-                className="flex border cursor-pointer border-border/50 dark:bg-background/50 bg-surface h-8 w-8 items-center justify-center rounded-xl text-muted transition-colors hover:text-foreground disabled:opacity-30"
-                disabled={!hasWorkspace}
-                onClick={() => setComposerMenuOpen((o) => !o)}
-                type="button"
-              >
-                <HugeiconsIcon
-                  color="currentColor"
-                  icon={Add01Icon}
-                  size={18}
-                  strokeWidth={1.5}
-                />
-              </button>
-
-              <AnimatePresence>
-                {composerMenuOpen && (
-                  <motion.div
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    className="absolute bottom-10 left-0 z-30 w-48 rounded-xl border border-border bg-overlay p-1 shadow-overlay"
-                    exit={{ opacity: 0, scale: 0.97, y: 6 }}
-                    initial={{ opacity: 0, scale: 0.97, y: 6 }}
-                    transition={{
-                      duration: 0.15,
-                      ease: [0.22, 1, 0.36, 1],
-                    }}
-                  >
-                    <button
-                      className="flex w-full items-center gap-2.5 rounded-xl px-2 py-1 text-left text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground"
-                      onClick={() => {
-                        setComposerMenuOpen(false);
-                        void handlePickFiles();
-                      }}
-                      type="button"
-                    >
-                      <HugeiconsIcon
-                        color="currentColor"
-                        icon={Attachment01Icon}
-                        size={15}
-                        strokeWidth={1.5}
-                      />
-                      <span>Add photos & files</span>
-                    </button>
-
-                    <div className="mx-2 my-0.5 h-px bg-separator" />
-
-                    <button
-                      className="flex w-full items-center justify-between gap-2 rounded-xl px-2 py-1 text-left text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground"
-                      onClick={handleTogglePlanMode}
-                      type="button"
-                    >
-                      <span className="flex items-center gap-2.5">
-                        <HugeiconsIcon
-                          color="currentColor"
-                          icon={AiIdeaIcon}
-                          size={15}
-                          strokeWidth={1.5}
-                        />
-                        <span>Plan mode</span>
-                      </span>
-
-                      <Switch
-                        size="sm"
-                        isSelected={planMode}
-                        // @ts-expect-error - onValueChange is not a valid prop for SwitchRootProps
-                        onValueChange={handleTogglePlanMode as any}
-                      >
-                        <Switch.Control>
-                          <Switch.Thumb>
-                            <Switch.Icon />
-                          </Switch.Thumb>
-                        </Switch.Control>
-                      </Switch>
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            <div className="relative ml-1" ref={modelMenuRef}>
-              <button
-                className="flex h-8 cursor-pointer border border-border/50 dark:border-border/80 items-center gap-1 rounded-xl px-2 text-[13px] text-muted transition-colors bg-background hover:bg-default hover:text-foreground disabled:opacity-30"
-                disabled={!hasModels || modelsQuery.isLoading}
-                onClick={() => setModelMenuOpen((o) => !o)}
-                type="button"
-              >
-                {modelsQuery.isLoading ? (
-                  <Spinner color="current" size="sm" />
-                ) : (
-                  <span className="flex min-w-0 items-center gap-2">
-                    {selectedModel ? (
-                      <ProviderIcon
-                        className="h-3 w-3"
-                        provider={selectedModel.provider}
-                      />
-                    ) : null}
-                    <span className="max-w-[160px] truncate">
-                      {selectedModel?.displayName ?? "No model"}
-                    </span>
-                  </span>
-                )}
-                <HugeiconsIcon
-                  className={`transition-transform ${modelMenuOpen ? "rotate-180" : ""}`}
-                  color="currentColor"
-                  icon={ArrowDown01Icon}
-                  size={11}
-                  strokeWidth={1.5}
-                />
-              </button>
-
-              <AnimatePresence>
-                {modelMenuOpen && (
-                  <motion.div
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    className="absolute bottom-10 left-0 z-30 max-h-[280px] w-48 overflow-y-auto rounded-2xl border border-border bg-overlay p-1 shadow-overlay"
-                    exit={{ opacity: 0, scale: 0.97, y: 6 }}
-                    initial={{ opacity: 0, scale: 0.97, y: 6 }}
-                    transition={{
-                      duration: 0.15,
-                      ease: [0.22, 1, 0.36, 1],
-                    }}
-                  >
-                    {availableModels.map((model) => {
-        const modelKey = getCompositeModelId(
-          model.provider,
-          model.modelId,
-                      );
-                      const isSelected = selectedModelKey === modelKey;
-                      return (
-                        <button
-                          className={`flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm transition-colors ${
-                            isSelected
-                              ? "bg-default text-foreground"
-                              : "text-muted hover:bg-default hover:text-foreground"
-                          }`}
-                          key={modelKey}
-                          onClick={() => handleSelectModel(modelKey)}
-                          type="button"
-                        >
-                          <ProviderIcon
-                            className="h-4 w-4"
-                            provider={model.provider}
-                          />
-                          <span className="truncate text-[13px]">
-                            {model.displayName}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {supportsReasoning && (
-              <div className="relative" ref={reasoningMenuRef}>
-                <button
-                  className="flex h-8 cursor-pointer border border-border/50 dark:border-border/80 items-center gap-1 rounded-xl px-2 text-[13px] text-muted transition-colors bg-background hover:bg-default hover:text-foreground"
-                  onClick={() => setReasoningMenuOpen((open) => !open)}
-                  type="button"
-                >
-                  <span>{reasoningLabel ?? "Medium"}</span>
-                  <HugeiconsIcon
-                    className={`transition-transform ${reasoningMenuOpen ? "rotate-180" : ""}`}
-                    color="currentColor"
-                    icon={ArrowDown01Icon}
-                    size={11}
-                    strokeWidth={1.5}
-                  />
-                </button>
-
-                <AnimatePresence>
-                  {reasoningMenuOpen && (
-                    <motion.div
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      className="absolute bottom-10 -left-5 z-30 w-24 overflow-hidden rounded-2xl border border-border bg-overlay p-1 shadow-overlay"
-                      exit={{ opacity: 0, scale: 0.97, y: 6 }}
-                      initial={{ opacity: 0, scale: 0.97, y: 6 }}
-                      transition={{
-                        duration: 0.15,
-                        ease: [0.22, 1, 0.36, 1],
-                      }}
-                    >
-                      {supportedReasoningEfforts.map((effort) => {
-                        const isSelected = selectedReasoningEffort === effort;
-                        return (
-                          <button
-                            className={`flex w-full items-center rounded-lg px-3 py-1.5 text-left text-sm transition-colors ${
-                              isSelected
-                                ? "bg-default text-foreground"
-                                : "text-muted hover:bg-default hover:text-foreground"
-                            }`}
-                            key={effort}
-                            onClick={() => handleSelectReasoningEffort(effort)}
-                            type="button"
-                          >
-                            {getReasoningEffortLabel(effort)}
-                          </button>
-                        );
-                      })}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            )}
-
-            {planMode && (
-              <div className="ml-1 flex items-center gap-1 border-l border-border/50 pl-2">
-                <HugeiconsIcon
-                  className="text-foreground"
-                  color="currentColor"
-                  icon={AiIdeaIcon}
-                  size={13}
-                  strokeWidth={1.5}
-                />
-                <span className="text-[13px] text-foreground">Plan</span>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1">
-            {isBusy ? (
-              <button
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-default text-muted transition-colors hover:text-foreground"
-                onClick={onStop}
-                type="button"
-              >
-                <svg
-                  fill="currentColor"
-                  height={12}
-                  viewBox="0 0 16 16"
-                  width={12}
-                >
-                  <rect height={10} rx={2} width={10} x={3} y={3} />
-                </svg>
-              </button>
-            ) : (
-              <button
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-accent-foreground transition-opacity hover:opacity-80 disabled:opacity-25 disabled:cursor-not-allowed"
-                disabled={isLocked || !selectedModelKey}
-                onClick={handleSend}
-                type="button"
-              >
-                <HugeiconsIcon
-                  color="currentColor"
-                  icon={ArrowUp02Icon}
-                  size={16}
-                  strokeWidth={1.5}
-                />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {previewAttachment?.previewUrl && (
-        <ImagePreviewModal
-          attachment={previewAttachment}
-          onClose={() => setPreviewAttachment(null)}
+        <ComposerToolbar
+          composerMenuOpen={composerMenuOpen}
+          composerMenuRef={composerMenuRef}
+          hasWorkspace={hasWorkspace}
+          isBusy={isBusy}
+          isLocked={isLocked}
+          modelSelector={
+            <ModelSelector
+              availableModels={availableModels}
+              isLoading={modelsQuery.isLoading}
+              modelMenuOpen={modelMenuOpen}
+              modelMenuRef={modelMenuRef}
+              onModelMenuOpenChange={setModelMenuOpen}
+              onReasoningMenuOpenChange={setReasoningMenuOpen}
+              onSelectModel={handleSelectModel}
+              onSelectReasoningEffort={handleSelectReasoningEffort}
+              reasoningLabel={reasoningLabel}
+              reasoningMenuOpen={reasoningMenuOpen}
+              reasoningMenuRef={reasoningMenuRef}
+              selectedModel={selectedModel}
+              selectedModelKey={selectedModelKey}
+              selectedReasoningEffort={selectedReasoningEffort}
+              supportedReasoningEfforts={supportedReasoningEfforts}
+            />
+          }
+          onComposerMenuOpenChange={setComposerMenuOpen}
+          onPickFiles={() => {
+            void handlePickFiles();
+          }}
+          onSend={() => {
+            void handleSend();
+          }}
+          onStop={onStop}
+          onTogglePlanMode={handleTogglePlanMode}
+          planMode={planMode}
+          selectedModelKey={selectedModelKey}
         />
-      )}
+      </div>
     </>
   );
 }
