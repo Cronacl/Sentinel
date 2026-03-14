@@ -238,9 +238,18 @@ function buildDecisionHeuristics(
     );
   }
 
-  if (categories.has("plan") && promptContext.threadMode === "chat") {
+  if (promptContext.threadMode === "chat") {
     heuristics.push(
-      `${step++}. When manage_task is available in chat mode, use it to steer or reflect progress on the existing thread plan without switching modes.`,
+      `${step++}. Always decompose multi-step work into tasks using manage_task before starting execution. Create tasks even when no formal plan exists — the system auto-creates a task tracker on the first manage_task call.`,
+    );
+    heuristics.push(
+      `${step++}. Mark tasks in_progress when you begin working on them, completed after validation, and blocked when stuck. Do not mark a task completed until the result is verified.`,
+    );
+    heuristics.push(
+      `${step++}. After every mutation (edit, create_file, delete_file, shell_command), validate the result before moving to the next task. Use read to verify file changes, run_task (lint, typecheck, test) when available, and grep to confirm patterns.`,
+    );
+    heuristics.push(
+      `${step++}. Do not generate a final response until all tasks are completed and validated. If you cannot finish a task, mark it blocked and explain what is unresolved.`,
     );
   }
 
@@ -298,9 +307,12 @@ function buildChatModeOverlay(
 
   return section("Mode Overlay", [
     "Chat mode is active. You may inspect, execute, and mutate only through capabilities that are available in this call.",
-    "Sequence stateful work as inspect -> decide -> mutate -> validate whenever the task changes workspace state.",
+    "Follow the task-driven cycle: create tasks -> inspect -> execute -> validate -> update task status -> repeat until all tasks are done.",
     "Do not ask the user to confirm every obvious intermediate step. Make progress until a real decision, approval boundary, or material ambiguity blocks you.",
     "Do not mention Sentinel's internal implementation details unless they are directly relevant to the task.",
+    "For any non-trivial request, always create tasks with manage_task first, then work through them systematically. The system auto-creates a task tracker if no plan exists.",
+    "After mutations, always validate: read files to verify, run checks if available, then update task status. Do not skip validation.",
+    "Do not generate a final response until all tasks are completed and validated, or explicitly marked blocked with an explanation.",
     permissionOverlay(promptContext),
     !promptContext.workspaceRoot && promptContext.skillRoots.length > 0
       ? "No workspace root is selected. Keep file and shell work inside discovered skill directories, and do not imply that workspace-only mutation tools or run_task are available."

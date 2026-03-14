@@ -232,12 +232,15 @@ export const updatePlanDescription = lines(
 );
 
 export const manageTaskDescription = lines(
-  "Create, update, or delete a task that belongs to the current thread plan.",
+  "Create, update, or delete a task to track progress on the current request.",
   [
     "- Supports three actions: create, update, and delete.",
     "- Tasks have a title, optional description, and status (pending, in_progress, completed, blocked).",
-    "- Use this tool for all task lifecycle changes after the plan exists.",
-    "- Prefer create_plan to set up the initial task list along with the plan document.",
+    "- Always create tasks to track your progress on multi-step work, even when no formal plan exists.",
+    "- The system auto-creates a task tracker when you create your first task in a thread.",
+    "- Update task status as you work: pending -> in_progress -> completed (or blocked if stuck).",
+    "- Do not mark a task completed until its result is validated.",
+    "- Use this tool for all task lifecycle changes; it is always available in chat mode.",
   ].join("\n"),
 );
 

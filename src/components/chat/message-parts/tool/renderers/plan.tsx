@@ -17,7 +17,6 @@ import {
   Cancel01Icon,
   Loading02Icon,
   TimeQuarterPassIcon,
-  Tick01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
@@ -131,15 +130,6 @@ function getPlanStatus(
     return { label: "Drafting", tone: "muted" as const };
   }
   return { label: "Running", tone: "muted" as const };
-}
-
-function buildManageTaskSummary(output?: unknown): string {
-  if (!output) return "Processing task…";
-  const value = output as ManageTaskOutput;
-  if (!value.task) {
-    return value.action === "delete" ? "Removed task" : "Updated task";
-  }
-  return `${value.task.title} · ${getTaskStatusLabel(value.task.status)}`;
 }
 
 function buildAskQuestionSummary(output?: unknown): string {
@@ -522,7 +512,32 @@ function QuestionBody({
   );
 }
 
-function ManageTaskBody({ output }: { output: ManageTaskOutput }) {
+function ManageTaskInline({
+  isRunning,
+  output,
+}: {
+  isRunning: boolean;
+  output?: ManageTaskOutput;
+}) {
+  if (!output) {
+    return (
+      <div className="flex items-center gap-2 py-0.5">
+        <HugeiconsIcon
+          className="shrink-0 text-foreground/30"
+          color="currentColor"
+          icon={Loading02Icon}
+          size={14}
+          strokeWidth={1.5}
+        />
+        <span
+          className={`text-[13px] ${isRunning ? "sentinel-thinking-shimmer" : "text-foreground/50"}`}
+        >
+          Updating task…
+        </span>
+      </div>
+    );
+  }
+
   const actionLabel =
     output.action === "create"
       ? "Created"
@@ -532,38 +547,40 @@ function ManageTaskBody({ output }: { output: ManageTaskOutput }) {
 
   if (!output.task) {
     return (
-      <p className="text-[11px] text-foreground/50">
-        {actionLabel} task successfully.
-      </p>
+      <div className="flex items-center gap-2 py-0.5">
+        <HugeiconsIcon
+          className="shrink-0 text-foreground/30"
+          color="currentColor"
+          icon={CheckmarkCircle02Icon}
+          size={14}
+          strokeWidth={1.5}
+        />
+        <span className="text-[13px] text-foreground/50">
+          {actionLabel} task
+        </span>
+      </div>
     );
   }
 
   const StatusIcon = getTaskStatusIcon(output.task.status);
 
   return (
-    <div className="flex items-start gap-2">
+    <div className="flex items-center gap-2 py-0.5">
       <HugeiconsIcon
-        className={`mt-px shrink-0 ${getTaskStatusTextClass(output.task.status)}`}
+        className={`shrink-0 ${getTaskStatusTextClass(output.task.status)}`}
         color="currentColor"
         icon={StatusIcon}
-        size={12}
+        size={14}
         strokeWidth={1.5}
       />
-      <div className="min-w-0 flex-1">
-        <span className="text-[11px] font-medium text-foreground/80">
-          {output.task.title}
-        </span>
-        <span
-          className={`ml-1.5 text-[10px] ${getTaskStatusTextClass(output.task.status)}`}
-        >
-          {actionLabel} · {getTaskStatusLabel(output.task.status)}
-        </span>
-        {output.task.description ? (
-          <p className="mt-0.5 text-[10px] text-foreground/40">
-            {output.task.description}
-          </p>
-        ) : null}
-      </div>
+      <span className="min-w-0 truncate text-[13px] text-foreground/70">
+        {output.task.title}
+      </span>
+      <span
+        className={`shrink-0 text-[11px] ${getTaskStatusTextClass(output.task.status)}`}
+      >
+        {getTaskStatusLabel(output.task.status)}
+      </span>
     </div>
   );
 }
@@ -820,34 +837,27 @@ export const PlanTool = memo(function PlanTool({
   }
 
   if (toolName === "manage_task") {
-    const taskSummary = buildManageTaskSummary(output);
+    if (part.state === "output-error" || part.state === "output-denied") {
+      return (
+        <div className="flex items-center gap-2 py-0.5">
+          <HugeiconsIcon
+            className="shrink-0 text-danger"
+            color="currentColor"
+            icon={Cancel01Icon}
+            size={14}
+            strokeWidth={1.5}
+          />
+          <span className="text-[13px] text-danger">
+            {errorText ?? "Task operation failed"}
+          </span>
+        </div>
+      );
+    }
     return (
-      <ToolLayout
-        summary={
-          <>
-            Task updated
-            <span className="ml-1.5 text-[11px] text-foreground/40">
-              {taskSummary}
-            </span>
-          </>
-        }
+      <ManageTaskInline
         isRunning={isRunning}
-        isError={status.tone === "danger"}
-        isExpandable={isFinishedState}
-        isExpanded={isExpanded}
-        onExpandedChange={setIsExpanded}
-        errorText={
-          errorText && part.state !== "output-error" ? errorText : undefined
-        }
-      >
-        {part.state === "output-error" ? (
-          <p className="text-[11px] text-danger">
-            {errorText ?? "Task operation failed."}
-          </p>
-        ) : output ? (
-          <ManageTaskBody output={output as ManageTaskOutput} />
-        ) : null}
-      </ToolLayout>
+        output={output as ManageTaskOutput | undefined}
+      />
     );
   }
 

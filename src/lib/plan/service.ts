@@ -379,7 +379,7 @@ export async function manageThreadPlanTask({
   let resolvedTask: ThreadPlanTask | null = null;
 
   database.transaction((tx) => {
-    const resolvedPlan = planId
+    let resolvedPlan = planId
       ? tx
           .select()
           .from(threadPlans)
@@ -392,6 +392,26 @@ export async function manageThreadPlanTask({
           .from(threadPlans)
           .where(eq(threadPlans.threadId, threadId))
           .get();
+
+    if (!resolvedPlan && action === "create") {
+      const autoPlanId = createId();
+      tx.insert(threadPlans)
+        .values({
+          audience: "technical",
+          document: "",
+          goal: trimToString(title) || "Complete the user's request",
+          id: autoPlanId,
+          summary: "Auto-created task tracker for chat mode.",
+          threadId,
+          title: "Task Tracker",
+        })
+        .run();
+      resolvedPlan = tx
+        .select()
+        .from(threadPlans)
+        .where(eq(threadPlans.id, autoPlanId))
+        .get();
+    }
 
     if (!resolvedPlan) {
       throw new Error("No plan exists for this thread.");

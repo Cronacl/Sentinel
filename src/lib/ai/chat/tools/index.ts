@@ -571,7 +571,7 @@ export function buildTools(options: ThreadAgentCallOptions) {
     ...buildMemoryTools(options),
     ...(options.mcpTools ?? {}),
     ...buildSkillTools(options),
-    ...(options.promptContext.planSummary ? buildTaskTools(options) : {}),
+    ...buildTaskTools(options),
     ...buildWebTools(options),
     ...(hasFilesystemTools
       ? {

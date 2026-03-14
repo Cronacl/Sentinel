@@ -4,12 +4,40 @@ import { manageThreadPlanTask } from "@/lib/plan/service";
 import { threadPlanTaskStatusSchema } from "@/schemas/plan.schema";
 
 export const manageTaskInputSchema = z.object({
-  action: z.enum(["create", "update", "delete"]),
-  description: z.string().trim().max(600).optional().nullable(),
-  planId: z.string().min(1).optional(),
-  status: threadPlanTaskStatusSchema.optional(),
-  taskId: z.string().min(1).optional(),
-  title: z.string().trim().min(1).max(200).optional(),
+  action: z
+    .enum(["create", "update", "delete"])
+    .describe(
+      "Required. The action to perform: 'create' a new task, 'update' an existing task's status/title/description, or 'delete' a task.",
+    ),
+  description: z
+    .string()
+    .trim()
+    .max(600)
+    .optional()
+    .nullable()
+    .describe("Optional task description."),
+  planId: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("Optional plan ID. Omit to use the current thread plan."),
+  status: threadPlanTaskStatusSchema
+    .optional()
+    .describe(
+      "Task status: 'pending', 'in_progress', 'completed', or 'blocked'. Required for update actions.",
+    ),
+  taskId: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("Required for update and delete actions. The ID of the task to modify."),
+  title: z
+    .string()
+    .trim()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe("Task title. Required for create actions."),
 });
 
 export const manageTaskOutputSchema = z.object({
