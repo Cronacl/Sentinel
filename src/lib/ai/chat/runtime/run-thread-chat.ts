@@ -22,6 +22,7 @@ import { createReasoningMetadataTracker } from "./reasoning";
 import { disposeShellSession } from "../tools/shell";
 import { getSystemPrompt } from "./system-prompt";
 import { createThreadAgent } from "../agent";
+import { buildThreadPromptContext } from "../prompt-context";
 import { loadMcpTools } from "@/lib/mcp/tools";
 import {
   autosaveConversationMemories,
@@ -265,14 +266,6 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
     userId: request.userId,
     workspaceId: request.workspaceId,
   }).catch(() => []);
-  const baseSystemPrompt = await getSystemPrompt(request.userId, {
-    memory: buildMemoryPromptLines(retrievedMemories),
-  });
-  const planPromptLines = buildPlanPromptLines(planState.plan);
-  const systemPrompt =
-    planPromptLines.length > 0
-      ? [baseSystemPrompt, ...planPromptLines].filter(Boolean).join("\n\n")
-      : baseSystemPrompt;
   const agent = createThreadAgent({
     attachmentDownload: createAttachmentDownloadHandler(),
     languageModel: resolvedModel.languageModel,
@@ -298,6 +291,42 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
             ? await mcpRuntimePromise
             : { closeAll: async () => {}, tools: {} };
         closeMcpTools = mcpRuntime.closeAll;
+        const promptContext = buildThreadPromptContext({
+          availableSkills: skillSnapshot.skills,
+          mcpToolNames: Object.keys(mcpRuntime.tools),
+          memoryPromptLines: buildMemoryPromptLines(retrievedMemories),
+          memorySettings,
+          permissionMode,
+          planSummary: planState.plan
+            ? {
+                audience: planState.plan.audience,
+                goal: planState.plan.goal,
+                hasPendingQuestions: Boolean(planState.pendingQuestionSet),
+                summary: planState.plan.summary,
+                taskCount: planState.plan.tasks.length,
+                title: planState.plan.title,
+              }
+            : null,
+          searchProviders,
+          searchSettings,
+          skillRoots: skillSnapshot.skillRoots,
+          sourceMessageId: parentId,
+          threadMode,
+          toolApprovalPolicies,
+          webFetchSettings,
+          workspaceRoot,
+        });
+        const baseSystemPrompt = await getSystemPrompt(
+          request.userId,
+          promptContext,
+        );
+        const planPromptLines = buildPlanPromptLines(planState.plan);
+        const systemPrompt =
+          planPromptLines.length > 0
+            ? [baseSystemPrompt, ...planPromptLines]
+                .filter(Boolean)
+                .join("\n\n")
+            : baseSystemPrompt;
 
         const result = await createAgentUIStream({
           agent,
@@ -318,6 +347,7 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
             mcpTools: mcpRuntime.tools,
             memorySettings,
             permissionMode,
+            promptContext,
             searchProviders,
             searchSettings,
             skillRoots: skillSnapshot.skillRoots,

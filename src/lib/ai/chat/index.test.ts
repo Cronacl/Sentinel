@@ -155,6 +155,7 @@ const getSearchSettings = mock(async () => ({
   maxResultCount: 10,
 }));
 const getSearchProviderRuntime = mock(async () => ({}));
+const getSkillsBasePath = mock(async () => null);
 const getWebFetchSettings = mock(async () => ({
   batchEnabled: false,
   batchLimit: 10,
@@ -405,6 +406,7 @@ mock.module("./runtime/workspace", () => ({
   getMcpServerRuntime,
   getSearchProviderRuntime,
   getSearchSettings,
+  getSkillsBasePath,
   getToolApprovalPolicies,
   getToolPermissionMode,
   getWebFetchSettings,
@@ -621,10 +623,10 @@ describe("runThreadChat title generation", () => {
     });
     expect(updateThreadTitle).toHaveBeenCalledWith("thread-1", "Fast title");
     expect(aiTestState.prepared?.instructions).toContain(
-      "Default directory: /tmp/workspace-1",
+      "Workspace root: /tmp/workspace-1.",
     );
     expect(aiTestState.prepared?.instructions).toContain(
-      "Permission mode: default",
+      "Permission mode: default.",
     );
     expect(aiTestState.prepared?.tools).toHaveProperty("list");
     expect(aiTestState.prepared?.tools).toHaveProperty("grep");
@@ -788,7 +790,10 @@ describe("runThreadChat approvals and lifecycle", () => {
     expect(toolNames).not.toContain("edit");
     expect(toolNames).not.toContain("shell_command");
     expect(aiTestState.prepared?.instructions).toContain(
-      "Workspace tools are currently unavailable because there is no selected workspace root.",
+      "Workspace root: unavailable.",
+    );
+    expect(aiTestState.prepared?.instructions).toContain(
+      "Workspace-bound file and task tools remain unavailable until a workspace root is selected.",
     );
   });
 
@@ -841,10 +846,10 @@ describe("runThreadChat approvals and lifecycle", () => {
       "ask_question",
     ]);
     expect(aiTestState.prepared?.instructions).toContain(
-      "This thread is in plan mode.",
+      "Plan mode is active. You are a read-only planning specialist.",
     );
     expect(aiTestState.prepared?.instructions).toContain(
-      "Gather context from available tools first",
+      "Inspect the linked workspace or skill directories before asking clarification questions",
     );
     expect(ensureThread).toHaveBeenCalledWith(
       "thread-1",
@@ -991,9 +996,14 @@ describe("runThreadChat approvals and lifecycle", () => {
         workspaceId: "workspace-1",
       }),
     );
-    expect(getSystemPrompt).toHaveBeenCalledWith("user-1", {
-      memory: ["[Global] preference: Prefers concise answers."],
-    });
+    expect(getSystemPrompt).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({
+        memoryPromptLines: ["[Global] preference: Prefers concise answers."],
+        threadMode: "chat",
+        workspaceRoot: "/tmp/workspace-1",
+      }),
+    );
     expect(autosaveConversationMemories).toHaveBeenCalledWith(
       expect.objectContaining({
         settings: expect.objectContaining({ enabled: true }),

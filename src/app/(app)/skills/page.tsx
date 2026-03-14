@@ -8,6 +8,7 @@ import {
   CubeIcon,
   Delete02Icon,
   GithubIcon,
+  McpServerIcon,
   NoteEditIcon,
   NotebookIcon,
   PaintBoardIcon,
@@ -98,17 +99,15 @@ const SKILL_ICON_MAP: Record<string, BrandIconEntry | HugeIconEntry> = {
   "figma-implement-design": { type: "brand", component: FigmaIcon },
   "cloudflare-deploy": { type: "brand", component: CloudflareIcon },
   "frontend-design": { type: "huge", icon: PaintBoardIcon },
-  "mcp-builder": { type: "huge", icon: WebDesign02Icon },
+  "mcp-builder": { type: "huge", icon: McpServerIcon },
   "webapp-testing": { type: "huge", icon: TestTube01Icon },
-  "doc-coauthoring": { type: "huge", icon: NoteEditIcon },
-  "ai-sdk": { type: "huge", icon: AiIdeaIcon },
   "openai-docs": { type: "huge", icon: NotebookIcon },
   "skill-creator": { type: "huge", icon: BrushIcon },
   "skill-installer": { type: "huge", icon: SparklesIcon },
   "github-fix-ci": { type: "brand", component: GitHubIcon },
 };
 
-function SkillIcon({ name, size = 16 }: { name: string; size?: number }) {
+function SkillIcon({ name, size = 24 }: { name: string; size?: number }) {
   const normalized = name.trim().toLowerCase();
   const entry = SKILL_ICON_MAP[normalized];
 
@@ -173,7 +172,7 @@ function InstalledSkillRow({
         href={`/skills/${encodeURIComponent(skill.name)}`}
         prefetch
       >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-border/50 bg-background/50 text-foreground/75">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/50 text-foreground/75">
           <SkillIcon name={skill.name} />
         </div>
 
@@ -250,7 +249,7 @@ function RegistrySkillRow({
   return (
     <div className="border-separator bg-surface rounded-2xl border p-3 transition-colors">
       <div className="flex items-center gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-border/50 bg-background/50 text-foreground/75">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/50 text-foreground/75">
           <SkillIcon name={entry.name} />
         </div>
 
@@ -421,7 +420,7 @@ export default function SkillsPage() {
     <SettingsPageWrapper
       actions={
         <>
-          <Button
+          {/* <Button
             isDisabled={skills.isFetching}
             onPress={() => {
               void skills.refetch();
@@ -446,7 +445,7 @@ export default function SkillsPage() {
                 Refresh
               </>
             )}
-          </Button>
+          </Button> */}
           <Button
             onPress={handleOpenInstallSidebar}
             size="sm"

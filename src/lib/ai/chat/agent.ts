@@ -16,6 +16,7 @@ import type { ThreadMode } from "@/lib/plan";
 import { z } from "zod";
 
 import type { ToolApprovalPolicyMap } from "./tool-approval-policy";
+import type { ThreadPromptContext } from "./prompt-context";
 import { buildTools } from "./tools";
 import { buildThreadAgentInstructions } from "./instructions";
 
@@ -29,6 +30,7 @@ const threadAgentCallOptionsSchema = z.object({
   memorySettings: z.custom<MemorySettings>(),
   mcpTools: z.custom<ToolSet>().optional(),
   permissionMode: z.custom<PermissionMode>(),
+  promptContext: z.custom<ThreadPromptContext>(),
   searchProviders: z.custom<SearchProviderRuntimeMap>(),
   searchSettings: z.custom<SearchSettings>(),
   availableSkills: z.array(z.custom<SkillMetadata>()),
@@ -75,7 +77,11 @@ export function createThreadAgent({
       const tools = buildTools(options);
       return {
         ...settings,
-        instructions: buildThreadAgentInstructions(options, Object.keys(tools)),
+        instructions: buildThreadAgentInstructions({
+          activeToolNames: Object.keys(tools),
+          promptContext: options.promptContext,
+          systemPrompt: options.systemPrompt,
+        }),
         tools,
       };
     },

@@ -213,6 +213,7 @@ mock.module("./tools/ask-question", () => {
 
 const { getDefaultToolApprovalPolicies } =
   await import("./tool-approval-policy");
+const { buildThreadPromptContext } = await import("./prompt-context");
 const { createThreadAgent } = await import("./agent.ts");
 
 const defaultMemorySettings = {
@@ -228,9 +229,26 @@ const defaultMemorySettings = {
 
 function prepareWith(options) {
   createThreadAgent({ languageModel: { kind: "model" } });
+  const promptContext = buildThreadPromptContext({
+    availableSkills: options.availableSkills ?? [],
+    mcpToolNames: Object.keys(options.mcpTools ?? {}),
+    memoryPromptLines: options.memoryPromptLines ?? [],
+    memorySettings: options.memorySettings,
+    permissionMode: options.permissionMode,
+    planSummary: options.planSummary ?? null,
+    searchProviders: options.searchProviders,
+    searchSettings: options.searchSettings,
+    skillRoots: options.skillRoots ?? [],
+    sourceMessageId: options.sourceMessageId ?? null,
+    threadMode: options.threadMode,
+    toolApprovalPolicies: options.toolApprovalPolicies,
+    webFetchSettings: options.webFetchSettings,
+    workspaceRoot: options.defaultDirectory ?? null,
+  });
   return aiTestState.agentConfig.prepareCall({
     options: {
       availableSkills: [],
+      promptContext,
       skillRoots: [],
       ...options,
     },
@@ -306,26 +324,26 @@ describe("createThreadAgent", () => {
     expect(prepared.tools).not.toHaveProperty("update_plan");
     expect(prepared.tools).not.toHaveProperty("manage_task");
     expect(prepared.tools).not.toHaveProperty("ask_question");
-    expect(prepared.instructions).toContain("Permission mode: default");
-    expect(prepared.instructions).toContain("## Skills");
+    expect(prepared.instructions).toContain("## Runtime Snapshot");
+    expect(prepared.instructions).toContain("Permission mode: default.");
+    expect(prepared.instructions).toContain("## Capability Manifest");
+    expect(prepared.instructions).toContain("## Discovered Skills");
+    expect(prepared.instructions).toContain("## MCP Tools");
     expect(prepared.instructions).toContain("helpful-skill: Helpful skill");
     expect(prepared.instructions).toContain("~/.codex/skills");
-    expect(prepared.instructions).toContain(
-      'Do not use `VAR=/path "$VAR" ...` in one shell command.',
-    );
-    expect(prepared.instructions).toContain("read");
+    expect(prepared.instructions).toContain("the read tool");
     expect(prepared.instructions).toContain("run_task");
-    expect(prepared.instructions).toContain("grep");
-    expect(prepared.instructions).toContain("list");
+    expect(prepared.instructions).toContain("the grep tool");
+    expect(prepared.instructions).toContain("the list tool");
     expect(prepared.instructions).toContain("search_memory");
     expect(prepared.instructions).toContain("save_memory");
     expect(prepared.instructions).toContain("forget_memory");
-    expect(prepared.instructions).toContain("websearch");
-    expect(prepared.instructions).toContain("webfetch");
+    expect(prepared.instructions).toContain("the websearch tool");
+    expect(prepared.instructions).toContain("the webfetch tool");
     expect(prepared.instructions).toContain(
       "When using the searxng provider, use searchType auto and leave livecrawl unset.",
     );
-    expect(prepared.instructions).toContain("Batch webfetch is enabled");
+    expect(prepared.instructions).toContain("Webfetch batching: enabled");
     expect(await prepared.tools.list.needsApproval({}, {})).toBe(false);
     expect(await prepared.tools.edit.needsApproval({}, {})).toBe(true);
     expect(await prepared.tools.multiedit.needsApproval({}, {})).toBe(true);
@@ -373,15 +391,13 @@ describe("createThreadAgent", () => {
     expect(toolNames).not.toContain("update_plan");
     expect(toolNames).not.toContain("manage_task");
     expect(toolNames).not.toContain("ask_question");
-    expect(prepared.instructions).toContain(
-      "Workspace tools are currently unavailable because there is no selected workspace root.",
-    );
+    expect(prepared.instructions).toContain("Workspace root: unavailable.");
     expect(prepared.instructions).toContain("search_memory");
     expect(prepared.instructions).toContain("save_memory");
     expect(prepared.instructions).toContain("forget_memory");
     expect(prepared.instructions).toContain("websearch");
     expect(prepared.instructions).toContain("webfetch");
-    expect(prepared.instructions).toContain("Batch webfetch is disabled");
+    expect(prepared.instructions).toContain("Webfetch batching: disabled.");
   });
 
   it("keeps load_skill and filesystem inspection available when only skill roots exist", () => {
@@ -422,9 +438,9 @@ describe("createThreadAgent", () => {
     expect(Object.keys(prepared.tools)).toContain("shell_command");
     expect(Object.keys(prepared.tools)).not.toContain("edit");
     expect(Object.keys(prepared.tools)).not.toContain("run_task");
-    expect(prepared.instructions).toContain("No workspace root is selected.");
+    expect(prepared.instructions).toContain("Workspace root: unavailable.");
     expect(prepared.instructions).toContain(
-      "Skill roots: /tmp/skills/helpful-skill",
+      "Skill roots: /tmp/skills/helpful-skill.",
     );
     expect(prepared.instructions).toContain("~/.codex/skills");
   });
@@ -513,10 +529,10 @@ describe("createThreadAgent", () => {
     expect(await prepared.tools.list.needsApproval({}, {})).toBe(true);
     expect(await prepared.tools.edit.needsApproval({}, {})).toBe(false);
     expect(prepared.instructions).toContain(
-      "the list tool to browse directory structure after approval.",
+      "the list tool: to browse directory structure after approval.",
     );
     expect(prepared.instructions).toContain(
-      "the edit tool for targeted file edits without approval.",
+      "the edit tool: for targeted file edits without approval.",
     );
   });
 
@@ -565,12 +581,14 @@ describe("createThreadAgent", () => {
       "manage_task",
       "ask_question",
     ]);
-    expect(prepared.instructions).toContain("This thread is in plan mode.");
     expect(prepared.instructions).toContain(
-      "Gather context from available tools first",
+      "Plan mode is active. You are a read-only planning specialist.",
     );
     expect(prepared.instructions).toContain(
-      "the read tool to read file contents",
+      "Inspect the linked workspace or skill directories before asking clarification questions",
+    );
+    expect(prepared.instructions).toContain(
+      "the read tool: to read file contents without approval.",
     );
     expect(await prepared.tools.read.needsApproval({}, {})).toBe(false);
     expect(aiTestState.agentConfig.stopWhen).toEqual([

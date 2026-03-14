@@ -1,38 +1,27 @@
-import { each, lines, section, when } from "@/lib/prompt";
-import type { SkillMetadata } from "@/lib/skills";
+import { lines, section } from "@/lib/prompt";
+
+import type { ThreadPromptContext } from "./prompt-context";
 import type { ToolApprovalPolicyMap } from "./tool-approval-policy";
-import { TOOL_CATALOG, getActiveCategories, getToolsInCategory } from "./tools";
-import type { ThreadAgentCallOptions } from "./agent";
+import { TOOL_CATALOG, getActiveCategories } from "./tools";
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+const SKILL_SUMMARY_LIMIT = 6;
+const MCP_SUMMARY_LIMIT = 6;
 
-function approvalLabel(
-  policies: ToolApprovalPolicyMap,
-  toolName: string,
-): string {
-  return policies[toolName as keyof ToolApprovalPolicyMap]
-    ? "after approval"
-    : "without approval";
+function approvalLabel(policies: ToolApprovalPolicyMap, toolName: string) {
+  if (toolName in policies) {
+    return policies[toolName as keyof ToolApprovalPolicyMap]
+      ? "after approval"
+      : "without approval";
+  }
+
+  return "without approval";
 }
 
-function toolAvailabilityLines(
-  toolNames: string[],
-  policies: ToolApprovalPolicyMap,
-  verb: "can use" | "can still use" = "can use",
-): string {
-  const entries = toolNames.map((name) => TOOL_CATALOG[name]).filter(Boolean);
-
-  if (entries.length === 0) return "";
-
-  return each(
-    toolNames.filter((n) => TOOL_CATALOG[n]),
-    (name) => {
-      const entry = TOOL_CATALOG[name]!;
-      return `You ${verb} ${entry.label} ${entry.capability} ${approvalLabel(policies, name)}.`;
-    },
-  );
+function truncateList<T>(items: T[], limit: number) {
+  return {
+    remaining: Math.max(0, items.length - limit),
+    visible: items.slice(0, limit),
+  };
 }
 
 function formatMcpToolLabel(toolName: string) {
@@ -42,366 +31,260 @@ function formatMcpToolLabel(toolName: string) {
     .replace(/_/g, " ");
 }
 
-function mcpAvailabilityLines(toolNames: string[]): string {
-  const mcpNames = toolNames.filter((name) => name.startsWith("mcp_"));
-
-  if (mcpNames.length === 0) {
-    return "";
-  }
-
-  return lines(
-    "External MCP tools are available for connected integrations.",
-    each(
-      mcpNames,
-      (name) =>
-        `Use ${formatMcpToolLabel(name)} when it directly matches the user's request.`,
-    ),
-  );
+function getConfiguredSearchProviders(promptContext: ThreadPromptContext) {
+  return Object.values(promptContext.searchProviders)
+    .filter((provider) => provider?.isEnabled)
+    .map((provider) => provider.provider)
+    .sort((left, right) =>
+      left.localeCompare(right, undefined, { sensitivity: "base" }),
+    );
 }
 
-function buildSkillsSection(skills: SkillMetadata[]): string {
-  if (skills.length === 0) {
-    return "";
-  }
-
-  return lines(
-    "## Skills",
-    "Use load_skill when the user's request matches one of these specialized skill descriptions.",
-    each(skills, (skill) => `- ${skill.name}: ${skill.description}`),
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Category-specific rules (only emitted when the category is active)
-// ---------------------------------------------------------------------------
-
-function inspectionRules(): string[] {
-  return [
-    "Prefer list when you need to discover folders or get a quick overview.",
-    "Prefer glob when you already know the filename pattern you need.",
-    "Prefer read when you need actual file contents or a bounded slice.",
-    "Prefer grep when you need to find files containing specific text or patterns.",
-  ];
-}
-
-function memoryRules(): string[] {
-  return [
-    "Prefer search_memory before asking the user to repeat stable preferences, habits, or constraints.",
-    "Use save_memory only for durable facts, preferences, workflows, and recurring context.",
-    "Never save secrets, API keys, access tokens, passwords, or one-off task state to memory.",
-    "Use forget_memory when the user explicitly says a previously stored fact is outdated or wrong.",
-  ];
-}
-
-function webRules(): string[] {
-  return [
-    "Prefer websearch when you need to discover sources, articles, or references for a topic.",
-    "Prefer webfetch when the answer depends on a known URL or a link shared in the conversation.",
-    "Prefer webfetch after websearch when you need to read a specific result in full.",
-    "When using the searxng provider, use searchType auto and leave livecrawl unset.",
-    "Prefer format=markdown for web pages unless plain text or raw HTML is specifically needed.",
-    "Use batch webfetch only when comparing or gathering multiple pages is clearly useful.",
-  ];
-}
-
-function mutationRules(): string[] {
-  return [
-    "Prefer multiedit instead of repeated edit calls when you need several replacements in one file.",
-    "Prefer edit, create_file, and delete_file for direct file changes instead of shell commands.",
-  ];
-}
-
-function executionRules(): string[] {
-  return [
-    "Prefer run_task for standard project scripts instead of raw shell commands.",
-  ];
-}
-
-function skillRules(): string[] {
-  return [
-    "Use load_skill before guessing skill instructions from memory.",
-    "After loading a skill, treat returned directory paths as the base for bundled references and scripts.",
-    "If a loaded skill mentions older default homes such as ~/.codex/skills or $CODEX_HOME/skills, ignore those examples and use the returned directory instead.",
-    'When a loaded skill suggests running a bundled script, prefer the absolute path directly or export a variable in one command and use it in a later command. Do not use `VAR=/path "$VAR" ...` in one shell command.',
-    "Load only the skills that directly match the current task.",
-  ];
-}
-
-function shellRules(): string[] {
-  return [
-    "Propose only one command at a time.",
-    "Explain the command briefly in the rationale field.",
-    "Avoid full-screen or interactive TUI programs.",
-    "Prefer non-interactive flags for scaffolding, installs, and builds.",
-    "When a task may run for several minutes, state that clearly before asking for approval.",
-    "Prefer read-only inspection before mutations or installs.",
-    "When a tool requests approval, wait for the user approval workflow to continue.",
-  ];
-}
-
-function mcpRules(): string[] {
-  return [
-    "Use MCP tools when the integration can answer or perform the task more directly than workspace or web tools.",
-    "Prefer read-only MCP actions before mutating actions when exploring a browser or external system.",
-    "For browser MCP tools, inspect tabs, snapshots, screenshots, or console state before clicking or typing.",
-    "If an MCP tool requests approval, wait for the approval workflow before continuing.",
-  ];
-}
-
-function permissionRules(
-  permissionMode: string,
-  opts?: {
-    hasSkillRoots?: boolean;
-    hasWorkspaceRoot?: boolean;
-  },
-): string[] {
-  if (permissionMode === "full") {
-    return [
-      "Full permissions mode is active. File and task tools may use absolute paths outside the workspace.",
-    ];
-  }
-
-  if (opts?.hasSkillRoots && opts?.hasWorkspaceRoot) {
-    return [
-      "In default permissions mode, inspection and shell tools must stay inside the selected workspace root or discovered skill directories.",
-      "In default permissions mode, mutation tools and run_task remain restricted to the selected workspace root.",
-    ];
-  }
-
-  if (opts?.hasSkillRoots) {
-    return [
-      "In default permissions mode, file and shell tools must stay inside the discovered skill directories.",
-    ];
-  }
-
-  return [
-    "In default permissions mode, all file and task tools must stay inside the selected workspace root.",
-  ];
-}
-
-// ---------------------------------------------------------------------------
-// Plan mode instructions
-// ---------------------------------------------------------------------------
-
-function buildPlanInstructions(
-  options: ThreadAgentCallOptions,
+function buildRuntimeSnapshot(
+  promptContext: ThreadPromptContext,
   activeToolNames: string[],
-): string {
-  const {
-    availableSkills,
-    defaultDirectory,
-    permissionMode,
-    skillRoots,
-    systemPrompt,
-    toolApprovalPolicies,
-  } = options;
+) {
+  const categories = Array.from(getActiveCategories(activeToolNames)).sort();
+  const configuredSearchProviders = getConfiguredSearchProviders(promptContext);
 
-  const categories = getActiveCategories(activeToolNames);
-  const hasInspection = categories.has("inspection");
-  const hasSkills = categories.has("skill") && availableSkills.length > 0;
-  const hasFilesystemRoots = Boolean(defaultDirectory) || skillRoots.length > 0;
+  return section("Runtime Snapshot", [
+    `Thread mode: ${promptContext.threadMode}.`,
+    promptContext.workspaceRoot
+      ? `Workspace root: ${promptContext.workspaceRoot}.`
+      : "Workspace root: unavailable.",
+    promptContext.skillRoots.length > 0
+      ? `Skill roots: ${promptContext.skillRoots.join(", ")}.`
+      : "Skill roots: none.",
+    `Permission mode: ${promptContext.permissionMode}.`,
+    categories.length > 0
+      ? `Active tool categories: ${categories.join(", ")}.`
+      : "Active tool categories: none.",
+    promptContext.planSummary
+      ? `Current plan: present (${promptContext.planSummary.taskCount} tasks${promptContext.planSummary.hasPendingQuestions ? "; pending clarification questions" : ""}).`
+      : "Current plan: none.",
+    promptContext.memorySettings.enabled
+      ? `Long-term memory: enabled (${promptContext.memorySettings.memoryProvider}:${promptContext.memorySettings.memoryModel}; retrieval limit ${promptContext.memorySettings.retrievalLimit}).`
+      : "Long-term memory: disabled.",
+    configuredSearchProviders.length > 0
+      ? `Web search: enabled via ${configuredSearchProviders.join(", ")}. Default provider: ${promptContext.searchSettings.defaultProvider}.`
+      : "Web search: configured with no enabled providers.",
+    promptContext.webFetchSettings.batchEnabled
+      ? `Webfetch batching: enabled (up to ${promptContext.webFetchSettings.batchLimit} URLs per call).`
+      : "Webfetch batching: disabled.",
+    promptContext.sourceMessageId
+      ? `Source message id: ${promptContext.sourceMessageId}.`
+      : "Source message id: unavailable.",
+  ]);
+}
 
-  return lines(
-    systemPrompt.trim(),
-    buildSkillsSection(availableSkills),
+function buildCapabilityManifest(
+  promptContext: ThreadPromptContext,
+  activeToolNames: string[],
+) {
+  const toolNames = activeToolNames.filter((toolName) =>
+    Boolean(TOOL_CATALOG[toolName]),
+  );
 
-    section("Plan Mode", [
-      "This thread is in plan mode. You are a read-only planning specialist.",
-      "Your role is to understand the request, gather context, and produce a thorough plan — not to implement it.",
-      "Do not attempt execution, file edits, shell commands, web access, or memory operations while planning.",
-      "All plan content must go through the create_plan or update_plan tools. The plan document should be substantial markdown, closer to a detailed planning memo than a quick task list.",
-      "Choose the plan audience that best fits the request: technical for specialists and detailed execution, general for broader stakeholders.",
-      "Use create_plan when the thread has no plan yet.",
-      "Use update_plan to revise the existing plan without losing useful detail.",
-      "Use manage_task for all task creation, status updates, and deletions after the plan exists.",
-      "Use ask_question when an ambiguity materially changes the plan.",
-      "When using ask_question, ask 1 to 3 questions total.",
-      "Each ask_question item must have 2 to 4 options only.",
-      "Set allowMultiple to true when the user should be able to pick more than one option.",
-      "If there are many possible answers, collapse them into 2 to 4 representative choices and rely on the custom answer field for anything else.",
-      "After calling create_plan or update_plan, do NOT repeat or summarize the plan title, goal, summary, or document content in the chat. The plan is rendered automatically in a dedicated panel. If you want to say something after creating the plan, keep it to a single short sentence like acknowledging the plan is ready or asking if the user wants any changes.",
-      "Keep plans substantial, actionable, and decision-complete.",
-      "Prefer task statuses consistently: pending, in_progress, completed, blocked.",
-      "Gather context from available tools first when they can answer the uncertainty.",
-      ...(hasSkills ? skillRules() : []),
-      "Ask structured questions instead of guessing when requirements, scope, or constraints remain unclear.",
-      "Use a shared core structure in the document: overview, current understanding, recommended approach, work breakdown, risks or open questions, and validation criteria.",
-      "Technical plans should include key components, dependencies, workflows, sequencing, and critical touchpoints when discoverable.",
-      "General plans should stay plain-language, explain impact, and avoid unnecessary implementation detail.",
-      "Do not produce speculative implementation details when the user has not decided key tradeoffs.",
-    ]),
-
-    when(hasInspection && hasFilesystemRoots, () => {
-      const inspectionNames = getToolsInCategory(activeToolNames, "inspection");
-      return lines(
-        "Before asking clarification questions or creating a plan, inspect the linked workspace when the existing files could answer the uncertainty.",
-        toolAvailabilityLines(inspectionNames, toolApprovalPolicies),
-        when(defaultDirectory, `Default directory: ${defaultDirectory}`),
-        when(skillRoots.length > 0, `Skill roots: ${skillRoots.join(", ")}`),
-        `Permission mode: ${permissionMode}.`,
-        section("Inspection Rules for Plan Mode", [
-          "Inspect workspace structure, configuration files, documentation, and key entry points before asking questions.",
-          ...inspectionRules(),
-          "Stay read-only while planning. Do not use mutation, execution, web, or memory tools in plan mode.",
-          "Ask questions only after inspection when the remaining ambiguity materially changes the plan.",
-        ]),
-      );
+  return section("Capability Manifest", [
+    "Tool availability is specific to this call. Do not rely on tools that are not listed here.",
+    ...toolNames.map((toolName) => {
+      const entry = TOOL_CATALOG[toolName]!;
+      return `${entry.label}: ${entry.capability} ${approvalLabel(promptContext.toolApprovalPolicies, toolName)}.`;
     }),
+    promptContext.availableSkills.length > 0
+      ? `Discovered skills: ${promptContext.availableSkills.length} available. Treat them as routing hints until load_skill is called.`
+      : "Discovered skills: none.",
+    promptContext.mcpToolNames.length > 0
+      ? `External MCP tools: ${promptContext.mcpToolNames.length} available. Use them only when the integration is more direct than workspace or web tools.`
+      : "External MCP tools: none.",
+  ]);
+}
 
-    when(
-      !hasInspection || !hasFilesystemRoots,
-      lines(
-        "No workspace is linked for direct file inspection in this thread.",
-        when(
-          hasSkills,
-          "You can still use load_skill for discovered skills while planning.",
-        ),
-        "If workspace context is needed, ask focused questions about the project structure, stack, and constraints before creating a plan.",
-      ),
-    ),
+function buildSkillsSection(promptContext: ThreadPromptContext) {
+  if (promptContext.availableSkills.length === 0) {
+    return "";
+  }
+
+  const { remaining, visible } = truncateList(
+    promptContext.availableSkills,
+    SKILL_SUMMARY_LIMIT,
+  );
+
+  return lines(
+    "## Discovered Skills",
+    "Discovered skills stay latent until you call load_skill. Load only the skills that directly match the current task.",
+    visible.map((skill) => `- ${skill.name}: ${skill.description}`).join("\n"),
+    remaining > 0 ? `- ... and ${remaining} more discovered skills.` : "",
   );
 }
 
-// ---------------------------------------------------------------------------
-// Chat mode instructions
-// ---------------------------------------------------------------------------
+function buildMcpToolsSection(promptContext: ThreadPromptContext) {
+  if (promptContext.mcpToolNames.length === 0) {
+    return "";
+  }
 
-function buildChatInstructions(
-  options: ThreadAgentCallOptions,
-  activeToolNames: string[],
-): string {
-  const {
-    availableSkills,
-    defaultDirectory,
-    memorySettings,
-    permissionMode,
-    searchProviders,
-    searchSettings,
-    skillRoots,
-    sourceMessageId,
-    systemPrompt,
-    toolApprovalPolicies,
-    webFetchSettings,
-  } = options;
-
-  const categories = getActiveCategories(activeToolNames);
-
-  const configuredSearchProviders = Object.values(searchProviders).filter(
-    (p) => p?.isEnabled,
+  const { remaining, visible } = truncateList(
+    promptContext.mcpToolNames,
+    MCP_SUMMARY_LIMIT,
   );
 
-  const webSearchGuidance = configuredSearchProviders.length
-    ? `Web search is available through ${configuredSearchProviders
-        .map((p) => p.provider)
-        .join(", ")}. Default provider: ${searchSettings.defaultProvider}.`
-    : "Web search is configured with no active providers yet. Configure a provider in Settings > Search before using websearch.";
+  return lines(
+    "## MCP Tools",
+    "Prefer MCP tools when they can answer or perform the task more directly than workspace or web tools.",
+    visible.map((toolName) => `- ${formatMcpToolLabel(toolName)}`).join("\n"),
+    remaining > 0 ? `- ... and ${remaining} more MCP tools.` : "",
+  );
+}
 
-  const webFetchBatchGuidance = webFetchSettings.batchEnabled
-    ? `Batch webfetch is enabled. You may use the urls field for up to ${webFetchSettings.batchLimit} URLs in one call.`
-    : "Batch webfetch is disabled. Use one URL per webfetch call.";
+function buildDecisionHeuristics(
+  promptContext: ThreadPromptContext,
+  activeToolNames: string[],
+) {
+  const categories = getActiveCategories(activeToolNames);
+  const heuristics: string[] = [];
+  let step = 1;
 
-  const memoryGuidance = memorySettings.enabled
-    ? `Long-term memory is enabled with ${memorySettings.memoryProvider}:${memorySettings.memoryModel}.${sourceMessageId ? ` Current source message id: ${sourceMessageId}.` : ""}`
-    : "Long-term memory is disabled. Do not use memory tools until the user enables Memory in Settings.";
-
-  const hasFilesystemRoots =
+  if (
     categories.has("inspection") &&
-    (Boolean(defaultDirectory) || skillRoots.length > 0);
-  const hasSkills = categories.has("skill") && availableSkills.length > 0;
+    (promptContext.workspaceRoot || promptContext.skillRoots.length > 0)
+  ) {
+    heuristics.push(
+      `${step++}. When repository or file state matters, inspect first. Prefer list for directory overview, glob for filename patterns, read for concrete file contents, and grep for content search.`,
+    );
+  }
 
-  return lines(
-    systemPrompt.trim(),
-    buildSkillsSection(availableSkills),
+  if (categories.has("skill")) {
+    heuristics.push(
+      `${step++}. Treat discovered skills as routing hints. Call load_skill before relying on a skill's instructions or bundled resources.`,
+    );
+    heuristics.push(
+      `${step++}. After load_skill, use the returned skill directory as the source of truth for scripts, references, and assets. Ignore stale home-directory examples such as ~/.codex/skills or $CODEX_HOME/skills.`,
+    );
+  }
 
-    when(hasFilesystemRoots, () => {
-      const allRules: string[] = [];
+  if (categories.has("mutation")) {
+    heuristics.push(
+      `${step++}. Before mutating files, inspect the relevant targets unless the user supplied exact content. Prefer edit, multiedit, create_file, and delete_file for direct file changes instead of shell commands.`,
+    );
+  }
 
-      if (categories.has("inspection")) allRules.push(...inspectionRules());
-      if (categories.has("skill")) allRules.push(...skillRules());
-      if (categories.has("memory")) allRules.push(...memoryRules());
-      if (categories.has("web")) allRules.push(...webRules());
-      if (categories.has("mutation")) allRules.push(...mutationRules());
-      if (categories.has("execution")) allRules.push(...executionRules());
-      if (activeToolNames.some((name) => name.startsWith("mcp_"))) {
-        allRules.push(...mcpRules());
-      }
-      allRules.push(
-        ...permissionRules(permissionMode, {
-          hasSkillRoots: skillRoots.length > 0,
-          hasWorkspaceRoot: Boolean(defaultDirectory),
-        }),
-      );
+  if (categories.has("execution")) {
+    heuristics.push(
+      `${step++}. Prefer run_task for standard scripts such as test, lint, build, format, or typecheck. Use shell_command only when the task cannot be expressed as a standard script.`,
+    );
+    heuristics.push(
+      `${step++}. For shell_command, propose one non-interactive command at a time, explain the rationale, and wait for approval workflows when required.`,
+    );
+  }
 
-      return lines(
-        toolAvailabilityLines(activeToolNames, toolApprovalPolicies),
-        mcpAvailabilityLines(activeToolNames),
-        when(categories.has("web"), webSearchGuidance),
-        when(categories.has("web"), webFetchBatchGuidance),
-        when(
-          !defaultDirectory && skillRoots.length > 0,
-          "No workspace root is selected. File and shell tools are limited to discovered skill directories.",
-        ),
-        when(defaultDirectory, `Default directory: ${defaultDirectory}`),
-        when(skillRoots.length > 0, `Skill roots: ${skillRoots.join(", ")}`),
-        `Permission mode: ${permissionMode}.`,
-        allRules.length > 0 ? section("Usage Guidelines", allRules) : "",
-        when(
-          categories.has("execution"),
-          section("Shell Guidelines", shellRules()),
-        ),
-        when(categories.has("memory"), memoryGuidance),
-      );
-    }),
+  if (categories.has("memory")) {
+    heuristics.push(
+      `${step++}. Use search_memory before asking the user to repeat durable preferences, workflows, or project facts. Save only durable context, and never store secrets or one-off task state.`,
+    );
+  }
 
-    when(!hasFilesystemRoots, () => {
-      const availableNames = activeToolNames.filter(
-        (n) =>
-          TOOL_CATALOG[n]?.category === "skill" ||
-          TOOL_CATALOG[n]?.category === "memory" ||
-          TOOL_CATALOG[n]?.category === "web",
-      );
+  if (categories.has("web")) {
+    heuristics.push(
+      `${step++}. Use websearch to discover sources and webfetch to read known URLs. Prefer webfetch after websearch when you need the full content of a specific result.`,
+    );
+    heuristics.push(
+      `${step++}. When using the searxng provider, use searchType auto and leave livecrawl unset. Use batch webfetch only when comparing multiple pages is clearly useful.`,
+    );
+  }
 
-      const allRules: string[] = [];
-      if (categories.has("skill")) allRules.push(...skillRules());
-      if (categories.has("memory")) allRules.push(...memoryRules());
-      if (categories.has("web")) allRules.push(...webRules());
-      if (activeToolNames.some((name) => name.startsWith("mcp_"))) {
-        allRules.push(...mcpRules());
-      }
+  if (promptContext.mcpToolNames.length > 0) {
+    heuristics.push(
+      `${step++}. Prefer read-only MCP actions before mutating ones, especially when exploring browsers or external systems.`,
+    );
+  }
 
-      return lines(
-        hasSkills
-          ? "Workspace tools are currently unavailable because there is no selected workspace root, but discovered skill tools are still available."
-          : "Workspace tools are currently unavailable because there is no selected workspace root.",
-        availableNames.length > 0
-          ? toolAvailabilityLines(
-              availableNames,
-              toolApprovalPolicies,
-              "can still use",
-            )
-          : "",
-        mcpAvailabilityLines(activeToolNames),
-        when(categories.has("web"), webSearchGuidance),
-        when(categories.has("web"), webFetchBatchGuidance),
-        allRules.length > 0 ? section("Usage Guidelines", allRules) : "",
-        when(categories.has("memory"), memoryGuidance),
-        hasSkills
-          ? "Do not mention or attempt workspace-only mutation tools or run_task unless a workspace root is selected."
-          : "Do not mention or attempt workspace file tools, task runners, or shell commands unless the user asks conceptually.",
-      );
-    }),
+  heuristics.push(
+    `${step++}. If the available context or tools still leave a material ambiguity, ask the user instead of guessing.`,
   );
+
+  return section("Decision Heuristics", heuristics.join("\n"));
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
+function permissionOverlay(promptContext: ThreadPromptContext) {
+  if (promptContext.permissionMode === "full") {
+    return "Full permissions mode is active. Available file and task tools may use absolute paths outside the workspace when the task requires it.";
+  }
 
-export function buildThreadAgentInstructions(
-  options: ThreadAgentCallOptions,
+  if (promptContext.workspaceRoot && promptContext.skillRoots.length > 0) {
+    return "Default permissions mode is active. Inspection and shell work must stay inside the selected workspace root or discovered skill directories, while mutation tools and run_task remain restricted to the selected workspace root.";
+  }
+
+  if (promptContext.skillRoots.length > 0) {
+    return "Default permissions mode is active. File and shell work must stay inside the discovered skill directories.";
+  }
+
+  return promptContext.workspaceRoot
+    ? "Default permissions mode is active. All available file and task tools must stay inside the selected workspace root."
+    : "Default permissions mode is active. Workspace-bound file and task tools remain unavailable until a workspace root is selected.";
+}
+
+function buildChatModeOverlay(
+  promptContext: ThreadPromptContext,
   activeToolNames: string[],
-): string {
-  return options.threadMode === "plan"
-    ? buildPlanInstructions(options, activeToolNames)
-    : buildChatInstructions(options, activeToolNames);
+) {
+  const categories = getActiveCategories(activeToolNames);
+
+  return section("Mode Overlay", [
+    "Chat mode is active. You may inspect, execute, and mutate only through capabilities that are available in this call.",
+    "Sequence stateful work as inspect -> decide -> mutate -> validate whenever the task changes workspace state.",
+    permissionOverlay(promptContext),
+    !promptContext.workspaceRoot && promptContext.skillRoots.length > 0
+      ? "No workspace root is selected. Keep file and shell work inside discovered skill directories, and do not imply that workspace-only mutation tools or run_task are available."
+      : !promptContext.workspaceRoot
+        ? "No workspace root is selected. Do not imply that workspace file tools, task runners, or shell commands are available unless the user is asking conceptually."
+        : "A workspace root is selected. Use it as the default base for available workspace tools.",
+    categories.has("execution") || categories.has("web")
+      ? "When a tool requires approval, pause for the approval workflow before continuing."
+      : "If a capability is missing, say so directly and continue with the best available path.",
+  ]);
+}
+
+function buildPlanModeOverlay(
+  promptContext: ThreadPromptContext,
+  activeToolNames: string[],
+) {
+  const categories = getActiveCategories(activeToolNames);
+
+  return section("Mode Overlay", [
+    "Plan mode is active. You are a read-only planning specialist.",
+    "Understand the request, gather context, and produce a thorough implementation plan rather than executing the work.",
+    "Do not attempt file edits, shell commands, web access, or memory operations while planning.",
+    "Use create_plan when the thread has no plan yet. Use update_plan to refine the existing plan without collapsing useful detail.",
+    "Use manage_task for task lifecycle updates after a plan exists.",
+    "Use ask_question only when a remaining ambiguity materially changes the plan, and keep it to 1 to 3 questions with 2 to 4 options each.",
+    permissionOverlay(promptContext),
+    categories.has("inspection") &&
+    (promptContext.workspaceRoot || promptContext.skillRoots.length > 0)
+      ? "Inspect the linked workspace or skill directories before asking clarification questions when the existing files can answer the uncertainty."
+      : "If workspace context is needed but unavailable, ask focused questions about the project structure, stack, and constraints before creating the plan.",
+    "After calling create_plan or update_plan, do not repeat the plan title, goal, summary, or document content in the chat because the plan is rendered separately.",
+    "Keep the plan substantial, decision-complete, and explicit about assumptions, validation, and risks.",
+  ]);
+}
+
+export function buildThreadAgentInstructions({
+  activeToolNames,
+  promptContext,
+  systemPrompt,
+}: {
+  activeToolNames: string[];
+  promptContext: ThreadPromptContext;
+  systemPrompt: string;
+}) {
+  return lines(
+    systemPrompt.trim(),
+    buildRuntimeSnapshot(promptContext, activeToolNames),
+    buildCapabilityManifest(promptContext, activeToolNames),
+    buildSkillsSection(promptContext),
+    buildMcpToolsSection(promptContext),
+    buildDecisionHeuristics(promptContext, activeToolNames),
+    promptContext.threadMode === "plan"
+      ? buildPlanModeOverlay(promptContext, activeToolNames)
+      : buildChatModeOverlay(promptContext, activeToolNames),
+  );
 }
