@@ -84,4 +84,21 @@ describe("executeRead", () => {
     expect(result.path).toBe(externalPath);
     expect(result.content).toContain("1: outside");
   });
+
+  it("allows absolute paths inside extra skill roots in default mode", async () => {
+    const defaultDirectory = await createDirectory();
+    const skillDirectory = await createDirectory();
+    const skillFile = path.join(skillDirectory, "reference.md");
+    await writeFile(skillFile, "skill-reference\n");
+
+    const result = await executeRead({
+      defaultDirectory,
+      extraAllowedRoots: [skillDirectory],
+      input: { path: skillFile },
+      permissionMode: "default",
+    });
+
+    expect(result.path).toBe(skillFile);
+    expect(result.content).toContain("1: skill-reference");
+  });
 });

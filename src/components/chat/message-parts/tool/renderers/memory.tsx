@@ -62,12 +62,19 @@ function buildSummary(
   part: RendererProps["part"],
   toolName: string,
 ): ReactNode {
-  const isError = part.state === "output-error" || part.state === "output-denied";
+  const isError =
+    part.state === "output-error" || part.state === "output-denied";
   const isDone = part.state === "output-available";
 
   if (toolName === "search_memory") {
-    const input = "input" in part ? (part.input as SearchMemoryInput | undefined) : undefined;
-    const output = isDone && "output" in part ? (part.output as SearchMemoryOutput | undefined) : undefined;
+    const input =
+      "input" in part
+        ? (part.input as SearchMemoryInput | undefined)
+        : undefined;
+    const output =
+      isDone && "output" in part
+        ? (part.output as SearchMemoryOutput | undefined)
+        : undefined;
 
     if (isError) return <>Memory search failed</>;
     if (output) {
@@ -80,27 +87,30 @@ function buildSummary(
         </>
       );
     }
-    return (
-      <>
-        Searching memory for &ldquo;{input?.query ?? "..."}&rdquo;
-      </>
-    );
+    return <>Searching memory for &ldquo;{input?.query ?? "..."}&rdquo;</>;
   }
 
   if (toolName === "save_memory") {
-    const output = isDone && "output" in part ? (part.output as SaveMemoryOutput | undefined) : undefined;
+    const output =
+      isDone && "output" in part
+        ? (part.output as SaveMemoryOutput | undefined)
+        : undefined;
     if (isError) return <>Failed to save memory</>;
     if (output) {
       return (
         <>
-          {output.status === "created" ? "Saved" : "Updated"} {output.kind} memory
+          {output.status === "created" ? "Saved" : "Updated"} {output.kind}{" "}
+          memory
         </>
       );
     }
     return <>Saving memory...</>;
   }
 
-  const output = isDone && "output" in part ? (part.output as ForgetMemoryOutput | undefined) : undefined;
+  const output =
+    isDone && "output" in part
+      ? (part.output as ForgetMemoryOutput | undefined)
+      : undefined;
   if (isError) return <>Failed to forget memory</>;
   if (output) return <>Forgot {output.kind} memory</>;
   return <>Forgetting memory...</>;
@@ -125,7 +135,9 @@ function MemoryResultBody({
             key={result.id}
           >
             <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-foreground/50">
-              <span className="font-medium text-foreground/70">{result.kind}</span>
+              <span className="font-medium text-foreground/70">
+                {result.kind}
+              </span>
               <span>{result.scope}</span>
             </div>
             <p className="mt-0.5 text-[12px] text-foreground/80">
@@ -142,7 +154,8 @@ function MemoryResultBody({
     return (
       <div className="text-[11px]">
         <p className="text-foreground/70">
-          {data.status === "created" ? "Stored" : "Updated"} {data.kind} memory in {data.scope} scope.
+          {data.status === "created" ? "Stored" : "Updated"} {data.kind} memory
+          in {data.scope} scope.
         </p>
         <p className="mt-0.5 text-foreground/40">{data.memoryId}</p>
       </div>
@@ -192,9 +205,7 @@ export const MemoryTool = memo(function MemoryTool({
 
   useEffect(() => {
     setIsExpanded(
-      part.state === "approval-requested" ||
-        part.state === "output-error" ||
-        part.state === "output-available",
+      part.state === "approval-requested" || part.state === "output-error",
     );
   }, [part.state]);
 
@@ -213,14 +224,13 @@ export const MemoryTool = memo(function MemoryTool({
   );
 
   const footer =
-    toolName === "search_memory" && output
-      ? (
-          <span>
-            {(output as SearchMemoryOutput).resultCount} result
-            {(output as SearchMemoryOutput).resultCount === 1 ? "" : "s"} · {(output as SearchMemoryOutput).resolvedScope}
-          </span>
-        )
-      : null;
+    toolName === "search_memory" && output ? (
+      <span>
+        {(output as SearchMemoryOutput).resultCount} result
+        {(output as SearchMemoryOutput).resultCount === 1 ? "" : "s"} ·{" "}
+        {(output as SearchMemoryOutput).resolvedScope}
+      </span>
+    ) : null;
 
   return (
     <ToolLayout
@@ -230,7 +240,9 @@ export const MemoryTool = memo(function MemoryTool({
       isExpandable={isFinished}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={errorText && part.state !== "output-error" ? errorText : undefined}
+      errorText={
+        errorText && part.state !== "output-error" ? errorText : undefined
+      }
       footer={footer}
       actions={
         showApprovalActions ? (

@@ -4,6 +4,7 @@ export type ToolCategory =
   | "memory"
   | "mutation"
   | "plan"
+  | "skill"
   | "web";
 
 export type ToolCatalogEntry = {
@@ -87,6 +88,11 @@ export const TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     capability: "to read web pages, documentation, and URLs",
     category: "web",
     label: "the webfetch tool",
+  },
+  load_skill: {
+    capability: "to load specialized skill instructions on demand",
+    category: "skill",
+    label: "the load_skill tool",
   },
   create_plan: {
     capability: "to create the initial plan for this thread",

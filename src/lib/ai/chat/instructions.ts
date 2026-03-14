@@ -1,4 +1,5 @@
 import { each, lines, section, when } from "@/lib/prompt";
+import type { SkillMetadata } from "@/lib/skills";
 import type { ToolApprovalPolicyMap } from "./tool-approval-policy";
 import { TOOL_CATALOG, getActiveCategories, getToolsInCategory } from "./tools";
 import type { ThreadAgentCallOptions } from "./agent";
@@ -58,6 +59,18 @@ function mcpAvailabilityLines(toolNames: string[]): string {
   );
 }
 
+function buildSkillsSection(skills: SkillMetadata[]): string {
+  if (skills.length === 0) {
+    return "";
+  }
+
+  return lines(
+    "## Skills",
+    "Use load_skill when the user's request matches one of these specialized skill descriptions.",
+    each(skills, (skill) => `- ${skill.name}: ${skill.description}`),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Category-specific rules (only emitted when the category is active)
 // ---------------------------------------------------------------------------
@@ -104,6 +117,14 @@ function executionRules(): string[] {
   ];
 }
 
+function skillRules(): string[] {
+  return [
+    "Use load_skill before guessing skill instructions from memory.",
+    "After loading a skill, treat returned directory paths as the base for bundled references and scripts.",
+    "Load only the skills that directly match the current task.",
+  ];
+}
+
 function shellRules(): string[] {
   return [
     "Propose only one command at a time.",
@@ -125,10 +146,29 @@ function mcpRules(): string[] {
   ];
 }
 
-function permissionRules(permissionMode: string): string[] {
+function permissionRules(
+  permissionMode: string,
+  opts?: {
+    hasSkillRoots?: boolean;
+    hasWorkspaceRoot?: boolean;
+  },
+): string[] {
   if (permissionMode === "full") {
     return [
       "Full permissions mode is active. File and task tools may use absolute paths outside the workspace.",
+    ];
+  }
+
+  if (opts?.hasSkillRoots && opts?.hasWorkspaceRoot) {
+    return [
+      "In default permissions mode, inspection and shell tools must stay inside the selected workspace root or discovered skill directories.",
+      "In default permissions mode, mutation tools and run_task remain restricted to the selected workspace root.",
+    ];
+  }
+
+  if (opts?.hasSkillRoots) {
+    return [
+      "In default permissions mode, file and shell tools must stay inside the discovered skill directories.",
     ];
   }
 
@@ -146,17 +186,23 @@ function buildPlanInstructions(
   activeToolNames: string[],
 ): string {
   const {
+    availableSkills,
     defaultDirectory,
     permissionMode,
+    skillRoots,
     systemPrompt,
     toolApprovalPolicies,
   } = options;
 
   const categories = getActiveCategories(activeToolNames);
   const hasInspection = categories.has("inspection");
+  const hasSkills = categories.has("skill") && availableSkills.length > 0;
+  const hasFilesystemRoots =
+    Boolean(defaultDirectory) || skillRoots.length > 0;
 
   return lines(
     systemPrompt.trim(),
+    buildSkillsSection(availableSkills),
 
     section("Plan Mode", [
       "This thread is in plan mode. You are a read-only planning specialist.",
@@ -176,6 +222,7 @@ function buildPlanInstructions(
       "Keep plans substantial, actionable, and decision-complete.",
       "Prefer task statuses consistently: pending, in_progress, completed, blocked.",
       "Gather context from available tools first when they can answer the uncertainty.",
+      ...(hasSkills ? skillRules() : []),
       "Ask structured questions instead of guessing when requirements, scope, or constraints remain unclear.",
       "Use a shared core structure in the document: overview, current understanding, recommended approach, work breakdown, risks or open questions, and validation criteria.",
       "Technical plans should include key components, dependencies, workflows, sequencing, and critical touchpoints when discoverable.",
@@ -183,12 +230,14 @@ function buildPlanInstructions(
       "Do not produce speculative implementation details when the user has not decided key tradeoffs.",
     ]),
 
-    when(hasInspection && defaultDirectory, () => {
+    when(hasInspection && hasFilesystemRoots, () => {
       const inspectionNames = getToolsInCategory(activeToolNames, "inspection");
       return lines(
         "Before asking clarification questions or creating a plan, inspect the linked workspace when the existing files could answer the uncertainty.",
         toolAvailabilityLines(inspectionNames, toolApprovalPolicies),
-        `Default directory: ${defaultDirectory}\nPermission mode: ${permissionMode}.`,
+        when(defaultDirectory, `Default directory: ${defaultDirectory}`),
+        when(skillRoots.length > 0, `Skill roots: ${skillRoots.join(", ")}`),
+        `Permission mode: ${permissionMode}.`,
         section("Inspection Rules for Plan Mode", [
           "Inspect workspace structure, configuration files, documentation, and key entry points before asking questions.",
           ...inspectionRules(),
@@ -199,8 +248,15 @@ function buildPlanInstructions(
     }),
 
     when(
-      !hasInspection || !defaultDirectory,
-      "No workspace is linked for direct file inspection in this thread.\nIf workspace context is needed, ask focused questions about the project structure, stack, and constraints before creating a plan.",
+      !hasInspection || !hasFilesystemRoots,
+      lines(
+        "No workspace is linked for direct file inspection in this thread.",
+        when(
+          hasSkills,
+          "You can still use load_skill for discovered skills while planning.",
+        ),
+        "If workspace context is needed, ask focused questions about the project structure, stack, and constraints before creating a plan.",
+      ),
     ),
   );
 }
@@ -214,11 +270,13 @@ function buildChatInstructions(
   activeToolNames: string[],
 ): string {
   const {
+    availableSkills,
     defaultDirectory,
     memorySettings,
     permissionMode,
     searchProviders,
     searchSettings,
+    skillRoots,
     sourceMessageId,
     systemPrompt,
     toolApprovalPolicies,
@@ -245,16 +303,19 @@ function buildChatInstructions(
     ? `Long-term memory is enabled with ${memorySettings.memoryProvider}:${memorySettings.memoryModel}.${sourceMessageId ? ` Current source message id: ${sourceMessageId}.` : ""}`
     : "Long-term memory is disabled. Do not use memory tools until the user enables Memory in Settings.";
 
-  const hasWorkspace =
-    Boolean(defaultDirectory) && categories.has("inspection");
+  const hasFilesystemRoots =
+    categories.has("inspection") && (Boolean(defaultDirectory) || skillRoots.length > 0);
+  const hasSkills = categories.has("skill") && availableSkills.length > 0;
 
   return lines(
     systemPrompt.trim(),
+    buildSkillsSection(availableSkills),
 
-    when(hasWorkspace, () => {
+    when(hasFilesystemRoots, () => {
       const allRules: string[] = [];
 
       if (categories.has("inspection")) allRules.push(...inspectionRules());
+      if (categories.has("skill")) allRules.push(...skillRules());
       if (categories.has("memory")) allRules.push(...memoryRules());
       if (categories.has("web")) allRules.push(...webRules());
       if (categories.has("mutation")) allRules.push(...mutationRules());
@@ -262,14 +323,25 @@ function buildChatInstructions(
       if (activeToolNames.some((name) => name.startsWith("mcp_"))) {
         allRules.push(...mcpRules());
       }
-      allRules.push(...permissionRules(permissionMode));
+      allRules.push(
+        ...permissionRules(permissionMode, {
+          hasSkillRoots: skillRoots.length > 0,
+          hasWorkspaceRoot: Boolean(defaultDirectory),
+        }),
+      );
 
       return lines(
         toolAvailabilityLines(activeToolNames, toolApprovalPolicies),
         mcpAvailabilityLines(activeToolNames),
         when(categories.has("web"), webSearchGuidance),
         when(categories.has("web"), webFetchBatchGuidance),
-        `Default directory: ${defaultDirectory}\nPermission mode: ${permissionMode}.`,
+        when(
+          !defaultDirectory && skillRoots.length > 0,
+          "No workspace root is selected. File and shell tools are limited to discovered skill directories.",
+        ),
+        when(defaultDirectory, `Default directory: ${defaultDirectory}`),
+        when(skillRoots.length > 0, `Skill roots: ${skillRoots.join(", ")}`),
+        `Permission mode: ${permissionMode}.`,
         allRules.length > 0 ? section("Usage Guidelines", allRules) : "",
         when(
           categories.has("execution"),
@@ -279,14 +351,16 @@ function buildChatInstructions(
       );
     }),
 
-    when(!hasWorkspace, () => {
+    when(!hasFilesystemRoots, () => {
       const availableNames = activeToolNames.filter(
         (n) =>
+          TOOL_CATALOG[n]?.category === "skill" ||
           TOOL_CATALOG[n]?.category === "memory" ||
           TOOL_CATALOG[n]?.category === "web",
       );
 
       const allRules: string[] = [];
+      if (categories.has("skill")) allRules.push(...skillRules());
       if (categories.has("memory")) allRules.push(...memoryRules());
       if (categories.has("web")) allRules.push(...webRules());
       if (activeToolNames.some((name) => name.startsWith("mcp_"))) {
@@ -294,7 +368,9 @@ function buildChatInstructions(
       }
 
       return lines(
-        "Workspace tools are currently unavailable because there is no selected workspace root.",
+        hasSkills
+          ? "Workspace tools are currently unavailable because there is no selected workspace root, but discovered skill tools are still available."
+          : "Workspace tools are currently unavailable because there is no selected workspace root.",
         availableNames.length > 0
           ? toolAvailabilityLines(
               availableNames,
@@ -307,7 +383,9 @@ function buildChatInstructions(
         when(categories.has("web"), webFetchBatchGuidance),
         allRules.length > 0 ? section("Usage Guidelines", allRules) : "",
         when(categories.has("memory"), memoryGuidance),
-        "Do not mention or attempt workspace file tools, task runners, or shell commands unless the user asks conceptually.",
+        hasSkills
+          ? "Do not mention or attempt workspace-only mutation tools or run_task unless a workspace root is selected."
+          : "Do not mention or attempt workspace file tools, task runners, or shell commands unless the user asks conceptually.",
       );
     }),
   );

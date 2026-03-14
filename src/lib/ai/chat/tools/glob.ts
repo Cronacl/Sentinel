@@ -50,15 +50,18 @@ function globToRegExp(pattern: string) {
 
 export async function executeGlob({
   defaultDirectory,
+  extraAllowedRoots,
   input,
   permissionMode,
 }: {
   defaultDirectory: string;
+  extraAllowedRoots?: readonly string[];
   input: GlobInput;
   permissionMode: PermissionMode;
 }): Promise<GlobOutput> {
   const { resolvedDirectory, rootLabel } = resolveToolDirectory({
     defaultDirectory,
+    ...(extraAllowedRoots ? { extraAllowedRoots } : {}),
     permissionMode,
     requestedPath: input.path,
     toolName: "glob",

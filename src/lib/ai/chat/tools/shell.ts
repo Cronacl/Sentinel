@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import crypto from "node:crypto";
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -52,6 +52,7 @@ type AsyncEventQueue<T> = {
 
 type PendingExecution = {
   allowedRoot?: string;
+  allowedRoots?: string[];
   command: string;
   eventQueue: AsyncEventQueue<ShellCommandStreamEvent>;
   inactivityTimeoutMs: number;
@@ -236,12 +237,20 @@ function appendTailChunk(
 function getShellCommand() {
   const preferredShell = process.env.SHELL?.trim();
   const preferredShellName = preferredShell ? path.basename(preferredShell) : null;
-  const executable =
+  const shellCandidates = [
+    "bash",
+    "sh",
+    "/bin/bash",
+    "/usr/bin/bash",
     preferredShell && (preferredShellName === "bash" || preferredShellName === "zsh")
       ? preferredShell
-      : os.platform() === "darwin"
-        ? "/bin/zsh"
-        : "/bin/bash";
+      : null,
+    os.platform() === "darwin" ? "/bin/zsh" : null,
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  const executable =
+    shellCandidates.find((candidate) =>
+      candidate.includes(path.sep) ? existsSync(candidate) : true,
+    ) ?? "sh";
   const shellName = path.basename(executable);
 
   if (shellName === "bash") {
@@ -411,6 +420,27 @@ function isPathInsideRoot(candidatePath: string, allowedRoot: string) {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
+function normalizeAllowedRoots({
+  allowedRoot,
+  allowedRoots,
+}: {
+  allowedRoot?: string;
+  allowedRoots?: string[];
+}) {
+  const roots = [
+    ...(allowedRoot ? [allowedRoot] : []),
+    ...(allowedRoots ?? []),
+  ].map((root) => toComparablePath(root));
+
+  return Array.from(new Set(roots));
+}
+
+function isPathInsideAllowedRoots(candidatePath: string, allowedRoots: readonly string[]) {
+  return allowedRoots.some((allowedRoot) =>
+    isPathInsideRoot(candidatePath, allowedRoot),
+  );
+}
+
 function finalizePendingExecution(
   session: ShellSession,
   exitCode: number,
@@ -439,7 +469,15 @@ function finalizePendingExecution(
     truncated: pending.truncated,
   };
 
-  if (pending.allowedRoot && !isPathInsideRoot(resolvedDirectory, pending.allowedRoot)) {
+  const allowedRoots = normalizeAllowedRoots({
+    allowedRoot: pending.allowedRoot,
+    allowedRoots: pending.allowedRoots,
+  });
+
+  if (
+    allowedRoots.length > 0 &&
+    !isPathInsideAllowedRoots(resolvedDirectory, allowedRoots)
+  ) {
     const error = new Error(
       "Shell command left the selected workspace root and the session was reset.",
     );
@@ -644,11 +682,13 @@ function runCommandInSession(
   command: string,
   {
     allowedRoot,
+    allowedRoots,
     maxOutputBytes = MAX_OUTPUT_BYTES,
     timeoutMs = COMMAND_MAX_DURATION_MS,
     inactivityTimeoutMs = COMMAND_INACTIVITY_TIMEOUT_MS,
   }: {
     allowedRoot?: string;
+    allowedRoots?: string[];
     inactivityTimeoutMs?: number;
     maxOutputBytes?: number;
     timeoutMs?: number;
@@ -685,6 +725,7 @@ function runCommandInSession(
 
   session.pending = {
     allowedRoot,
+    allowedRoots,
     command,
     eventQueue,
     inactivityTimeoutMs,
@@ -727,11 +768,15 @@ function runCommandInSession(
   };
 }
 
-export function assertShellCommandAllowed(command: string) {
+export function assertShellCommandAllowed(
+  command: string,
+  allowedRootsInput?: string[],
+) {
+  const allowedRoots = normalizeAllowedRoots({
+    allowedRoots: allowedRootsInput,
+  });
   const forbiddenPatterns = [
     /\bpushd\b/i,
-    /\bcd\s+~/i,
-    /\bcd\s+\//i,
     /\bcd\s+\.\.(?:\s|$|\/|\\)/i,
     /\bcd\s+-/i,
   ];
@@ -741,10 +786,37 @@ export function assertShellCommandAllowed(command: string) {
       "Shell command violates default permissions mode by attempting to change directories outside the selected workspace root.",
     );
   }
+
+  const absoluteCdMatches = Array.from(
+    command.matchAll(/\bcd\s+((?:~\/[^\s;&|]+)|(?:\/[^\s;&|]+))/gi),
+  );
+
+  for (const match of absoluteCdMatches) {
+    const rawTarget = match[1]?.trim();
+    if (!rawTarget) {
+      continue;
+    }
+
+    const resolvedTarget = rawTarget.startsWith("~/")
+      ? path.join(os.homedir(), rawTarget.slice(2))
+      : rawTarget;
+
+    if (
+      allowedRoots.length > 0 &&
+      isPathInsideAllowedRoots(path.resolve(resolvedTarget), allowedRoots)
+    ) {
+      continue;
+    }
+
+    throw new Error(
+      "Shell command violates default permissions mode by attempting to change directories outside the selected workspace root.",
+    );
+  }
 }
 
 export async function* streamShellCommand({
   allowedRoot,
+  allowedRoots,
   command,
   defaultDirectory,
   maxOutputBytes,
@@ -754,6 +826,7 @@ export async function* streamShellCommand({
   threadId,
 }: {
   allowedRoot?: string;
+  allowedRoots?: string[];
   command: string;
   defaultDirectory: string;
   inactivityTimeoutMs?: number;
@@ -767,6 +840,7 @@ export async function* streamShellCommand({
 
   const execution = runCommandInSession(session, command, {
     allowedRoot: permissionMode === "default" ? allowedRoot : undefined,
+    allowedRoots: permissionMode === "default" ? allowedRoots : undefined,
     inactivityTimeoutMs,
     maxOutputBytes,
     timeoutMs,
@@ -780,6 +854,7 @@ export async function* streamShellCommand({
 
 export async function executeShellCommand({
   allowedRoot,
+  allowedRoots,
   command,
   defaultDirectory,
   maxOutputBytes,
@@ -789,6 +864,7 @@ export async function executeShellCommand({
   threadId,
 }: {
   allowedRoot?: string;
+  allowedRoots?: string[];
   command: string;
   defaultDirectory: string;
   inactivityTimeoutMs?: number;
@@ -801,6 +877,7 @@ export async function executeShellCommand({
 
   for await (const event of streamShellCommand({
     allowedRoot,
+    allowedRoots,
     command,
     defaultDirectory,
     inactivityTimeoutMs,

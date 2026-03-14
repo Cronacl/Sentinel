@@ -81,6 +81,23 @@ describe("executeGrep", () => {
     expect(result.files.map((file) => file.path)).toEqual(["outside.txt"]);
   });
 
+  it("allows absolute paths inside extra skill roots in default mode", async () => {
+    const defaultDirectory = await createDirectory();
+    const skillDirectory = await createDirectory();
+
+    await writeFile(path.join(skillDirectory, "reference.md"), "needle\n");
+
+    const result = await executeGrep({
+      defaultDirectory,
+      extraAllowedRoots: [skillDirectory],
+      input: { path: skillDirectory, pattern: "needle" },
+      permissionMode: "default",
+    });
+
+    expect(result.root).toBe(skillDirectory);
+    expect(result.files.map((file) => file.path)).toEqual(["reference.md"]);
+  });
+
   it("applies include glob filtering", async () => {
     const defaultDirectory = await createDirectory();
 

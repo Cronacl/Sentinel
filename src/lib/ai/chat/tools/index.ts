@@ -11,6 +11,7 @@ import {
   forgetMemoryDescription,
   globDescription,
   grepDescription,
+  loadSkillDescription,
   listDescription,
   manageTaskDescription,
   multieditDescription,
@@ -52,6 +53,11 @@ import {
 import { executeGlob, globInputSchema, globOutputSchema } from "./glob";
 import { executeGrep, grepInputSchema, grepOutputSchema } from "./grep";
 import { executeList, listInputSchema, listOutputSchema } from "./list";
+import {
+  executeLoadSkill,
+  loadSkillInputSchema,
+  loadSkillOutputSchema,
+} from "./load-skill";
 import {
   executeManageTask,
   manageTaskInputSchema,
@@ -149,7 +155,13 @@ const shellCommandOutputSchema = z.discriminatedUnion("phase", [
 // ---------------------------------------------------------------------------
 
 function buildInspectionTools(options: ThreadAgentCallOptions) {
-  const { defaultDirectory, permissionMode, toolApprovalPolicies } = options;
+  const {
+    defaultDirectory,
+    permissionMode,
+    skillRoots,
+    toolApprovalPolicies,
+  } = options;
+  const filesystemRoot = defaultDirectory ?? skillRoots[0];
 
   return {
     list: tool({
@@ -159,7 +171,8 @@ function buildInspectionTools(options: ThreadAgentCallOptions) {
       outputSchema: listOutputSchema,
       execute: async (input) =>
         executeList({
-          defaultDirectory: defaultDirectory!,
+          defaultDirectory: filesystemRoot!,
+          ...(skillRoots.length > 0 ? { extraAllowedRoots: skillRoots } : {}),
           input,
           permissionMode,
         }),
@@ -171,7 +184,8 @@ function buildInspectionTools(options: ThreadAgentCallOptions) {
       outputSchema: globOutputSchema,
       execute: async (input) =>
         executeGlob({
-          defaultDirectory: defaultDirectory!,
+          defaultDirectory: filesystemRoot!,
+          ...(skillRoots.length > 0 ? { extraAllowedRoots: skillRoots } : {}),
           input,
           permissionMode,
         }),
@@ -183,7 +197,8 @@ function buildInspectionTools(options: ThreadAgentCallOptions) {
       outputSchema: readOutputSchema,
       execute: async (input) =>
         executeRead({
-          defaultDirectory: defaultDirectory!,
+          defaultDirectory: filesystemRoot!,
+          ...(skillRoots.length > 0 ? { extraAllowedRoots: skillRoots } : {}),
           input,
           permissionMode,
         }),
@@ -195,7 +210,8 @@ function buildInspectionTools(options: ThreadAgentCallOptions) {
       outputSchema: grepOutputSchema,
       execute: async (input) =>
         executeGrep({
-          defaultDirectory: defaultDirectory!,
+          defaultDirectory: filesystemRoot!,
+          ...(skillRoots.length > 0 ? { extraAllowedRoots: skillRoots } : {}),
           input,
           permissionMode,
         }),
@@ -259,11 +275,19 @@ function buildMutationTools(options: ThreadAgentCallOptions) {
 }
 
 function buildExecutionTools(options: ThreadAgentCallOptions) {
-  const { defaultDirectory, permissionMode, threadId, toolApprovalPolicies } =
-    options;
+  const {
+    defaultDirectory,
+    permissionMode,
+    skillRoots,
+    threadId,
+    toolApprovalPolicies,
+  } = options;
+  const filesystemRoot = defaultDirectory ?? skillRoots[0];
 
   return {
-    run_task: tool({
+    ...(defaultDirectory
+      ? {
+          run_task: tool({
       description: runTaskDescription,
       inputSchema: runTaskInputSchema,
       needsApproval: () => toolApprovalPolicies.run_task,
@@ -294,6 +318,8 @@ function buildExecutionTools(options: ThreadAgentCallOptions) {
         }
       },
     }),
+        }
+      : {}),
     shell_command: tool({
       description: shellCommandDescription,
       inputSchema: shellCommandInputSchema,
@@ -305,7 +331,10 @@ function buildExecutionTools(options: ThreadAgentCallOptions) {
       }),
       execute: async function* ({ command }, { abortSignal }) {
         if (permissionMode === "default") {
-          assertShellCommandAllowed(command);
+          assertShellCommandAllowed(command, [
+            ...(defaultDirectory ? [defaultDirectory] : []),
+            ...skillRoots,
+          ]);
         }
         const abortShell = () => {
           void disposeShellSession(threadId);
@@ -313,10 +342,12 @@ function buildExecutionTools(options: ThreadAgentCallOptions) {
         abortSignal?.addEventListener("abort", abortShell, { once: true });
         try {
           for await (const event of streamShellCommand({
-            allowedRoot:
-              permissionMode === "default" ? defaultDirectory! : undefined,
+            allowedRoots:
+              permissionMode === "default"
+                ? [...(defaultDirectory ? [defaultDirectory] : []), ...skillRoots]
+                : undefined,
             command,
-            defaultDirectory: defaultDirectory!,
+            defaultDirectory: filesystemRoot!,
             permissionMode,
             threadId,
           })) {
@@ -327,6 +358,27 @@ function buildExecutionTools(options: ThreadAgentCallOptions) {
           abortSignal?.removeEventListener("abort", abortShell);
         }
       },
+    }),
+  };
+}
+
+function buildSkillTools(options: ThreadAgentCallOptions) {
+  const { availableSkills, defaultDirectory } = options;
+
+  if (availableSkills.length === 0) {
+    return {};
+  }
+
+  return {
+    load_skill: tool({
+      description: loadSkillDescription,
+      inputSchema: loadSkillInputSchema,
+      outputSchema: loadSkillOutputSchema,
+      execute: async (input) =>
+        executeLoadSkill({
+          input,
+          workspaceRoot: defaultDirectory ?? null,
+        }),
     }),
   };
 }
@@ -489,9 +541,13 @@ function buildPlanTools(options: ThreadAgentCallOptions) {
 // ---------------------------------------------------------------------------
 
 export function buildTools(options: ThreadAgentCallOptions) {
+  const hasFilesystemTools =
+    Boolean(options.defaultDirectory) || options.skillRoots.length > 0;
+
   if (options.threadMode === "plan") {
     return {
-      ...(options.toolsEnabled ? buildInspectionTools(options) : {}),
+      ...buildSkillTools(options),
+      ...(hasFilesystemTools ? buildInspectionTools(options) : {}),
       ...buildPlanTools(options),
     };
   }
@@ -499,12 +555,13 @@ export function buildTools(options: ThreadAgentCallOptions) {
   return {
     ...buildMemoryTools(options),
     ...(options.mcpTools ?? {}),
+    ...buildSkillTools(options),
     ...buildWebTools(options),
-    ...(options.toolsEnabled
+    ...(hasFilesystemTools
       ? {
           ...buildInspectionTools(options),
-          ...buildMutationTools(options),
           ...buildExecutionTools(options),
+          ...(options.toolsEnabled ? buildMutationTools(options) : {}),
         }
       : {}),
   };

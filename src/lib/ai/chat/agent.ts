@@ -10,6 +10,7 @@ import type { PermissionMode } from "@/lib/security";
 import type { SearchProviderRuntimeMap } from "@/lib/search/providers/runtime";
 import type { SearchSettings } from "@/lib/search";
 import type { MemorySettings } from "@/lib/memory";
+import type { SkillMetadata } from "@/lib/skills";
 import type { WebFetchSettings } from "@/lib/webfetch";
 import type { ThreadMode } from "@/lib/plan";
 import { z } from "zod";
@@ -29,6 +30,8 @@ const threadAgentCallOptionsSchema = z.object({
   permissionMode: z.custom<PermissionMode>(),
   searchProviders: z.custom<SearchProviderRuntimeMap>(),
   searchSettings: z.custom<SearchSettings>(),
+  availableSkills: z.array(z.custom<SkillMetadata>()),
+  skillRoots: z.array(z.string()),
   sourceMessageId: z.string().nullable().optional(),
   systemPrompt: z.string(),
   threadId: z.string(),

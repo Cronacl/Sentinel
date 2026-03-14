@@ -21,20 +21,42 @@ export function isPathWithinRoot(candidatePath: string, allowedRoot: string) {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
+export function isPathWithinAnyRoot(
+  candidatePath: string,
+  allowedRoots: readonly string[],
+) {
+  return allowedRoots.some((allowedRoot) =>
+    isPathWithinRoot(candidatePath, allowedRoot),
+  );
+}
+
 export function resolveToolPath({
   defaultDirectory,
+  extraAllowedRoots,
   permissionMode,
   requestedPath,
   toolName,
 }: {
   defaultDirectory: string;
+  extraAllowedRoots?: readonly string[];
   permissionMode: PermissionMode;
   requestedPath?: string;
   toolName: string;
 }) {
   const rawPath = requestedPath?.trim() || ".";
+  const normalizedExtraAllowedRoots = (extraAllowedRoots ?? []).map((root) =>
+    path.resolve(root),
+  );
+  const allowedRoots = [path.resolve(defaultDirectory), ...normalizedExtraAllowedRoots];
+  const allowsAbsolutePath =
+    path.isAbsolute(rawPath) &&
+    isPathWithinAnyRoot(path.resolve(rawPath), normalizedExtraAllowedRoots);
 
-  if (permissionMode === "default" && path.isAbsolute(rawPath)) {
+  if (
+    permissionMode === "default" &&
+    path.isAbsolute(rawPath) &&
+    !allowsAbsolutePath
+  ) {
     throw new Error(
       `The ${toolName} tool only accepts relative paths in default permissions mode.`,
     );
@@ -46,7 +68,7 @@ export function resolveToolPath({
 
   if (
     permissionMode === "default" &&
-    !isPathWithinRoot(resolvedPath, defaultDirectory)
+    !isPathWithinAnyRoot(resolvedPath, allowedRoots)
   ) {
     throw new Error(
       "The requested path must stay inside the selected workspace root.",
@@ -66,6 +88,7 @@ export function resolveToolPath({
 
 export function resolveToolDirectory(input: {
   defaultDirectory: string;
+  extraAllowedRoots?: readonly string[];
   permissionMode: PermissionMode;
   requestedPath?: string;
   toolName: string;

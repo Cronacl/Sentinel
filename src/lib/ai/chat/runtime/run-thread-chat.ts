@@ -34,6 +34,7 @@ import {
   answerThreadPlanQuestionSet,
 } from "@/lib/plan/service";
 import { buildPlanPromptLines, normalizeThreadMode } from "@/lib/plan";
+import { getSkillSnapshot } from "@/lib/skills";
 import { resolveThreadTitleModel } from "../title/model";
 import { generateThreadTitle } from "../title/generate";
 import { parseRequest } from "./parse-request";
@@ -167,6 +168,12 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
       threadId: request.threadId,
     }).catch(() => ({ pendingQuestionSet: null, plan: null })),
   ]);
+  const skillSnapshot = await getSkillSnapshot({ workspaceRoot }).catch(() => ({
+    revision: 0,
+    skillRoots: [],
+    skills: [],
+    updatedAt: Date.now(),
+  }));
   const toolsEnabled = Boolean(workspaceRoot);
   const continuationAssistant =
     request.trigger === "submit-tool-approval" ||
@@ -299,12 +306,14 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
             return streamErrorMessage;
           },
           options: {
+            availableSkills: skillSnapshot.skills,
             ...(workspaceRoot ? { defaultDirectory: workspaceRoot } : {}),
             mcpTools: mcpRuntime.tools,
             memorySettings,
             permissionMode,
             searchProviders,
             searchSettings,
+            skillRoots: skillSnapshot.skillRoots,
             sourceMessageId: parentId,
             systemPrompt,
             threadId: request.threadId,

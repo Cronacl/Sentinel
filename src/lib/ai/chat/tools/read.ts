@@ -82,15 +82,18 @@ async function isBinaryFile(resolvedPath: string) {
 
 export async function executeRead({
   defaultDirectory,
+  extraAllowedRoots,
   input,
   permissionMode,
 }: {
   defaultDirectory: string;
+  extraAllowedRoots?: readonly string[];
   input: ReadInput;
   permissionMode: PermissionMode;
 }): Promise<ReadOutput> {
   const { label, resolvedPath } = resolveToolPath({
     defaultDirectory,
+    ...(extraAllowedRoots ? { extraAllowedRoots } : {}),
     permissionMode,
     requestedPath: input.path,
     toolName: "read",

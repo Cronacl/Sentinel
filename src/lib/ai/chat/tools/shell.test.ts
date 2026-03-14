@@ -1,6 +1,7 @@
 // @ts-nocheck
 
 import { afterEach, describe, expect, it } from "bun:test";
+import { mkdir } from "node:fs/promises";
 
 const {
   assertShellCommandAllowed,
@@ -144,8 +145,15 @@ describe("shell session manager", () => {
     );
   });
 
+  it("allows changing into an allowed skill root in default mode", () => {
+    expect(() =>
+      assertShellCommandAllowed(`cd ${workspaceRoot}`, [workspaceRoot]),
+    ).not.toThrow();
+  });
+
   it("resets the session if the shell leaves the allowed root in default mode", async () => {
     const childDirectory = `${workspaceRoot}/sentinel`;
+    await mkdir(childDirectory, { recursive: true });
 
     await expect(
       executeShellCommand({

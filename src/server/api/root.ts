@@ -15,6 +15,7 @@ import { providersRouter } from "@/server/api/routers/providers";
 import { searchProvidersRouter } from "@/server/api/routers/search-providers";
 import { searchSettingsRouter } from "@/server/api/routers/search-settings";
 import { securityRouter } from "@/server/api/routers/security";
+import { skillsRouter } from "@/server/api/routers/skills";
 import { threadsRouter } from "@/server/api/routers/threads";
 import { createCallerFactory, createTRPCRouter } from "@/server/api/trpc";
 import { workspacesRouter } from "@/server/api/routers/workspaces";
@@ -42,6 +43,7 @@ export const appRouter = createTRPCRouter({
   searchProviders: searchProvidersRouter,
   searchSettings: searchSettingsRouter,
   security: securityRouter,
+  skills: skillsRouter,
   threads: threadsRouter,
   workspaces: workspacesRouter,
 });

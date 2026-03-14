@@ -57,6 +57,22 @@ mock.module("./tools/forget-memory", () => ({
   forgetMemoryOutputSchema: z.object({}),
 }));
 
+mock.module("./tools/load-skill", () => ({
+  executeLoadSkill: mock(async () => ({
+    content: "# Loaded skill",
+    description: "Helpful skill",
+    directory: "/tmp/skill-dir",
+    files: ["references/guide.md"],
+    name: "helpful-skill",
+    preview: "# Loaded skill",
+    scope: "workspace",
+    skillFile: "/tmp/skill-dir/SKILL.md",
+    sourceKind: "sentinel",
+  })),
+  loadSkillInputSchema: z.object({}),
+  loadSkillOutputSchema: z.object({}),
+}));
+
 mock.module("./tools/create-plan", () => ({
   createPlanInputSchema: z.object({}),
   createPlanOutputSchema: z.object({}),
@@ -211,7 +227,13 @@ const defaultMemorySettings = {
 
 function prepareWith(options) {
   createThreadAgent({ languageModel: { kind: "model" } });
-  return aiTestState.agentConfig.prepareCall({ options });
+  return aiTestState.agentConfig.prepareCall({
+    options: {
+      availableSkills: [],
+      skillRoots: [],
+      ...options,
+    },
+  });
 }
 
 afterEach(() => {
@@ -238,6 +260,19 @@ describe("createThreadAgent", () => {
         defaultResultCount: 5,
         maxResultCount: 10,
       },
+      availableSkills: [
+        {
+          description: "Helpful skill",
+          directory: "/tmp/workspace/.sentinel/skills/helpful-skill",
+          name: "helpful-skill",
+          preview: "# Helpful skill",
+          scope: "workspace",
+          skillFile:
+            "/tmp/workspace/.sentinel/skills/helpful-skill/SKILL.md",
+          sourceKind: "sentinel",
+        },
+      ],
+      skillRoots: ["/tmp/workspace/.sentinel/skills/helpful-skill"],
       sourceMessageId: "user-message-1",
       systemPrompt: "System prompt",
       threadId: "thread-1",
@@ -255,6 +290,8 @@ describe("createThreadAgent", () => {
     expect(prepared.tools).toHaveProperty("forget_memory");
     expect(prepared.tools).toHaveProperty("websearch");
     expect(prepared.tools).toHaveProperty("webfetch");
+    expect(prepared.tools).toHaveProperty("load_skill");
+    expect(prepared.tools.load_skill).not.toHaveProperty("needsApproval");
     expect(prepared.tools).toHaveProperty("list");
     expect(prepared.tools).toHaveProperty("glob");
     expect(prepared.tools).toHaveProperty("read");
@@ -270,6 +307,8 @@ describe("createThreadAgent", () => {
     expect(prepared.tools).not.toHaveProperty("manage_task");
     expect(prepared.tools).not.toHaveProperty("ask_question");
     expect(prepared.instructions).toContain("Permission mode: default");
+    expect(prepared.instructions).toContain("## Skills");
+    expect(prepared.instructions).toContain("helpful-skill: Helpful skill");
     expect(prepared.instructions).toContain("read");
     expect(prepared.instructions).toContain("run_task");
     expect(prepared.instructions).toContain("grep");
@@ -341,6 +380,48 @@ describe("createThreadAgent", () => {
     expect(prepared.instructions).toContain("Batch webfetch is disabled");
   });
 
+  it("keeps load_skill and filesystem inspection available when only skill roots exist", () => {
+    const prepared = prepareWith({
+      availableSkills: [
+        {
+          description: "Helpful skill",
+          directory: "/tmp/skills/helpful-skill",
+          name: "helpful-skill",
+          preview: "# Helpful skill",
+          scope: "global",
+          skillFile: "/tmp/skills/helpful-skill/SKILL.md",
+          sourceKind: "agents",
+        },
+      ],
+      memorySettings: defaultMemorySettings,
+      permissionMode: "default",
+      searchProviders: {},
+      searchSettings: {
+        defaultProvider: "exa",
+        defaultResultCount: 5,
+        maxResultCount: 10,
+      },
+      skillRoots: ["/tmp/skills/helpful-skill"],
+      sourceMessageId: "user-message-skills",
+      systemPrompt: "System prompt",
+      threadId: "thread-skills",
+      threadMode: "chat",
+      userId: "user-1",
+      toolApprovalPolicies: getDefaultToolApprovalPolicies(),
+      toolsEnabled: false,
+      webFetchSettings: { batchEnabled: false, batchLimit: 10 },
+      workspaceId: "workspace-1",
+    });
+
+    expect(Object.keys(prepared.tools)).toContain("load_skill");
+    expect(Object.keys(prepared.tools)).toContain("list");
+    expect(Object.keys(prepared.tools)).toContain("shell_command");
+    expect(Object.keys(prepared.tools)).not.toContain("edit");
+    expect(Object.keys(prepared.tools)).not.toContain("run_task");
+    expect(prepared.instructions).toContain("No workspace root is selected.");
+    expect(prepared.instructions).toContain("Skill roots: /tmp/skills/helpful-skill");
+  });
+
   it("uses per-tool approval overrides when deciding whether to pause", async () => {
     const toolApprovalPolicies = getDefaultToolApprovalPolicies();
     toolApprovalPolicies.list = true;
@@ -348,6 +429,19 @@ describe("createThreadAgent", () => {
 
     const prepared = prepareWith({
       defaultDirectory: "/tmp/workspace",
+      availableSkills: [
+        {
+          description: "Helpful skill",
+          directory: "/tmp/workspace/.sentinel/skills/helpful-skill",
+          name: "helpful-skill",
+          preview: "# Helpful skill",
+          scope: "workspace",
+          skillFile:
+            "/tmp/workspace/.sentinel/skills/helpful-skill/SKILL.md",
+          sourceKind: "sentinel",
+        },
+      ],
+      skillRoots: ["/tmp/workspace/.sentinel/skills/helpful-skill"],
       memorySettings: defaultMemorySettings,
       permissionMode: "default",
       searchProviders: {},
@@ -380,6 +474,19 @@ describe("createThreadAgent", () => {
   it("builds a planning agent with read-only inspection tools for plan mode threads", async () => {
     const prepared = prepareWith({
       defaultDirectory: "/tmp/workspace",
+      availableSkills: [
+        {
+          description: "Helpful skill",
+          directory: "/tmp/workspace/.sentinel/skills/helpful-skill",
+          name: "helpful-skill",
+          preview: "# Helpful skill",
+          scope: "workspace",
+          skillFile:
+            "/tmp/workspace/.sentinel/skills/helpful-skill/SKILL.md",
+          sourceKind: "sentinel",
+        },
+      ],
+      skillRoots: ["/tmp/workspace/.sentinel/skills/helpful-skill"],
       memorySettings: defaultMemorySettings,
       permissionMode: "default",
       searchProviders: {},
@@ -400,6 +507,7 @@ describe("createThreadAgent", () => {
     });
 
     expect(Object.keys(prepared.tools)).toEqual([
+      "load_skill",
       "list",
       "glob",
       "read",

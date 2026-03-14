@@ -113,6 +113,14 @@ const updateMessageMetadata = mock(async () => {});
 
 const createNewResumableStream = mock(async () => {});
 const getWorkspaceRootPath = mock(async () => "/tmp/workspace-1");
+const getSkillSnapshot = mock(async () => ({
+  revision: 1,
+  skillRoots: [],
+  skills: [],
+  updatedAt: Date.now(),
+}));
+const loadSkillByName = mock(async () => null);
+const getMcpServerRuntime = mock(async () => []);
 const getToolPermissionMode = mock(async () => "default");
 const getMemorySettings = mock(async () => ({
   autoSaveEnabled: true,
@@ -394,12 +402,18 @@ mock.module("@/lib/plan/service", () => ({
 
 mock.module("./runtime/workspace", () => ({
   getMemorySettings,
+  getMcpServerRuntime,
   getSearchProviderRuntime,
   getSearchSettings,
   getToolApprovalPolicies,
   getToolPermissionMode,
   getWebFetchSettings,
   getWorkspaceRootPath,
+}));
+
+mock.module("@/lib/skills", () => ({
+  getSkillSnapshot,
+  loadSkillByName,
 }));
 
 const { runThreadChat } = await import("./index");

@@ -161,15 +161,18 @@ function formatTree(root: string, entries: ListEntry[]) {
 
 export async function executeList({
   defaultDirectory,
+  extraAllowedRoots,
   input,
   permissionMode,
 }: {
   defaultDirectory: string;
+  extraAllowedRoots?: readonly string[];
   input: ListInput;
   permissionMode: PermissionMode;
 }): Promise<ListOutput> {
   const { resolvedDirectory, rootLabel } = resolveToolDirectory({
     defaultDirectory,
+    ...(extraAllowedRoots ? { extraAllowedRoots } : {}),
     permissionMode,
     requestedPath: input.path,
     toolName: "list",

@@ -87,4 +87,24 @@ describe("executeEdit", () => {
 
     expect(await readFile(externalPath, "utf8")).toContain("world");
   });
+
+  it("keeps skill-root paths blocked in default mode", async () => {
+    const defaultDirectory = await createDirectory();
+    const skillDirectory = await createDirectory();
+    const skillFile = path.join(skillDirectory, "reference.md");
+    await writeFile(skillFile, "hello\n");
+
+    await expect(
+      executeEdit({
+        defaultDirectory,
+        input: {
+          newString: "world",
+          oldString: "hello",
+          path: skillFile,
+          rationale: "Attempt to edit a skill file",
+        },
+        permissionMode: "default",
+      }),
+    ).rejects.toThrow(/relative paths/i);
+  });
 });

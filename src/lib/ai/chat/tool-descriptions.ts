@@ -194,6 +194,17 @@ export const webfetchDescription = lines(
   ].join("\n"),
 );
 
+export const loadSkillDescription = lines(
+  "Load a discovered skill to access specialized instructions and bundled resources.",
+  [
+    "- Loads the full SKILL.md body for one discovered skill by name.",
+    "- Returns the skill base directory, source scope, source kind, and a sample of bundled files.",
+    "- Use this tool when the user's request matches a listed skill description.",
+    "- Relative resource paths mentioned in the skill are relative to the returned directory.",
+    "- This tool is always available when skills are discovered and does not require approval.",
+  ].join("\n"),
+);
+
 export const createPlanDescription = lines(
   "Create the initial plan for this thread.",
   [

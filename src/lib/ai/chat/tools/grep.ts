@@ -101,15 +101,18 @@ async function waitForExit(child: ReturnType<typeof spawn>) {
 
 export async function executeGrep({
   defaultDirectory,
+  extraAllowedRoots,
   input,
   permissionMode,
 }: {
   defaultDirectory: string;
+  extraAllowedRoots?: readonly string[];
   input: GrepInput;
   permissionMode: PermissionMode;
 }): Promise<GrepOutput> {
   const { resolvedDirectory, rootLabel } = resolveToolDirectory({
     defaultDirectory,
+    ...(extraAllowedRoots ? { extraAllowedRoots } : {}),
     permissionMode,
     requestedPath: input.path,
     toolName: "grep",

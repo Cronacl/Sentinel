@@ -9,6 +9,7 @@ import { PlanTool } from "./renderers/plan";
 import { ReadTool } from "./renderers/read";
 import { RunTaskTool } from "./renderers/run-task";
 import { ShellTool } from "./renderers/shell";
+import { SkillTool } from "./renderers/skill";
 import { WebSearchTool } from "./renderers/websearch";
 import { WebFetchTool } from "./renderers/webfetch";
 
@@ -29,6 +30,7 @@ const renderers: Record<string, Renderer> = {
   save_memory: MemoryTool,
   search_memory: MemoryTool,
   shell_command: ShellTool,
+  load_skill: SkillTool,
   update_plan: PlanTool,
   websearch: WebSearchTool,
   webfetch: WebFetchTool,
