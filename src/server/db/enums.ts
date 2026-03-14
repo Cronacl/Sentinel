@@ -65,3 +65,33 @@ export type ThreadPlanQuestionStatus =
 
 export const THREAD_PLAN_AUDIENCES = ["technical", "general"] as const;
 export type ThreadPlanAudience = (typeof THREAD_PLAN_AUDIENCES)[number];
+
+export const AUTOMATION_STATUSES = ["active", "paused"] as const;
+export type AutomationStatus = (typeof AUTOMATION_STATUSES)[number];
+
+export const AUTOMATION_SCHEDULE_TYPES = [
+  "hourly",
+  "daily",
+  "weekly",
+  "weekdays",
+  "custom",
+] as const;
+export type AutomationScheduleType =
+  (typeof AUTOMATION_SCHEDULE_TYPES)[number];
+
+export const AUTOMATION_RUN_STATUSES = [
+  "pending",
+  "running",
+  "completed",
+  "failed",
+] as const;
+export type AutomationRunStatus = (typeof AUTOMATION_RUN_STATUSES)[number];
+
+export const AUTOMATION_REASONING_EFFORTS = [
+  "minimal",
+  "low",
+  "medium",
+  "high",
+] as const;
+export type AutomationReasoningEffort =
+  (typeof AUTOMATION_REASONING_EFFORTS)[number];

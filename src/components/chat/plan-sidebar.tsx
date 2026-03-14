@@ -4,14 +4,9 @@ import type { ReactNode } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { useMemo } from "react";
 import { CloseButton, ScrollShadow } from "@heroui/react";
-import {
-  CheckmarkCircle02Icon,
-  Cancel01Icon,
-  Loading02Icon,
-  TimeQuarterPassIcon,
-} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
+import { TaskStatusIcon } from "@/components/chat/task-status-icon";
 import {
   getPlanAudienceLabel,
   getTaskStatusLabel,
@@ -30,13 +25,6 @@ function formatRelativeTime(value: Date) {
   const diffMs = Math.abs(Date.now() - value.getTime());
   if (diffMs < 30_000) return "now";
   return formatDistanceToNowStrict(value, { addSuffix: true });
-}
-
-function getTaskStatusIcon(status: ThreadPlanTaskStatus | undefined) {
-  if (status === "completed") return CheckmarkCircle02Icon;
-  if (status === "in_progress") return Loading02Icon;
-  if (status === "blocked") return Cancel01Icon;
-  return TimeQuarterPassIcon;
 }
 
 function getTaskStatusColor(status: ThreadPlanTaskStatus | undefined) {
@@ -82,16 +70,15 @@ function PlanSidebarBody({ plan }: { plan: SidebarPlanData }) {
     const parts: string[] = [];
     parts.push(getPlanAudienceLabel(plan.audience));
     if (plan.statusLabel) parts.push(plan.statusLabel);
-    if (taskCount > 0) parts.push(`${taskCount} task${taskCount === 1 ? "" : "s"}`);
+    if (taskCount > 0)
+      parts.push(`${taskCount} task${taskCount === 1 ? "" : "s"}`);
     if (plan.updatedAt) parts.push(formatRelativeTime(plan.updatedAt));
     return parts;
   }, [plan.audience, plan.statusLabel, plan.updatedAt, taskCount]);
 
   return (
     <ScrollShadow className="h-full px-5 pb-6" orientation="vertical">
-      <p className="text-[11px] text-foreground/40">
-        {metaParts.join(" · ")}
-      </p>
+      <p className="text-[11px] text-foreground/40">{metaParts.join(" · ")}</p>
 
       {trimmedGoal ? (
         <p className="mt-2.5 text-[13px] leading-relaxed text-foreground/70">
@@ -102,9 +89,7 @@ function PlanSidebarBody({ plan }: { plan: SidebarPlanData }) {
       {taskCount > 0 && plan.tasks ? (
         <section className="mt-4">
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-[11px] font-medium text-foreground/50">
-              Tasks
-            </p>
+            <p className="text-[11px] font-medium text-foreground/50">Tasks</p>
             <p className="text-[10px] text-foreground/30">
               {completedCount}/{taskCount} done
             </p>
@@ -121,18 +106,15 @@ function PlanSidebarBody({ plan }: { plan: SidebarPlanData }) {
 
           <div className="space-y-px">
             {plan.tasks.map((task, index) => {
-              const StatusIcon = getTaskStatusIcon(task.status);
               return (
                 <div
-                  className="flex items-start gap-2 rounded-lg px-2 py-1.5"
+                  className="flex items-start gap-1 rounded-2xl px-2 py-1.5"
                   key={task.id ?? `${task.title}-${index}`}
                 >
-                  <HugeiconsIcon
+                  <TaskStatusIcon
                     className={`mt-0.5 shrink-0 ${getTaskStatusColor(task.status)}`}
-                    color="currentColor"
-                    icon={StatusIcon}
                     size={12}
-                    strokeWidth={1.5}
+                    status={task.status}
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-1.5">

@@ -10,6 +10,10 @@ import { createId } from "@paralleldrive/cuid2";
 
 import {
   AI_PROVIDERS,
+  AUTOMATION_REASONING_EFFORTS,
+  AUTOMATION_RUN_STATUSES,
+  AUTOMATION_SCHEDULE_TYPES,
+  AUTOMATION_STATUSES,
   MCP_SERVER_CATALOG_IDS,
   MCP_TRANSPORTS,
   PERMISSION_MODES,
@@ -100,6 +104,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   searchSettings: many(searchSettings),
   memorySettings: many(memorySettings),
   toolApprovalPolicies: many(toolApprovalPolicies),
+  automations: many(automations),
 }));
 
 export const workspaces = sqliteTable(
@@ -137,6 +142,7 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   }),
   selectedByUsers: many(users, { relationName: "selectedWorkspace" }),
   threads: many(threads),
+  automations: many(automations),
 }));
 
 export const threads = sqliteTable(
@@ -619,6 +625,102 @@ export const modelPreferencesRelations = relations(
     user: one(users, {
       fields: [modelPreferences.userId],
       references: [users.id],
+    }),
+  }),
+);
+
+export const automations = sqliteTable(
+  "automation",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    userId: text("user_id").notNull(),
+    workspaceId: text("workspace_id"),
+    title: text("title").notNull(),
+    prompt: text("prompt").notNull(),
+    status: text("status", { enum: AUTOMATION_STATUSES })
+      .notNull()
+      .default("paused"),
+    scheduleType: text("schedule_type", { enum: AUTOMATION_SCHEDULE_TYPES })
+      .notNull()
+      .default("daily"),
+    scheduleDayOfWeek: integer("schedule_day_of_week"),
+    scheduleTime: text("schedule_time"),
+    scheduleCron: text("schedule_cron"),
+    modelId: text("model_id"),
+    reasoningEffort: text("reasoning_effort", {
+      enum: AUTOMATION_REASONING_EFFORTS,
+    }),
+    lastRanAt: integer("last_ran_at", { mode: "timestamp" }),
+    nextRunAt: integer("next_run_at", { mode: "timestamp" }),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("automation_user_id_idx").on(table.userId),
+    index("automation_user_status_idx").on(table.userId, table.status),
+    index("automation_next_run_idx").on(table.nextRunAt),
+  ],
+);
+
+export const automationsRelations = relations(
+  automations,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [automations.userId],
+      references: [users.id],
+    }),
+    workspace: one(workspaces, {
+      fields: [automations.workspaceId],
+      references: [workspaces.id],
+    }),
+    runs: many(automationRuns),
+  }),
+);
+
+export const automationRuns = sqliteTable(
+  "automation_run",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    automationId: text("automation_id").notNull(),
+    threadId: text("thread_id"),
+    status: text("status", { enum: AUTOMATION_RUN_STATUSES })
+      .notNull()
+      .default("pending"),
+    error: text("error"),
+    startedAt: integer("started_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    completedAt: integer("completed_at", { mode: "timestamp" }),
+  },
+  (table) => [
+    index("automation_run_automation_id_idx").on(table.automationId),
+    index("automation_run_automation_started_idx").on(
+      table.automationId,
+      table.startedAt,
+    ),
+    index("automation_run_thread_id_idx").on(table.threadId),
+  ],
+);
+
+export const automationRunsRelations = relations(
+  automationRuns,
+  ({ one }) => ({
+    automation: one(automations, {
+      fields: [automationRuns.automationId],
+      references: [automations.id],
+    }),
+    thread: one(threads, {
+      fields: [automationRuns.threadId],
+      references: [threads.id],
     }),
   }),
 );

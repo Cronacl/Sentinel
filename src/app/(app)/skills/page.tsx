@@ -462,10 +462,10 @@ export default function SkillsPage() {
         </>
       }
       subtitle={
-        <div className="max-w-sm">
+        <span className="max-w-sm">
           Browse discovered skills and install recommended skills from the
           registry.
-        </div>
+        </span>
       }
       title={
         <div>

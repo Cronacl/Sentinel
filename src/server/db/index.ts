@@ -395,6 +395,53 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
   db.run(
     sql`CREATE INDEX IF NOT EXISTS "model_preference_user_id_idx" ON "model_preference" ("user_id")`,
   );
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS "automation" (
+    "id" text PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL,
+    "workspace_id" text,
+    "title" text NOT NULL,
+    "prompt" text NOT NULL,
+    "status" text DEFAULT 'paused' NOT NULL,
+    "schedule_type" text DEFAULT 'daily' NOT NULL,
+    "schedule_day_of_week" integer,
+    "schedule_time" text,
+    "schedule_cron" text,
+    "model_id" text,
+    "reasoning_effort" text,
+    "last_ran_at" integer,
+    "next_run_at" integer,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "automation_user_id_idx" ON "automation" ("user_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "automation_user_status_idx" ON "automation" ("user_id", "status")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "automation_next_run_idx" ON "automation" ("next_run_at")`,
+  );
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS "automation_run" (
+    "id" text PRIMARY KEY NOT NULL,
+    "automation_id" text NOT NULL,
+    "thread_id" text,
+    "status" text DEFAULT 'pending' NOT NULL,
+    "error" text,
+    "started_at" integer NOT NULL,
+    "completed_at" integer
+  )`);
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "automation_run_automation_id_idx" ON "automation_run" ("automation_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "automation_run_automation_started_idx" ON "automation_run" ("automation_id", "started_at")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "automation_run_thread_id_idx" ON "automation_run" ("thread_id")`,
+  );
 }
 
 function initVectorDb(): Database.Database | null {
@@ -513,6 +560,7 @@ function createDatabase() {
 }
 
 const globalForDb = globalThis as unknown as {
+  automationSchedulerInit: Promise<void> | undefined;
   db: ReturnType<typeof createDatabase> | undefined;
   vectorDb: Database.Database | null | undefined;
 };
@@ -524,6 +572,23 @@ export const vectorDb: Database.Database | null =
 if (process.env.NODE_ENV !== "production") {
   globalForDb.db = db;
   globalForDb.vectorDb = vectorDb;
+}
+
+if (!globalForDb.automationSchedulerInit) {
+  globalForDb.automationSchedulerInit = Promise.resolve()
+    .then(async () => {
+      const { initAutomationScheduler } = await import(
+        "@/lib/automations/scheduler"
+      );
+      await initAutomationScheduler();
+    })
+    .catch((error) => {
+      globalForDb.automationSchedulerInit = undefined;
+      console.error(
+        "[Automations] Failed to initialize scheduler:",
+        error instanceof Error ? error.message : error,
+      );
+    });
 }
 
 export type Database = typeof db;

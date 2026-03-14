@@ -163,24 +163,18 @@ export function SkillDetailScreen({ skillName }: { skillName: string }) {
 
   return (
     <SettingsPageWrapper
-      actions={
-        <Link href="/skills">
-          <Button size="sm" variant="tertiary">
-            <HugeiconsIcon
-              color="currentColor"
-              icon={ArrowLeft01Icon}
-              size={16}
-              strokeWidth={1.5}
-            />
-            Back to skills
-          </Button>
-        </Link>
-      }
       title={
         <div>
           {!leftSidebarOpen ? <SidebarToggle /> : null}
           {formatSkillTitle(resolvedName)}
         </div>
+      }
+      subtitle={
+        <Link href="/skills">
+          <span className="text-sm text-muted underline hover:text-foreground">
+            Back to skills
+          </span>
+        </Link>
       }
     >
       {skill.error ? (

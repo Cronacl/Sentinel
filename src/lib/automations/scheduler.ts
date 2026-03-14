@@ -1,0 +1,144 @@
+import Baker, { FilePersistenceProvider } from "cronbake";
+import path from "node:path";
+import os from "node:os";
+import { eq } from "drizzle-orm";
+
+import { db } from "@/server/db";
+import { automations } from "@/server/db/schema";
+import type { AutomationScheduleType } from "@/server/db/enums";
+import { buildCronExpression } from "./schedule-utils";
+import { executeAutomationRun } from "./runner";
+
+function getStatePath(): string {
+  const sentinelDir =
+    process.env.SENTINEL_DB_PATH?.trim()
+      ? path.dirname(process.env.SENTINEL_DB_PATH.trim())
+      : path.join(os.homedir(), ".sentinel");
+  return path.join(sentinelDir, "automations-state.json");
+}
+
+let bakerInstance: ReturnType<typeof Baker.create> | null = null;
+
+function getBaker() {
+  if (!bakerInstance) {
+    bakerInstance = Baker.create({
+      persistence: {
+        enabled: true,
+        strategy: "file",
+        provider: new FilePersistenceProvider(getStatePath()),
+        autoRestore: true,
+      },
+      enableMetrics: true,
+      onError: (error, jobName) => {
+        console.error(
+          `[Automations] Job ${jobName} failed:`,
+          error instanceof Error ? error.message : error,
+        );
+      },
+    });
+  }
+  return bakerInstance;
+}
+
+export async function initAutomationScheduler() {
+  const baker = getBaker();
+  await baker.ready();
+
+  const activeAutomations = await db.query.automations.findMany({
+    where: eq(automations.status, "active"),
+  });
+
+  const existingJobs = new Set(baker.getJobNames());
+
+  for (const automation of activeAutomations) {
+    if (!existingJobs.has(automation.id)) {
+      scheduleAutomation(automation);
+    }
+  }
+}
+
+export function scheduleAutomation(automation: {
+  id: string;
+  title: string;
+  scheduleType: AutomationScheduleType;
+  scheduleDayOfWeek: number | null;
+  scheduleTime: string | null;
+  scheduleCron: string | null;
+}) {
+  const baker = getBaker();
+  const cronExpr = buildCronExpression(automation);
+
+  const existingJobs = new Set(baker.getJobNames());
+  if (existingJobs.has(automation.id)) {
+    baker.remove(automation.id);
+  }
+
+  baker.add({
+    name: automation.id,
+    cron: cronExpr,
+    persist: true,
+    overrunProtection: true,
+    callback: async () => {
+      await executeAutomationRun(automation.id);
+    },
+    onError: (error) => {
+      console.error(
+        `[Automations] "${automation.title}" failed:`,
+        error instanceof Error ? error.message : error,
+      );
+    },
+  });
+
+  baker.bake(automation.id);
+}
+
+export function unscheduleAutomation(automationId: string) {
+  const baker = getBaker();
+  const existingJobs = new Set(baker.getJobNames());
+  if (existingJobs.has(automationId)) {
+    baker.remove(automationId);
+  }
+}
+
+export function pauseAutomation(automationId: string) {
+  const baker = getBaker();
+  const existingJobs = new Set(baker.getJobNames());
+  if (existingJobs.has(automationId)) {
+    baker.pause(automationId);
+  }
+}
+
+export function resumeAutomation(automationId: string) {
+  const baker = getBaker();
+  const existingJobs = new Set(baker.getJobNames());
+  if (existingJobs.has(automationId)) {
+    baker.resume(automationId);
+  }
+}
+
+export function getNextRun(automationId: string): Date | null {
+  const baker = getBaker();
+  try {
+    return baker.nextExecution(automationId);
+  } catch {
+    return null;
+  }
+}
+
+export function getLastRun(automationId: string): Date | null {
+  const baker = getBaker();
+  try {
+    return baker.lastExecution(automationId);
+  } catch {
+    return null;
+  }
+}
+
+export function getJobMetrics(automationId: string) {
+  const baker = getBaker();
+  try {
+    return baker.getMetrics(automationId);
+  } catch {
+    return null;
+  }
+}

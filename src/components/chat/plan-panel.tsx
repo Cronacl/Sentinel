@@ -3,17 +3,11 @@
 import { formatDistanceToNowStrict } from "date-fns";
 import { useMemo, useState } from "react";
 import { Button, Card, ScrollShadow } from "@heroui/react";
-import {
-  AiIdeaIcon,
-  ArrowDown01Icon,
-  CheckmarkCircle02Icon,
-  Cancel01Icon,
-  Loading02Icon,
-  TimeQuarterPassIcon,
-} from "@hugeicons/core-free-icons";
+import { AiIdeaIcon, ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
 import { useRightSidebar } from "@/components/shell/shell-context";
+import { TaskStatusIcon } from "@/components/chat/task-status-icon";
 import {
   getPlanAudienceLabel,
   getTaskStatusLabel,
@@ -49,13 +43,6 @@ function getStatusChipClass(status: string) {
   if (status === "blocked")
     return "border-danger/15 bg-danger-soft text-danger-soft-foreground";
   return "border-border/60 bg-background/70 text-muted";
-}
-
-function getStatusIcon(status: string) {
-  if (status === "completed") return CheckmarkCircle02Icon;
-  if (status === "in_progress") return Loading02Icon;
-  if (status === "blocked") return Cancel01Icon;
-  return TimeQuarterPassIcon;
 }
 
 function getAudienceChipClass(audience: ThreadPlanAudience) {
@@ -292,14 +279,13 @@ export function PlanPanel({ threadId }: { threadId: string }) {
                 {totalCount > 0 ? (
                   <ScrollShadow className="mt-4 max-h-[420px] space-y-2">
                     {resolvedPlan.tasks.map((task) => {
-                      const StatusIcon = getStatusIcon(task.status);
                       return (
                         <div
                           className="group rounded-2xl border border-border/20 bg-surface/60 p-3"
                           key={task.id}
                         >
                           <div className="flex items-start gap-3">
-                            <HugeiconsIcon
+                            <TaskStatusIcon
                               className={`mt-0.5 shrink-0 ${
                                 task.status === "completed"
                                   ? "text-success"
@@ -309,10 +295,8 @@ export function PlanPanel({ threadId }: { threadId: string }) {
                                       ? "text-danger"
                                       : "text-muted/60"
                               }`}
-                              color="currentColor"
-                              icon={StatusIcon}
                               size={14}
-                              strokeWidth={1.5}
+                              status={task.status}
                             />
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">

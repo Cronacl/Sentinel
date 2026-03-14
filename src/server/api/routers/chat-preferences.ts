@@ -1,21 +1,34 @@
 import { eq } from "drizzle-orm";
 
+import { getEnabledModels } from "@/lib/ai/providers/resolver";
+import { normalizeSelectedModelId } from "@/lib/ai/providers/model-selection";
 import { chatSelectionSchema } from "@/schemas/chat-preferences.schema";
 import { users } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
 export const chatPreferencesRouter = createTRPCRouter({
-  get: protectedProcedure.query(({ ctx }) => ({
-    mode: ctx.user.defaultChatMode ?? null,
-    modelId: ctx.user.defaultChatModelId ?? null,
-    reasoningEffort: ctx.user.defaultChatReasoningEffort ?? null,
-  })),
+  get: protectedProcedure.query(async ({ ctx }) => {
+    const enabledModels = await getEnabledModels(ctx.user.id);
+
+    return {
+      mode: ctx.user.defaultChatMode ?? null,
+      modelId: normalizeSelectedModelId(
+        ctx.user.defaultChatModelId ?? null,
+        enabledModels,
+      ),
+      reasoningEffort: ctx.user.defaultChatReasoningEffort ?? null,
+    };
+  }),
 
   updateGlobal: protectedProcedure
     .input(chatSelectionSchema)
-    .mutation(({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const enabledModels = await getEnabledModels(ctx.user.id);
       const currentMode = ctx.user.defaultChatMode ?? null;
-      const currentModelId = ctx.user.defaultChatModelId ?? null;
+      const currentModelId = normalizeSelectedModelId(
+        ctx.user.defaultChatModelId ?? null,
+        enabledModels,
+      );
       const currentReasoningEffort = ctx.user.defaultChatReasoningEffort ?? null;
 
       ctx.db
@@ -36,7 +49,10 @@ export const chatPreferencesRouter = createTRPCRouter({
 
       return {
         mode: input.mode !== undefined ? (input.mode ?? null) : currentMode,
-        modelId: input.modelId !== undefined ? input.modelId : currentModelId,
+        modelId:
+          input.modelId !== undefined
+            ? normalizeSelectedModelId(input.modelId, enabledModels)
+            : currentModelId,
         reasoningEffort:
           input.reasoningEffort !== undefined
             ? (input.reasoningEffort ?? null)

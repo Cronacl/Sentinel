@@ -32,6 +32,10 @@ import {
   getAttachmentTone,
   type AttachmentKind,
 } from "@/lib/files/chat-attachment-types";
+import {
+  getCompositeModelId,
+  normalizeSelectedModelId,
+} from "@/lib/ai/providers/model-selection";
 import { applyThreadSettingsCacheUpdate } from "@/lib/threads/cache";
 import { api } from "@/trpc/react";
 
@@ -73,10 +77,6 @@ type ChatComposerProps = {
     reasoningEffort?: ReasoningEffort | null;
   } | null;
 };
-
-function getModelKey(provider: AIProvider, modelId: string) {
-  return `${provider}:${modelId}`;
-}
 
 function getReasoningEffortLabel(effort: ReasoningEffort) {
   return effort.charAt(0).toUpperCase() + effort.slice(1);
@@ -372,8 +372,8 @@ export function ChatComposer({
 
   const selectedModel =
     availableModels.find(
-      (model) =>
-        getModelKey(model.provider, model.modelId) === selectedModelKey,
+        (model) =>
+          getCompositeModelId(model.provider, model.modelId) === selectedModelKey,
     ) ?? null;
   const canPersistThreadSelection = Boolean(
     threadId && threadSelection && (persistThreadSelection ?? true),
@@ -562,15 +562,21 @@ export function ChatComposer({
       return;
     }
 
-    const preferredModel = preferredModelId
+    const normalizedPreferredModelId = normalizeSelectedModelId(
+      preferredModelId,
+      availableModels,
+    );
+
+    const preferredModel = normalizedPreferredModelId
       ? (availableModels.find(
           (model) =>
-            getModelKey(model.provider, model.modelId) === preferredModelId,
+            getCompositeModelId(model.provider, model.modelId) ===
+            normalizedPreferredModelId,
         ) ?? null)
       : null;
     const nextModel = preferredModel ?? availableModels[0] ?? null;
     const nextModelKey = nextModel
-      ? getModelKey(nextModel.provider, nextModel.modelId)
+      ? getCompositeModelId(nextModel.provider, nextModel.modelId)
       : null;
 
     setSelectedModelKey(nextModelKey);
@@ -631,7 +637,7 @@ export function ChatComposer({
 
     const stillAvailable = availableModels.some(
       (model) =>
-        getModelKey(model.provider, model.modelId) === selectedModelKey,
+        getCompositeModelId(model.provider, model.modelId) === selectedModelKey,
     );
     if (stillAvailable) {
       return;
@@ -644,7 +650,7 @@ export function ChatComposer({
       return;
     }
 
-    const fallbackModelKey = getModelKey(
+    const fallbackModelKey = getCompositeModelId(
       fallbackModel.provider,
       fallbackModel.modelId,
     );
@@ -835,8 +841,9 @@ export function ChatComposer({
 
   const handleSelectModel = useCallback(
     (modelKey: string) => {
-      const nextModel = availableModels.find(
-        (model) => getModelKey(model.provider, model.modelId) === modelKey,
+    const nextModel = availableModels.find(
+        (model) =>
+          getCompositeModelId(model.provider, model.modelId) === modelKey,
       );
       if (!nextModel) {
         return;
@@ -1143,9 +1150,9 @@ export function ChatComposer({
                     }}
                   >
                     {availableModels.map((model) => {
-                      const modelKey = getModelKey(
-                        model.provider,
-                        model.modelId,
+        const modelKey = getCompositeModelId(
+          model.provider,
+          model.modelId,
                       );
                       const isSelected = selectedModelKey === modelKey;
                       return (

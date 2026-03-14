@@ -4,10 +4,14 @@ import { REASONING_EFFORTS } from "@/lib/ai/providers/models";
 import { THREAD_MODES } from "@/lib/plan";
 
 const reasoningEffortSchema = z.enum(REASONING_EFFORTS);
+const compositeModelIdSchema = z
+  .string()
+  .trim()
+  .regex(/^[a-z_]+:.+$/, 'Model must use the "provider:model" format.');
 
 const chatSelectionFieldsSchema = z.object({
   mode: z.enum(THREAD_MODES).nullish(),
-  modelId: z.string().trim().min(1, "Model ID is required.").optional(),
+  modelId: compositeModelIdSchema.optional(),
   reasoningEffort: reasoningEffortSchema.nullish(),
 });
 

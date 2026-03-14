@@ -20,6 +20,17 @@ mock.module("@/server/api/trpc", () => ({
   },
 }));
 
+mock.module("@/lib/ai/providers/resolver", () => ({
+  getEnabledModels: mock(async () => [
+    { compositeId: "openai:gpt-5.2", modelId: "gpt-5.2", provider: "openai" },
+    {
+      compositeId: "anthropic:claude-sonnet-4.5",
+      modelId: "claude-sonnet-4.5",
+      provider: "anthropic",
+    },
+  ]),
+}));
+
 const { chatPreferencesRouter } = await import("./chat-preferences");
 
 describe("chatPreferencesRouter.updateGlobal", () => {
@@ -45,6 +56,25 @@ describe("chatPreferencesRouter.updateGlobal", () => {
     });
     expect(result).toEqual({
       mode: "plan",
+      modelId: "openai:gpt-5.2",
+      reasoningEffort: "medium",
+    });
+  });
+
+  it("normalizes legacy stored model ids in get", async () => {
+    const result = await chatPreferencesRouter.get({
+      ctx: {
+        user: {
+          defaultChatMode: "chat",
+          defaultChatModelId: "gpt-5.2",
+          defaultChatReasoningEffort: "medium",
+          id: "user-1",
+        },
+      },
+    });
+
+    expect(result).toEqual({
+      mode: "chat",
       modelId: "openai:gpt-5.2",
       reasoningEffort: "medium",
     });

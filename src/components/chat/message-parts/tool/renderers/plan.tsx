@@ -13,13 +13,11 @@ import {
 import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
-  CheckmarkCircle02Icon,
   Cancel01Icon,
-  Loading02Icon,
-  TimeQuarterPassIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
+import { TaskStatusIcon } from "@/components/chat/task-status-icon";
 import { useRightSidebar } from "@/components/shell/shell-context";
 import { getPlanAudienceLabel, getTaskStatusLabel } from "@/lib/plan";
 
@@ -85,15 +83,6 @@ type AskQuestionOutput = {
   }>;
   status: "answered" | "pending";
 };
-
-function getTaskStatusIcon(
-  status: NonNullable<ManageTaskOutput["task"]>["status"],
-) {
-  if (status === "completed") return CheckmarkCircle02Icon;
-  if (status === "in_progress") return Loading02Icon;
-  if (status === "blocked") return Cancel01Icon;
-  return TimeQuarterPassIcon;
-}
 
 function getTaskStatusTextClass(
   status: NonNullable<ManageTaskOutput["task"]>["status"],
@@ -522,12 +511,9 @@ function ManageTaskInline({
   if (!output) {
     return (
       <div className="flex items-center gap-2 py-0.5">
-        <HugeiconsIcon
+        <TaskStatusIcon
           className="shrink-0 text-foreground/30"
-          color="currentColor"
-          icon={Loading02Icon}
-          size={14}
-          strokeWidth={1.5}
+          status="pending"
         />
         <span
           className={`text-[13px] ${isRunning ? "sentinel-thinking-shimmer" : "text-foreground/50"}`}
@@ -548,12 +534,9 @@ function ManageTaskInline({
   if (!output.task) {
     return (
       <div className="flex items-center gap-2 py-0.5">
-        <HugeiconsIcon
+        <TaskStatusIcon
           className="shrink-0 text-foreground/30"
-          color="currentColor"
-          icon={CheckmarkCircle02Icon}
-          size={14}
-          strokeWidth={1.5}
+          status="completed"
         />
         <span className="text-[13px] text-foreground/50">
           {actionLabel} task
@@ -562,16 +545,11 @@ function ManageTaskInline({
     );
   }
 
-  const StatusIcon = getTaskStatusIcon(output.task.status);
-
   return (
     <div className="flex items-center gap-2 py-0.5">
-      <HugeiconsIcon
+      <TaskStatusIcon
         className={`shrink-0 ${getTaskStatusTextClass(output.task.status)}`}
-        color="currentColor"
-        icon={StatusIcon}
-        size={14}
-        strokeWidth={1.5}
+        status={output.task.status}
       />
       <span className="min-w-0 truncate text-[13px] text-foreground/70">
         {output.task.title}
