@@ -79,8 +79,8 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
 
   db.run(sql`CREATE TABLE IF NOT EXISTS "thread" (
     "id" text PRIMARY KEY NOT NULL,
-    "workspace_id" text NOT NULL,
-    "user_id" text NOT NULL,
+    "workspace_id" text NOT NULL REFERENCES "workspace"("id"),
+    "user_id" text NOT NULL REFERENCES "user"("id"),
     "title" text NOT NULL,
     "summary" text,
     "mode" text DEFAULT 'chat' NOT NULL,
@@ -426,8 +426,8 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
 
   db.run(sql`CREATE TABLE IF NOT EXISTS "automation_run" (
     "id" text PRIMARY KEY NOT NULL,
-    "automation_id" text NOT NULL,
-    "thread_id" text,
+    "automation_id" text NOT NULL REFERENCES "automation"("id"),
+    "thread_id" text REFERENCES "thread"("id"),
     "status" text DEFAULT 'pending' NOT NULL,
     "error" text,
     "started_at" integer NOT NULL,
@@ -577,9 +577,8 @@ if (process.env.NODE_ENV !== "production") {
 if (!globalForDb.automationSchedulerInit) {
   globalForDb.automationSchedulerInit = Promise.resolve()
     .then(async () => {
-      const { initAutomationScheduler } = await import(
-        "@/lib/automations/scheduler"
-      );
+      const { initAutomationScheduler } =
+        await import("@/lib/automations/scheduler");
       await initAutomationScheduler();
     })
     .catch((error) => {

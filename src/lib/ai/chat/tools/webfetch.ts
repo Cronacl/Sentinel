@@ -10,6 +10,7 @@ const MAX_RESPONSE_SIZE = 5 * 1024 * 1024;
 const DEFAULT_TIMEOUT_SECONDS = 30;
 const MAX_TIMEOUT_SECONDS = 120;
 const MAX_CONTENT_CHARS = 120_000;
+const MAX_REDIRECTS = 5;
 const CONTENT_TRUNCATION_NOTICE =
   "\n\n[Content truncated to keep the tool response within chat limits.]";
 
@@ -132,6 +133,131 @@ function normalizeUrl(inputUrl: string) {
   return parsed.toString();
 }
 
+function normalizeHostname(hostname: string) {
+  return hostname.startsWith("[") && hostname.endsWith("]")
+    ? hostname.slice(1, -1).toLowerCase()
+    : hostname.toLowerCase();
+}
+
+function isBlockedIpv4Address(hostname: string) {
+  const octets = hostname.split(".").map((part) => Number.parseInt(part, 10));
+
+  if (
+    octets.length !== 4 ||
+    octets.some((part) => Number.isNaN(part) || part < 0 || part > 255)
+  ) {
+    return false;
+  }
+
+  const first = octets[0] ?? -1;
+  const second = octets[1] ?? -1;
+  const third = octets[2] ?? -1;
+
+  return (
+    first === 0 ||
+    first === 10 ||
+    first === 127 ||
+    (first === 100 && second >= 64 && second <= 127) ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 0 && (third === 0 || third === 2)) ||
+    (first === 192 && second === 168) ||
+    (first === 198 && (second === 18 || second === 19)) ||
+    (first === 198 && second === 51 && third === 100) ||
+    (first === 203 && second === 0 && third === 113) ||
+    first >= 224
+  );
+}
+
+function isBlockedIpv6Address(hostname: string) {
+  const normalized = hostname.toLowerCase();
+
+  if (
+    normalized === "::" ||
+    normalized === "::1" ||
+    normalized.startsWith("fe80:") ||
+    /^f[c-d][0-9a-f]{2}:/i.test(normalized)
+  ) {
+    return true;
+  }
+
+  if (normalized.startsWith("::ffff:")) {
+    return isBlockedIpv4Address(normalized.slice("::ffff:".length));
+  }
+
+  return false;
+}
+
+function assertWebFetchTargetAllowed(targetUrl: string) {
+  const parsed = new URL(targetUrl);
+  const hostname = normalizeHostname(parsed.hostname);
+
+  if (hostname === "localhost" || hostname.endsWith(".localhost")) {
+    throw new Error(
+      "Blocked URL: localhost and local network targets are not allowed.",
+    );
+  }
+
+  if (isBlockedIpv4Address(hostname) || isBlockedIpv6Address(hostname)) {
+    throw new Error(
+      "Blocked URL: private, loopback, and reserved IP ranges are not allowed.",
+    );
+  }
+}
+
+function isRedirectStatus(status: number) {
+  return (
+    status === 301 ||
+    status === 302 ||
+    status === 303 ||
+    status === 307 ||
+    status === 308
+  );
+}
+
+async function fetchWithSafeRedirects({
+  headers,
+  signal,
+  url,
+}: {
+  headers: HeadersInit;
+  signal: AbortSignal;
+  url: string;
+}) {
+  let currentUrl = url;
+
+  for (
+    let redirectCount = 0;
+    redirectCount <= MAX_REDIRECTS;
+    redirectCount += 1
+  ) {
+    assertWebFetchTargetAllowed(currentUrl);
+
+    const response = await fetch(currentUrl, {
+      headers,
+      redirect: "manual",
+      signal,
+    });
+
+    if (!isRedirectStatus(response.status)) {
+      return response;
+    }
+
+    const location = response.headers.get("location");
+    if (!location) {
+      return response;
+    }
+
+    if (redirectCount === MAX_REDIRECTS) {
+      throw new Error(`Too many redirects (maximum ${MAX_REDIRECTS}).`);
+    }
+
+    currentUrl = normalizeUrl(new URL(location, currentUrl).toString());
+  }
+
+  throw new Error(`Too many redirects (maximum ${MAX_REDIRECTS}).`);
+}
+
 function buildAcceptHeader(format: WebFetchInput["format"]) {
   switch (format) {
     case "markdown":
@@ -246,21 +372,23 @@ async function fetchWithCloudflareRetry({
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
   };
 
-  const initial = await fetch(url, {
+  const initial = await fetchWithSafeRedirects({
     headers,
     signal,
+    url,
   });
 
   if (
     initial.status === 403 &&
     initial.headers.get("cf-mitigated") === "challenge"
   ) {
-    return await fetch(url, {
+    return await fetchWithSafeRedirects({
       headers: {
         ...headers,
         "User-Agent": "sentinel-webfetch",
       },
       signal,
+      url,
     });
   }
 
@@ -279,6 +407,7 @@ async function fetchSingleUrl({
   url: string;
 }): Promise<WebFetchSuccessResult> {
   const normalizedUrl = normalizeUrl(url);
+  assertWebFetchTargetAllowed(normalizedUrl);
   const timeoutMs = Math.min(
     (timeout ?? DEFAULT_TIMEOUT_SECONDS) * 1000,
     MAX_TIMEOUT_SECONDS * 1000,
@@ -484,8 +613,10 @@ export const __internal = {
   CONTENT_TRUNCATION_NOTICE,
   DEFAULT_TIMEOUT_SECONDS,
   MAX_CONTENT_CHARS,
+  MAX_REDIRECTS,
   MAX_RESPONSE_SIZE,
   MAX_TIMEOUT_SECONDS,
+  assertWebFetchTargetAllowed,
   buildAcceptHeader,
   convertHtmlToMarkdown,
   convertHtmlToText,

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { env } from "@/env";
+import { decrypt, encrypt } from "@/lib/ai/providers/encrypt";
 
 type McpOAuthStateRecord = {
   clientInformation?: OAuthClientInformation;
@@ -15,6 +16,15 @@ type McpOAuthStateRecord = {
 type McpOAuthStore = {
   servers?: Record<string, McpOAuthStateRecord>;
 };
+
+type EncryptedMcpOAuthStoreFile = {
+  encrypted: true;
+  payload: string;
+  version: 1;
+};
+
+const STATE_DIRECTORY_MODE = 0o700;
+const STATE_FILE_MODE = 0o600;
 
 function getStateRoot() {
   if (env.SENTINEL_STATE_PATH?.trim()) {
@@ -32,10 +42,31 @@ function getStoreKey(userId: string, serverId: string) {
   return `${userId}:${serverId}`;
 }
 
+function isEncryptedStoreFile(
+  value: unknown,
+): value is EncryptedMcpOAuthStoreFile {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<EncryptedMcpOAuthStoreFile>;
+  return (
+    candidate.encrypted === true &&
+    candidate.version === 1 &&
+    typeof candidate.payload === "string"
+  );
+}
+
 async function readStore(): Promise<McpOAuthStore> {
   try {
     const raw = await readFile(getStorePath(), "utf8");
-    return JSON.parse(raw) as McpOAuthStore;
+    const parsed = JSON.parse(raw) as unknown;
+
+    if (isEncryptedStoreFile(parsed)) {
+      return JSON.parse(decrypt(parsed.payload)) as McpOAuthStore;
+    }
+
+    return parsed as McpOAuthStore;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return {};
@@ -47,8 +78,20 @@ async function readStore(): Promise<McpOAuthStore> {
 
 async function writeStore(store: McpOAuthStore) {
   const storePath = getStorePath();
-  await mkdir(path.dirname(storePath), { recursive: true });
-  await writeFile(storePath, JSON.stringify(store, null, 2), "utf8");
+  const payload: EncryptedMcpOAuthStoreFile = {
+    encrypted: true,
+    payload: encrypt(JSON.stringify(store)),
+    version: 1,
+  };
+
+  await mkdir(path.dirname(storePath), {
+    mode: STATE_DIRECTORY_MODE,
+    recursive: true,
+  });
+  await writeFile(storePath, JSON.stringify(payload, null, 2), {
+    encoding: "utf8",
+    mode: STATE_FILE_MODE,
+  });
 }
 
 export async function getMcpOAuthState(args: {

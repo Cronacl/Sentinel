@@ -130,16 +130,22 @@ export const ReasoningPart = memo(function ReasoningPart({
     if (!isOpen) return;
     if (getReasoningSidebarState().reasoningKey !== reasoningKey) return;
     syncSidebarState();
-  }, [isOpen, reasoningKey, syncSidebarState, isStreaming, isLastStreamingPart, text, title, tokenCount]);
+  }, [
+    isOpen,
+    reasoningKey,
+    syncSidebarState,
+    isStreaming,
+    isLastStreamingPart,
+    text,
+    title,
+    tokenCount,
+  ]);
 
   return (
-    <div
-      className="w-full overflow-hidden rounded-lg"
-      aria-busy={isStreaming}
-    >
+    <div className="w-full overflow-hidden rounded-lg" aria-busy={isStreaming}>
       <div className="flex w-full items-center justify-between gap-3 pr-1">
         <button
-          className="group flex min-w-0 flex-1 items-center gap-2 text-left text-default-600 transition-colors hover:text-foreground dark:text-default-400"
+          className="group cursor-pointer flex min-w-0 flex-1 items-center gap-2 text-left text-default-600 transition-colors hover:text-foreground dark:text-default-400"
           onClick={handleOpen}
           type="button"
         >

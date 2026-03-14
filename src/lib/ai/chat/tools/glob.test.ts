@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { executeGlob } from "./glob";
+import { __internal, executeGlob } from "./glob";
 
 async function createDirectory() {
   return await mkdtemp(path.join(tmpdir(), "sentinel-glob-"));
@@ -72,4 +72,42 @@ describe("executeGlob", () => {
     expect(result.totalFiles).toBe(105);
     expect(result.truncated).toBe(true);
   }, 15_000);
+
+  it("stops recursion at the configured max depth", async () => {
+    const defaultDirectory = await createDirectory();
+    const deepFile = path.join(defaultDirectory, "a", "b", "c", "deep.ts");
+
+    await mkdir(path.dirname(deepFile), { recursive: true });
+    await writeFile(deepFile, "");
+
+    const result = await executeGlob({
+      defaultDirectory,
+      input: { maxDepth: 1, pattern: "**/*.ts" },
+      permissionMode: "default",
+    });
+
+    expect(result.files).toEqual([]);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("uses a safe default recursion limit", async () => {
+    const defaultDirectory = await createDirectory();
+    const segments = Array.from(
+      { length: __internal.DEFAULT_MAX_DEPTH + 2 },
+      (_, index) => `dir-${index}`,
+    );
+    const deepFile = path.join(defaultDirectory, ...segments, "deep.ts");
+
+    await mkdir(path.dirname(deepFile), { recursive: true });
+    await writeFile(deepFile, "");
+
+    const result = await executeGlob({
+      defaultDirectory,
+      input: { pattern: "**/*.ts" },
+      permissionMode: "default",
+    });
+
+    expect(result.files).toEqual([]);
+    expect(result.truncated).toBe(true);
+  });
 });

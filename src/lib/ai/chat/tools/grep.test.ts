@@ -3,7 +3,7 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { __internal, executeGrep } from "./grep";
+import { __internal, executeGrep, grepInputSchema } from "./grep";
 
 const tempRoots: string[] = [];
 
@@ -15,7 +15,9 @@ async function createDirectory() {
 
 afterEach(async () => {
   await Promise.all(
-    tempRoots.splice(0).map((root) => rm(root, { force: true, recursive: true })),
+    tempRoots
+      .splice(0)
+      .map((root) => rm(root, { force: true, recursive: true })),
   );
 });
 
@@ -162,7 +164,11 @@ describe("executeGrep", () => {
     await Promise.all(
       Array.from({ length: __internal.GREP_MATCH_LIMIT + 10 }, (_, index) =>
         writeFile(
-          path.join(defaultDirectory, "src", `match-${String(index).padStart(3, "0")}.ts`),
+          path.join(
+            defaultDirectory,
+            "src",
+            `match-${String(index).padStart(3, "0")}.ts`,
+          ),
           "needle\n",
         ),
       ),
@@ -185,7 +191,10 @@ describe("executeGrep", () => {
     await mkdir(path.join(defaultDirectory, ".git"), { recursive: true });
     await mkdir(path.join(defaultDirectory, "src"), { recursive: true });
     await writeFile(path.join(defaultDirectory, ".git", "config"), "needle\n");
-    await writeFile(path.join(defaultDirectory, "src", "visible.ts"), "needle\n");
+    await writeFile(
+      path.join(defaultDirectory, "src", "visible.ts"),
+      "needle\n",
+    );
 
     const result = await executeGrep({
       defaultDirectory,
@@ -209,5 +218,13 @@ describe("executeGrep", () => {
     });
 
     expect(result.files[0]?.matches[0]?.text.endsWith("...")).toBe(true);
+  });
+
+  it("rejects excessively long regex patterns up front", () => {
+    const parsed = grepInputSchema.safeParse({
+      pattern: "a".repeat(__internal.MAX_PATTERN_LENGTH + 1),
+    });
+
+    expect(parsed.success).toBe(false);
   });
 });

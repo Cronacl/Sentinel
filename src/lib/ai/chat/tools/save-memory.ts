@@ -11,6 +11,7 @@ export const saveMemoryInputSchema = z.object({
   content: z
     .string()
     .min(8)
+    .max(8_000)
     .describe("Durable information worth keeping for future conversations."),
   kind: z.enum(MEMORY_KIND_VALUES).describe("The kind of memory being stored."),
   salience: z

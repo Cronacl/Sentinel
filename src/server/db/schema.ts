@@ -151,8 +151,12 @@ export const threads = sqliteTable(
     id: text("id")
       .primaryKey()
       .$defaultFn(() => createId()),
-    workspaceId: text("workspace_id").notNull(),
-    userId: text("user_id").notNull(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
     title: text("title").notNull(),
     summary: text("summary"),
     mode: text("mode", { enum: THREAD_MODES }).notNull().default("chat"),
@@ -669,20 +673,17 @@ export const automations = sqliteTable(
   ],
 );
 
-export const automationsRelations = relations(
-  automations,
-  ({ one, many }) => ({
-    user: one(users, {
-      fields: [automations.userId],
-      references: [users.id],
-    }),
-    workspace: one(workspaces, {
-      fields: [automations.workspaceId],
-      references: [workspaces.id],
-    }),
-    runs: many(automationRuns),
+export const automationsRelations = relations(automations, ({ one, many }) => ({
+  user: one(users, {
+    fields: [automations.userId],
+    references: [users.id],
   }),
-);
+  workspace: one(workspaces, {
+    fields: [automations.workspaceId],
+    references: [workspaces.id],
+  }),
+  runs: many(automationRuns),
+}));
 
 export const automationRuns = sqliteTable(
   "automation_run",
@@ -690,8 +691,10 @@ export const automationRuns = sqliteTable(
     id: text("id")
       .primaryKey()
       .$defaultFn(() => createId()),
-    automationId: text("automation_id").notNull(),
-    threadId: text("thread_id"),
+    automationId: text("automation_id")
+      .notNull()
+      .references(() => automations.id),
+    threadId: text("thread_id").references(() => threads.id),
     status: text("status", { enum: AUTOMATION_RUN_STATUSES })
       .notNull()
       .default("pending"),
@@ -711,16 +714,13 @@ export const automationRuns = sqliteTable(
   ],
 );
 
-export const automationRunsRelations = relations(
-  automationRuns,
-  ({ one }) => ({
-    automation: one(automations, {
-      fields: [automationRuns.automationId],
-      references: [automations.id],
-    }),
-    thread: one(threads, {
-      fields: [automationRuns.threadId],
-      references: [threads.id],
-    }),
+export const automationRunsRelations = relations(automationRuns, ({ one }) => ({
+  automation: one(automations, {
+    fields: [automationRuns.automationId],
+    references: [automations.id],
   }),
-);
+  thread: one(threads, {
+    fields: [automationRuns.threadId],
+    references: [threads.id],
+  }),
+}));

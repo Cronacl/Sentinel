@@ -10,6 +10,7 @@ import { normalizeRelativePath, resolveToolDirectory } from "./paths";
 
 const GREP_MATCH_LIMIT = 100;
 const MAX_MATCH_PREVIEW_LENGTH = 280;
+const MAX_PATTERN_LENGTH = 500;
 
 const grepMatchSchema = z.object({
   lineNumber: z.number().int().min(1),
@@ -39,6 +40,10 @@ export const grepInputSchema = z.object({
   pattern: z
     .string()
     .min(1)
+    .max(
+      MAX_PATTERN_LENGTH,
+      `Regular expression patterns must be ${MAX_PATTERN_LENGTH} characters or fewer.`,
+    )
     .describe("Regular expression pattern to search for in file contents."),
 });
 
@@ -245,5 +250,6 @@ export async function executeGrep({
 export const __internal = {
   GREP_MATCH_LIMIT,
   MAX_MATCH_PREVIEW_LENGTH,
+  MAX_PATTERN_LENGTH,
   trimMatchPreview,
 };

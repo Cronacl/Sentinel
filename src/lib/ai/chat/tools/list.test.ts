@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { executeList, LIST_LIMIT } from "./list";
+import { __internal, executeList, LIST_LIMIT } from "./list";
 
 const tempRoots: string[] = [];
 
@@ -15,7 +15,9 @@ async function createWorkspace() {
 
 afterEach(async () => {
   await Promise.all(
-    tempRoots.splice(0).map((root) => rm(root, { force: true, recursive: true })),
+    tempRoots
+      .splice(0)
+      .map((root) => rm(root, { force: true, recursive: true })),
   );
 });
 
@@ -29,7 +31,10 @@ describe("executeList", () => {
     });
     await mkdir(path.join(defaultDirectory, ".git"), { recursive: true });
     await writeFile(path.join(defaultDirectory, "README.md"), "# Sentinel\n");
-    await writeFile(path.join(defaultDirectory, "src", "index.ts"), "export {};\n");
+    await writeFile(
+      path.join(defaultDirectory, "src", "index.ts"),
+      "export {};\n",
+    );
     await writeFile(
       path.join(defaultDirectory, "src", "lib", "utils.ts"),
       "export {};\n",
@@ -118,7 +123,11 @@ describe("executeList", () => {
     await Promise.all(
       Array.from({ length: LIST_LIMIT + 20 }, (_, index) =>
         writeFile(
-          path.join(defaultDirectory, "files", `file-${String(index).padStart(3, "0")}.txt`),
+          path.join(
+            defaultDirectory,
+            "files",
+            `file-${String(index).padStart(3, "0")}.txt`,
+          ),
           "x\n",
         ),
       ),
@@ -132,5 +141,52 @@ describe("executeList", () => {
 
     expect(result.truncated).toBe(true);
     expect(result.totalEntries).toBe(LIST_LIMIT);
+  });
+
+  it("stops descending once maxDepth is reached", async () => {
+    const defaultDirectory = await createWorkspace();
+
+    await mkdir(path.join(defaultDirectory, "src", "deep", "nested"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(defaultDirectory, "src", "deep", "nested", "file.ts"),
+      "export {};",
+    );
+
+    const result = await executeList({
+      defaultDirectory,
+      input: { maxDepth: 1 },
+      permissionMode: "default",
+    });
+
+    expect(result.entries.map((entry) => entry.path)).toEqual([
+      "src",
+      "src/deep",
+    ]);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("applies the default depth limit when none is provided", async () => {
+    const defaultDirectory = await createWorkspace();
+    const segments = Array.from(
+      { length: __internal.DEFAULT_MAX_DEPTH + 2 },
+      (_, index) => `dir-${index}`,
+    );
+    const deepDirectory = path.join(defaultDirectory, ...segments);
+
+    await mkdir(deepDirectory, { recursive: true });
+    await writeFile(path.join(deepDirectory, "deep.txt"), "hello\n");
+
+    const result = await executeList({
+      defaultDirectory,
+      input: {},
+      permissionMode: "default",
+    });
+
+    expect(result.entries.at(-1)?.path).not.toBe(
+      path.join(...segments, "deep.txt").replaceAll(path.sep, "/"),
+    );
+    expect(result.truncated).toBe(true);
   });
 });

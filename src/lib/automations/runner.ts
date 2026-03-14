@@ -226,7 +226,7 @@ export async function executeAutomationRun(
       .run();
 
     db.update(automations)
-      .set(buildAutomationRunPatch(automation))
+      .set(buildAutomationFailurePatch(automation))
       .where(eq(automations.id, automationId))
       .run();
   }

@@ -120,12 +120,14 @@ const shellCommandInputSchema = z.object({
   command: z
     .string()
     .min(1)
+    .max(2_000)
     .describe(
       "One shell command to run in the linked workspace root or discovered skill directory.",
     ),
   rationale: z
     .string()
     .min(1)
+    .max(500)
     .describe("Why this command is needed and what you expect to learn."),
 });
 

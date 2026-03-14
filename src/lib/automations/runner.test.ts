@@ -136,4 +136,63 @@ describe("executeAutomationRun", () => {
     expect(insertedValues).toHaveLength(0);
     expect(updatedValues).toHaveLength(0);
   });
+
+  it("pauses active automations after a runtime failure", async () => {
+    db.query = {
+      automations: {
+        findFirst: mock(async () => ({
+          id: "automation-1",
+          prompt: "Review the codebase.",
+          reasoningEffort: "medium",
+          scheduleCron: null,
+          scheduleDayOfWeek: null,
+          scheduleTime: "09:00",
+          scheduleType: "daily",
+          status: "active",
+          title: "Daily review",
+          userId: "user-1",
+          workspace: {
+            id: "workspace-1",
+            isArchived: false,
+          },
+          workspaceId: "workspace-1",
+        })),
+      },
+    };
+
+    db.transaction = mock((callback: (tx: Record<string, any>) => unknown) =>
+      callback({
+        insert: () => ({
+          values: () => ({
+            run: () => undefined,
+          }),
+        }),
+        select: () => ({
+          from: () => ({
+            where: () => ({
+              get: () => null,
+            }),
+          }),
+        }),
+      }),
+    );
+
+    runThreadChat.mockImplementationOnce(async () => {
+      throw new Error("Provider request failed");
+    });
+
+    await executeAutomationRun("automation-1");
+
+    expect(updatedValues).toEqual([
+      expect.objectContaining({
+        completedAt: expect.any(Date),
+        error: "Provider request failed",
+        status: "failed",
+      }),
+      expect.objectContaining({
+        nextRunAt: null,
+        status: "paused",
+      }),
+    ]);
+  });
 });

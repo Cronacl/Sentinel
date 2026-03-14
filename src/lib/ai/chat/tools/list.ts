@@ -36,6 +36,8 @@ export const DEFAULT_LIST_IGNORES = [
 ];
 
 export const LIST_LIMIT = 160;
+const DEFAULT_MAX_DEPTH = 12;
+const MAX_ALLOWED_DEPTH = 64;
 
 const listEntrySchema = z.object({
   depth: z.number().int().min(0),
@@ -51,6 +53,15 @@ export const listInputSchema = z.object({
     .optional()
     .describe(
       "Optional path prefixes, names, or simple glob patterns to exclude from the listing.",
+    ),
+  maxDepth: z
+    .number()
+    .int()
+    .min(0)
+    .max(MAX_ALLOWED_DEPTH)
+    .optional()
+    .describe(
+      "Maximum directory depth to recurse into. Defaults to 12 levels.",
     ),
   path: z
     .string()
@@ -188,6 +199,7 @@ export async function executeList({
   }
 
   const shouldIgnore = buildIgnoreMatcher(input.ignore);
+  const maxDepth = input.maxDepth ?? DEFAULT_MAX_DEPTH;
   const entries: ListEntry[] = [];
   let directoryCount = 0;
   let fileCount = 0;
@@ -250,6 +262,11 @@ export async function executeList({
       });
       directoryCount += 1;
 
+      if (depth >= maxDepth) {
+        truncated = true;
+        continue;
+      }
+
       await walk(directory.absolutePath, directory.relativePath, depth + 1);
 
       if (truncated) {
@@ -285,3 +302,8 @@ export async function executeList({
     truncated,
   };
 }
+
+export const __internal = {
+  DEFAULT_MAX_DEPTH,
+  MAX_ALLOWED_DEPTH,
+};

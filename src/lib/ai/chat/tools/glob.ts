@@ -8,8 +8,19 @@ import { DEFAULT_LIST_IGNORES } from "./list";
 import { normalizeRelativePath, resolveToolDirectory } from "./paths";
 
 const GLOB_LIMIT = 100;
+const DEFAULT_MAX_DEPTH = 12;
+const MAX_ALLOWED_DEPTH = 64;
 
 export const globInputSchema = z.object({
+  maxDepth: z
+    .number()
+    .int()
+    .min(0)
+    .max(MAX_ALLOWED_DEPTH)
+    .optional()
+    .describe(
+      "Maximum directory depth to recurse into. Defaults to 12 levels.",
+    ),
   path: z
     .string()
     .min(1)
@@ -80,9 +91,17 @@ export async function executeGlob({
   const ignoredNames = new Set(DEFAULT_LIST_IGNORES);
   const files: string[] = [];
   let totalFiles = 0;
+  let truncated = false;
+  const maxDepth = input.maxDepth ?? DEFAULT_MAX_DEPTH;
 
-  const walk = async (currentDirectory: string, currentRelativePath: string) => {
-    const directoryEntries = await readdir(currentDirectory, { withFileTypes: true });
+  const walk = async (
+    currentDirectory: string,
+    currentRelativePath: string,
+    depth: number,
+  ) => {
+    const directoryEntries = await readdir(currentDirectory, {
+      withFileTypes: true,
+    });
 
     directoryEntries.sort((left, right) =>
       left.name.localeCompare(right.name, undefined, {
@@ -102,7 +121,16 @@ export async function executeGlob({
           : `${currentRelativePath}/${directoryEntry.name}`;
 
       if (directoryEntry.isDirectory()) {
-        await walk(path.join(currentDirectory, directoryEntry.name), relativePath);
+        if (depth >= maxDepth) {
+          truncated = true;
+          continue;
+        }
+
+        await walk(
+          path.join(currentDirectory, directoryEntry.name),
+          relativePath,
+          depth + 1,
+        );
         continue;
       }
 
@@ -120,7 +148,7 @@ export async function executeGlob({
     }
   };
 
-  await walk(resolvedDirectory, ".");
+  await walk(resolvedDirectory, ".", 0);
 
   return {
     files,
@@ -128,11 +156,13 @@ export async function executeGlob({
     root: rootLabel,
     shownFiles: files.length,
     totalFiles,
-    truncated: totalFiles > files.length,
+    truncated: truncated || totalFiles > files.length,
   };
 }
 
 export const __internal = {
+  DEFAULT_MAX_DEPTH,
   GLOB_LIMIT,
   globToRegExp,
+  MAX_ALLOWED_DEPTH,
 };

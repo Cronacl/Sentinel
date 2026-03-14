@@ -83,6 +83,7 @@ describe("executeWebFetch", () => {
     });
 
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls[0]?.[1]?.redirect).toBe("manual");
     expect(
       (fetchImpl.mock.calls[1]?.[1]?.headers as Record<string, string>)[
         "User-Agent"
@@ -169,6 +170,53 @@ describe("executeWebFetch", () => {
     expect(
       result.results[0]?.status === "success" ? result.results[0].content : "",
     ).toContain(__internal.CONTENT_TRUNCATION_NOTICE.trim());
+  });
+
+  it("blocks localhost targets before issuing a request", async () => {
+    const fetchImpl = mock(async () => new Response("ok", { status: 200 }));
+    globalThis.fetch = fetchImpl as typeof fetch;
+
+    await expect(
+      executeWebFetch({
+        input: {
+          format: "text",
+          url: "http://localhost:3000/internal",
+        },
+        settings: { batchEnabled: true, batchLimit: 10 },
+      }),
+    ).rejects.toThrow(/blocked url/i);
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("blocks redirects into reserved IP ranges", async () => {
+    const fetchImpl = mock(async (input: string | URL | Request) => {
+      const url = String(input);
+
+      if (url === "https://example.com/start") {
+        return new Response(null, {
+          headers: {
+            location: "http://127.0.0.1:8000/secret",
+          },
+          status: 302,
+        });
+      }
+
+      return new Response("ok", { status: 200 });
+    });
+    globalThis.fetch = fetchImpl as typeof fetch;
+
+    await expect(
+      executeWebFetch({
+        input: {
+          format: "text",
+          url: "https://example.com/start",
+        },
+        settings: { batchEnabled: true, batchLimit: 10 },
+      }),
+    ).rejects.toThrow(/reserved ip ranges/i);
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("supports batch fetches when enabled and records partial failures", async () => {

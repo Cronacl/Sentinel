@@ -6,8 +6,16 @@ import type { PermissionMode } from "@/lib/security";
 
 import { resolveToolPath } from "./paths";
 
+const MAX_CREATE_FILE_CONTENT_LENGTH = 200_000;
+
 export const createFileInputSchema = z.object({
-  content: z.string().describe("Full file contents to create."),
+  content: z
+    .string()
+    .max(
+      MAX_CREATE_FILE_CONTENT_LENGTH,
+      `File content must be ${MAX_CREATE_FILE_CONTENT_LENGTH} characters or fewer.`,
+    )
+    .describe("Full file contents to create."),
   path: z
     .string()
     .min(1)
@@ -17,6 +25,7 @@ export const createFileInputSchema = z.object({
   rationale: z
     .string()
     .min(1)
+    .max(500)
     .describe("Why this file should be created."),
 });
 
@@ -55,7 +64,8 @@ export async function executeCreateFile({
 
   return {
     bytesWritten: Buffer.byteLength(input.content, "utf8"),
-    lineCount: input.content.length === 0 ? 0 : input.content.split(/\r?\n/).length,
+    lineCount:
+      input.content.length === 0 ? 0 : input.content.split(/\r?\n/).length,
     path: label,
   };
 }
