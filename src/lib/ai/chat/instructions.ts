@@ -238,6 +238,12 @@ function buildDecisionHeuristics(
     );
   }
 
+  if (categories.has("plan") && promptContext.threadMode === "chat") {
+    heuristics.push(
+      `${step++}. When manage_task is available in chat mode, use it to steer or reflect progress on the existing thread plan without switching modes.`,
+    );
+  }
+
   if (promptContext.enabledMcpServers.length > 0) {
     heuristics.push(
       `${step++}. Reach for an MCP server when the user is asking about a connected external system or when that integration is the most direct source of truth.`,

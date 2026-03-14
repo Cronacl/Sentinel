@@ -892,6 +892,44 @@ describe("runThreadChat approvals and lifecycle", () => {
     });
   });
 
+  it("keeps manage_task available in chat mode when the thread already has a plan", async () => {
+    getThreadPlanState.mockImplementation(async () => ({
+      pendingQuestionSet: null,
+      plan: {
+        audience: "technical",
+        createdAt: new Date(),
+        document: "# Plan\n\n## Overview\n\nSummary",
+        goal: "Ship the feature",
+        id: "plan-1",
+        summary: "Current implementation plan",
+        tasks: [
+          {
+            createdAt: new Date(),
+            description: null,
+            id: "task-1",
+            status: "pending",
+            title: "Inspect the repo",
+            updatedAt: new Date(),
+          },
+        ],
+        threadId: "thread-1",
+        title: "Plan",
+        updatedAt: new Date(),
+      },
+    }));
+
+    await runThreadChat(createSubmitRequest(), "user-1");
+
+    const toolNames = Object.keys(aiTestState.prepared?.tools ?? {});
+    expect(toolNames).toContain("manage_task");
+    expect(toolNames).not.toContain("create_plan");
+    expect(toolNames).not.toContain("update_plan");
+    expect(toolNames).not.toContain("ask_question");
+    expect(aiTestState.prepared?.instructions).toContain(
+      "When manage_task is available in chat mode, use it to steer or reflect progress on the existing thread plan without switching modes.",
+    );
+  });
+
   it("persists plan answers before continuing a plan-mode assistant turn", async () => {
     loadThread.mockImplementation(async () => ({
       archivedAt: null,

@@ -526,19 +526,27 @@ function buildPlanTools(options: ThreadAgentCallOptions) {
       execute: async (input) =>
         executeUpdatePlan({ input, runtime: { threadId } }),
     }),
-    manage_task: tool({
-      description: manageTaskDescription,
-      inputSchema: manageTaskInputSchema,
-      outputSchema: manageTaskOutputSchema,
-      execute: async (input) =>
-        executeManageTask({ input, runtime: { threadId } }),
-    }),
+    ...buildTaskTools(options),
     ask_question: tool({
       description: askQuestionDescription,
       inputSchema: askQuestionInputSchema,
       outputSchema: askQuestionOutputSchema,
       execute: async (input) =>
         executeAskQuestion({ input, runtime: { threadId } }),
+    }),
+  };
+}
+
+function buildTaskTools(options: ThreadAgentCallOptions) {
+  const { threadId } = options;
+
+  return {
+    manage_task: tool({
+      description: manageTaskDescription,
+      inputSchema: manageTaskInputSchema,
+      outputSchema: manageTaskOutputSchema,
+      execute: async (input) =>
+        executeManageTask({ input, runtime: { threadId } }),
     }),
   };
 }
@@ -563,6 +571,7 @@ export function buildTools(options: ThreadAgentCallOptions) {
     ...buildMemoryTools(options),
     ...(options.mcpTools ?? {}),
     ...buildSkillTools(options),
+    ...(options.promptContext.planSummary ? buildTaskTools(options) : {}),
     ...buildWebTools(options),
     ...(hasFilesystemTools
       ? {

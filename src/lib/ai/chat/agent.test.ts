@@ -610,4 +610,43 @@ describe("createThreadAgent", () => {
       { kind: "has-tool-call", toolName: "ask_question" },
     ]);
   });
+
+  it("keeps manage_task available in chat mode when a thread already has a plan", () => {
+    const prepared = prepareWith({
+      defaultDirectory: "/tmp/workspace",
+      memorySettings: defaultMemorySettings,
+      permissionMode: "default",
+      planSummary: {
+        audience: "technical",
+        goal: "Ship the feature",
+        hasPendingQuestions: false,
+        summary: "Current implementation plan",
+        taskCount: 2,
+        title: "Plan",
+      },
+      searchProviders: {},
+      searchSettings: {
+        defaultProvider: "exa",
+        defaultResultCount: 5,
+        maxResultCount: 10,
+      },
+      sourceMessageId: "user-message-5",
+      systemPrompt: "System prompt",
+      threadId: "thread-5",
+      threadMode: "chat",
+      userId: "user-1",
+      toolApprovalPolicies: getDefaultToolApprovalPolicies(),
+      toolsEnabled: true,
+      webFetchSettings: { batchEnabled: false, batchLimit: 10 },
+      workspaceId: "workspace-1",
+    });
+
+    expect(Object.keys(prepared.tools)).toContain("manage_task");
+    expect(Object.keys(prepared.tools)).not.toContain("create_plan");
+    expect(Object.keys(prepared.tools)).not.toContain("update_plan");
+    expect(Object.keys(prepared.tools)).not.toContain("ask_question");
+    expect(prepared.instructions).toContain(
+      "When manage_task is available in chat mode, use it to steer or reflect progress on the existing thread plan without switching modes.",
+    );
+  });
 });
