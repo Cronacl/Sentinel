@@ -137,12 +137,18 @@ const getToolApprovalPolicies = mock(async () => ({
   glob: false,
   read: false,
   grep: false,
+  diff: false,
+  batch_read: false,
   edit: true,
   multiedit: true,
   create_file: true,
   delete_file: true,
+  move_file: true,
+  apply_patch: true,
   run_task: true,
   shell_command: true,
+  git: true,
+  diagnostics: true,
   search_memory: false,
   save_memory: false,
   forget_memory: false,
@@ -169,11 +175,13 @@ const answerThreadPlanQuestionSet = mock(async () => ({
   questionSetId: "question-set-1",
   status: "answered",
 }));
+const generateText = mock(async () => ({ text: "{}" }));
 
 mock.module("ai", () => ({
   createAgentUIStream,
   createUIMessageStream,
   createUIMessageStreamResponse,
+  generateText,
   generateId,
   hasToolCall,
   smoothStream,
@@ -181,6 +189,8 @@ mock.module("ai", () => ({
   tool,
   ToolLoopAgent: MockToolLoopAgent,
 }));
+
+mock.module("server-only", () => ({}));
 
 mock.module("./runtime/attachments", () => ({
   createAttachmentDownloadHandler,
@@ -563,12 +573,18 @@ beforeEach(() => {
     glob: false,
     read: false,
     grep: false,
+    diff: false,
+    batch_read: false,
     edit: true,
     multiedit: true,
     create_file: true,
     delete_file: true,
+    move_file: true,
+    apply_patch: true,
     run_task: true,
     shell_command: true,
+    git: true,
+    diagnostics: true,
     search_memory: false,
     save_memory: false,
     forget_memory: false,
@@ -782,9 +798,9 @@ describe("runThreadChat approvals and lifecycle", () => {
     expect(toolNames).toContain("forget_memory");
     expect(toolNames).toContain("websearch");
     expect(toolNames).toContain("webfetch");
+    expect(toolNames).toContain("manage_task");
     expect(toolNames).not.toContain("create_plan");
     expect(toolNames).not.toContain("update_plan");
-    expect(toolNames).not.toContain("manage_task");
     expect(toolNames).not.toContain("ask_question");
     expect(toolNames).not.toContain("list");
     expect(toolNames).not.toContain("edit");
@@ -803,12 +819,18 @@ describe("runThreadChat approvals and lifecycle", () => {
       glob: false,
       read: false,
       grep: false,
+      diff: false,
+      batch_read: false,
       edit: false,
       multiedit: false,
       create_file: true,
       delete_file: true,
+      move_file: true,
+      apply_patch: true,
       run_task: true,
       shell_command: true,
+      git: true,
+      diagnostics: true,
       search_memory: false,
       save_memory: false,
       forget_memory: false,
@@ -926,7 +948,7 @@ describe("runThreadChat approvals and lifecycle", () => {
     expect(toolNames).not.toContain("update_plan");
     expect(toolNames).not.toContain("ask_question");
     expect(aiTestState.prepared?.instructions).toContain(
-      "When manage_task is available in chat mode, use it to steer or reflect progress on the existing thread plan without switching modes.",
+      "Always decompose multi-step work into tasks using manage_task before starting execution.",
     );
   });
 

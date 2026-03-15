@@ -1,7 +1,6 @@
 import {
   generateText,
   hasToolCall,
-  NoSuchToolError,
   stepCountIs,
   ToolLoopAgent,
   type StopCondition,
@@ -99,6 +98,8 @@ const MUTATION_TOOLS = new Set([
   "multiedit",
   "create_file",
   "delete_file",
+  "move_file",
+  "apply_patch",
 ]);
 
 const TASK_ENFORCEMENT_ADDON = [
@@ -113,7 +114,7 @@ const VALIDATION_ADDON = [
   "## Step Directive: Validate Your Changes",
   "You just made file changes. Before proceeding to the next task:",
   "1. Read the modified files to verify correctness.",
-  "2. Run relevant checks (lint, typecheck, test) via run_task if available.",
+  "2. Run relevant checks via diagnostics or run_task (lint, typecheck, test) when available.",
   "3. Update the corresponding task status with manage_task.",
   "Do not mark a task as completed until the changes are validated.",
 ].join("\n");
@@ -144,6 +145,14 @@ function buildStepProgressAddon(
 // ---------------------------------------------------------------------------
 
 const MAX_AGENT_STEPS = 75;
+
+function isNoSuchToolError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.name === "NoSuchToolError" ||
+    error.constructor?.name === "NoSuchToolError"
+  );
+}
 
 export function createThreadAgent({
   attachmentDownload,
@@ -177,7 +186,7 @@ export function createThreadAgent({
       inputSchema,
       error,
     }) => {
-      if (NoSuchToolError.isInstance(error)) {
+      if (isNoSuchToolError(error)) {
         return null;
       }
 

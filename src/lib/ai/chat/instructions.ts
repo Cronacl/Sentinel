@@ -2,7 +2,7 @@ import { lines, section } from "@/lib/prompt";
 
 import type { ThreadPromptContext } from "./prompt-context";
 import type { ToolApprovalPolicyMap } from "./tool-approval-policy";
-import { TOOL_CATALOG, getActiveCategories } from "./tools";
+import { TOOL_CATALOG, getActiveCategories } from "./tools/catalog";
 
 const SKILL_SUMMARY_LIMIT = 6;
 const MCP_SUMMARY_LIMIT = 6;
@@ -191,6 +191,16 @@ function buildDecisionHeuristics(
     heuristics.push(
       `${step++}. When repository or file state matters, inspect first. Prefer list for directory overview, glob for filename patterns, read for concrete file contents, and grep for content search.`,
     );
+    if (activeToolNames.includes("diff")) {
+      heuristics.push(
+        `${step++}. Use diff to preview or compare changes before mutating files, especially when validating a proposed edit or patch.`,
+      );
+    }
+    if (activeToolNames.includes("batch_read")) {
+      heuristics.push(
+        `${step++}. Use batch_read when you need several files at once instead of repeated read calls.`,
+      );
+    }
   }
 
   if (categories.has("skill")) {
@@ -207,7 +217,7 @@ function buildDecisionHeuristics(
 
   if (categories.has("mutation")) {
     heuristics.push(
-      `${step++}. Before mutating files, inspect the relevant targets unless the user supplied exact content. Prefer edit, multiedit, create_file, and delete_file for direct file changes instead of shell commands.`,
+      `${step++}. Before mutating files, inspect the relevant targets unless the user supplied exact content. Prefer edit, multiedit, create_file, delete_file, move_file, and apply_patch for direct file changes instead of shell commands.`,
     );
   }
 
@@ -215,6 +225,16 @@ function buildDecisionHeuristics(
     heuristics.push(
       `${step++}. Prefer run_task for standard scripts such as test, lint, build, format, or typecheck. Use shell_command only when the task cannot be expressed as a standard script.`,
     );
+    if (activeToolNames.includes("git")) {
+      heuristics.push(
+        `${step++}. Prefer git over shell_command for local repository inspection, staging, branching, checkout, and commit flows that fit the safe structured actions.`,
+      );
+    }
+    if (activeToolNames.includes("diagnostics")) {
+      heuristics.push(
+        `${step++}. Prefer diagnostics over parsing raw lint or compiler stdout when you need file- and line-specific issues.`,
+      );
+    }
     heuristics.push(
       `${step++}. For shell_command, propose one non-interactive command at a time, explain the rationale, and wait for approval workflows when required.`,
     );
@@ -246,7 +266,7 @@ function buildDecisionHeuristics(
       `${step++}. Mark tasks in_progress when you begin working on them, completed after validation, and blocked when stuck. Do not mark a task completed until the result is verified.`,
     );
     heuristics.push(
-      `${step++}. After every mutation (edit, create_file, delete_file, shell_command), validate the result before moving to the next task. Use read to verify file changes, run_task (lint, typecheck, test) when available, and grep to confirm patterns.`,
+      `${step++}. After every mutation (edit, multiedit, create_file, delete_file, move_file, apply_patch, shell_command), validate the result before moving to the next task. Use read or diff to verify file changes, diagnostics or run_task when available, and grep to confirm patterns.`,
     );
     heuristics.push(
       `${step++}. Do not generate a final response until all tasks are completed and validated. If you cannot finish a task, mark it blocked and explain what is unresolved.`,

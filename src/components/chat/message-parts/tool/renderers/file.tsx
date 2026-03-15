@@ -7,6 +7,7 @@ import { Copy01Icon, Tick01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
 import type { RendererProps } from "../renderer";
+import { buildPreviewUnifiedDiff, DiffView as SharedDiffView } from "./diff-view";
 import { ToolLayout } from "./tool-layout";
 
 type EditInput = {
@@ -223,32 +224,7 @@ function buildUnifiedDiff({
   before: string;
   path: string;
 }) {
-  const beforeLines = toDiffLines(before);
-  const afterLines = toDiffLines(after);
-  const diffLines = [`--- a/${path}`, `+++ b/${path}`, "@@ @@"];
-  const maxLineCount = Math.max(beforeLines.length, afterLines.length);
-
-  for (let index = 0; index < maxLineCount; index += 1) {
-    const previousLine = beforeLines[index];
-    const nextLine = afterLines[index];
-
-    if (previousLine === nextLine) {
-      if (previousLine !== undefined) {
-        diffLines.push(` ${previousLine}`);
-      }
-      continue;
-    }
-
-    if (previousLine !== undefined) {
-      diffLines.push(`-${previousLine}`);
-    }
-
-    if (nextLine !== undefined) {
-      diffLines.push(`+${nextLine}`);
-    }
-  }
-
-  return diffLines.join("\n");
+  return buildPreviewUnifiedDiff({ after, before, path });
 }
 
 type DiffLineKind = "add" | "del" | "ctx";
@@ -832,7 +808,7 @@ function buildBody(
         before: part.input.oldString,
         path: part.input.path,
       });
-      return <DiffView diff={diff} path={part.input.path} />;
+      return <SharedDiffView diff={diff} path={part.input.path} />;
     }
 
     if (toolName === "multiedit" && isMultiEditInput(part.input)) {
@@ -846,7 +822,7 @@ function buildBody(
               path: input.path,
             });
             return (
-              <DiffView
+              <SharedDiffView
                 key={index}
                 diff={diff}
                 path={`${input.path} #${index + 1}${edit.replaceAll ? " (all)" : ""}`}
@@ -863,7 +839,7 @@ function buildBody(
         before: "",
         path: part.input.path,
       });
-      return <DiffView diff={diff} path={part.input.path} />;
+      return <SharedDiffView diff={diff} path={part.input.path} />;
     }
 
     if (toolName === "delete_file" && isDeleteFileInput(part.input)) {

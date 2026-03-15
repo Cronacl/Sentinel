@@ -34,6 +34,16 @@ export const TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     category: "inspection",
     label: "the grep tool",
   },
+  diff: {
+    capability: "to preview unified diffs before making changes",
+    category: "inspection",
+    label: "the diff tool",
+  },
+  batch_read: {
+    capability: "to read multiple files or directories at once",
+    category: "inspection",
+    label: "the batch_read tool",
+  },
   edit: {
     capability: "for targeted file edits",
     category: "mutation",
@@ -54,6 +64,16 @@ export const TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     category: "mutation",
     label: "the delete_file tool",
   },
+  move_file: {
+    capability: "to atomically rename or move files",
+    category: "mutation",
+    label: "the move_file tool",
+  },
+  apply_patch: {
+    capability: "to apply coordinated multi-file patches",
+    category: "mutation",
+    label: "the apply_patch tool",
+  },
   run_task: {
     capability: "to run standard project scripts",
     category: "execution",
@@ -63,6 +83,16 @@ export const TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     capability: "to execute shell commands in the workspace",
     category: "execution",
     label: "the shell tool",
+  },
+  git: {
+    capability: "to run safe structured git operations",
+    category: "execution",
+    label: "the git tool",
+  },
+  diagnostics: {
+    capability: "to collect structured lint or type diagnostics",
+    category: "execution",
+    label: "the diagnostics tool",
   },
   search_memory: {
     capability: "to recall durable user or workspace context",

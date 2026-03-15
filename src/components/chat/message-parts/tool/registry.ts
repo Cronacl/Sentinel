@@ -12,13 +12,19 @@ import { ShellTool } from "./renderers/shell";
 import { SkillTool } from "./renderers/skill";
 import { WebSearchTool } from "./renderers/websearch";
 import { WebFetchTool } from "./renderers/webfetch";
+import { WorkspaceTool } from "./renderers/workspace";
 
 const renderers: Record<string, Renderer> = {
+  apply_patch: WorkspaceTool,
+  batch_read: WorkspaceTool,
   create_file: FileTool,
   create_plan: PlanTool,
   delete_file: FileTool,
+  diagnostics: WorkspaceTool,
+  diff: WorkspaceTool,
   edit: FileTool,
   multiedit: FileTool,
+  git: WorkspaceTool,
   grep: GrepTool,
   glob: GlobTool,
   list: ListTool,
@@ -31,6 +37,7 @@ const renderers: Record<string, Renderer> = {
   search_memory: MemoryTool,
   shell_command: ShellTool,
   load_skill: SkillTool,
+  move_file: WorkspaceTool,
   update_plan: PlanTool,
   websearch: WebSearchTool,
   webfetch: WebFetchTool,

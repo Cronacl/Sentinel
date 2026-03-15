@@ -3,12 +3,18 @@ export const TOOL_APPROVAL_TOOL_NAMES = [
   "glob",
   "read",
   "grep",
+  "diff",
+  "batch_read",
   "edit",
   "multiedit",
   "create_file",
   "delete_file",
+  "move_file",
+  "apply_patch",
   "run_task",
   "shell_command",
+  "git",
+  "diagnostics",
   "search_memory",
   "save_memory",
   "forget_memory",
@@ -57,6 +63,20 @@ export const TOOL_APPROVAL_METADATA: Record<
     riskSummary:
       "Sentinel can search code and text across the selected project or discovered skill directories without stopping for confirmation.",
   },
+  diff: {
+    defaultRequireApproval: false,
+    description: "Generate unified diffs for files or proposed content.",
+    label: "Diff",
+    riskSummary:
+      "Sentinel can inspect code changes as unified diffs without modifying files or pausing for confirmation.",
+  },
+  batch_read: {
+    defaultRequireApproval: false,
+    description: "Read multiple files or directories in one call.",
+    label: "Batch read",
+    riskSummary:
+      "Sentinel can inspect several files or directories in the selected project or discovered skill directories without stopping for confirmation.",
+  },
   edit: {
     defaultRequireApproval: true,
     description: "Replace exact text inside an existing file.",
@@ -85,6 +105,20 @@ export const TOOL_APPROVAL_METADATA: Record<
     riskSummary:
       "Sentinel can delete project files without stopping for confirmation.",
   },
+  move_file: {
+    defaultRequireApproval: true,
+    description: "Rename or move a file within the workspace.",
+    label: "Move file",
+    riskSummary:
+      "Sentinel can rename or relocate files in the project without stopping for confirmation.",
+  },
+  apply_patch: {
+    defaultRequireApproval: true,
+    description: "Apply a structured multi-file patch.",
+    label: "Apply patch",
+    riskSummary:
+      "Sentinel can apply coordinated file additions, edits, deletions, and moves without stopping for confirmation.",
+  },
   run_task: {
     defaultRequireApproval: true,
     description:
@@ -100,6 +134,20 @@ export const TOOL_APPROVAL_METADATA: Record<
     label: "Shell command",
     riskSummary:
       "Sentinel can execute shell commands immediately in the workspace or discovered skill directories.",
+  },
+  git: {
+    defaultRequireApproval: true,
+    description: "Run safe structured git operations in the workspace.",
+    label: "Git",
+    riskSummary:
+      "Sentinel can inspect or mutate local git state immediately within the selected repository.",
+  },
+  diagnostics: {
+    defaultRequireApproval: true,
+    description: "Collect structured lint or compiler diagnostics.",
+    label: "Diagnostics",
+    riskSummary:
+      "Sentinel can run local code analysis tools immediately and surface structured diagnostics from the workspace.",
   },
   search_memory: {
     defaultRequireApproval: false,

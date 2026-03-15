@@ -53,6 +53,27 @@ export const grepDescription = lines(
   ].join("\n"),
 );
 
+export const diffDescription = lines(
+  "Generate a unified diff between a file and another file or proposed content.",
+  [
+    "- Supports file-to-file comparison and file-to-proposed-content comparison.",
+    "- Returns unified diff text plus addition/deletion counts.",
+    "- Optional contextLines controls how many unchanged lines are included around changes.",
+    "- Use this tool to inspect or preview changes before mutating files.",
+    "- Prefer this tool over guessing what a patch or edit will do.",
+  ].join("\n"),
+);
+
+export const batchReadDescription = lines(
+  "Read multiple files or directories in one tool call.",
+  [
+    "- Applies the existing read behavior to each requested path and preserves the request order.",
+    "- Supports optional shared offset and limit parameters for every requested path.",
+    "- Returns one structured read result per path.",
+    "- Use this tool when you need several files at once instead of repeated read calls.",
+  ].join("\n"),
+);
+
 export const editDescription = lines(
   "Replace exact text inside an existing file.",
   [
@@ -100,6 +121,28 @@ export const deleteFileDescription = lines(
   ].join("\n"),
 );
 
+export const moveFileDescription = lines(
+  "Atomically rename or move a file within the workspace.",
+  [
+    "- Uses a filesystem rename instead of create-plus-delete.",
+    "- Automatically creates destination parent directories when needed.",
+    "- Fails if the source does not exist or the destination already exists.",
+    "- Requires a rationale explaining why the move is needed.",
+    "- Prefer this tool over manual copy/delete flows when renaming files.",
+  ].join("\n"),
+);
+
+export const applyPatchDescription = lines(
+  "Apply a structured multi-file patch using Sentinel's patch envelope format.",
+  [
+    "- Accepts Add, Delete, and Update file operations, with optional Move directives on updates.",
+    "- Verifies patch structure before writing files.",
+    "- Returns per-file diffs and change counts after applying the patch.",
+    "- Requires a rationale explaining why the patch should be applied.",
+    "- Prefer this tool for coordinated multi-file edits or file moves expressed as a patch.",
+  ].join("\n"),
+);
+
 export const runTaskDescription = lines(
   "Run a standard project script such as test, lint, build, format, or typecheck.",
   [
@@ -126,6 +169,27 @@ export const shellCommandDescription = lines(
     "- Prefer non-interactive flags for scaffolding, installs, and builds.",
     "- Prefer run_task for standard project scripts (test, lint, build, format, typecheck).",
     "- Prefer edit, create_file, and delete_file for direct file changes instead of shell commands.",
+  ].join("\n"),
+);
+
+export const gitDescription = lines(
+  "Run safe, structured git operations in the selected workspace root.",
+  [
+    "- Supports status, diff, log, branch_list, branch_create, checkout, add, and commit.",
+    "- Returns structured JSON instead of raw shell output.",
+    "- Enforces safe local operations only: no remotes, rebases, resets, force flags, or detached HEAD flows.",
+    "- Branch creation and checkout require a clean worktree; commit requires staged changes.",
+    "- Prefer this tool over shell_command for local git inspection and commits.",
+  ].join("\n"),
+);
+
+export const diagnosticsDescription = lines(
+  "Collect structured code diagnostics for the workspace or a specific path.",
+  [
+    "- Returns normalized diagnostics with file, line, column, severity, source, and message.",
+    "- In auto mode, prefers ESLint when available, then falls back to TypeScript compiler diagnostics.",
+    "- Supports path scoping when the underlying tool output can be filtered safely.",
+    "- Use this tool instead of parsing raw lint or typecheck stdout.",
   ].join("\n"),
 );
 

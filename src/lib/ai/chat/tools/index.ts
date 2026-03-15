@@ -3,17 +3,23 @@ import { z } from "zod";
 
 import type { ThreadAgentCallOptions } from "../agent";
 import {
+  applyPatchDescription,
   askQuestionDescription,
+  batchReadDescription,
   createFileDescription,
   createPlanDescription,
   deleteFileDescription,
+  diagnosticsDescription,
+  diffDescription,
   editDescription,
   forgetMemoryDescription,
+  gitDescription,
   globDescription,
   grepDescription,
   loadSkillDescription,
   listDescription,
   manageTaskDescription,
+  moveFileDescription,
   multieditDescription,
   readDescription,
   runTaskDescription,
@@ -25,10 +31,20 @@ import {
   websearchDescription,
 } from "../tool-descriptions";
 import {
+  applyPatchInputSchema,
+  applyPatchOutputSchema,
+  executeApplyPatch,
+} from "./apply-patch";
+import {
   executeAskQuestion,
   askQuestionInputSchema,
   askQuestionOutputSchema,
 } from "./ask-question";
+import {
+  batchReadInputSchema,
+  batchReadOutputSchema,
+  executeBatchRead,
+} from "./batch-read";
 import {
   executeCreateFile,
   createFileInputSchema,
@@ -46,10 +62,21 @@ import {
 } from "./delete-file";
 import { executeEdit, editInputSchema, editOutputSchema } from "./edit";
 import {
+  diagnosticsInputSchema,
+  diagnosticsOutputSchema,
+  executeDiagnostics,
+} from "./diagnostics";
+import {
+  diffInputSchema,
+  diffOutputSchema,
+  executeDiff,
+} from "./diff";
+import {
   executeForgetMemory,
   forgetMemoryInputSchema,
   forgetMemoryOutputSchema,
 } from "./forget-memory";
+import { executeGit, gitInputSchema, gitOutputSchema } from "./git";
 import { executeGlob, globInputSchema, globOutputSchema } from "./glob";
 import { executeGrep, grepInputSchema, grepOutputSchema } from "./grep";
 import { executeList, listInputSchema, listOutputSchema } from "./list";
@@ -63,6 +90,11 @@ import {
   manageTaskInputSchema,
   manageTaskOutputSchema,
 } from "./manage-task";
+import {
+  executeMoveFile,
+  moveFileInputSchema,
+  moveFileOutputSchema,
+} from "./move-file";
 import {
   executeMultiEdit,
   multieditInputSchema,
@@ -158,7 +190,14 @@ const shellCommandOutputSchema = z.discriminatedUnion("phase", [
 // Individual tool group builders
 // ---------------------------------------------------------------------------
 
-function buildInspectionTools(options: ThreadAgentCallOptions) {
+function buildInspectionTools(
+  options: ThreadAgentCallOptions,
+  {
+    includeExtended = true,
+  }: {
+    includeExtended?: boolean;
+  } = {},
+) {
   const { defaultDirectory, permissionMode, skillRoots, toolApprovalPolicies } =
     options;
   const filesystemRoot = defaultDirectory ?? skillRoots[0];
@@ -216,6 +255,40 @@ function buildInspectionTools(options: ThreadAgentCallOptions) {
           permissionMode,
         }),
     }),
+    ...(includeExtended
+      ? {
+          diff: tool({
+            description: diffDescription,
+            inputSchema: diffInputSchema,
+            needsApproval: () => toolApprovalPolicies.diff,
+            outputSchema: diffOutputSchema,
+            execute: async (input) =>
+              executeDiff({
+                defaultDirectory: filesystemRoot!,
+                ...(skillRoots.length > 0
+                  ? { extraAllowedRoots: skillRoots }
+                  : {}),
+                input,
+                permissionMode,
+              }),
+          }),
+          batch_read: tool({
+            description: batchReadDescription,
+            inputSchema: batchReadInputSchema,
+            needsApproval: () => toolApprovalPolicies.batch_read,
+            outputSchema: batchReadOutputSchema,
+            execute: async (input) =>
+              executeBatchRead({
+                defaultDirectory: filesystemRoot!,
+                ...(skillRoots.length > 0
+                  ? { extraAllowedRoots: skillRoots }
+                  : {}),
+                input,
+                permissionMode,
+              }),
+          }),
+        }
+      : {}),
   };
 }
 
@@ -271,6 +344,30 @@ function buildMutationTools(options: ThreadAgentCallOptions) {
           permissionMode,
         }),
     }),
+    move_file: tool({
+      description: moveFileDescription,
+      inputSchema: moveFileInputSchema,
+      needsApproval: () => toolApprovalPolicies.move_file,
+      outputSchema: moveFileOutputSchema,
+      execute: async (input) =>
+        executeMoveFile({
+          defaultDirectory: defaultDirectory!,
+          input,
+          permissionMode,
+        }),
+    }),
+    apply_patch: tool({
+      description: applyPatchDescription,
+      inputSchema: applyPatchInputSchema,
+      needsApproval: () => toolApprovalPolicies.apply_patch,
+      outputSchema: applyPatchOutputSchema,
+      execute: async (input) =>
+        executeApplyPatch({
+          defaultDirectory: defaultDirectory!,
+          input,
+          permissionMode,
+        }),
+    }),
   };
 }
 
@@ -285,6 +382,34 @@ function buildExecutionTools(options: ThreadAgentCallOptions) {
   const filesystemRoot = defaultDirectory ?? skillRoots[0];
 
   return {
+    ...(defaultDirectory
+      ? {
+          diagnostics: tool({
+            description: diagnosticsDescription,
+            inputSchema: diagnosticsInputSchema,
+            needsApproval: () => toolApprovalPolicies.diagnostics,
+            outputSchema: diagnosticsOutputSchema,
+            execute: async (input) =>
+              executeDiagnostics({
+                defaultDirectory: defaultDirectory!,
+                input,
+                permissionMode,
+              }),
+          }),
+          git: tool({
+            description: gitDescription,
+            inputSchema: gitInputSchema,
+            needsApproval: () => toolApprovalPolicies.git,
+            outputSchema: gitOutputSchema,
+            execute: async (input) =>
+              executeGit({
+                defaultDirectory: defaultDirectory!,
+                input,
+                permissionMode,
+              }),
+          }),
+        }
+      : {}),
     ...(defaultDirectory
       ? {
           run_task: tool({
@@ -564,7 +689,9 @@ export function buildTools(options: ThreadAgentCallOptions) {
   if (options.threadMode === "plan") {
     return {
       ...buildSkillTools(options),
-      ...(hasFilesystemTools ? buildInspectionTools(options) : {}),
+      ...(hasFilesystemTools
+        ? buildInspectionTools(options, { includeExtended: false })
+        : {}),
       ...buildPlanTools(options),
     };
   }

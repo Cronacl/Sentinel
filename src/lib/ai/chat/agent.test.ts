@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, mock } from "bun:test";
 import { z } from "zod";
 
 const tool = mock((config) => config);
+const generateText = mock(async () => ({ text: "{}" }));
 const hasToolCall = mock((toolName) => ({ kind: "has-tool-call", toolName }));
 const stepCountIs = mock(() => ({ kind: "stop-when" }));
 const executeLoadSkillMock = mock(async () => ({
@@ -28,6 +29,7 @@ class MockToolLoopAgent {
 }
 
 mock.module("ai", () => ({
+  generateText,
   hasToolCall,
   stepCountIs,
   tool,
@@ -325,15 +327,21 @@ describe("createThreadAgent", () => {
     expect(prepared.tools).toHaveProperty("glob");
     expect(prepared.tools).toHaveProperty("read");
     expect(prepared.tools).toHaveProperty("grep");
+    expect(prepared.tools).toHaveProperty("diff");
+    expect(prepared.tools).toHaveProperty("batch_read");
     expect(prepared.tools).toHaveProperty("edit");
     expect(prepared.tools).toHaveProperty("multiedit");
     expect(prepared.tools).toHaveProperty("create_file");
     expect(prepared.tools).toHaveProperty("delete_file");
+    expect(prepared.tools).toHaveProperty("move_file");
+    expect(prepared.tools).toHaveProperty("apply_patch");
+    expect(prepared.tools).toHaveProperty("diagnostics");
+    expect(prepared.tools).toHaveProperty("git");
     expect(prepared.tools).toHaveProperty("run_task");
     expect(prepared.tools).toHaveProperty("shell_command");
+    expect(prepared.tools).toHaveProperty("manage_task");
     expect(prepared.tools).not.toHaveProperty("create_plan");
     expect(prepared.tools).not.toHaveProperty("update_plan");
-    expect(prepared.tools).not.toHaveProperty("manage_task");
     expect(prepared.tools).not.toHaveProperty("ask_question");
     expect(prepared.instructions).toContain("## Runtime Snapshot");
     expect(prepared.instructions).toContain("Permission mode: default.");
@@ -359,8 +367,14 @@ describe("createThreadAgent", () => {
     );
     expect(prepared.instructions).toContain("Webfetch batching: enabled");
     expect(await prepared.tools.list.needsApproval({}, {})).toBe(false);
+    expect(await prepared.tools.diff.needsApproval({}, {})).toBe(false);
+    expect(await prepared.tools.batch_read.needsApproval({}, {})).toBe(false);
     expect(await prepared.tools.edit.needsApproval({}, {})).toBe(true);
     expect(await prepared.tools.multiedit.needsApproval({}, {})).toBe(true);
+    expect(await prepared.tools.move_file.needsApproval({}, {})).toBe(true);
+    expect(await prepared.tools.apply_patch.needsApproval({}, {})).toBe(true);
+    expect(await prepared.tools.diagnostics.needsApproval({}, {})).toBe(true);
+    expect(await prepared.tools.git.needsApproval({}, {})).toBe(true);
     expect(await prepared.tools.search_memory.needsApproval({}, {})).toBe(
       false,
     );
@@ -399,11 +413,11 @@ describe("createThreadAgent", () => {
     expect(toolNames).toContain("forget_memory");
     expect(toolNames).toContain("websearch");
     expect(toolNames).toContain("webfetch");
+    expect(toolNames).toContain("manage_task");
     expect(toolNames).not.toContain("list");
     expect(toolNames).not.toContain("edit");
     expect(toolNames).not.toContain("create_plan");
     expect(toolNames).not.toContain("update_plan");
-    expect(toolNames).not.toContain("manage_task");
     expect(toolNames).not.toContain("ask_question");
     expect(prepared.instructions).toContain("Workspace root: unavailable.");
     expect(prepared.instructions).toContain("search_memory");
@@ -605,10 +619,15 @@ describe("createThreadAgent", () => {
       "the read tool: to read file contents without approval.",
     );
     expect(await prepared.tools.read.needsApproval({}, {})).toBe(false);
-    expect(aiTestState.agentConfig.stopWhen).toEqual([
-      { kind: "stop-when" },
-      { kind: "has-tool-call", toolName: "ask_question" },
-    ]);
+    expect(aiTestState.agentConfig.stopWhen).toHaveLength(3);
+    expect(aiTestState.agentConfig.stopWhen[0]).toEqual({
+      kind: "stop-when",
+    });
+    expect(aiTestState.agentConfig.stopWhen[1]).toEqual({
+      kind: "has-tool-call",
+      toolName: "ask_question",
+    });
+    expect(typeof aiTestState.agentConfig.stopWhen[2]).toBe("function");
   });
 
   it("keeps manage_task available in chat mode when a thread already has a plan", () => {
@@ -646,7 +665,7 @@ describe("createThreadAgent", () => {
     expect(Object.keys(prepared.tools)).not.toContain("update_plan");
     expect(Object.keys(prepared.tools)).not.toContain("ask_question");
     expect(prepared.instructions).toContain(
-      "When manage_task is available in chat mode, use it to steer or reflect progress on the existing thread plan without switching modes.",
+      "Always decompose multi-step work into tasks using manage_task before starting execution.",
     );
   });
 });
