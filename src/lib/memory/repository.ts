@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { createId } from "@paralleldrive/cuid2";
 
+import { MEMORY_KIND_VALUES } from "@/lib/memory";
 import type {
   MemoryItem,
   MemoryKind,
@@ -13,8 +14,6 @@ import {
   getMemoryEmbeddingTableName,
   MEMORY_VECTOR_DIMENSIONS,
   toMemoryScope,
-  type MemoryRecord,
-  type MemorySearchRow,
 } from "@/server/db/memory-schema";
 
 type MemoryListFilters = {
@@ -26,6 +25,24 @@ type MemoryListFilters = {
   userId: string;
   workspaceId?: string | null;
 };
+
+type MemoryFacetCounts = {
+  kindCounts: Record<MemoryKind, number>;
+  scopeCounts: Record<MemoryScope, number>;
+};
+
+type QueryFiltersOptions = {
+  includeKind?: boolean;
+  includeScope?: boolean;
+};
+
+type QueryFiltersResult = {
+  conditions: string[];
+  params: unknown[];
+};
+
+const SEMANTIC_DEDUPLICATION_THRESHOLD = 0.93;
+const MEMORY_DECAY_HALF_LIFE_DAYS = 90;
 
 type UpsertMemoryInput = {
   content: string;
@@ -68,6 +85,85 @@ function toEmbeddingBuffer(embedding: Float32Array | number[]) {
   return embedding instanceof Float32Array
     ? Buffer.from(embedding.buffer)
     : Buffer.from(new Float32Array(embedding).buffer);
+}
+
+function toFloat32Array(embedding: Float32Array | number[]) {
+  return embedding instanceof Float32Array
+    ? embedding
+    : new Float32Array(embedding);
+}
+
+function fromEmbeddingBuffer(value: unknown) {
+  if (value instanceof Float32Array) {
+    return value;
+  }
+
+  if (Buffer.isBuffer(value)) {
+    return new Float32Array(
+      value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength),
+    );
+  }
+
+  if (value instanceof Uint8Array) {
+    return new Float32Array(
+      value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength),
+    );
+  }
+
+  if (value instanceof ArrayBuffer) {
+    return new Float32Array(value.slice(0));
+  }
+
+  throw new Error("Unsupported embedding buffer.");
+}
+
+function cosineSimilarity(
+  leftEmbedding: Float32Array | number[],
+  rightEmbedding: Float32Array | number[],
+) {
+  const left = toFloat32Array(leftEmbedding);
+  const right = toFloat32Array(rightEmbedding);
+
+  if (left.length !== right.length || left.length === 0) {
+    return 0;
+  }
+
+  let dotProduct = 0;
+  let leftMagnitude = 0;
+  let rightMagnitude = 0;
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftValue = left[index] ?? 0;
+    const rightValue = right[index] ?? 0;
+    dotProduct += leftValue * rightValue;
+    leftMagnitude += leftValue * leftValue;
+    rightMagnitude += rightValue * rightValue;
+  }
+
+  if (leftMagnitude === 0 || rightMagnitude === 0) {
+    return 0;
+  }
+
+  return dotProduct / (Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude));
+}
+
+function calculateTimeDecayFactor({
+  anchorTimestamp,
+  isPinned,
+  now = Date.now(),
+}: {
+  anchorTimestamp: number;
+  isPinned: boolean;
+  now?: number;
+}) {
+  if (isPinned) {
+    return 1;
+  }
+
+  const ageMs = Math.max(0, now - anchorTimestamp);
+  const ageDays = ageMs / (1000 * 60 * 60 * 24);
+
+  return Math.exp((-Math.log(2) * ageDays) / MEMORY_DECAY_HALF_LIFE_DAYS);
 }
 
 function mapMemoryRow(row: Record<string, unknown>): MemoryItem {
@@ -115,24 +211,28 @@ export function countMemoriesByUser(userId: string) {
   return row.count;
 }
 
-export function listMemories(filters: MemoryListFilters): MemoryItem[] {
-  const db = requireVectorDb();
+function buildMemoryFilterQuery(
+  filters: MemoryListFilters,
+  options: QueryFiltersOptions = {},
+): QueryFiltersResult {
+  const includeKind = options.includeKind ?? true;
+  const includeScope = options.includeScope ?? true;
   const conditions = ["user_id = ?"];
   const params: unknown[] = [filters.userId];
 
-  if (filters.scope === "global") {
+  if (includeScope && filters.scope === "global") {
     conditions.push("workspace_id IS NULL");
-  } else if (filters.scope === "workspace") {
+  } else if (includeScope && filters.scope === "workspace") {
     conditions.push("workspace_id = ?");
     params.push(filters.workspaceId ?? "");
   }
 
-  if (filters.workspaceId && filters.scope !== "workspace") {
+  if (filters.workspaceId && (!includeScope || filters.scope !== "workspace")) {
     conditions.push("(workspace_id IS NULL OR workspace_id = ?)");
     params.push(filters.workspaceId);
   }
 
-  if (filters.kind) {
+  if (includeKind && filters.kind) {
     conditions.push("kind = ?");
     params.push(filters.kind);
   }
@@ -148,6 +248,12 @@ export function listMemories(filters: MemoryListFilters): MemoryItem[] {
     params.push(pattern, pattern);
   }
 
+  return { conditions, params };
+}
+
+export function listMemories(filters: MemoryListFilters): MemoryItem[] {
+  const db = requireVectorDb();
+  const { conditions, params } = buildMemoryFilterQuery(filters);
   const limit = Math.max(1, Math.min(filters.limit ?? 200, 500));
   params.push(limit);
 
@@ -164,6 +270,62 @@ export function listMemories(filters: MemoryListFilters): MemoryItem[] {
     .all(...params) as Record<string, unknown>[];
 
   return rows.map(mapMemoryRow);
+}
+
+export function countMemories(filters: Omit<MemoryListFilters, "limit">) {
+  const db = requireVectorDb();
+  const { conditions, params } = buildMemoryFilterQuery(filters);
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) as count
+         FROM memory_items
+        WHERE ${conditions.join(" AND ")}`,
+    )
+    .get(...params) as { count: number };
+
+  return row.count;
+}
+
+export function getMemoryFacetCounts(
+  filters: Omit<MemoryListFilters, "kind" | "limit" | "scope">,
+): MemoryFacetCounts {
+  const db = requireVectorDb();
+  const { conditions, params } = buildMemoryFilterQuery(filters, {
+    includeKind: false,
+    includeScope: false,
+  });
+  const rows = db
+    .prepare(
+      `SELECT kind, workspace_id, COUNT(*) as count
+         FROM memory_items
+        WHERE ${conditions.join(" AND ")}
+        GROUP BY kind, workspace_id`,
+    )
+    .all(...params) as Array<{
+      count: number;
+      kind: MemoryKind;
+      workspace_id: string | null;
+    }>;
+
+  const kindCounts = MEMORY_KIND_VALUES.reduce(
+    (accumulator, kind) => ({ ...accumulator, [kind]: 0 }),
+    {} as Record<MemoryKind, number>,
+  );
+  const scopeCounts: Record<MemoryScope, number> = {
+    global: 0,
+    workspace: 0,
+  };
+
+  for (const row of rows) {
+    kindCounts[row.kind] = (kindCounts[row.kind] ?? 0) + Number(row.count ?? 0);
+    const scope = toMemoryScope(row.workspace_id ?? null);
+    scopeCounts[scope] += Number(row.count ?? 0);
+  }
+
+  return {
+    kindCounts,
+    scopeCounts,
+  };
 }
 
 export function getMemoryById(userId: string, memoryId: string): MemoryItem | null {
@@ -184,6 +346,7 @@ export function upsertMemory(input: UpsertMemoryInput) {
     input.scope === "workspace" ? (input.workspaceId ?? null) : null;
   const scopeKey = workspaceId ?? "__global__";
   const fingerprint = createFingerprint(input.kind, scopeKey, normalizedContent);
+  const tableName = getMemoryEmbeddingTableName(input.embeddingDimensions);
   const existing = db
     .prepare(
       `SELECT id
@@ -196,19 +359,57 @@ export function upsertMemory(input: UpsertMemoryInput) {
     .get(input.userId, input.kind, workspaceId ?? "", fingerprint) as
     | { id: string }
     | undefined;
+  const semanticDuplicate =
+    existing
+      ? null
+      : ((db
+          .prepare(
+            `SELECT
+               m.id,
+               e.embedding as stored_embedding
+             FROM memory_items m
+             JOIN ${tableName} e ON e.memory_id = m.id
+             WHERE m.user_id = ?
+               AND m.kind = ?
+               AND coalesce(m.workspace_id, '') = ?
+               AND m.embedding_provider = ?
+               AND m.embedding_model = ?
+               AND m.embedding_dimensions = ?`,
+          )
+          .all(
+            input.userId,
+            input.kind,
+            workspaceId ?? "",
+            input.embeddingProvider,
+            input.embeddingModel,
+            input.embeddingDimensions,
+          ) as Array<{ id: string; stored_embedding: unknown }>)
+          .map((row) => ({
+            id: row.id,
+            similarity: cosineSimilarity(
+              input.embedding,
+              fromEmbeddingBuffer(row.stored_embedding),
+            ),
+          }))
+          .sort((left, right) => right.similarity - left.similarity)[0] ?? null);
 
-  const id = existing?.id ?? createId();
+  const duplicateId = existing?.id
+    ? existing.id
+    : semanticDuplicate &&
+        semanticDuplicate.similarity >= SEMANTIC_DEDUPLICATION_THRESHOLD
+      ? semanticDuplicate.id
+      : undefined;
+  const id = duplicateId ?? createId();
   const buffer = toEmbeddingBuffer(input.embedding);
-  const tableName = getMemoryEmbeddingTableName(input.embeddingDimensions);
+  const existingMemory = duplicateId ? getMemoryById(input.userId, duplicateId) : null;
 
   db.transaction(() => {
-    if (existing) {
+    if (existingMemory) {
       db.prepare(
         `UPDATE memory_items
             SET content = ?,
                 summary = ?,
                 salience = ?,
-                is_pinned = ?,
                 source_thread_id = ?,
                 source_message_id = ?,
                 updated_at = ?,
@@ -219,8 +420,7 @@ export function upsertMemory(input: UpsertMemoryInput) {
       ).run(
         normalizedContent,
         normalizedSummary,
-        input.salience ?? 0.5,
-        input.isPinned ? 1 : 0,
+        Math.max(existingMemory.salience, input.salience ?? 0.5),
         input.sourceThreadId ?? null,
         input.sourceMessageId ?? null,
         now,
@@ -263,7 +463,7 @@ export function upsertMemory(input: UpsertMemoryInput) {
 
   return {
     memory: getMemoryById(input.userId, id)!,
-    status: existing ? ("updated" as const) : ("created" as const),
+    status: existingMemory ? ("updated" as const) : ("created" as const),
   };
 }
 
@@ -343,7 +543,8 @@ export function searchMemories({
   const db = requireVectorDb();
   const tableName = getMemoryEmbeddingTableName(embeddingDimensions);
   const buffer = toEmbeddingBuffer(queryEmbedding);
-  const fetchLimit = Math.max(limit * 4, limit);
+  const fetchLimit = Math.max(limit * 8, 24);
+  const queryVector = toFloat32Array(queryEmbedding);
   const conditions = [
     "m.user_id = ?",
     "m.embedding_provider = ?",
@@ -375,6 +576,7 @@ export function searchMemories({
     .prepare(
       `SELECT
          e.distance as distance,
+         e.embedding as stored_embedding,
          m.*
        FROM ${tableName} e
        JOIN memory_items m ON m.id = e.memory_id
@@ -390,14 +592,24 @@ export function searchMemories({
       const memory = mapMemoryRow(row);
       const workspaceBoosted =
         Boolean(workspaceId) && memory.workspaceId === workspaceId;
+      const cosine = cosineSimilarity(
+        queryVector,
+        fromEmbeddingBuffer(row.stored_embedding),
+      );
+      const decayFactor = calculateTimeDecayFactor({
+        anchorTimestamp: memory.lastAccessedAt ?? memory.updatedAt,
+        isPinned: memory.isPinned,
+      });
+      const workspaceBoost = workspaceBoosted ? 0.15 : 0;
+      const pinBoost = memory.isPinned ? 0.2 : 0;
+      const salienceBoost = memory.salience * 0.1;
       const score =
-        1 / (1 + Number(row.distance ?? 0)) +
-        (workspaceBoosted ? 0.15 : 0) +
-        (memory.isPinned ? 0.2 : 0) +
-        memory.salience * 0.1;
+        cosine * decayFactor + workspaceBoost + pinBoost + salienceBoost;
 
       return {
         ...memory,
+        cosineSimilarity: cosine,
+        decayFactor,
         distance: Number(row.distance ?? 0),
         score,
         workspaceBoosted,
@@ -494,6 +706,10 @@ export function listMemoriesForEmbeddingProfile({
 }
 
 export const __internal = {
+  calculateTimeDecayFactor,
+  cosineSimilarity,
   createFingerprint,
+  fromEmbeddingBuffer,
   normalizeMemoryText,
+  SEMANTIC_DEDUPLICATION_THRESHOLD,
 };

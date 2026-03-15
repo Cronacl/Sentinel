@@ -3,7 +3,21 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
 const listMemories = mock(() => []);
+const countMemories = mock(() => 0);
 const countMemoriesByUser = mock(() => 0);
+const getMemoryFacetCounts = mock(() => ({
+  kindCounts: {
+    fact: 0,
+    preference: 0,
+    profile: 0,
+    project: 0,
+    workflow: 0,
+  },
+  scopeCounts: {
+    global: 0,
+    workspace: 0,
+  },
+}));
 const getMemoryById = mock(() => null);
 const clearMemoriesForUser = mock(() => 0);
 const toggleMemoryPinned = mock(() => undefined);
@@ -43,7 +57,9 @@ mock.module("@/server/api/trpc", () => ({
 
 mock.module("@/lib/memory/repository", () => ({
   clearMemoriesForUser,
+  countMemories,
   countMemoriesByUser,
+  getMemoryFacetCounts,
   getMemoryById,
   listMemories,
   toggleMemoryPinned,
@@ -81,7 +97,9 @@ const { memoryRouter } = await import("./memory");
 
 beforeEach(() => {
   listMemories.mockReset();
+  countMemories.mockReset();
   countMemoriesByUser.mockReset();
+  getMemoryFacetCounts.mockReset();
   getMemoryById.mockReset();
   clearMemoriesForUser.mockReset();
   toggleMemoryPinned.mockReset();
@@ -100,7 +118,21 @@ beforeEach(() => {
   update.mockReset();
 
   listMemories.mockImplementation(() => []);
+  countMemories.mockImplementation(() => 0);
   countMemoriesByUser.mockImplementation(() => 0);
+  getMemoryFacetCounts.mockImplementation(() => ({
+    kindCounts: {
+      fact: 0,
+      preference: 0,
+      profile: 0,
+      project: 0,
+      workflow: 0,
+    },
+    scopeCounts: {
+      global: 0,
+      workspace: 0,
+    },
+  }));
   getMemoryById.mockImplementation(() => null);
   clearMemoriesForUser.mockImplementation(() => 0);
   toggleMemoryPinned.mockImplementation(() => undefined);
@@ -156,7 +188,21 @@ describe("memoryRouter", () => {
         workspaceId: "workspace-1",
       },
     ]);
+    countMemories.mockImplementation(() => 1);
     countMemoriesByUser.mockImplementation(() => 1);
+    getMemoryFacetCounts.mockImplementation(() => ({
+      kindCounts: {
+        fact: 0,
+        preference: 1,
+        profile: 0,
+        project: 0,
+        workflow: 0,
+      },
+      scopeCounts: {
+        global: 0,
+        workspace: 1,
+      },
+    }));
     workspacesFindMany.mockImplementation(async () => [
       { id: "workspace-1", name: "Sentinel" },
     ]);
@@ -186,6 +232,20 @@ describe("memoryRouter", () => {
           workspaceName: "Sentinel",
         }),
       ],
+      facets: {
+        kindCounts: {
+          fact: 0,
+          preference: 1,
+          profile: 0,
+          project: 0,
+          workflow: 0,
+        },
+        scopeCounts: {
+          global: 0,
+          workspace: 1,
+        },
+      },
+      filteredTotal: 1,
       total: 1,
     });
   });

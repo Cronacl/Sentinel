@@ -3,7 +3,9 @@ import { and, eq, inArray } from "drizzle-orm";
 
 import {
   clearMemoriesForUser,
+  countMemories,
   countMemoriesByUser,
+  getMemoryFacetCounts,
   getMemoryById,
   listMemories,
   toggleMemoryPinned,
@@ -25,7 +27,7 @@ export const memoryRouter = createTRPCRouter({
     .input(memoryListSchema.optional())
     .query(async ({ ctx, input }) => {
       const filters = input ?? {};
-      const memories = listMemories({
+      const listFilters = {
         ...(filters.kind && filters.kind !== "all" ? { kind: filters.kind } : {}),
         ...(typeof filters.pinned === "boolean"
           ? { pinned: filters.pinned }
@@ -34,6 +36,18 @@ export const memoryRouter = createTRPCRouter({
         ...(filters.scope && filters.scope !== "all"
           ? { scope: filters.scope }
           : {}),
+        ...(filters.workspaceId && filters.workspaceId !== "all"
+          ? { workspaceId: filters.workspaceId }
+          : {}),
+        userId: ctx.session.user.id,
+      } as const;
+      const memories = listMemories(listFilters);
+      const filteredTotal = countMemories(listFilters);
+      const facets = getMemoryFacetCounts({
+        ...(typeof filters.pinned === "boolean"
+          ? { pinned: filters.pinned }
+          : {}),
+        ...(filters.query?.trim() ? { query: filters.query.trim() } : {}),
         ...(filters.workspaceId && filters.workspaceId !== "all"
           ? { workspaceId: filters.workspaceId }
           : {}),
@@ -89,6 +103,8 @@ export const memoryRouter = createTRPCRouter({
             ? (workspaceMap.get(memory.workspaceId) ?? null)
             : null,
         })),
+        facets,
+        filteredTotal,
         total: countMemoriesByUser(ctx.session.user.id),
       };
     }),

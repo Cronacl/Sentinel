@@ -69,6 +69,8 @@ export type MemoryItem = {
 };
 
 export type MemorySearchResult = MemoryItem & {
+  cosineSimilarity: number;
+  decayFactor: number;
   distance: number;
   score: number;
   workspaceBoosted: boolean;

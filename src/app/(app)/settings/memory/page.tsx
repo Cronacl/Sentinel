@@ -45,20 +45,6 @@ type ManagedMemoryItem = {
   summary: string | null;
 };
 
-const KIND_OPTIONS = [
-  { label: "All kinds", value: "all" },
-  ...MEMORY_KIND_VALUES.map((value) => ({
-    label: value[0]?.toUpperCase() + value.slice(1),
-    value,
-  })),
-];
-
-const SCOPE_FILTER_OPTIONS = [
-  { label: "All scopes", value: "all" },
-  { label: "Global", value: "global" },
-  { label: "Workspace", value: "workspace" },
-];
-
 const PINNED_OPTIONS = [
   { label: "All items", value: "all" },
   { label: "Pinned only", value: "pinned" },
@@ -71,6 +57,12 @@ type MemoryProfileOption = {
   description: string;
   label: string;
   value: MemorySettingsFormValues["memoryProfileId"];
+};
+
+type BrowseChipOption<TValue extends string> = {
+  count: number;
+  label: string;
+  value: TValue;
 };
 
 function MemorySettingsSkeleton() {
@@ -180,6 +172,50 @@ function MemoryPagination({
   );
 }
 
+function MemoryBrowseChips<TValue extends string>({
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  label: string;
+  onChange: (value: TValue) => void;
+  options: BrowseChipOption<TValue>[];
+  value: TValue;
+}) {
+  return (
+    <div className="space-y-2">
+      <span className="text-muted text-xs font-medium">{label}</span>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => {
+          const isActive = option.value === value;
+
+          return (
+            <Button
+              className="rounded-full"
+              key={option.value}
+              onPress={() => onChange(option.value)}
+              size="sm"
+              variant={isActive ? "primary" : "tertiary"}
+            >
+              <span>{option.label}</span>
+              <span
+                className={
+                  isActive
+                    ? "rounded-full bg-background/20 px-2 py-0.5 text-[11px]"
+                    : "rounded-full bg-foreground/8 px-2 py-0.5 text-[11px]"
+                }
+              >
+                {option.count}
+              </span>
+            </Button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function formatDate(timestamp: number | null) {
   if (!timestamp) {
     return "Never";
@@ -229,6 +265,8 @@ export default function MemorySettingsPage() {
         ? { pinned: false }
         : {}),
   });
+  const kindFacetCounts = memories.data?.facets.kindCounts;
+  const scopeFacetCounts = memories.data?.facets.scopeCounts;
 
   const form = useForm<MemorySettingsFormValues>({
     defaultValues: {
@@ -376,13 +414,34 @@ export default function MemorySettingsPage() {
 
   const totalMemories = memories.data?.total ?? 0;
   const allItems = memories.data?.items ?? [];
-  const filteredCount = allItems.length;
+  const filteredCount = memories.data?.filteredTotal ?? allItems.length;
   const totalPages = Math.max(1, Math.ceil(filteredCount / MEMORIES_PER_PAGE));
   const safePage = Math.min(page, totalPages);
   const startIndex = (safePage - 1) * MEMORIES_PER_PAGE;
   const paginatedItems = allItems.slice(startIndex, startIndex + MEMORIES_PER_PAGE);
   const startItem = filteredCount > 0 ? startIndex + 1 : 0;
   const endItem = Math.min(startIndex + MEMORIES_PER_PAGE, filteredCount);
+  const kindBrowseOptions: BrowseChipOption<typeof kindFilter>[] = [
+    { count: Object.values(kindFacetCounts ?? {}).reduce((sum, count) => sum + count, 0), label: "All kinds", value: "all" },
+    ...MEMORY_KIND_VALUES.map((value) => ({
+      count: kindFacetCounts?.[value] ?? 0,
+      label: value[0]?.toUpperCase() + value.slice(1),
+      value,
+    })),
+  ];
+  const scopeBrowseOptions: BrowseChipOption<typeof scopeFilter>[] = [
+    {
+      count: (scopeFacetCounts?.global ?? 0) + (scopeFacetCounts?.workspace ?? 0),
+      label: "All scopes",
+      value: "all",
+    },
+    { count: scopeFacetCounts?.global ?? 0, label: "Global", value: "global" },
+    {
+      count: scopeFacetCounts?.workspace ?? 0,
+      label: "Workspace",
+      value: "workspace",
+    },
+  ];
 
   const selectedProfile =
     MEMORY_EMBEDDING_PROFILES.find(
@@ -576,7 +635,9 @@ export default function MemorySettingsPage() {
                   Memory manager
                 </h2>
                 <p className="text-muted text-sm">
-                  {totalMemories} stored mem{totalMemories === 1 ? "ory" : "ories"}
+                  {filteredCount === totalMemories
+                    ? `${totalMemories} stored mem${totalMemories === 1 ? "ory" : "ories"}`
+                    : `${filteredCount} matching of ${totalMemories} stored memories`}
                 </p>
               </div>
             </div>
@@ -614,44 +675,6 @@ export default function MemorySettingsPage() {
 
               <label className="space-y-1">
                 <span className="text-muted text-xs font-medium">
-                  Scope
-                </span>
-                <select
-                  className="border-separator bg-background/70 text-foreground w-full rounded-xl border px-3 py-2.5 text-sm outline-none"
-                  onChange={(event) =>
-                    setScopeFilter(event.target.value as typeof scopeFilter)
-                  }
-                  value={scopeFilter}
-                >
-                  {SCOPE_FILTER_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="space-y-1">
-                <span className="text-muted text-xs font-medium">
-                  Kind
-                </span>
-                <select
-                  className="border-separator bg-background/70 text-foreground w-full rounded-xl border px-3 py-2.5 text-sm outline-none"
-                  onChange={(event) =>
-                    setKindFilter(event.target.value as typeof kindFilter)
-                  }
-                  value={kindFilter}
-                >
-                  {KIND_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="space-y-1">
-                <span className="text-muted text-xs font-medium">
                   Pinned
                 </span>
                 <select
@@ -668,6 +691,21 @@ export default function MemorySettingsPage() {
                   ))}
                 </select>
               </label>
+            </div>
+
+            <div className="mb-4 grid gap-3">
+              <MemoryBrowseChips
+                label="Kind"
+                onChange={setKindFilter}
+                options={kindBrowseOptions}
+                value={kindFilter}
+              />
+              <MemoryBrowseChips
+                label="Scope"
+                onChange={setScopeFilter}
+                options={scopeBrowseOptions}
+                value={scopeFilter}
+              />
             </div>
 
             <div className="space-y-3">
