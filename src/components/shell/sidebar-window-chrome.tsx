@@ -25,6 +25,10 @@ function TrafficLightButton({
 
 export function SidebarWindowChrome() {
   const desktop = getDesktopApi();
+  const expandButtonLabel =
+    typeof navigator !== "undefined" && navigator.userAgent.includes("Mac")
+      ? "Toggle full screen"
+      : "Maximize window";
 
   return (
     <div className="app-region-drag grid h-14 shrink-0 grid-cols-[52px_1fr_52px] items-center px-4">
@@ -40,7 +44,7 @@ export function SidebarWindowChrome() {
           onPress={() => void desktop?.window.minimize()}
         />
         <TrafficLightButton
-          ariaLabel="Maximize window"
+          ariaLabel={expandButtonLabel}
           colorClassName="bg-[#28c840]"
           onPress={() => void desktop?.window.toggleMaximize()}
         />

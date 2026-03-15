@@ -1,4 +1,11 @@
-import { app, BrowserWindow, dialog, ipcMain, session } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  session,
+} from "electron";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +22,7 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow = null;
 let serverState = null;
+let resolvedTheme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
 
 // GPU acceleration is required for smooth backdrop-blur, shadows, and animations.
 // Only disable if a specific driver issue is confirmed on a target platform.
@@ -125,9 +133,35 @@ function escapeHtml(text) {
     .replace(/>/g, "&gt;");
 }
 
-function getPopupHtml(targetUrl, appOrigin) {
+function getWindowBackgroundColor(theme) {
+  return theme === "light" ? "#f5f5f5" : "#090909";
+}
+
+async function applyThemeToPopupGuest(guestContents, theme) {
+  try {
+    if (!guestContents.debugger.isAttached()) {
+      guestContents.debugger.attach("1.3");
+    }
+
+    await guestContents.debugger.sendCommand("Emulation.setEmulatedMedia", {
+      features: [
+        {
+          name: "prefers-color-scheme",
+          value: theme,
+        },
+      ],
+    });
+  } catch (error) {
+    console.warn("[electron] failed to apply popup theme", error);
+  }
+}
+
+function getPopupHtml(targetUrl, appOrigin, theme) {
   const escapedUrl = escapeHtml(targetUrl);
   const escapedAppOrigin = escapeHtml(appOrigin);
+  const escapedTheme = theme === "light" ? "light" : "dark";
+  const expandButtonTitle =
+    process.platform === "darwin" ? "Toggle Full Screen" : "Maximize";
   let hostname;
   try {
     hostname = escapeHtml(new URL(targetUrl).hostname);
@@ -136,22 +170,38 @@ function getPopupHtml(targetUrl, appOrigin) {
   }
 
   return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
-<html lang="en">
+<html lang="en" data-theme="${escapedTheme}">
 <head>
 <meta charset="UTF-8"/>
 <title>${hostname} — Sentinel</title>
 <style>
-:root{color-scheme:dark}
+:root{color-scheme:light dark}
+html[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#090909;
+  --panel:#090909;
+  --text:rgba(245,245,245,.4);
+  --border:rgba(255,255,255,.06);
+  --loader:rgba(255,255,255,.35);
+}
+html[data-theme="light"]{
+  color-scheme:light;
+  --bg:#f5f5f5;
+  --panel:#fcfcfc;
+  --text:rgba(24,24,27,.45);
+  --border:rgba(24,24,27,.08);
+  --loader:rgba(24,24,27,.24);
+}
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%;overflow:hidden;background:#090909;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-.tb{height:38px;display:flex;align-items:center;padding:0 14px;-webkit-app-region:drag;background:#090909;border-bottom:1px solid rgba(255,255,255,.06);gap:10px;user-select:none}
+html,body{height:100%;overflow:hidden;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.tb{height:38px;display:flex;align-items:center;padding:0 14px;-webkit-app-region:drag;background:var(--panel);border-bottom:1px solid var(--border);gap:10px;user-select:none}
 .tl{display:flex;align-items:center;gap:6px;-webkit-app-region:no-drag}
 .tl button{width:10px;height:10px;min-width:10px;min-height:10px;border-radius:50%;border:none;cursor:pointer;padding:0;transition:transform .1s}
 .tl button:hover{transform:scale(1.08)}
 .tc{background:#ff5f57}.tn{background:#febc2e}.tx{background:#28c840}
-.url{flex:1;min-width:0;text-align:center;font-size:11px;color:rgba(245,245,245,.4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em}
+.url{flex:1;min-width:0;text-align:center;font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em}
 .sp{width:52px;flex-shrink:0}
-.lb{height:2px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);background-size:200% 100%;animation:lbs 1.2s linear infinite;opacity:0;transition:opacity .2s}
+.lb{height:2px;background:linear-gradient(90deg,transparent,var(--loader),transparent);background-size:200% 100%;animation:lbs 1.2s linear infinite;opacity:0;transition:opacity .2s}
 .lb.on{opacity:1}
 @keyframes lbs{0%{background-position:200% 0}100%{background-position:-200% 0}}
 webview{width:100%;height:calc(100% - 40px);border:none}
@@ -162,7 +212,7 @@ webview{width:100%;height:calc(100% - 40px);border:none}
 <div class="tl">
 <button class="tc" id="bc" title="Close"></button>
 <button class="tn" id="bn" title="Minimize"></button>
-<button class="tx" id="bx" title="Maximize"></button>
+<button class="tx" id="bx" title="${expandButtonTitle}"></button>
 </div>
 <div class="url" id="ud">${hostname}</div>
 <div class="sp"></div>
@@ -207,8 +257,9 @@ function isExternalUrl(url) {
 }
 
 function createBrowserPopup(url) {
+  const theme = resolvedTheme;
   const popup = new BrowserWindow({
-    backgroundColor: "#090909",
+    backgroundColor: getWindowBackgroundColor(theme),
     frame: false,
     height: 720,
     minHeight: 400,
@@ -224,12 +275,17 @@ function createBrowserPopup(url) {
     width: 1020,
   });
 
+  popup.webContents.on("did-attach-webview", (_event, guestContents) => {
+    void applyThemeToPopupGuest(guestContents, theme);
+  });
+
   void popup.loadURL(
     getPopupHtml(
       url,
       serverState?.url ??
         process.env.SENTINEL_APP_URL ??
         "http://127.0.0.1:3232",
+      theme,
     ),
   );
   popup.once("ready-to-show", () => popup.show());
@@ -440,10 +496,19 @@ function registerIpc() {
   ipcMain.handle(DESKTOP_CHANNELS.WINDOW_MINIMIZE, async (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize();
   });
+  ipcMain.handle(DESKTOP_CHANNELS.WINDOW_SYNC_THEME, async (_event, theme) => {
+    resolvedTheme = theme === "light" ? "light" : "dark";
+  });
   ipcMain.handle(DESKTOP_CHANNELS.WINDOW_TOGGLE_MAXIMIZE, async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) {
       return false;
+    }
+
+    if (process.platform === "darwin") {
+      const isFullscreen = win.isFullScreen();
+      win.setFullScreen(!isFullscreen);
+      return !isFullscreen;
     }
 
     if (win.isMaximized()) {

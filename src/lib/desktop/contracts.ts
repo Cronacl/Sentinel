@@ -14,6 +14,8 @@ export type DesktopServicesStatus = {
   appServer: boolean;
 };
 
+export type DesktopResolvedTheme = "light" | "dark";
+
 export type SentinelDesktopApi = {
   app: {
     getVersion: () => Promise<string>;
@@ -28,6 +30,7 @@ export type SentinelDesktopApi = {
   window: {
     close: () => Promise<void>;
     minimize: () => Promise<void>;
+    syncTheme: (theme: DesktopResolvedTheme) => Promise<void>;
     toggleMaximize: () => Promise<boolean>;
   };
 };

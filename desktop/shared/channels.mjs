@@ -7,5 +7,6 @@ export const DESKTOP_CHANNELS = {
   SERVICES_STOP: "sentinel:services-stop",
   WINDOW_CLOSE: "sentinel:window-close",
   WINDOW_MINIMIZE: "sentinel:window-minimize",
+  WINDOW_SYNC_THEME: "sentinel:window-sync-theme",
   WINDOW_TOGGLE_MAXIMIZE: "sentinel:window-toggle-maximize",
 };

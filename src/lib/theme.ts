@@ -1,6 +1,7 @@
 export const THEME_PREFERENCE_VALUES = ["light", "dark", "system"] as const;
 
 export type ThemePreference = (typeof THEME_PREFERENCE_VALUES)[number];
+export type ResolvedTheme = Exclude<ThemePreference, "system">;
 
 export const DEFAULT_THEME_PREFERENCE: ThemePreference = "system";
 
@@ -22,7 +23,9 @@ export const THEME_OPTIONS = [
   },
 ] as const;
 
-export function resolveThemePreference(preference: ThemePreference) {
+export function resolveThemePreference(
+  preference: ThemePreference,
+): ResolvedTheme {
   if (preference !== "system") {
     return preference;
   }
@@ -37,11 +40,12 @@ export function resolveThemePreference(preference: ThemePreference) {
 }
 
 export function applyThemePreference(preference: ThemePreference) {
+  const resolved = resolveThemePreference(preference);
+
   if (typeof document === "undefined") {
-    return preference;
+    return resolved;
   }
 
-  const resolved = resolveThemePreference(preference);
   const root = document.documentElement;
   (
     window as typeof window & { __sentinelThemePreference?: ThemePreference }

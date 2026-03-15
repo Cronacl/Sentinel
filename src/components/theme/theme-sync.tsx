@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 
+import { getDesktopApi } from "@/lib/desktop/client";
 import {
   applyThemePreference,
   DEFAULT_THEME_PREFERENCE,
@@ -18,13 +19,16 @@ export function ThemeSync() {
       return;
     }
 
+    const desktop = getDesktopApi();
     const themeWindow = window as ThemeWindow;
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
     const syncTheme = () => {
-      applyThemePreference(
+      const resolvedTheme = applyThemePreference(
         themeWindow.__sentinelThemePreference ?? DEFAULT_THEME_PREFERENCE,
       );
+
+      void desktop?.window.syncTheme(resolvedTheme);
     };
 
     syncTheme();

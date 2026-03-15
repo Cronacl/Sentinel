@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld("sentinelDesktop", {
   window: {
     close: () => ipcRenderer.invoke(DESKTOP_CHANNELS.WINDOW_CLOSE),
     minimize: () => ipcRenderer.invoke(DESKTOP_CHANNELS.WINDOW_MINIMIZE),
+    syncTheme: (theme) =>
+      ipcRenderer.invoke(DESKTOP_CHANNELS.WINDOW_SYNC_THEME, theme),
     toggleMaximize: () =>
       ipcRenderer.invoke(DESKTOP_CHANNELS.WINDOW_TOGGLE_MAXIMIZE),
   },
