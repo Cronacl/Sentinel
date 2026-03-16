@@ -25,7 +25,7 @@ type ThreadOutput = {
 
 function extractName(from: string): string {
   const match = from.match(/^"?([^"<]+)"?\s*</);
-  if (match) return match[1].trim();
+  if (match) return (match[1] ?? "").trim();
   return from.split("@")[0] ?? from;
 }
 

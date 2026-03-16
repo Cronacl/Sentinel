@@ -186,6 +186,14 @@ export function useThreadChat({
     }
 
     lastSyncedSignatureRef.current = initialMessagesSignature;
+
+    if (
+      messagesRef.current.length > 0 &&
+      normalizedInitialMessages.length < messagesRef.current.length
+    ) {
+      return;
+    }
+
     chat.setMessages(normalizedInitialMessages);
   }, [
     chat.setMessages,
