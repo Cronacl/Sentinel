@@ -8,12 +8,7 @@ import {
   UserMultipleIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  CloseButton,
-  ScrollShadow,
-  Separator,
-  Spinner,
-} from "@heroui/react";
+import { CloseButton, ScrollShadow, Separator, Spinner } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
 import { IntegrationProviderIcon } from "@/components/icons/integration-provider-icon";
@@ -67,8 +62,8 @@ function humanizeMimeType(mimeType: string): string {
   }
   const parts = mimeType.split("/");
   if (parts.length === 2) {
-    const sub = parts[1].replace(/^(vnd\.|x-)/, "").replace(/[.-]/g, " ");
-    return sub.charAt(0).toUpperCase() + sub.slice(1);
+    const sub = parts[1]?.replace(/^(vnd\.|x-)/, "").replace(/[.-]/g, " ");
+    return (sub ?? "").charAt(0).toUpperCase() + (sub ?? "").slice(1);
   }
   return mimeType;
 }
@@ -202,7 +197,10 @@ function Breadcrumbs({
       {path.map((entry, i) => {
         const isLast = i === path.length - 1;
         return (
-          <span key={entry.id} className="inline-flex shrink-0 items-center gap-0.5">
+          <span
+            key={entry.id}
+            className="inline-flex shrink-0 items-center gap-0.5"
+          >
             {i > 0 ? (
               <Icon
                 icon="solar:alt-arrow-right-linear"
@@ -473,7 +471,10 @@ export const GDriveSearchSidebar = memo(function GDriveSearchSidebar({
 
   const [navStack, setNavStack] = useState<ViewState[]>([{ kind: "list" }]);
   const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbEntry[]>([
-    { id: "search", name: query ? `"${query}"` : isListMode ? "Files" : "Search" },
+    {
+      id: "search",
+      name: query ? `"${query}"` : isListMode ? "Files" : "Search",
+    },
   ]);
 
   const [folderCache, setFolderCache] = useState<
@@ -524,9 +525,7 @@ export const GDriveSearchSidebar = memo(function GDriveSearchSidebar({
         setFolderErrors((prev) => ({
           ...prev,
           [folderId]:
-            error instanceof Error
-              ? error.message
-              : "Unable to load folder.",
+            error instanceof Error ? error.message : "Unable to load folder.",
         }));
       } finally {
         if (!signal.aborted) {
@@ -538,28 +537,25 @@ export const GDriveSearchSidebar = memo(function GDriveSearchSidebar({
   );
 
   useEffect(() => {
-    if (currentView.kind !== "folder") return;
+    if (currentView?.kind !== "folder") return;
 
     const controller = new AbortController();
-    void fetchFolder(currentView.folderId, controller.signal);
+    void fetchFolder(currentView.folderId!, controller.signal);
     return () => controller.abort();
   }, [currentView, fetchFolder]);
 
-  const handleSelectFile = useCallback(
-    (file: DriveFileResult) => {
-      if (isFolder(file)) {
-        setNavStack((prev) => [
-          ...prev,
-          { kind: "folder", folderId: file.id, folderName: file.name },
-        ]);
-        setBreadcrumbs((prev) => [...prev, { id: file.id, name: file.name }]);
-      } else {
-        setNavStack((prev) => [...prev, { kind: "detail", file }]);
-        setBreadcrumbs((prev) => [...prev, { id: file.id, name: file.name }]);
-      }
-    },
-    [],
-  );
+  const handleSelectFile = useCallback((file: DriveFileResult) => {
+    if (isFolder(file)) {
+      setNavStack((prev) => [
+        ...prev,
+        { kind: "folder", folderId: file.id, folderName: file.name },
+      ]);
+      setBreadcrumbs((prev) => [...prev, { id: file.id, name: file.name }]);
+    } else {
+      setNavStack((prev) => [...prev, { kind: "detail", file }]);
+      setBreadcrumbs((prev) => [...prev, { id: file.id, name: file.name }]);
+    }
+  }, []);
 
   const handleBack = useCallback(() => {
     if (navStack.length <= 1) return;
@@ -567,46 +563,43 @@ export const GDriveSearchSidebar = memo(function GDriveSearchSidebar({
     setBreadcrumbs((prev) => prev.slice(0, -1));
   }, [navStack.length]);
 
-  const handleBreadcrumbNavigate = useCallback(
-    (index: number) => {
-      setNavStack((prev) => prev.slice(0, index + 1));
-      setBreadcrumbs((prev) => prev.slice(0, index + 1));
-    },
-    [],
-  );
+  const handleBreadcrumbNavigate = useCallback((index: number) => {
+    setNavStack((prev) => prev.slice(0, index + 1));
+    setBreadcrumbs((prev) => prev.slice(0, index + 1));
+  }, []);
 
   const handleClose = useCallback(() => close(), [close]);
 
   const headerTitle = (() => {
-    if (currentView.kind === "detail") return currentView.file.name;
-    if (currentView.kind === "folder") return currentView.folderName;
+    if (currentView?.kind === "detail") return currentView?.file?.name ?? "";
+    if (currentView?.kind === "folder") return currentView?.folderName ?? "";
     return "Google Drive";
   })();
 
   const currentFiles = (() => {
-    if (currentView.kind === "list") return initialFiles;
-    if (currentView.kind === "folder") {
-      return folderCache[currentView.folderId]?.files ?? [];
+    if (currentView?.kind === "list") return initialFiles;
+    if (currentView?.kind === "folder") {
+      return folderCache[currentView?.folderId!]?.files ?? [];
     }
     return [];
   })();
 
   const currentTotal = (() => {
-    if (currentView.kind === "list") return initialTotal;
-    if (currentView.kind === "folder") {
-      return folderCache[currentView.folderId]?.total ?? 0;
+    if (currentView?.kind === "list") return initialTotal;
+    if (currentView?.kind === "folder") {
+      return folderCache[currentView?.folderId!]?.total ?? 0;
     }
     return 0;
   })();
 
   const isLoading =
-    currentView.kind === "folder" &&
-    loadingFolderId === currentView.folderId &&
-    !folderCache[currentView.folderId];
+    currentView?.kind === "folder" &&
+    loadingFolderId === currentView?.folderId &&
+    !folderCache[currentView?.folderId!];
 
   const error =
-    currentView.kind === "folder"
-      ? folderErrors[currentView.folderId] ?? null
+    currentView?.kind === "folder"
+      ? (folderErrors[currentView?.folderId!] ?? null)
       : null;
 
   const showBreadcrumbs = breadcrumbs.length > 1;
@@ -616,7 +609,7 @@ export const GDriveSearchSidebar = memo(function GDriveSearchSidebar({
       <SidebarHeader
         title={headerTitle}
         subtitle={
-          currentView.kind !== "detail" && !isLoading && !error
+          currentView?.kind !== "detail" && !isLoading && !error
             ? `${currentTotal} item${currentTotal !== 1 ? "s" : ""}`
             : undefined
         }
@@ -625,7 +618,7 @@ export const GDriveSearchSidebar = memo(function GDriveSearchSidebar({
         onClose={handleClose}
       />
 
-      {showBreadcrumbs && currentView.kind !== "detail" ? (
+      {showBreadcrumbs && currentView?.kind !== "detail" ? (
         <>
           <Breadcrumbs
             path={breadcrumbs}
@@ -638,8 +631,8 @@ export const GDriveSearchSidebar = memo(function GDriveSearchSidebar({
       )}
 
       <div className="min-h-0 flex-1">
-        {currentView.kind === "detail" ? (
-          <FileDetailView file={currentView.file} />
+        {currentView?.kind === "detail" ? (
+          <FileDetailView file={currentView?.file!} />
         ) : isLoading ? (
           <LoadingState />
         ) : error ? (
@@ -648,7 +641,7 @@ export const GDriveSearchSidebar = memo(function GDriveSearchSidebar({
           <FileListView
             files={currentFiles}
             onSelect={handleSelectFile}
-            isFolderView={currentView.kind === "folder"}
+            isFolderView={currentView?.kind === "folder"}
           />
         )}
       </div>
