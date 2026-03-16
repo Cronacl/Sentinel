@@ -256,4 +256,75 @@ export class GoogleCalendarService {
 
     return result;
   }
+
+  async quickAdd(
+    calendarId: string,
+    text: string,
+  ): Promise<CalendarEvent> {
+    const response = await this.calendar.events.quickAdd({
+      calendarId: calendarId || "primary",
+      text,
+    });
+    return parseEvent(response.data, calendarId || "primary");
+  }
+
+  async rsvpEvent(
+    calendarId: string,
+    eventId: string,
+    responseStatus: "accepted" | "declined" | "tentative",
+  ): Promise<CalendarEvent> {
+    const existing = await this.getEvent(calendarId, eventId);
+
+    const updatedAttendees = existing.attendees.map((a) => ({
+      email: a.email,
+      responseStatus: a.email === existing.organizer.email
+        ? a.responseStatus
+        : a.responseStatus,
+    }));
+
+    const response = await this.calendar.events.patch({
+      calendarId,
+      eventId,
+      requestBody: {
+        attendees: updatedAttendees.length > 0
+          ? updatedAttendees.map((a) => ({
+              email: a.email,
+              responseStatus: a.responseStatus,
+            }))
+          : undefined,
+      },
+      sendUpdates: "all",
+    });
+
+    const selfEntry = response.data.attendees?.find(
+      (a) => a.self === true,
+    );
+    if (selfEntry) {
+      selfEntry.responseStatus = responseStatus;
+      await this.calendar.events.patch({
+        calendarId,
+        eventId,
+        requestBody: {
+          attendees: response.data.attendees,
+        },
+        sendUpdates: "all",
+      });
+    }
+
+    const updated = await this.getEvent(calendarId, eventId);
+    return updated;
+  }
+
+  async moveEvent(
+    calendarId: string,
+    eventId: string,
+    destinationCalendarId: string,
+  ): Promise<CalendarEvent> {
+    const response = await this.calendar.events.move({
+      calendarId,
+      eventId,
+      destination: destinationCalendarId,
+    });
+    return parseEvent(response.data, destinationCalendarId);
+  }
 }

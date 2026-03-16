@@ -287,5 +287,178 @@ export function buildGmailTools(
         return { status: "trashed" as const };
       },
     }),
+
+    gmail_star: tool({
+      description: "Star an email to mark it as important.",
+      inputSchema: z.object({
+        messageId: z.string().describe("The message ID to star."),
+      }),
+      outputSchema: z.object({ status: z.literal("starred") }),
+      needsApproval: () => approvalFn("gmail_star"),
+      execute: async (input) => {
+        const service = getGmailService(context);
+        await service.starEmail(input.messageId);
+        return { status: "starred" as const };
+      },
+    }),
+
+    gmail_unstar: tool({
+      description: "Remove the star from an email.",
+      inputSchema: z.object({
+        messageId: z.string().describe("The message ID to unstar."),
+      }),
+      outputSchema: z.object({ status: z.literal("unstarred") }),
+      needsApproval: () => approvalFn("gmail_unstar"),
+      execute: async (input) => {
+        const service = getGmailService(context);
+        await service.unstarEmail(input.messageId);
+        return { status: "unstarred" as const };
+      },
+    }),
+
+    gmail_mark_read: tool({
+      description: "Mark an email as read.",
+      inputSchema: z.object({
+        messageId: z.string().describe("The message ID to mark as read."),
+      }),
+      outputSchema: z.object({ status: z.literal("read") }),
+      needsApproval: () => approvalFn("gmail_mark_read"),
+      execute: async (input) => {
+        const service = getGmailService(context);
+        await service.markAsRead(input.messageId);
+        return { status: "read" as const };
+      },
+    }),
+
+    gmail_mark_unread: tool({
+      description: "Mark an email as unread.",
+      inputSchema: z.object({
+        messageId: z.string().describe("The message ID to mark as unread."),
+      }),
+      outputSchema: z.object({ status: z.literal("unread") }),
+      needsApproval: () => approvalFn("gmail_mark_unread"),
+      execute: async (input) => {
+        const service = getGmailService(context);
+        await service.markAsUnread(input.messageId);
+        return { status: "unread" as const };
+      },
+    }),
+
+    gmail_forward: tool({
+      description:
+        "Forward an email to another recipient. Optionally add a message above the forwarded content.",
+      inputSchema: z.object({
+        messageId: z.string().describe("The message ID to forward."),
+        to: z
+          .string()
+          .describe("Recipient email address(es), comma-separated."),
+        additionalBody: z
+          .string()
+          .optional()
+          .describe("Optional message to include above the forwarded email."),
+      }),
+      outputSchema: z.object({
+        messageId: z.string(),
+        threadId: z.string(),
+        status: z.literal("forwarded"),
+      }),
+      needsApproval: () => approvalFn("gmail_forward"),
+      execute: async (input) => {
+        const service = getGmailService(context);
+        const result = await service.forwardEmail(input);
+        return { ...result, status: "forwarded" as const };
+      },
+    }),
+
+    gmail_get_thread: tool({
+      description:
+        "Get all messages in an email thread/conversation by thread ID.",
+      inputSchema: z.object({
+        threadId: z.string().describe("The thread ID to retrieve."),
+      }),
+      outputSchema: z.object({
+        threadId: z.string(),
+        messageCount: z.number(),
+        messages: z.array(
+          z.object({
+            id: z.string(),
+            from: z.string(),
+            to: z.string(),
+            subject: z.string(),
+            snippet: z.string(),
+            date: z.string(),
+            isUnread: z.boolean(),
+          }),
+        ),
+      }),
+      needsApproval: () => approvalFn("gmail_get_thread"),
+      toModelOutput: ({ output }) => ({
+        type: "json" as const,
+        value: {
+          threadId: output.threadId,
+          messageCount: output.messageCount,
+          messages: output.messages.map((m) => ({
+            id: m.id,
+            from: m.from,
+            subject: m.subject,
+            snippet: m.snippet,
+            date: m.date,
+            isUnread: m.isUnread,
+          })),
+        },
+      }),
+      execute: async (input) => {
+        const service = getGmailService(context);
+        const thread = await service.getThread(input.threadId);
+        return {
+          threadId: thread.threadId,
+          messageCount: thread.messages.length,
+          messages: thread.messages.map((m) => ({
+            id: m.id,
+            from: m.from,
+            to: m.to,
+            subject: m.subject,
+            snippet: m.snippet,
+            date: m.date,
+            isUnread: m.isUnread,
+          })),
+        };
+      },
+    }),
+
+    gmail_bulk_action: tool({
+      description:
+        "Perform a bulk action on multiple emails at once. Supports archive, trash, star, unstar, mark as read, and mark as unread.",
+      inputSchema: z.object({
+        messageIds: z
+          .array(z.string())
+          .min(1)
+          .max(50)
+          .describe("Message IDs to act on."),
+        action: z
+          .enum([
+            "archive",
+            "trash",
+            "star",
+            "unstar",
+            "mark_read",
+            "mark_unread",
+          ])
+          .describe("The action to perform on all messages."),
+      }),
+      outputSchema: z.object({
+        action: z.string(),
+        modifiedCount: z.number(),
+      }),
+      needsApproval: () => approvalFn("gmail_bulk_action"),
+      execute: async (input) => {
+        const service = getGmailService(context);
+        const result = await service.bulkModify(
+          input.messageIds,
+          input.action,
+        );
+        return { action: input.action, ...result };
+      },
+    }),
   };
 }

@@ -19,12 +19,18 @@ import { GmailSendTool } from "./renderers/integrations/gmail/gmail-send";
 import { GmailListLabelsTool } from "./renderers/integrations/gmail/gmail-labels";
 import { GmailManageLabelsTool } from "./renderers/integrations/gmail/gmail-manage-labels";
 import { GmailActionTool } from "./renderers/integrations/gmail/gmail-action";
+import { GmailForwardTool } from "./renderers/integrations/gmail/gmail-forward";
+import { GmailThreadTool } from "./renderers/integrations/gmail/gmail-thread";
+import { GmailBulkActionTool } from "./renderers/integrations/gmail/gmail-bulk-action";
 import { GCalEventsTool } from "./renderers/integrations/gcal/gcal-events";
 import { GCalEventDetailTool } from "./renderers/integrations/gcal/gcal-event-detail";
 import { GCalCreateEventTool } from "./renderers/integrations/gcal/gcal-create-event";
 import { GCalListCalendarsTool } from "./renderers/integrations/gcal/gcal-list-calendars";
 import { GCalDeleteEventTool } from "./renderers/integrations/gcal/gcal-delete-event";
 import { GCalFreeBusyTool } from "./renderers/integrations/gcal/gcal-free-busy";
+import { GCalQuickAddTool } from "./renderers/integrations/gcal/gcal-quick-add";
+import { GCalRsvpTool } from "./renderers/integrations/gcal/gcal-rsvp";
+import { GCalMoveEventTool } from "./renderers/integrations/gcal/gcal-move-event";
 import { IntegrationGenericTool } from "./renderers/integrations/shared/generic";
 
 const renderers: Record<string, Renderer> = {
@@ -64,6 +70,13 @@ const renderers: Record<string, Renderer> = {
   gmail_manage_labels: GmailManageLabelsTool,
   gmail_archive: GmailActionTool,
   gmail_trash: GmailActionTool,
+  gmail_star: GmailActionTool,
+  gmail_unstar: GmailActionTool,
+  gmail_mark_read: GmailActionTool,
+  gmail_mark_unread: GmailActionTool,
+  gmail_forward: GmailForwardTool,
+  gmail_get_thread: GmailThreadTool,
+  gmail_bulk_action: GmailBulkActionTool,
 
   gcal_list_calendars: GCalListCalendarsTool,
   gcal_get_events: GCalEventsTool,
@@ -72,6 +85,10 @@ const renderers: Record<string, Renderer> = {
   gcal_update_event: GCalCreateEventTool,
   gcal_delete_event: GCalDeleteEventTool,
   gcal_get_free_busy: GCalFreeBusyTool,
+  gcal_quick_add: GCalQuickAddTool,
+  gcal_rsvp: GCalRsvpTool,
+  gcal_move_event: GCalMoveEventTool,
+  gcal_get_today: GCalEventsTool,
 };
 
 function isIntegrationToolName(name: string) {

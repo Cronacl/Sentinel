@@ -247,5 +247,172 @@ export function buildGoogleCalendarTools(context: IntegrationContext, approvalFn
         return { calendars: result };
       },
     }),
+
+    gcal_quick_add: tool({
+      description:
+        "Create a calendar event from natural language text (e.g. 'Lunch with John tomorrow at noon', 'Meeting on Friday 3-4pm').",
+      inputSchema: z.object({
+        text: z.string().describe("Natural language description of the event."),
+        calendarId: z.string().optional().describe("Calendar ID (defaults to 'primary')."),
+      }),
+      outputSchema: z.object({
+        id: z.string(),
+        summary: z.string(),
+        start: z.string(),
+        end: z.string(),
+        htmlLink: z.string(),
+        status: z.literal("created"),
+      }),
+      needsApproval: () => approvalFn("gcal_quick_add"),
+      execute: async (input) => {
+        const service = getCalendarService(context);
+        const event = await service.quickAdd(input.calendarId || "primary", input.text);
+        return {
+          id: event.id,
+          summary: event.summary,
+          start: event.start,
+          end: event.end,
+          htmlLink: event.htmlLink,
+          status: "created" as const,
+        };
+      },
+    }),
+
+    gcal_rsvp: tool({
+      description:
+        "Respond to a calendar event invitation. Accept, decline, or mark as tentative.",
+      inputSchema: z.object({
+        calendarId: z.string().describe("Calendar ID containing the event."),
+        eventId: z.string().describe("The event ID to respond to."),
+        status: z
+          .enum(["accepted", "declined", "tentative"])
+          .describe("Your response to the invitation."),
+      }),
+      outputSchema: z.object({
+        id: z.string(),
+        summary: z.string(),
+        responseStatus: z.string(),
+        status: z.literal("responded"),
+      }),
+      needsApproval: () => approvalFn("gcal_rsvp"),
+      execute: async (input) => {
+        const service = getCalendarService(context);
+        const event = await service.rsvpEvent(
+          input.calendarId,
+          input.eventId,
+          input.status,
+        );
+        return {
+          id: event.id,
+          summary: event.summary,
+          responseStatus: input.status,
+          status: "responded" as const,
+        };
+      },
+    }),
+
+    gcal_move_event: tool({
+      description: "Move a calendar event from one calendar to another.",
+      inputSchema: z.object({
+        calendarId: z.string().describe("Source calendar ID."),
+        eventId: z.string().describe("The event ID to move."),
+        destinationCalendarId: z.string().describe("Destination calendar ID."),
+      }),
+      outputSchema: z.object({
+        id: z.string(),
+        summary: z.string(),
+        htmlLink: z.string(),
+        status: z.literal("moved"),
+      }),
+      needsApproval: () => approvalFn("gcal_move_event"),
+      execute: async (input) => {
+        const service = getCalendarService(context);
+        const event = await service.moveEvent(
+          input.calendarId,
+          input.eventId,
+          input.destinationCalendarId,
+        );
+        return {
+          id: event.id,
+          summary: event.summary,
+          htmlLink: event.htmlLink,
+          status: "moved" as const,
+        };
+      },
+    }),
+
+    gcal_get_today: tool({
+      description:
+        "Get all calendar events for today. A convenience shortcut — no date range needed.",
+      inputSchema: z.object({
+        calendarId: z.string().optional().describe("Calendar ID (defaults to 'primary')."),
+      }),
+      outputSchema: z.object({
+        events: z.array(z.object({
+          id: z.string(),
+          calendarId: z.string(),
+          summary: z.string(),
+          description: z.string(),
+          location: z.string(),
+          start: z.string(),
+          end: z.string(),
+          isAllDay: z.boolean(),
+          status: z.string(),
+          htmlLink: z.string(),
+          hangoutLink: z.string(),
+          attendeeCount: z.number(),
+          organizer: z.object({ email: z.string(), displayName: z.string() }),
+        })),
+        totalResults: z.number(),
+      }),
+      needsApproval: () => approvalFn("gcal_get_today"),
+      toModelOutput: ({ output }) => ({
+        type: "json" as const,
+        value: {
+          totalResults: output.totalResults,
+          events: output.events.map((e) => ({
+            id: e.id,
+            summary: e.summary,
+            start: e.start,
+            end: e.end,
+            isAllDay: e.isAllDay,
+            location: e.location,
+            attendeeCount: e.attendeeCount,
+          })),
+        },
+      }),
+      execute: async (input) => {
+        const service = getCalendarService(context);
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+
+        const result = await service.getEvents({
+          calendarId: input.calendarId,
+          timeMin: startOfDay.toISOString(),
+          timeMax: endOfDay.toISOString(),
+          maxResults: 50,
+        });
+
+        return {
+          events: result.events.map((e) => ({
+            id: e.id,
+            calendarId: e.calendarId,
+            summary: e.summary,
+            description: e.description,
+            location: e.location,
+            start: e.start,
+            end: e.end,
+            isAllDay: e.isAllDay,
+            status: e.status,
+            htmlLink: e.htmlLink,
+            hangoutLink: e.hangoutLink,
+            attendeeCount: e.attendees.length,
+            organizer: e.organizer,
+          })),
+          totalResults: result.events.length,
+        };
+      },
+    }),
   };
 }

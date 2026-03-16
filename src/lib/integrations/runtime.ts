@@ -25,8 +25,8 @@ const INTEGRATION_LABELS: Partial<Record<IntegrationProvider, string>> = {
 };
 
 const INTEGRATION_TOOL_COUNTS: Partial<Record<IntegrationProvider, number>> = {
-  gmail: 9,
-  google_calendar: 7,
+  gmail: 16,
+  google_calendar: 11,
 };
 
 export async function getEnabledIntegrations(

@@ -320,4 +320,119 @@ export class GmailService {
       requestBody: { addLabelIds: ["STARRED"] },
     });
   }
+
+  async unstarEmail(messageId: string): Promise<void> {
+    await this.gmail.users.messages.modify({
+      userId: "me",
+      id: messageId,
+      requestBody: { removeLabelIds: ["STARRED"] },
+    });
+  }
+
+  async markAsRead(messageId: string): Promise<void> {
+    await this.gmail.users.messages.modify({
+      userId: "me",
+      id: messageId,
+      requestBody: { removeLabelIds: ["UNREAD"] },
+    });
+  }
+
+  async markAsUnread(messageId: string): Promise<void> {
+    await this.gmail.users.messages.modify({
+      userId: "me",
+      id: messageId,
+      requestBody: { addLabelIds: ["UNREAD"] },
+    });
+  }
+
+  async forwardEmail(params: {
+    messageId: string;
+    to: string;
+    additionalBody?: string;
+  }): Promise<{ messageId: string; threadId: string }> {
+    const original = await this.getEmail(params.messageId);
+
+    const forwardHeader = [
+      params.additionalBody ?? "",
+      "<br/><br/>---------- Forwarded message ----------",
+      `<br/>From: ${original.from}`,
+      `<br/>Date: ${original.date}`,
+      `<br/>Subject: ${original.subject}`,
+      `<br/>To: ${original.to}`,
+      original.cc ? `<br/>Cc: ${original.cc}` : "",
+      "<br/><br/>",
+      original.body,
+    ]
+      .filter(Boolean)
+      .join("");
+
+    const raw = createRawMessage({
+      to: params.to,
+      subject: original.subject.startsWith("Fwd:")
+        ? original.subject
+        : `Fwd: ${original.subject}`,
+      body: forwardHeader,
+    });
+
+    const response = await this.gmail.users.messages.send({
+      userId: "me",
+      requestBody: { raw },
+    });
+    return {
+      messageId: response.data.id ?? "",
+      threadId: response.data.threadId ?? "",
+    };
+  }
+
+  async getThread(
+    threadId: string,
+  ): Promise<{ threadId: string; messages: ParsedEmail[] }> {
+    const response = await this.gmail.users.threads.get({
+      userId: "me",
+      id: threadId,
+      format: "full",
+    });
+
+    const messages = (response.data.messages ?? []).map(parseMessage);
+
+    return {
+      threadId: response.data.id ?? threadId,
+      messages,
+    };
+  }
+
+  async bulkModify(
+    messageIds: string[],
+    action:
+      | "archive"
+      | "trash"
+      | "star"
+      | "unstar"
+      | "mark_read"
+      | "mark_unread",
+  ): Promise<{ modifiedCount: number }> {
+    const perform = (id: string): Promise<void> => {
+      switch (action) {
+        case "archive":
+          return this.archiveEmail(id);
+        case "trash":
+          return this.trashEmail(id);
+        case "star":
+          return this.starEmail(id);
+        case "unstar":
+          return this.unstarEmail(id);
+        case "mark_read":
+          return this.markAsRead(id);
+        case "mark_unread":
+          return this.markAsUnread(id);
+      }
+    };
+
+    let count = 0;
+    for (const id of messageIds) {
+      await perform(id);
+      count++;
+    }
+    return { modifiedCount: count };
+  }
 }

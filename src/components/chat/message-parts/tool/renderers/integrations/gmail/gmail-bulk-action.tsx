@@ -6,80 +6,67 @@ import { Icon } from "@iconify/react";
 
 import type { RendererProps } from "../../../renderer";
 import type { ToolPart } from "../../../../types";
-import { getToolName } from "../../../../types";
 import { IntegrationToolLayout } from "../shared/integration-tool-layout";
 import { getIntegrationToolInteractionState } from "../shared/state";
 import { IntegrationProviderIcon } from "@/components/icons/integration-provider-icon";
 
-type ActionInput = {
-  messageId: string;
+type BulkInput = {
+  messageIds: string[];
+  action: string;
 };
 
-type ActionOutput = {
-  status: string;
+type BulkOutput = {
+  action: string;
+  modifiedCount: number;
 };
 
-const ACTION_META: Record<
+const BULK_ACTION_META: Record<
   string,
-  { label: string; pastTense: string; gerund: string; icon: string; iconClass: string }
+  { label: string; pastTense: string; icon: string; iconClass: string }
 > = {
-  gmail_archive: {
+  archive: {
     label: "Archive",
-    pastTense: "Email archived",
-    gerund: "Archiving",
+    pastTense: "archived",
     icon: "solar:archive-minimalistic-linear",
     iconClass: "text-warning",
   },
-  gmail_trash: {
+  trash: {
     label: "Trash",
-    pastTense: "Email moved to trash",
-    gerund: "Trashing",
+    pastTense: "trashed",
     icon: "solar:trash-bin-2-linear",
     iconClass: "text-danger",
   },
-  gmail_star: {
+  star: {
     label: "Star",
-    pastTense: "Email starred",
-    gerund: "Starring",
+    pastTense: "starred",
     icon: "solar:star-linear",
     iconClass: "text-warning",
   },
-  gmail_unstar: {
+  unstar: {
     label: "Unstar",
-    pastTense: "Email unstarred",
-    gerund: "Unstarring",
+    pastTense: "unstarred",
     icon: "solar:star-cross-linear",
     iconClass: "text-foreground/50",
   },
-  gmail_mark_read: {
+  mark_read: {
     label: "Mark as read",
-    pastTense: "Email marked as read",
-    gerund: "Marking as read",
+    pastTense: "marked as read",
     icon: "solar:letter-opened-linear",
     iconClass: "text-primary",
   },
-  gmail_mark_unread: {
+  mark_unread: {
     label: "Mark as unread",
-    pastTense: "Email marked as unread",
-    gerund: "Marking as unread",
+    pastTense: "marked as unread",
     icon: "solar:letter-unread-linear",
     iconClass: "text-primary",
   },
 };
 
-export const GmailActionTool = memo(function GmailActionTool({
+export const GmailBulkActionTool = memo(function GmailBulkActionTool({
   onApprove,
   onDeny,
   part,
 }: RendererProps) {
-  const toolName = getToolName(part as ToolPart);
-  const meta = ACTION_META[toolName] ?? {
-    label: "Action",
-    pastTense: "Done",
-    gerund: "Processing",
-    icon: "solar:check-circle-linear",
-    iconClass: "text-foreground/50",
-  };
   const state = getIntegrationToolInteractionState(part as ToolPart, {
     onApprove,
     onDeny,
@@ -90,21 +77,31 @@ export const GmailActionTool = memo(function GmailActionTool({
     setIsExpanded(state.needsApproval);
   }, [part.toolCallId, state.needsApproval]);
 
-  const input = "input" in part ? (part.input as ActionInput) : null;
+  const input = "input" in part ? (part.input as BulkInput) : null;
   const output =
     state.hasOutput && "output" in part
-      ? (part.output as ActionOutput)
+      ? (part.output as BulkOutput)
       : null;
 
+  const actionKey = input?.action ?? output?.action ?? "";
+  const meta = BULK_ACTION_META[actionKey] ?? {
+    label: "Bulk action",
+    pastTense: "modified",
+    icon: "solar:layers-linear",
+    iconClass: "text-foreground/50",
+  };
+
+  const msgCount = input?.messageIds?.length ?? 0;
+
   const summary = state.needsApproval
-    ? `${meta.label} email — awaiting approval`
+    ? `${meta.label} ${msgCount} email${msgCount !== 1 ? "s" : ""} — awaiting approval`
     : state.isRunning
-      ? `${meta.gerund} email…`
+      ? `Processing ${msgCount} email${msgCount !== 1 ? "s" : ""}…`
       : state.hasOutput && output
-        ? meta.pastTense
+        ? `${output.modifiedCount} email${output.modifiedCount !== 1 ? "s" : ""} ${meta.pastTense}`
         : state.isError
-          ? `Failed to ${meta.label.toLowerCase()} email`
-          : `${meta.gerund} email…`;
+          ? `Failed to ${meta.label.toLowerCase()}`
+          : `Processing ${msgCount} email${msgCount !== 1 ? "s" : ""}…`;
 
   return (
     <IntegrationToolLayout
@@ -144,17 +141,21 @@ export const GmailActionTool = memo(function GmailActionTool({
         output ? (
           <span className="flex items-center gap-1">
             <Icon icon={meta.icon} className={`h-3 w-3 ${meta.iconClass}`} />
-            {meta.pastTense}
+            {output.modifiedCount} email
+            {output.modifiedCount !== 1 ? "s" : ""} {meta.pastTense}
           </span>
         ) : undefined
       }
     >
       {state.needsApproval && input ? (
-        <div className="flex items-center gap-2 text-xs text-foreground/70">
-          <Icon icon={meta.icon} className={`h-4 w-4 ${meta.iconClass}`} />
-          <span>
-            {meta.label} message <code className="rounded bg-foreground/5 px-1 py-0.5 text-[10px]">{input.messageId}</code>
-          </span>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs text-foreground/70">
+            <Icon icon={meta.icon} className={`h-4 w-4 ${meta.iconClass}`} />
+            <span>
+              {meta.label} {msgCount} email
+              {msgCount !== 1 ? "s" : ""}
+            </span>
+          </div>
         </div>
       ) : null}
     </IntegrationToolLayout>

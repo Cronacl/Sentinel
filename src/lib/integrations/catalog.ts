@@ -46,6 +46,41 @@ export const INTEGRATION_TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     category: "integration",
     label: "gmail_trash",
   },
+  gmail_star: {
+    capability: "to star an email",
+    category: "integration",
+    label: "gmail_star",
+  },
+  gmail_unstar: {
+    capability: "to unstar an email",
+    category: "integration",
+    label: "gmail_unstar",
+  },
+  gmail_mark_read: {
+    capability: "to mark an email as read",
+    category: "integration",
+    label: "gmail_mark_read",
+  },
+  gmail_mark_unread: {
+    capability: "to mark an email as unread",
+    category: "integration",
+    label: "gmail_mark_unread",
+  },
+  gmail_forward: {
+    capability: "to forward an email to another recipient",
+    category: "integration",
+    label: "gmail_forward",
+  },
+  gmail_get_thread: {
+    capability: "to get all messages in an email thread",
+    category: "integration",
+    label: "gmail_get_thread",
+  },
+  gmail_bulk_action: {
+    capability: "to perform bulk actions on multiple emails",
+    category: "integration",
+    label: "gmail_bulk_action",
+  },
   gcal_list_calendars: {
     capability: "to list Google Calendar calendars",
     category: "integration",
@@ -80,5 +115,25 @@ export const INTEGRATION_TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     capability: "to check free/busy status",
     category: "integration",
     label: "gcal_get_free_busy",
+  },
+  gcal_quick_add: {
+    capability: "to create a calendar event from natural language text",
+    category: "integration",
+    label: "gcal_quick_add",
+  },
+  gcal_rsvp: {
+    capability: "to respond to a calendar event invitation",
+    category: "integration",
+    label: "gcal_rsvp",
+  },
+  gcal_move_event: {
+    capability: "to move a calendar event between calendars",
+    category: "integration",
+    label: "gcal_move_event",
+  },
+  gcal_get_today: {
+    capability: "to get today's calendar events",
+    category: "integration",
+    label: "gcal_get_today",
   },
 };
