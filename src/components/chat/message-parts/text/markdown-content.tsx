@@ -1,10 +1,18 @@
 "use client";
 
-import { memo, type ReactElement, type ReactNode, useMemo } from "react";
+import {
+  memo,
+  type ReactElement,
+  type ReactNode,
+  useDeferredValue,
+  useMemo,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { CodeBlock } from "./code-block";
+
+const REMARK_PLUGINS = [remarkGfm];
 
 function extractText(node: ReactNode): string {
   if (typeof node === "string") return node;
@@ -103,6 +111,8 @@ export const MarkdownContent = memo(function MarkdownContent({
     [isStreaming],
   );
 
+  const deferredText = useDeferredValue(text);
+
   return (
     <div
       className={
@@ -115,9 +125,9 @@ export const MarkdownContent = memo(function MarkdownContent({
     >
       <ReactMarkdown
         components={markdownComponents}
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={REMARK_PLUGINS}
       >
-        {text}
+        {deferredText}
       </ReactMarkdown>
     </div>
   );

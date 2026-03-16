@@ -19,11 +19,17 @@ function getScrollMetrics(element: HTMLDivElement) {
   };
 }
 
+function isNearBottom(element: HTMLDivElement) {
+  const { clientHeight, scrollHeight, scrollTop } = element;
+  return scrollHeight - scrollTop - clientHeight <= SCROLL_EDGE_THRESHOLD;
+}
+
 export function useChatScrollControl(threadKey: string) {
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const composerDockRef = useRef<HTMLDivElement | null>(null);
   const [composerOffset, setComposerOffset] = useState(96);
   const previousScrollTopRef = useRef(0);
+  const stickToBottomRef = useRef(true);
   const [buttonDirection, setButtonDirection] =
     useState<ScrollButtonDirection>("down");
   const [isButtonVisible, setIsButtonVisible] = useState(false);
@@ -39,6 +45,8 @@ export function useChatScrollControl(threadKey: string) {
     const delta = scrollTop - previousScrollTopRef.current;
 
     previousScrollTopRef.current = scrollTop;
+
+    stickToBottomRef.current = isNearBottom(scrollArea);
 
     if (!canScrollDown && !canScrollUp) {
       setIsButtonVisible(false);
@@ -71,6 +79,10 @@ export function useChatScrollControl(threadKey: string) {
     const scrollArea = scrollAreaRef.current;
     if (!scrollArea) {
       return;
+    }
+
+    if (buttonDirection === "down") {
+      stickToBottomRef.current = true;
     }
 
     scrollArea.scrollTo({
@@ -130,11 +142,39 @@ export function useChatScrollControl(threadKey: string) {
         behavior: "auto",
       });
       previousScrollTopRef.current = scrollArea.scrollTop;
+      stickToBottomRef.current = true;
       syncScrollState();
     });
 
     return () => window.cancelAnimationFrame(frame);
   }, [syncScrollState, threadKey]);
+
+  useEffect(() => {
+    const scrollArea = scrollAreaRef.current;
+    if (!scrollArea) {
+      return;
+    }
+
+    const contentEl = scrollArea.firstElementChild;
+    if (!contentEl) {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      if (stickToBottomRef.current) {
+        scrollArea.scrollTo({
+          top: scrollArea.scrollHeight,
+          behavior: "auto",
+        });
+      }
+    });
+
+    observer.observe(contentEl);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [threadKey]);
 
   return {
     buttonDirection,

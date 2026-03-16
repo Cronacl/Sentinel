@@ -168,14 +168,17 @@ function AssistantMessage({
   isStreaming: boolean;
   message: ThreadUIMessage;
 }) {
-  const assistantText = getAssistantText(message);
+  const assistantText = useMemo(() => getAssistantText(message), [message]);
   const groups = useMemo(() => groupMessageParts(message.parts), [message.parts]);
-  let lastReasoningIndex = -1;
-  message.parts.forEach((part, partIndex) => {
-    if (part.type === "reasoning") {
-      lastReasoningIndex = partIndex;
-    }
-  });
+  const lastReasoningIndex = useMemo(() => {
+    let last = -1;
+    message.parts.forEach((part, partIndex) => {
+      if (part.type === "reasoning") {
+        last = partIndex;
+      }
+    });
+    return last;
+  }, [message.parts]);
 
   const metadata = message.metadata as ThreadMessageMetadata | undefined;
   const reasoningTokens = extractReasoningTokens(metadata);
@@ -184,13 +187,17 @@ function AssistantMessage({
     reasoningMetadata?.segmentDurationsMs ??
     reasoningMetadata?.rawSegmentDurationsMs ??
     [];
-  const mergedReasoningText = message.parts.reduce((text, part) => {
-    if (part.type !== "reasoning") {
-      return text;
-    }
+  const mergedReasoningText = useMemo(
+    () =>
+      message.parts.reduce((text, part) => {
+        if (part.type !== "reasoning") {
+          return text;
+        }
 
-    return mergeReasoningText(text, part.text);
-  }, "");
+        return mergeReasoningText(text, part.text);
+      }, ""),
+    [message.parts],
+  );
   const hasMergedReasoning = mergedReasoningText.trim().length > 0;
   const mergedReasoningDurationMs =
     reasoningMetadata?.durationMs ??
@@ -341,7 +348,7 @@ function AssistantMessage({
             ) : null}
             {!isStreaming && onSelectBranch ? (
               <BranchSwitcher
-                onSelect={(id) => onSelectBranch?.(id)}
+                onSelect={onSelectBranch}
                 options={branchOptions}
               />
             ) : null}
@@ -416,7 +423,7 @@ function UserMessage({
             />
           ) : null}
           <BranchSwitcher
-            onSelect={(id) => onSelectBranch?.(id)}
+            onSelect={onSelectBranch}
             options={branchOptions}
           />
         </div>
