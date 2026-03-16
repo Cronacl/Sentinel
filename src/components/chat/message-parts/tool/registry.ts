@@ -46,6 +46,15 @@ import { GHPRActionTool } from "./renderers/integrations/github/gh-pr-action";
 import { GHBranchTool } from "./renderers/integrations/github/gh-branch";
 import { GHActionsTool } from "./renderers/integrations/github/gh-actions";
 import { GHReleaseTool } from "./renderers/integrations/github/gh-release";
+import { LinearIssueDetailTool } from "./renderers/integrations/linear/linear-issue-detail";
+import { LinearIssueActionTool } from "./renderers/integrations/linear/linear-issue-action";
+import { LinearCommentTool } from "./renderers/integrations/linear/linear-comment";
+import { LinearProjectTool } from "./renderers/integrations/linear/linear-project";
+import { LinearTeamTool } from "./renderers/integrations/linear/linear-team";
+import { LinearCycleTool } from "./renderers/integrations/linear/linear-cycle";
+import { LinearLabelTool } from "./renderers/integrations/linear/linear-label";
+import { LinearUsersTool } from "./renderers/integrations/linear/linear-users";
+import { LinearWorkflowStatesTool } from "./renderers/integrations/linear/linear-workflow-states";
 import { IntegrationGenericTool } from "./renderers/integrations/shared/generic";
 
 const renderers: Record<string, Renderer> = {
@@ -139,6 +148,27 @@ const renderers: Record<string, Renderer> = {
   gh_rerun_workflow: GHActionsTool,
   gh_list_releases: GHReleaseTool,
   gh_create_release: GHReleaseTool,
+
+  linear_search_issues: LinearIssueDetailTool,
+  linear_list_issues: LinearIssueDetailTool,
+  linear_get_issue: LinearIssueDetailTool,
+  linear_create_issue: LinearIssueActionTool,
+  linear_update_issue: LinearIssueActionTool,
+  linear_delete_issue: LinearIssueActionTool,
+  linear_list_comments: LinearCommentTool,
+  linear_create_comment: LinearCommentTool,
+  linear_list_projects: LinearProjectTool,
+  linear_get_project: LinearProjectTool,
+  linear_create_project: LinearProjectTool,
+  linear_update_project: LinearProjectTool,
+  linear_list_teams: LinearTeamTool,
+  linear_get_team: LinearTeamTool,
+  linear_list_cycles: LinearCycleTool,
+  linear_get_current_cycle: LinearCycleTool,
+  linear_list_labels: LinearLabelTool,
+  linear_create_label: LinearLabelTool,
+  linear_list_users: LinearUsersTool,
+  linear_list_workflow_states: LinearWorkflowStatesTool,
 };
 
 function isIntegrationToolName(name: string) {
@@ -146,7 +176,8 @@ function isIntegrationToolName(name: string) {
     name.startsWith("gmail_") ||
     name.startsWith("gcal_") ||
     name.startsWith("gdrive_") ||
-    name.startsWith("gh_")
+    name.startsWith("gh_") ||
+    name.startsWith("linear_")
   );
 }
 

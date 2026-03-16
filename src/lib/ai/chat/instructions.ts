@@ -190,7 +190,7 @@ function buildIntegrationsSection(promptContext: ThreadPromptContext) {
     promptContext.enabledIntegrations
       .map(
         (integration) =>
-          `- ${integration.label} (${integration.toolCount} tools): Use ${integration.provider.replace(/_/g, " ")} tools when the user asks about ${integration.provider === "gmail" ? "emails, inbox, or messages" : integration.provider === "google_calendar" ? "calendar, events, meetings, or scheduling" : integration.provider === "google_drive" ? "files, documents, drive, or uploads" : integration.provider === "github" ? "repos, issues, pull requests, code, branches, workflows, releases, or GitHub" : integration.provider.replace(/_/g, " ")}.`,
+          `- ${integration.label} (${integration.toolCount} tools): Use ${integration.provider.replace(/_/g, " ")} tools when the user asks about ${integration.provider === "gmail" ? "emails, inbox, or messages" : integration.provider === "google_calendar" ? "calendar, events, meetings, or scheduling" : integration.provider === "google_drive" ? "files, documents, drive, or uploads" : integration.provider === "github" ? "repos, issues, pull requests, code, branches, workflows, releases, or GitHub" : integration.provider === "linear" ? "issues, projects, cycles, teams, labels, sprints, or Linear" : integration.provider.replace(/_/g, " ")}.`,
       )
       .join("\n"),
   );

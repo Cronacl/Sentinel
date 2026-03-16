@@ -15,6 +15,7 @@ export const READY_INTEGRATION_PROVIDERS = new Set<IntegrationProvider>([
   "google_calendar",
   "google_drive",
   "github",
+  "linear",
 ]);
 
 export const INTEGRATION_METADATA: Record<
@@ -108,15 +109,22 @@ export const INTEGRATION_METADATA: Record<
       "Create a GitHub OAuth App at github.com/settings/developers and paste the Client ID and Client Secret.",
   },
   linear: {
-    availability: "coming_soon",
+    availability: "ready",
     description:
-      "Linear integration is planned for issue tracking, triage, and planning workflows.",
+      "Search and manage issues, projects, cycles, and teams in Linear from chat.",
     highlights: [
-      "Planned support for projects, issues, and status updates",
-      "Designed to keep planning workflows close to coding context",
+      "Search, create, and update issues with full detail",
+      "Browse projects, teams, cycles, and workflow states",
+      "Add comments and manage labels",
+      "List workspace members and track progress",
     ],
-    requiredAccess: [],
-    setupHint: "Linear connection flow is not available yet.",
+    requiredAccess: [
+      "Read issues, projects, teams, cycles, labels, and users",
+      "Create and update issues, projects, comments, and labels",
+      "Delete issues",
+    ],
+    setupHint:
+      "Create a Linear OAuth2 Application at linear.app/settings/api and paste the Client ID and Client Secret.",
   },
 };
 

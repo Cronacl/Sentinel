@@ -13,6 +13,7 @@ import type { IntegrationProvider } from "@/server/db/enums";
 
 import { getGoogleOAuthConfig, isGoogleProvider } from "./providers/google";
 import { isGitHubProvider } from "./providers/github";
+import { getLinearOAuthConfig, isLinearProvider } from "./providers/linear";
 import type { OAuthAppConfig } from "../types";
 
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
@@ -37,6 +38,12 @@ async function resolveOAuthAppConfig(
   };
 }
 
+function resolveTokenEndpoint(provider: IntegrationProvider): string {
+  if (isGoogleProvider(provider)) return getGoogleOAuthConfig(provider).tokenEndpoint;
+  if (isLinearProvider(provider)) return getLinearOAuthConfig().tokenEndpoint;
+  throw new Error(`Token refresh not supported for provider: ${provider}`);
+}
+
 async function refreshAccessToken(
   provider: IntegrationProvider,
   refreshToken: string,
@@ -44,14 +51,11 @@ async function refreshAccessToken(
 ): Promise<{
   accessToken: string;
   expiresAt: Date | null;
+  newRefreshToken: string | null;
 }> {
-  if (!isGoogleProvider(provider)) {
-    throw new Error(`Token refresh not supported for provider: ${provider}`);
-  }
+  const tokenEndpoint = resolveTokenEndpoint(provider);
 
-  const oauthConfig = getGoogleOAuthConfig(provider);
-
-  const response = await fetch(oauthConfig.tokenEndpoint, {
+  const response = await fetch(tokenEndpoint, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -70,6 +74,7 @@ async function refreshAccessToken(
   const data = (await response.json()) as {
     access_token: string;
     expires_in?: number;
+    refresh_token?: string;
   };
 
   return {
@@ -77,6 +82,7 @@ async function refreshAccessToken(
     expiresAt: data.expires_in
       ? new Date(Date.now() + data.expires_in * 1000)
       : null,
+    newRefreshToken: data.refresh_token ?? null,
   };
 }
 
@@ -136,13 +142,19 @@ export async function getValidAccessToken(
     appConfig,
   );
 
+  const updateSet: Record<string, unknown> = {
+    encryptedAccessToken: encrypt(refreshed.accessToken),
+    expiresAt: refreshed.expiresAt,
+    updatedAt: new Date(),
+  };
+
+  if (refreshed.newRefreshToken) {
+    updateSet.encryptedRefreshToken = encrypt(refreshed.newRefreshToken);
+  }
+
   await db
     .update(integrationOAuthTokens)
-    .set({
-      encryptedAccessToken: encrypt(refreshed.accessToken),
-      expiresAt: refreshed.expiresAt,
-      updatedAt: new Date(),
-    })
+    .set(updateSet)
     .where(eq(integrationOAuthTokens.id, tokenRow.id));
 
   return refreshed.accessToken;
@@ -188,6 +200,19 @@ export async function revokeTokens(integrationId: string): Promise<void> {
                 body: JSON.stringify({ access_token: accessToken }),
               },
             );
+          }
+        } else if (isLinearProvider(integration.provider)) {
+          const linearConfig = getLinearOAuthConfig();
+          if (linearConfig.revokeEndpoint) {
+            const accessToken = decrypt(tokenRow.encryptedAccessToken);
+            await fetch(linearConfig.revokeEndpoint, {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({
+                token: accessToken,
+                token_type_hint: "access_token",
+              }),
+            });
           }
         }
       } catch {

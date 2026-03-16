@@ -31,6 +31,10 @@ const PROVIDER_TOOL_LOADERS: Partial<
     const { buildGitHubTools } = await import("./providers/github/tools");
     return buildGitHubTools;
   },
+  linear: async () => {
+    const { buildLinearTools } = await import("./providers/linear/tools");
+    return buildLinearTools;
+  },
 };
 
 export async function loadIntegrationTools(

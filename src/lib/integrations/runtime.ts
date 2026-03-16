@@ -29,6 +29,7 @@ const INTEGRATION_TOOL_COUNTS: Partial<Record<IntegrationProvider, number>> = {
   google_calendar: 11,
   google_drive: 10,
   github: 23,
+  linear: 20,
 };
 
 export async function getEnabledIntegrations(

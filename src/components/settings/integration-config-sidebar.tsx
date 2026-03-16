@@ -67,6 +67,21 @@ function getProviderCopy(provider: IntegrationProvider) {
     };
   }
 
+  if (provider === "linear") {
+    return {
+      clientIdPlaceholder: "your-linear-client-id",
+      clientIdDescription:
+        "Paste the Client ID from your Linear OAuth2 Application settings.",
+      clientSecretPlaceholder: "your-linear-client-secret",
+      clientSecretDescription:
+        "Paste the Client Secret from your Linear OAuth2 Application.",
+      redirectUriDescription:
+        "This must match a Redirect callback URL in your Linear OAuth2 Application.",
+      redirectUriNote:
+        "Add this URL as a Redirect callback URL in your Linear OAuth2 Application at linear.app/settings/api.",
+    };
+  }
+
   return {
     clientIdPlaceholder: "client-id",
     clientIdDescription: "Paste the OAuth client ID.",

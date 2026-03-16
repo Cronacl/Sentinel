@@ -301,4 +301,104 @@ export const INTEGRATION_TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     category: "integration",
     label: "gh_create_release",
   },
+  linear_search_issues: {
+    capability: "to search Linear issues by text query",
+    category: "integration",
+    label: "linear_search_issues",
+  },
+  linear_list_issues: {
+    capability: "to list Linear issues with filters",
+    category: "integration",
+    label: "linear_list_issues",
+  },
+  linear_get_issue: {
+    capability: "to get details of a Linear issue",
+    category: "integration",
+    label: "linear_get_issue",
+  },
+  linear_create_issue: {
+    capability: "to create a new Linear issue",
+    category: "integration",
+    label: "linear_create_issue",
+  },
+  linear_update_issue: {
+    capability: "to update a Linear issue",
+    category: "integration",
+    label: "linear_update_issue",
+  },
+  linear_delete_issue: {
+    capability: "to delete a Linear issue",
+    category: "integration",
+    label: "linear_delete_issue",
+  },
+  linear_list_comments: {
+    capability: "to list comments on a Linear issue",
+    category: "integration",
+    label: "linear_list_comments",
+  },
+  linear_create_comment: {
+    capability: "to add a comment to a Linear issue",
+    category: "integration",
+    label: "linear_create_comment",
+  },
+  linear_list_projects: {
+    capability: "to list Linear projects",
+    category: "integration",
+    label: "linear_list_projects",
+  },
+  linear_get_project: {
+    capability: "to get details of a Linear project",
+    category: "integration",
+    label: "linear_get_project",
+  },
+  linear_create_project: {
+    capability: "to create a new Linear project",
+    category: "integration",
+    label: "linear_create_project",
+  },
+  linear_update_project: {
+    capability: "to update a Linear project",
+    category: "integration",
+    label: "linear_update_project",
+  },
+  linear_list_teams: {
+    capability: "to list Linear teams",
+    category: "integration",
+    label: "linear_list_teams",
+  },
+  linear_get_team: {
+    capability: "to get details of a Linear team",
+    category: "integration",
+    label: "linear_get_team",
+  },
+  linear_list_cycles: {
+    capability: "to list cycles for a Linear team",
+    category: "integration",
+    label: "linear_list_cycles",
+  },
+  linear_get_current_cycle: {
+    capability: "to get the current active cycle for a Linear team",
+    category: "integration",
+    label: "linear_get_current_cycle",
+  },
+  linear_list_labels: {
+    capability: "to list issue labels in Linear",
+    category: "integration",
+    label: "linear_list_labels",
+  },
+  linear_create_label: {
+    capability: "to create a new issue label in Linear",
+    category: "integration",
+    label: "linear_create_label",
+  },
+  linear_list_users: {
+    capability: "to list users in the Linear workspace",
+    category: "integration",
+    label: "linear_list_users",
+  },
+  linear_list_workflow_states: {
+    capability: "to list workflow states for a Linear team",
+    category: "integration",
+    label: "linear_list_workflow_states",
+  },
 };

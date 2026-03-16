@@ -40,6 +40,7 @@
     "@hugeicons/core-free-icons": "^4.0.0",
     "@hugeicons/react": "^1.1.5",
     "@iconify/react": "^6.0.2",
+    "@linear/sdk": "^77.0.0",
     "@octokit/rest": "^22.0.1",
     "@paralleldrive/cuid2": "^3.3.0",
     "@t3-oss/env-nextjs": "^0.12.0",

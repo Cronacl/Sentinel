@@ -15,6 +15,7 @@ import type { IntegrationProvider } from "@/server/db/enums";
 
 import { getGoogleOAuthConfig, isGoogleProvider } from "./providers/google";
 import { getGitHubOAuthConfig, isGitHubProvider } from "./providers/github";
+import { getLinearOAuthConfig, isLinearProvider } from "./providers/linear";
 import type {
   OAuthAppConfig,
   OAuthProviderConfig,
@@ -26,6 +27,7 @@ function resolveOAuthConfig(
 ): OAuthProviderConfig {
   if (isGoogleProvider(provider)) return getGoogleOAuthConfig(provider);
   if (isGitHubProvider(provider)) return getGitHubOAuthConfig();
+  if (isLinearProvider(provider)) return getLinearOAuthConfig();
   throw new Error(`No OAuth config for provider: ${provider}`);
 }
 
@@ -78,11 +80,13 @@ export async function beginIntegrationOAuth(
   const appConfig = await resolveOAuthAppConfig(userId, provider);
   const state = generateState(provider, userId);
 
+  const scopeSeparator = isLinearProvider(provider) ? "," : " ";
+
   const params = new URLSearchParams({
     client_id: appConfig.clientId,
     redirect_uri: appConfig.redirectUri,
     response_type: "code",
-    scope: oauthConfig.scopes.join(" "),
+    scope: oauthConfig.scopes.join(scopeSeparator),
     state,
   });
 
@@ -117,7 +121,7 @@ export async function completeIntegrationOAuth(
     redirect_uri: appConfig.redirectUri,
   });
 
-  if (isGoogleProvider(provider)) {
+  if (isGoogleProvider(provider) || isLinearProvider(provider)) {
     body.set("grant_type", "authorization_code");
   }
 
@@ -156,7 +160,7 @@ export async function completeIntegrationOAuth(
       ? new Date(Date.now() + tokenData.expires_in * 1000)
       : null,
     refreshToken: tokenData.refresh_token ?? null,
-    scope: tokenData.scope ?? oauthConfig.scopes.join(" "),
+    scope: tokenData.scope ?? oauthConfig.scopes.join(isLinearProvider(provider) ? "," : " "),
     tokenType: tokenData.token_type ?? "Bearer",
   };
 
