@@ -62,6 +62,11 @@ import { NotionDatabaseActionTool } from "./renderers/integrations/notion/notion
 import { NotionBlocksTool } from "./renderers/integrations/notion/notion-blocks";
 import { NotionCommentTool } from "./renderers/integrations/notion/notion-comment";
 import { NotionUsersTool } from "./renderers/integrations/notion/notion-users";
+import { SlackChannelTool } from "./renderers/integrations/slack/slack-channel";
+import { SlackChannelActionTool } from "./renderers/integrations/slack/slack-channel-action";
+import { SlackMessageTool } from "./renderers/integrations/slack/slack-message";
+import { SlackMessageActionTool } from "./renderers/integrations/slack/slack-message-action";
+import { SlackUsersTool } from "./renderers/integrations/slack/slack-users";
 import { IntegrationGenericTool } from "./renderers/integrations/shared/generic";
 import { PgListTool } from "./renderers/integrations/database/postgresql/pg-list";
 import { PgDescribeTool } from "./renderers/integrations/database/postgresql/pg-describe";
@@ -207,6 +212,29 @@ const renderers: Record<string, Renderer> = {
   notion_list_users: NotionUsersTool,
   notion_get_user: NotionUsersTool,
 
+  // Slack
+  slack_list_channels: SlackChannelTool,
+  slack_get_channel: SlackChannelTool,
+  slack_create_channel: SlackChannelActionTool,
+  slack_archive_channel: SlackChannelActionTool,
+  slack_invite_to_channel: SlackChannelActionTool,
+  slack_kick_from_channel: SlackChannelActionTool,
+  slack_set_topic: SlackChannelActionTool,
+  slack_set_purpose: SlackChannelActionTool,
+  slack_search_messages: SlackMessageTool,
+  slack_get_history: SlackMessageTool,
+  slack_get_thread: SlackMessageTool,
+  slack_post_message: SlackMessageActionTool,
+  slack_reply_to_thread: SlackMessageActionTool,
+  slack_update_message: SlackMessageActionTool,
+  slack_delete_message: SlackMessageActionTool,
+  slack_add_reaction: SlackMessageActionTool,
+  slack_schedule_message: SlackMessageActionTool,
+  slack_pin_message: SlackMessageActionTool,
+  slack_unpin_message: SlackMessageActionTool,
+  slack_list_users: SlackUsersTool,
+  slack_get_user: SlackUsersTool,
+
   // PostgreSQL
   pg_list_databases: PgListTool,
   pg_list_schemas: PgListTool,
@@ -244,6 +272,7 @@ function isIntegrationToolName(name: string) {
     name.startsWith("gh_") ||
     name.startsWith("linear_") ||
     name.startsWith("notion_") ||
+    name.startsWith("slack_") ||
     name.startsWith("pg_") ||
     name.startsWith("mysql_") ||
     name.startsWith("mongo_")

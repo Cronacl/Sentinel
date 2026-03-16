@@ -17,6 +17,7 @@ import { getGoogleOAuthConfig, isGoogleProvider } from "./providers/google";
 import { getGitHubOAuthConfig, isGitHubProvider } from "./providers/github";
 import { getLinearOAuthConfig, isLinearProvider } from "./providers/linear";
 import { getNotionOAuthConfig, isNotionProvider } from "./providers/notion";
+import { getSlackOAuthConfig, isSlackProvider } from "./providers/slack";
 import type {
   OAuthAppConfig,
   OAuthProviderConfig,
@@ -30,6 +31,7 @@ function resolveOAuthConfig(
   if (isGitHubProvider(provider)) return getGitHubOAuthConfig();
   if (isLinearProvider(provider)) return getLinearOAuthConfig();
   if (isNotionProvider(provider)) return getNotionOAuthConfig();
+  if (isSlackProvider(provider)) return getSlackOAuthConfig();
   throw new Error(`No OAuth config for provider: ${provider}`);
 }
 
@@ -82,15 +84,21 @@ export async function beginIntegrationOAuth(
   const appConfig = await resolveOAuthAppConfig(userId, provider);
   const state = generateState(provider, userId);
 
-  const scopeSeparator = isLinearProvider(provider) ? "," : " ";
+  const scopeSeparator = isLinearProvider(provider) || isSlackProvider(provider) ? "," : " ";
+  const scopeString = oauthConfig.scopes.join(scopeSeparator);
 
   const params = new URLSearchParams({
     client_id: appConfig.clientId,
     redirect_uri: appConfig.redirectUri,
     response_type: "code",
-    scope: oauthConfig.scopes.join(scopeSeparator),
     state,
   });
+
+  if (isSlackProvider(provider)) {
+    params.set("user_scope", scopeString);
+  } else {
+    params.set("scope", scopeString);
+  }
 
   if (isGoogleProvider(provider)) {
     params.set("access_type", "offline");
@@ -152,13 +160,19 @@ export async function completeIntegrationOAuth(
   }
 
   const tokenData = (await tokenResponse.json()) as {
-    access_token: string;
+    access_token?: string;
     expires_in?: number;
     refresh_token?: string;
     scope?: string;
     token_type?: string;
     error?: string;
     error_description?: string;
+    ok?: boolean;
+    authed_user?: {
+      access_token?: string;
+      scope?: string;
+      token_type?: string;
+    };
   };
 
   if (tokenData.error) {
@@ -167,14 +181,24 @@ export async function completeIntegrationOAuth(
     );
   }
 
+  // Slack V2 OAuth returns the user token under authed_user
+  const accessToken = isSlackProvider(provider)
+    ? tokenData.authed_user?.access_token
+    : tokenData.access_token;
+
+  if (!accessToken) {
+    throw new Error("No access token returned from token exchange.");
+  }
+
   const tokens: OAuthTokenResult = {
-    accessToken: tokenData.access_token,
+    accessToken,
     expiresAt: tokenData.expires_in
       ? new Date(Date.now() + tokenData.expires_in * 1000)
       : null,
     refreshToken: tokenData.refresh_token ?? null,
-    scope: tokenData.scope ?? oauthConfig.scopes.join(isLinearProvider(provider) ? "," : " "),
-    tokenType: tokenData.token_type ?? "Bearer",
+    scope: (isSlackProvider(provider) ? tokenData.authed_user?.scope : tokenData.scope)
+      ?? oauthConfig.scopes.join(isLinearProvider(provider) || isSlackProvider(provider) ? "," : " "),
+    tokenType: (isSlackProvider(provider) ? tokenData.authed_user?.token_type : tokenData.token_type) ?? "Bearer",
   };
 
   const existingIntegration = await db.query.integrations.findFirst({

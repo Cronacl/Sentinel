@@ -1,7 +1,6 @@
 "use client";
 
 import { Button, Chip, Skeleton, Switch } from "@heroui/react";
-import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { IntegrationProviderIcon } from "@/components/icons/integration-provider-icon";
@@ -45,39 +44,19 @@ type IntegrationListItem = {
   provider: IntegrationProvider;
 };
 
-function getGridColumns(width: number, isSidebarOpen: boolean) {
-  if (isSidebarOpen) {
-    return width >= 700 ? 2 : 1;
-  }
-
-  if (width >= 1000) {
-    return 3;
-  }
-
-  if (width >= 640) {
-    return 2;
-  }
-
-  return 1;
-}
-
-function IntegrationSkeleton() {
+function IntegrationsSkeleton() {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {Array.from({ length: 6 }).map((_, index) => (
+    <div className="flex flex-col gap-2">
+      {Array.from({ length: 4 }).map((_, index) => (
         <section
-          className="border-separator bg-surface rounded-2xl border p-4"
+          className="border-separator bg-surface rounded-xl border p-5"
           key={index}
         >
-          <div className="flex items-start gap-3">
-            <Skeleton className="h-10 w-10 rounded-xl" />
+          <div className="flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1 space-y-2">
-              <Skeleton className="h-4 w-28 rounded-md" />
-              <Skeleton className="h-3 w-full rounded-md" />
+              <Skeleton className="h-3 w-36 rounded-md" />
+              <Skeleton className="h-2 w-72 max-w-full rounded-md" />
             </div>
-          </div>
-          <div className="mt-3 flex items-center gap-2">
-            <Skeleton className="h-7 w-20 rounded-lg" />
           </div>
         </section>
       ))}
@@ -85,39 +64,7 @@ function IntegrationSkeleton() {
   );
 }
 
-function IntegrationGrid({
-  children,
-  columns,
-}: {
-  children: ReactNode;
-  columns: number;
-}) {
-  return (
-    <div
-      className="grid gap-3"
-      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function SectionHeading({
-  description = "",
-  title,
-}: {
-  description?: string;
-  title: string;
-}) {
-  return (
-    <div className="mb-2 px-1">
-      <h2 className="text-foreground text-sm font-medium">{title}</h2>
-      <p className="text-muted mt-1 text-xs">{description}</p>
-    </div>
-  );
-}
-
-function IntegrationCard({
+function IntegrationRow({
   connectingProvider,
   integration,
   isSelected,
@@ -162,36 +109,31 @@ function IntegrationCard({
   ) : null;
 
   return (
-    <section
-      className={`rounded-2xl border p-4 transition-colors ${
+    <div
+      className={`flex items-center gap-4 rounded-xl border px-4 py-2.5 transition-colors ${
         isSelected
           ? "border-primary/50 bg-primary/[0.03]"
-          : "border-separator bg-surface hover:bg-surface-hover"
+          : "border-separator bg-surface"
       }`}
     >
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/80">
-          <IntegrationProviderIcon
-            className="h-5 w-5"
-            provider={integration.provider}
-          />
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="text-foreground truncate text-sm font-medium">
-              {integration.label}
-            </h3>
-            {statusChip}
-          </div>
-
-          <p className="text-muted mt-1 line-clamp-2 text-xs leading-relaxed">
-            {metadata.description}
-          </p>
-        </div>
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/80">
+        <IntegrationProviderIcon
+          className="h-5 w-5"
+          provider={integration.provider}
+        />
       </div>
 
-      <div className="mt-3 flex items-center gap-2">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-foreground text-sm font-medium">
+            {integration.label}
+          </span>
+          {statusChip}
+        </div>
+        <p className="text-muted mt-0.5 text-xs">{metadata.description}</p>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-2">
         {integration.isConnected ? (
           <Switch
             aria-label={`Enable ${integration.label}`}
@@ -233,7 +175,7 @@ function IntegrationCard({
           {canManage ? detailLabel : "Coming soon"}
         </Button>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -242,13 +184,12 @@ export default function IntegrationsSettingsPage() {
     useState<IntegrationProvider | null>(null);
   const [connectingProvider, setConnectingProvider] =
     useState<IntegrationProvider | null>(null);
-  const [gridColumns, setGridColumns] = useState(3);
-  const pageRef = useRef<HTMLDivElement | null>(null);
+  const previousRightSidebarOpenRef = useRef(false);
 
   const integrationsQuery = api.integrations.list.useQuery();
   const utils = api.useUtils();
   const connect = api.integrations.connect.useMutation();
-  const rightSidebar = useRightSidebar();
+  const { close, isOpen, open } = useRightSidebar();
 
   const toggle = api.integrations.toggle.useMutation({
     onMutate: async ({ isEnabled, provider }) => {
@@ -320,26 +261,25 @@ export default function IntegrationsSettingsPage() {
   }, [selectedIntegration]);
 
   useEffect(() => {
-    if (!rightSidebar.isOpen && selectedProvider !== null) {
+    if (
+      previousRightSidebarOpenRef.current &&
+      !isOpen &&
+      selectedProvider !== null
+    ) {
       setSelectedProvider(null);
     }
-  }, [rightSidebar.isOpen, selectedProvider]);
+
+    previousRightSidebarOpenRef.current = isOpen;
+  }, [isOpen, selectedProvider]);
 
   useEffect(() => {
     if (!sidebarContent) {
-      if (rightSidebar.isOpen) {
-        rightSidebar.close();
-      }
+      close();
       return;
     }
 
-    if (rightSidebar.isOpen) {
-      rightSidebar.setContent(sidebarContent);
-      return;
-    }
-
-    rightSidebar.open(sidebarContent);
-  }, [rightSidebar, sidebarContent]);
+    open(sidebarContent);
+  }, [close, open, sidebarContent]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -383,29 +323,6 @@ export default function IntegrationsSettingsPage() {
     };
   }, [integrationsQuery, utils.integrations.list]);
 
-  useEffect(() => {
-    const element = pageRef.current;
-    if (!element) {
-      return;
-    }
-
-    const updateColumns = () => {
-      setGridColumns(getGridColumns(element.clientWidth, rightSidebar.isOpen));
-    };
-
-    updateColumns();
-
-    const observer = new ResizeObserver(() => {
-      updateColumns();
-    });
-
-    observer.observe(element);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [rightSidebar.isOpen]);
-
   const handleConnect = async (provider: IntegrationProvider) => {
     setConnectingProvider(provider);
 
@@ -422,78 +339,67 @@ export default function IntegrationsSettingsPage() {
     }
   };
 
+  const renderRows = (items: IntegrationListItem[], isToggling: boolean) =>
+    items.map((integration) => (
+      <IntegrationRow
+        connectingProvider={connectingProvider}
+        integration={integration}
+        isSelected={selectedProvider === integration.provider}
+        isToggling={isToggling}
+        key={integration.provider}
+        onConnect={handleConnect}
+        onManage={setSelectedProvider}
+        onToggle={(provider, isEnabled) =>
+          toggle.mutate({ isEnabled, provider })
+        }
+      />
+    ));
+
   return (
     <SettingsPageWrapper
-      contentClassName="max-w-6xl"
       subtitle="Connect the external tools Sentinel can act on directly. Setup stays local, and each integration uses your own credentials."
       title="Integrations"
     >
       {integrationsQuery.isPending && integrations.length === 0 ? (
-        <IntegrationSkeleton />
+        <IntegrationsSkeleton />
       ) : (
-        <div className="flex flex-col gap-5" ref={pageRef}>
+        <div className="flex flex-col gap-5">
           {connected.length > 0 ? (
             <section>
-              <SectionHeading title="Connected" />
-              <IntegrationGrid columns={gridColumns}>
-                {connected.map((integration) => (
-                  <IntegrationCard
-                    connectingProvider={connectingProvider}
-                    integration={integration}
-                    isSelected={selectedProvider === integration.provider}
-                    isToggling={toggle.isPending}
-                    key={integration.provider}
-                    onConnect={handleConnect}
-                    onManage={setSelectedProvider}
-                    onToggle={(provider, isEnabled) =>
-                      toggle.mutate({ isEnabled, provider })
-                    }
-                  />
-                ))}
-              </IntegrationGrid>
+              <h2 className="text-foreground mb-2 px-1 text-sm font-medium">
+                Connected
+              </h2>
+              <div className="flex flex-col gap-2">
+                {renderRows(connected, toggle.isPending)}
+              </div>
             </section>
           ) : null}
 
           {readyToSetup.length > 0 ? (
             <section>
-              <SectionHeading title="Ready To Set Up" />
-              <IntegrationGrid columns={gridColumns}>
-                {readyToSetup.map((integration) => (
-                  <IntegrationCard
-                    connectingProvider={connectingProvider}
-                    integration={integration}
-                    isSelected={selectedProvider === integration.provider}
-                    isToggling={false}
-                    key={integration.provider}
-                    onConnect={handleConnect}
-                    onManage={setSelectedProvider}
-                    onToggle={() => undefined}
-                  />
-                ))}
-              </IntegrationGrid>
+              <h2 className="text-foreground mb-2 px-1 text-sm font-medium">
+                Ready To Set Up
+              </h2>
+              <div className="flex flex-col gap-2">
+                {renderRows(readyToSetup, false)}
+              </div>
             </section>
           ) : null}
 
           {comingSoon.length > 0 ? (
             <section>
-              <SectionHeading
-                description="These integrations are planned, but the connection flow is not available yet."
-                title="Coming Soon"
-              />
-              <IntegrationGrid columns={gridColumns}>
-                {comingSoon.map((integration) => (
-                  <IntegrationCard
-                    connectingProvider={connectingProvider}
-                    integration={integration}
-                    isSelected={selectedProvider === integration.provider}
-                    isToggling={false}
-                    key={integration.provider}
-                    onConnect={handleConnect}
-                    onManage={setSelectedProvider}
-                    onToggle={() => undefined}
-                  />
-                ))}
-              </IntegrationGrid>
+              <div className="mb-2 px-1">
+                <h2 className="text-foreground text-sm font-medium">
+                  Coming Soon
+                </h2>
+                <p className="text-muted mt-0.5 text-xs">
+                  These integrations are planned, but the connection flow is not
+                  available yet.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2">
+                {renderRows(comingSoon, false)}
+              </div>
             </section>
           ) : null}
         </div>

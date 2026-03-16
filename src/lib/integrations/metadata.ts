@@ -17,6 +17,7 @@ export const READY_INTEGRATION_PROVIDERS = new Set<IntegrationProvider>([
   "github",
   "linear",
   "notion",
+  "slack",
   "postgresql",
   "mysql",
   "mongodb",
@@ -73,15 +74,22 @@ export const INTEGRATION_METADATA: Record<
       "Use a Google Cloud OAuth client with the Google Drive API enabled for your project.",
   },
   slack: {
-    availability: "coming_soon",
+    availability: "ready",
     description:
-      "Slack integration is planned for channel search, message review, and team workflows.",
+      "Search messages, manage channels, post and reply in threads, and collaborate with your team in Slack from chat.",
     highlights: [
-      "Planned support for channels, threads, and messages",
-      "Designed for direct team context inside Sentinel",
+      "Search messages across your workspace",
+      "List, create, and manage channels with topics and purposes",
+      "Post messages, reply in threads, schedule, pin, and react",
+      "Browse channel history and user profiles",
     ],
-    requiredAccess: [],
-    setupHint: "Slack connection flow is not available yet.",
+    requiredAccess: [
+      "Read channels, messages, threads, pins, reactions, and users",
+      "Post, update, delete, and schedule messages",
+      "Create, archive channels and manage membership",
+    ],
+    setupHint:
+      "Create a Slack App at api.slack.com/apps, enable OAuth with user scopes, and paste the Client ID and Client Secret.",
   },
   notion: {
     availability: "ready",

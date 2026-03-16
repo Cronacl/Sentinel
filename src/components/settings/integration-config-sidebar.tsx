@@ -82,6 +82,21 @@ function getProviderCopy(provider: IntegrationProvider) {
     };
   }
 
+  if (provider === "slack") {
+    return {
+      clientIdPlaceholder: "1234567890.1234567890123",
+      clientIdDescription:
+        "Paste the Client ID from your Slack App at api.slack.com/apps.",
+      clientSecretPlaceholder: "your-slack-client-secret",
+      clientSecretDescription:
+        "Paste the Client Secret from your Slack App's OAuth & Permissions page.",
+      redirectUriDescription:
+        "This must match a Redirect URL in your Slack App's OAuth & Permissions settings.",
+      redirectUriNote:
+        "Add this URL as a Redirect URL in your Slack App at api.slack.com/apps.",
+    };
+  }
+
   if (provider === "linear") {
     return {
       clientIdPlaceholder: "your-linear-client-id",
@@ -520,9 +535,8 @@ export function IntegrationConfigSidebar({
                       inputProps={{
                         autoComplete: "off",
                         placeholder:
-                          "http://localhost:3232/api/integrations/oauth/callback",
+                          buildIntegrationOAuthRedirectUri(),
                         type: "url",
-                        disabled: true,
                       }}
                       label="Redirect URI"
                       name="redirectUri"

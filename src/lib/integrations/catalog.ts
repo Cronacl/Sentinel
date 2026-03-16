@@ -479,6 +479,113 @@ export const INTEGRATION_TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     label: "notion_get_user",
   },
 
+  // Slack
+  slack_list_channels: {
+    capability: "to list Slack channels in the workspace",
+    category: "integration",
+    label: "slack_list_channels",
+  },
+  slack_get_channel: {
+    capability: "to get details of a Slack channel",
+    category: "integration",
+    label: "slack_get_channel",
+  },
+  slack_create_channel: {
+    capability: "to create a new Slack channel",
+    category: "integration",
+    label: "slack_create_channel",
+  },
+  slack_archive_channel: {
+    capability: "to archive a Slack channel",
+    category: "integration",
+    label: "slack_archive_channel",
+  },
+  slack_invite_to_channel: {
+    capability: "to invite users to a Slack channel",
+    category: "integration",
+    label: "slack_invite_to_channel",
+  },
+  slack_kick_from_channel: {
+    capability: "to remove a user from a Slack channel",
+    category: "integration",
+    label: "slack_kick_from_channel",
+  },
+  slack_set_topic: {
+    capability: "to set a Slack channel topic",
+    category: "integration",
+    label: "slack_set_topic",
+  },
+  slack_set_purpose: {
+    capability: "to set a Slack channel purpose",
+    category: "integration",
+    label: "slack_set_purpose",
+  },
+  slack_search_messages: {
+    capability: "to search Slack messages across the workspace",
+    category: "integration",
+    label: "slack_search_messages",
+  },
+  slack_post_message: {
+    capability: "to post a message to a Slack channel",
+    category: "integration",
+    label: "slack_post_message",
+  },
+  slack_reply_to_thread: {
+    capability: "to reply to a Slack message thread",
+    category: "integration",
+    label: "slack_reply_to_thread",
+  },
+  slack_update_message: {
+    capability: "to update a Slack message",
+    category: "integration",
+    label: "slack_update_message",
+  },
+  slack_delete_message: {
+    capability: "to delete a Slack message",
+    category: "integration",
+    label: "slack_delete_message",
+  },
+  slack_add_reaction: {
+    capability: "to add an emoji reaction to a Slack message",
+    category: "integration",
+    label: "slack_add_reaction",
+  },
+  slack_schedule_message: {
+    capability: "to schedule a Slack message for later",
+    category: "integration",
+    label: "slack_schedule_message",
+  },
+  slack_pin_message: {
+    capability: "to pin a message in a Slack channel",
+    category: "integration",
+    label: "slack_pin_message",
+  },
+  slack_unpin_message: {
+    capability: "to unpin a message in a Slack channel",
+    category: "integration",
+    label: "slack_unpin_message",
+  },
+  slack_get_thread: {
+    capability: "to get replies in a Slack message thread",
+    category: "integration",
+    label: "slack_get_thread",
+  },
+  slack_list_users: {
+    capability: "to list Slack workspace members",
+    category: "integration",
+    label: "slack_list_users",
+  },
+  slack_get_user: {
+    capability: "to get details of a Slack user",
+    category: "integration",
+    label: "slack_get_user",
+  },
+  slack_get_history: {
+    capability: "to get message history from a Slack channel",
+    category: "integration",
+    label: "slack_get_history",
+  },
+
   // PostgreSQL
   pg_list_databases: {
     capability: "to list databases on the PostgreSQL server",

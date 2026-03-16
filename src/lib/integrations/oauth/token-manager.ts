@@ -15,6 +15,7 @@ import { getGoogleOAuthConfig, isGoogleProvider } from "./providers/google";
 import { isGitHubProvider } from "./providers/github";
 import { getLinearOAuthConfig, isLinearProvider } from "./providers/linear";
 import { isNotionProvider } from "./providers/notion";
+import { getSlackOAuthConfig, isSlackProvider } from "./providers/slack";
 import type { OAuthAppConfig } from "../types";
 
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
@@ -106,8 +107,8 @@ export async function getValidAccessToken(
     throw new Error("Integration not found.");
   }
 
-  // GitHub and Notion tokens don't expire -- always return the stored token
-  if (isGitHubProvider(integration.provider) || isNotionProvider(integration.provider)) {
+  // GitHub, Notion, and Slack tokens don't expire -- always return the stored token
+  if (isGitHubProvider(integration.provider) || isNotionProvider(integration.provider) || isSlackProvider(integration.provider)) {
     return decrypt(tokenRow.encryptedAccessToken);
   }
 
@@ -213,6 +214,18 @@ export async function revokeTokens(integrationId: string): Promise<void> {
                 token: accessToken,
                 token_type_hint: "access_token",
               }),
+            });
+          }
+        } else if (isSlackProvider(integration.provider)) {
+          const slackConfig = getSlackOAuthConfig();
+          if (slackConfig.revokeEndpoint) {
+            const accessToken = decrypt(tokenRow.encryptedAccessToken);
+            await fetch(slackConfig.revokeEndpoint, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+                Authorization: `Bearer ${accessToken}`,
+              },
             });
           }
         }

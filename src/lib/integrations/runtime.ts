@@ -42,6 +42,7 @@ const INTEGRATION_TOOL_COUNTS: Partial<Record<IntegrationProvider, number>> = {
   github: 23,
   linear: 20,
   notion: 15,
+  slack: 21,
   postgresql: 6,
   mysql: 5,
   mongodb: 11,
