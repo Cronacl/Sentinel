@@ -55,6 +55,13 @@ import { LinearCycleTool } from "./renderers/integrations/linear/linear-cycle";
 import { LinearLabelTool } from "./renderers/integrations/linear/linear-label";
 import { LinearUsersTool } from "./renderers/integrations/linear/linear-users";
 import { LinearWorkflowStatesTool } from "./renderers/integrations/linear/linear-workflow-states";
+import { NotionPageDetailTool } from "./renderers/integrations/notion/notion-page-detail";
+import { NotionPageActionTool } from "./renderers/integrations/notion/notion-page-action";
+import { NotionDatabaseTool } from "./renderers/integrations/notion/notion-database";
+import { NotionDatabaseActionTool } from "./renderers/integrations/notion/notion-database-action";
+import { NotionBlocksTool } from "./renderers/integrations/notion/notion-blocks";
+import { NotionCommentTool } from "./renderers/integrations/notion/notion-comment";
+import { NotionUsersTool } from "./renderers/integrations/notion/notion-users";
 import { IntegrationGenericTool } from "./renderers/integrations/shared/generic";
 import { PgListTool } from "./renderers/integrations/database/postgresql/pg-list";
 import { PgDescribeTool } from "./renderers/integrations/database/postgresql/pg-describe";
@@ -183,6 +190,23 @@ const renderers: Record<string, Renderer> = {
   linear_list_users: LinearUsersTool,
   linear_list_workflow_states: LinearWorkflowStatesTool,
 
+  // Notion
+  notion_search: NotionPageDetailTool,
+  notion_get_page: NotionPageDetailTool,
+  notion_create_page: NotionPageActionTool,
+  notion_update_page: NotionPageActionTool,
+  notion_archive_page: NotionPageActionTool,
+  notion_list_databases: NotionDatabaseTool,
+  notion_query_database: NotionDatabaseTool,
+  notion_create_database_entry: NotionDatabaseActionTool,
+  notion_update_database_entry: NotionDatabaseActionTool,
+  notion_get_blocks: NotionBlocksTool,
+  notion_append_blocks: NotionBlocksTool,
+  notion_list_comments: NotionCommentTool,
+  notion_create_comment: NotionCommentTool,
+  notion_list_users: NotionUsersTool,
+  notion_get_user: NotionUsersTool,
+
   // PostgreSQL
   pg_list_databases: PgListTool,
   pg_list_schemas: PgListTool,
@@ -219,6 +243,7 @@ function isIntegrationToolName(name: string) {
     name.startsWith("gdrive_") ||
     name.startsWith("gh_") ||
     name.startsWith("linear_") ||
+    name.startsWith("notion_") ||
     name.startsWith("pg_") ||
     name.startsWith("mysql_") ||
     name.startsWith("mongo_")

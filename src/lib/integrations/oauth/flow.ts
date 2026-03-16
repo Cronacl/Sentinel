@@ -16,6 +16,7 @@ import type { IntegrationProvider } from "@/server/db/enums";
 import { getGoogleOAuthConfig, isGoogleProvider } from "./providers/google";
 import { getGitHubOAuthConfig, isGitHubProvider } from "./providers/github";
 import { getLinearOAuthConfig, isLinearProvider } from "./providers/linear";
+import { getNotionOAuthConfig, isNotionProvider } from "./providers/notion";
 import type {
   OAuthAppConfig,
   OAuthProviderConfig,
@@ -28,6 +29,7 @@ function resolveOAuthConfig(
   if (isGoogleProvider(provider)) return getGoogleOAuthConfig(provider);
   if (isGitHubProvider(provider)) return getGitHubOAuthConfig();
   if (isLinearProvider(provider)) return getLinearOAuthConfig();
+  if (isNotionProvider(provider)) return getNotionOAuthConfig();
   throw new Error(`No OAuth config for provider: ${provider}`);
 }
 
@@ -95,6 +97,10 @@ export async function beginIntegrationOAuth(
     params.set("prompt", "consent");
   }
 
+  if (isNotionProvider(provider)) {
+    params.set("owner", "user");
+  }
+
   return `${oauthConfig.authorizationEndpoint}?${params.toString()}`;
 }
 
@@ -114,14 +120,21 @@ export async function completeIntegrationOAuth(
     headers["Accept"] = "application/json";
   }
 
+  if (isNotionProvider(provider)) {
+    headers["Authorization"] = `Basic ${Buffer.from(`${appConfig.clientId}:${appConfig.clientSecret}`).toString("base64")}`;
+  }
+
   const body = new URLSearchParams({
-    client_id: appConfig.clientId,
-    client_secret: appConfig.clientSecret,
     code,
     redirect_uri: appConfig.redirectUri,
   });
 
-  if (isGoogleProvider(provider) || isLinearProvider(provider)) {
+  if (!isNotionProvider(provider)) {
+    body.set("client_id", appConfig.clientId);
+    body.set("client_secret", appConfig.clientSecret);
+  }
+
+  if (isGoogleProvider(provider) || isLinearProvider(provider) || isNotionProvider(provider)) {
     body.set("grant_type", "authorization_code");
   }
 

@@ -284,7 +284,7 @@ function createBrowserPopup(url) {
       url,
       serverState?.url ??
         process.env.SENTINEL_APP_URL ??
-        "http://127.0.0.1:3232",
+        "http://localhost:3232",
       theme,
     ),
   );
@@ -459,7 +459,7 @@ function registerIpc() {
     const appServer = await getAppServerStatus(
       serverState?.url ??
         process.env.SENTINEL_APP_URL ??
-        "http://127.0.0.1:3232",
+        "http://localhost:3232",
     );
 
     return { appServer };
@@ -476,7 +476,7 @@ function registerIpc() {
     const appServer = await getAppServerStatus(
       serverState?.url ??
         process.env.SENTINEL_APP_URL ??
-        "http://127.0.0.1:3232",
+        "http://localhost:3232",
     );
 
     return { appServer };

@@ -35,6 +35,10 @@ const PROVIDER_TOOL_LOADERS: Partial<
     const { buildLinearTools } = await import("./providers/linear/tools");
     return buildLinearTools;
   },
+  notion: async () => {
+    const { buildNotionTools } = await import("./providers/notion/tools");
+    return buildNotionTools;
+  },
   postgresql: async () => {
     const { buildPostgresTools } = await import(
       "./providers/postgresql/tools"

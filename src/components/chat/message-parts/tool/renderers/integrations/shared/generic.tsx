@@ -22,6 +22,8 @@ function getProviderFromToolName(toolName: string) {
     return { provider: "github", label: "GitHub" };
   if (toolName.startsWith("linear_"))
     return { provider: "linear", label: "Linear" };
+  if (toolName.startsWith("notion_"))
+    return { provider: "notion", label: "Notion" };
   if (toolName.startsWith("pg_"))
     return { provider: "postgresql", label: "PostgreSQL" };
   if (toolName.startsWith("mysql_"))
@@ -33,7 +35,7 @@ function getProviderFromToolName(toolName: string) {
 
 function humanizeToolName(toolName: string): string {
   return toolName
-    .replace(/^(gmail_|gcal_|gdrive_|gh_|linear_|pg_|mysql_|mongo_)/, "")
+    .replace(/^(gmail_|gcal_|gdrive_|gh_|linear_|notion_|pg_|mysql_|mongo_)/, "")
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }

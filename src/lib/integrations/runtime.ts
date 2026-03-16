@@ -41,6 +41,7 @@ const INTEGRATION_TOOL_COUNTS: Partial<Record<IntegrationProvider, number>> = {
   google_drive: 10,
   github: 23,
   linear: 20,
+  notion: 15,
   postgresql: 6,
   mysql: 5,
   mongodb: 11,

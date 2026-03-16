@@ -130,7 +130,7 @@ export const mcpServersRouter = createTRPCRouter({
           const referer = ctx.headers.get("referer");
           return referer ? new URL(referer).origin : null;
         })() ??
-        "http://127.0.0.1:3232";
+        "http://localhost:3232";
 
       return beginMcpServerOAuth({
         appOrigin,

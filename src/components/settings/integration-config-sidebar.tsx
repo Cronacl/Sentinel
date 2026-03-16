@@ -48,7 +48,7 @@ function getProviderCopy(provider: IntegrationProvider) {
       redirectUriDescription:
         "This must exactly match an authorized redirect URI in your Google Cloud OAuth client.",
       redirectUriNote:
-        "Google compares this value exactly. If your authorized URI uses `127.0.0.1` but the app is open on `localhost`, keep the registered value here.",
+        "Google compares this value exactly. Make sure this matches the authorized redirect URI registered in your Google Cloud console.",
     };
   }
 
@@ -64,6 +64,21 @@ function getProviderCopy(provider: IntegrationProvider) {
         "This must match the Authorization callback URL in your GitHub OAuth App.",
       redirectUriNote:
         "Enter this URL as the Authorization callback URL in your GitHub OAuth App settings.",
+    };
+  }
+
+  if (provider === "notion") {
+    return {
+      clientIdPlaceholder: "your-notion-oauth-client-id",
+      clientIdDescription:
+        "Paste the OAuth client ID from your Notion Public Integration settings.",
+      clientSecretPlaceholder: "secret_...",
+      clientSecretDescription:
+        "Paste the OAuth client secret from your Notion Public Integration.",
+      redirectUriDescription:
+        "This must match the Redirect URI in your Notion integration settings.",
+      redirectUriNote:
+        "Add this URL as a Redirect URI in your Notion integration at notion.so/my-integrations.",
     };
   }
 
@@ -505,7 +520,7 @@ export function IntegrationConfigSidebar({
                       inputProps={{
                         autoComplete: "off",
                         placeholder:
-                          "http://127.0.0.1:3232/api/integrations/oauth/callback",
+                          "http://localhost:3232/api/integrations/oauth/callback",
                         type: "url",
                         disabled: true,
                       }}

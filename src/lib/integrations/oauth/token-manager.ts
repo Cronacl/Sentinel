@@ -14,6 +14,7 @@ import type { IntegrationProvider } from "@/server/db/enums";
 import { getGoogleOAuthConfig, isGoogleProvider } from "./providers/google";
 import { isGitHubProvider } from "./providers/github";
 import { getLinearOAuthConfig, isLinearProvider } from "./providers/linear";
+import { isNotionProvider } from "./providers/notion";
 import type { OAuthAppConfig } from "../types";
 
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
@@ -105,8 +106,8 @@ export async function getValidAccessToken(
     throw new Error("Integration not found.");
   }
 
-  // GitHub tokens don't expire -- always return the stored token
-  if (isGitHubProvider(integration.provider)) {
+  // GitHub and Notion tokens don't expire -- always return the stored token
+  if (isGitHubProvider(integration.provider) || isNotionProvider(integration.provider)) {
     return decrypt(tokenRow.encryptedAccessToken);
   }
 

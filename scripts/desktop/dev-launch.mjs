@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 
-const HEALTHCHECK_URL = "http://127.0.0.1:3232/api/health";
+const HEALTHCHECK_URL = "http://localhost:3232/api/health";
 const ELECTRON_ENTRY = path.join(
   process.cwd(),
   "node_modules",
@@ -37,7 +37,7 @@ await waitForHealthcheck();
 const child = spawn(ELECTRON_ENTRY, ["."], {
   env: {
     ...process.env,
-    SENTINEL_APP_URL: "http://127.0.0.1:3232",
+    SENTINEL_APP_URL: "http://localhost:3232",
   },
   stdio: "inherit",
 });

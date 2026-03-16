@@ -47,11 +47,15 @@ type IntegrationListItem = {
 
 function getGridColumns(width: number, isSidebarOpen: boolean) {
   if (isSidebarOpen) {
-    return 1;
+    return width >= 700 ? 2 : 1;
   }
 
   if (width >= 1000) {
     return 3;
+  }
+
+  if (width >= 640) {
+    return 2;
   }
 
   return 1;
@@ -59,23 +63,21 @@ function getGridColumns(width: number, isSidebarOpen: boolean) {
 
 function IntegrationSkeleton() {
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {Array.from({ length: 6 }).map((_, index) => (
         <section
           className="border-separator bg-surface rounded-2xl border p-4"
           key={index}
         >
           <div className="flex items-start gap-3">
-            <Skeleton className="h-12 w-12 rounded-2xl" />
+            <Skeleton className="h-10 w-10 rounded-xl" />
             <div className="min-w-0 flex-1 space-y-2">
-              <Skeleton className="h-4 w-32 rounded-md" />
+              <Skeleton className="h-4 w-28 rounded-md" />
               <Skeleton className="h-3 w-full rounded-md" />
-              <Skeleton className="h-3 w-24 rounded-md" />
             </div>
           </div>
-          <div className="mt-4 flex items-center justify-between">
-            <Skeleton className="h-8 w-24 rounded-xl" />
-            <Skeleton className="h-9 w-28 rounded-xl" />
+          <div className="mt-3 flex items-center gap-2">
+            <Skeleton className="h-7 w-20 rounded-lg" />
           </div>
         </section>
       ))}
@@ -118,6 +120,7 @@ function SectionHeading({
 function IntegrationCard({
   connectingProvider,
   integration,
+  isSelected,
   isToggling,
   onConnect,
   onManage,
@@ -125,6 +128,7 @@ function IntegrationCard({
 }: {
   connectingProvider: IntegrationProvider | null;
   integration: IntegrationListItem;
+  isSelected: boolean;
   isToggling: boolean;
   onConnect: (provider: IntegrationProvider) => void;
   onManage: (provider: IntegrationProvider) => void;
@@ -138,106 +142,96 @@ function IntegrationCard({
   const showConnectButton =
     !isDb && !integration.isConnected && isSetupReady && integration.hasOAuthApp;
   const detailLabel = integration.isConnected ? "Details" : "Setup";
-  const statusText = integration.isConnected
-    ? integration.isEnabled
-      ? "Connected and active"
-      : "Connected and paused"
-    : isDb
-      ? isSetupReady
-        ? "Ready to configure"
-        : "Not available yet"
-      : integration.hasOAuthApp
-        ? "Credentials saved"
-        : isSetupReady
-          ? "Ready to configure"
-          : "Not available yet";
+
+  const statusChip = integration.isConnected ? (
+    <Chip
+      color={integration.isEnabled ? "success" : "warning"}
+      size="sm"
+      variant="soft"
+    >
+      {integration.isEnabled ? "Active" : "Paused"}
+    </Chip>
+  ) : integration.hasOAuthApp ? (
+    <Chip color="warning" size="sm" variant="soft">
+      Credentials saved
+    </Chip>
+  ) : !isSetupReady ? (
+    <Chip size="sm" variant="soft">
+      Coming soon
+    </Chip>
+  ) : null;
 
   return (
-    <section className="border-separator bg-surface rounded-2xl border p-4">
+    <section
+      className={`rounded-2xl border p-4 transition-colors ${
+        isSelected
+          ? "border-primary/50 bg-primary/[0.03]"
+          : "border-separator bg-surface hover:bg-surface-hover"
+      }`}
+    >
       <div className="flex items-start gap-3">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-border/50 bg-background/80">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/80">
           <IntegrationProviderIcon
-            className="h-6 w-6"
+            className="h-5 w-5"
             provider={integration.provider}
           />
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-foreground text-base font-medium">
+          <div className="flex items-center gap-2">
+            <h3 className="text-foreground truncate text-sm font-medium">
               {integration.label}
             </h3>
-            {integration.isConnected ? (
-              <Chip color="success" size="sm" variant="soft">
-                Connected
-              </Chip>
-            ) : integration.hasOAuthApp ? (
-              <Chip color="warning" size="sm" variant="soft">
-                Credentials saved
-              </Chip>
-            ) : null}
-            {!isSetupReady && !integration.isConnected ? (
-              <Chip size="sm" variant="soft">
-                Coming soon
-              </Chip>
-            ) : null}
-            {integration.isConnected ? (
-              <Chip
-                color={integration.isEnabled ? "success" : "warning"}
-                size="sm"
-                variant="soft"
-              >
-                {integration.isEnabled ? "Active" : "Paused"}
-              </Chip>
-            ) : null}
+            {statusChip}
           </div>
 
-          <p className="text-muted mt-1 text-sm">{metadata.description}</p>
-          <p className="text-muted mt-2 text-xs">{statusText}</p>
+          <p className="text-muted mt-1 line-clamp-2 text-xs leading-relaxed">
+            {metadata.description}
+          </p>
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <div className="flex shrink-0 items-center gap-2">
-          {integration.isConnected ? (
-            <Switch
-              aria-label={`Enable ${integration.label}`}
-              isDisabled={isToggling}
-              isSelected={integration.isEnabled}
-              onChange={() =>
-                onToggle(integration.provider, !integration.isEnabled)
-              }
-            >
-              <Switch.Control>
-                <Switch.Thumb />
-              </Switch.Control>
-            </Switch>
-          ) : null}
-
-          {showConnectButton ? (
-            <Button
-              isPending={isConnecting}
-              onPress={() => onConnect(integration.provider)}
-              size="sm"
-              variant="primary"
-            >
-              Connect
-            </Button>
-          ) : null}
-
-          <Button
-            isDisabled={!canManage}
-            onPress={() => onManage(integration.provider)}
-            size="sm"
-            variant={
-              showConnectButton || integration.isConnected
-                ? "secondary"
-                : "primary"
+      <div className="mt-3 flex items-center gap-2">
+        {integration.isConnected ? (
+          <Switch
+            aria-label={`Enable ${integration.label}`}
+            isDisabled={isToggling}
+            isSelected={integration.isEnabled}
+            onChange={() =>
+              onToggle(integration.provider, !integration.isEnabled)
             }
           >
-            {canManage ? detailLabel : "Coming soon"}
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
+          </Switch>
+        ) : null}
+
+        {showConnectButton ? (
+          <Button
+            isPending={isConnecting}
+            onPress={() => onConnect(integration.provider)}
+            size="sm"
+            variant="primary"
+          >
+            Connect
           </Button>
-        </div>
+        ) : null}
+
+        <Button
+          isDisabled={!canManage}
+          onPress={() => onManage(integration.provider)}
+          size="sm"
+          variant={
+            isSelected
+              ? "primary"
+              : showConnectButton || integration.isConnected
+                ? "secondary"
+                : "primary"
+          }
+        >
+          {canManage ? detailLabel : "Coming soon"}
+        </Button>
       </div>
     </section>
   );
@@ -324,6 +318,12 @@ export default function IntegrationsSettingsPage() {
       />
     );
   }, [selectedIntegration]);
+
+  useEffect(() => {
+    if (!rightSidebar.isOpen && selectedProvider !== null) {
+      setSelectedProvider(null);
+    }
+  }, [rightSidebar.isOpen, selectedProvider]);
 
   useEffect(() => {
     if (!sidebarContent) {
@@ -440,6 +440,7 @@ export default function IntegrationsSettingsPage() {
                   <IntegrationCard
                     connectingProvider={connectingProvider}
                     integration={integration}
+                    isSelected={selectedProvider === integration.provider}
                     isToggling={toggle.isPending}
                     key={integration.provider}
                     onConnect={handleConnect}
@@ -461,6 +462,7 @@ export default function IntegrationsSettingsPage() {
                   <IntegrationCard
                     connectingProvider={connectingProvider}
                     integration={integration}
+                    isSelected={selectedProvider === integration.provider}
                     isToggling={false}
                     key={integration.provider}
                     onConnect={handleConnect}
@@ -483,6 +485,7 @@ export default function IntegrationsSettingsPage() {
                   <IntegrationCard
                     connectingProvider={connectingProvider}
                     integration={integration}
+                    isSelected={selectedProvider === integration.provider}
                     isToggling={false}
                     key={integration.provider}
                     onConnect={handleConnect}

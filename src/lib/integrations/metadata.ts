@@ -16,6 +16,7 @@ export const READY_INTEGRATION_PROVIDERS = new Set<IntegrationProvider>([
   "google_drive",
   "github",
   "linear",
+  "notion",
   "postgresql",
   "mysql",
   "mongodb",
@@ -83,15 +84,22 @@ export const INTEGRATION_METADATA: Record<
     setupHint: "Slack connection flow is not available yet.",
   },
   notion: {
-    availability: "coming_soon",
+    availability: "ready",
     description:
-      "Notion integration is planned for knowledge base lookups and page workflows.",
+      "Search pages, query databases, manage content blocks, and collaborate with comments in Notion from chat.",
     highlights: [
-      "Planned workspace search and page retrieval",
-      "Will support direct knowledge access from chat",
+      "Search and browse pages and databases",
+      "Create, update, and archive pages with rich content",
+      "Query databases with filters and sorts",
+      "Read and append content blocks, manage comments",
     ],
-    requiredAccess: [],
-    setupHint: "Notion connection flow is not available yet.",
+    requiredAccess: [
+      "Read pages, databases, blocks, comments, and users",
+      "Create and update pages, database entries, blocks, and comments",
+      "Archive pages",
+    ],
+    setupHint:
+      "Create a Notion Public Integration at notion.so/my-integrations, enable OAuth, and paste the Client ID and Client Secret.",
   },
   github: {
     availability: "ready",

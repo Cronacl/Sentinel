@@ -402,6 +402,83 @@ export const INTEGRATION_TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     label: "linear_list_workflow_states",
   },
 
+  // Notion
+  notion_search: {
+    capability: "to search Notion pages and databases by query",
+    category: "integration",
+    label: "notion_search",
+  },
+  notion_get_page: {
+    capability: "to get a Notion page by ID with its properties",
+    category: "integration",
+    label: "notion_get_page",
+  },
+  notion_create_page: {
+    capability: "to create a new Notion page",
+    category: "integration",
+    label: "notion_create_page",
+  },
+  notion_update_page: {
+    capability: "to update a Notion page's properties or icon",
+    category: "integration",
+    label: "notion_update_page",
+  },
+  notion_archive_page: {
+    capability: "to archive a Notion page",
+    category: "integration",
+    label: "notion_archive_page",
+  },
+  notion_list_databases: {
+    capability: "to list accessible Notion databases",
+    category: "integration",
+    label: "notion_list_databases",
+  },
+  notion_query_database: {
+    capability: "to query a Notion database with filters and sorts",
+    category: "integration",
+    label: "notion_query_database",
+  },
+  notion_create_database_entry: {
+    capability: "to create a new entry in a Notion database",
+    category: "integration",
+    label: "notion_create_database_entry",
+  },
+  notion_update_database_entry: {
+    capability: "to update a Notion database entry's properties",
+    category: "integration",
+    label: "notion_update_database_entry",
+  },
+  notion_get_blocks: {
+    capability: "to get content blocks of a Notion page or block",
+    category: "integration",
+    label: "notion_get_blocks",
+  },
+  notion_append_blocks: {
+    capability: "to append content blocks to a Notion page",
+    category: "integration",
+    label: "notion_append_blocks",
+  },
+  notion_list_comments: {
+    capability: "to list comments on a Notion page",
+    category: "integration",
+    label: "notion_list_comments",
+  },
+  notion_create_comment: {
+    capability: "to create a comment on a Notion page",
+    category: "integration",
+    label: "notion_create_comment",
+  },
+  notion_list_users: {
+    capability: "to list workspace members in Notion",
+    category: "integration",
+    label: "notion_list_users",
+  },
+  notion_get_user: {
+    capability: "to get a specific Notion user by ID",
+    category: "integration",
+    label: "notion_get_user",
+  },
+
   // PostgreSQL
   pg_list_databases: {
     capability: "to list databases on the PostgreSQL server",

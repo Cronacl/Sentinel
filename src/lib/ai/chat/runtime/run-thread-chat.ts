@@ -335,7 +335,9 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
                       ? "GitHub"
                       : i.provider === "linear"
                         ? "Linear"
-                        : i.provider,
+                        : i.provider === "notion"
+                          ? "Notion"
+                          : i.provider,
             toolCount: Object.keys(integrationTools).filter((name) =>
               i.provider === "gmail"
                 ? name.startsWith("gmail_")
@@ -347,7 +349,9 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
                       ? name.startsWith("gh_")
                       : i.provider === "linear"
                         ? name.startsWith("linear_")
-                        : false,
+                        : i.provider === "notion"
+                          ? name.startsWith("notion_")
+                          : false,
             ).length,
           })),
           enabledMcpServers: mcpServers
