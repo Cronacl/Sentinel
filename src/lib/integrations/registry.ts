@@ -35,6 +35,20 @@ const PROVIDER_TOOL_LOADERS: Partial<
     const { buildLinearTools } = await import("./providers/linear/tools");
     return buildLinearTools;
   },
+  postgresql: async () => {
+    const { buildPostgresTools } = await import(
+      "./providers/postgresql/tools"
+    );
+    return buildPostgresTools;
+  },
+  mysql: async () => {
+    const { buildMySQLTools } = await import("./providers/mysql/tools");
+    return buildMySQLTools;
+  },
+  mongodb: async () => {
+    const { buildMongoDBTools } = await import("./providers/mongodb/tools");
+    return buildMongoDBTools;
+  },
 };
 
 export async function loadIntegrationTools(

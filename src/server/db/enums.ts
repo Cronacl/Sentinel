@@ -104,12 +104,24 @@ export const INTEGRATION_PROVIDERS = [
   "notion",
   "github",
   "linear",
+  "postgresql",
+  "mysql",
+  "mongodb",
 ] as const;
 export type IntegrationProvider = (typeof INTEGRATION_PROVIDERS)[number];
+
+export const DATABASE_INTEGRATION_PROVIDERS = [
+  "postgresql",
+  "mysql",
+  "mongodb",
+] as const;
+export type DatabaseIntegrationProvider =
+  (typeof DATABASE_INTEGRATION_PROVIDERS)[number];
 
 export const INTEGRATION_AUTH_TYPES = [
   "oauth",
   "api_key",
   "bearer_token",
+  "connection_config",
 ] as const;
 export type IntegrationAuthType = (typeof INTEGRATION_AUTH_TYPES)[number];

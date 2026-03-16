@@ -401,4 +401,125 @@ export const INTEGRATION_TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     category: "integration",
     label: "linear_list_workflow_states",
   },
+
+  // PostgreSQL
+  pg_list_databases: {
+    capability: "to list databases on the PostgreSQL server",
+    category: "integration",
+    label: "pg_list_databases",
+  },
+  pg_list_schemas: {
+    capability: "to list schemas in a PostgreSQL database",
+    category: "integration",
+    label: "pg_list_schemas",
+  },
+  pg_list_tables: {
+    capability: "to list tables in a PostgreSQL schema",
+    category: "integration",
+    label: "pg_list_tables",
+  },
+  pg_describe_table: {
+    capability:
+      "to describe a PostgreSQL table's columns, indexes, and foreign keys",
+    category: "integration",
+    label: "pg_describe_table",
+  },
+  pg_query: {
+    capability: "to execute a read-only SQL query on PostgreSQL",
+    category: "integration",
+    label: "pg_query",
+  },
+  pg_execute: {
+    capability:
+      "to execute a mutation SQL statement (INSERT/UPDATE/DELETE/DDL) on PostgreSQL",
+    category: "integration",
+    label: "pg_execute",
+  },
+
+  // MySQL
+  mysql_list_databases: {
+    capability: "to list databases on the MySQL server",
+    category: "integration",
+    label: "mysql_list_databases",
+  },
+  mysql_list_tables: {
+    capability: "to list tables in a MySQL database",
+    category: "integration",
+    label: "mysql_list_tables",
+  },
+  mysql_describe_table: {
+    capability:
+      "to describe a MySQL table's columns, indexes, and foreign keys",
+    category: "integration",
+    label: "mysql_describe_table",
+  },
+  mysql_query: {
+    capability: "to execute a read-only SQL query on MySQL",
+    category: "integration",
+    label: "mysql_query",
+  },
+  mysql_execute: {
+    capability:
+      "to execute a mutation SQL statement (INSERT/UPDATE/DELETE/DDL) on MySQL",
+    category: "integration",
+    label: "mysql_execute",
+  },
+
+  // MongoDB
+  mongo_list_databases: {
+    capability: "to list databases on the MongoDB server",
+    category: "integration",
+    label: "mongo_list_databases",
+  },
+  mongo_list_collections: {
+    capability: "to list collections in a MongoDB database",
+    category: "integration",
+    label: "mongo_list_collections",
+  },
+  mongo_find: {
+    capability:
+      "to find documents in a MongoDB collection with query, sort, and projection",
+    category: "integration",
+    label: "mongo_find",
+  },
+  mongo_find_one: {
+    capability: "to find a single document in a MongoDB collection",
+    category: "integration",
+    label: "mongo_find_one",
+  },
+  mongo_insert_one: {
+    capability: "to insert a document into a MongoDB collection",
+    category: "integration",
+    label: "mongo_insert_one",
+  },
+  mongo_insert_many: {
+    capability: "to insert multiple documents into a MongoDB collection",
+    category: "integration",
+    label: "mongo_insert_many",
+  },
+  mongo_update_one: {
+    capability: "to update a single document in a MongoDB collection",
+    category: "integration",
+    label: "mongo_update_one",
+  },
+  mongo_update_many: {
+    capability: "to update multiple documents in a MongoDB collection",
+    category: "integration",
+    label: "mongo_update_many",
+  },
+  mongo_aggregate: {
+    capability: "to run an aggregation pipeline on a MongoDB collection",
+    category: "integration",
+    label: "mongo_aggregate",
+  },
+  mongo_count: {
+    capability: "to count documents in a MongoDB collection",
+    category: "integration",
+    label: "mongo_count",
+  },
+  mongo_distinct: {
+    capability: "to get distinct values for a field in a MongoDB collection",
+    category: "integration",
+    label: "mongo_distinct",
+  },
 };

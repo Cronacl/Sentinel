@@ -62,6 +62,9 @@ const PROVIDER_ICONS: Record<IntegrationProvider, ProviderIconDef> = {
   notion: { type: "iconify", icon: "logos:notion-icon" },
   github: { type: "svg", component: GithubIcon },
   linear: { type: "svg", component: LinearIcon },
+  postgresql: { type: "iconify", icon: "logos:postgresql" },
+  mysql: { type: "iconify", icon: "logos:mysql-icon" },
+  mongodb: { type: "iconify", icon: "logos:mongodb-icon" },
 };
 
 type IntegrationProviderIconProps = {

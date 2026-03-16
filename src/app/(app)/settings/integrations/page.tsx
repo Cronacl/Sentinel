@@ -9,6 +9,10 @@ import {
   IntegrationConfigSidebar,
   type IntegrationSummary,
 } from "@/components/settings/integration-config-sidebar";
+import {
+  DatabaseConfigSidebar,
+  type DatabaseIntegrationSummary,
+} from "@/components/settings/database-config-sidebar";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { useRightSidebar } from "@/components/shell";
 import {
@@ -16,10 +20,23 @@ import {
   isIntegrationSetupReady,
 } from "@/lib/integrations/metadata";
 import { openIntegrationOAuthPopup } from "@/lib/integrations/oauth/popup";
-import type { IntegrationProvider } from "@/server/db/enums";
+import {
+  DATABASE_INTEGRATION_PROVIDERS,
+  type DatabaseIntegrationProvider,
+  type IntegrationProvider,
+} from "@/server/db/enums";
 import { api } from "@/trpc/react";
 
+function isDatabaseProvider(
+  provider: string,
+): provider is DatabaseIntegrationProvider {
+  return (DATABASE_INTEGRATION_PROVIDERS as readonly string[]).includes(
+    provider,
+  );
+}
+
 type IntegrationListItem = {
+  hasDbConfig?: boolean;
   hasOAuthApp: boolean;
   id: string | null;
   isConnected: boolean;
@@ -115,20 +132,25 @@ function IntegrationCard({
 }) {
   const metadata = INTEGRATION_METADATA[integration.provider];
   const isSetupReady = isIntegrationSetupReady(integration.provider);
+  const isDb = isDatabaseProvider(integration.provider);
   const canManage = integration.isConnected || isSetupReady;
   const isConnecting = connectingProvider === integration.provider;
   const showConnectButton =
-    !integration.isConnected && isSetupReady && integration.hasOAuthApp;
+    !isDb && !integration.isConnected && isSetupReady && integration.hasOAuthApp;
   const detailLabel = integration.isConnected ? "Details" : "Setup";
   const statusText = integration.isConnected
     ? integration.isEnabled
       ? "Connected and active"
       : "Connected and paused"
-    : integration.hasOAuthApp
-      ? "Credentials saved"
-      : isSetupReady
+    : isDb
+      ? isSetupReady
         ? "Ready to configure"
-        : "Not available yet";
+        : "Not available yet"
+      : integration.hasOAuthApp
+        ? "Credentials saved"
+        : isSetupReady
+          ? "Ready to configure"
+          : "Not available yet";
 
   return (
     <section className="border-separator bg-surface rounded-2xl border p-4">
@@ -284,6 +306,15 @@ export default function IntegrationsSettingsPage() {
   const sidebarContent = useMemo(() => {
     if (!selectedIntegration) {
       return null;
+    }
+
+    if (isDatabaseProvider(selectedIntegration.provider)) {
+      return (
+        <DatabaseConfigSidebar
+          integration={selectedIntegration as DatabaseIntegrationSummary}
+          onClose={() => setSelectedProvider(null)}
+        />
+      );
     }
 
     return (

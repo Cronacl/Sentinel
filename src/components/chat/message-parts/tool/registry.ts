@@ -56,6 +56,19 @@ import { LinearLabelTool } from "./renderers/integrations/linear/linear-label";
 import { LinearUsersTool } from "./renderers/integrations/linear/linear-users";
 import { LinearWorkflowStatesTool } from "./renderers/integrations/linear/linear-workflow-states";
 import { IntegrationGenericTool } from "./renderers/integrations/shared/generic";
+import { PgListTool } from "./renderers/integrations/database/postgresql/pg-list";
+import { PgDescribeTool } from "./renderers/integrations/database/postgresql/pg-describe";
+import { PgQueryTool } from "./renderers/integrations/database/postgresql/pg-query";
+import { PgExecuteTool } from "./renderers/integrations/database/postgresql/pg-execute";
+import { MysqlListTool } from "./renderers/integrations/database/mysql/mysql-list";
+import { MysqlDescribeTool } from "./renderers/integrations/database/mysql/mysql-describe";
+import { MysqlQueryTool } from "./renderers/integrations/database/mysql/mysql-query";
+import { MysqlExecuteTool } from "./renderers/integrations/database/mysql/mysql-execute";
+import { MongoListTool } from "./renderers/integrations/database/mongodb/mongo-list";
+import { MongoFindTool } from "./renderers/integrations/database/mongodb/mongo-find";
+import { MongoMutationTool } from "./renderers/integrations/database/mongodb/mongo-mutation";
+import { MongoAggregateTool } from "./renderers/integrations/database/mongodb/mongo-aggregate";
+import { MongoCountTool } from "./renderers/integrations/database/mongodb/mongo-count";
 
 const renderers: Record<string, Renderer> = {
   apply_patch: WorkspaceTool,
@@ -169,6 +182,34 @@ const renderers: Record<string, Renderer> = {
   linear_create_label: LinearLabelTool,
   linear_list_users: LinearUsersTool,
   linear_list_workflow_states: LinearWorkflowStatesTool,
+
+  // PostgreSQL
+  pg_list_databases: PgListTool,
+  pg_list_schemas: PgListTool,
+  pg_list_tables: PgListTool,
+  pg_describe_table: PgDescribeTool,
+  pg_query: PgQueryTool,
+  pg_execute: PgExecuteTool,
+
+  // MySQL
+  mysql_list_databases: MysqlListTool,
+  mysql_list_tables: MysqlListTool,
+  mysql_describe_table: MysqlDescribeTool,
+  mysql_query: MysqlQueryTool,
+  mysql_execute: MysqlExecuteTool,
+
+  // MongoDB
+  mongo_list_databases: MongoListTool,
+  mongo_list_collections: MongoListTool,
+  mongo_find: MongoFindTool,
+  mongo_find_one: MongoFindTool,
+  mongo_insert_one: MongoMutationTool,
+  mongo_insert_many: MongoMutationTool,
+  mongo_update_one: MongoMutationTool,
+  mongo_update_many: MongoMutationTool,
+  mongo_aggregate: MongoAggregateTool,
+  mongo_count: MongoCountTool,
+  mongo_distinct: MongoCountTool,
 };
 
 function isIntegrationToolName(name: string) {
@@ -177,7 +218,10 @@ function isIntegrationToolName(name: string) {
     name.startsWith("gcal_") ||
     name.startsWith("gdrive_") ||
     name.startsWith("gh_") ||
-    name.startsWith("linear_")
+    name.startsWith("linear_") ||
+    name.startsWith("pg_") ||
+    name.startsWith("mysql_") ||
+    name.startsWith("mongo_")
   );
 }
 

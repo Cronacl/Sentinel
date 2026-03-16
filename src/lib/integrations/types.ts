@@ -1,7 +1,24 @@
-import type { IntegrationProvider } from "@/server/db/enums";
+import type {
+  DatabaseIntegrationProvider,
+  IntegrationProvider,
+} from "@/server/db/enums";
+
+export type DatabaseConnectionConfig = {
+  host: string;
+  port: number;
+  database?: string;
+  username: string;
+  password: string;
+  connectionUrl?: string;
+  useConnectionUrl: boolean;
+  ssl: boolean;
+};
 
 export type IntegrationContext = {
   tokens: Partial<Record<IntegrationProvider, string>>;
+  databases: Partial<
+    Record<DatabaseIntegrationProvider, DatabaseConnectionConfig>
+  >;
 };
 
 export type OAuthAppConfig = {

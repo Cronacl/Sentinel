@@ -22,12 +22,18 @@ function getProviderFromToolName(toolName: string) {
     return { provider: "github", label: "GitHub" };
   if (toolName.startsWith("linear_"))
     return { provider: "linear", label: "Linear" };
+  if (toolName.startsWith("pg_"))
+    return { provider: "postgresql", label: "PostgreSQL" };
+  if (toolName.startsWith("mysql_"))
+    return { provider: "mysql", label: "MySQL" };
+  if (toolName.startsWith("mongo_"))
+    return { provider: "mongodb", label: "MongoDB" };
   return { provider: "unknown", label: "Integration" };
 }
 
 function humanizeToolName(toolName: string): string {
   return toolName
-    .replace(/^(gmail_|gcal_|gdrive_|gh_|linear_)/, "")
+    .replace(/^(gmail_|gcal_|gdrive_|gh_|linear_|pg_|mysql_|mongo_)/, "")
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }

@@ -306,7 +306,7 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
         const integrationContext =
           threadMode === "chat" && enabledIntegrations.length > 0
             ? await buildIntegrationContext(enabledIntegrations)
-            : { tokens: {} };
+            : { tokens: {}, databases: {} };
 
         const integrationApprovalFn = (toolName: string) =>
           (toolApprovalPolicies as Record<string, boolean>)[toolName] ?? true;

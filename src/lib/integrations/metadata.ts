@@ -16,6 +16,9 @@ export const READY_INTEGRATION_PROVIDERS = new Set<IntegrationProvider>([
   "google_drive",
   "github",
   "linear",
+  "postgresql",
+  "mysql",
+  "mongodb",
 ]);
 
 export const INTEGRATION_METADATA: Record<
@@ -125,6 +128,54 @@ export const INTEGRATION_METADATA: Record<
     ],
     setupHint:
       "Create a Linear OAuth2 Application at linear.app/settings/api and paste the Client ID and Client Secret.",
+  },
+  postgresql: {
+    availability: "ready",
+    description:
+      "Query, explore schemas, and manage data in PostgreSQL databases from chat.",
+    highlights: [
+      "Browse databases, schemas, and table structures",
+      "Execute SQL queries and view results in rich tables",
+      "Run INSERT, UPDATE, DELETE with approval safeguards",
+    ],
+    requiredAccess: [
+      "Connect to PostgreSQL with provided credentials",
+      "Execute read and write SQL statements",
+    ],
+    setupHint:
+      "Provide host, port, database, username, and password, or a connection URL.",
+  },
+  mysql: {
+    availability: "ready",
+    description:
+      "Query, explore tables, and manage data in MySQL databases from chat.",
+    highlights: [
+      "Browse databases and table structures",
+      "Execute SQL queries and view results in rich tables",
+      "Run INSERT, UPDATE, DELETE with approval safeguards",
+    ],
+    requiredAccess: [
+      "Connect to MySQL with provided credentials",
+      "Execute read and write SQL statements",
+    ],
+    setupHint:
+      "Provide host, port, database, username, and password, or a connection URL.",
+  },
+  mongodb: {
+    availability: "ready",
+    description:
+      "Query, browse collections, and manage documents in MongoDB databases from chat.",
+    highlights: [
+      "Browse databases and collections",
+      "Find, insert, update, and aggregate documents",
+      "Run aggregation pipelines with rich result views",
+    ],
+    requiredAccess: [
+      "Connect to MongoDB with provided credentials",
+      "Execute read and write operations",
+    ],
+    setupHint:
+      "Provide host, port, database, username, and password, or a connection URL.",
   },
 };
 

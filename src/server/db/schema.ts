@@ -774,6 +774,7 @@ export const integrationsRelations = relations(
       references: [users.id],
     }),
     oauthTokens: many(integrationOAuthTokens),
+    databaseConfigs: many(integrationDatabaseConfigs),
   }),
 );
 
@@ -849,6 +850,52 @@ export const integrationOAuthAppsRelations = relations(
     user: one(users, {
       fields: [integrationOAuthApps.userId],
       references: [users.id],
+    }),
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Integration Database Configs
+// ---------------------------------------------------------------------------
+
+export const integrationDatabaseConfigs = sqliteTable(
+  "integration_database_config",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => integrations.id, { onDelete: "cascade" }),
+    encryptedHost: text("encrypted_host").notNull(),
+    encryptedPort: text("encrypted_port").notNull(),
+    encryptedDatabase: text("encrypted_database"),
+    encryptedUsername: text("encrypted_username").notNull(),
+    encryptedPassword: text("encrypted_password").notNull(),
+    encryptedConnectionUrl: text("encrypted_connection_url"),
+    useConnectionUrl: integer("use_connection_url", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    ssl: integer("ssl", { mode: "boolean" }).notNull().default(false),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("integration_db_config_integration_idx").on(table.integrationId),
+  ],
+);
+
+export const integrationDatabaseConfigsRelations = relations(
+  integrationDatabaseConfigs,
+  ({ one }) => ({
+    integration: one(integrations, {
+      fields: [integrationDatabaseConfigs.integrationId],
+      references: [integrations.id],
     }),
   }),
 );
