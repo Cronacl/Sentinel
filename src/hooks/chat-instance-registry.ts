@@ -23,10 +23,12 @@ export function setChatInstance(
   registry.set(threadId, instance);
 }
 
+const CLEANUP_DELAY_MS = 30_000;
+
 export function scheduleChatInstanceCleanup(threadId: string) {
   const timer = setTimeout(() => {
     registry.delete(threadId);
     cleanupTimers.delete(threadId);
-  }, 3000);
+  }, CLEANUP_DELAY_MS);
   cleanupTimers.set(threadId, timer);
 }

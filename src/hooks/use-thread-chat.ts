@@ -108,11 +108,13 @@ export function useThreadChat({
   );
 
   const chatInstanceRef = useRef<Chat<ThreadUIMessage> | null>(null);
+  const restoredFromCacheRef = useRef(false);
 
   if (!chatInstanceRef.current || chatInstanceRef.current.id !== threadId) {
     const existing = getChatInstance(threadId);
     if (existing) {
       chatInstanceRef.current = existing;
+      restoredFromCacheRef.current = true;
     } else {
       chatInstanceRef.current = new Chat<ThreadUIMessage>({
         id: threadId,
@@ -126,12 +128,12 @@ export function useThreadChat({
         transport,
       });
       setChatInstance(threadId, chatInstanceRef.current);
+      restoredFromCacheRef.current = false;
     }
   }
 
   const chatInstance = chatInstanceRef.current;
   const internalChat = chatInstance as unknown as {
-    makeRequest?: (options: InternalChatRequestOptions) => Promise<void>;
     onData?: ChatOnDataCallback<ThreadUIMessage>;
     onError?: (error: Error) => void;
     onFinish?: (() => void) | undefined;
@@ -148,8 +150,14 @@ export function useThreadChat({
 
   const chat = useChat<ThreadUIMessage>({
     chat: chatInstance,
-    resume: true,
+    resume: !restoredFromCacheRef.current,
   });
+
+  const messagesRef = useRef(chat.messages);
+  messagesRef.current = chat.messages;
+  const statusRef = useRef(chat.status);
+  statusRef.current = chat.status;
+
   const lastSyncedSignatureRef = useRef(initialMessagesSignature);
   const syncedThreadIdRef = useRef(threadId);
 
@@ -157,7 +165,13 @@ export function useThreadChat({
     if (syncedThreadIdRef.current !== threadId) {
       syncedThreadIdRef.current = threadId;
       lastSyncedSignatureRef.current = initialMessagesSignature;
-      if (chat.status !== "submitted" && chat.status !== "streaming") {
+
+      if (restoredFromCacheRef.current) {
+        restoredFromCacheRef.current = false;
+        return;
+      }
+
+      if (statusRef.current !== "submitted" && statusRef.current !== "streaming") {
         chat.setMessages(normalizedInitialMessages);
       }
       return;
@@ -167,7 +181,7 @@ export function useThreadChat({
       return;
     }
 
-    if (chat.status === "submitted" || chat.status === "streaming") {
+    if (statusRef.current === "submitted" || statusRef.current === "streaming") {
       return;
     }
 
@@ -175,7 +189,6 @@ export function useThreadChat({
     chat.setMessages(normalizedInitialMessages);
   }, [
     chat.setMessages,
-    chat.status,
     initialMessagesSignature,
     normalizedInitialMessages,
     threadId,
@@ -212,12 +225,12 @@ export function useThreadChat({
         },
       );
     },
-    [chat],
+    [chat.sendMessage],
   );
 
   const answerPlanQuestions = useCallback(
     ({ answers, assistantMessageId, questionSetId }: AnswerPlanQuestionsInput) => {
-      const nextMessages = chat.messages.map((message) => {
+      const nextMessages = messagesRef.current.map((message) => {
         if (message.id !== assistantMessageId) {
           return message;
         }
@@ -255,7 +268,10 @@ export function useThreadChat({
 
       chat.setMessages(nextMessages);
 
-      return internalChat.makeRequest?.({
+      const internal = chatInstanceRef.current as unknown as {
+        makeRequest?: (options: InternalChatRequestOptions) => Promise<void>;
+      };
+      return internal.makeRequest?.({
         body: {
           planAnswers: answers,
           planQuestionSetId: questionSetId,
@@ -267,7 +283,7 @@ export function useThreadChat({
         trigger: "regenerate-message",
       });
     },
-    [chat, internalChat],
+    [chat.setMessages],
   );
 
   const editMessage = useCallback(
@@ -288,12 +304,13 @@ export function useThreadChat({
         ],
         role: "user",
       };
-      const targetIndex = chat.messages.findIndex(
+      const currentMessages = messagesRef.current;
+      const targetIndex = currentMessages.findIndex(
         (message) => message.id === targetMessageId,
       );
 
       if (targetIndex >= 0) {
-        chat.setMessages(chat.messages.slice(0, targetIndex));
+        chat.setMessages(currentMessages.slice(0, targetIndex));
       }
 
       return chat.sendMessage(nextMessage, {
@@ -306,7 +323,7 @@ export function useThreadChat({
         },
       });
     },
-    [chat],
+    [chat.sendMessage, chat.setMessages],
   );
 
   const regenerateMessage = useCallback(
@@ -319,7 +336,7 @@ export function useThreadChat({
         messageId,
       });
     },
-    [chat],
+    [chat.regenerate],
   );
 
   const retryMessage = useCallback(
@@ -332,7 +349,7 @@ export function useThreadChat({
         messageId,
       });
     },
-    [chat],
+    [chat.regenerate],
   );
 
   return {

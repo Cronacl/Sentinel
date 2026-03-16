@@ -48,7 +48,10 @@ import {
   getFirstUserText,
   getParentMessageId,
 } from "./transcript";
-import { getEnabledIntegrations, buildIntegrationContext } from "@/lib/integrations/runtime";
+import {
+  getEnabledIntegrations,
+  buildIntegrationContext,
+} from "@/lib/integrations/runtime";
 import { loadIntegrationTools } from "@/lib/integrations/registry";
 import {
   getSearchProviderRuntime,
