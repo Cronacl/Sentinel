@@ -95,3 +95,21 @@ export const AUTOMATION_REASONING_EFFORTS = [
 ] as const;
 export type AutomationReasoningEffort =
   (typeof AUTOMATION_REASONING_EFFORTS)[number];
+
+export const INTEGRATION_PROVIDERS = [
+  "gmail",
+  "google_calendar",
+  "google_drive",
+  "slack",
+  "notion",
+  "github",
+  "linear",
+] as const;
+export type IntegrationProvider = (typeof INTEGRATION_PROVIDERS)[number];
+
+export const INTEGRATION_AUTH_TYPES = [
+  "oauth",
+  "api_key",
+  "bearer_token",
+] as const;
+export type IntegrationAuthType = (typeof INTEGRATION_AUTH_TYPES)[number];

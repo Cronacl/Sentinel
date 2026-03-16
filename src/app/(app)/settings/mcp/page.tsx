@@ -86,7 +86,7 @@ function RecommendedServerRow({
         </div>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-foreground text-sm font-semibold">
+            <p className="text-foreground text-sm font-medium">
               {server.name}
               <span className="text-muted font-normal">
                 {" "}

@@ -6,19 +6,21 @@ interface SettingsPageWrapperProps extends PropsWithChildren {
   title: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
+  contentClassName?: string;
 }
 
 export function SettingsPageWrapper({
   title,
   subtitle,
   actions,
+  contentClassName,
   children,
 }: SettingsPageWrapperProps) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-clip">
       <div className="sentinel-scroll-shell h-full w-full">
         <div className="sentinel-scroll-area h-[calc(100vh-0.25rem)] w-full px-6 py-8 lg:px-8">
-          <div className="mx-auto w-full max-w-2xl">
+          <div className={`mx-auto w-full ${contentClassName ?? "max-w-2xl"}`}>
             <div className="mb-6 flex items-start justify-between gap-4">
               <div className="app-region-no-drag min-w-0">
                 <div className="flex items-center gap-3">

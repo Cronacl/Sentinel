@@ -94,6 +94,9 @@ function buildCapabilityManifest(
     promptContext.availableSkills.length > 0
       ? `Discovered skills: ${promptContext.availableSkills.length} available. Treat them as routing hints until load_skill is called.`
       : "Discovered skills: none.",
+    promptContext.enabledIntegrations.length > 0
+      ? `Connected integrations: ${promptContext.enabledIntegrations.map((i) => i.label).join(", ")}.`
+      : "Connected integrations: none.",
     promptContext.enabledMcpServers.length > 0
       ? `Enabled MCP servers: ${promptContext.enabledMcpServers.length}. Use them when the task targets those external systems or when the integration is more direct than workspace or web tools.`
       : "Enabled MCP servers: none.",
@@ -173,6 +176,23 @@ function buildMcpToolsSection(promptContext: ThreadPromptContext) {
             .join("\n"),
         )
       : "",
+  );
+}
+
+function buildIntegrationsSection(promptContext: ThreadPromptContext) {
+  if (promptContext.enabledIntegrations.length === 0) {
+    return "";
+  }
+
+  return lines(
+    "## Connected Integrations",
+    "The following integrations are connected and their tools are available for use.",
+    promptContext.enabledIntegrations
+      .map(
+        (integration) =>
+          `- ${integration.label} (${integration.toolCount} tools): Use ${integration.provider.replace(/_/g, " ")} tools when the user asks about ${integration.provider === "gmail" ? "emails, inbox, or messages" : integration.provider === "google_calendar" ? "calendar, events, meetings, or scheduling" : integration.provider.replace(/_/g, " ")}.`,
+      )
+      .join("\n"),
   );
 }
 
@@ -270,6 +290,12 @@ function buildDecisionHeuristics(
     );
     heuristics.push(
       `${step++}. Do not generate a final response until all tasks are completed and validated. If you cannot finish a task, mark it blocked and explain what is unresolved.`,
+    );
+  }
+
+  if (promptContext.enabledIntegrations.length > 0) {
+    heuristics.push(
+      `${step++}. Use integration tools when the user asks about connected services (e.g., gmail tools for email tasks, gcal tools for calendar tasks). Prefer read-only integration tools before mutating ones.`,
     );
   }
 
@@ -384,6 +410,7 @@ export function buildThreadAgentInstructions({
     buildRuntimeSnapshot(promptContext, activeToolNames),
     buildCapabilityManifest(promptContext, activeToolNames),
     buildSkillsSection(promptContext),
+    buildIntegrationsSection(promptContext),
     buildMcpToolsSection(promptContext),
     buildDecisionHeuristics(promptContext, activeToolNames),
     promptContext.threadMode === "plan"

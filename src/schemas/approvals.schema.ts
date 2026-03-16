@@ -9,8 +9,14 @@ export const toolApprovalUpdateItemSchema = z.object({
   toolName: toolApprovalNameSchema,
 });
 
+const groupUpdateSchema = z.object({
+  groupId: z.string(),
+  requireApproval: z.boolean(),
+});
+
 export const approvalsUpdateSchema = z.union([
   toolApprovalUpdateItemSchema,
+  groupUpdateSchema,
   z.object({
     policies: z
       .array(toolApprovalUpdateItemSchema)

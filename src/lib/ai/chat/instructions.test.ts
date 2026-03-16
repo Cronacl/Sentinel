@@ -7,6 +7,7 @@ import { buildThreadAgentInstructions } from "./instructions";
 function createPromptContext(overrides: Record<string, unknown> = {}) {
   return buildThreadPromptContext({
     availableSkills: [],
+    enabledIntegrations: [],
     enabledMcpServers: [],
     mcpToolNames: [],
     memoryPromptLines: [],

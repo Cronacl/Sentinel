@@ -1,5 +1,6 @@
 import { approvalsRouter } from "@/server/api/routers/approvals";
 import { appearanceRouter } from "@/server/api/routers/appearance";
+import { integrationsRouter } from "@/server/api/routers/integrations";
 import { automationsRouter } from "@/server/api/routers/automations";
 import { authRouter } from "@/server/api/routers/auth";
 import { chatPreferencesRouter } from "@/server/api/routers/chat-preferences";
@@ -34,6 +35,7 @@ export const appRouter = createTRPCRouter({
   chatPreferences: chatPreferencesRouter,
   generalSettings: generalSettingsRouter,
   health: healthRouter,
+  integrations: integrationsRouter,
   memory: memoryRouter,
   memorySettings: memorySettingsRouter,
   mcpServers: mcpServersRouter,

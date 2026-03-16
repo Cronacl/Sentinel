@@ -252,7 +252,7 @@ export function CustomSkillInstallSidebar({
               <p className="text-foreground text-sm font-medium">
                 Create a skill from scratch
               </p>
-              <p className="text-muted mt-1 text-xs leading-relaxed">
+              <p className="text-muted mt-1 text-xs">
                 Need to author your own skill instead of installing one? Follow
                 the instructions below.
               </p>

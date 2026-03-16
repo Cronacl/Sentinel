@@ -699,6 +699,7 @@ export function buildTools(options: ThreadAgentCallOptions) {
   return {
     ...buildMemoryTools(options),
     ...(options.mcpTools ?? {}),
+    ...(options.integrationTools ?? {}),
     ...buildSkillTools(options),
     ...buildTaskTools(options),
     ...buildWebTools(options),

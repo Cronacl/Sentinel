@@ -1,5 +1,5 @@
 import type { MemorySettings } from "@/lib/memory";
-import type { MCPTransportId } from "@/server/db/enums";
+import type { IntegrationProvider, MCPTransportId } from "@/server/db/enums";
 import type { ThreadMode, ThreadPlanAudience } from "@/lib/plan";
 import type { PermissionMode } from "@/lib/security";
 import type { SearchSettings } from "@/lib/search";
@@ -8,6 +8,12 @@ import type { SkillMetadata } from "@/lib/skills";
 import type { WebFetchSettings } from "@/lib/webfetch";
 
 import type { ToolApprovalPolicyMap } from "./tool-approval-policy";
+
+export type ThreadPromptIntegration = {
+  provider: IntegrationProvider;
+  label: string;
+  toolCount: number;
+};
 
 export type ThreadPromptPlanSummary = {
   audience: ThreadPlanAudience;
@@ -29,6 +35,7 @@ export type ThreadPromptMcpServer = {
 
 export type ThreadPromptContext = {
   availableSkills: SkillMetadata[];
+  enabledIntegrations: ThreadPromptIntegration[];
   enabledMcpServers: ThreadPromptMcpServer[];
   mcpToolNames: string[];
   memoryPromptLines: string[];
@@ -68,6 +75,9 @@ export function buildThreadPromptContext(
   return {
     ...input,
     availableSkills: [...input.availableSkills],
+    enabledIntegrations: [...input.enabledIntegrations].sort((left, right) =>
+      left.label.localeCompare(right.label, undefined, { sensitivity: "base" }),
+    ),
     enabledMcpServers: [...input.enabledMcpServers].sort((left, right) =>
       left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
     ),

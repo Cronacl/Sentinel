@@ -20,6 +20,22 @@ export const TOOL_APPROVAL_TOOL_NAMES = [
   "forget_memory",
   "websearch",
   "webfetch",
+  "gmail_search",
+  "gmail_get_email",
+  "gmail_send",
+  "gmail_reply",
+  "gmail_create_draft",
+  "gmail_list_labels",
+  "gmail_manage_labels",
+  "gmail_archive",
+  "gmail_trash",
+  "gcal_list_calendars",
+  "gcal_get_events",
+  "gcal_get_event",
+  "gcal_create_event",
+  "gcal_update_event",
+  "gcal_delete_event",
+  "gcal_get_free_busy",
 ] as const;
 
 export type ToolApprovalToolName = (typeof TOOL_APPROVAL_TOOL_NAMES)[number];
@@ -27,8 +43,59 @@ export type ToolApprovalToolName = (typeof TOOL_APPROVAL_TOOL_NAMES)[number];
 type ToolApprovalMetadata = {
   defaultRequireApproval: boolean;
   description: string;
+  group?: string;
   label: string;
   riskSummary: string;
+};
+
+export type ToolApprovalGroup = {
+  defaultRequireApproval: boolean;
+  description: string;
+  label: string;
+  provider: string;
+  riskSummary: string;
+  toolNames: readonly string[];
+};
+
+export const TOOL_APPROVAL_GROUPS: Record<string, ToolApprovalGroup> = {
+  gmail: {
+    defaultRequireApproval: true,
+    description:
+      "Gmail tools for searching, reading, sending, and managing emails.",
+    label: "Gmail",
+    provider: "gmail",
+    riskSummary:
+      "Sentinel can search, read, send, and manage your Gmail emails.",
+    toolNames: [
+      "gmail_search",
+      "gmail_get_email",
+      "gmail_send",
+      "gmail_reply",
+      "gmail_create_draft",
+      "gmail_list_labels",
+      "gmail_manage_labels",
+      "gmail_archive",
+      "gmail_trash",
+    ],
+  },
+  google_calendar: {
+    defaultRequireApproval: true,
+    description:
+      "Google Calendar tools for viewing, creating, and managing events.",
+    label: "Google Calendar",
+    provider: "google_calendar",
+    riskSummary:
+      "Sentinel can view, create, update, and delete your Google Calendar events.",
+    toolNames: [
+      "gcal_list_calendars",
+      "gcal_get_events",
+      "gcal_get_event",
+      "gcal_create_event",
+      "gcal_update_event",
+      "gcal_delete_event",
+      "gcal_get_free_busy",
+    ],
+  },
 };
 
 export const TOOL_APPROVAL_METADATA: Record<
@@ -185,6 +252,118 @@ export const TOOL_APPROVAL_METADATA: Record<
     riskSummary:
       "Sentinel can access remote URLs immediately, including user-shared documentation and external pages.",
   },
+  gmail_search: {
+    defaultRequireApproval: false,
+    description: "Search emails by query, label, or date.",
+    group: "gmail",
+    label: "Gmail search",
+    riskSummary: "Sentinel can search your Gmail emails without stopping for confirmation.",
+  },
+  gmail_get_email: {
+    defaultRequireApproval: false,
+    description: "Get full email content by ID.",
+    group: "gmail",
+    label: "Gmail get email",
+    riskSummary: "Sentinel can read your Gmail emails without stopping for confirmation.",
+  },
+  gmail_send: {
+    defaultRequireApproval: true,
+    description: "Send a new email.",
+    group: "gmail",
+    label: "Gmail send",
+    riskSummary: "Sentinel can send emails from your Gmail account without stopping for confirmation.",
+  },
+  gmail_reply: {
+    defaultRequireApproval: true,
+    description: "Reply to an email thread.",
+    group: "gmail",
+    label: "Gmail reply",
+    riskSummary: "Sentinel can reply to emails from your Gmail account without stopping for confirmation.",
+  },
+  gmail_create_draft: {
+    defaultRequireApproval: true,
+    description: "Create a draft email.",
+    group: "gmail",
+    label: "Gmail create draft",
+    riskSummary: "Sentinel can create draft emails in your Gmail account without stopping for confirmation.",
+  },
+  gmail_list_labels: {
+    defaultRequireApproval: false,
+    description: "List Gmail labels.",
+    group: "gmail",
+    label: "Gmail list labels",
+    riskSummary: "Sentinel can view your Gmail labels without stopping for confirmation.",
+  },
+  gmail_manage_labels: {
+    defaultRequireApproval: true,
+    description: "Add or remove labels from emails.",
+    group: "gmail",
+    label: "Gmail manage labels",
+    riskSummary: "Sentinel can modify labels on your emails without stopping for confirmation.",
+  },
+  gmail_archive: {
+    defaultRequireApproval: true,
+    description: "Archive an email.",
+    group: "gmail",
+    label: "Gmail archive",
+    riskSummary: "Sentinel can archive your emails without stopping for confirmation.",
+  },
+  gmail_trash: {
+    defaultRequireApproval: true,
+    description: "Move email to trash.",
+    group: "gmail",
+    label: "Gmail trash",
+    riskSummary: "Sentinel can trash your emails without stopping for confirmation.",
+  },
+  gcal_list_calendars: {
+    defaultRequireApproval: false,
+    description: "List user's calendars.",
+    group: "google_calendar",
+    label: "Calendar list",
+    riskSummary: "Sentinel can view your calendar list without stopping for confirmation.",
+  },
+  gcal_get_events: {
+    defaultRequireApproval: false,
+    description: "Get events in a date range.",
+    group: "google_calendar",
+    label: "Calendar get events",
+    riskSummary: "Sentinel can view your calendar events without stopping for confirmation.",
+  },
+  gcal_get_event: {
+    defaultRequireApproval: false,
+    description: "Get a single event's details.",
+    group: "google_calendar",
+    label: "Calendar get event",
+    riskSummary: "Sentinel can view event details without stopping for confirmation.",
+  },
+  gcal_create_event: {
+    defaultRequireApproval: true,
+    description: "Create a new event.",
+    group: "google_calendar",
+    label: "Calendar create event",
+    riskSummary: "Sentinel can create events on your calendar without stopping for confirmation.",
+  },
+  gcal_update_event: {
+    defaultRequireApproval: true,
+    description: "Update an existing event.",
+    group: "google_calendar",
+    label: "Calendar update event",
+    riskSummary: "Sentinel can modify your calendar events without stopping for confirmation.",
+  },
+  gcal_delete_event: {
+    defaultRequireApproval: true,
+    description: "Delete an event.",
+    group: "google_calendar",
+    label: "Calendar delete event",
+    riskSummary: "Sentinel can delete your calendar events without stopping for confirmation.",
+  },
+  gcal_get_free_busy: {
+    defaultRequireApproval: false,
+    description: "Check free/busy status.",
+    group: "google_calendar",
+    label: "Calendar free/busy",
+    riskSummary: "Sentinel can check your availability without stopping for confirmation.",
+  },
 };
 
 export type ToolApprovalPolicyMap = Record<ToolApprovalToolName, boolean>;
@@ -227,6 +406,13 @@ export function buildToolApprovalOverrideMap(
   const overrides: Partial<ToolApprovalPolicyMap> = {};
 
   for (const record of records) {
+    if (record.toolName.startsWith("group:")) {
+      (overrides as Record<string, boolean>)[record.toolName] = Boolean(
+        record.requireApproval,
+      );
+      continue;
+    }
+
     if (!isToolApprovalToolName(record.toolName)) {
       continue;
     }
@@ -240,10 +426,31 @@ export function buildToolApprovalOverrideMap(
 export function resolveToolApprovalPolicies(
   overrides?: Partial<ToolApprovalPolicyMap>,
 ): ToolApprovalPolicyMap {
-  return {
-    ...DEFAULT_TOOL_APPROVAL_POLICIES,
-    ...(overrides ?? {}),
-  };
+  const resolved = { ...DEFAULT_TOOL_APPROVAL_POLICIES };
+
+  if (!overrides) return resolved;
+
+  for (const [groupKey, group] of Object.entries(TOOL_APPROVAL_GROUPS)) {
+    const groupOverride = (overrides as Record<string, boolean>)[
+      `group:${groupKey}`
+    ];
+    if (typeof groupOverride === "boolean") {
+      for (const toolName of group.toolNames) {
+        if (toolName in resolved) {
+          (resolved as Record<string, boolean>)[toolName] = groupOverride;
+        }
+      }
+    }
+  }
+
+  for (const [toolName, value] of Object.entries(overrides)) {
+    if (toolName.startsWith("group:")) continue;
+    if (toolName in resolved && typeof value === "boolean") {
+      (resolved as Record<string, boolean>)[toolName] = value;
+    }
+  }
+
+  return resolved;
 }
 
 export function buildEffectiveToolApprovalPolicies(

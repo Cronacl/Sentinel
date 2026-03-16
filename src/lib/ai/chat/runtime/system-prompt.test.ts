@@ -7,6 +7,7 @@ import { buildSystemPrompt } from "./system-prompt-builder";
 function createPromptContext(memoryPromptLines: string[] = []) {
   return buildThreadPromptContext({
     availableSkills: [],
+    enabledIntegrations: [],
     enabledMcpServers: [],
     mcpToolNames: [],
     memoryPromptLines,

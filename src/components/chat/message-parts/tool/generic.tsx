@@ -4,7 +4,7 @@ import { Button } from "@heroui/react";
 import { memo, useEffect, useState } from "react";
 
 import type { RendererProps } from "./renderer";
-import { ToolLayout } from "./renderers/tool-layout";
+import { ToolLayout } from "./renderers/shared/tool-layout";
 import { getToolName, getToolStateLabel, stringifyJson } from "../types";
 
 function JsonBlock({ value }: { value: unknown }) {

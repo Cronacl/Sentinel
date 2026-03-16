@@ -81,9 +81,7 @@ function PlanSidebarBody({ plan }: { plan: SidebarPlanData }) {
       <p className="text-[11px] text-foreground/40">{metaParts.join(" · ")}</p>
 
       {trimmedGoal ? (
-        <p className="mt-2.5 text-[13px] leading-relaxed text-foreground/70">
-          {trimmedGoal}
-        </p>
+        <p className="mt-2.5 text-[13px] text-foreground/70">{trimmedGoal}</p>
       ) : null}
 
       {taskCount > 0 && plan.tasks ? (

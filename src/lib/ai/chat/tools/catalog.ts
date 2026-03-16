@@ -1,6 +1,7 @@
 export type ToolCategory =
   | "execution"
   | "inspection"
+  | "integration"
   | "memory"
   | "mutation"
   | "plan"
@@ -13,7 +14,10 @@ export type ToolCatalogEntry = {
   label: string;
 };
 
+import { INTEGRATION_TOOL_CATALOG } from "@/lib/integrations/catalog";
+
 export const TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
+  ...INTEGRATION_TOOL_CATALOG,
   list: {
     capability: "to browse directory structure",
     category: "inspection",

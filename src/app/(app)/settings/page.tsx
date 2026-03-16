@@ -342,7 +342,7 @@ export default function GeneralSettingsPage() {
               </div>
             </section>
 
-            <section className="border-separator bg-surface rounded-xl border p-5">
+            <section className="border-separator mt-5 bg-surface rounded-xl border p-5">
               <div className="mb-5 space-y-1">
                 <h2 className="text-foreground text-base font-medium">
                   Skills directory

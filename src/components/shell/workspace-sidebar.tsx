@@ -1257,7 +1257,7 @@ export function WorkspaceSidebar() {
 
       <div className="flex shrink-0 items-center gap-1 px-4">
         <div className="min-w-0 flex-1">
-          <h2 className="text-foreground/45 px-2 text-xs font-medium  tracking-wide">
+          <h2 className="text-foreground/45 px-2 text-xs font-medium">
             Threads
           </h2>
         </div>

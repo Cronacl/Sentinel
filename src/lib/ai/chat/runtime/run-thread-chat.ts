@@ -48,6 +48,8 @@ import {
   getFirstUserText,
   getParentMessageId,
 } from "./transcript";
+import { getEnabledIntegrations, buildIntegrationContext } from "@/lib/integrations/runtime";
+import { loadIntegrationTools } from "@/lib/integrations/registry";
 import {
   getSearchProviderRuntime,
   getSearchSettings,
@@ -161,6 +163,7 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
     webFetchSettings,
     planState,
     skillsBasePath,
+    enabledIntegrations,
   ] = await Promise.all([
     getWorkspaceRootPath(request.workspaceId, request.userId),
     getToolPermissionMode(request.userId),
@@ -174,6 +177,7 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
       threadId: request.threadId,
     }).catch(() => ({ pendingQuestionSet: null, plan: null })),
     getSkillsBasePath(request.userId),
+    getEnabledIntegrations(request.userId).catch(() => []),
   ]);
   const skillSnapshot = await getSkillSnapshot({
     workspaceRoot,
@@ -295,8 +299,42 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
             : { closeAll: async () => {}, tools: {} };
         closeMcpTools = mcpRuntime.closeAll;
         const mcpToolNames = Object.keys(mcpRuntime.tools);
+
+        const integrationContext =
+          threadMode === "chat" && enabledIntegrations.length > 0
+            ? await buildIntegrationContext(enabledIntegrations)
+            : { tokens: {} };
+
+        const integrationApprovalFn = (toolName: string) =>
+          (toolApprovalPolicies as Record<string, boolean>)[toolName] ?? true;
+
+        const integrationTools =
+          threadMode === "chat" && enabledIntegrations.length > 0
+            ? await loadIntegrationTools(
+                enabledIntegrations.map((i) => i.provider),
+                integrationContext,
+                integrationApprovalFn,
+              )
+            : {};
+
         const promptContext = buildThreadPromptContext({
           availableSkills: skillSnapshot.skills,
+          enabledIntegrations: enabledIntegrations.map((i) => ({
+            provider: i.provider,
+            label:
+              i.provider === "gmail"
+                ? "Gmail"
+                : i.provider === "google_calendar"
+                  ? "Google Calendar"
+                  : i.provider,
+            toolCount: Object.keys(integrationTools).filter((name) =>
+              i.provider === "gmail"
+                ? name.startsWith("gmail_")
+                : i.provider === "google_calendar"
+                  ? name.startsWith("gcal_")
+                  : false,
+            ).length,
+          })),
           enabledMcpServers: mcpServers
             .filter((entry) => entry.isEnabled)
             .map((entry) => {
@@ -365,6 +403,7 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
             availableSkills: skillSnapshot.skills,
             ...(workspaceRoot ? { defaultDirectory: workspaceRoot } : {}),
             globalSkillsBasePath: skillsBasePath,
+            integrationTools,
             mcpTools: mcpRuntime.tools,
             memorySettings,
             permissionMode,

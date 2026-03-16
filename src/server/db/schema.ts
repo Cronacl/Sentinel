@@ -14,6 +14,8 @@ import {
   AUTOMATION_RUN_STATUSES,
   AUTOMATION_SCHEDULE_TYPES,
   AUTOMATION_STATUSES,
+  INTEGRATION_AUTH_TYPES,
+  INTEGRATION_PROVIDERS,
   MCP_SERVER_CATALOG_IDS,
   MCP_TRANSPORTS,
   PERMISSION_MODES,
@@ -105,6 +107,8 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   memorySettings: many(memorySettings),
   toolApprovalPolicies: many(toolApprovalPolicies),
   automations: many(automations),
+  integrations: many(integrations),
+  integrationOAuthApps: many(integrationOAuthApps),
 }));
 
 export const workspaces = sqliteTable(
@@ -724,3 +728,127 @@ export const automationRunsRelations = relations(automationRuns, ({ one }) => ({
     references: [threads.id],
   }),
 }));
+
+// ---------------------------------------------------------------------------
+// Integrations
+// ---------------------------------------------------------------------------
+
+export const integrations = sqliteTable(
+  "integration",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    userId: text("user_id").notNull(),
+    provider: text("provider", { enum: INTEGRATION_PROVIDERS }).notNull(),
+    authType: text("auth_type", { enum: INTEGRATION_AUTH_TYPES })
+      .notNull()
+      .default("oauth"),
+    isEnabled: integer("is_enabled", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    metadata: text("metadata", { mode: "json" }),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("integration_user_provider_unique").on(
+      table.userId,
+      table.provider,
+    ),
+    index("integration_user_id_idx").on(table.userId),
+    index("integration_user_enabled_idx").on(table.userId, table.isEnabled),
+  ],
+);
+
+export const integrationsRelations = relations(
+  integrations,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [integrations.userId],
+      references: [users.id],
+    }),
+    oauthTokens: many(integrationOAuthTokens),
+  }),
+);
+
+export const integrationOAuthTokens = sqliteTable(
+  "integration_oauth_token",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    integrationId: text("integration_id")
+      .notNull()
+      .references(() => integrations.id, { onDelete: "cascade" }),
+    encryptedAccessToken: text("encrypted_access_token").notNull(),
+    encryptedRefreshToken: text("encrypted_refresh_token"),
+    tokenType: text("token_type").notNull().default("Bearer"),
+    scope: text("scope"),
+    expiresAt: integer("expires_at", { mode: "timestamp" }),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("integration_oauth_token_integration_idx").on(table.integrationId),
+  ],
+);
+
+export const integrationOAuthTokensRelations = relations(
+  integrationOAuthTokens,
+  ({ one }) => ({
+    integration: one(integrations, {
+      fields: [integrationOAuthTokens.integrationId],
+      references: [integrations.id],
+    }),
+  }),
+);
+
+export const integrationOAuthApps = sqliteTable(
+  "integration_oauth_app",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    userId: text("user_id").notNull(),
+    provider: text("provider", { enum: INTEGRATION_PROVIDERS }).notNull(),
+    encryptedClientId: text("encrypted_client_id").notNull(),
+    encryptedClientSecret: text("encrypted_client_secret").notNull(),
+    redirectUri: text("redirect_uri"),
+    scopes: text("scopes"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("integration_oauth_app_user_provider_unique").on(
+      table.userId,
+      table.provider,
+    ),
+    index("integration_oauth_app_user_id_idx").on(table.userId),
+  ],
+);
+
+export const integrationOAuthAppsRelations = relations(
+  integrationOAuthApps,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [integrationOAuthApps.userId],
+      references: [users.id],
+    }),
+  }),
+);

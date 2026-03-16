@@ -116,6 +116,10 @@ body {
   word-break: break-word;
 }
 
+button[type="button"] {
+  cursor: pointer;
+}
+
 .sentinel-composer-editor.ProseMirror p.is-editor-empty:first-child::before {
   color: color-mix(in srgb, var(--foreground) 38%, transparent);
   content: attr(data-placeholder);

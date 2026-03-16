@@ -442,6 +442,59 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
   db.run(
     sql`CREATE INDEX IF NOT EXISTS "automation_run_thread_id_idx" ON "automation_run" ("thread_id")`,
   );
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS "integration" (
+    "id" text PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL,
+    "provider" text NOT NULL,
+    "auth_type" text DEFAULT 'oauth' NOT NULL,
+    "is_enabled" integer DEFAULT true NOT NULL,
+    "metadata" text,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "integration_user_provider_unique" ON "integration" ("user_id", "provider")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "integration_user_id_idx" ON "integration" ("user_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "integration_user_enabled_idx" ON "integration" ("user_id", "is_enabled")`,
+  );
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS "integration_oauth_token" (
+    "id" text PRIMARY KEY NOT NULL,
+    "integration_id" text NOT NULL REFERENCES "integration"("id") ON DELETE CASCADE,
+    "encrypted_access_token" text NOT NULL,
+    "encrypted_refresh_token" text,
+    "token_type" text DEFAULT 'Bearer' NOT NULL,
+    "scope" text,
+    "expires_at" integer,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "integration_oauth_token_integration_idx" ON "integration_oauth_token" ("integration_id")`,
+  );
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS "integration_oauth_app" (
+    "id" text PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL,
+    "provider" text NOT NULL,
+    "encrypted_client_id" text NOT NULL,
+    "encrypted_client_secret" text NOT NULL,
+    "redirect_uri" text,
+    "scopes" text,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "integration_oauth_app_user_provider_unique" ON "integration_oauth_app" ("user_id", "provider")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "integration_oauth_app_user_id_idx" ON "integration_oauth_app" ("user_id")`,
+  );
 }
 
 function initVectorDb(): Database.Database | null {

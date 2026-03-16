@@ -145,9 +145,11 @@ export default function ApprovalsSettingsPage() {
     onMutate: async (input) => {
       const previousApprovals = utils.approvals.get.getData();
 
-      utils.approvals.get.setData(undefined, (current) =>
-        applyUpdates(current, input),
-      );
+      if (!("groupId" in input)) {
+        utils.approvals.get.setData(undefined, (current) =>
+          applyUpdates(current, input),
+        );
+      }
 
       return { previousApprovals };
     },
