@@ -13,6 +13,7 @@ export type IntegrationMetadata = {
 export const READY_INTEGRATION_PROVIDERS = new Set<IntegrationProvider>([
   "gmail",
   "google_calendar",
+  "google_drive",
 ]);
 
 export const INTEGRATION_METADATA: Record<
@@ -50,16 +51,20 @@ export const INTEGRATION_METADATA: Record<
       "Use a Google Cloud OAuth client with the Google Calendar API enabled for your project.",
   },
   google_drive: {
-    availability: "coming_soon",
+    availability: "ready",
     description:
-      "Google Drive access is planned, but setup is not available in this build yet.",
+      "Search, browse, upload, download, and organize files in Google Drive from chat.",
     highlights: [
-      "Planned file browsing and retrieval support",
-      "Will follow the same local-first credential model",
+      "Search and browse files and folders",
+      "Upload local files and download Drive files to workspace",
+      "Share, move, rename, and organize files",
     ],
-    requiredAccess: [],
+    requiredAccess: [
+      "Read files, folders, and metadata",
+      "Upload, download, move, rename, trash, and share files",
+    ],
     setupHint:
-      "Setup will unlock once Drive tooling and OAuth scopes are ready.",
+      "Use a Google Cloud OAuth client with the Google Drive API enabled for your project.",
   },
   slack: {
     availability: "coming_soon",

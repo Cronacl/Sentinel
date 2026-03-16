@@ -21,6 +21,12 @@ const PROVIDER_TOOL_LOADERS: Partial<
     );
     return buildGoogleCalendarTools;
   },
+  google_drive: async () => {
+    const { buildGoogleDriveTools } = await import(
+      "./providers/google-drive/tools"
+    );
+    return buildGoogleDriveTools;
+  },
 };
 
 export async function loadIntegrationTools(

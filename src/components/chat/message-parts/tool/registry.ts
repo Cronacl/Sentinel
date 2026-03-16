@@ -31,6 +31,12 @@ import { GCalFreeBusyTool } from "./renderers/integrations/gcal/gcal-free-busy";
 import { GCalQuickAddTool } from "./renderers/integrations/gcal/gcal-quick-add";
 import { GCalRsvpTool } from "./renderers/integrations/gcal/gcal-rsvp";
 import { GCalMoveEventTool } from "./renderers/integrations/gcal/gcal-move-event";
+import { GDriveSearchTool } from "./renderers/integrations/gdrive/gdrive-search";
+import { GDriveFileDetailTool } from "./renderers/integrations/gdrive/gdrive-file-detail";
+import { GDriveUploadTool } from "./renderers/integrations/gdrive/gdrive-upload";
+import { GDriveDownloadTool } from "./renderers/integrations/gdrive/gdrive-download";
+import { GDriveActionTool } from "./renderers/integrations/gdrive/gdrive-action";
+import { GDriveFolderTool } from "./renderers/integrations/gdrive/gdrive-folder";
 import { IntegrationGenericTool } from "./renderers/integrations/shared/generic";
 
 const renderers: Record<string, Renderer> = {
@@ -89,10 +95,25 @@ const renderers: Record<string, Renderer> = {
   gcal_rsvp: GCalRsvpTool,
   gcal_move_event: GCalMoveEventTool,
   gcal_get_today: GCalEventsTool,
+
+  gdrive_search: GDriveSearchTool,
+  gdrive_list_files: GDriveSearchTool,
+  gdrive_get_file: GDriveFileDetailTool,
+  gdrive_create_folder: GDriveFolderTool,
+  gdrive_upload: GDriveUploadTool,
+  gdrive_download: GDriveDownloadTool,
+  gdrive_move: GDriveActionTool,
+  gdrive_rename: GDriveActionTool,
+  gdrive_trash: GDriveActionTool,
+  gdrive_share: GDriveActionTool,
 };
 
 function isIntegrationToolName(name: string) {
-  return name.startsWith("gmail_") || name.startsWith("gcal_");
+  return (
+    name.startsWith("gmail_") ||
+    name.startsWith("gcal_") ||
+    name.startsWith("gdrive_")
+  );
 }
 
 function shouldUseIntegrationGeneric(part: ToolPart) {

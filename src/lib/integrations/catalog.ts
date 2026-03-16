@@ -136,4 +136,54 @@ export const INTEGRATION_TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     category: "integration",
     label: "gcal_get_today",
   },
+  gdrive_search: {
+    capability: "to search Google Drive files by name or content",
+    category: "integration",
+    label: "gdrive_search",
+  },
+  gdrive_list_files: {
+    capability: "to list files in a Google Drive folder",
+    category: "integration",
+    label: "gdrive_list_files",
+  },
+  gdrive_get_file: {
+    capability: "to get file metadata and text content from Google Drive",
+    category: "integration",
+    label: "gdrive_get_file",
+  },
+  gdrive_create_folder: {
+    capability: "to create a new folder in Google Drive",
+    category: "integration",
+    label: "gdrive_create_folder",
+  },
+  gdrive_upload: {
+    capability: "to upload a local file to Google Drive",
+    category: "integration",
+    label: "gdrive_upload",
+  },
+  gdrive_download: {
+    capability: "to download a Google Drive file to the local filesystem",
+    category: "integration",
+    label: "gdrive_download",
+  },
+  gdrive_move: {
+    capability: "to move a file to a different folder in Google Drive",
+    category: "integration",
+    label: "gdrive_move",
+  },
+  gdrive_rename: {
+    capability: "to rename a file in Google Drive",
+    category: "integration",
+    label: "gdrive_rename",
+  },
+  gdrive_trash: {
+    capability: "to move a Google Drive file to trash",
+    category: "integration",
+    label: "gdrive_trash",
+  },
+  gdrive_share: {
+    capability: "to share a Google Drive file with another user",
+    category: "integration",
+    label: "gdrive_share",
+  },
 };

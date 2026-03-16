@@ -16,9 +16,14 @@ const GOOGLE_CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
 ];
 
+const GOOGLE_DRIVE_SCOPES = [
+  "https://www.googleapis.com/auth/drive",
+];
+
 const PROVIDER_SCOPES: Partial<Record<IntegrationProvider, string[]>> = {
   gmail: GMAIL_SCOPES,
   google_calendar: GOOGLE_CALENDAR_SCOPES,
+  google_drive: GOOGLE_DRIVE_SCOPES,
 };
 
 export function getGoogleOAuthConfig(
@@ -39,5 +44,9 @@ export function getGoogleOAuthConfig(
 }
 
 export function isGoogleProvider(provider: IntegrationProvider): boolean {
-  return provider === "gmail" || provider === "google_calendar";
+  return (
+    provider === "gmail" ||
+    provider === "google_calendar" ||
+    provider === "google_drive"
+  );
 }

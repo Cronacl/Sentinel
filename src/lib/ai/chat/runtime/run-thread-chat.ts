@@ -326,13 +326,17 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
                 ? "Gmail"
                 : i.provider === "google_calendar"
                   ? "Google Calendar"
-                  : i.provider,
+                  : i.provider === "google_drive"
+                    ? "Google Drive"
+                    : i.provider,
             toolCount: Object.keys(integrationTools).filter((name) =>
               i.provider === "gmail"
                 ? name.startsWith("gmail_")
                 : i.provider === "google_calendar"
                   ? name.startsWith("gcal_")
-                  : false,
+                  : i.provider === "google_drive"
+                    ? name.startsWith("gdrive_")
+                    : false,
             ).length,
           })),
           enabledMcpServers: mcpServers
