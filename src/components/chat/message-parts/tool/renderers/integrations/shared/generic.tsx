@@ -18,12 +18,14 @@ function getProviderFromToolName(toolName: string) {
     return { provider: "google_calendar", label: "Calendar" };
   if (toolName.startsWith("gdrive_"))
     return { provider: "google_drive", label: "Drive" };
+  if (toolName.startsWith("gh_"))
+    return { provider: "github", label: "GitHub" };
   return { provider: "unknown", label: "Integration" };
 }
 
 function humanizeToolName(toolName: string): string {
   return toolName
-    .replace(/^(gmail_|gcal_|gdrive_)/, "")
+    .replace(/^(gmail_|gcal_|gdrive_|gh_)/, "")
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }

@@ -28,6 +28,57 @@ import type { IntegrationProvider } from "@/server/db/enums";
 import { api } from "@/trpc/react";
 import { useRightSidebar } from "@/components/shell/shell-context";
 
+function isGoogleIntegration(provider: IntegrationProvider) {
+  return (
+    provider === "gmail" ||
+    provider === "google_calendar" ||
+    provider === "google_drive"
+  );
+}
+
+function getProviderCopy(provider: IntegrationProvider) {
+  if (isGoogleIntegration(provider)) {
+    return {
+      clientIdPlaceholder:
+        "1234567890-abcdefghijklmnopqrstuvwxyz.apps.googleusercontent.com",
+      clientIdDescription:
+        "Paste the OAuth client ID from your Google Cloud credentials.",
+      clientSecretPlaceholder: "GOCSPX-...",
+      clientSecretDescription: "Paste the OAuth client secret from Google Cloud.",
+      redirectUriDescription:
+        "This must exactly match an authorized redirect URI in your Google Cloud OAuth client.",
+      redirectUriNote:
+        "Google compares this value exactly. If your authorized URI uses `127.0.0.1` but the app is open on `localhost`, keep the registered value here.",
+    };
+  }
+
+  if (provider === "github") {
+    return {
+      clientIdPlaceholder: "Iv1.a1b2c3d4e5f6g7h8",
+      clientIdDescription:
+        "Paste the Client ID from your GitHub OAuth App settings.",
+      clientSecretPlaceholder: "your-client-secret",
+      clientSecretDescription:
+        "Paste the Client Secret from your GitHub OAuth App.",
+      redirectUriDescription:
+        "This must match the Authorization callback URL in your GitHub OAuth App.",
+      redirectUriNote:
+        "Enter this URL as the Authorization callback URL in your GitHub OAuth App settings.",
+    };
+  }
+
+  return {
+    clientIdPlaceholder: "client-id",
+    clientIdDescription: "Paste the OAuth client ID.",
+    clientSecretPlaceholder: "client-secret",
+    clientSecretDescription: "Paste the OAuth client secret.",
+    redirectUriDescription:
+      "This must match the redirect URI configured in your OAuth application.",
+    redirectUriNote:
+      "Copy this URI into your OAuth application's redirect URI settings.",
+  };
+}
+
 const integrationConfigFormSchema = z.object({
   clientId: z.string().trim().min(1, "Client ID is required."),
   clientSecret: z.string(),
@@ -96,6 +147,7 @@ export function IntegrationConfigSidebar({
   const utils = api.useUtils();
   const metadata = INTEGRATION_METADATA[integration.provider];
   const isSetupReady = isIntegrationSetupReady(integration.provider);
+  const providerCopy = getProviderCopy(integration.provider);
   const [submitError, setSubmitError] = useState("");
 
   const form = useForm<IntegrationConfigFormValues>({
@@ -404,11 +456,10 @@ export function IntegrationConfigSidebar({
 
                     <ControlledTextField
                       control={form.control}
-                      description="Paste the OAuth client ID from your Google Cloud credentials."
+                      description={providerCopy.clientIdDescription}
                       inputProps={{
                         autoComplete: "off",
-                        placeholder:
-                          "1234567890-abcdefghijklmnopqrstuvwxyz.apps.googleusercontent.com",
+                        placeholder: providerCopy.clientIdPlaceholder,
                       }}
                       label="Client ID"
                       name="clientId"
@@ -420,13 +471,13 @@ export function IntegrationConfigSidebar({
                       description={
                         existingOAuthApp?.hasClientSecret
                           ? "Leave blank to keep the current secret, or paste a new one to replace it."
-                          : "Paste the OAuth client secret from Google Cloud."
+                          : providerCopy.clientSecretDescription
                       }
                       inputProps={{
                         autoComplete: "off",
                         placeholder: existingOAuthApp?.hasClientSecret
                           ? "Current secret is already stored"
-                          : "GOCSPX-...",
+                          : providerCopy.clientSecretPlaceholder,
                         type: "password",
                       }}
                       label="Client Secret"
@@ -435,7 +486,7 @@ export function IntegrationConfigSidebar({
 
                     <ControlledTextField
                       control={form.control}
-                      description="This must exactly match an authorized redirect URI in your Google Cloud OAuth client."
+                      description={providerCopy.redirectUriDescription}
                       inputProps={{
                         autoComplete: "off",
                         placeholder:
@@ -453,9 +504,7 @@ export function IntegrationConfigSidebar({
                 <SidebarSection title="Redirect URI">
                   <div className="space-y-2">
                     <p className="text-xs text-foreground/70">
-                      Google compares this value exactly. If your authorized URI
-                      uses `127.0.0.1` but the app is open on `localhost`, keep
-                      the registered value here.
+                      {providerCopy.redirectUriNote}
                     </p>
                     <code className="block overflow-x-auto rounded-xl border border-border/50 bg-background px-3 py-2 text-[11px] text-foreground">
                       {form.watch("redirectUri") ||

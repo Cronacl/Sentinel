@@ -14,7 +14,20 @@ import {
 import type { IntegrationProvider } from "@/server/db/enums";
 
 import { getGoogleOAuthConfig, isGoogleProvider } from "./providers/google";
-import type { OAuthAppConfig, OAuthTokenResult } from "../types";
+import { getGitHubOAuthConfig, isGitHubProvider } from "./providers/github";
+import type {
+  OAuthAppConfig,
+  OAuthProviderConfig,
+  OAuthTokenResult,
+} from "../types";
+
+function resolveOAuthConfig(
+  provider: IntegrationProvider,
+): OAuthProviderConfig {
+  if (isGoogleProvider(provider)) return getGoogleOAuthConfig(provider);
+  if (isGitHubProvider(provider)) return getGitHubOAuthConfig();
+  throw new Error(`No OAuth config for provider: ${provider}`);
+}
 
 function generateState(provider: IntegrationProvider, userId: string): string {
   const payload = JSON.stringify({
@@ -61,11 +74,7 @@ export async function beginIntegrationOAuth(
   provider: IntegrationProvider,
   userId: string,
 ): Promise<string> {
-  if (!isGoogleProvider(provider)) {
-    throw new Error(`OAuth flow not supported for provider: ${provider}`);
-  }
-
-  const oauthConfig = getGoogleOAuthConfig(provider);
+  const oauthConfig = resolveOAuthConfig(provider);
   const appConfig = await resolveOAuthAppConfig(userId, provider);
   const state = generateState(provider, userId);
 
@@ -75,9 +84,12 @@ export async function beginIntegrationOAuth(
     response_type: "code",
     scope: oauthConfig.scopes.join(" "),
     state,
-    access_type: "offline",
-    prompt: "consent",
   });
+
+  if (isGoogleProvider(provider)) {
+    params.set("access_type", "offline");
+    params.set("prompt", "consent");
+  }
 
   return `${oauthConfig.authorizationEndpoint}?${params.toString()}`;
 }
@@ -87,24 +99,32 @@ export async function completeIntegrationOAuth(
   state: string,
 ): Promise<void> {
   const { provider, userId } = parseState(state);
+  const oauthConfig = resolveOAuthConfig(provider);
+  const appConfig = await resolveOAuthAppConfig(userId, provider);
 
-  if (!isGoogleProvider(provider)) {
-    throw new Error(`OAuth flow not supported for provider: ${provider}`);
+  const headers: Record<string, string> = {
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
+
+  if (isGitHubProvider(provider)) {
+    headers["Accept"] = "application/json";
   }
 
-  const oauthConfig = getGoogleOAuthConfig(provider);
-  const appConfig = await resolveOAuthAppConfig(userId, provider);
+  const body = new URLSearchParams({
+    client_id: appConfig.clientId,
+    client_secret: appConfig.clientSecret,
+    code,
+    redirect_uri: appConfig.redirectUri,
+  });
+
+  if (isGoogleProvider(provider)) {
+    body.set("grant_type", "authorization_code");
+  }
 
   const tokenResponse = await fetch(oauthConfig.tokenEndpoint, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: appConfig.clientId,
-      client_secret: appConfig.clientSecret,
-      code,
-      grant_type: "authorization_code",
-      redirect_uri: appConfig.redirectUri,
-    }),
+    headers,
+    body,
   });
 
   if (!tokenResponse.ok) {
@@ -120,7 +140,15 @@ export async function completeIntegrationOAuth(
     refresh_token?: string;
     scope?: string;
     token_type?: string;
+    error?: string;
+    error_description?: string;
   };
+
+  if (tokenData.error) {
+    throw new Error(
+      tokenData.error_description ?? tokenData.error,
+    );
+  }
 
   const tokens: OAuthTokenResult = {
     accessToken: tokenData.access_token,

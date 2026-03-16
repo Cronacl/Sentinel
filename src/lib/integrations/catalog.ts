@@ -186,4 +186,119 @@ export const INTEGRATION_TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     category: "integration",
     label: "gdrive_share",
   },
+  gh_search_repos: {
+    capability: "to search GitHub repositories",
+    category: "integration",
+    label: "gh_search_repos",
+  },
+  gh_list_repos: {
+    capability: "to list your GitHub repositories",
+    category: "integration",
+    label: "gh_list_repos",
+  },
+  gh_get_repo: {
+    capability: "to get details of a GitHub repository",
+    category: "integration",
+    label: "gh_get_repo",
+  },
+  gh_list_issues: {
+    capability: "to list issues in a GitHub repository",
+    category: "integration",
+    label: "gh_list_issues",
+  },
+  gh_get_issue: {
+    capability: "to get details of a GitHub issue",
+    category: "integration",
+    label: "gh_get_issue",
+  },
+  gh_create_issue: {
+    capability: "to create a new GitHub issue",
+    category: "integration",
+    label: "gh_create_issue",
+  },
+  gh_update_issue: {
+    capability: "to update a GitHub issue",
+    category: "integration",
+    label: "gh_update_issue",
+  },
+  gh_close_issue: {
+    capability: "to close a GitHub issue",
+    category: "integration",
+    label: "gh_close_issue",
+  },
+  gh_add_issue_comment: {
+    capability: "to add a comment to a GitHub issue",
+    category: "integration",
+    label: "gh_add_issue_comment",
+  },
+  gh_list_prs: {
+    capability: "to list pull requests in a GitHub repository",
+    category: "integration",
+    label: "gh_list_prs",
+  },
+  gh_get_pr: {
+    capability: "to get details of a GitHub pull request",
+    category: "integration",
+    label: "gh_get_pr",
+  },
+  gh_create_pr: {
+    capability: "to create a new GitHub pull request",
+    category: "integration",
+    label: "gh_create_pr",
+  },
+  gh_merge_pr: {
+    capability: "to merge a GitHub pull request",
+    category: "integration",
+    label: "gh_merge_pr",
+  },
+  gh_review_pr: {
+    capability: "to review a GitHub pull request",
+    category: "integration",
+    label: "gh_review_pr",
+  },
+  gh_add_pr_comment: {
+    capability: "to add a comment to a GitHub pull request",
+    category: "integration",
+    label: "gh_add_pr_comment",
+  },
+  gh_search_code: {
+    capability: "to search code across GitHub repositories",
+    category: "integration",
+    label: "gh_search_code",
+  },
+  gh_list_branches: {
+    capability: "to list branches in a GitHub repository",
+    category: "integration",
+    label: "gh_list_branches",
+  },
+  gh_create_branch: {
+    capability: "to create a new branch in a GitHub repository",
+    category: "integration",
+    label: "gh_create_branch",
+  },
+  gh_list_runs: {
+    capability: "to list GitHub Actions workflow runs",
+    category: "integration",
+    label: "gh_list_runs",
+  },
+  gh_get_run_logs: {
+    capability: "to get GitHub Actions workflow run logs",
+    category: "integration",
+    label: "gh_get_run_logs",
+  },
+  gh_rerun_workflow: {
+    capability: "to re-run a GitHub Actions workflow",
+    category: "integration",
+    label: "gh_rerun_workflow",
+  },
+  gh_list_releases: {
+    capability: "to list releases in a GitHub repository",
+    category: "integration",
+    label: "gh_list_releases",
+  },
+  gh_create_release: {
+    capability: "to create a new GitHub release",
+    category: "integration",
+    label: "gh_create_release",
+  },
 };

@@ -27,6 +27,10 @@ const PROVIDER_TOOL_LOADERS: Partial<
     );
     return buildGoogleDriveTools;
   },
+  github: async () => {
+    const { buildGitHubTools } = await import("./providers/github/tools");
+    return buildGitHubTools;
+  },
 };
 
 export async function loadIntegrationTools(

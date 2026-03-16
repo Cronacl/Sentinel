@@ -12,6 +12,7 @@ import {
 import type { IntegrationProvider } from "@/server/db/enums";
 
 import { getGoogleOAuthConfig, isGoogleProvider } from "./providers/google";
+import { isGitHubProvider } from "./providers/github";
 import type { OAuthAppConfig } from "../types";
 
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
@@ -90,6 +91,19 @@ export async function getValidAccessToken(
     throw new Error("No OAuth tokens found for this integration.");
   }
 
+  const integration = await db.query.integrations.findFirst({
+    where: eq(integrations.id, integrationId),
+  });
+
+  if (!integration) {
+    throw new Error("Integration not found.");
+  }
+
+  // GitHub tokens don't expire -- always return the stored token
+  if (isGitHubProvider(integration.provider)) {
+    return decrypt(tokenRow.encryptedAccessToken);
+  }
+
   const isExpired =
     tokenRow.expiresAt &&
     tokenRow.expiresAt.getTime() < Date.now() + TOKEN_REFRESH_BUFFER_MS;
@@ -102,14 +116,6 @@ export async function getValidAccessToken(
     throw new Error(
       "Access token expired and no refresh token available. Please reconnect the integration.",
     );
-  }
-
-  const integration = await db.query.integrations.findFirst({
-    where: eq(integrations.id, integrationId),
-  });
-
-  if (!integration) {
-    throw new Error("Integration not found.");
   }
 
   const appConfig = await resolveOAuthAppConfig(
@@ -152,18 +158,40 @@ export async function revokeTokens(integrationId: string): Promise<void> {
       where: eq(integrations.id, integrationId),
     });
 
-    if (integration && isGoogleProvider(integration.provider)) {
-      const oauthConfig = getGoogleOAuthConfig(integration.provider);
-      if (oauthConfig.revokeEndpoint) {
-        try {
-          const accessToken = decrypt(tokenRow.encryptedAccessToken);
-          await fetch(
-            `${oauthConfig.revokeEndpoint}?token=${encodeURIComponent(accessToken)}`,
-            { method: "POST" },
+    if (integration) {
+      try {
+        if (isGoogleProvider(integration.provider)) {
+          const oauthConfig = getGoogleOAuthConfig(integration.provider);
+          if (oauthConfig.revokeEndpoint) {
+            const accessToken = decrypt(tokenRow.encryptedAccessToken);
+            await fetch(
+              `${oauthConfig.revokeEndpoint}?token=${encodeURIComponent(accessToken)}`,
+              { method: "POST" },
+            );
+          }
+        } else if (isGitHubProvider(integration.provider)) {
+          const appConfig = await resolveOAuthAppConfig(
+            integration.userId,
+            integration.provider,
           );
-        } catch {
-          // Best-effort revocation
+          if (appConfig) {
+            const accessToken = decrypt(tokenRow.encryptedAccessToken);
+            await fetch(
+              `https://api.github.com/applications/${appConfig.clientId}/token`,
+              {
+                method: "DELETE",
+                headers: {
+                  Authorization: `Basic ${Buffer.from(`${appConfig.clientId}:${appConfig.clientSecret}`).toString("base64")}`,
+                  Accept: "application/vnd.github+json",
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ access_token: accessToken }),
+              },
+            );
+          }
         }
+      } catch {
+        // Best-effort revocation
       }
     }
 

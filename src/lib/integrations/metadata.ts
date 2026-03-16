@@ -14,6 +14,7 @@ export const READY_INTEGRATION_PROVIDERS = new Set<IntegrationProvider>([
   "gmail",
   "google_calendar",
   "google_drive",
+  "github",
 ]);
 
 export const INTEGRATION_METADATA: Record<
@@ -89,15 +90,22 @@ export const INTEGRATION_METADATA: Record<
     setupHint: "Notion connection flow is not available yet.",
   },
   github: {
-    availability: "coming_soon",
+    availability: "ready",
     description:
-      "GitHub integration is planned for repository context, issues, and pull requests.",
+      "Search repos, manage issues and pull requests, browse code, run workflows, and create releases from chat.",
     highlights: [
-      "Planned support for repos, issues, and PR workflows",
-      "Will make external repository context available in chat",
+      "Search repos and code across GitHub",
+      "Create, update, and close issues with comments",
+      "Open, review, merge pull requests",
+      "List branches, workflow runs, and releases",
     ],
-    requiredAccess: [],
-    setupHint: "GitHub connection flow is not available yet.",
+    requiredAccess: [
+      "Read repositories, issues, and pull requests",
+      "Create and manage issues, PRs, branches, and releases",
+      "Trigger and view GitHub Actions workflows",
+    ],
+    setupHint:
+      "Create a GitHub OAuth App at github.com/settings/developers and paste the Client ID and Client Secret.",
   },
   linear: {
     availability: "coming_soon",

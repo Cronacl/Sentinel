@@ -37,6 +37,15 @@ import { GDriveUploadTool } from "./renderers/integrations/gdrive/gdrive-upload"
 import { GDriveDownloadTool } from "./renderers/integrations/gdrive/gdrive-download";
 import { GDriveActionTool } from "./renderers/integrations/gdrive/gdrive-action";
 import { GDriveFolderTool } from "./renderers/integrations/gdrive/gdrive-folder";
+import { GHSearchTool } from "./renderers/integrations/github/gh-search";
+import { GHRepoTool } from "./renderers/integrations/github/gh-repo";
+import { GHIssueDetailTool } from "./renderers/integrations/github/gh-issue-detail";
+import { GHPRDetailTool } from "./renderers/integrations/github/gh-pr-detail";
+import { GHIssueActionTool } from "./renderers/integrations/github/gh-issue-action";
+import { GHPRActionTool } from "./renderers/integrations/github/gh-pr-action";
+import { GHBranchTool } from "./renderers/integrations/github/gh-branch";
+import { GHActionsTool } from "./renderers/integrations/github/gh-actions";
+import { GHReleaseTool } from "./renderers/integrations/github/gh-release";
 import { IntegrationGenericTool } from "./renderers/integrations/shared/generic";
 
 const renderers: Record<string, Renderer> = {
@@ -106,13 +115,38 @@ const renderers: Record<string, Renderer> = {
   gdrive_rename: GDriveActionTool,
   gdrive_trash: GDriveActionTool,
   gdrive_share: GDriveActionTool,
+
+  gh_search_repos: GHSearchTool,
+  gh_search_code: GHSearchTool,
+  gh_list_repos: GHRepoTool,
+  gh_get_repo: GHRepoTool,
+  gh_list_issues: GHIssueDetailTool,
+  gh_get_issue: GHIssueDetailTool,
+  gh_create_issue: GHIssueActionTool,
+  gh_update_issue: GHIssueActionTool,
+  gh_close_issue: GHIssueActionTool,
+  gh_add_issue_comment: GHIssueActionTool,
+  gh_list_prs: GHPRDetailTool,
+  gh_get_pr: GHPRDetailTool,
+  gh_create_pr: GHPRActionTool,
+  gh_merge_pr: GHPRActionTool,
+  gh_review_pr: GHPRActionTool,
+  gh_add_pr_comment: GHPRActionTool,
+  gh_list_branches: GHBranchTool,
+  gh_create_branch: GHBranchTool,
+  gh_list_runs: GHActionsTool,
+  gh_get_run_logs: GHActionsTool,
+  gh_rerun_workflow: GHActionsTool,
+  gh_list_releases: GHReleaseTool,
+  gh_create_release: GHReleaseTool,
 };
 
 function isIntegrationToolName(name: string) {
   return (
     name.startsWith("gmail_") ||
     name.startsWith("gcal_") ||
-    name.startsWith("gdrive_")
+    name.startsWith("gdrive_") ||
+    name.startsWith("gh_")
   );
 }
 
