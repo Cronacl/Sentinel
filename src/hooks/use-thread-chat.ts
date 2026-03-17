@@ -1,7 +1,13 @@
 "use client";
 
 import type { FileUIPart } from "ai";
-import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from "react";
 
 import type {
   QueuedFollowUpSummary,
@@ -183,7 +189,9 @@ function normalizeQueuedFollowUps(
   }));
 }
 
-function normalizeSnapshot(snapshot: ThreadSessionSnapshot): ThreadSessionSnapshot {
+function normalizeSnapshot(
+  snapshot: ThreadSessionSnapshot,
+): ThreadSessionSnapshot {
   return {
     ...snapshot,
     messages: normalizeThreadUIMessages(snapshot.messages),
@@ -203,7 +211,8 @@ function createInitialState(
       pendingActionCount: 0,
     },
     connectionState:
-      normalizedSnapshot?.activeRunId && normalizedSnapshot.threadStatus === "streaming"
+      normalizedSnapshot?.activeRunId &&
+      normalizedSnapshot.threadStatus === "streaming"
         ? "connecting"
         : "idle",
     errorMessage: null,
@@ -504,7 +513,11 @@ function createSessionStore(
   };
 
   const applyEvent = (event: ThreadStreamEvent) => {
-    if ("runId" in event && state.activeRunId && event.runId !== state.activeRunId) {
+    if (
+      "runId" in event &&
+      state.activeRunId &&
+      event.runId !== state.activeRunId
+    ) {
       return;
     }
 
@@ -621,7 +634,10 @@ function createSessionStore(
 
     void consumeThreadStream(threadId, abortController.signal, applyEvent)
       .then(async () => {
-        if (abortController.signal.aborted || streamAbortController !== abortController) {
+        if (
+          abortController.signal.aborted ||
+          streamAbortController !== abortController
+        ) {
           return;
         }
 
@@ -653,7 +669,10 @@ function createSessionStore(
         }
       })
       .catch(async (error) => {
-        if (abortController.signal.aborted || streamAbortController !== abortController) {
+        if (
+          abortController.signal.aborted ||
+          streamAbortController !== abortController
+        ) {
           return;
         }
 
@@ -782,16 +801,15 @@ function createUserThreadMessage({
   return {
     id: crypto.randomUUID(),
     metadata: {},
-    parts: [
-      ...fileParts,
-      ...(text ? [{ text, type: "text" as const }] : []),
-    ],
+    parts: [...fileParts, ...(text ? [{ text, type: "text" as const }] : [])],
     role: "user",
   };
 }
 
 function getLastAssistantMessage(messages: ThreadUIMessage[]) {
-  return [...messages].reverse().find((message) => message.role === "assistant");
+  return [...messages]
+    .reverse()
+    .find((message) => message.role === "assistant");
 }
 
 export function useThreadChat({
@@ -816,7 +834,11 @@ export function useThreadChat({
     [threadId],
   );
 
-  const state = useSyncExternalStore(store.subscribe, store.getState, store.getState);
+  const state = useSyncExternalStore(
+    store.subscribe,
+    store.getState,
+    store.getState,
+  );
   const workspaceIdRef = useRef(workspaceId);
   workspaceIdRef.current = workspaceId;
 
@@ -863,7 +885,9 @@ export function useThreadChat({
         let message = "Unable to process the chat request.";
 
         try {
-          const payload = (await response.json()) as { error?: { message?: string } };
+          const payload = (await response.json()) as {
+            error?: { message?: string };
+          };
           message = payload.error?.message ?? message;
         } catch {
           // keep the fallback message when the response is not JSON
@@ -878,7 +902,10 @@ export function useThreadChat({
   );
 
   const runAction = useCallback(
-    async (body: Record<string, unknown>, localMessages?: ThreadUIMessage[]) => {
+    async (
+      body: Record<string, unknown>,
+      localMessages?: ThreadUIMessage[],
+    ) => {
       store.beginAction();
 
       if (localMessages) {
@@ -1044,7 +1071,10 @@ export function useThreadChat({
 
   const addToolApprovalResponse = useCallback(
     async (input: ToolApprovalResponseInput) => {
-      const nextMessages = applyToolApprovalResponse(store.getState().messages, input);
+      const nextMessages = applyToolApprovalResponse(
+        store.getState().messages,
+        input,
+      );
 
       await runAction(
         {
