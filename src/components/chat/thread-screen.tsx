@@ -9,6 +9,7 @@ import {
   Kbd,
   Label,
   Modal,
+  ScrollShadow,
   TextField,
   useOverlayState,
 } from "@heroui/react";
@@ -461,7 +462,9 @@ export function ThreadScreen({
     }
     startPlanImplementationLockRef.current = true;
 
-    const cachedThread = utils.threads.get.getData({ threadId: thread.id })?.thread;
+    const cachedThread = utils.threads.get.getData({
+      threadId: thread.id,
+    })?.thread;
     const globalSelection = utils.chatPreferences.get.getData();
     const modelId =
       threadSelectionState.modelId ??
@@ -470,8 +473,10 @@ export function ThreadScreen({
       null;
     const reasoningEffort =
       threadSelectionState.reasoningEffort ??
-      ((cachedThread?.chatReasoningEffort as ReasoningEffort | null) ?? null) ??
-      ((globalSelection?.reasoningEffort as ReasoningEffort | null) ?? null);
+      (cachedThread?.chatReasoningEffort as ReasoningEffort | null) ??
+      null ??
+      (globalSelection?.reasoningEffort as ReasoningEffort | null) ??
+      null;
 
     if (!modelId) {
       startPlanImplementationLockRef.current = false;
@@ -502,7 +507,14 @@ export function ThreadScreen({
       text: "Implement Plan",
       threadMode: "chat",
     });
-  }, [isBusy, sendMessage, thread.id, threadSelectionState, utils, workspace.id]);
+  }, [
+    isBusy,
+    sendMessage,
+    thread.id,
+    threadSelectionState,
+    utils,
+    workspace.id,
+  ]);
 
   useEffect(() => {
     if (
@@ -602,7 +614,7 @@ export function ThreadScreen({
       flush
     >
       <div className="sentinel-scroll-shell relative h-full">
-        <div
+        <ScrollShadow
           ref={scrollAreaRef}
           className="sentinel-scroll-area flex h-[calc(100vh-44px)] flex-col"
         >
@@ -655,7 +667,7 @@ export function ThreadScreen({
               }}
             />
           </div>
-        </div>
+        </ScrollShadow>
         <ChatScrollControl
           bottomOffset={composerOffset}
           direction={buttonDirection}
