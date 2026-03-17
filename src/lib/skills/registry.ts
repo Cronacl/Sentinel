@@ -74,6 +74,66 @@ function openai(
   };
 }
 
+function remotion(
+  name: string,
+  displayName: string,
+  description: string,
+): RegistrySkill {
+  return {
+    name,
+    displayName,
+    description,
+    repoUrl: "https://github.com/remotion-dev/skills",
+    skillPath: `skills/${name}`,
+    ref: "main",
+    installSteps: buildInstallSteps(
+      "https://github.com/remotion-dev/skills",
+      `skills/${name}`,
+      "main",
+    ),
+  };
+}
+
+function marketing(
+  name: string,
+  displayName: string,
+  description: string,
+): RegistrySkill {
+  return {
+    name,
+    displayName,
+    description,
+    repoUrl: "https://github.com/coreyhaines31/marketingskills",
+    skillPath: `skills/${name}`,
+    ref: "main",
+    installSteps: buildInstallSteps(
+      "https://github.com/coreyhaines31/marketingskills",
+      `skills/${name}`,
+      "main",
+    ),
+  };
+}
+
+function playwright(
+  name: string,
+  displayName: string,
+  description: string,
+): RegistrySkill {
+  return {
+    name,
+    displayName,
+    description,
+    repoUrl: "https://github.com/microsoft/playwright",
+    skillPath: `.claude/skills/${name}`,
+    ref: "main",
+    installSteps: buildInstallSteps(
+      "https://github.com/microsoft/playwright",
+      `.claude/skills/${name}`,
+      "main",
+    ),
+  };
+}
+
 export const SKILL_REGISTRY: RegistrySkill[] = [
   anthropic(
     "frontend-design",
@@ -140,5 +200,48 @@ export const SKILL_REGISTRY: RegistrySkill[] = [
     "vercel-deploy",
     "Vercel Deploy",
     "Deploy applications and websites to Vercel.",
+  ),
+
+  remotion(
+    "remotion",
+    "Remotion",
+    "Create and edit programmatic videos with React using the Remotion framework.",
+  ),
+
+  anthropic(
+    "xlsx",
+    "Excel (XLSX)",
+    "Read, create, or edit Excel spreadsheets (.xlsx) with formatting and layout fidelity.",
+  ),
+
+  marketing(
+    "copywriting",
+    "Copywriting",
+    "Write high-converting copy for landing pages, ads, emails, and sales assets.",
+  ),
+  marketing(
+    "marketing-ideas",
+    "Marketing Ideas",
+    "Generate creative marketing strategies, campaign concepts, and growth ideas.",
+  ),
+  marketing(
+    "lead-magnets",
+    "Lead Magnets",
+    "Create compelling lead magnets that attract and convert potential customers.",
+  ),
+  marketing(
+    "cold-email",
+    "Cold Email",
+    "Craft effective cold email sequences that get opens, replies, and conversions.",
+  ),
+  marketing(
+    "ad-creative",
+    "Ad Creative",
+    "Design and write high-performing ad creatives for paid channels.",
+  ),
+  marketing(
+    "social-content",
+    "Social Content",
+    "Create engaging social media content across platforms to grow audience and reach.",
   ),
 ];
