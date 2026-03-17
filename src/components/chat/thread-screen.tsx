@@ -26,6 +26,7 @@ import { useRouter } from "next/navigation";
 
 import { PageWrapper } from "@/components/shell";
 import { useThreadChat } from "@/hooks/use-thread-chat";
+import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import {
@@ -35,7 +36,6 @@ import {
   restoreOptimisticThreadPinUpdate,
 } from "@/lib/threads/cache";
 import { api } from "@/trpc/react";
-import type { ChatOnDataCallback } from "ai";
 import type { FileUIPart } from "ai";
 
 import { ChatComposer } from "./chat-composer";
@@ -44,12 +44,15 @@ import { ChatScrollControl, useChatScrollControl } from "./chat-scroll-control";
 
 type ThreadScreenProps = {
   initialMessages: ThreadUIMessage[];
+  queuedFollowUps: QueuedFollowUpSummary[];
   thread: {
+    activeRunId: string | null;
     chatModelId: string | null;
     chatReasoningEffort: string | null;
     id: string;
     mode: "chat" | "plan";
     pinnedAt: Date | null;
+    status: "idle" | "streaming" | "awaiting_approval";
     summary: string | null;
     title: string;
   };
@@ -65,6 +68,7 @@ type ThreadScreenProps = {
 
 export function ThreadScreen({
   initialMessages,
+  queuedFollowUps,
   thread,
   workspace,
 }: ThreadScreenProps) {
@@ -84,45 +88,6 @@ export function ThreadScreen({
   useEffect(() => {
     setThreadTitle(thread.title);
   }, [thread.title]);
-
-  const handleData = useCallback<ChatOnDataCallback<ThreadUIMessage>>(
-    (dataPart) => {
-      if (
-        dataPart.type === "data-thread-title" &&
-        dataPart.data.threadId === thread.id
-      ) {
-        setThreadTitle(dataPart.data.title);
-        utils.threads.get.setData({ threadId: thread.id }, (current) =>
-          current
-            ? {
-                ...current,
-                thread: {
-                  ...current.thread,
-                  title: dataPart.data.title,
-                },
-              }
-            : current,
-        );
-        void utils.threads.list.invalidate();
-      }
-
-      if (
-        dataPart.type === "data-thread-invalidation" &&
-        dataPart.data.threadId === thread.id
-      ) {
-        void utils.plan.get.invalidate({ threadId: thread.id });
-        void utils.threads.get.invalidate({ threadId: thread.id });
-        void utils.threads.list.invalidate();
-      }
-    },
-    [thread.id, utils.plan.get, utils.threads.get, utils.threads.list],
-  );
-
-  const handleFinish = useCallback(() => {
-    void utils.plan.get.invalidate({ threadId: thread.id });
-    void utils.threads.get.invalidate({ threadId: thread.id });
-    void utils.threads.list.invalidate();
-  }, [thread.id, utils.plan.get, utils.threads.get, utils.threads.list]);
 
   const handleError = useCallback((error: Error) => {
     setChatError(error.message);
@@ -215,6 +180,17 @@ export function ThreadScreen({
       void utils.threads.get.invalidate({ threadId: thread.id });
     },
   });
+  const removeQueuedFollowUp = api.threads.removeQueuedFollowUp.useMutation({
+    onSuccess: () => {
+      void utils.threads.get.invalidate({ threadId: thread.id });
+    },
+  });
+  const steerQueuedFollowUp = api.threads.steerQueuedFollowUp.useMutation({
+    onSuccess: () => {
+      void utils.threads.get.invalidate({ threadId: thread.id });
+      void utils.threads.list.invalidate();
+    },
+  });
   const {
     buttonDirection,
     composerDockRef,
@@ -225,11 +201,13 @@ export function ThreadScreen({
   } = useChatScrollControl(thread.id);
 
   const chat = useThreadChat({
+    hydrateFromServer: true,
+    initialActiveRunId: thread.activeRunId,
     threadId: thread.id,
     initialMessages,
-    onData: handleData,
+    initialQueuedFollowUps: queuedFollowUps,
+    initialThreadStatus: thread.status,
     workspaceId: workspace.id,
-    onFinish: handleFinish,
     onError: handleError,
   });
   const {
@@ -237,11 +215,14 @@ export function ThreadScreen({
     answerPlanQuestions,
     editMessage,
     messages,
+    queueFollowUp,
+    queuedFollowUps: liveQueuedFollowUps,
     regenerateMessage,
     retryMessage,
     sendMessage,
     status,
-    stop,
+    steerFollowUp,
+    stopStream,
   } = chat;
 
   const isBusy = status === "submitted" || status === "streaming";
@@ -313,6 +294,62 @@ export function ThreadScreen({
       });
     },
     [sendMessage, thread.id, threadSelectionState.mode, utils, workspace.id],
+  );
+
+  const handleQueueFollowUp = useCallback(
+    async ({
+      files,
+      modelId,
+      reasoningEffort,
+      text,
+      threadMode,
+    }: {
+      files?: FileUIPart[];
+      modelId: string;
+      reasoningEffort?: ReasoningEffort | null;
+      text: string;
+      threadMode?: "chat" | "plan";
+    }) => {
+      setChatError(null);
+      await queueFollowUp({
+        files,
+        modelId,
+        reasoningEffort,
+        text,
+        threadMode: threadMode ?? threadSelectionState.mode,
+      });
+      await utils.threads.get.invalidate({ threadId: thread.id });
+      void utils.threads.list.invalidate();
+    },
+    [queueFollowUp, thread.id, threadSelectionState.mode, utils],
+  );
+
+  const handleSteerFollowUp = useCallback(
+    async ({
+      files,
+      modelId,
+      reasoningEffort,
+      text,
+      threadMode,
+    }: {
+      files?: FileUIPart[];
+      modelId: string;
+      reasoningEffort?: ReasoningEffort | null;
+      text: string;
+      threadMode?: "chat" | "plan";
+    }) => {
+      setChatError(null);
+      await steerFollowUp({
+        files,
+        modelId,
+        reasoningEffort,
+        text,
+        threadMode: threadMode ?? threadSelectionState.mode,
+      });
+      await utils.threads.get.invalidate({ threadId: thread.id });
+      void utils.threads.list.invalidate();
+    },
+    [steerFollowUp, thread.id, threadSelectionState.mode, utils],
   );
 
   const handleApproveTool = useCallback(
@@ -667,10 +704,25 @@ export function ThreadScreen({
               attachmentSeed={editingAttachmentSeed}
               isEditing={editingMessage != null}
               onCancelEdit={handleCancelEdit}
+              onQueueFollowUp={handleQueueFollowUp}
+              onRemoveQueuedFollowUp={async (id) => {
+                await removeQueuedFollowUp.mutateAsync({
+                  followUpId: id,
+                  threadId: thread.id,
+                });
+              }}
               onSend={editingMessage ? handleEditSubmit : handleSend}
-              onStop={stop}
+              onStop={stopStream}
+              onSteerFollowUp={handleSteerFollowUp}
+              onSteerQueuedFollowUp={async (id) => {
+                await steerQueuedFollowUp.mutateAsync({
+                  followUpId: id,
+                  threadId: thread.id,
+                });
+              }}
               promptSeed={editingPromptSeed}
               promptSeedKey={editingMessage?.id}
+              queuedFollowUps={liveQueuedFollowUps}
               status={status}
               threadId={thread.id}
               threadSelection={{

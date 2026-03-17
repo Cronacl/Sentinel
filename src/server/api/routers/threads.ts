@@ -5,6 +5,7 @@ import {
   threadArchiveSchema,
   threadCreateSchema,
   threadGetSchema,
+  threadQueuedFollowUpActionSchema,
   threadListSchema,
   threadRenameSchema,
   threadSearchSchema,
@@ -13,7 +14,15 @@ import {
   threadTogglePinSchema,
   threadUpdateMetaSchema,
 } from "@/schemas/workspace-thread.schema";
-import { setActiveMessage } from "@/lib/ai/chat/persistence";
+import { runThreadChat } from "@/lib/ai/chat";
+import {
+  getLatestAssistantMessageId,
+  listThreadFollowUps,
+  moveThreadFollowUpToFront,
+  removeThreadFollowUp,
+  setActiveMessage,
+} from "@/lib/ai/chat/persistence";
+import { summarizeQueuedFollowUp } from "@/lib/ai/chat/session-server";
 import { disposeShellSession } from "@/lib/ai/chat/tools/shell";
 import { mapThreadMessagesToUIMessages } from "@/lib/ai/messages/ui";
 import { threadMessages, threads, workspaces } from "@/server/db/schema";
@@ -189,10 +198,15 @@ export const threadsRouter = createTRPCRouter({
         where: eq(threadMessages.threadId, thread.id),
         orderBy: (messages, { asc }) => [asc(messages.createdAt)],
       });
+      const queuedFollowUps = await listThreadFollowUps(thread.id);
 
       return {
         messages: await mapThreadMessagesToUIMessages(messages as any[]),
+        queuedFollowUps: queuedFollowUps
+          .filter((followUp) => followUp.status === "queued")
+          .map(summarizeQueuedFollowUp),
         thread: {
+          activeRunId: thread.activeStreamId,
           archivedAt: thread.archivedAt,
           chatModelId: thread.chatModelId,
           chatReasoningEffort: thread.chatReasoningEffort,
@@ -200,6 +214,7 @@ export const threadsRouter = createTRPCRouter({
           id: thread.id,
           mode: thread.mode,
           pinnedAt: thread.pinnedAt,
+          status: thread.status,
           summary: thread.summary,
           title: thread.title,
           updatedAt: thread.updatedAt,
@@ -387,6 +402,39 @@ export const threadsRouter = createTRPCRouter({
       await getOwnedThreadOrThrow(ctx, input.threadId);
 
       await setActiveMessage(input.threadId, input.messageId);
+
+      return { ok: true };
+    }),
+
+  removeQueuedFollowUp: protectedProcedure
+    .input(threadQueuedFollowUpActionSchema)
+    .mutation(async ({ ctx, input }) => {
+      await getOwnedThreadOrThrow(ctx, input.threadId);
+      removeThreadFollowUp(input.threadId, input.followUpId);
+      return { ok: true };
+    }),
+
+  steerQueuedFollowUp: protectedProcedure
+    .input(threadQueuedFollowUpActionSchema)
+    .mutation(async ({ ctx, input }) => {
+      const thread = await getOwnedThreadOrThrow(ctx, input.threadId);
+      moveThreadFollowUpToFront(input.threadId, input.followUpId);
+
+      if (thread.status === "streaming") {
+        const latestAssistantId = await getLatestAssistantMessageId(
+          input.threadId,
+        );
+
+        await runThreadChat(
+          {
+            id: input.threadId,
+            ...(latestAssistantId ? { messageId: latestAssistantId } : {}),
+            trigger: "stop-stream",
+            workspaceId: thread.workspaceId,
+          },
+          ctx.session.user.id,
+        );
+      }
 
       return { ok: true };
     }),

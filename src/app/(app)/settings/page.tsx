@@ -29,6 +29,8 @@ import {
 } from "@/lib/webfetch";
 import { useOptimisticMutation } from "@/hooks/use-optimistic-mutation";
 import {
+  DEFAULT_FOLLOW_UP_BEHAVIOR,
+  type FollowUpBehavior,
   type GeneralSettingsFormValues,
   generalSettingsFormSchema,
 } from "@/schemas/general-settings.schema";
@@ -84,6 +86,7 @@ export default function GeneralSettingsPage() {
 
   const generalSettingsForm = useForm<GeneralSettingsFormValues>({
     defaultValues: {
+      followUpBehavior: DEFAULT_FOLLOW_UP_BEHAVIOR,
       webFetchBatchEnabled: DEFAULT_WEBFETCH_BATCH_ENABLED,
       webFetchBatchLimit: DEFAULT_WEBFETCH_BATCH_LIMIT,
       skillsBasePath: null,
@@ -268,6 +271,59 @@ export default function GeneralSettingsPage() {
                           strokeWidth={1.5}
                         />
                       )}
+                      {option.label}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          <section className="border-separator bg-surface rounded-xl border p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="space-y-1">
+                <h2 className="text-foreground text-base font-medium">
+                  Follow-up behavior
+                </h2>
+                <p className="text-muted text-sm">
+                  Queue follow-ups while the model runs or steer the current
+                  run.
+                </p>
+              </div>
+
+              <div className="bg-background border-separator inline-flex w-full flex-wrap gap-1 rounded-full border p-1 lg:w-auto lg:flex-nowrap">
+                {(
+                  [
+                    { label: "Queue", value: "queue" },
+                    { label: "Steer", value: "steer" },
+                  ] as const
+                ).map((option) => {
+                  const currentBehavior =
+                    generalSettingsForm.watch("followUpBehavior") ??
+                    DEFAULT_FOLLOW_UP_BEHAVIOR;
+                  const isSelected = currentBehavior === option.value;
+
+                  return (
+                    <Button
+                      className="justify-center rounded-full"
+                      isDisabled={updateGeneralSettings.isPending}
+                      key={option.value}
+                      onPress={() => {
+                        if (option.value === currentBehavior) return;
+                        const values = generalSettingsForm.getValues();
+                        void updateGeneralSettings.mutateAsync({
+                          ...values,
+                          followUpBehavior:
+                            option.value as FollowUpBehavior,
+                        });
+                        generalSettingsForm.setValue(
+                          "followUpBehavior",
+                          option.value as FollowUpBehavior,
+                        );
+                      }}
+                      size="sm"
+                      variant={isSelected ? "tertiary" : "ghost"}
+                    >
                       {option.label}
                     </Button>
                   );

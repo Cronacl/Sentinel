@@ -14,6 +14,8 @@ import {
   AUTOMATION_RUN_STATUSES,
   AUTOMATION_SCHEDULE_TYPES,
   AUTOMATION_STATUSES,
+  FOLLOW_UP_BEHAVIORS,
+  THREAD_FOLLOW_UP_STATUSES,
   INTEGRATION_AUTH_TYPES,
   INTEGRATION_PROVIDERS,
   MCP_SERVER_CATALOG_IDS,
@@ -67,6 +69,11 @@ export const users = sqliteTable(
     defaultChatModelId: text("default_chat_model_id"),
     defaultChatMode: text("default_chat_mode", { enum: THREAD_MODES }),
     defaultChatReasoningEffort: text("default_chat_reasoning_effort"),
+    followUpBehavior: text("follow_up_behavior", {
+      enum: FOLLOW_UP_BEHAVIORS,
+    })
+      .notNull()
+      .default("queue"),
     selectedWorkspaceId: text("selected_workspace_id"),
     threadListOrganizeBy: text("thread_list_organize_by", {
       enum: THREAD_LIST_ORGANIZE_BY,
@@ -210,9 +217,46 @@ export const threadsRelations = relations(threads, ({ one, many }) => ({
     fields: [threads.userId],
     references: [users.id],
   }),
+  followUps: many(threadFollowUps),
   messages: many(threadMessages),
   plans: many(threadPlans),
   planQuestions: many(threadPlanQuestions),
+}));
+
+export const threadFollowUps = sqliteTable(
+  "thread_follow_up",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id").notNull(),
+    parts: text("parts", { mode: "json" }).notNull(),
+    modelId: text("model_id").notNull(),
+    reasoningEffort: text("reasoning_effort"),
+    threadMode: text("thread_mode", { enum: THREAD_MODES }).notNull(),
+    status: text("status", { enum: THREAD_FOLLOW_UP_STATUSES })
+      .notNull()
+      .default("queued"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("thread_follow_up_thread_created_idx").on(
+      table.threadId,
+      table.createdAt,
+    ),
+    index("thread_follow_up_thread_status_idx").on(table.threadId, table.status),
+  ],
+);
+
+export const threadFollowUpsRelations = relations(threadFollowUps, ({ one }) => ({
+  thread: one(threads, {
+    fields: [threadFollowUps.threadId],
+    references: [threads.id],
+  }),
 }));
 
 export const threadMessages = sqliteTable(

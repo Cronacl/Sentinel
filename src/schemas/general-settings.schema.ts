@@ -5,7 +5,12 @@ import {
   MIN_WEBFETCH_BATCH_LIMIT,
 } from "@/lib/webfetch";
 
+export const FOLLOW_UP_BEHAVIOR_OPTIONS = ["queue", "steer"] as const;
+export type FollowUpBehavior = (typeof FOLLOW_UP_BEHAVIOR_OPTIONS)[number];
+export const DEFAULT_FOLLOW_UP_BEHAVIOR: FollowUpBehavior = "queue";
+
 export const generalSettingsFormSchema = z.object({
+  followUpBehavior: z.enum(FOLLOW_UP_BEHAVIOR_OPTIONS),
   webFetchBatchEnabled: z.boolean(),
   webFetchBatchLimit: z
     .number()

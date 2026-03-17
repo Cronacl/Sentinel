@@ -63,6 +63,7 @@ describe("generalSettingsRouter", () => {
 
     expect(findFirst).toHaveBeenCalled();
     expect(result).toEqual({
+      followUpBehavior: "queue",
       skillsBasePath: "/tmp/custom-skills",
       webFetchBatchEnabled: true,
       webFetchBatchLimit: 12,
@@ -82,6 +83,7 @@ describe("generalSettingsRouter", () => {
         },
       },
       input: {
+        followUpBehavior: "queue",
         skillsBasePath: "/tmp/custom-skills",
         webFetchBatchEnabled: true,
         webFetchBatchLimit: 10,
@@ -90,12 +92,14 @@ describe("generalSettingsRouter", () => {
 
     expect(update).toHaveBeenCalled();
     expect(set).toHaveBeenCalledWith({
+      followUpBehavior: "queue",
       skillsBasePath: "/tmp/custom-skills",
       webFetchBatchEnabled: true,
       webFetchBatchLimit: 10,
     });
     expect(run).toHaveBeenCalled();
     expect(result).toEqual({
+      followUpBehavior: "queue",
       skillsBasePath: "/tmp/custom-skills",
       webFetchBatchEnabled: true,
       webFetchBatchLimit: 10,

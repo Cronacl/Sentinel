@@ -7,6 +7,8 @@ import type { ThreadMode, ThreadPlanAnswer } from "@/lib/plan";
 
 export type ThreadChatTrigger =
   | "submit-user-message"
+  | "queue-follow-up"
+  | "steer-follow-up"
   | "submit-plan-answer"
   | "submit-tool-approval"
   | "retry-assistant-message"

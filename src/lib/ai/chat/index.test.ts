@@ -40,12 +40,27 @@ const createUIMessageStream = mock(({ execute, onFinish }) => {
 
   return { done, writer };
 });
-const createUIMessageStreamResponse = mock(async ({ headers, stream }) => {
+const createUIMessageStreamResponse = mock(
+  async ({ consumeSseStream, headers, stream }) => {
+    if (consumeSseStream) {
+      await consumeSseStream({
+        stream: new ReadableStream<string>({
+          start(controller) {
+            controller.close();
+          },
+        }),
+      });
+    }
+
   await stream.done;
   return new Response("ok", { headers, status: 200 });
-});
+  },
+);
 const generateId = mock(() => "stream-id");
 const hasToolCall = mock((toolName) => ({ kind: "has-tool-call", toolName }));
+const readUIMessageStream = mock(async function* () {
+  yield aiState.assistantResponseMessage;
+});
 const smoothStream = mock(() => undefined);
 const stepCountIs = mock(() => ({ kind: "stop-when" }));
 const tool = mock((config) => config);
@@ -99,17 +114,39 @@ const getLatestVisibleMessageId = mock(() => null);
 const getMessageRecordById = mock(() => undefined);
 const validateThreadUIMessage = mock(async (message) => message);
 const validateThreadUIMessages = mock(async (messages) => messages);
+const mapThreadMessagesToUIMessages = mock(async (messages) => messages);
 
 const loadThreadMessages = mock(async () => []);
 const loadThread = mock(async () => null);
 const ensureThread = mock(async () => ({ created: true }));
+const enqueueThreadFollowUp = mock(() => {});
+const enqueueThreadFollowUpAtFront = mock(() => {});
+const claimNextThreadFollowUp = mock(() => null);
+const deleteThreadFollowUp = mock(() => {});
+const getLatestAssistantMessageId = mock(async () => "assistant-1");
+const listThreadFollowUps = mock(async () => []);
+const moveThreadFollowUpToFront = mock(() => {});
+const removeThreadFollowUp = mock(() => {});
+const requeueThreadFollowUp = mock(() => {});
+const resetProcessingThreadFollowUps = mock(() => {});
+const setThreadStatus = mock(() => {});
 const updateThreadChatSettings = mock(() => {});
-const upsertMessage = mock(() => {});
+const upsertMessage = mock((_threadId, message) => message);
 const setActiveMessage = mock(async () => {});
 const clearActiveStream = mock(() => {});
 const updateThreadTitle = mock(() => {});
 const setActiveStream = mock(() => {});
 const updateMessageMetadata = mock(async () => {});
+const loadThreadSessionSnapshot = mock(async (threadId: string) => ({
+  activeRunId: null,
+  messages: [],
+  queuedFollowUps: [],
+  threadId,
+  threadStatus: "idle",
+}));
+const serializeThreadStreamEvent = mock(
+  (event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+);
 
 const createNewResumableStream = mock(async () => {});
 const getWorkspaceRootPath = mock(async () => "/tmp/workspace-1");
@@ -184,6 +221,7 @@ mock.module("ai", () => ({
   generateText,
   generateId,
   hasToolCall,
+  readUIMessageStream,
   smoothStream,
   stepCountIs,
   tool,
@@ -377,21 +415,38 @@ mock.module("../messages/branches", () => ({
 }));
 
 mock.module("../messages/ui", () => ({
+  mapThreadMessagesToUIMessages,
   validateThreadUIMessage,
   validateThreadUIMessages,
 }));
 
 mock.module("./persistence", () => ({
+  claimNextThreadFollowUp,
   clearActiveStream,
+  deleteThreadFollowUp,
+  enqueueThreadFollowUp,
+  enqueueThreadFollowUpAtFront,
   ensureThread,
+  getLatestAssistantMessageId,
   loadThread,
+  listThreadFollowUps,
   loadThreadMessages,
+  moveThreadFollowUpToFront,
+  removeThreadFollowUp,
+  requeueThreadFollowUp,
+  resetProcessingThreadFollowUps,
   setActiveMessage,
   setActiveStream,
+  setThreadStatus,
   updateMessageMetadata,
   updateThreadChatSettings,
   updateThreadTitle,
   upsertMessage,
+}));
+
+mock.module("./session-server", () => ({
+  loadThreadSessionSnapshot,
+  serializeThreadStreamEvent,
 }));
 
 mock.module("@/lib/streams", () => ({
@@ -423,12 +478,65 @@ mock.module("./runtime/workspace", () => ({
   getWorkspaceRootPath,
 }));
 
+mock.module("@/server/db", () => ({
+  db: {
+    delete: mock(() => ({
+      where: mock(() => ({
+        run: mock(() => {}),
+      })),
+    })),
+    insert: mock(() => ({
+      values: mock(() => ({
+        onConflictDoNothing: mock(() => ({
+          run: mock(() => {}),
+        })),
+        run: mock(() => {}),
+      })),
+    })),
+    query: {},
+    select: mock(() => ({
+      from: mock(() => ({
+        get: mock(() => undefined),
+        orderBy: mock(() => ({
+          get: mock(() => undefined),
+        })),
+        where: mock(() => ({
+          get: mock(() => undefined),
+          orderBy: mock(() => ({
+            get: mock(() => undefined),
+          })),
+        })),
+      })),
+    })),
+    transaction: mock((fn: (tx: any) => void) => fn({})),
+    update: mock(() => ({
+      set: mock(() => ({
+        run: mock(() => {}),
+        where: mock(() => ({
+          returning: mock(() => ({
+            all: mock(() => []),
+          })),
+          run: mock(() => {}),
+        })),
+      })),
+    })),
+  },
+}));
+
 mock.module("@/lib/skills", () => ({
   getSkillSnapshot,
   loadSkillByName,
 }));
 
 const { runThreadChat } = await import("./index");
+
+async function flushAsyncWork() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await Promise.resolve();
+}
 
 function createUserMessage(text: string) {
   return {
@@ -552,6 +660,7 @@ beforeEach(() => {
 
   loadThreadMessages.mockImplementation(async () => []);
   loadThread.mockImplementation(async () => null);
+  claimNextThreadFollowUp.mockImplementation(() => null);
   resolveThreadTitleModel.mockImplementation(async () => resolvedTitleModel);
   generateThreadTitle.mockImplementation(async () => "Fast title");
   retrieveRelevantMemories.mockImplementation(async () => []);
@@ -611,6 +720,7 @@ beforeEach(() => {
     status: "answered",
   }));
   getWorkspaceRootPath.mockImplementation(async () => "/tmp/workspace-1");
+  getLatestAssistantMessageId.mockImplementation(async () => "assistant-1");
 });
 
 afterEach(() => {
@@ -621,6 +731,7 @@ afterEach(() => {
 describe("runThreadChat title generation", () => {
   it("uses the provider-specific fast title model and keeps thread chat settings on the selected model", async () => {
     const response = await runThreadChat(createSubmitRequest(), "user-1");
+    await flushAsyncWork();
 
     expect(response.status).toBe(200);
     expect(resolveThreadTitleModel).toHaveBeenCalledWith({
@@ -664,6 +775,7 @@ describe("runThreadChat title generation", () => {
     ]);
 
     await runThreadChat(createSubmitRequest(), "user-1");
+    await flushAsyncWork();
 
     expect(resolveThreadTitleModel).not.toHaveBeenCalled();
     expect(generateThreadTitle).not.toHaveBeenCalled();
@@ -675,10 +787,12 @@ describe("runThreadChat title generation", () => {
       createRetryRequest("retry-assistant-message"),
       "user-1",
     );
+    await flushAsyncWork();
     await runThreadChat(
       createRetryRequest("regenerate-assistant-message"),
       "user-1",
     );
+    await flushAsyncWork();
     await runThreadChat(
       createSubmitRequest({
         message: createUserMessage("Edited prompt"),
@@ -687,6 +801,7 @@ describe("runThreadChat title generation", () => {
       }),
       "user-1",
     );
+    await flushAsyncWork();
 
     expect(resolveThreadTitleModel).not.toHaveBeenCalled();
     expect(generateThreadTitle).not.toHaveBeenCalled();
@@ -705,6 +820,7 @@ describe("runThreadChat title generation", () => {
       }),
       "user-1",
     );
+    await flushAsyncWork();
 
     expect(ensureThread).toHaveBeenCalledWith(
       "thread-1",
@@ -739,6 +855,7 @@ describe("runThreadChat approvals and lifecycle", () => {
     };
 
     const response = await runThreadChat(request, "user-1");
+    await flushAsyncWork();
 
     expect(response.status).toBe(200);
     expect(createAgentUIStream).toHaveBeenCalledWith(
@@ -780,10 +897,181 @@ describe("runThreadChat approvals and lifecycle", () => {
     );
   });
 
+  it("queues a follow-up on the backend without starting a new run", async () => {
+    loadThread.mockImplementation(async () => ({
+      activeStreamId: "stream-1",
+      archivedAt: null,
+      id: "thread-1",
+      mode: "chat",
+      status: "streaming",
+      userId: "user-1",
+      workspaceId: "workspace-1",
+    }));
+
+    const response = await runThreadChat(
+      {
+        id: "thread-1",
+        message: createUserMessage("Queue this for later"),
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "queue-follow-up",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+
+    expect(response.status).toBe(204);
+    expect(enqueueThreadFollowUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "user-message-1",
+        modelId: "openai:gpt-5.2",
+        threadId: "thread-1",
+        threadMode: "chat",
+      }),
+    );
+    expect(createAgentUIStream).not.toHaveBeenCalled();
+  });
+
+  it("steers by queuing at the front and cancelling the active assistant", async () => {
+    loadThread.mockImplementation(async () => ({
+      activeStreamId: "stream-1",
+      archivedAt: null,
+      id: "thread-1",
+      mode: "chat",
+      status: "streaming",
+      userId: "user-1",
+      workspaceId: "workspace-1",
+    }));
+
+    const response = await runThreadChat(
+      {
+        id: "thread-1",
+        message: createUserMessage("Steer this run"),
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "steer-follow-up",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+
+    expect(response.status).toBe(204);
+    expect(enqueueThreadFollowUpAtFront).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "user-message-1",
+        threadId: "thread-1",
+      }),
+    );
+    expect(updateMessageMetadata).toHaveBeenCalledWith(
+      "thread-1",
+      "assistant-1",
+      {
+        errorMessage: "Generation stopped.",
+        status: "cancelled",
+      },
+    );
+  });
+
+  it("starts the next queued follow-up after stop-stream", async () => {
+    let claims = 0;
+    loadThread.mockImplementation(async () => ({
+      activeStreamId: null,
+      archivedAt: null,
+      id: "thread-1",
+      mode: "chat",
+      status: "idle",
+      userId: "user-1",
+      workspaceId: "workspace-1",
+    }));
+    claimNextThreadFollowUp.mockImplementation(() => {
+      claims += 1;
+      if (claims > 1) {
+        return null;
+      }
+
+      return {
+        createdAt: new Date("2026-03-10T10:00:02.000Z"),
+        id: "queued-1",
+        modelId: "openai:gpt-5.2",
+        parts: [{ text: "Continue with the queue", type: "text" }],
+        reasoningEffort: "high",
+        status: "processing",
+        threadId: "thread-1",
+        threadMode: "chat",
+        updatedAt: new Date("2026-03-10T10:00:02.000Z"),
+      };
+    });
+
+    const response = await runThreadChat(
+      {
+        id: "thread-1",
+        messageId: "assistant-1",
+        trigger: "stop-stream",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+
+    expect(response.status).toBe(204);
+    expect(createAgentUIStream).toHaveBeenCalled();
+    expect(createNewResumableStream).toHaveBeenCalled();
+    expect(deleteThreadFollowUp).toHaveBeenCalledWith("thread-1", "queued-1");
+  });
+
+  it("does not finalize a stream after a newer stream takes ownership", async () => {
+    let loadCalls = 0;
+    loadThread.mockImplementation(async () => {
+      loadCalls += 1;
+
+      if (loadCalls === 1) {
+        return {
+          activeStreamId: null,
+          archivedAt: null,
+          id: "thread-1",
+          mode: "chat",
+          status: "idle",
+          userId: "user-1",
+          workspaceId: "workspace-1",
+        };
+      }
+
+      return {
+        activeStreamId: "newer-stream",
+        archivedAt: null,
+        id: "thread-1",
+        mode: "chat",
+        status: "streaming",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      };
+    });
+    claimNextThreadFollowUp.mockImplementation(() => ({
+      createdAt: new Date("2026-03-10T10:00:02.000Z"),
+      id: "queued-1",
+      modelId: "openai:gpt-5.2",
+      parts: [{ text: "This should stay queued", type: "text" }],
+      reasoningEffort: "high",
+      status: "processing",
+      threadId: "thread-1",
+      threadMode: "chat",
+      updatedAt: new Date("2026-03-10T10:00:02.000Z"),
+    }));
+
+    const response = await runThreadChat(createSubmitRequest(), "user-1");
+    await flushAsyncWork();
+
+    expect(response.status).toBe(200);
+    expect(buildPersistedAssistantMessage).not.toHaveBeenCalled();
+    expect(clearActiveStream).toHaveBeenCalledTimes(0);
+    expect(createAgentUIStream).toHaveBeenCalledTimes(1);
+    expect(deleteThreadFollowUp).not.toHaveBeenCalled();
+  });
+
   it("disables shell tooling when the workspace root is unavailable", async () => {
     getWorkspaceRootPath.mockImplementation(async () => null);
 
     await runThreadChat(createSubmitRequest(), "user-1");
+    await flushAsyncWork();
 
     expect(aiTestState.prepared?.tools).toMatchObject({
       search_memory: expect.any(Object),
@@ -839,6 +1127,7 @@ describe("runThreadChat approvals and lifecycle", () => {
     }));
 
     await runThreadChat(createSubmitRequest(), "user-1");
+    await flushAsyncWork();
 
     expect(
       await aiTestState.prepared?.tools.list.needsApproval({}, {}),
@@ -856,6 +1145,7 @@ describe("runThreadChat approvals and lifecycle", () => {
       },
       "user-1",
     );
+    await flushAsyncWork();
 
     expect(Object.keys(aiTestState.prepared?.tools ?? {})).toEqual([
       "list",
@@ -941,6 +1231,7 @@ describe("runThreadChat approvals and lifecycle", () => {
     }));
 
     await runThreadChat(createSubmitRequest(), "user-1");
+    await flushAsyncWork();
 
     const toolNames = Object.keys(aiTestState.prepared?.tools ?? {});
     expect(toolNames).toContain("manage_task");
@@ -1047,6 +1338,7 @@ describe("runThreadChat approvals and lifecycle", () => {
     ]);
 
     await runThreadChat(createSubmitRequest(), "user-1");
+    await flushAsyncWork();
 
     expect(retrieveRelevantMemories).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1118,6 +1410,7 @@ describe("runThreadChat approvals and lifecycle", () => {
       },
       "user-1",
     );
+    await flushAsyncWork();
 
     expect(createAgentUIStream).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1125,5 +1418,51 @@ describe("runThreadChat approvals and lifecycle", () => {
         uiMessages: [persistedUser],
       }),
     );
+  });
+
+  it("drains the next queued follow-up after a normal finish", async () => {
+    let claims = 0;
+    let activeStreamId: string | null = null;
+    claimNextThreadFollowUp.mockImplementation(() => {
+      claims += 1;
+      if (claims > 1) {
+        return null;
+      }
+
+      return {
+        createdAt: new Date("2026-03-10T10:00:02.000Z"),
+        id: "queued-1",
+        modelId: "openai:gpt-5.2",
+        parts: [{ text: "Continue with the queue", type: "text" }],
+        reasoningEffort: "high",
+        status: "processing",
+        threadId: "thread-1",
+        threadMode: "chat",
+        updatedAt: new Date("2026-03-10T10:00:02.000Z"),
+      };
+    });
+    loadThread.mockImplementation(async () => ({
+      activeStreamId,
+      archivedAt: null,
+      id: "thread-1",
+      mode: "chat",
+      status: activeStreamId ? "streaming" : "idle",
+      userId: "user-1",
+      workspaceId: "workspace-1",
+    }));
+    setActiveStream.mockImplementation((_threadId, streamId) => {
+      activeStreamId = streamId;
+    });
+    clearActiveStream.mockImplementation(() => {
+      activeStreamId = null;
+    });
+
+    const response = await runThreadChat(createSubmitRequest(), "user-1");
+    await flushAsyncWork();
+
+    expect(response.status).toBe(200);
+    expect(createAgentUIStream).toHaveBeenCalledTimes(2);
+    expect(createNewResumableStream).toHaveBeenCalledTimes(2);
+    expect(deleteThreadFollowUp).toHaveBeenCalledWith("thread-1", "queued-1");
   });
 });

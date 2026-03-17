@@ -13,6 +13,8 @@ import type { ThreadChatRequest, ThreadChatTrigger } from "../types";
 
 export const VALID_TRIGGERS = new Set<ThreadChatTrigger>([
   "submit-user-message",
+  "queue-follow-up",
+  "steer-follow-up",
   "submit-plan-answer",
   "submit-tool-approval",
   "retry-assistant-message",
@@ -61,9 +63,15 @@ export async function parseRequest(
       : undefined;
 
   const needsMessage =
-    trigger === "submit-user-message" || trigger === "edit-user-message";
+    trigger === "submit-user-message" ||
+    trigger === "queue-follow-up" ||
+    trigger === "steer-follow-up" ||
+    trigger === "edit-user-message";
   const needsMessageId =
     trigger !== "submit-user-message" &&
+    trigger !== "queue-follow-up" &&
+    trigger !== "steer-follow-up" &&
+    trigger !== "stop-stream" &&
     trigger !== "submit-tool-approval" &&
     trigger !== "submit-plan-answer";
 

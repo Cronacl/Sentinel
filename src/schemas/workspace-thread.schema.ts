@@ -152,6 +152,11 @@ export const threadSetActiveBranchSchema = z.object({
   threadId: z.string().min(1),
 });
 
+export const threadQueuedFollowUpActionSchema = z.object({
+  followUpId: z.string().min(1),
+  threadId: z.string().min(1),
+});
+
 export const threadMessageAppendSchema = z.object({
   message: threadUIMessageSchema,
   threadId: z.string().min(1),

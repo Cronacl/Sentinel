@@ -1,8 +1,8 @@
 import {
   createAgentUIStream,
   createUIMessageStream,
-  createUIMessageStreamResponse,
   generateId,
+  readUIMessageStream,
   smoothStream,
 } from "ai";
 
@@ -69,24 +69,215 @@ import {
 } from "./workspace";
 import type { ThreadChatRequest } from "../types";
 import type { PersistedThreadMessageRecord } from "@/lib/ai/messages/branches";
+import {
+  loadThreadSessionSnapshot,
+  serializeThreadStreamEvent,
+} from "../session-server";
+import type { ThreadStreamEvent } from "../session-types";
 
 type ResolvedModel = Awaited<ReturnType<typeof resolveThreadChatModel>>;
+type ThreadEventChannel = Awaited<ReturnType<typeof createThreadEventChannel>>;
+
+type ActiveRunControl = {
+  abortController: AbortController;
+  cancelled: boolean;
+  eventChannel: ThreadEventChannel;
+};
+
+const activeRunControls = new Map<string, ActiveRunControl>();
 
 // ---------------------------------------------------------------------------
 // Stop-stream handler
 // ---------------------------------------------------------------------------
 
 async function handleStopStream(request: ThreadChatRequest): Promise<Response> {
+  const thread = await persist.loadThread(request.threadId);
+  const activeRunId = thread?.activeStreamId ?? null;
+  const activeRunControl = activeRunId
+    ? activeRunControls.get(activeRunId)
+    : undefined;
+
   if (request.messageId) {
     await persist.updateMessageMetadata(request.threadId, request.messageId, {
       errorMessage: "Generation stopped.",
       status: "cancelled",
     });
   }
+
+  if (activeRunControl && !activeRunControl.cancelled) {
+    activeRunControl.cancelled = true;
+    activeRunControl.abortController.abort(new Error("Generation stopped."));
+  }
+
   await disposeShellSession(request.threadId);
   persist.clearActiveStream(request.threadId);
   persist.setThreadStatus(request.threadId, "idle");
+
+  if (activeRunId && activeRunControl) {
+    const snapshot = await loadThreadSessionSnapshot(request.threadId);
+    if (snapshot) {
+      activeRunControl.eventChannel.emit({
+        snapshot,
+        type: "thread.snapshot",
+      });
+    }
+    activeRunControl.eventChannel.emit({
+      ...(request.messageId ? { messageId: request.messageId } : {}),
+      runId: activeRunId,
+      threadStatus: "idle",
+      type: "run.cancelled",
+    });
+    activeRunControl.eventChannel.close();
+    activeRunControls.delete(activeRunId);
+  }
+
+  await drainFollowUpQueue(request);
   return new Response(null, { status: 204 });
+}
+
+async function handleFollowUpAction(
+  request: ThreadChatRequest,
+  existingThread: Awaited<ReturnType<typeof persist.loadThread>>,
+  position: "front" | "tail",
+): Promise<Response> {
+  if (!request.message || !request.modelId) {
+    throw new Error("Queued follow-ups require a message payload and model.");
+  }
+
+  const threadMode = normalizeThreadMode(request.threadMode ?? existingThread?.mode);
+  const fallbackTitle =
+    getFirstUserText([request.message])?.slice(0, 100) ?? "New thread";
+
+  await persist.ensureThread(
+    request.threadId,
+    request.userId,
+    request.workspaceId,
+    fallbackTitle,
+    threadMode,
+  );
+
+  const payload = {
+    id: request.message.id,
+    modelId: request.modelId,
+    parts: request.message.parts,
+    reasoningEffort: request.reasoningEffort ?? null,
+    threadId: request.threadId,
+    threadMode,
+  } as const;
+
+  if (position === "front") {
+    persist.enqueueThreadFollowUpAtFront(payload);
+  } else {
+    persist.enqueueThreadFollowUp(payload);
+  }
+
+  const latestThread = await persist.loadThread(request.threadId);
+  const isStreaming =
+    latestThread?.activeStreamId != null || latestThread?.status === "streaming";
+
+  if (position === "front" && isStreaming) {
+    const latestAssistantId = await persist.getLatestAssistantMessageId(
+      request.threadId,
+    );
+    return handleStopStream({
+      ...request,
+      ...(latestAssistantId ? { messageId: latestAssistantId } : {}),
+      trigger: "stop-stream",
+    });
+  }
+
+  await drainFollowUpQueue(request);
+  return new Response(null, { status: 204 });
+}
+
+async function drainFollowUpQueue(request: Pick<
+  ThreadChatRequest,
+  "threadId" | "userId" | "workspaceId"
+>) {
+  const thread = await persist.loadThread(request.threadId);
+
+  if (!thread) {
+    return;
+  }
+
+  if (thread.activeStreamId || thread.status === "streaming") {
+    return;
+  }
+
+  if (thread.status === "awaiting_approval") {
+    return;
+  }
+
+  persist.resetProcessingThreadFollowUps(request.threadId);
+  const nextFollowUp = persist.claimNextThreadFollowUp(request.threadId);
+
+  if (!nextFollowUp) {
+    return;
+  }
+
+  try {
+    await runParsedThreadChat(
+      {
+        id: request.threadId,
+        message: {
+          id: nextFollowUp.id,
+          metadata: {},
+          parts: nextFollowUp.parts,
+          role: "user",
+        },
+        modelId: nextFollowUp.modelId,
+        ...(nextFollowUp.reasoningEffort
+          ? { reasoningEffort: nextFollowUp.reasoningEffort }
+          : {}),
+        threadMode: nextFollowUp.threadMode,
+        trigger: "submit-user-message",
+        workspaceId: request.workspaceId,
+      },
+      request.userId,
+      { detached: true },
+    );
+    persist.deleteThreadFollowUp(request.threadId, nextFollowUp.id);
+  } catch (error) {
+    persist.requeueThreadFollowUp(request.threadId, nextFollowUp.id);
+    throw error;
+  }
+}
+
+async function streamStillOwnsThread(threadId: string, streamId: string | null) {
+  if (!streamId) {
+    return true;
+  }
+
+  const currentThread = await persist.loadThread(threadId);
+  if (!currentThread) {
+    return true;
+  }
+
+  return currentThread?.activeStreamId === streamId;
+}
+
+async function createThreadEventChannel(runId: string) {
+  let controller: ReadableStreamDefaultController<string> | null = null;
+
+  await streamContext.createNewResumableStream(
+    runId,
+    () =>
+      new ReadableStream<string>({
+        start(nextController) {
+          controller = nextController;
+        },
+      }),
+  );
+
+  return {
+    close() {
+      controller?.close();
+      controller = null;
+    },
+    emit(event: ThreadStreamEvent) {
+      controller?.enqueue(serializeThreadStreamEvent(event));
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -190,6 +381,7 @@ function persistUserMessage(
   request: ThreadChatRequest,
   transcript: ThreadUIMessage[],
   targetMessage: PersistedThreadMessageRecord | undefined,
+  runId?: string,
 ): string | null {
   if (
     !request.message ||
@@ -211,6 +403,7 @@ function persistUserMessage(
       branchId: request.message.id,
       isActive: true,
       parentMessageId,
+      ...(runId ? { runId } : {}),
       status: "completed",
       ...(request.trigger === "edit-user-message" && request.messageId
         ? { editedFromMessageId: request.messageId }
@@ -220,6 +413,20 @@ function persistUserMessage(
 
   persist.upsertMessage(request.threadId, userMsg);
   return userMsg.id;
+}
+
+function persistAssistantSnapshot(
+  threadId: string,
+  runId: string,
+  message: ThreadUIMessage,
+) {
+  return persist.upsertMessage(threadId, {
+    ...message,
+    metadata: mergeThreadMessageMetadata(message.metadata, {
+      runId,
+      status: "streaming",
+    }),
+  });
 }
 
 function resolveUserParentId(
@@ -272,15 +479,27 @@ const EMPTY_MCP_RUNTIME = {
 // Main entry point
 // ---------------------------------------------------------------------------
 
-export async function runThreadChat(rawInput: unknown, userId: string) {
+async function runParsedThreadChat(
+  rawInput: unknown,
+  userId: string,
+  options?: { detached?: boolean },
+) {
   const request = await parseRequest(rawInput, userId);
+  const existingThread = await persist.loadThread(request.threadId);
 
   if (request.trigger === "stop-stream") {
     return handleStopStream(request);
   }
 
+  if (request.trigger === "queue-follow-up") {
+    return handleFollowUpAction(request, existingThread, "tail");
+  }
+
+  if (request.trigger === "steer-follow-up") {
+    return handleFollowUpAction(request, existingThread, "front");
+  }
+
   const allRecords = await persist.loadThreadMessages(request.threadId);
-  const existingThread = await persist.loadThread(request.threadId);
   const transcript = buildActiveThreadMessages(allRecords);
   const threadMode = normalizeThreadMode(
     request.threadMode ?? existingThread?.mode,
@@ -307,6 +526,8 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
     fallbackTitle,
     threadMode,
   );
+  const runId = generateId();
+  persist.setActiveStream(request.threadId, runId);
   persist.setThreadStatus(request.threadId, "streaming");
 
   try {
@@ -330,12 +551,11 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
       request,
       transcript,
       targetMessage,
+      runId,
     );
     if (persistedUserId) {
       await persist.setActiveMessage(request.threadId, persistedUserId);
     }
-
-    persist.clearActiveStream(request.threadId);
 
     const resolvedModel = await resolveThreadChatModel(request, targetMessage);
 
@@ -402,7 +622,12 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
       continuationAssistant,
     );
 
-    persist.upsertMessage(request.threadId, placeholder);
+    const placeholderMessage = persist.upsertMessage(request.threadId, {
+      ...placeholder,
+      metadata: mergeThreadMessageMetadata(placeholder.metadata, {
+        runId,
+      }),
+    });
     await persist.setActiveMessage(request.threadId, assistantId);
 
     const mcpRuntimePromise =
@@ -437,6 +662,21 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
     const agentMessages = prepareMessagesForModel(modelTranscript);
     let streamErrorMessage: string | undefined;
     let closeMcpTools = async () => {};
+    const abortController = new AbortController();
+    const eventChannel = await createThreadEventChannel(runId);
+    activeRunControls.set(runId, {
+      abortController,
+      cancelled: false,
+      eventChannel,
+    });
+    const initialSnapshot = await loadThreadSessionSnapshot(request.threadId);
+    if (initialSnapshot) {
+      eventChannel.emit({
+        snapshot: initialSnapshot,
+        type: "thread.snapshot",
+      });
+    }
+    eventChannel.emit({ runId, type: "run.started" });
 
     const stream = createUIMessageStream({
       originalMessages: modelTranscript,
@@ -530,6 +770,7 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
 
           const result = await createAgentUIStream({
             agent,
+            abortSignal: abortController.signal,
             experimental_transform: smoothStream({ chunking: "line" }),
             generateMessageId: () => assistantId,
             messageMetadata: ({ part }) => tracker.getMessageMetadata(part),
@@ -577,25 +818,23 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
           const title = await resolvedTitlePromise.catch(() => null);
           if (title) {
             persist.updateThreadTitle(request.threadId, title);
-            writer.write({
-              type: "data-thread-title",
-              data: { threadId: request.threadId, title },
-            });
-            writer.write({
-              type: "data-thread-invalidation",
-              data: { target: "all", threadId: request.threadId },
-            });
           }
         }
       },
       onFinish: async ({ responseMessage }) => {
         await closeMcpTools();
+        if (!(await streamStillOwnsThread(request.threadId, runId))) {
+          eventChannel.close();
+          activeRunControls.delete(runId);
+          return;
+        }
+
         const finalized = tracker.finalize(
           [...modelTranscript, responseMessage as ThreadUIMessage],
           responseMessage as ThreadUIMessage,
         );
         const [finalAssistant] = normalizeThreadUIMessages(finalized).slice(-1);
-        persist.upsertMessage(
+        const persistedAssistant = persist.upsertMessage(
           request.threadId,
           buildPersistedAssistantMessage({
             assistantId,
@@ -603,9 +842,20 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
               ? { errorMessage: streamErrorMessage }
               : {}),
             finalAssistant,
-            placeholder,
+            placeholder: placeholderMessage,
           }),
         );
+        eventChannel.emit({
+          message: persistedAssistant,
+          runId,
+          type: "message.upsert",
+        });
+        eventChannel.emit({
+          messageId: persistedAssistant.id,
+          runId,
+          status: persistedAssistant.metadata?.status,
+          type: "message.status",
+        });
 
         if (!streamErrorMessage) {
           void autosaveConversationMemories({
@@ -631,29 +881,101 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
           request.threadId,
           hasApprovalPending ? "awaiting_approval" : "idle",
         );
-      },
-    });
+        const snapshot = await loadThreadSessionSnapshot(request.threadId);
+        if (snapshot) {
+          eventChannel.emit({
+            snapshot,
+            type: "thread.snapshot",
+          });
+          eventChannel.emit({
+            queuedFollowUps: snapshot.queuedFollowUps,
+            runId,
+            type: "queue.snapshot",
+          });
+        }
+        eventChannel.emit({
+          runId,
+          threadStatus: hasApprovalPending ? "awaiting_approval" : "idle",
+          type: "run.finished",
+        });
+        eventChannel.close();
+        activeRunControls.delete(runId);
 
-    return createUIMessageStreamResponse({
-      headers: { "Content-Encoding": "none" },
-      stream,
-      async consumeSseStream({ stream: sseStream }) {
-        const streamId = generateId();
-        persist.setActiveStream(request.threadId, streamId);
-        try {
-          await streamContext.createNewResumableStream(
-            streamId,
-            () => sseStream,
-          );
-        } catch (error) {
-          persist.clearActiveStream(request.threadId);
-          persist.setThreadStatus(request.threadId, "idle");
-          throw error;
+        if (!hasApprovalPending) {
+          await drainFollowUpQueue(request);
         }
       },
     });
+
+    void (async () => {
+      try {
+        for await (const assistantMessage of readUIMessageStream<ThreadUIMessage>({
+          message: placeholderMessage,
+          stream,
+        })) {
+          if (!(await streamStillOwnsThread(request.threadId, runId))) {
+            eventChannel.close();
+            return;
+          }
+
+          const persistedAssistant = persistAssistantSnapshot(
+            request.threadId,
+            runId,
+            assistantMessage,
+          );
+          eventChannel.emit({
+            message: persistedAssistant,
+            runId,
+            type: "message.upsert",
+          });
+        }
+      } catch (error) {
+        await closeMcpTools();
+        if (await streamStillOwnsThread(request.threadId, runId)) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : String(error ?? "Unknown error");
+
+          persist.clearActiveStream(request.threadId);
+          persist.setThreadStatus(request.threadId, "idle");
+          await persist.updateMessageMetadata(request.threadId, assistantId, {
+            errorMessage: message,
+            runId,
+            status: "error",
+          });
+          const snapshot = await loadThreadSessionSnapshot(request.threadId);
+          if (snapshot) {
+            eventChannel.emit({
+              snapshot,
+              type: "thread.snapshot",
+            });
+          }
+          eventChannel.emit({
+            error: message,
+            runId,
+            threadStatus: "idle",
+            type: "run.failed",
+          });
+        }
+        eventChannel.close();
+        activeRunControls.delete(runId);
+      }
+    })();
+
+    return Response.json(
+      {
+        activeRunId: runId,
+      },
+      { status: options?.detached ? 202 : 200 },
+    );
   } catch (error) {
+    persist.clearActiveStream(request.threadId);
     persist.setThreadStatus(request.threadId, "idle");
     throw error;
   }
+}
+
+export async function runThreadChat(rawInput: unknown, userId: string) {
+  return runParsedThreadChat(rawInput, userId);
 }

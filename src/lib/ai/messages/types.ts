@@ -39,6 +39,7 @@ export const threadMessageMetadataSchema = z
       .partial()
       .optional(),
     parentMessageId: z.string().nullable().optional(),
+    revision: z.number().int().nonnegative().optional(),
     reasoning: z
       .object({
         activeSinceMs: z.number().nullable().optional(),
@@ -49,6 +50,7 @@ export const threadMessageMetadataSchema = z
       })
       .partial()
       .optional(),
+    runId: z.string().optional(),
     status: z
       .enum(["pending", "streaming", "completed", "error", "cancelled"])
       .optional(),
@@ -68,6 +70,14 @@ export type ThreadUIMessage = UIMessage<
   ThreadMessageMetadata,
   ThreadUIDataTypes
 >;
+
+export function getThreadMessageRevision(message: ThreadUIMessage): number {
+  return message.metadata?.revision ?? 0;
+}
+
+export function getThreadMessageRunId(message: ThreadUIMessage): string | null {
+  return message.metadata?.runId ?? null;
+}
 
 function getTextFingerprint(text: string) {
   if (!text) {
@@ -272,6 +282,8 @@ export function getThreadMessageSyncToken(message: ThreadUIMessage) {
     metadata?.isActive ? "1" : "0",
     metadata?.errorMessage ?? "",
     metadata?.finishReason ?? "",
+    metadata?.revision ?? "",
+    metadata?.runId ?? "",
     metadata?.usage?.totalTokens ?? "",
     metadata?.usage?.reasoningTokens ?? "",
     metadata?.reasoning?.durationMs ?? "",

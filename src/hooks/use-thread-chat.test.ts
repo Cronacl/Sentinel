@@ -1,134 +1,150 @@
-import { describe, expect, it, mock } from "bun:test";
+import { afterEach, describe, expect, it, mock } from "bun:test";
 
+import type { ThreadSessionSnapshot } from "@/lib/ai/chat/session-types";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 
-const lastAssistantMessageIsCompleteWithApprovalResponses = mock(
-  () => false,
-);
+import {
+  fetchThreadSessionSnapshot,
+  mergeThreadSessionStateFromSnapshot,
+} from "./use-thread-chat";
 
-mock.module("ai", () => ({
-  createAgentUIStream: mock(async () => ({ kind: "agent-ui-stream" })),
-  createUIMessageStream: mock(() => new ReadableStream()),
-  createUIMessageStreamResponse: mock(() => new Response()),
-  generateId: mock(() => "mock-id"),
-  hasToolCall: mock((name: string) => ({ kind: "has-tool-call", toolName: name })),
-  lastAssistantMessageIsCompleteWithApprovalResponses,
-  smoothStream: mock(() => ({})),
-  stepCountIs: mock(() => ({ kind: "stop-when" })),
-  tool: mock((config: unknown) => config),
-  ToolLoopAgent: class { constructor() {} },
-}));
+function createMessage(
+  id: string,
+  text: string,
+  revision: number,
+): ThreadUIMessage {
+  return {
+    id,
+    metadata: { revision },
+    parts: [{ text, type: "text" }],
+    role: "assistant",
+  };
+}
 
-const { prepareThreadChatRequestBody } = await import("./thread-chat-transport");
+function createQueuedFollowUp(id: string, text: string) {
+  return {
+    attachmentCount: 0,
+    createdAt: new Date("2026-03-17T10:00:00.000Z"),
+    hasFiles: false,
+    id,
+    modelId: "openai:gpt-5.2",
+    reasoningEffort: "high" as const,
+    text,
+    threadMode: "chat" as const,
+  };
+}
 
-describe("prepareThreadChatRequestBody", () => {
-  it("includes threadMode on first user message submissions", () => {
-    const userMessage: ThreadUIMessage = {
-      id: "user-1",
-      metadata: {},
-      parts: [{ text: "make a plan", type: "text" }],
-      role: "user",
+afterEach(() => {
+  mock.restore();
+});
+
+describe("mergeThreadSessionStateFromSnapshot", () => {
+  it("returns the current state when the snapshot is identical", () => {
+    const queuedFollowUps = [createQueuedFollowUp("queued-1", "same queue")];
+    const current = {
+      activeRunId: "run-1",
+      composerState: { pendingActionCount: 0 },
+      connectionState: "connected" as const,
+      errorMessage: null,
+      lastAppliedRevision: 5,
+      lastSyncedAt: 123,
+      messages: [createMessage("assistant-1", "same assistant", 5)],
+      queuedFollowUps,
+      threadId: "thread-1",
+      threadStatus: "streaming" as const,
+    };
+    const snapshot: ThreadSessionSnapshot = {
+      activeRunId: "run-1",
+      messages: current.messages,
+      queuedFollowUps,
+      threadId: "thread-1",
+      threadStatus: "streaming",
     };
 
-    const result = prepareThreadChatRequestBody({
-      body: {
-        modelId: "openai:gpt-5.2",
-        threadMode: "plan",
-        trigger: "submit-user-message",
-      },
-      id: "thread-1",
-      messages: [userMessage],
-      trigger: "submit-message",
-      workspaceId: "workspace-1",
-    });
+    const result = mergeThreadSessionStateFromSnapshot(
+      current,
+      snapshot,
+      "connected",
+    );
 
-    expect(result.body).toMatchObject({
-      id: "thread-1",
-      message: userMessage,
-      modelId: "openai:gpt-5.2",
-      threadMode: "plan",
-      trigger: "submit-user-message",
-      workspaceId: "workspace-1",
-    });
-    expect(result.body).not.toHaveProperty("messages");
+    expect(result).toBe(current);
   });
 
-  it("preserves plan mode on plan-answer submissions", () => {
-    const userMessage: ThreadUIMessage = {
-      id: "user-1",
-      metadata: {},
-      parts: [{ text: "make a plan", type: "text" }],
-      role: "user",
+  it("preserves newer local messages while applying queue and status updates", () => {
+    const current = {
+      activeRunId: "run-1",
+      composerState: { pendingActionCount: 0 },
+      connectionState: "connected" as const,
+      errorMessage: "stale error",
+      lastAppliedRevision: 5,
+      lastSyncedAt: null,
+      messages: [createMessage("assistant-1", "newer local assistant", 5)],
+      queuedFollowUps: [createQueuedFollowUp("queued-old", "old queue")],
+      threadId: "thread-1",
+      threadStatus: "streaming" as const,
     };
-    const assistantMessage: ThreadUIMessage = {
-      id: "assistant-1",
-      metadata: {},
-      parts: [
-        {
-          input: {
-            questions: [
-              {
-                header: "Scope",
-                id: "scope",
-                options: [
-                  { description: "Keep it small", label: "Small" },
-                  { description: "Go broad", label: "Broad" },
-                ],
-                question: "What scope do you want?",
-              },
-            ],
-          },
-          output: {
-            answers: null,
-            questionSetId: "question-set-1",
-            questions: [
-              {
-                header: "Scope",
-                id: "scope",
-                options: [
-                  { description: "Keep it small", label: "Small" },
-                  { description: "Go broad", label: "Broad" },
-                ],
-                question: "What scope do you want?",
-              },
-            ],
-            status: "pending",
-          },
-          state: "output-available",
-          toolCallId: "tool-call-1",
-          type: "tool-ask_question",
-        },
-      ],
-      role: "assistant",
+    const snapshot: ThreadSessionSnapshot = {
+      activeRunId: "run-1",
+      messages: [createMessage("assistant-1", "older snapshot", 3)],
+      queuedFollowUps: [createQueuedFollowUp("queued-new", "new queue")],
+      threadId: "thread-1",
+      threadStatus: "idle",
     };
 
-    const result = prepareThreadChatRequestBody({
-      body: {
-        planAnswers: [
-          {
-            answer: "Small",
-            optionLabel: "Small",
-            questionId: "scope",
-          },
-        ],
-        planQuestionSetId: "question-set-1",
-        threadMode: "plan",
-        trigger: "submit-plan-answer",
-      },
-      id: "thread-1",
-      messageId: "assistant-1",
-      messages: [userMessage, assistantMessage],
-      trigger: "regenerate-message",
-      workspaceId: "workspace-1",
-    });
+    const result = mergeThreadSessionStateFromSnapshot(
+      current,
+      snapshot,
+      "disconnected",
+    );
 
-    expect(result.body).toMatchObject({
-      id: "thread-1",
-      messageId: "assistant-1",
-      planQuestionSetId: "question-set-1",
-      threadMode: "plan",
-      trigger: "submit-plan-answer",
-      workspaceId: "workspace-1",
-    });
+    expect(result.messages).toEqual(current.messages);
+    expect(result.queuedFollowUps).toEqual(snapshot.queuedFollowUps);
+    expect(result.threadStatus).toBe("idle");
+    expect(result.connectionState).toBe("idle");
+    expect(result.lastAppliedRevision).toBe(5);
+    expect(result.errorMessage).toBeNull();
+  });
+
+  it("replaces messages when the snapshot is newer", () => {
+    const current = {
+      activeRunId: "run-1",
+      composerState: { pendingActionCount: 0 },
+      connectionState: "connected" as const,
+      errorMessage: null,
+      lastAppliedRevision: 2,
+      lastSyncedAt: null,
+      messages: [createMessage("assistant-1", "older local assistant", 2)],
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadStatus: "streaming" as const,
+    };
+    const snapshot: ThreadSessionSnapshot = {
+      activeRunId: "run-1",
+      messages: [createMessage("assistant-1", "newer snapshot", 4)],
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadStatus: "streaming",
+    };
+
+    const result = mergeThreadSessionStateFromSnapshot(
+      current,
+      snapshot,
+      "disconnected",
+    );
+
+    expect(result.messages).toEqual(snapshot.messages);
+    expect(result.lastAppliedRevision).toBe(4);
+    expect(result.connectionState).toBe("disconnected");
+  });
+});
+
+describe("fetchThreadSessionSnapshot", () => {
+  it("returns null for missing sessions when allowMissing is enabled", async () => {
+    const fetchMock = mock(async () => new Response(null, { status: 404 }));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    await expect(
+      fetchThreadSessionSnapshot("thread-1", { allowMissing: true }),
+    ).resolves.toBeNull();
   });
 });

@@ -16,15 +16,14 @@ import { PageWrapper } from "@/components/shell";
 import { SentinelLogoBadge } from "@/components/shared/logo";
 import { useOutsideClick } from "@/hooks/use-outside-click";
 import { useThreadChat } from "@/hooks/use-thread-chat";
+import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
-import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import {
   applyThreadSettingsCacheUpdate,
   applyThreadStatusCacheUpdate,
 } from "@/lib/threads/cache";
 import { CreateWorkspaceModal } from "@/components/workspaces/create-workspace-modal";
 import { api } from "@/trpc/react";
-import type { ChatOnDataCallback } from "ai";
 import type { FileUIPart } from "ai";
 
 import { ChatComposer } from "./chat-composer";
@@ -43,7 +42,6 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
-  const [generatedTitle, setGeneratedTitle] = useState<string | null>(null);
   const [draftThreadMode, setDraftThreadMode] = useState<
     "chat" | "plan" | null
   >(null);
@@ -151,64 +149,33 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   });
 
   const selectedWorkspace = currentWorkspace.data;
-  const handleData = useCallback<ChatOnDataCallback<ThreadUIMessage>>(
-    (dataPart) => {
-      if (
-        dataPart.type === "data-thread-title" &&
-        dataPart.data.threadId === draftThreadId
-      ) {
-        setGeneratedTitle(dataPart.data.title);
-        utils.threads.get.setData({ threadId: draftThreadId }, (current) =>
-          current
-            ? {
-                ...current,
-                thread: {
-                  ...current.thread,
-                  title: dataPart.data.title,
-                },
-              }
-            : current,
-        );
-        void utils.threads.list.invalidate();
-      }
-
-      if (
-        dataPart.type === "data-thread-invalidation" &&
-        dataPart.data.threadId === draftThreadId
-      ) {
-        void utils.plan.get.invalidate({ threadId: draftThreadId });
-        void utils.threads.get.invalidate({ threadId: draftThreadId });
-        void utils.threads.list.invalidate();
-      }
-    },
-    [draftThreadId, utils.plan.get, utils.threads.get, utils.threads.list],
-  );
-
-  const handleFinish = useCallback(() => {
-    void utils.plan.get.invalidate({ threadId: draftThreadId });
-    void utils.threads.get.invalidate({ threadId: draftThreadId });
-    void utils.threads.list.invalidate();
-  }, [draftThreadId, utils.plan.get, utils.threads.get, utils.threads.list]);
-
+  const cachedThreadDetails = utils.threads.get.getData({
+    threadId: draftThreadId,
+  });
   const handleError = useCallback((error: Error) => {
     setChatError(error.message);
   }, []);
 
   const chat = useThreadChat({
+    initialActiveRunId: cachedThreadDetails?.thread.activeRunId ?? null,
     threadId: draftThreadId,
-    initialMessages: [],
-    onData: handleData,
+    initialMessages: cachedThreadDetails?.messages ?? [],
+    initialQueuedFollowUps:
+      (cachedThreadDetails?.queuedFollowUps as QueuedFollowUpSummary[]) ?? [],
+    initialThreadStatus: cachedThreadDetails?.thread.status ?? "idle",
     workspaceId: selectedWorkspace?.id ?? "",
-    onFinish: handleFinish,
     onError: handleError,
   });
   const {
     addToolApprovalResponse,
     answerPlanQuestions,
     messages,
+    queueFollowUp,
+    queuedFollowUps,
     sendMessage,
     status,
-    stop,
+    steerFollowUp,
+    stopStream,
   } = chat;
 
   const hasMessages = messages.length > 0;
@@ -217,6 +184,18 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     { threadId: draftThreadId },
     { enabled: hasMessages },
   );
+  const removeQueuedFollowUp = api.threads.removeQueuedFollowUp.useMutation({
+    onSuccess: () => {
+      void utils.threads.get.invalidate({ threadId: draftThreadId });
+      void utils.threads.list.invalidate();
+    },
+  });
+  const steerQueuedFollowUp = api.threads.steerQueuedFollowUp.useMutation({
+    onSuccess: () => {
+      void utils.threads.get.invalidate({ threadId: draftThreadId });
+      void utils.threads.list.invalidate();
+    },
+  });
 
   useEffect(() => {
     if (status === "streaming") {
@@ -251,7 +230,6 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       threadMode?: "chat" | "plan";
     }) => {
       setChatError(null);
-      setGeneratedTitle(null);
       setDraftThreadMode(threadMode);
       setDraftThreadSelection({
         modelId,
@@ -261,8 +239,10 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       if (selectedWorkspace) {
         const now = new Date();
         utils.threads.get.setData({ threadId: draftThreadId }, (current) => ({
-          messages: current?.messages ?? [],
+          messages: current?.messages ?? messages,
+          queuedFollowUps: current?.queuedFollowUps ?? queuedFollowUps,
           thread: {
+            activeRunId: current?.thread.activeRunId ?? null,
             archivedAt: current?.thread.archivedAt ?? null,
             chatModelId: modelId,
             chatReasoningEffort: reasoningEffort ?? null,
@@ -270,6 +250,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             id: draftThreadId,
             mode: threadMode,
             pinnedAt: current?.thread.pinnedAt ?? null,
+            status: current?.thread.status ?? "idle",
             summary: current?.thread.summary ?? null,
             title:
               current?.thread.title || text.trim().slice(0, 60) || "New thread",
@@ -294,6 +275,8 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     },
     [
       draftThreadId,
+      messages,
+      queuedFollowUps,
       router,
       selectedWorkspace,
       sendMessage,
@@ -333,6 +316,62 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       void answerPlanQuestions({ answers, assistantMessageId, questionSetId });
     },
     [answerPlanQuestions],
+  );
+
+  const handleQueueFollowUp = useCallback(
+    async ({
+      files,
+      modelId,
+      reasoningEffort,
+      text,
+      threadMode = "chat",
+    }: {
+      files?: FileUIPart[];
+      modelId: string;
+      reasoningEffort?: ReasoningEffort | null;
+      text: string;
+      threadMode?: "chat" | "plan";
+    }) => {
+      setChatError(null);
+      await queueFollowUp({
+        files,
+        modelId,
+        reasoningEffort,
+        text,
+        threadMode,
+      });
+      await utils.threads.get.invalidate({ threadId: draftThreadId });
+      void utils.threads.list.invalidate();
+    },
+    [draftThreadId, queueFollowUp, utils.threads.get, utils.threads.list],
+  );
+
+  const handleSteerFollowUp = useCallback(
+    async ({
+      files,
+      modelId,
+      reasoningEffort,
+      text,
+      threadMode = "chat",
+    }: {
+      files?: FileUIPart[];
+      modelId: string;
+      reasoningEffort?: ReasoningEffort | null;
+      text: string;
+      threadMode?: "chat" | "plan";
+    }) => {
+      setChatError(null);
+      await steerFollowUp({
+        files,
+        modelId,
+        reasoningEffort,
+        text,
+        threadMode,
+      });
+      await utils.threads.get.invalidate({ threadId: draftThreadId });
+      void utils.threads.list.invalidate();
+    },
+    [draftThreadId, steerFollowUp, utils.threads.get, utils.threads.list],
   );
 
   const handleStartPlanImplementation = useCallback(() => {
@@ -430,7 +469,6 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     const handleNewThread = () => {
       hasHandedOffRef.current = false;
       setChatError(null);
-      setGeneratedTitle(null);
       setDraftThreadMode(utils.chatPreferences.get.getData()?.mode ?? null);
       setDraftThreadSelection(null);
       setDraftThreadId(crypto.randomUUID());
@@ -477,7 +515,10 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         ?.text.slice(0, 60) ?? "New Thread";
 
     return (
-      <PageWrapper title={generatedTitle ?? firstText} flush>
+      <PageWrapper
+        title={threadDetailsQuery.data?.thread.title ?? firstText}
+        flush
+      >
         <div className="sentinel-scroll-shell relative h-full">
           <div
             ref={scrollAreaRef}
@@ -514,9 +555,24 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
               <ChatComposer
                 activeWorkspace={selectedWorkspace}
                 draftMode={resolvedThreadSelection?.mode ?? draftThreadMode}
+                onQueueFollowUp={handleQueueFollowUp}
+                onRemoveQueuedFollowUp={async (id) => {
+                  await removeQueuedFollowUp.mutateAsync({
+                    followUpId: id,
+                    threadId: draftThreadId,
+                  });
+                }}
                 onSend={handleSend}
-                onStop={stop}
+                onStop={stopStream}
+                onSteerFollowUp={handleSteerFollowUp}
+                onSteerQueuedFollowUp={async (id) => {
+                  await steerQueuedFollowUp.mutateAsync({
+                    followUpId: id,
+                    threadId: draftThreadId,
+                  });
+                }}
                 persistThreadSelection={Boolean(threadDetailsQuery.data)}
+                queuedFollowUps={queuedFollowUps}
                 status={status}
                 threadId={draftThreadId}
                 threadSelection={resolvedThreadSelection}
@@ -658,9 +714,24 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             <ChatComposer
               activeWorkspace={selectedWorkspace}
               draftMode={draftThreadMode}
+              onQueueFollowUp={handleQueueFollowUp}
+              onRemoveQueuedFollowUp={async (id) => {
+                await removeQueuedFollowUp.mutateAsync({
+                  followUpId: id,
+                  threadId: draftThreadId,
+                });
+              }}
               onSend={handleSend}
-              onStop={stop}
+              onStop={stopStream}
+              onSteerFollowUp={handleSteerFollowUp}
+              onSteerQueuedFollowUp={async (id) => {
+                await steerQueuedFollowUp.mutateAsync({
+                  followUpId: id,
+                  threadId: draftThreadId,
+                });
+              }}
               persistThreadSelection={false}
+              queuedFollowUps={queuedFollowUps}
               status={status}
               threadId={draftThreadId}
               threadSelection={draftThreadSelection}

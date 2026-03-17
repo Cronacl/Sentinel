@@ -56,6 +56,7 @@ export function ThreadRouteScreen({ threadId }: { threadId: string }) {
   return (
     <ThreadScreen
       initialMessages={threadQuery.data.messages}
+      queuedFollowUps={threadQuery.data.queuedFollowUps}
       thread={threadQuery.data.thread}
       workspace={threadQuery.data.workspace}
     />

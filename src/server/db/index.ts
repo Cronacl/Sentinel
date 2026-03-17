@@ -155,6 +155,14 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
 
   try {
     db.run(
+      sql`ALTER TABLE "user" ADD COLUMN "follow_up_behavior" text DEFAULT 'queue' NOT NULL`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(
       sql`ALTER TABLE "thread" ADD COLUMN "mode" text DEFAULT 'chat' NOT NULL`,
     );
   } catch {
@@ -231,6 +239,24 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
   );
   db.run(
     sql`CREATE INDEX IF NOT EXISTS "thread_message_thread_created_idx" ON "thread_message" ("thread_id", "created_at")`,
+  );
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS "thread_follow_up" (
+    "id" text PRIMARY KEY NOT NULL,
+    "thread_id" text NOT NULL,
+    "parts" text NOT NULL,
+    "model_id" text NOT NULL,
+    "reasoning_effort" text,
+    "thread_mode" text NOT NULL,
+    "status" text DEFAULT 'queued' NOT NULL,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "thread_follow_up_thread_created_idx" ON "thread_follow_up" ("thread_id", "created_at")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "thread_follow_up_thread_status_idx" ON "thread_follow_up" ("thread_id", "status")`,
   );
 
   db.run(sql`CREATE TABLE IF NOT EXISTS "thread_plan" (
