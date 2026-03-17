@@ -63,7 +63,7 @@ export class MySQLService {
     return this.withConnection(async (conn) => {
       const [rows] = await conn.query("SHOW DATABASES");
       return (rows as Record<string, string>[]).map((r) => ({
-        name: r.Database,
+        name: r.Database!,
       }));
     });
   }
@@ -199,7 +199,10 @@ export class MySQLService {
     database?: string,
   ): Promise<{ affectedRows: number; command: string }> {
     return this.withConnection(async (conn) => {
-      const [result] = await conn.execute(sql, params ?? []);
+      const [result] = await conn.execute(
+        sql,
+        (params ?? []) as (string | number | boolean | null)[],
+      );
       const info = result as mysql.ResultSetHeader;
       const command = sql.trim().split(/\s+/)[0]?.toUpperCase() ?? "UNKNOWN";
       return {

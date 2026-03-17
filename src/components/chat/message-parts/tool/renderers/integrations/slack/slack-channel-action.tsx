@@ -62,6 +62,9 @@ export const SlackChannelActionTool = memo(function SlackChannelActionTool({
     if (state.needsApproval) setIsExpanded(true);
   }, [state.needsApproval]);
 
+  const channelOutput =
+    output && "name" in output ? (output as ChannelOutput) : null;
+
   const summary = state.needsApproval
     ? `${actionLabel} \u2014 awaiting approval`
     : state.isRunning
@@ -70,8 +73,8 @@ export const SlackChannelActionTool = memo(function SlackChannelActionTool({
         ? `${actionLabel} \u2014 failed`
         : state.isDenied
           ? `${actionLabel} \u2014 denied`
-          : output && "name" in output
-            ? `Created #${output.name}`
+              : channelOutput
+            ? `Created #${channelOutput.name}`
             : output && "topic" in output
               ? "Topic updated"
               : output && "purpose" in output
@@ -111,7 +114,7 @@ export const SlackChannelActionTool = memo(function SlackChannelActionTool({
       errorText={state.isError ? state.errorText : undefined}
       isExpandable={Boolean(
         (state.needsApproval && input) ||
-          (state.hasOutput && output && "name" in output),
+          (state.hasOutput && channelOutput),
       )}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
@@ -137,23 +140,23 @@ export const SlackChannelActionTool = memo(function SlackChannelActionTool({
             </div>
           </div>
         ) : null}
-        {!state.needsApproval && output && "name" in output ? (
+        {!state.needsApproval && channelOutput ? (
           <div className="rounded-lg p-2">
             <div className="flex items-center gap-2">
               <Icon
-                icon={output.isPrivate ? "solar:lock-linear" : "solar:hashtag-linear"}
+                icon={channelOutput.isPrivate ? "solar:lock-linear" : "solar:hashtag-linear"}
                 className="h-4 w-4 text-foreground/50"
               />
               <p className="text-[12.5px] font-medium text-foreground">
-                {output.name}
+                {channelOutput.name}
               </p>
             </div>
             <div className="mt-1 flex items-center gap-1.5 text-[10.5px] text-foreground/45">
               <span className="inline-flex items-center gap-1 rounded bg-foreground/4 px-1.5 py-0.5">
                 <Icon icon="solar:users-group-rounded-linear" className="h-3 w-3" />
-                {output.memberCount}
+                {channelOutput.memberCount}
               </span>
-              {output.isPrivate ? (
+              {channelOutput.isPrivate ? (
                 <span className="inline-flex items-center rounded bg-foreground/4 px-1.5 py-0.5">
                   Private
                 </span>

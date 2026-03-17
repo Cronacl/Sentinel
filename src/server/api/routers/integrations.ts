@@ -38,6 +38,7 @@ const INTEGRATION_LABELS: Record<IntegrationProvider, string> = {
   gmail: "Gmail",
   google_calendar: "Google Calendar",
   google_drive: "Google Drive",
+  airtable: "Airtable",
   slack: "Slack",
   notion: "Notion",
   github: "GitHub",

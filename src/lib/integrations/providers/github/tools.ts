@@ -152,15 +152,18 @@ export function buildGitHubTools(
         const service = getGitHubService(context);
         return service.searchRepos(input);
       },
-      experimental_toModelOutput: ({ output }) => ({
-        totalCount: output.totalCount,
-        repos: output.repos.map((r) => ({
-          fullName: r.fullName,
-          description: truncateBody(r.description),
-          stars: r.stars,
-          language: r.language,
-          htmlUrl: r.htmlUrl,
-        })),
+      toModelOutput: ({ output }) => ({
+        type: "json" as const,
+        value: {
+          totalCount: output.totalCount,
+          repos: output.repos.map((r) => ({
+            fullName: r.fullName,
+            description: truncateBody(r.description),
+            stars: r.stars,
+            language: r.language,
+            htmlUrl: r.htmlUrl,
+          })),
+        },
       }),
     }),
 
@@ -181,18 +184,22 @@ export function buildGitHubTools(
         const repos = await service.listRepos(input);
         return { repos };
       },
-      experimental_toModelOutput: ({ output }) => ({
-        repos: output.repos.map((r) => ({
-          fullName: r.fullName,
-          description: truncateBody(r.description),
-          stars: r.stars,
-          language: r.language,
-        })),
+      toModelOutput: ({ output }) => ({
+        type: "json" as const,
+        value: {
+          repos: output.repos.map((r) => ({
+            fullName: r.fullName,
+            description: truncateBody(r.description),
+            stars: r.stars,
+            language: r.language,
+          })),
+        },
       }),
     }),
 
     gh_get_repo: tool({
-      description: "Get detailed information about a specific GitHub repository.",
+      description:
+        "Get detailed information about a specific GitHub repository.",
       inputSchema: z.object(ownerRepoInput),
       outputSchema: repoSchema,
       needsApproval: () => approvalFn("gh_get_repo"),
@@ -224,15 +231,18 @@ export function buildGitHubTools(
         const issues = await service.listIssues(input);
         return { issues };
       },
-      experimental_toModelOutput: ({ output }) => ({
-        issues: output.issues.map((i) => ({
-          number: i.number,
-          title: i.title,
-          state: i.state,
-          labels: i.labels,
-          author: i.author,
-          htmlUrl: i.htmlUrl,
-        })),
+      toModelOutput: ({ output }) => ({
+        type: "json" as const,
+        value: {
+          issues: output.issues.map((i) => ({
+            number: i.number,
+            title: i.title,
+            state: i.state,
+            labels: i.labels,
+            author: i.author,
+            htmlUrl: i.htmlUrl,
+          })),
+        },
       }),
     }),
 
@@ -257,7 +267,10 @@ export function buildGitHubTools(
         title: z.string().describe("Issue title."),
         body: z.string().optional().describe("Issue body (Markdown)."),
         labels: z.array(z.string()).optional().describe("Label names."),
-        assignees: z.array(z.string()).optional().describe("Usernames to assign."),
+        assignees: z
+          .array(z.string())
+          .optional()
+          .describe("Usernames to assign."),
       }),
       outputSchema: issueSchema,
       needsApproval: () => approvalFn("gh_create_issue"),
@@ -268,7 +281,8 @@ export function buildGitHubTools(
     }),
 
     gh_update_issue: tool({
-      description: "Update an existing GitHub issue (title, body, labels, assignees, state).",
+      description:
+        "Update an existing GitHub issue (title, body, labels, assignees, state).",
       inputSchema: z.object({
         ...ownerRepoInput,
         issueNumber: z.number().describe("Issue number."),
@@ -276,7 +290,10 @@ export function buildGitHubTools(
         body: z.string().optional().describe("New body."),
         state: z.enum(["open", "closed"]).optional().describe("New state."),
         labels: z.array(z.string()).optional().describe("Replace labels."),
-        assignees: z.array(z.string()).optional().describe("Replace assignees."),
+        assignees: z
+          .array(z.string())
+          .optional()
+          .describe("Replace assignees."),
       }),
       outputSchema: issueSchema,
       needsApproval: () => approvalFn("gh_update_issue"),
@@ -333,17 +350,20 @@ export function buildGitHubTools(
         const prs = await service.listPrs(input);
         return { prs };
       },
-      experimental_toModelOutput: ({ output }) => ({
-        prs: output.prs.map((p) => ({
-          number: p.number,
-          title: p.title,
-          state: p.state,
-          author: p.author,
-          head: p.head,
-          base: p.base,
-          draft: p.draft,
-          htmlUrl: p.htmlUrl,
-        })),
+      toModelOutput: ({ output }) => ({
+        type: "json" as const,
+        value: {
+          prs: output.prs.map((p) => ({
+            number: p.number,
+            title: p.title,
+            state: p.state,
+            author: p.author,
+            head: p.head,
+            base: p.base,
+            draft: p.draft,
+            htmlUrl: p.htmlUrl,
+          })),
+        },
       }),
     }),
 
@@ -388,7 +408,10 @@ export function buildGitHubTools(
           .enum(["merge", "squash", "rebase"])
           .optional()
           .describe("Merge strategy (default merge)."),
-        commitTitle: z.string().optional().describe("Custom merge commit title."),
+        commitTitle: z
+          .string()
+          .optional()
+          .describe("Custom merge commit title."),
       }),
       outputSchema: z.object({
         merged: z.boolean(),
@@ -447,7 +470,9 @@ export function buildGitHubTools(
       inputSchema: z.object({
         query: z
           .string()
-          .describe("Code search query (GitHub search syntax, e.g. 'useState repo:facebook/react')."),
+          .describe(
+            "Code search query (GitHub search syntax, e.g. 'useState repo:facebook/react').",
+          ),
         maxResults: z.number().optional().describe("Max results (default 20)."),
       }),
       outputSchema: z.object({
@@ -486,8 +511,7 @@ export function buildGitHubTools(
     }),
 
     gh_create_branch: tool({
-      description:
-        "Create a new branch from a given commit SHA.",
+      description: "Create a new branch from a given commit SHA.",
       inputSchema: z.object({
         ...ownerRepoInput,
         branchName: z.string().describe("Name for the new branch."),
@@ -522,16 +546,19 @@ export function buildGitHubTools(
         const service = getGitHubService(context);
         return service.listRuns(input);
       },
-      experimental_toModelOutput: ({ output }) => ({
-        totalCount: output.totalCount,
-        runs: output.runs.map((r) => ({
-          id: r.id,
-          name: r.name,
-          status: r.status,
-          conclusion: r.conclusion,
-          branch: r.branch,
-          htmlUrl: r.htmlUrl,
-        })),
+      toModelOutput: ({ output }) => ({
+        type: "json" as const,
+        value: {
+          totalCount: output.totalCount,
+          runs: output.runs.map((r) => ({
+            id: r.id,
+            name: r.name,
+            status: r.status,
+            conclusion: r.conclusion,
+            branch: r.branch,
+            htmlUrl: r.htmlUrl,
+          })),
+        },
       }),
     }),
 
@@ -578,15 +605,18 @@ export function buildGitHubTools(
         const releases = await service.listReleases(input);
         return { releases };
       },
-      experimental_toModelOutput: ({ output }) => ({
-        releases: output.releases.map((r) => ({
-          tagName: r.tagName,
-          name: r.name,
-          htmlUrl: r.htmlUrl,
-          draft: r.draft,
-          prerelease: r.prerelease,
-          publishedAt: r.publishedAt,
-        })),
+      toModelOutput: ({ output }) => ({
+        type: "json" as const,
+        value: {
+          releases: output.releases.map((r) => ({
+            tagName: r.tagName,
+            name: r.name,
+            htmlUrl: r.htmlUrl,
+            draft: r.draft,
+            prerelease: r.prerelease,
+            publishedAt: r.publishedAt,
+          })),
+        },
       }),
     }),
 
@@ -602,7 +632,9 @@ export function buildGitHubTools(
         targetCommitish: z
           .string()
           .optional()
-          .describe("Branch or commit SHA to tag (defaults to default branch)."),
+          .describe(
+            "Branch or commit SHA to tag (defaults to default branch).",
+          ),
       }),
       outputSchema: releaseSchema,
       needsApproval: () => approvalFn("gh_create_release"),
