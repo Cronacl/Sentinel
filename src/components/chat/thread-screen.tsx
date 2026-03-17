@@ -30,6 +30,7 @@ import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import {
   applyThreadSettingsCacheUpdate,
+  applyThreadStatusCacheUpdate,
   applyOptimisticThreadPinUpdate,
   restoreOptimisticThreadPinUpdate,
 } from "@/lib/threads/cache";
@@ -138,6 +139,7 @@ export function ThreadScreen({
         description: workspace.description,
         id: workspace.id,
         isArchived: false,
+        isExpanded: false,
         name: workspace.name,
         rootPath: workspace.rootPath,
         updatedAt: workspace.updatedAt,
@@ -243,6 +245,18 @@ export function ThreadScreen({
   } = chat;
 
   const isBusy = status === "submitted" || status === "streaming";
+
+  useEffect(() => {
+    if (status === "streaming") {
+      applyThreadStatusCacheUpdate({
+        status: "streaming",
+        threadId: thread.id,
+        utils,
+        workspaceId: workspace.id,
+      });
+      void utils.threads.list.invalidate();
+    }
+  }, [status, thread.id, utils, workspace.id]);
 
   useEffect(() => {
     if (isBusy) return;
@@ -474,7 +488,6 @@ export function ThreadScreen({
     const reasoningEffort =
       threadSelectionState.reasoningEffort ??
       (cachedThread?.chatReasoningEffort as ReasoningEffort | null) ??
-      null ??
       (globalSelection?.reasoningEffort as ReasoningEffort | null) ??
       null;
 

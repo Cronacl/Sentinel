@@ -57,6 +57,7 @@ function toCurrentWorkspace(
         createdAt: Date;
         description: string | null;
         id: string;
+        isExpanded?: boolean;
         name: string;
         rootPath: string | null;
         updatedAt: Date;
@@ -73,6 +74,7 @@ function toCurrentWorkspace(
     description: workspace.description,
     id: workspace.id,
     isArchived: false,
+    isExpanded: workspace.isExpanded ?? false,
     name: workspace.name,
     rootPath: workspace.rootPath,
     updatedAt: workspace.updatedAt,
@@ -111,6 +113,27 @@ function formatRelativeTime(value: Date | string) {
     /(\d+)\s+(\w+)/,
     (_, num, unit) => `${num}${SHORT_LABELS[unit] ?? unit}`,
   );
+}
+
+type ThreadStatusValue = "idle" | "streaming" | "awaiting_approval";
+
+function ThreadStatusIndicator({ status }: { status: ThreadStatusValue }) {
+  if (status === "streaming") {
+    return <Spinner className="size-3 min-w-3" color="current" size="sm" />;
+  }
+
+  if (status === "awaiting_approval") {
+    return (
+      <span
+        className="relative flex h-2.5 w-2.5 shrink-0"
+        title="Awaiting approval"
+      >
+        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-accent" />
+      </span>
+    );
+  }
+
+  return null;
 }
 
 function WorkspaceSidebarLoadingState() {
@@ -220,20 +243,23 @@ function ThreadItemTrailing({
   onArchive,
   updatedAt,
   alwaysVisible = false,
+  threadStatus = "idle",
 }: {
   alwaysVisible?: boolean;
   isPinned: boolean;
   onArchive: (threadId: string) => void;
   onPin: (threadId: string) => void;
   threadId: string;
+  threadStatus?: ThreadStatusValue;
   updatedAt?: Date;
 }) {
-  const hasTimestamp = !alwaysVisible && updatedAt != null;
+  const isActive = threadStatus !== "idle";
+  const hasTimestamp = !alwaysVisible && !isActive && updatedAt != null;
 
   return (
     <span
       className={`relative flex h-6 shrink-0 items-center justify-end ${
-        hasTimestamp ? "w-[2.5rem]" : "w-[2rem]"
+        hasTimestamp ? "w-10" : "w-8"
       }`}
     >
       {hasTimestamp ? (
@@ -327,6 +353,7 @@ function PinnedThreadsList({
   threads: Array<{
     id: string;
     pinnedAt: Date | null;
+    status: ThreadStatusValue;
     title: string;
     updatedAt: Date;
     workspace: { id: string; name: string };
@@ -358,13 +385,17 @@ function PinnedThreadsList({
               }}
             >
               <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-                <HugeiconsIcon
-                  className="shrink-0 text-foreground/40"
-                  color="currentColor"
-                  icon={PinIcon}
-                  size={12}
-                  strokeWidth={1.5}
-                />
+                {thread.status !== "idle" ? (
+                  <ThreadStatusIndicator status={thread.status} />
+                ) : (
+                  <HugeiconsIcon
+                    className="shrink-0 text-foreground/40"
+                    color="currentColor"
+                    icon={PinIcon}
+                    size={12}
+                    strokeWidth={1.5}
+                  />
+                )}
                 <span
                   className="min-w-0 max-w-[9rem] truncate"
                   title={thread.title}
@@ -378,6 +409,7 @@ function PinnedThreadsList({
                 onArchive={onArchive}
                 onPin={onPin}
                 threadId={thread.id}
+                threadStatus={thread.status}
               />
             </div>
           );
@@ -493,7 +525,9 @@ const ThreadList = memo(function ThreadList({
                           }}
                         >
                           <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-                            {thread.pinnedAt != null && (
+                            {thread.status !== "idle" ? (
+                              <ThreadStatusIndicator status={thread.status} />
+                            ) : thread.pinnedAt != null ? (
                               <HugeiconsIcon
                                 className="shrink-0 text-foreground/40"
                                 color="currentColor"
@@ -501,7 +535,7 @@ const ThreadList = memo(function ThreadList({
                                 size={11}
                                 strokeWidth={1.5}
                               />
-                            )}
+                            ) : null}
                             <span
                               className="min-w-0 truncate text-sm"
                               title={thread.title}
@@ -514,6 +548,7 @@ const ThreadList = memo(function ThreadList({
                             onArchive={onArchive}
                             onPin={onPin}
                             threadId={thread.id}
+                            threadStatus={thread.status}
                             updatedAt={thread.updatedAt}
                           />
                         </div>
@@ -588,7 +623,9 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
           >
             <div className="flex min-w-0 items-center justify-between gap-2">
               <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-                {item.pinnedAt != null && (
+                {item.status !== "idle" ? (
+                  <ThreadStatusIndicator status={item.status} />
+                ) : item.pinnedAt != null ? (
                   <HugeiconsIcon
                     className="shrink-0 text-foreground/40"
                     color="currentColor"
@@ -596,7 +633,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
                     size={11}
                     strokeWidth={1.5}
                   />
-                )}
+                ) : null}
                 <span className="min-w-0 truncate" title={item.title}>
                   {item.title}
                 </span>
@@ -606,6 +643,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
                 onArchive={onArchive}
                 onPin={onPin}
                 threadId={item.id}
+                threadStatus={item.status}
                 updatedAt={item.updatedAt}
               />
             </div>
@@ -677,9 +715,6 @@ export function WorkspaceSidebar() {
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [organizeBy, setOrganizeBy] = useState<OrganizeBy>("workspace");
   const [sortBy, setSortBy] = useState<SortBy>("updated");
-  const [expandedWorkspaceIds, setExpandedWorkspaceIds] = useState<Set<string>>(
-    new Set(),
-  );
   const [threadVisibleCounts, setThreadVisibleCounts] = useState<
     Map<string, number>
   >(new Map());
@@ -704,15 +739,38 @@ export function WorkspaceSidebar() {
   const preferences = api.workspaces.getPreferences.useQuery();
   const currentWorkspace = api.workspaces.getCurrent.useQuery();
   const workspaces = api.workspaces.list.useQuery();
+
+  const expandedWorkspaceIds = useMemo(
+    () =>
+      new Set(
+        (workspaces.data ?? []).filter((w) => w.isExpanded).map((w) => w.id),
+      ),
+    [workspaces.data],
+  );
+
   const selectedThreadId = useMemo(() => {
     const match = pathname.match(/\/thread\/([^/]+)/);
     return match?.[1] ?? null;
   }, [pathname]);
 
-  const threads = api.threads.list.useQuery({
-    organizeBy,
-    sortBy,
-  });
+  const threads = api.threads.list.useQuery(
+    { organizeBy, sortBy },
+    {
+      refetchInterval: (query) => {
+        const data = query.state.data;
+        if (!data) return false;
+        const hasActive =
+          "groups" in data
+            ? data.groups?.some((g) =>
+                g.threads.some((t) => t.status !== "idle"),
+              )
+            : "items" in data
+              ? data.items?.some((t) => t.status !== "idle")
+              : false;
+        return hasActive ? 2_000 : false;
+      },
+    },
+  );
 
   const groups: ThreadGroup =
     threads.data && "groups" in threads.data ? (threads.data.groups ?? []) : [];
@@ -723,6 +781,7 @@ export function WorkspaceSidebar() {
     const pinned: Array<{
       id: string;
       pinnedAt: Date | null;
+      status: ThreadStatusValue;
       title: string;
       updatedAt: Date;
       workspace: { id: string; name: string };
@@ -853,6 +912,7 @@ export function WorkspaceSidebar() {
         description: workspace.description,
         id: workspace.id,
         isArchived: workspace.isArchived,
+        isExpanded: workspace.isExpanded,
         name: workspace.name,
         rootPath: workspace.rootPath,
         updatedAt: workspace.updatedAt,
@@ -868,6 +928,7 @@ export function WorkspaceSidebar() {
             createdAt: workspace.createdAt,
             description: workspace.description,
             id: workspace.id,
+            isExpanded: workspace.isExpanded,
             isSelected: true,
             latestThreadUpdatedAt: null,
             name: workspace.name,
@@ -938,11 +999,6 @@ export function WorkspaceSidebar() {
         undefined,
         toCurrentWorkspace(nextSelectedWorkspace),
       );
-      setExpandedWorkspaceIds((current) => {
-        const next = new Set(current);
-        next.delete(workspaceId);
-        return next;
-      });
       void utils.threads.list.invalidate();
 
       if (
@@ -1020,28 +1076,6 @@ export function WorkspaceSidebar() {
     setOrganizeBy(preferences.data.organizeBy);
     setSortBy(preferences.data.sortBy);
   }, [preferences.data]);
-
-  useEffect(() => {
-    if (
-      !selectedThreadId ||
-      organizeBy !== "workspace" ||
-      groups.length === 0
-    ) {
-      return;
-    }
-
-    for (const group of groups) {
-      if (group.threads.some((t) => t.id === selectedThreadId)) {
-        setExpandedWorkspaceIds((current) => {
-          if (current.has(group.workspace.id)) return current;
-          const next = new Set(current);
-          next.add(group.workspace.id);
-          return next;
-        });
-        break;
-      }
-    }
-  }, [selectedThreadId, groups, organizeBy]);
 
   useEffect(() => {
     if (!isPreferencesOpen) {
@@ -1123,26 +1157,29 @@ export function WorkspaceSidebar() {
     setChronologicalVisibleCount((c) => c + THREADS_PER_PAGE);
   }, []);
 
-  const handleToggleWorkspace = useCallback((workspaceId: string) => {
-    setExpandedWorkspaceIds((current) => {
-      const next = new Set(current);
-      if (next.has(workspaceId)) {
-        next.delete(workspaceId);
-      } else {
-        next.add(workspaceId);
-      }
-      return next;
-    });
-  }, []);
+  const toggleExpanded = api.workspaces.toggleExpanded.useMutation({
+    onMutate: async ({ workspaceId }) => {
+      const previous = utils.workspaces.list.getData();
+      utils.workspaces.list.setData(undefined, (current) =>
+        current?.map((w) =>
+          w.id === workspaceId ? { ...w, isExpanded: !w.isExpanded } : w,
+        ),
+      );
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      utils.workspaces.list.setData(undefined, context?.previous ?? []);
+    },
+  });
 
   const handlePressWorkspace = useCallback(
     (workspaceId: string) => {
       if (selectedWorkspaceId !== workspaceId) {
         void selectWorkspace.mutate({ workspaceId });
       }
-      handleToggleWorkspace(workspaceId);
+      void toggleExpanded.mutate({ workspaceId });
     },
-    [handleToggleWorkspace, selectWorkspace, selectedWorkspaceId],
+    [toggleExpanded, selectWorkspace, selectedWorkspaceId],
   );
 
   const handlePressThread = useCallback(

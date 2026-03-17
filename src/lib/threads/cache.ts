@@ -189,6 +189,55 @@ export function restoreOptimisticThreadPinUpdate(
   }
 }
 
+type ThreadStatusValue = "idle" | "streaming" | "awaiting_approval";
+
+function updateThreadStatusInListData<T extends ThreadListData | undefined>(
+  data: T,
+  threadId: string,
+  status: ThreadStatusValue,
+): T {
+  if (!data) {
+    return data;
+  }
+
+  if ("groups" in data) {
+    return {
+      ...data,
+      groups: (data.groups ?? []).map((group) => ({
+        ...group,
+        threads: group.threads.map((thread) =>
+          thread.id === threadId ? { ...thread, status } : thread,
+        ),
+      })),
+    } as T;
+  }
+
+  return {
+    ...data,
+    items: (data.items ?? []).map((item) =>
+      item.id === threadId ? { ...item, status } : item,
+    ),
+  } as T;
+}
+
+export function applyThreadStatusCacheUpdate({
+  status,
+  threadId,
+  utils,
+  workspaceId,
+}: {
+  status: ThreadStatusValue;
+  threadId: string;
+  utils: TrpcUtils;
+  workspaceId?: string;
+}) {
+  for (const input of getThreadListInputs(workspaceId)) {
+    utils.threads.list.setData(input, (current) =>
+      updateThreadStatusInListData(current, threadId, status),
+    );
+  }
+}
+
 export function applyThreadSettingsCacheUpdate({
   patch,
   threadId,

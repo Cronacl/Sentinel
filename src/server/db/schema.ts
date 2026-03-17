@@ -29,6 +29,7 @@ import {
   THREAD_MODES,
   THREAD_PLAN_QUESTION_STATUSES,
   THREAD_PLAN_TASK_STATUSES,
+  THREAD_STATUSES,
 } from "./enums";
 
 export const users = sqliteTable(
@@ -124,6 +125,9 @@ export const workspaces = sqliteTable(
     isArchived: integer("is_archived", { mode: "boolean" })
       .notNull()
       .default(false),
+    isExpanded: integer("is_expanded", { mode: "boolean" })
+      .notNull()
+      .default(false),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .$defaultFn(() => new Date()),
@@ -176,6 +180,9 @@ export const threads = sqliteTable(
     archivedAt: integer("archived_at", { mode: "timestamp" }),
     pinnedAt: integer("pinned_at", { mode: "timestamp" }),
     activeStreamId: text("active_stream_id"),
+    status: text("status", { enum: THREAD_STATUSES })
+      .notNull()
+      .default("idle"),
   },
   (table) => [
     index("thread_workspace_id_idx").on(table.workspaceId),

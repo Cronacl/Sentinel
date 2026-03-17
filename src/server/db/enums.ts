@@ -47,6 +47,13 @@ export type ThreadMessageRole = (typeof THREAD_MESSAGE_ROLES)[number];
 export const THREAD_MODES = ["chat", "plan"] as const;
 export type ThreadMode = (typeof THREAD_MODES)[number];
 
+export const THREAD_STATUSES = [
+  "idle",
+  "streaming",
+  "awaiting_approval",
+] as const;
+export type ThreadStatus = (typeof THREAD_STATUSES)[number];
+
 export const THREAD_PLAN_TASK_STATUSES = [
   "pending",
   "in_progress",

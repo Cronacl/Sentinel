@@ -3,6 +3,8 @@ import path from "node:path";
 import { TRPCError } from "@trpc/server";
 import { and, count, eq, isNull, max, ne, sql } from "drizzle-orm";
 
+import { z } from "zod";
+
 import {
   threadListPreferencesSchema,
   workspaceArchiveSchema,
@@ -106,6 +108,7 @@ export const workspacesRouter = createTRPCRouter({
         createdAt: workspace.createdAt,
         description: workspace.description,
         id: workspace.id,
+        isExpanded: workspace.isExpanded,
         isSelected: ctx.user.selectedWorkspaceId === workspace.id,
         latestThreadUpdatedAt: stats?.latestThreadUpdatedAt ?? null,
         name: workspace.name,
@@ -310,5 +313,20 @@ export const workspacesRouter = createTRPCRouter({
         organizeBy: input.organizeBy,
         sortBy: input.sortBy,
       };
+    }),
+
+  toggleExpanded: protectedProcedure
+    .input(z.object({ workspaceId: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const next = !workspace.isExpanded;
+
+      ctx.db
+        .update(workspaces)
+        .set({ isExpanded: next })
+        .where(eq(workspaces.id, input.workspaceId))
+        .run();
+
+      return { isExpanded: next, workspaceId: input.workspaceId };
     }),
 });

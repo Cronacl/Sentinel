@@ -33,6 +33,7 @@ const threadSelect = {
   id: true,
   mode: true,
   pinnedAt: true,
+  status: true,
   summary: true,
   title: true,
   updatedAt: true,

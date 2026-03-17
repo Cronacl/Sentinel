@@ -196,3 +196,13 @@ export function clearActiveStream(threadId: string) {
     .where(eq(threads.id, threadId))
     .run();
 }
+
+export function setThreadStatus(
+  threadId: string,
+  status: "idle" | "streaming" | "awaiting_approval",
+) {
+  db.update(threads)
+    .set({ status })
+    .where(eq(threads.id, threadId))
+    .run();
+}

@@ -77,6 +77,7 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
     }
     await disposeShellSession(request.threadId);
     persist.clearActiveStream(request.threadId);
+    persist.setThreadStatus(request.threadId, "idle");
     return new Response(null, { status: 204 });
   }
 
@@ -107,7 +108,9 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
     fallbackTitle,
     threadMode,
   );
+  persist.setThreadStatus(request.threadId, "streaming");
 
+  try {
   if (request.trigger === "submit-plan-answer" && request.planQuestionSetId) {
     await answerThreadPlanQuestionSet({
       answers: request.planAnswers ?? [],
@@ -505,6 +508,14 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
       }
 
       persist.clearActiveStream(request.threadId);
+
+      const hasApprovalPending = (responseMessage as ThreadUIMessage).parts.some(
+        (part) => "state" in part && part.state === "approval-requested",
+      );
+      persist.setThreadStatus(
+        request.threadId,
+        hasApprovalPending ? "awaiting_approval" : "idle",
+      );
     },
   });
 
@@ -520,8 +531,13 @@ export async function runThreadChat(rawInput: unknown, userId: string) {
         await streamContext.createNewResumableStream(streamId, () => sseStream);
       } catch (error) {
         persist.clearActiveStream(request.threadId);
+        persist.setThreadStatus(request.threadId, "idle");
         throw error;
       }
     },
   });
+  } catch (error) {
+    persist.setThreadStatus(request.threadId, "idle");
+    throw error;
+  }
 }

@@ -18,7 +18,10 @@ import { useOutsideClick } from "@/hooks/use-outside-click";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
-import { applyThreadSettingsCacheUpdate } from "@/lib/threads/cache";
+import {
+  applyThreadSettingsCacheUpdate,
+  applyThreadStatusCacheUpdate,
+} from "@/lib/threads/cache";
 import { CreateWorkspaceModal } from "@/components/workspaces/create-workspace-modal";
 import { api } from "@/trpc/react";
 import type { ChatOnDataCallback } from "ai";
@@ -79,6 +82,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
               description: nextWorkspace.description,
               id: nextWorkspace.id,
               isArchived: false,
+              isExpanded: nextWorkspace.isExpanded,
               name: nextWorkspace.name,
               rootPath: nextWorkspace.rootPath,
               updatedAt: nextWorkspace.updatedAt,
@@ -115,6 +119,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         description: workspace.description,
         id: workspace.id,
         isArchived: workspace.isArchived,
+        isExpanded: workspace.isExpanded,
         name: workspace.name,
         rootPath: workspace.rootPath,
         updatedAt: workspace.updatedAt,
@@ -130,6 +135,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             createdAt: workspace.createdAt,
             description: workspace.description,
             id: workspace.id,
+            isExpanded: workspace.isExpanded,
             isSelected: true,
             latestThreadUpdatedAt: null,
             name: workspace.name,
@@ -211,6 +217,18 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     { threadId: draftThreadId },
     { enabled: hasMessages },
   );
+
+  useEffect(() => {
+    if (status === "streaming") {
+      applyThreadStatusCacheUpdate({
+        status: "streaming",
+        threadId: draftThreadId,
+        utils,
+        workspaceId: selectedWorkspace?.id,
+      });
+      void utils.threads.list.invalidate();
+    }
+  }, [draftThreadId, selectedWorkspace?.id, status, utils]);
 
   useEffect(() => {
     if (!isBusy) {
