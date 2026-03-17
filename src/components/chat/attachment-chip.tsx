@@ -30,7 +30,7 @@ export function AttachmentChip({
     <div
       role="button"
       onClick={isImage && attachment.previewUrl ? onPreview : undefined}
-      className="group relative flex max-w-[200px] cursor-pointer items-center gap-2 rounded-full border border-border bg-background py-1 pl-1 pr-3 text-xs transition-colors hover:bg-surface"
+      className="group relative flex max-w-[190px] cursor-pointer items-center gap-2 rounded-xl border border-border/50 bg-background py-1 pl-1 pr-3 text-xs transition-colors"
     >
       <div className="flex shrink-0 items-center justify-center">
         {isImage && attachment.previewUrl ? (
@@ -57,7 +57,7 @@ export function AttachmentChip({
       ) : null}
       <span className="min-w-0 truncate text-muted">{attachment.name}</span>
       <button
-        className="absolute -right-1 -top-1 hidden h-4 w-4 items-center justify-center rounded-full bg-surface text-foreground group-hover:flex"
+        className="hidden h-4 min-w-4 items-center justify-center rounded-full bg-surface text-foreground group-hover:flex transition-all duration-150"
         onClick={(event) => {
           event.stopPropagation();
           onRemove();

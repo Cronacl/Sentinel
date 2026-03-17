@@ -47,7 +47,7 @@ export function ComposerToolbar({
       <div className="flex items-center gap-2">
         <div className="relative" ref={composerMenuRef}>
           <button
-            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl border border-border/50 bg-surface text-muted transition-colors hover:text-foreground disabled:opacity-30 dark:bg-background/50"
+            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl border border-border/50 bg-surface text-muted transition-colors hover:text-foreground disabled:opacity-30 dark:bg-background"
             disabled={!hasWorkspace}
             onClick={() => onComposerMenuOpenChange(!composerMenuOpen)}
             type="button"

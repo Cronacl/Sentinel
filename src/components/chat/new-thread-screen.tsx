@@ -2,9 +2,10 @@
 
 import { Spinner } from "@heroui/react";
 import {
-  ArrowDown01Icon,
+  ArrowUp01Icon,
   Folder01Icon,
   FolderAddIcon,
+  Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AnimatePresence, motion } from "motion/react";
@@ -519,7 +520,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     <PageWrapper title="New Thread" flush>
       <div className="sentinel-scroll-shell h-[calc(100vh-44px)]">
         <div className="sentinel-scroll-area flex h-full flex-col">
-          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-6">
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-6">
             <SentinelLogoBadge
               className="h-8 w-8 rounded-[1.75rem]"
               markClassName="h-9 w-9"
@@ -531,7 +532,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
 
             <div className="relative" ref={workspaceMenuRef}>
               <button
-                className="flex h-8 items-center gap-2 rounded-xl border border-border/70 cursor-pointer bg-surface px-3 text-sm text-muted transition-colors hover:text-foreground disabled:opacity-40"
+                className="flex cursor-pointer items-center gap-1.5 disabled:opacity-40"
                 disabled={selectWorkspace.isPending}
                 onClick={() => setIsWorkspaceMenuOpen((open) => !open)}
                 type="button"
@@ -539,22 +540,16 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                 {currentWorkspace.isLoading ? (
                   <Spinner color="current" size="sm" />
                 ) : (
-                  <HugeiconsIcon
-                    color="currentColor"
-                    icon={Folder01Icon}
-                    size={14}
-                    strokeWidth={1.5}
-                  />
+                  <span className="max-w-[240px] truncate text-lg font-medium text-muted">
+                    {selectedWorkspace?.name ?? "Choose workspace"}
+                  </span>
                 )}
-                <span className="max-w-[200px] truncate">
-                  {selectedWorkspace?.name ?? "Choose workspace"}
-                </span>
                 <HugeiconsIcon
-                  className={`transition-transform ${isWorkspaceMenuOpen ? "rotate-180" : ""}`}
+                  className={`text-muted transition-transform ${isWorkspaceMenuOpen ? "" : "rotate-180"}`}
                   color="currentColor"
-                  icon={ArrowDown01Icon}
-                  size={12}
-                  strokeWidth={1.5}
+                  icon={ArrowUp01Icon}
+                  size={14}
+                  strokeWidth={2}
                 />
               </button>
 
@@ -562,19 +557,26 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                 {isWorkspaceMenuOpen && (
                   <motion.div
                     animate={{ opacity: 1, scale: 1, y: 0 }}
-                    className="absolute max-h-56 overflow-y-auto left-1/2 top-10 z-[200] w-[320px] -translate-x-1/2 rounded-xl border border-border bg-background p-1 shadow-overlay"
+                    className="absolute left-1/2 top-10 z-[200] max-h-64 w-[220px] -translate-x-1/2 overflow-y-auto rounded-2xl border border-border/50 bg-surface p-1.5 shadow-overlay"
                     exit={{ opacity: 0, scale: 0.97, y: -6 }}
                     initial={{ opacity: 0, scale: 0.97, y: -6 }}
-                    transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+                    transition={{
+                      duration: 0.15,
+                      ease: [0.22, 1, 0.36, 1],
+                    }}
                   >
+                    <p className="px-2.5 pb-1.5 pt-1 text-xs text-muted">
+                      Select your project
+                    </p>
+
                     {(workspaces.data ?? []).map((workspace) => {
                       const isSelected = workspace.id === selectedWorkspace?.id;
 
                       return (
                         <button
-                          className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                          className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-sm transition-colors ${
                             isSelected
-                              ? "bg-default text-foreground"
+                              ? "text-foreground"
                               : "text-muted hover:bg-default hover:text-foreground"
                           }`}
                           key={workspace.id}
@@ -587,27 +589,32 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                           type="button"
                         >
                           <HugeiconsIcon
+                            className="shrink-0"
                             color="currentColor"
                             icon={Folder01Icon}
-                            size={14}
+                            size={16}
                             strokeWidth={1.5}
                           />
-                          <div className="min-w-0">
-                            <div className="truncate font-medium">
-                              {workspace.name}
-                            </div>
-                            <div className="truncate text-xs text-muted">
-                              {workspace.rootPath || "No folder linked"}
-                            </div>
-                          </div>
+                          <span className="min-w-0 truncate">
+                            {workspace.name}
+                          </span>
+                          {isSelected && (
+                            <HugeiconsIcon
+                              className="ml-auto shrink-0 text-foreground"
+                              color="currentColor"
+                              icon={Tick02Icon}
+                              size={16}
+                              strokeWidth={2}
+                            />
+                          )}
                         </button>
                       );
                     })}
 
-                    <div className="mx-1.5 my-1 h-px bg-separator" />
+                    <div className="mx-2 my-1 h-px bg-separator" />
 
                     <button
-                      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-muted transition-colors hover:bg-default hover:text-foreground"
+                      className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-sm text-muted transition-colors hover:bg-default hover:text-foreground"
                       onClick={() => {
                         setIsWorkspaceMenuOpen(false);
                         setIsCreateOpen(true);
@@ -615,12 +622,13 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                       type="button"
                     >
                       <HugeiconsIcon
+                        className="shrink-0"
                         color="currentColor"
                         icon={FolderAddIcon}
-                        size={14}
+                        size={16}
                         strokeWidth={1.5}
                       />
-                      <span>Create workspace</span>
+                      <span>Add new project</span>
                     </button>
                   </motion.div>
                 )}

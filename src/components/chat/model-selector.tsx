@@ -56,7 +56,7 @@ export function ModelSelector({
     <>
       <div className="relative ml-1" ref={modelMenuRef}>
         <button
-          className="flex h-8 cursor-pointer items-center gap-1 rounded-xl border border-border/50 bg-background px-2 text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground disabled:opacity-30 dark:border-border/80"
+          className="flex h-8 cursor-pointer items-center gap-1 rounded-xl border border-border/50 bg-background px-2 text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground disabled:opacity-30"
           disabled={availableModels.length === 0 || isLoading}
           onClick={() => onModelMenuOpenChange(!modelMenuOpen)}
           type="button"
@@ -89,7 +89,7 @@ export function ModelSelector({
           {modelMenuOpen ? (
             <motion.div
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              className="absolute bottom-10 left-0 z-30 max-h-[280px] w-48 overflow-y-auto rounded-2xl border border-border bg-overlay p-1 shadow-overlay"
+              className="absolute bottom-10 -left-9 z-30 max-h-[280px] w-48 overflow-y-auto rounded-2xl border border-border bg-overlay p-1 shadow-overlay"
               exit={{ opacity: 0, scale: 0.97, y: 6 }}
               initial={{ opacity: 0, scale: 0.97, y: 6 }}
               transition={{
@@ -133,7 +133,7 @@ export function ModelSelector({
       {supportsReasoning ? (
         <div className="relative" ref={reasoningMenuRef}>
           <button
-            className="flex h-8 cursor-pointer items-center gap-1 rounded-xl border border-border/50 bg-background px-2 text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground dark:border-border/80"
+            className="flex h-8 cursor-pointer items-center gap-1 rounded-xl border border-border/50 bg-background px-2 text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground"
             onClick={() => onReasoningMenuOpenChange(!reasoningMenuOpen)}
             type="button"
           >
