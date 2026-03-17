@@ -11,6 +11,7 @@ import { eq } from "drizzle-orm";
 import superjson from "superjson";
 import { ZodError } from "zod";
 
+import { createLogger } from "@/lib/logger";
 import { db } from "@/server/db";
 import { users } from "@/server/db/schema";
 import { getLocalSession } from "@/server/local-profile";
@@ -42,6 +43,8 @@ export const createCallerFactory = t.createCallerFactory;
 
 export const createTRPCRouter = t.router;
 
+const trpcLog = createLogger("TRPC");
+
 const timingMiddleware = t.middleware(async ({ next, path }) => {
   if (process.env.NODE_ENV !== "development") {
     return next();
@@ -50,7 +53,7 @@ const timingMiddleware = t.middleware(async ({ next, path }) => {
   const start = Date.now();
   const result = await next();
   const end = Date.now();
-  console.log(`[TRPC] ${path} took ${end - start}ms to execute`);
+  trpcLog.debug(`${path} took ${end - start}ms to execute`);
 
   return result;
 });

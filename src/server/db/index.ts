@@ -4,6 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import { sql } from "drizzle-orm";
 
+import { createLogger } from "@/lib/logger";
 import * as schema from "./schema";
 
 function getDbPath(): string {
@@ -621,6 +622,7 @@ function createDatabase() {
 
 const globalForDb = globalThis as unknown as {
   automationSchedulerInit: Promise<void> | undefined;
+  startupBackupInit: Promise<void> | undefined;
   db: ReturnType<typeof createDatabase> | undefined;
   vectorDb: Database.Database | null | undefined;
 };
@@ -643,9 +645,25 @@ if (!globalForDb.automationSchedulerInit) {
     })
     .catch((error) => {
       globalForDb.automationSchedulerInit = undefined;
-      console.error(
-        "[Automations] Failed to initialize scheduler:",
-        error instanceof Error ? error.message : error,
+      createLogger("Automations").error(
+        `Failed to initialize scheduler: ${error instanceof Error ? error.message : error}`,
+      );
+    });
+}
+
+if (!globalForDb.startupBackupInit) {
+  globalForDb.startupBackupInit = Promise.resolve()
+    .then(async () => {
+      const { createStartupBackup } = await import("@/server/db/backup");
+      const result = await createStartupBackup();
+      if (result) {
+        createLogger("Backup").info(`Startup backup created: ${result.filename}`);
+      }
+    })
+    .catch((error) => {
+      globalForDb.startupBackupInit = undefined;
+      createLogger("Backup").error(
+        `Startup backup failed: ${error instanceof Error ? error.message : error}`,
       );
     });
 }

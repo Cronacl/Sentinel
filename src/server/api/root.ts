@@ -1,5 +1,6 @@
 import { approvalsRouter } from "@/server/api/routers/approvals";
 import { appearanceRouter } from "@/server/api/routers/appearance";
+import { backupRouter } from "@/server/api/routers/backup";
 import { integrationsRouter } from "@/server/api/routers/integrations";
 import { automationsRouter } from "@/server/api/routers/automations";
 import { authRouter } from "@/server/api/routers/auth";
@@ -30,6 +31,7 @@ import { workspacesRouter } from "@/server/api/routers/workspaces";
 export const appRouter = createTRPCRouter({
   approvals: approvalsRouter,
   appearance: appearanceRouter,
+  backup: backupRouter,
   auth: authRouter,
   automations: automationsRouter,
   chatPreferences: chatPreferencesRouter,

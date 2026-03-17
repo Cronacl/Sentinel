@@ -1,5 +1,7 @@
 import { after } from "next/server";
 
+import { createLogger } from "@/lib/logger";
+
 type StreamListener = {
   close(): void;
   enqueue(chunk: string): void;
@@ -165,11 +167,11 @@ export const streamContext = {
       listeners: new Set(),
     };
 
+    const streamLog = createLogger("Stream");
     record.completion = consumeStream(streamId, record, stream).catch(
       (error) => {
-        console.error(
-          `[Stream] Stream ${streamId} failed:`,
-          error instanceof Error ? error.message : error,
+        streamLog.error(
+          `Stream ${streamId} failed: ${error instanceof Error ? error.message : error}`,
         );
       },
     );

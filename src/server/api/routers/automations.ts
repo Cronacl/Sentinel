@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { createLogger } from "@/lib/logger";
 import {
   createAutomationSchema,
   updateAutomationSchema,
@@ -359,9 +360,8 @@ export const automationsRouter = createTRPCRouter({
       }
 
       executeAutomationRun(input.id, { allowPaused: true }).catch((error) => {
-        console.error(
-          `[Automations] Manual run failed for ${input.id}:`,
-          error instanceof Error ? error.message : error,
+        createLogger("Automations").error(
+          `Manual run failed for ${input.id}: ${error instanceof Error ? error.message : error}`,
         );
       });
 

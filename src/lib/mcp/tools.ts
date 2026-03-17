@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { createLogger } from "@/lib/logger";
 import {
   buildMcpOAuthRedirectUrl,
   createMcpOAuthProvider,
@@ -16,6 +17,8 @@ import type {
   McpServerRuntimeEntry,
   McpStdioRuntimeEntry,
 } from "@/lib/mcp/runtime";
+
+const log = createLogger("MCP");
 
 type McpToolMap = Record<string, any>;
 
@@ -155,14 +158,14 @@ export function getResolvedStdioCwd(
   }
 
   if (workspaceRoot && fs.existsSync(workspaceRoot)) {
-    console.warn(
-      `[MCP] Working directory "${configured}" for "${entry.name}" does not exist. Falling back to workspace root.`,
+    log.warn(
+      `Working directory "${configured}" for "${entry.name}" does not exist. Falling back to workspace root.`,
     );
     return workspaceRoot;
   }
 
-  console.warn(
-    `[MCP] Working directory "${configured}" for "${entry.name}" does not exist. Launching without cwd override.`,
+  log.warn(
+    `Working directory "${configured}" for "${entry.name}" does not exist. Launching without cwd override.`,
   );
 
   return undefined;
@@ -353,8 +356,8 @@ export async function loadMcpTools(args: {
 
       Object.assign(tools, cached.tools);
     } catch (error) {
-      console.warn(
-        `[MCP] Skipping server "${entry.name}": ${
+      log.warn(
+        `Skipping server "${entry.name}": ${
           error instanceof Error ? error.message : String(error)
         }`,
       );

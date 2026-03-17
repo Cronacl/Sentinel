@@ -3,11 +3,14 @@ import path from "node:path";
 import os from "node:os";
 import { eq } from "drizzle-orm";
 
+import { createLogger } from "@/lib/logger";
 import { db } from "@/server/db";
 import { automations } from "@/server/db/schema";
 import type { AutomationScheduleType } from "@/server/db/enums";
 import { buildCronExpression } from "./schedule-utils";
 import { executeAutomationRun } from "./runner";
+
+const log = createLogger("Automations");
 
 function getStatePath(): string {
   const sentinelDir =
@@ -30,9 +33,8 @@ function getBaker() {
       },
       enableMetrics: true,
       onError: (error, jobName) => {
-        console.error(
-          `[Automations] Job ${jobName} failed:`,
-          error instanceof Error ? error.message : error,
+        log.error(
+          `Job ${jobName} failed: ${error instanceof Error ? error.message : error}`,
         );
       },
     });
@@ -82,9 +84,8 @@ export function scheduleAutomation(automation: {
       await executeAutomationRun(automation.id);
     },
     onError: (error) => {
-      console.error(
-        `[Automations] "${automation.title}" failed:`,
-        error instanceof Error ? error.message : error,
+      log.error(
+        `"${automation.title}" failed: ${error instanceof Error ? error.message : error}`,
       );
     },
   });

@@ -5,6 +5,7 @@ import {
   AiIdeaIcon,
   ArrowLeft02Icon,
   Brain02Icon,
+  Database01Icon,
   GlobalSearchIcon,
   GridIcon,
   IceCubesIcon,
@@ -55,6 +56,7 @@ const SETTINGS_NAV = [
   { href: "/settings/security", label: "Security", icon: ShieldUserIcon },
   { href: "/settings/providers", label: "Providers", icon: TestTubeIcon },
   { href: "/settings/models", label: "Models", icon: Brain02Icon },
+  { href: "/settings/data", label: "Data", icon: Database01Icon },
 ] as const;
 
 function ShellWarmCache() {

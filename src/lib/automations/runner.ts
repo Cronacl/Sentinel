@@ -2,10 +2,13 @@ import { and, eq, isNull } from "drizzle-orm";
 import { generateId } from "ai";
 import { createId } from "@paralleldrive/cuid2";
 
+import { createLogger } from "@/lib/logger";
 import { db } from "@/server/db";
 import { automationRuns, automations } from "@/server/db/schema";
 import { runThreadChat } from "@/lib/ai/chat";
 import { computeNextRunAt } from "./schedule-utils";
+
+const log = createLogger("Automations");
 
 function buildAutomationRunPatch(automation: {
   scheduleCron: string | null;
@@ -87,9 +90,7 @@ export async function executeAutomationRun(
   });
 
   if (!automation) {
-    console.error(
-      `[Automations] Cannot execute run: automation ${automationId} not found`,
-    );
+    log.error(`Cannot execute run: automation ${automationId} not found`);
     return;
   }
 
@@ -101,9 +102,7 @@ export async function executeAutomationRun(
   const workspaceId = automation.workspaceId ?? automation.workspace?.id;
 
   if (!workspaceId) {
-    console.error(
-      `[Automations] Cannot execute "${automation.title}": no workspace configured`,
-    );
+    log.error(`Cannot execute "${automation.title}": no workspace configured`);
 
     recordFailedAutomationRun(automation, {
       automationId,
@@ -115,9 +114,7 @@ export async function executeAutomationRun(
   }
 
   if (!automation.workspace || automation.workspace.isArchived) {
-    console.error(
-      `[Automations] Cannot execute "${automation.title}": workspace is archived`,
-    );
+    log.error(`Cannot execute "${automation.title}": workspace is archived`);
 
     recordFailedAutomationRun(automation, {
       automationId,
@@ -160,9 +157,7 @@ export async function executeAutomationRun(
   });
 
   if (!startedRun) {
-    console.warn(
-      `[Automations] Skipping run for "${automation.title}": another run is already in progress`,
-    );
+    log.warn(`Skipping run for "${automation.title}": another run is already in progress`);
     return;
   }
 
@@ -211,10 +206,7 @@ export async function executeAutomationRun(
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
 
-    console.error(
-      `[Automations] Run failed for "${automation.title}":`,
-      errorMessage,
-    );
+    log.error(`Run failed for "${automation.title}": ${errorMessage}`);
 
     db.update(automationRuns)
       .set({
