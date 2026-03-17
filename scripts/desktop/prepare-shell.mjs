@@ -30,7 +30,7 @@ const shellPackageJson = {
   author: rootPackageJson.author,
   type: rootPackageJson.type ?? "module",
   main: "desktop/main/index.mjs",
-  productName: "sentinel",
+  productName: "Sentinel",
 };
 
 await writeFile(
