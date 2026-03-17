@@ -159,7 +159,7 @@ function RepoDetail({ repo }: { repo: RepoResult }) {
 
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-border/30 bg-foreground/2 px-3 py-2">
-          <p className="text-[10px] uppercase tracking-wide text-foreground/40">
+          <p className="text-[10px] text-foreground/40">
             Stars
           </p>
           <p className="text-[13px] font-medium text-foreground">
@@ -167,7 +167,7 @@ function RepoDetail({ repo }: { repo: RepoResult }) {
           </p>
         </div>
         <div className="rounded-xl border border-border/30 bg-foreground/2 px-3 py-2">
-          <p className="text-[10px] uppercase tracking-wide text-foreground/40">
+          <p className="text-[10px] text-foreground/40">
             Forks
           </p>
           <p className="text-[13px] font-medium text-foreground">
@@ -175,7 +175,7 @@ function RepoDetail({ repo }: { repo: RepoResult }) {
           </p>
         </div>
         <div className="rounded-xl border border-border/30 bg-foreground/2 px-3 py-2">
-          <p className="text-[10px] uppercase tracking-wide text-foreground/40">
+          <p className="text-[10px] text-foreground/40">
             Open Issues
           </p>
           <p className="text-[13px] font-medium text-foreground">
@@ -183,7 +183,7 @@ function RepoDetail({ repo }: { repo: RepoResult }) {
           </p>
         </div>
         <div className="rounded-xl border border-border/30 bg-foreground/2 px-3 py-2">
-          <p className="text-[10px] uppercase tracking-wide text-foreground/40">
+          <p className="text-[10px] text-foreground/40">
             Language
           </p>
           <p className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">

@@ -123,7 +123,7 @@ export const NotionPageDetailTool = memo(function NotionPageDetailTool({
               <NotionIcon icon={item.icon} fallback={isDatabase(item) ? "\u{1F5C3}" : "\u{1F4C4}"} />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[12.5px] font-medium leading-snug text-foreground">
+              <p className="text-[12.5px] font-medium text-foreground">
                 {item.title}
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10.5px] text-foreground/45">

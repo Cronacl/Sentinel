@@ -8,6 +8,7 @@ import type { ToolPart } from "../../../../../types";
 import { IntegrationToolLayout } from "../../shared/integration-tool-layout";
 import { IntegrationProviderIcon } from "@/components/icons/integration-provider-icon";
 import { getIntegrationToolInteractionState } from "../../shared/state";
+import { CodeBlock } from "@/components/chat/message-parts/text/code-block";
 
 type ExecuteOutput = {
   affectedRows: number;
@@ -74,13 +75,7 @@ export function createDbExecuteTool(
       >
         <div className="space-y-2">
           {input?.sql ? (
-            <div className="overflow-auto rounded-lg border border-border/30 bg-surface/40 px-3 py-2">
-              <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-foreground/60">
-                {input.sql.length > 300
-                  ? `${input.sql.slice(0, 300)}...`
-                  : input.sql}
-              </pre>
-            </div>
+            <CodeBlock code={input.sql} language="sql" />
           ) : null}
           {output ? (
             <div className="flex items-center gap-2 text-xs text-foreground/60">

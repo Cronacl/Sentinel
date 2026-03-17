@@ -142,7 +142,7 @@ export const SlackMessageActionTool = memo(function SlackMessageActionTool({
         ) : null}
         {!state.needsApproval && output && "text" in output ? (
           <div className="rounded-lg p-2">
-            <p className="text-[12.5px] leading-snug text-foreground line-clamp-3">
+            <p className="text-[12.5px] text-foreground line-clamp-3">
               {output.text}
             </p>
             {output.timestamp ? (

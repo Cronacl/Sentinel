@@ -122,7 +122,7 @@ function MessageContent({ msg }: { msg: MessageOutput }) {
         <Icon icon="solar:chat-round-dots-linear" className="h-4 w-4" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-[12.5px] leading-snug text-foreground line-clamp-2">
+        <p className="text-[12.5px] text-foreground line-clamp-2">
           {msg.text}
         </p>
         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10.5px] text-foreground/45">

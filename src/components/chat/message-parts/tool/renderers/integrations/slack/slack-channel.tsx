@@ -91,11 +91,11 @@ export const SlackChannelTool = memo(function SlackChannelTool({
               />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[12.5px] font-medium leading-snug text-foreground">
+              <p className="text-[12.5px] font-medium text-foreground">
                 {ch.name}
               </p>
               {ch.topic || ch.purpose ? (
-                <p className="mt-0.5 text-[11px] leading-snug text-foreground/50 line-clamp-1">
+                <p className="mt-0.5 text-[11px] text-foreground/50 line-clamp-1">
                   {ch.topic || ch.purpose}
                 </p>
               ) : null}

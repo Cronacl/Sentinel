@@ -99,7 +99,7 @@ export const NotionDatabaseTool = memo(function NotionDatabaseTool({
                 <NotionIcon icon={item.icon} fallback={isDb ? "\u{1F5C3}" : "\u{1F4C4}"} />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-[12.5px] font-medium leading-snug text-foreground">
+                <p className="text-[12.5px] font-medium text-foreground">
                   {item.title}
                 </p>
                 {isDb ? (

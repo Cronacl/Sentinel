@@ -145,7 +145,7 @@ export const NotionDatabaseActionTool = memo(function NotionDatabaseActionTool({
               )}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[12.5px] font-medium leading-snug text-foreground">
+              <p className="text-[12.5px] font-medium text-foreground">
                 {output.title}
               </p>
               {Object.keys(output.properties).length > 0 ? (

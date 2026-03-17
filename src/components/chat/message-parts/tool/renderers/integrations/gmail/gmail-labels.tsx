@@ -67,7 +67,7 @@ export const GmailListLabelsTool = memo(function GmailListLabelsTool({
         <div className="space-y-3">
           {userLabels.length > 0 ? (
             <div>
-              <div className="mb-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-foreground/40">
+              <div className="mb-2 flex items-center gap-1.5 text-[10px] font-medium text-foreground/40">
                 <Icon icon="solar:tag-linear" className="h-3 w-3" />
                 <span>Custom Labels</span>
               </div>
@@ -85,7 +85,7 @@ export const GmailListLabelsTool = memo(function GmailListLabelsTool({
           ) : null}
           {systemLabels.length > 0 ? (
             <div>
-              <div className="mb-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-foreground/40">
+              <div className="mb-2 flex items-center gap-1.5 text-[10px] font-medium text-foreground/40">
                 <Icon icon="solar:inbox-linear" className="h-3 w-3" />
                 <span>System Labels</span>
               </div>

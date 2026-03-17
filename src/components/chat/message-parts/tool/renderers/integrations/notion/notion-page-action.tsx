@@ -146,7 +146,7 @@ export const NotionPageActionTool = memo(function NotionPageActionTool({
               )}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[12.5px] font-medium leading-snug text-foreground">
+              <p className="text-[12.5px] font-medium text-foreground">
                 {output.title}
               </p>
               <div className="mt-1 flex items-center gap-1.5 text-[10.5px] text-foreground/45">

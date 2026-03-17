@@ -101,7 +101,7 @@ export const SlackUsersTool = memo(function SlackUsersTool({
               )}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[12.5px] font-medium leading-snug text-foreground">
+              <p className="text-[12.5px] font-medium text-foreground">
                 {user.realName || user.displayName || user.name}
               </p>
               {user.displayName && user.displayName !== user.realName ? (

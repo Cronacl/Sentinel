@@ -65,7 +65,7 @@ export const AirtableBaseTool = memo(function AirtableBaseTool({
               <Icon icon="solar:database-linear" className="h-4 w-4" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[12.5px] font-medium leading-snug text-foreground">
+              <p className="text-[12.5px] font-medium text-foreground">
                 {base.name}
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10.5px] text-foreground/45">

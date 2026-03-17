@@ -91,7 +91,7 @@ export function createDbDescribeTool(
           <ScrollShadow className="max-h-72">
             <div className="space-y-3">
               <div className="space-y-1">
-                <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-foreground/40">
+                <div className="flex items-center gap-1.5 text-[10px] font-medium text-foreground/40">
                   <Icon
                     icon="solar:list-check-linear"
                     className="h-3 w-3"
@@ -134,7 +134,7 @@ export function createDbDescribeTool(
 
               {output.indexes.length > 0 ? (
                 <div className="space-y-1">
-                  <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-foreground/40">
+                  <div className="flex items-center gap-1.5 text-[10px] font-medium text-foreground/40">
                     <Icon
                       icon="solar:sort-vertical-linear"
                       className="h-3 w-3"
@@ -171,7 +171,7 @@ export function createDbDescribeTool(
 
               {output.foreignKeys.length > 0 ? (
                 <div className="space-y-1">
-                  <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-foreground/40">
+                  <div className="flex items-center gap-1.5 text-[10px] font-medium text-foreground/40">
                     <Icon
                       icon="solar:link-minimalistic-linear"
                       className="h-3 w-3"

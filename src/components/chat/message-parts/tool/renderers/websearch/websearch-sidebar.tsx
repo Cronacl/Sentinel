@@ -1,8 +1,7 @@
 "use client";
 
 import { memo, useCallback, useState } from "react";
-import { Cancel01Icon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
+import { CloseButton, ScrollShadow, Separator } from "@heroui/react";
 
 import { useRightSidebar } from "@/components/shell/shell-context";
 
@@ -127,46 +126,33 @@ export const WebSearchSidebar = memo(function WebSearchSidebar({
   }, [close]);
 
   return (
-    <div className="flex h-full w-full flex-col bg-transparent px-7 pb-6 pt-8">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h2 className="text-[22px] font-medium text-foreground/78">
-            Sources
-          </h2>
-          <p className="mt-1.5 text-[13px] text-muted/90">
-            {results.length} result{results.length !== 1 ? "s" : ""} for &ldquo;
-            {query}&rdquo;
-          </p>
-          <p className="mt-0.5 text-[11px] text-muted/60">via {provider}</p>
-        </div>
-        <button
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted/80 transition-colors hover:text-foreground/80"
-          onClick={handleClose}
-          type="button"
-        >
-          <HugeiconsIcon
-            color="currentColor"
-            icon={Cancel01Icon}
-            size={16}
-            strokeWidth={1.5}
-          />
-        </button>
-      </div>
+    <div className="flex h-full w-full min-h-0 flex-col bg-surface">
+      <header className="flex h-11 shrink-0 items-center gap-2 px-2">
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground ml-2">
+          Sources
+        </span>
+        <span className="shrink-0 text-[11px] text-foreground/35">
+          {results.length} result{results.length !== 1 ? "s" : ""}
+        </span>
+        <CloseButton aria-label="Close sidebar" onPress={handleClose} />
+      </header>
 
-      <div className="sentinel-scroll-shell min-h-0 flex-1">
-        <div className="sentinel-scroll-area flex h-full flex-col">
+      <Separator variant="tertiary" />
+
+      <div className="min-h-0 flex-1">
+        <ScrollShadow className="h-full px-3 py-3" orientation="vertical">
           {results.length === 0 ? (
-            <div className="flex items-center justify-center py-8 text-sm text-default-400">
+            <div className="flex items-center justify-center py-8 text-sm text-foreground/30">
               No results found
             </div>
           ) : (
-            <div className="flex flex-col gap-2 pb-6">
+            <div className="flex flex-col gap-2">
               {results.map((result, index) => (
                 <ResultCard key={`${result.url}-${index}`} result={result} />
               ))}
             </div>
           )}
-        </div>
+        </ScrollShadow>
       </div>
     </div>
   );
