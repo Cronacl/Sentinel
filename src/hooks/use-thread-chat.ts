@@ -112,7 +112,8 @@ function areMessagesEqual(left: ThreadUIMessage[], right: ThreadUIMessage[]) {
   return left.every((message, index) => {
     const other = right[index];
     return other
-      ? getThreadMessageSyncToken(message) === getThreadMessageSyncToken(other)
+      ? message.id === other.id &&
+          getThreadMessageSyncToken(message) === getThreadMessageSyncToken(other)
       : false;
   });
 }
@@ -254,6 +255,7 @@ export function mergeThreadSessionStateFromSnapshot(
   const normalizedSnapshot = normalizeSnapshot(snapshot);
   const nextRevision = getMaxMessageRevision(normalizedSnapshot.messages);
   const preserveCurrentMessages =
+    current.activeRunId != null &&
     current.lastAppliedRevision > nextRevision &&
     current.activeRunId === normalizedSnapshot.activeRunId;
   const nextConnectionState =

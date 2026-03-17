@@ -422,6 +422,7 @@ export async function setActiveMessage(threadId: string, messageId: string) {
         .set({
           metadata: mergeThreadMessageMetadata(meta, {
             isActive: msg.messageId === messageId,
+            revision: (meta.revision ?? 0) + 1,
           }),
         })
         .where(eq(threadMessages.id, msg.id))

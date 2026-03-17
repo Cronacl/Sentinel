@@ -403,7 +403,15 @@ export const threadsRouter = createTRPCRouter({
 
       await setActiveMessage(input.threadId, input.messageId);
 
-      return { ok: true };
+      const messages = await ctx.db.query.threadMessages.findMany({
+        where: eq(threadMessages.threadId, input.threadId),
+        orderBy: (records, { asc }) => [asc(records.createdAt)],
+      });
+
+      return {
+        messages: await mapThreadMessagesToUIMessages(messages as any[]),
+        ok: true,
+      };
     }),
 
   removeQueuedFollowUp: protectedProcedure

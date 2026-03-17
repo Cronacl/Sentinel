@@ -176,7 +176,15 @@ export function ThreadScreen({
     },
   });
   const setActiveBranch = api.threads.setActiveBranch.useMutation({
-    onSuccess: () => {
+    onSuccess: (result) => {
+      utils.threads.get.setData({ threadId: thread.id }, (current) =>
+        current
+          ? {
+              ...current,
+              messages: result.messages,
+            }
+          : current,
+      );
       void utils.threads.get.invalidate({ threadId: thread.id });
     },
   });

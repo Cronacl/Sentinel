@@ -136,6 +136,69 @@ describe("mergeThreadSessionStateFromSnapshot", () => {
     expect(result.lastAppliedRevision).toBe(4);
     expect(result.connectionState).toBe("disconnected");
   });
+
+  it("replaces messages when branch selection changes message ids at the same revision", () => {
+    const current = {
+      activeRunId: null,
+      composerState: { pendingActionCount: 0 },
+      connectionState: "idle" as const,
+      errorMessage: null,
+      lastAppliedRevision: 1,
+      lastSyncedAt: null,
+      messages: [createMessage("assistant-1", "same text", 1)],
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadStatus: "idle" as const,
+    };
+    const snapshot: ThreadSessionSnapshot = {
+      activeRunId: null,
+      messages: [createMessage("assistant-2", "same text", 1)],
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadStatus: "idle",
+    };
+
+    const result = mergeThreadSessionStateFromSnapshot(
+      current,
+      snapshot,
+      "idle",
+    );
+
+    expect(result).not.toBe(current);
+    expect(result.messages).toEqual(snapshot.messages);
+  });
+
+  it("applies lower-revision snapshots when there is no active run", () => {
+    const current = {
+      activeRunId: null,
+      composerState: { pendingActionCount: 0 },
+      connectionState: "idle" as const,
+      errorMessage: null,
+      lastAppliedRevision: 5,
+      lastSyncedAt: null,
+      messages: [createMessage("assistant-2", "newer branch", 5)],
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadStatus: "idle" as const,
+    };
+    const snapshot: ThreadSessionSnapshot = {
+      activeRunId: null,
+      messages: [createMessage("assistant-1", "older branch", 3)],
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadStatus: "idle",
+    };
+
+    const result = mergeThreadSessionStateFromSnapshot(
+      current,
+      snapshot,
+      "idle",
+    );
+
+    expect(result).not.toBe(current);
+    expect(result.messages).toEqual(snapshot.messages);
+    expect(result.lastAppliedRevision).toBe(5);
+  });
 });
 
 describe("fetchThreadSessionSnapshot", () => {
