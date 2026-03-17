@@ -100,6 +100,7 @@ export const INTEGRATION_PROVIDERS = [
   "gmail",
   "google_calendar",
   "google_drive",
+  "airtable",
   "slack",
   "notion",
   "github",

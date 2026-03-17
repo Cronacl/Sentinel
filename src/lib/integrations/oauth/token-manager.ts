@@ -16,6 +16,10 @@ import { isGitHubProvider } from "./providers/github";
 import { getLinearOAuthConfig, isLinearProvider } from "./providers/linear";
 import { isNotionProvider } from "./providers/notion";
 import { getSlackOAuthConfig, isSlackProvider } from "./providers/slack";
+import {
+  getAirtableOAuthConfig,
+  isAirtableProvider,
+} from "./providers/airtable";
 import type { OAuthAppConfig } from "../types";
 
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
@@ -43,6 +47,7 @@ async function resolveOAuthAppConfig(
 function resolveTokenEndpoint(provider: IntegrationProvider): string {
   if (isGoogleProvider(provider)) return getGoogleOAuthConfig(provider).tokenEndpoint;
   if (isLinearProvider(provider)) return getLinearOAuthConfig().tokenEndpoint;
+  if (isAirtableProvider(provider)) return getAirtableOAuthConfig().tokenEndpoint;
   throw new Error(`Token refresh not supported for provider: ${provider}`);
 }
 
@@ -57,15 +62,27 @@ async function refreshAccessToken(
 }> {
   const tokenEndpoint = resolveTokenEndpoint(provider);
 
+  const headers: Record<string, string> = {
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+  });
+
+  if (isAirtableProvider(provider)) {
+    headers["Authorization"] = `Basic ${Buffer.from(
+      `${appConfig.clientId}:${appConfig.clientSecret}`,
+    ).toString("base64")}`;
+  } else {
+    body.set("client_id", appConfig.clientId);
+    body.set("client_secret", appConfig.clientSecret);
+  }
+
   const response = await fetch(tokenEndpoint, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: appConfig.clientId,
-      client_secret: appConfig.clientSecret,
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-    }),
+    headers,
+    body,
   });
 
   if (!response.ok) {
@@ -227,6 +244,25 @@ export async function revokeTokens(integrationId: string): Promise<void> {
                 Authorization: `Bearer ${accessToken}`,
               },
             });
+          }
+        } else if (isAirtableProvider(integration.provider)) {
+          const airtableConfig = getAirtableOAuthConfig();
+          if (airtableConfig.revokeEndpoint) {
+            const appConfig = await resolveOAuthAppConfig(
+              integration.userId,
+              integration.provider,
+            );
+            if (appConfig) {
+              const accessToken = decrypt(tokenRow.encryptedAccessToken);
+              await fetch(airtableConfig.revokeEndpoint, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/x-www-form-urlencoded",
+                  Authorization: `Basic ${Buffer.from(`${appConfig.clientId}:${appConfig.clientSecret}`).toString("base64")}`,
+                },
+                body: new URLSearchParams({ token: accessToken }),
+              });
+            }
           }
         }
       } catch {

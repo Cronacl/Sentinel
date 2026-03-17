@@ -18,6 +18,31 @@ const LinearIcon = (props: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+const AirtableIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 200 170"
+    {...props}
+  >
+    <path
+      fill="#FCB400"
+      d="M90.039 12.368 24.079 39.66c-3.667 1.519-3.63 6.729.062 8.192l66.235 26.266a24.17 24.17 0 0 0 17.803 0l66.236-26.266c3.691-1.463 3.729-6.673.06-8.191l-65.96-27.293a24.172 24.172 0 0 0-18.476 0Z"
+    />
+    <path
+      fill="#18BFFF"
+      d="M105.312 88.46v65.617c0 3.12 3.147 5.258 6.048 4.108l73.806-28.648a4.42 4.42 0 0 0 2.79-4.108V59.813c0-3.121-3.147-5.258-6.048-4.108l-73.806 28.648a4.42 4.42 0 0 0-2.79 4.108Z"
+    />
+    <path
+      fill="#F82B60"
+      d="m88.078 91.846-21.904 10.576-2.224 1.074-46.238 22.155c-2.93 1.414-6.672-.722-6.672-3.978V60.088c0-1.178.604-2.195 1.414-2.96a5.14 5.14 0 0 1 1.672-1.14c1.222-.564 2.58-.528 3.803.074l67.497 32.18c3.26 1.552 3.096 6.278-.348 7.604Z"
+    />
+    <path
+      fill="#BA1B5E"
+      d="m88.078 91.846-21.904 10.576L11.13 56.014c1.222-.564 2.58-.528 3.803.074l67.497 32.18c3.26 1.552 3.096 6.278-.348 7.604l-.004-.026Z"
+    />
+  </svg>
+);
+
 const GithubIcon = (props: SVGProps<SVGSVGElement>) => (
   <svg
     viewBox="0 0 16 16"
@@ -58,6 +83,7 @@ const PROVIDER_ICONS: Record<IntegrationProvider, ProviderIconDef> = {
   gmail: { type: "iconify", icon: "logos:google-gmail" },
   google_calendar: { type: "iconify", icon: "logos:google-calendar" },
   google_drive: { type: "iconify", icon: "logos:google-drive" },
+  airtable: { type: "svg", component: AirtableIcon },
   slack: { type: "iconify", icon: "logos:slack-icon" },
   notion: { type: "iconify", icon: "logos:notion-icon" },
   github: { type: "svg", component: GithubIcon },

@@ -39,6 +39,10 @@ const PROVIDER_TOOL_LOADERS: Partial<
     const { buildNotionTools } = await import("./providers/notion/tools");
     return buildNotionTools;
   },
+  airtable: async () => {
+    const { buildAirtableTools } = await import("./providers/airtable/tools");
+    return buildAirtableTools;
+  },
   slack: async () => {
     const { buildSlackTools } = await import("./providers/slack/tools");
     return buildSlackTools;

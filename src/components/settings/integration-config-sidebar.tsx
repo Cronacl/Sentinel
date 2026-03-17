@@ -97,6 +97,21 @@ function getProviderCopy(provider: IntegrationProvider) {
     };
   }
 
+  if (provider === "airtable") {
+    return {
+      clientIdPlaceholder: "your-airtable-client-id",
+      clientIdDescription:
+        "Paste the Client ID from your Airtable OAuth integration at airtable.com/create/oauth.",
+      clientSecretPlaceholder: "your-airtable-client-secret",
+      clientSecretDescription:
+        "Paste the Client Secret from your Airtable OAuth integration.",
+      redirectUriDescription:
+        "This must match a Redirect URL in your Airtable OAuth integration settings.",
+      redirectUriNote:
+        "Add this URL as a Redirect URL in your Airtable OAuth integration at airtable.com/create/oauth.",
+    };
+  }
+
   if (provider === "linear") {
     return {
       clientIdPlaceholder: "your-linear-client-id",

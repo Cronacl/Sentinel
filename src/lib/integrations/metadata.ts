@@ -17,6 +17,7 @@ export const READY_INTEGRATION_PROVIDERS = new Set<IntegrationProvider>([
   "github",
   "linear",
   "notion",
+  "airtable",
   "slack",
   "postgresql",
   "mysql",
@@ -72,6 +73,24 @@ export const INTEGRATION_METADATA: Record<
     ],
     setupHint:
       "Use a Google Cloud OAuth client with the Google Drive API enabled for your project.",
+  },
+  airtable: {
+    availability: "ready",
+    description:
+      "Browse bases, manage tables and fields, create, update, and query records in Airtable from chat.",
+    highlights: [
+      "List all accessible bases and explore table schemas",
+      "Create tables and add or update fields",
+      "List, filter, and sort records with Airtable formulas",
+      "Create, update, and delete records in bulk",
+    ],
+    requiredAccess: [
+      "Read bases, tables, fields, and records",
+      "Create and update tables, fields, and records",
+      "Delete records",
+    ],
+    setupHint:
+      "Create an Airtable OAuth integration at airtable.com/create/oauth, enable scopes, and paste the Client ID and Client Secret.",
   },
   slack: {
     availability: "ready",

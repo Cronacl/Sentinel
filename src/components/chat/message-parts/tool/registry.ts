@@ -67,6 +67,13 @@ import { SlackChannelActionTool } from "./renderers/integrations/slack/slack-cha
 import { SlackMessageTool } from "./renderers/integrations/slack/slack-message";
 import { SlackMessageActionTool } from "./renderers/integrations/slack/slack-message-action";
 import { SlackUsersTool } from "./renderers/integrations/slack/slack-users";
+import { AirtableBaseTool } from "./renderers/integrations/airtable/airtable-base";
+import { AirtableTableTool } from "./renderers/integrations/airtable/airtable-table";
+import { AirtableTableActionTool } from "./renderers/integrations/airtable/airtable-table-action";
+import { AirtableRecordTool } from "./renderers/integrations/airtable/airtable-record";
+import { AirtableRecordActionTool } from "./renderers/integrations/airtable/airtable-record-action";
+import { AirtableCommentTool } from "./renderers/integrations/airtable/airtable-comment";
+import { AirtableUserTool } from "./renderers/integrations/airtable/airtable-user";
 import { IntegrationGenericTool } from "./renderers/integrations/shared/generic";
 import { PgListTool } from "./renderers/integrations/database/postgresql/pg-list";
 import { PgDescribeTool } from "./renderers/integrations/database/postgresql/pg-describe";
@@ -235,6 +242,22 @@ const renderers: Record<string, Renderer> = {
   slack_list_users: SlackUsersTool,
   slack_get_user: SlackUsersTool,
 
+  // Airtable
+  airtable_list_bases: AirtableBaseTool,
+  airtable_list_tables: AirtableTableTool,
+  airtable_get_table: AirtableTableTool,
+  airtable_create_table: AirtableTableActionTool,
+  airtable_create_field: AirtableTableActionTool,
+  airtable_update_field: AirtableTableActionTool,
+  airtable_list_records: AirtableRecordTool,
+  airtable_get_record: AirtableRecordTool,
+  airtable_create_records: AirtableRecordActionTool,
+  airtable_update_records: AirtableRecordActionTool,
+  airtable_delete_records: AirtableRecordActionTool,
+  airtable_list_comments: AirtableCommentTool,
+  airtable_create_comment: AirtableCommentTool,
+  airtable_get_user: AirtableUserTool,
+
   // PostgreSQL
   pg_list_databases: PgListTool,
   pg_list_schemas: PgListTool,
@@ -273,6 +296,7 @@ function isIntegrationToolName(name: string) {
     name.startsWith("linear_") ||
     name.startsWith("notion_") ||
     name.startsWith("slack_") ||
+    name.startsWith("airtable_") ||
     name.startsWith("pg_") ||
     name.startsWith("mysql_") ||
     name.startsWith("mongo_")

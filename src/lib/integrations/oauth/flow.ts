@@ -1,7 +1,7 @@
 import "server-only";
 
 import { and, eq } from "drizzle-orm";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 import { encrypt, decrypt } from "@/lib/ai/providers/encrypt";
 import { buildIntegrationOAuthRedirectUri } from "@/lib/app-origin";
@@ -18,6 +18,10 @@ import { getGitHubOAuthConfig, isGitHubProvider } from "./providers/github";
 import { getLinearOAuthConfig, isLinearProvider } from "./providers/linear";
 import { getNotionOAuthConfig, isNotionProvider } from "./providers/notion";
 import { getSlackOAuthConfig, isSlackProvider } from "./providers/slack";
+import {
+  getAirtableOAuthConfig,
+  isAirtableProvider,
+} from "./providers/airtable";
 import type {
   OAuthAppConfig,
   OAuthProviderConfig,
@@ -32,24 +36,35 @@ function resolveOAuthConfig(
   if (isLinearProvider(provider)) return getLinearOAuthConfig();
   if (isNotionProvider(provider)) return getNotionOAuthConfig();
   if (isSlackProvider(provider)) return getSlackOAuthConfig();
+  if (isAirtableProvider(provider)) return getAirtableOAuthConfig();
   throw new Error(`No OAuth config for provider: ${provider}`);
 }
 
-function generateState(provider: IntegrationProvider, userId: string): string {
-  const payload = JSON.stringify({
+function generateState(
+  provider: IntegrationProvider,
+  userId: string,
+  codeVerifier?: string,
+): string {
+  const payload: Record<string, string> = {
     provider,
     userId,
     nonce: randomBytes(16).toString("hex"),
-  });
-  return Buffer.from(payload).toString("base64url");
+  };
+  if (codeVerifier) payload.codeVerifier = codeVerifier;
+  return Buffer.from(JSON.stringify(payload)).toString("base64url");
 }
 
 function parseState(state: string): {
   provider: IntegrationProvider;
   userId: string;
+  codeVerifier?: string;
 } {
   const payload = JSON.parse(Buffer.from(state, "base64url").toString("utf-8"));
-  return { provider: payload.provider, userId: payload.userId };
+  return {
+    provider: payload.provider,
+    userId: payload.userId,
+    codeVerifier: payload.codeVerifier,
+  };
 }
 
 async function resolveOAuthAppConfig(
@@ -82,10 +97,16 @@ export async function beginIntegrationOAuth(
 ): Promise<string> {
   const oauthConfig = resolveOAuthConfig(provider);
   const appConfig = await resolveOAuthAppConfig(userId, provider);
-  const state = generateState(provider, userId);
 
   const scopeSeparator = isLinearProvider(provider) || isSlackProvider(provider) ? "," : " ";
   const scopeString = oauthConfig.scopes.join(scopeSeparator);
+
+  let codeVerifier: string | undefined;
+  if (isAirtableProvider(provider)) {
+    codeVerifier = randomBytes(32).toString("base64url");
+  }
+
+  const state = generateState(provider, userId, codeVerifier);
 
   const params = new URLSearchParams({
     client_id: appConfig.clientId,
@@ -109,6 +130,14 @@ export async function beginIntegrationOAuth(
     params.set("owner", "user");
   }
 
+  if (isAirtableProvider(provider) && codeVerifier) {
+    const codeChallenge = createHash("sha256")
+      .update(codeVerifier)
+      .digest("base64url");
+    params.set("code_challenge", codeChallenge);
+    params.set("code_challenge_method", "S256");
+  }
+
   return `${oauthConfig.authorizationEndpoint}?${params.toString()}`;
 }
 
@@ -116,9 +145,11 @@ export async function completeIntegrationOAuth(
   code: string,
   state: string,
 ): Promise<void> {
-  const { provider, userId } = parseState(state);
+  const { provider, userId, codeVerifier } = parseState(state);
   const oauthConfig = resolveOAuthConfig(provider);
   const appConfig = await resolveOAuthAppConfig(userId, provider);
+
+  const usesBasicAuth = isNotionProvider(provider) || isAirtableProvider(provider);
 
   const headers: Record<string, string> = {
     "Content-Type": "application/x-www-form-urlencoded",
@@ -128,7 +159,7 @@ export async function completeIntegrationOAuth(
     headers["Accept"] = "application/json";
   }
 
-  if (isNotionProvider(provider)) {
+  if (usesBasicAuth) {
     headers["Authorization"] = `Basic ${Buffer.from(`${appConfig.clientId}:${appConfig.clientSecret}`).toString("base64")}`;
   }
 
@@ -137,13 +168,17 @@ export async function completeIntegrationOAuth(
     redirect_uri: appConfig.redirectUri,
   });
 
-  if (!isNotionProvider(provider)) {
+  if (!usesBasicAuth) {
     body.set("client_id", appConfig.clientId);
     body.set("client_secret", appConfig.clientSecret);
   }
 
-  if (isGoogleProvider(provider) || isLinearProvider(provider) || isNotionProvider(provider)) {
+  if (isGoogleProvider(provider) || isLinearProvider(provider) || usesBasicAuth) {
     body.set("grant_type", "authorization_code");
+  }
+
+  if (codeVerifier) {
+    body.set("code_verifier", codeVerifier);
   }
 
   const tokenResponse = await fetch(oauthConfig.tokenEndpoint, {

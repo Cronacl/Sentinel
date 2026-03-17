@@ -479,6 +479,78 @@ export const INTEGRATION_TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     label: "notion_get_user",
   },
 
+  // Airtable
+  airtable_list_bases: {
+    capability: "to list all accessible Airtable bases",
+    category: "integration",
+    label: "airtable_list_bases",
+  },
+  airtable_list_tables: {
+    capability: "to list tables in an Airtable base with fields and views",
+    category: "integration",
+    label: "airtable_list_tables",
+  },
+  airtable_get_table: {
+    capability: "to get detailed schema of a specific Airtable table",
+    category: "integration",
+    label: "airtable_get_table",
+  },
+  airtable_create_table: {
+    capability: "to create a new table in an Airtable base",
+    category: "integration",
+    label: "airtable_create_table",
+  },
+  airtable_create_field: {
+    capability: "to add a new field to an Airtable table",
+    category: "integration",
+    label: "airtable_create_field",
+  },
+  airtable_update_field: {
+    capability: "to update a field's name or description in an Airtable table",
+    category: "integration",
+    label: "airtable_update_field",
+  },
+  airtable_list_records: {
+    capability: "to list and filter records in an Airtable table",
+    category: "integration",
+    label: "airtable_list_records",
+  },
+  airtable_get_record: {
+    capability: "to get a single record from an Airtable table",
+    category: "integration",
+    label: "airtable_get_record",
+  },
+  airtable_create_records: {
+    capability: "to create records in an Airtable table",
+    category: "integration",
+    label: "airtable_create_records",
+  },
+  airtable_update_records: {
+    capability: "to update existing records in an Airtable table",
+    category: "integration",
+    label: "airtable_update_records",
+  },
+  airtable_delete_records: {
+    capability: "to delete records from an Airtable table",
+    category: "integration",
+    label: "airtable_delete_records",
+  },
+  airtable_list_comments: {
+    capability: "to list comments on an Airtable record",
+    category: "integration",
+    label: "airtable_list_comments",
+  },
+  airtable_create_comment: {
+    capability: "to add a comment to an Airtable record",
+    category: "integration",
+    label: "airtable_create_comment",
+  },
+  airtable_get_user: {
+    capability: "to get the current Airtable user's identity",
+    category: "integration",
+    label: "airtable_get_user",
+  },
+
   // Slack
   slack_list_channels: {
     capability: "to list Slack channels in the workspace",
