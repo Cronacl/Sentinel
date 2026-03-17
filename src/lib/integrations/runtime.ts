@@ -36,6 +36,20 @@ const INTEGRATION_LABELS: Partial<Record<IntegrationProvider, string>> = {
   mongodb: "MongoDB",
 };
 
+const INTEGRATION_TOOL_PREFIXES: Partial<Record<IntegrationProvider, string>> = {
+  gmail: "gmail_",
+  google_calendar: "gcal_",
+  google_drive: "gdrive_",
+  github: "gh_",
+  linear: "linear_",
+  notion: "notion_",
+  slack: "slack_",
+  airtable: "airtable_",
+  postgresql: "pg_",
+  mysql: "mysql_",
+  mongodb: "mongo_",
+};
+
 const INTEGRATION_TOOL_COUNTS: Partial<Record<IntegrationProvider, number>> = {
   gmail: 16,
   google_calendar: 11,
@@ -136,6 +150,19 @@ export function getIntegrationLabel(provider: IntegrationProvider): string {
   return INTEGRATION_LABELS[provider] ?? provider;
 }
 
+export function getIntegrationToolPrefix(provider: IntegrationProvider): string | null {
+  return INTEGRATION_TOOL_PREFIXES[provider] ?? null;
+}
+
 export function getIntegrationToolCount(provider: IntegrationProvider): number {
   return INTEGRATION_TOOL_COUNTS[provider] ?? 0;
+}
+
+export function countIntegrationTools(
+  provider: IntegrationProvider,
+  allToolNames: string[],
+): number {
+  const prefix = INTEGRATION_TOOL_PREFIXES[provider];
+  if (!prefix) return 0;
+  return allToolNames.filter((name) => name.startsWith(prefix)).length;
 }
