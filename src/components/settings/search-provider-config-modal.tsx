@@ -10,6 +10,7 @@ import {
   ControlledSwitchField,
   ControlledTextField,
 } from "@/components/forms/controlled-fields";
+import { getErrorMessage } from "@/lib/errors";
 import { LIVECRAWL_MODE_VALUES, SEARCH_TYPE_VALUES } from "@/lib/search";
 import {
   exaSearchProviderConfigFormSchema,
@@ -52,14 +53,6 @@ function createDefaultValues(
     defaultSearchType: "auto",
     isEnabled: true,
   };
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  return fallback;
 }
 
 export function SearchProviderConfigModal({

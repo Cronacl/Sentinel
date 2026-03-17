@@ -1,6 +1,7 @@
 import TurndownService from "turndown";
 import { z } from "zod";
 
+import { getErrorMessage } from "@/lib/errors";
 import {
   MAX_WEBFETCH_BATCH_LIMIT,
   type WebFetchSettings,
@@ -350,10 +351,6 @@ function buildFallbackTitle(targetUrl: string) {
   } catch {
     return targetUrl;
   }
-}
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
 }
 
 async function fetchWithCloudflareRetry({

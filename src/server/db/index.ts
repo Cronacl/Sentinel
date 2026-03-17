@@ -177,6 +177,13 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
   } catch {
     // column already exists
   }
+
+  try {
+    db.run(sql`ALTER TABLE "thread" ADD COLUMN "active_stream_id" text`);
+  } catch {
+    // column already exists
+  }
+
   db.run(
     sql`CREATE INDEX IF NOT EXISTS "thread_user_pinned_idx" ON "thread" ("user_id", "pinned_at")`,
   );

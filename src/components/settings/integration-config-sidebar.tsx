@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
+import { getErrorMessage } from "@/lib/errors";
 import {
   ControlledSwitchField,
   ControlledTextField,
@@ -174,14 +175,6 @@ function createDefaultValues(
     redirectUri: buildIntegrationOAuthRedirectUri(),
     isEnabled: integration.isConnected ? integration.isEnabled : true,
   };
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  return fallback;
 }
 
 function SidebarSection({

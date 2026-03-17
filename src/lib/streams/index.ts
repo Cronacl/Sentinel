@@ -165,7 +165,14 @@ export const streamContext = {
       listeners: new Set(),
     };
 
-    record.completion = consumeStream(streamId, record, stream).catch(() => {});
+    record.completion = consumeStream(streamId, record, stream).catch(
+      (error) => {
+        console.error(
+          `[Stream] Stream ${streamId} failed:`,
+          error instanceof Error ? error.message : error,
+        );
+      },
+    );
     activeStreams.set(streamId, record);
     try {
       after(record.completion);

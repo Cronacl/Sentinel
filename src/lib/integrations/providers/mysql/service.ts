@@ -24,7 +24,9 @@ export class MySQLService {
       database: database ?? this.config.database,
       user: this.config.username,
       password: this.config.password,
-      ssl: this.config.ssl ? { rejectUnauthorized: false } : undefined,
+      ssl: this.config.ssl
+        ? { rejectUnauthorized: this.config.sslRejectUnauthorized ?? true }
+        : undefined,
       connectTimeout: CONNECT_TIMEOUT_MS,
     };
   }

@@ -13,6 +13,7 @@ import {
   ControlledTextAreaField,
   ControlledTextField,
 } from "@/components/forms/controlled-fields";
+import { getErrorMessage } from "@/lib/errors";
 import { useRightSidebar } from "@/components/shell/shell-context";
 import { buildInstallSteps } from "@/lib/skills/registry";
 import {
@@ -47,14 +48,6 @@ function createDefaultValues(): CustomSkillInstallFormValues {
     scope: "global",
     skillPath: "",
   };
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  return fallback;
 }
 
 export function CustomSkillInstallSidebar({

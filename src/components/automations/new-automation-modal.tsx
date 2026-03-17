@@ -23,6 +23,7 @@ import {
   ControlledTextAreaField,
   ControlledTextField,
 } from "@/components/forms/controlled-fields";
+import { getErrorMessage } from "@/lib/errors";
 import { AUTOMATION_SCHEDULE_TYPES } from "@/server/db/enums";
 import {
   getDefaultReasoningEffort,
@@ -215,14 +216,6 @@ function parseTimeString(value: string | null | undefined): Time | null {
   const match = value.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) return null;
   return new Time(Number(match[1]), Number(match[2]));
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  return fallback;
 }
 
 function getReasoningEffortLabel(effort: ReasoningEffort) {

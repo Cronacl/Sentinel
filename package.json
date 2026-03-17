@@ -24,6 +24,7 @@
     "dev": "node ./scripts/rebuild-node-native.mjs && next dev --turbo",
     "preview": "node ./scripts/rebuild-node-native.mjs && next build && next start",
     "start": "node ./scripts/rebuild-node-native.mjs && next start",
+    "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

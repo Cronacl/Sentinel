@@ -12,7 +12,9 @@ export class PostgreSQLService {
     if (this.config.useConnectionUrl && this.config.connectionUrl) {
       return {
         connectionString: this.config.connectionUrl,
-        ssl: this.config.ssl ? { rejectUnauthorized: false } : undefined,
+        ssl: this.config.ssl
+          ? { rejectUnauthorized: this.config.sslRejectUnauthorized ?? true }
+          : undefined,
         connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
       };
     }
@@ -23,7 +25,9 @@ export class PostgreSQLService {
       database: database ?? this.config.database ?? "postgres",
       user: this.config.username,
       password: this.config.password,
-      ssl: this.config.ssl ? { rejectUnauthorized: false } : undefined,
+      ssl: this.config.ssl
+        ? { rejectUnauthorized: this.config.sslRejectUnauthorized ?? true }
+        : undefined,
       connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
     };
   }

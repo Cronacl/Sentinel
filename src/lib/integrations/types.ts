@@ -12,6 +12,7 @@ export type DatabaseConnectionConfig = {
   connectionUrl?: string;
   useConnectionUrl: boolean;
   ssl: boolean;
+  sslRejectUnauthorized?: boolean;
 };
 
 export type IntegrationContext = {

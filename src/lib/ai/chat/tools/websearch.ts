@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { getErrorMessage } from "@/lib/errors";
 import {
   clampRequestedResultCount,
   LIVECRAWL_MODE_VALUES,
@@ -106,10 +107,6 @@ function buildDigest({
       return `${index + 1}. ${title} (${getHostname(result.url)})\n${summary}\n${result.url}`;
     })
     .join("\n\n");
-}
-
-function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function requireProvider(

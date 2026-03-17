@@ -12,6 +12,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 
+import { getErrorMessage } from "@/lib/errors";
 import type { AIProvider } from "@/server/db/enums";
 import {
   ControlledSwitchField,
@@ -44,14 +45,6 @@ function createDefaultValues(): ProviderConfigFormValues {
     privateKey: "",
     project: "",
   };
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  return fallback;
 }
 
 export function ProviderConfigModal({
