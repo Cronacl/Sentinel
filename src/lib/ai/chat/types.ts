@@ -32,6 +32,7 @@ export type ThreadChatRequest = {
 };
 
 type ResolvedThreadModel = {
+  contextWindow?: number;
   languageModel: unknown;
   providerId: AIProvider;
   providerOptions?: SharedV3ProviderOptions;

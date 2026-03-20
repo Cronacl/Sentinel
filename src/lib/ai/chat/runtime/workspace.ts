@@ -19,6 +19,12 @@ import {
   normalizeWebFetchSettings,
   type WebFetchSettings,
 } from "@/lib/webfetch";
+import {
+  DEFAULT_CONTEXT_COMPACTION_ENABLED,
+  DEFAULT_CONTEXT_COMPACTION_USE_FIXED_WINDOW,
+  DEFAULT_FIXED_CONTEXT_WINDOW_SIZE,
+  DEFAULT_CONTEXT_COMPACTION_WINDOW_PERCENT,
+} from "@/schemas/general-settings.schema";
 import type { PermissionMode } from "@/server/db/enums";
 import { db } from "@/server/db";
 import {
@@ -71,6 +77,37 @@ export async function getWebFetchSettings(
   });
 
   return normalizeWebFetchSettings(user);
+}
+
+export async function getContextCompactionSettings(userId: string): Promise<{
+  enabled: boolean;
+  fixedWindowSize: number;
+  useFixedWindow: boolean;
+  windowPercent: number;
+}> {
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: {
+      contextCompactionEnabled: true,
+      contextCompactionFixedWindowSize: true,
+      contextCompactionUseFixedWindow: true,
+      contextCompactionWindowPercent: true,
+    },
+  });
+
+  return {
+    enabled:
+      user?.contextCompactionEnabled ?? DEFAULT_CONTEXT_COMPACTION_ENABLED,
+    fixedWindowSize:
+      user?.contextCompactionFixedWindowSize ??
+      DEFAULT_FIXED_CONTEXT_WINDOW_SIZE,
+    useFixedWindow:
+      user?.contextCompactionUseFixedWindow ??
+      DEFAULT_CONTEXT_COMPACTION_USE_FIXED_WINDOW,
+    windowPercent:
+      user?.contextCompactionWindowPercent ??
+      DEFAULT_CONTEXT_COMPACTION_WINDOW_PERCENT,
+  };
 }
 
 export async function getToolApprovalPolicies(

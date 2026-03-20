@@ -59,6 +59,7 @@ import {
 } from "@/lib/integrations/runtime";
 import { loadIntegrationTools } from "@/lib/integrations/registry";
 import {
+  getContextCompactionSettings,
   getSearchProviderRuntime,
   getSearchSettings,
   getMemorySettings,
@@ -69,6 +70,7 @@ import {
   getWebFetchSettings,
   getWorkspaceRootPath,
 } from "./workspace";
+import { applyContextCompaction } from "./context-compaction";
 import type { ThreadChatRequest } from "../types";
 import type { PersistedThreadMessageRecord } from "@/lib/ai/messages/branches";
 import {
@@ -139,6 +141,7 @@ async function handleStopStream(request: ThreadChatRequest): Promise<Response> {
   if (request.messageId) {
     await persist.updateMessageMetadata(request.threadId, request.messageId, {
       errorMessage: "Generation stopped.",
+      statusLabel: null,
       status: "cancelled",
     });
   }
@@ -183,7 +186,9 @@ async function handleFollowUpAction(
     throw new Error("Queued follow-ups require a message payload and model.");
   }
 
-  const threadMode = normalizeThreadMode(request.threadMode ?? existingThread?.mode);
+  const threadMode = normalizeThreadMode(
+    request.threadMode ?? existingThread?.mode,
+  );
   const fallbackTitle =
     getFirstUserText([request.message])?.slice(0, 100) ?? "New thread";
 
@@ -212,7 +217,8 @@ async function handleFollowUpAction(
 
   const latestThread = await persist.loadThread(request.threadId);
   const isStreaming =
-    latestThread?.activeStreamId != null || latestThread?.status === "streaming";
+    latestThread?.activeStreamId != null ||
+    latestThread?.status === "streaming";
 
   if (position === "front" && isStreaming) {
     const latestAssistantId = await persist.getLatestAssistantMessageId(
@@ -229,10 +235,9 @@ async function handleFollowUpAction(
   return new Response(null, { status: 204 });
 }
 
-async function drainFollowUpQueue(request: Pick<
-  ThreadChatRequest,
-  "threadId" | "userId" | "workspaceId"
->) {
+async function drainFollowUpQueue(
+  request: Pick<ThreadChatRequest, "threadId" | "userId" | "workspaceId">,
+) {
   const thread = await persist.loadThread(request.threadId);
 
   if (!thread) {
@@ -282,7 +287,10 @@ async function drainFollowUpQueue(request: Pick<
   }
 }
 
-async function streamStillOwnsThread(threadId: string, streamId: string | null) {
+async function streamStillOwnsThread(
+  threadId: string,
+  streamId: string | null,
+) {
   if (!streamId) {
     return true;
   }
@@ -454,7 +462,21 @@ function persistAssistantSnapshot(
     ...message,
     metadata: mergeThreadMessageMetadata(message.metadata, {
       runId,
+      statusLabel: null,
       status: "streaming",
+    }),
+  });
+}
+
+function updatePendingAssistantStatusLabel(
+  threadId: string,
+  message: ThreadUIMessage,
+  statusLabel: string | null,
+) {
+  return persist.upsertMessage(threadId, {
+    ...message,
+    metadata: mergeThreadMessageMetadata(message.metadata, {
+      statusLabel,
     }),
   });
 }
@@ -562,6 +584,7 @@ async function failThreadRun(
   await persist.updateMessageMetadata(run.request.threadId, run.assistantId, {
     errorMessage: message,
     runId: run.runId,
+    statusLabel: null,
     status: "error",
   });
   await emitLatestThreadSnapshot(run.request.threadId, run.eventChannel);
@@ -622,9 +645,15 @@ function launchTitleGeneration(
 }
 
 async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
-  const { abortController, assistantId, eventChannel, modelTranscript, parentId } =
-    run;
+  const {
+    abortController,
+    assistantId,
+    eventChannel,
+    modelTranscript,
+    parentId,
+  } = run;
   let firstMessageUpsertLogged = false;
+  let latestInputTokens: number | undefined;
 
   try {
     const resolvedModel = await resolveThreadChatModel(
@@ -638,18 +667,21 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
       workspaceRoot,
       permissionMode,
       memorySettings,
+      contextCompactionSettings,
       mcpServers,
       searchSettings,
       searchProviders,
       toolApprovalPolicies,
       webFetchSettings,
       planState,
+      contextCompactionCheckpoint,
       skillsBasePath,
       enabledIntegrations,
     ] = await Promise.all([
       getWorkspaceRootPath(run.request.workspaceId, run.request.userId),
       getToolPermissionMode(run.request.userId),
       getMemorySettings(run.request.userId),
+      getContextCompactionSettings(run.request.userId),
       getMcpServerRuntime(run.request.userId),
       getSearchSettings(run.request.userId),
       getSearchProviderRuntime(run.request.userId),
@@ -659,6 +691,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
         pendingQuestionSet: null,
         plan: null,
       })),
+      persist.getThreadContextCompactionCheckpoint(run.request.threadId),
       getSkillsBasePath(run.request.userId),
       getEnabledIntegrations(run.request.userId).catch(() => []),
     ]);
@@ -740,8 +773,6 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
       providerId: resolvedModel.providerId,
       requestedModelId: resolvedModel.requestedModelId,
     });
-
-    const agentMessages = prepareMessagesForModel(modelTranscript);
     let streamErrorMessage: string | undefined;
     let closeMcpTools = async () => {};
 
@@ -858,12 +889,65 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
                   .filter(Boolean)
                   .join("\n\n")
               : baseSystemPrompt;
+          const compactionResult = await applyContextCompaction({
+            checkpoint: contextCompactionCheckpoint,
+            contextWindow: resolvedModel.contextWindow,
+            enabled: contextCompactionSettings.enabled,
+            fixedWindowSize: contextCompactionSettings.fixedWindowSize,
+            languageModel: resolvedModel.languageModel,
+            onCompactionStart: async () => {
+              const compactingMessage = updatePendingAssistantStatusLabel(
+                run.request.threadId,
+                run.placeholderMessage,
+                "Compacting context...",
+              );
+              run.placeholderMessage = compactingMessage;
+              eventChannel.emit({
+                message: compactingMessage,
+                runId: run.runId,
+                type: "message.upsert",
+              });
+            },
+            providerOptions: resolvedModel.providerOptions,
+            transcript: modelTranscript,
+            useFixedWindow: contextCompactionSettings.useFixedWindow,
+            windowPercent: contextCompactionSettings.windowPercent,
+          }).catch((error) => {
+            log.warn(
+              `Skipping context compaction: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+            return {
+              checkpointWasInvalid: false,
+              didCompact: false,
+              inputTokens: null,
+              thresholdTokens: 0,
+              transcript: prepareMessagesForModel(modelTranscript),
+              updatedCheckpoint: null,
+            };
+          });
+          const agentMessages = compactionResult.transcript;
+
+          if (compactionResult.updatedCheckpoint) {
+            persist.updateThreadContextCompactionCheckpoint(
+              run.request.threadId,
+              {
+                coveredThroughMessageId:
+                  compactionResult.updatedCheckpoint.coveredThroughMessageId,
+                summary: compactionResult.updatedCheckpoint.summary,
+              },
+            );
+          }
 
           const result = await createAgentUIStream({
             agent,
             abortSignal: abortController.signal,
             experimental_transform: smoothStream(),
             generateMessageId: () => assistantId,
+            onStepFinish: async ({ usage }) => {
+              latestInputTokens = usage.inputTokens;
+            },
             messageMetadata: ({ part }) => tracker.getMessageMetadata(part),
             onError: (error) => {
               streamErrorMessage =
@@ -898,7 +982,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
               webFetchSettings,
               workspaceId: run.request.workspaceId,
             },
-            originalMessages: modelTranscript as never,
+            originalMessages: agentMessages as never,
             sendReasoning: true,
             sendSources: true,
             uiMessages: agentMessages as never,
@@ -923,19 +1007,31 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           activeRunControls.delete(run.runId);
           return;
         }
-
         const finalized = tracker.finalize(
           [...modelTranscript, responseMessage as ThreadUIMessage],
           responseMessage as ThreadUIMessage,
         );
-        const [finalAssistant] = normalizeThreadUIMessages(finalized).slice(-1);
+        const [finalAssistantBase] =
+          normalizeThreadUIMessages(finalized).slice(-1);
+        const finalAssistant =
+          finalAssistantBase && latestInputTokens !== undefined
+            ? {
+                ...finalAssistantBase,
+                metadata: mergeThreadMessageMetadata(
+                  finalAssistantBase.metadata,
+                  {
+                    usage: {
+                      inputTokens: latestInputTokens,
+                    },
+                  },
+                ),
+              }
+            : finalAssistantBase;
         const persistedAssistant = persist.upsertMessage(
           run.request.threadId,
           buildPersistedAssistantMessage({
             assistantId,
-            ...(streamErrorMessage
-              ? { errorMessage: streamErrorMessage }
-              : {}),
+            ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
             finalAssistant,
             placeholder: run.placeholderMessage,
           }),
@@ -1007,10 +1103,12 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
 
     void (async () => {
       try {
-        for await (const assistantMessage of readUIMessageStream<ThreadUIMessage>({
-          message: run.placeholderMessage,
-          stream,
-        })) {
+        for await (const assistantMessage of readUIMessageStream<ThreadUIMessage>(
+          {
+            message: run.placeholderMessage,
+            stream,
+          },
+        )) {
           if (!(await streamStillOwnsThread(run.request.threadId, run.runId))) {
             eventChannel.close();
             return;

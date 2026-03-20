@@ -30,7 +30,9 @@ type ThreadMessageNode = {
 
 function getTextPreview(message: ThreadUIMessage) {
   const text = message.parts.find(
-    (part): part is Extract<ThreadUIMessage["parts"][number], { type: "text" }> =>
+    (
+      part,
+    ): part is Extract<ThreadUIMessage["parts"][number], { type: "text" }> =>
       part.type === "text" && part.text.trim().length > 0,
   )?.text;
 
@@ -92,7 +94,7 @@ function materializeNodes(records: PersistedThreadMessageRecord[]) {
     (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
   );
 
-  return sorted.map((record, index, all) => {
+  const nodes = sorted.map((record, index, all) => {
     const node = normalizeNode(record);
     if (node.hasExplicitParent || node.parentMessageId != null) {
       if (
@@ -124,6 +126,31 @@ function materializeNodes(records: PersistedThreadMessageRecord[]) {
       parentMessageId: previous.messageId,
     };
   });
+
+  const nodesByMessageId = new Map(
+    nodes.map((node) => [node.message.id, node]),
+  );
+
+  return nodes.map((node) => {
+    const editedFromMessageId = node.metadata.editedFromMessageId;
+    if (
+      node.message.role !== "user" ||
+      !editedFromMessageId ||
+      node.parentMessageId !== editedFromMessageId
+    ) {
+      return node;
+    }
+
+    const editedTarget = nodesByMessageId.get(editedFromMessageId);
+    if (!editedTarget) {
+      return node;
+    }
+
+    return {
+      ...node,
+      parentMessageId: editedTarget.parentMessageId,
+    };
+  });
 }
 
 function groupChildren(nodes: ThreadMessageNode[]) {
@@ -144,11 +171,8 @@ function groupChildren(nodes: ThreadMessageNode[]) {
 }
 
 function getActiveSibling(siblings: ThreadMessageNode[]) {
-  return (
-    siblings.find((node) => node.metadata.isActive) ??
-    siblings[siblings.length - 1] ??
-    null
-  );
+  const activeSiblings = siblings.filter((node) => node.metadata.isActive);
+  return activeSiblings[activeSiblings.length - 1] ?? siblings.at(-1) ?? null;
 }
 
 export function buildActiveThreadMessages(
@@ -216,7 +240,9 @@ export function getMessageRecordById(
   records: PersistedThreadMessageRecord[],
   messageId: string,
 ) {
-  return materializeNodes(records).find((node) => node.message.id === messageId);
+  return materializeNodes(records).find(
+    (node) => node.message.id === messageId,
+  );
 }
 
 export function getLatestVisibleMessageId(

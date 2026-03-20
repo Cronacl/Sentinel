@@ -62,6 +62,21 @@ export const users = sqliteTable(
       .notNull()
       .default(false),
     webFetchBatchLimit: integer("webfetch_batch_limit").notNull().default(10),
+    contextCompactionEnabled: integer("context_compaction_enabled", {
+      mode: "boolean",
+    }),
+    contextCompactionUseFixedWindow: integer(
+      "context_compaction_use_fixed_window",
+      {
+        mode: "boolean",
+      },
+    ),
+    contextCompactionFixedWindowSize: integer(
+      "context_compaction_fixed_window_size",
+    ),
+    contextCompactionWindowPercent: integer(
+      "context_compaction_window_percent",
+    ),
     skillsBasePath: text("skills_base_path"),
     themePreference: text("theme_preference", { enum: THEME_PREFERENCES })
       .notNull()
@@ -187,9 +202,14 @@ export const threads = sqliteTable(
     archivedAt: integer("archived_at", { mode: "timestamp" }),
     pinnedAt: integer("pinned_at", { mode: "timestamp" }),
     activeStreamId: text("active_stream_id"),
-    status: text("status", { enum: THREAD_STATUSES })
-      .notNull()
-      .default("idle"),
+    contextCompactionSummary: text("context_compaction_summary"),
+    contextCompactionCoveredThroughMessageId: text(
+      "context_compaction_covered_through_message_id",
+    ),
+    contextCompactionUpdatedAt: integer("context_compaction_updated_at", {
+      mode: "timestamp",
+    }),
+    status: text("status", { enum: THREAD_STATUSES }).notNull().default("idle"),
   },
   (table) => [
     index("thread_workspace_id_idx").on(table.workspaceId),
@@ -248,16 +268,22 @@ export const threadFollowUps = sqliteTable(
       table.threadId,
       table.createdAt,
     ),
-    index("thread_follow_up_thread_status_idx").on(table.threadId, table.status),
+    index("thread_follow_up_thread_status_idx").on(
+      table.threadId,
+      table.status,
+    ),
   ],
 );
 
-export const threadFollowUpsRelations = relations(threadFollowUps, ({ one }) => ({
-  thread: one(threads, {
-    fields: [threadFollowUps.threadId],
-    references: [threads.id],
+export const threadFollowUpsRelations = relations(
+  threadFollowUps,
+  ({ one }) => ({
+    thread: one(threads, {
+      fields: [threadFollowUps.threadId],
+      references: [threads.id],
+    }),
   }),
-}));
+);
 
 export const threadMessages = sqliteTable(
   "thread_message",

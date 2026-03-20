@@ -54,6 +54,15 @@ describe("chat-message helpers", () => {
     ).toBe("Inspect renderer");
   });
 
+  it("prefers an explicit status label over generic pending labels", () => {
+    expect(
+      getPendingAssistantStatusLabel({
+        messageStatus: "pending",
+        statusLabel: "Compacting context...",
+      }),
+    ).toBe("Compacting context...");
+  });
+
   it("shows planning copy when reasoning metadata is active", () => {
     expect(
       getPendingAssistantStatusLabel({

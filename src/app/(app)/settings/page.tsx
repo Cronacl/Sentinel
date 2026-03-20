@@ -29,7 +29,13 @@ import {
 } from "@/lib/webfetch";
 import { useOptimisticMutation } from "@/hooks/use-optimistic-mutation";
 import {
+  DEFAULT_CONTEXT_COMPACTION_ENABLED,
+  DEFAULT_CONTEXT_COMPACTION_USE_FIXED_WINDOW,
+  DEFAULT_FIXED_CONTEXT_WINDOW_SIZE,
+  DEFAULT_CONTEXT_COMPACTION_WINDOW_PERCENT,
   DEFAULT_FOLLOW_UP_BEHAVIOR,
+  MAX_FIXED_CONTEXT_WINDOW_SIZE,
+  MIN_FIXED_CONTEXT_WINDOW_SIZE,
   type FollowUpBehavior,
   type GeneralSettingsFormValues,
   generalSettingsFormSchema,
@@ -86,6 +92,11 @@ export default function GeneralSettingsPage() {
 
   const generalSettingsForm = useForm<GeneralSettingsFormValues>({
     defaultValues: {
+      contextCompactionEnabled: DEFAULT_CONTEXT_COMPACTION_ENABLED,
+      contextCompactionFixedWindowSize: DEFAULT_FIXED_CONTEXT_WINDOW_SIZE,
+      contextCompactionUseFixedWindow:
+        DEFAULT_CONTEXT_COMPACTION_USE_FIXED_WINDOW,
+      contextCompactionWindowPercent: DEFAULT_CONTEXT_COMPACTION_WINDOW_PERCENT,
       followUpBehavior: DEFAULT_FOLLOW_UP_BEHAVIOR,
       webFetchBatchEnabled: DEFAULT_WEBFETCH_BATCH_ENABLED,
       webFetchBatchLimit: DEFAULT_WEBFETCH_BATCH_LIMIT,
@@ -200,6 +211,18 @@ export default function GeneralSettingsPage() {
     "webFetchBatchEnabled",
   );
   const webFetchBatchLimit = generalSettingsForm.watch("webFetchBatchLimit");
+  const contextCompactionEnabled = generalSettingsForm.watch(
+    "contextCompactionEnabled",
+  );
+  const contextCompactionFixedWindowSize = generalSettingsForm.watch(
+    "contextCompactionFixedWindowSize",
+  );
+  const contextCompactionUseFixedWindow = generalSettingsForm.watch(
+    "contextCompactionUseFixedWindow",
+  );
+  const contextCompactionWindowPercent = generalSettingsForm.watch(
+    "contextCompactionWindowPercent",
+  );
   const skillsBasePath = generalSettingsForm.watch("skillsBasePath");
 
   return (
@@ -313,8 +336,7 @@ export default function GeneralSettingsPage() {
                         const values = generalSettingsForm.getValues();
                         void updateGeneralSettings.mutateAsync({
                           ...values,
-                          followUpBehavior:
-                            option.value as FollowUpBehavior,
+                          followUpBehavior: option.value as FollowUpBehavior,
                         });
                         generalSettingsForm.setValue(
                           "followUpBehavior",
@@ -338,6 +360,93 @@ export default function GeneralSettingsPage() {
             )}
           >
             <section className="border-separator bg-surface rounded-xl border p-5">
+              <div className="mb-5 space-y-1">
+                <h2 className="text-foreground text-base font-medium">
+                  Context compaction
+                </h2>
+                <p className="text-muted text-sm">
+                  Use the active model&apos;s context window and compact older
+                  transcript history once the estimated prompt reaches your
+                  configured threshold.
+                </p>
+              </div>
+
+              <div className="space-y-5">
+                <ControlledSwitchField
+                  control={generalSettingsForm.control}
+                  description="When enabled, Sentinel summarizes older conversation history before new model calls once the prompt estimate crosses your threshold."
+                  label="Enable context compaction"
+                  name="contextCompactionEnabled"
+                />
+
+                <ControlledNumberField
+                  control={generalSettingsForm.control}
+                  description="Target percentage of the active model's context window that can be filled before Sentinel compacts older context. Allowed range: 50 to 90."
+                  inputProps={{ className: "w-full" }}
+                  label="Context window target (%)"
+                  name="contextCompactionWindowPercent"
+                  numberFieldProps={{
+                    className: "w-full max-w-xs",
+                    isDisabled: !contextCompactionEnabled,
+                    maxValue: 90,
+                    minValue: 50,
+                  }}
+                />
+
+                <ControlledSwitchField
+                  control={generalSettingsForm.control}
+                  description="Use a fixed token window for context estimates and compaction instead of the selected model's advertised context window."
+                  label="Use fixed context window size"
+                  name="contextCompactionUseFixedWindow"
+                />
+
+                <ControlledNumberField
+                  control={generalSettingsForm.control}
+                  description={`Fixed context window size in tokens. Allowed range: ${MIN_FIXED_CONTEXT_WINDOW_SIZE.toLocaleString()} to ${MAX_FIXED_CONTEXT_WINDOW_SIZE.toLocaleString()}.`}
+                  inputProps={{ className: "w-full" }}
+                  label="Fixed context window size"
+                  name="contextCompactionFixedWindowSize"
+                  numberFieldProps={{
+                    className: "w-full max-w-xs",
+                    isDisabled: !contextCompactionUseFixedWindow,
+                    maxValue: MAX_FIXED_CONTEXT_WINDOW_SIZE,
+                    minValue: MIN_FIXED_CONTEXT_WINDOW_SIZE,
+                  }}
+                />
+
+                <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-xs text-muted">
+                  Current policy:{" "}
+                  {contextCompactionEnabled
+                    ? `compaction enabled once the estimated prompt reaches ${contextCompactionWindowPercent}% of the ${
+                        contextCompactionUseFixedWindow
+                          ? `${contextCompactionFixedWindowSize.toLocaleString()}-token fixed window`
+                          : "active model context window"
+                      }.`
+                    : "compaction disabled; full transcript history is sent until the model limit is hit."}
+                </div>
+              </div>
+
+              <div className="mt-5 flex justify-end">
+                <Button
+                  isDisabled={
+                    updateGeneralSettings.isPending ||
+                    !generalSettingsForm.formState.isDirty
+                  }
+                  isPending={updateGeneralSettings.isPending}
+                  size="sm"
+                  type="submit"
+                >
+                  {({ isPending }) => (
+                    <>
+                      {isPending ? <Spinner color="current" size="sm" /> : null}
+                      Save
+                    </>
+                  )}
+                </Button>
+              </div>
+            </section>
+
+            <section className="border-separator mt-5 bg-surface rounded-xl border p-5">
               <div className="mb-5 space-y-1">
                 <h2 className="text-foreground text-base font-medium">
                   Web fetch

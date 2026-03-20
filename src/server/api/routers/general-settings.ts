@@ -5,6 +5,10 @@ import {
   DEFAULT_WEBFETCH_BATCH_LIMIT,
 } from "@/lib/webfetch";
 import {
+  DEFAULT_CONTEXT_COMPACTION_ENABLED,
+  DEFAULT_CONTEXT_COMPACTION_USE_FIXED_WINDOW,
+  DEFAULT_FIXED_CONTEXT_WINDOW_SIZE,
+  DEFAULT_CONTEXT_COMPACTION_WINDOW_PERCENT,
   DEFAULT_FOLLOW_UP_BEHAVIOR,
   generalSettingsFormSchema,
 } from "@/schemas/general-settings.schema";
@@ -16,6 +20,10 @@ export const generalSettingsRouter = createTRPCRouter({
     const user = await ctx.db.query.users.findFirst({
       where: eq(users.id, ctx.session.user.id),
       columns: {
+        contextCompactionEnabled: true,
+        contextCompactionFixedWindowSize: true,
+        contextCompactionUseFixedWindow: true,
+        contextCompactionWindowPercent: true,
         followUpBehavior: true,
         webFetchBatchEnabled: true,
         webFetchBatchLimit: true,
@@ -24,8 +32,18 @@ export const generalSettingsRouter = createTRPCRouter({
     });
 
     return {
-      followUpBehavior:
-        user?.followUpBehavior ?? DEFAULT_FOLLOW_UP_BEHAVIOR,
+      contextCompactionEnabled:
+        user?.contextCompactionEnabled ?? DEFAULT_CONTEXT_COMPACTION_ENABLED,
+      contextCompactionFixedWindowSize:
+        user?.contextCompactionFixedWindowSize ??
+        DEFAULT_FIXED_CONTEXT_WINDOW_SIZE,
+      contextCompactionUseFixedWindow:
+        user?.contextCompactionUseFixedWindow ??
+        DEFAULT_CONTEXT_COMPACTION_USE_FIXED_WINDOW,
+      contextCompactionWindowPercent:
+        user?.contextCompactionWindowPercent ??
+        DEFAULT_CONTEXT_COMPACTION_WINDOW_PERCENT,
+      followUpBehavior: user?.followUpBehavior ?? DEFAULT_FOLLOW_UP_BEHAVIOR,
       webFetchBatchEnabled:
         user?.webFetchBatchEnabled ?? DEFAULT_WEBFETCH_BATCH_ENABLED,
       webFetchBatchLimit:
@@ -40,6 +58,12 @@ export const generalSettingsRouter = createTRPCRouter({
       ctx.db
         .update(users)
         .set({
+          contextCompactionEnabled: input.contextCompactionEnabled,
+          contextCompactionFixedWindowSize:
+            input.contextCompactionFixedWindowSize,
+          contextCompactionUseFixedWindow:
+            input.contextCompactionUseFixedWindow,
+          contextCompactionWindowPercent: input.contextCompactionWindowPercent,
           followUpBehavior: input.followUpBehavior,
           webFetchBatchEnabled: input.webFetchBatchEnabled,
           webFetchBatchLimit: input.webFetchBatchLimit,
@@ -49,6 +73,11 @@ export const generalSettingsRouter = createTRPCRouter({
         .run();
 
       return {
+        contextCompactionEnabled: input.contextCompactionEnabled,
+        contextCompactionFixedWindowSize:
+          input.contextCompactionFixedWindowSize,
+        contextCompactionUseFixedWindow: input.contextCompactionUseFixedWindow,
+        contextCompactionWindowPercent: input.contextCompactionWindowPercent,
         followUpBehavior: input.followUpBehavior,
         webFetchBatchEnabled: input.webFetchBatchEnabled,
         webFetchBatchLimit: input.webFetchBatchLimit,

@@ -245,4 +245,33 @@ describe("thread message normalization", () => {
       getThreadMessageSyncToken(normalizeThreadUIMessage(withProviderIds)),
     );
   });
+
+  it("updates the sync token when input token usage changes", () => {
+    const base = normalizeThreadUIMessage({
+      id: "assistant-1",
+      metadata: {
+        status: "completed",
+        usage: {
+          inputTokens: 400,
+        },
+      },
+      parts: [{ text: "Answer", type: "text" }],
+      role: "assistant",
+    });
+
+    const updated = normalizeThreadUIMessage({
+      ...base,
+      metadata: {
+        ...base.metadata,
+        usage: {
+          ...base.metadata.usage,
+          inputTokens: 800,
+        },
+      },
+    });
+
+    expect(getThreadMessageSyncToken(base)).not.toBe(
+      getThreadMessageSyncToken(updated),
+    );
+  });
 });

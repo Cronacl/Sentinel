@@ -7,6 +7,7 @@ import type { ReasoningEffort } from "@/lib/ai/providers/models";
 
 import {
   buildActiveThreadMessages,
+  getBranchSelectionPayload,
   type PersistedThreadMessageRecord,
 } from "../messages/branches";
 import {
@@ -28,6 +29,12 @@ export type PersistedThreadFollowUpRecord = {
   threadId: string;
   threadMode: ThreadMode;
   updatedAt: Date;
+};
+
+export type ThreadContextCompactionCheckpoint = {
+  coveredThroughMessageId: string | null;
+  summary: string | null;
+  updatedAt: Date | null;
 };
 
 export async function ensureThread(
@@ -73,6 +80,26 @@ export async function loadThread(threadId: string) {
   return {
     ...thread,
     activeRunId: thread.activeStreamId,
+  };
+}
+
+export async function getThreadContextCompactionCheckpoint(
+  threadId: string,
+): Promise<ThreadContextCompactionCheckpoint> {
+  const thread = await db.query.threads.findFirst({
+    where: eq(threads.id, threadId),
+    columns: {
+      contextCompactionCoveredThroughMessageId: true,
+      contextCompactionSummary: true,
+      contextCompactionUpdatedAt: true,
+    },
+  });
+
+  return {
+    coveredThroughMessageId:
+      thread?.contextCompactionCoveredThroughMessageId ?? null,
+    summary: thread?.contextCompactionSummary ?? null,
+    updatedAt: thread?.contextCompactionUpdatedAt ?? null,
   };
 }
 
@@ -202,7 +229,10 @@ export function removeThreadFollowUp(threadId: string, followUpId: string) {
     .run();
 }
 
-export function moveThreadFollowUpToFront(threadId: string, followUpId: string) {
+export function moveThreadFollowUpToFront(
+  threadId: string,
+  followUpId: string,
+) {
   const existing = db
     .select()
     .from(threadFollowUps)
@@ -325,9 +355,13 @@ export function deleteThreadFollowUp(threadId: string, followUpId: string) {
 }
 
 export async function getLatestAssistantMessageId(threadId: string) {
-  const transcript = buildActiveThreadMessages(await loadThreadMessages(threadId));
-  return [...transcript].reverse().find((message) => message.role === "assistant")
-    ?.id ?? null;
+  const transcript = buildActiveThreadMessages(
+    await loadThreadMessages(threadId),
+  );
+  return (
+    [...transcript].reverse().find((message) => message.role === "assistant")
+      ?.id ?? null
+  );
 }
 
 export function upsertMessage(
@@ -379,7 +413,11 @@ export function upsertMessage(
         .run();
     } else {
       tx.insert(threadMessages)
-        .values({ ...serialized, ...(createdAt ? { createdAt } : {}), threadId })
+        .values({
+          ...serialized,
+          ...(createdAt ? { createdAt } : {}),
+          threadId,
+        })
         .run();
     }
 
@@ -398,34 +436,22 @@ export async function setActiveMessage(threadId: string, messageId: string) {
     orderBy: (m, { asc }) => [asc(m.createdAt)],
   });
 
-  const target = messages.find((m) => m.messageId === messageId);
-  if (!target) return;
-
-  const targetMeta = normalizeThreadMessageMetadata(
-    target.metadata as ThreadMessageMetadata | null | undefined,
-  );
-  const parentId = targetMeta.parentMessageId ?? null;
-
-  const siblings = messages.filter((m) => {
-    const meta = normalizeThreadMessageMetadata(
-      m.metadata as ThreadMessageMetadata | null | undefined,
-    );
-    return (meta.parentMessageId ?? null) === parentId;
-  });
+  const selection = getBranchSelectionPayload(messages as any[], messageId);
+  if (!selection) return;
 
   db.transaction((tx) => {
-    for (const msg of siblings) {
+    for (const sibling of selection.siblings) {
       const meta = normalizeThreadMessageMetadata(
-        msg.metadata as ThreadMessageMetadata | null | undefined,
+        sibling.metadata as ThreadMessageMetadata | null | undefined,
       );
       tx.update(threadMessages)
         .set({
           metadata: mergeThreadMessageMetadata(meta, {
-            isActive: msg.messageId === messageId,
+            isActive: sibling.message.id === messageId,
             revision: (meta.revision ?? 0) + 1,
           }),
         })
-        .where(eq(threadMessages.id, msg.id))
+        .where(eq(threadMessages.id, sibling.dbId))
         .run();
     }
   });
@@ -468,6 +494,25 @@ export function updateThreadTitle(threadId: string, title: string) {
     .run();
 }
 
+export function updateThreadContextCompactionCheckpoint(
+  threadId: string,
+  checkpoint: {
+    coveredThroughMessageId: string | null;
+    summary: string | null;
+  },
+) {
+  db.update(threads)
+    .set({
+      contextCompactionCoveredThroughMessageId:
+        checkpoint.coveredThroughMessageId,
+      contextCompactionSummary: checkpoint.summary,
+      contextCompactionUpdatedAt: checkpoint.summary ? new Date() : null,
+      updatedAt: new Date(),
+    })
+    .where(eq(threads.id, threadId))
+    .run();
+}
+
 export function setActiveStream(threadId: string, streamId: string) {
   db.update(threads)
     .set({ activeStreamId: streamId })
@@ -486,8 +531,5 @@ export function setThreadStatus(
   threadId: string,
   status: "idle" | "streaming" | "awaiting_approval",
 ) {
-  db.update(threads)
-    .set({ status })
-    .where(eq(threads.id, threadId))
-    .run();
+  db.update(threads).set({ status }).where(eq(threads.id, threadId)).run();
 }

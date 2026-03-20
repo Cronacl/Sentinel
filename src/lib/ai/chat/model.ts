@@ -4,10 +4,15 @@ import { db } from "@/server/db";
 import { threads } from "@/server/db/schema";
 
 import {
+  findModel,
   getReasoningProviderOptions,
   type ReasoningEffort,
 } from "../providers/models";
-import { getEnabledModels, getLanguageModel, parseModelId } from "../providers/resolver";
+import {
+  getEnabledModels,
+  getLanguageModel,
+  parseModelId,
+} from "../providers/resolver";
 import {
   normalizeThreadMessageMetadata,
   type ThreadMessageMetadata,
@@ -62,6 +67,8 @@ export async function resolveThreadChatModel(
       | undefined) ?? undefined;
 
   return {
+    contextWindow: findModel(parsedModel.provider, parsedModel.model)
+      ?.contextWindow,
     languageModel: await getLanguageModel(request.userId, requestedModelId),
     providerId: parsedModel.provider,
     providerOptions: getReasoningProviderOptions(

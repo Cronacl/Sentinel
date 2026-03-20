@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useOutsideClick } from "@/hooks/use-outside-click";
 import { DEFAULT_FOLLOW_UP_BEHAVIOR } from "@/schemas/general-settings.schema";
+import { getExactContextWindowUsage } from "@/lib/ai/chat/context-window";
 import { api } from "@/trpc/react";
 
 import { AttachmentManager } from "../attachment-manager";
@@ -46,6 +47,7 @@ export function ChatComposer({
   const handleSendRef = useRef<() => void>(() => {});
   const composerMenuRef = useRef<HTMLDivElement | null>(null);
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
+  const utils = api.useUtils();
 
   const hasWorkspace = Boolean(activeWorkspace);
   const isBusy = status === "submitted" || status === "streaming";
@@ -135,6 +137,23 @@ export function ChatComposer({
     promptSeed,
     promptSeedKey,
   });
+
+  const threadMessages =
+    threadId != null
+      ? (utils.threads.get.getData({ threadId })?.messages ?? [])
+      : [];
+
+  const contextWindowIndicator =
+    selectedModelKey && selectedModel
+      ? getExactContextWindowUsage({
+          contextWindow: selectedModel.contextWindow,
+          fixedWindowSize:
+            generalSettingsQuery.data?.contextCompactionFixedWindowSize,
+          messages: threadMessages,
+          useFixedWindow:
+            generalSettingsQuery.data?.contextCompactionUseFixedWindow,
+        })
+      : null;
 
   useOutsideClick([
     { onOutsideClick: () => setModelMenuOpen(false), ref: modelMenuRef },
@@ -309,6 +328,25 @@ export function ChatComposer({
           hasWorkspace={hasWorkspace}
           isBusy={isBusy}
           isLocked={isLocked}
+          contextWindowIndicator={
+            contextWindowIndicator
+              ? {
+                  compactionEnabled:
+                    generalSettingsQuery.data?.contextCompactionEnabled ??
+                    false,
+                  contextWindowMode: generalSettingsQuery.data
+                    ?.contextCompactionUseFixedWindow
+                    ? ("fixed" as const)
+                    : ("model" as const),
+                  compactionWindowPercent:
+                    generalSettingsQuery.data?.contextCompactionWindowPercent ??
+                    70,
+                  contextWindow: contextWindowIndicator.contextWindow,
+                  inputTokens: contextWindowIndicator.inputTokens,
+                  usedPercent: contextWindowIndicator.usedPercent,
+                }
+              : null
+          }
           modelSelector={
             <ModelSelector
               availableModels={availableModels}

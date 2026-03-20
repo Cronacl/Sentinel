@@ -48,15 +48,21 @@ export function isVisibleAssistantPart(part: MessagePart) {
 
 export function getPendingAssistantStatusLabel({
   messageStatus,
+  statusLabel,
   reasoningMetadata,
   reasoningText,
   rotationIndex,
 }: {
   messageStatus?: ThreadMessageMetadata["status"];
+  statusLabel?: string | null;
   reasoningMetadata?: ThreadMessageMetadata["reasoning"];
   reasoningText?: string;
   rotationIndex?: number;
 }) {
+  if (statusLabel?.trim()) {
+    return statusLabel.trim();
+  }
+
   const reasoningTitle = reasoningText ? extractLastTitle(reasoningText) : null;
   if (reasoningTitle) {
     return reasoningTitle;
@@ -67,7 +73,8 @@ export function getPendingAssistantStatusLabel({
   }
 
   if (messageStatus === "pending" || messageStatus === "streaming") {
-    const index = Math.abs(rotationIndex ?? 0) % PRE_RESPONSE_STATUS_LABELS.length;
+    const index =
+      Math.abs(rotationIndex ?? 0) % PRE_RESPONSE_STATUS_LABELS.length;
     return PRE_RESPONSE_STATUS_LABELS[index]!;
   }
 
@@ -76,16 +83,21 @@ export function getPendingAssistantStatusLabel({
 
 function PendingAssistantStatus({
   messageStatus,
+  statusLabel,
   reasoningMetadata,
   reasoningText,
 }: {
   messageStatus?: ThreadMessageMetadata["status"];
+  statusLabel?: string | null;
   reasoningMetadata?: ThreadMessageMetadata["reasoning"];
   reasoningText?: string;
 }) {
   const shouldRotate =
+    !statusLabel?.trim() &&
     !extractLastTitle(reasoningText ?? "") &&
-    !(reasoningMetadata?.isActive || reasoningMetadata?.activeSinceMs != null) &&
+    !(
+      reasoningMetadata?.isActive || reasoningMetadata?.activeSinceMs != null
+    ) &&
     (messageStatus === "pending" || messageStatus === "streaming");
   const [rotationIndex, setRotationIndex] = useState(0);
 
@@ -102,8 +114,9 @@ function PendingAssistantStatus({
     return () => window.clearInterval(interval);
   }, [shouldRotate]);
 
-  const statusLabel = getPendingAssistantStatusLabel({
+  const resolvedStatusLabel = getPendingAssistantStatusLabel({
     messageStatus,
+    statusLabel,
     reasoningMetadata,
     reasoningText,
     rotationIndex,
@@ -120,7 +133,7 @@ function PendingAssistantStatus({
             >
               <p className="flex min-w-0 items-center gap-2 text-xs font-medium text-foreground/70">
                 <span className="sentinel-thinking-shimmer truncate">
-                  {statusLabel}
+                  {resolvedStatusLabel}
                 </span>
               </p>
             </button>
@@ -346,6 +359,7 @@ function AssistantMessage({
     return (
       <PendingAssistantStatus
         messageStatus={status}
+        statusLabel={metadata?.statusLabel}
         reasoningMetadata={reasoningMetadata}
         reasoningText={mergedReasoningText}
       />

@@ -11,9 +11,19 @@ import { Switch } from "@heroui/react";
 import { AnimatePresence, motion } from "motion/react";
 import type { ReactNode, RefObject } from "react";
 
+import { ContextWindowIndicator } from "./chat-composer/context-window-indicator";
+
 type ComposerToolbarProps = {
   composerMenuOpen: boolean;
   composerMenuRef: RefObject<HTMLDivElement | null>;
+  contextWindowIndicator?: {
+    compactionEnabled: boolean;
+    compactionWindowPercent: number;
+    contextWindow: number;
+    contextWindowMode: "fixed" | "model";
+    inputTokens: number;
+    usedPercent: number;
+  } | null;
   hasWorkspace: boolean;
   isBusy: boolean;
   isLocked: boolean;
@@ -30,6 +40,7 @@ type ComposerToolbarProps = {
 export function ComposerToolbar({
   composerMenuOpen,
   composerMenuRef,
+  contextWindowIndicator,
   hasWorkspace,
   isBusy,
   isLocked,
@@ -140,7 +151,21 @@ export function ComposerToolbar({
         ) : null}
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-3">
+        {contextWindowIndicator ? (
+          <ContextWindowIndicator
+            compactionEnabled={contextWindowIndicator.compactionEnabled}
+            compactionWindowPercent={
+              contextWindowIndicator.compactionWindowPercent
+            }
+            contextWindow={contextWindowIndicator.contextWindow}
+            contextWindowMode={contextWindowIndicator.contextWindowMode}
+            inputTokens={contextWindowIndicator.inputTokens}
+            isDisabled={isLocked || !selectedModelKey}
+            usedPercent={contextWindowIndicator.usedPercent}
+          />
+        ) : null}
+
         {isBusy ? (
           <button
             className="flex h-8 w-8 items-center justify-center rounded-full bg-default text-muted transition-colors hover:text-foreground"

@@ -222,4 +222,156 @@ describe("buildPersistedAssistantMessage", () => {
     expect(transcript[1]?.metadata?.parentMessageId).toBe("user-1");
     expect(transcript[3]?.metadata?.parentMessageId).toBe("user-2");
   });
+
+  it("repairs edited user messages that were accidentally stored as child messages", () => {
+    const transcript = buildActiveThreadMessages([
+      {
+        createdAt: new Date("2026-03-10T10:00:00.000Z"),
+        id: "db-user-1",
+        messageId: "user-1",
+        metadata: {
+          branchId: "user-1",
+          isActive: true,
+          parentMessageId: null,
+          status: "completed",
+        },
+        parts: [{ text: "show exports", type: "text" }],
+        role: "user",
+        updatedAt: new Date("2026-03-10T10:00:00.000Z"),
+      },
+      {
+        createdAt: new Date("2026-03-10T10:00:01.000Z"),
+        id: "db-assistant-1",
+        messageId: "assistant-1",
+        metadata: {
+          branchId: "user-1",
+          isActive: true,
+          parentMessageId: "user-1",
+          status: "completed",
+        },
+        parts: [{ text: "Here are the exports.", type: "text" }],
+        role: "assistant",
+        updatedAt: new Date("2026-03-10T10:00:01.000Z"),
+      },
+      {
+        createdAt: new Date("2026-03-10T10:00:02.000Z"),
+        id: "db-user-2",
+        messageId: "user-2",
+        metadata: {
+          branchId: "user-2",
+          isActive: false,
+          parentMessageId: "assistant-1",
+          status: "completed",
+        },
+        parts: [{ text: "please review all files", type: "text" }],
+        role: "user",
+        updatedAt: new Date("2026-03-10T10:00:02.000Z"),
+      },
+      {
+        createdAt: new Date("2026-03-10T10:00:03.000Z"),
+        id: "db-user-3",
+        messageId: "user-3",
+        metadata: {
+          branchId: "user-3",
+          editedFromMessageId: "user-2",
+          isActive: true,
+          parentMessageId: "user-2",
+          status: "completed",
+        },
+        parts: [{ text: "please review each file", type: "text" }],
+        role: "user",
+        updatedAt: new Date("2026-03-10T10:00:03.000Z"),
+      },
+      {
+        createdAt: new Date("2026-03-10T10:00:04.000Z"),
+        id: "db-assistant-2",
+        messageId: "assistant-2",
+        metadata: {
+          branchId: "user-3",
+          isActive: true,
+          parentMessageId: "user-3",
+          status: "completed",
+        },
+        parts: [{ text: "Reviewing each file now.", type: "text" }],
+        role: "assistant",
+        updatedAt: new Date("2026-03-10T10:00:04.000Z"),
+      },
+    ]);
+
+    expect(transcript.map((message) => message.id)).toEqual([
+      "user-1",
+      "assistant-1",
+      "user-3",
+      "assistant-2",
+    ]);
+    expect(transcript[2]?.metadata?.branchOptions).toHaveLength(2);
+  });
+
+  it("prefers the latest active sibling when legacy rows leave multiple branches active", () => {
+    const transcript = buildActiveThreadMessages([
+      {
+        createdAt: new Date("2026-03-10T10:00:00.000Z"),
+        id: "db-user-1",
+        messageId: "user-1",
+        metadata: {
+          branchId: "user-1",
+          isActive: true,
+          parentMessageId: null,
+          status: "completed",
+        },
+        parts: [{ text: "show exports", type: "text" }],
+        role: "user",
+        updatedAt: new Date("2026-03-10T10:00:00.000Z"),
+      },
+      {
+        createdAt: new Date("2026-03-10T10:00:01.000Z"),
+        id: "db-assistant-1",
+        messageId: "assistant-1",
+        metadata: {
+          branchId: "user-1",
+          isActive: true,
+          parentMessageId: "user-1",
+          status: "completed",
+        },
+        parts: [{ text: "Here are the exports.", type: "text" }],
+        role: "assistant",
+        updatedAt: new Date("2026-03-10T10:00:01.000Z"),
+      },
+      {
+        createdAt: new Date("2026-03-10T10:00:02.000Z"),
+        id: "db-user-2",
+        messageId: "user-2",
+        metadata: {
+          branchId: "user-2",
+          isActive: true,
+          parentMessageId: "assistant-1",
+          status: "completed",
+        },
+        parts: [{ text: "please review all files", type: "text" }],
+        role: "user",
+        updatedAt: new Date("2026-03-10T10:00:02.000Z"),
+      },
+      {
+        createdAt: new Date("2026-03-10T10:00:03.000Z"),
+        id: "db-user-3",
+        messageId: "user-3",
+        metadata: {
+          branchId: "user-3",
+          isActive: true,
+          parentMessageId: "assistant-1",
+          status: "completed",
+        },
+        parts: [{ text: "please review each file", type: "text" }],
+        role: "user",
+        updatedAt: new Date("2026-03-10T10:00:03.000Z"),
+      },
+    ]);
+
+    expect(transcript.map((message) => message.id)).toEqual([
+      "user-1",
+      "assistant-1",
+      "user-3",
+    ]);
+    expect(transcript[2]?.metadata?.branchOptions).toHaveLength(2);
+  });
 });

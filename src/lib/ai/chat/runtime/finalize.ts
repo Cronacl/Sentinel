@@ -29,6 +29,7 @@ export function buildPersistedAssistantMessage({
         finishReason: merged.metadata?.finishReason,
         isActive: true,
         parentMessageId: placeholderMetadata.parentMessageId ?? null,
+        statusLabel: null,
         status: errorMessage ? "error" : "completed",
       },
     ),

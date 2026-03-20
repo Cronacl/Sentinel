@@ -5,6 +5,10 @@ import { afterEach, describe, expect, it, mock } from "bun:test";
 const findFirst = mock(
   async () =>
     ({
+      contextCompactionEnabled: true,
+      contextCompactionFixedWindowSize: 96_000,
+      contextCompactionUseFixedWindow: true,
+      contextCompactionWindowPercent: 80,
       skillsBasePath: "/tmp/custom-skills",
       webFetchBatchEnabled: true,
       webFetchBatchLimit: 12,
@@ -37,6 +41,8 @@ mock.module("@/server/db/schema", () => ({
 }));
 
 const { generalSettingsRouter } = await import("./general-settings");
+const { generalSettingsFormSchema } =
+  await import("@/schemas/general-settings.schema");
 
 afterEach(() => {
   mock.restore();
@@ -63,6 +69,10 @@ describe("generalSettingsRouter", () => {
 
     expect(findFirst).toHaveBeenCalled();
     expect(result).toEqual({
+      contextCompactionEnabled: true,
+      contextCompactionFixedWindowSize: 96_000,
+      contextCompactionUseFixedWindow: true,
+      contextCompactionWindowPercent: 80,
       followUpBehavior: "queue",
       skillsBasePath: "/tmp/custom-skills",
       webFetchBatchEnabled: true,
@@ -83,6 +93,10 @@ describe("generalSettingsRouter", () => {
         },
       },
       input: {
+        contextCompactionEnabled: true,
+        contextCompactionFixedWindowSize: 64_000,
+        contextCompactionUseFixedWindow: true,
+        contextCompactionWindowPercent: 75,
         followUpBehavior: "queue",
         skillsBasePath: "/tmp/custom-skills",
         webFetchBatchEnabled: true,
@@ -92,6 +106,10 @@ describe("generalSettingsRouter", () => {
 
     expect(update).toHaveBeenCalled();
     expect(set).toHaveBeenCalledWith({
+      contextCompactionEnabled: true,
+      contextCompactionFixedWindowSize: 64_000,
+      contextCompactionUseFixedWindow: true,
+      contextCompactionWindowPercent: 75,
       followUpBehavior: "queue",
       skillsBasePath: "/tmp/custom-skills",
       webFetchBatchEnabled: true,
@@ -99,10 +117,44 @@ describe("generalSettingsRouter", () => {
     });
     expect(run).toHaveBeenCalled();
     expect(result).toEqual({
+      contextCompactionEnabled: true,
+      contextCompactionFixedWindowSize: 64_000,
+      contextCompactionUseFixedWindow: true,
+      contextCompactionWindowPercent: 75,
       followUpBehavior: "queue",
       skillsBasePath: "/tmp/custom-skills",
       webFetchBatchEnabled: true,
       webFetchBatchLimit: 10,
     });
+  });
+
+  it("rejects invalid context compaction percentages", () => {
+    const parsed = generalSettingsFormSchema.safeParse({
+      contextCompactionEnabled: true,
+      contextCompactionFixedWindowSize: 64_000,
+      contextCompactionUseFixedWindow: false,
+      contextCompactionWindowPercent: 49,
+      followUpBehavior: "queue",
+      skillsBasePath: null,
+      webFetchBatchEnabled: true,
+      webFetchBatchLimit: 10,
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects invalid fixed context window sizes", () => {
+    const parsed = generalSettingsFormSchema.safeParse({
+      contextCompactionEnabled: true,
+      contextCompactionFixedWindowSize: 31_999,
+      contextCompactionUseFixedWindow: true,
+      contextCompactionWindowPercent: 70,
+      followUpBehavior: "queue",
+      skillsBasePath: null,
+      webFetchBatchEnabled: true,
+      webFetchBatchLimit: 10,
+    });
+
+    expect(parsed.success).toBe(false);
   });
 });

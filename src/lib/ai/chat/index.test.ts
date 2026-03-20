@@ -52,8 +52,8 @@ const createUIMessageStreamResponse = mock(
       });
     }
 
-  await stream.done;
-  return new Response("ok", { headers, status: 200 });
+    await stream.done;
+    return new Response("ok", { headers, status: 200 });
   },
 );
 const generateId = mock(() => "stream-id");
@@ -78,6 +78,7 @@ const attachmentDownloadHandler = { kind: "download-handler" };
 const createAttachmentDownloadHandler = mock(() => attachmentDownloadHandler);
 
 const resolvedChatModel = {
+  contextWindow: 128_000,
   languageModel: { kind: "chat-model" },
   providerId: "openai",
   providerOptions: { openai: { reasoningEffort: "high" } },
@@ -153,6 +154,11 @@ const mapThreadMessagesToUIMessages = mock(async (messages) => messages);
 
 const loadThreadMessages = mock(async () => []);
 const loadThread = mock(async () => null);
+const getThreadContextCompactionCheckpoint = mock(async () => ({
+  coveredThroughMessageId: null,
+  summary: null,
+  updatedAt: null,
+}));
 const ensureThread = mock(async () => ({ created: true }));
 const enqueueThreadFollowUp = mock(() => {});
 const enqueueThreadFollowUpAtFront = mock(() => {});
@@ -170,14 +176,12 @@ const sessionSnapshotState = {
   threadTitle: "New thread",
 };
 const setThreadStatus = mock(
-  (
-    _threadId: string,
-    status: "idle" | "streaming" | "awaiting_approval",
-  ) => {
+  (_threadId: string, status: "idle" | "streaming" | "awaiting_approval") => {
     sessionSnapshotState.threadStatus = status;
   },
 );
 const updateThreadChatSettings = mock(() => {});
+const updateThreadContextCompactionCheckpoint = mock(() => {});
 const upsertMessage = mock((_threadId, message) => message);
 const setActiveMessage = mock(async () => {});
 const clearActiveStream = mock(() => {
@@ -267,6 +271,12 @@ const getSearchSettings = mock(async () => ({
   defaultProvider: "exa",
   defaultResultCount: 5,
   maxResultCount: 10,
+}));
+const getContextCompactionSettings = mock(async () => ({
+  enabled: false,
+  fixedWindowSize: 128_000,
+  useFixedWindow: false,
+  windowPercent: 70,
 }));
 const getSearchProviderRuntime = mock(async () => ({}));
 const getSkillsBasePath = mock(async () => null);
@@ -418,13 +428,21 @@ mock.module("./tools/manage-task", () => ({
 
 mock.module("./tools/ask-question", () => {
   const askQuestionInputItemSchema = z.object({
-    allowMultiple: z.boolean().optional().describe("When true the user can select multiple options."),
+    allowMultiple: z
+      .boolean()
+      .optional()
+      .describe("When true the user can select multiple options."),
     header: z.string().trim().min(1).max(80),
     id: z.string().trim().min(1).max(80).optional(),
-    options: z.array(z.object({
-      description: z.string().trim().min(1).max(400),
-      label: z.string().trim().min(1).max(160),
-    })).min(2).max(8),
+    options: z
+      .array(
+        z.object({
+          description: z.string().trim().min(1).max(400),
+          label: z.string().trim().min(1).max(160),
+        }),
+      )
+      .min(2)
+      .max(8),
     question: z.string().trim().min(1).max(400),
   });
 
@@ -439,33 +457,59 @@ mock.module("./tools/ask-question", () => {
     status: z.enum(["pending", "answered"]),
   });
 
-  function trimToLength(v, max) { return v.trim().slice(0, max).trim(); }
+  function trimToLength(v, max) {
+    return v.trim().slice(0, max).trim();
+  }
 
   function sanitizeAskQuestionInput(input) {
-    const questions = input.questions.slice(0, 3).map((q) => {
-      const seen = new Set();
-      const options = q.options
-        .map((o) => ({ description: trimToLength(o.description, 240), label: trimToLength(o.label, 80) }))
-        .filter((o) => o.label.length > 0 && o.description.length > 0 && !seen.has(o.label.toLowerCase()) && seen.add(o.label.toLowerCase()))
-        .slice(0, 4);
-      return {
-        ...(q.allowMultiple ? { allowMultiple: true } : {}),
-        header: trimToLength(q.header, 24),
-        id: q.id ? trimToLength(q.id, 80) : undefined,
-        options,
-        question: trimToLength(q.question, 240),
-      };
-    }).filter((q) => q.options.length >= 2);
-    if (questions.length === 0) throw new Error("Need at least one question with 2+ options");
+    const questions = input.questions
+      .slice(0, 3)
+      .map((q) => {
+        const seen = new Set();
+        const options = q.options
+          .map((o) => ({
+            description: trimToLength(o.description, 240),
+            label: trimToLength(o.label, 80),
+          }))
+          .filter(
+            (o) =>
+              o.label.length > 0 &&
+              o.description.length > 0 &&
+              !seen.has(o.label.toLowerCase()) &&
+              seen.add(o.label.toLowerCase()),
+          )
+          .slice(0, 4);
+        return {
+          ...(q.allowMultiple ? { allowMultiple: true } : {}),
+          header: trimToLength(q.header, 24),
+          id: q.id ? trimToLength(q.id, 80) : undefined,
+          options,
+          question: trimToLength(q.question, 240),
+        };
+      })
+      .filter((q) => q.options.length >= 2);
+    if (questions.length === 0)
+      throw new Error("Need at least one question with 2+ options");
     return { questions };
   }
 
   async function executeAskQuestion({ input, runtime }) {
     const sanitized = sanitizeAskQuestionInput(input);
     const { createThreadPlanQuestionSet } = await import("@/lib/plan/service");
-    const questions = sanitized.questions.map((q, i) => ({ ...q, id: q.id || `q-${i}` }));
-    const qs = await createThreadPlanQuestionSet({ questions, threadId: runtime.threadId });
-    return { answers: null, questionSetId: qs.id, questions: qs.questions, status: "pending" };
+    const questions = sanitized.questions.map((q, i) => ({
+      ...q,
+      id: q.id || `q-${i}`,
+    }));
+    const qs = await createThreadPlanQuestionSet({
+      questions,
+      threadId: runtime.threadId,
+    });
+    return {
+      answers: null,
+      questionSetId: qs.id,
+      questions: qs.questions,
+      status: "pending",
+    };
   }
 
   return {
@@ -509,6 +553,7 @@ mock.module("./persistence", () => ({
   enqueueThreadFollowUpAtFront,
   ensureThread,
   getLatestAssistantMessageId,
+  getThreadContextCompactionCheckpoint,
   loadThread,
   listThreadFollowUps,
   loadThreadMessages,
@@ -521,6 +566,7 @@ mock.module("./persistence", () => ({
   setThreadStatus,
   updateMessageMetadata,
   updateThreadChatSettings,
+  updateThreadContextCompactionCheckpoint,
   updateThreadTitle,
   upsertMessage,
 }));
@@ -552,6 +598,7 @@ mock.module("@/lib/plan/service", () => ({
 }));
 
 mock.module("./runtime/workspace", () => ({
+  getContextCompactionSettings,
   getMemorySettings,
   getMcpServerRuntime,
   getSearchProviderRuntime,
@@ -654,6 +701,44 @@ function createUserMessage(text: string) {
   };
 }
 
+function createTextMessage({
+  id,
+  metadata = {},
+  role,
+  text,
+}: {
+  id: string;
+  metadata?: Record<string, unknown>;
+  role: "assistant" | "system" | "user";
+  text: string;
+}) {
+  return {
+    id,
+    metadata,
+    parts: [{ text, type: "text" }],
+    role,
+  };
+}
+
+function createMessageWithParts({
+  id,
+  metadata = {},
+  parts,
+  role,
+}: {
+  id: string;
+  metadata?: Record<string, unknown>;
+  parts: Array<Record<string, unknown>>;
+  role: "assistant" | "system" | "user";
+}) {
+  return {
+    id,
+    metadata,
+    parts,
+    role,
+  };
+}
+
 function createAssistantApprovalMessage() {
   return {
     id: "assistant-existing",
@@ -675,21 +760,45 @@ function createAssistantApprovalMessage() {
   };
 }
 
-function createPersistedUserMessage(text: string) {
+function createPersistedMessage({
+  createdAt = "2026-03-10T10:00:00.000Z",
+  id,
+  messageId = id,
+  metadata = { isActive: true, status: "completed" },
+  parts,
+  role,
+}: {
+  createdAt?: string;
+  id: string;
+  messageId?: string;
+  metadata?: Record<string, unknown>;
+  parts: Array<Record<string, unknown>>;
+  role: "assistant" | "system" | "user";
+}) {
   return {
-    createdAt: new Date("2026-03-10T10:00:00.000Z"),
+    createdAt: new Date(createdAt),
+    id,
+    messageId,
+    metadata,
+    parts,
+    role,
+    updatedAt: new Date(createdAt),
+  };
+}
+
+function createPersistedUserMessage(text: string) {
+  return createPersistedMessage({
     id: "db-user-message-1",
     messageId: "user-message-1",
     metadata: { isActive: true, status: "completed" },
     parts: [{ text, type: "text" }],
     role: "user",
-    updatedAt: new Date("2026-03-10T10:00:00.000Z"),
-  };
+  });
 }
 
 function createPersistedAssistantToolMessage() {
-  return {
-    createdAt: new Date("2026-03-10T10:00:01.000Z"),
+  return createPersistedMessage({
+    createdAt: "2026-03-10T10:00:01.000Z",
     id: "assistant-tool-1",
     messageId: "assistant-tool-1",
     metadata: {
@@ -717,8 +826,7 @@ function createPersistedAssistantToolMessage() {
       { text: "Workspace confirmed", type: "text" },
     ],
     role: "assistant",
-    updatedAt: new Date("2026-03-10T10:00:01.000Z"),
-  };
+  });
 }
 
 function createSubmitRequest({
@@ -767,6 +875,7 @@ beforeEach(() => {
     parts: [{ text: "Assistant response", type: "text" }],
     role: "assistant",
   };
+  resolvedChatModel.contextWindow = 128_000;
 
   loadThreadMessages.mockImplementation(async () => []);
   loadThread.mockImplementation(async () => null);
@@ -815,6 +924,12 @@ beforeEach(() => {
     defaultResultCount: 5,
     maxResultCount: 10,
   }));
+  getContextCompactionSettings.mockImplementation(async () => ({
+    enabled: false,
+    fixedWindowSize: 128_000,
+    useFixedWindow: false,
+    windowPercent: 70,
+  }));
   getSearchProviderRuntime.mockImplementation(async () => ({}));
   getWebFetchSettings.mockImplementation(async () => ({
     batchEnabled: false,
@@ -838,6 +953,11 @@ beforeEach(() => {
   loadMcpTools.mockImplementation(async () => ({
     closeAll: async () => {},
     tools: {},
+  }));
+  getThreadContextCompactionCheckpoint.mockImplementation(async () => ({
+    coveredThroughMessageId: null,
+    summary: null,
+    updatedAt: null,
   }));
   buildIntegrationContext.mockImplementation(async () => ({
     databases: {},
@@ -979,6 +1099,681 @@ describe("runThreadChat title generation", () => {
   });
 });
 
+describe("runThreadChat context compaction", () => {
+  function createLongConversation(
+    messageCount = 14,
+    { assistantInputTokens }: { assistantInputTokens?: number } = {},
+  ) {
+    return Array.from({ length: messageCount }, (_, index) =>
+      createTextMessage({
+        id: `message-${index + 1}`,
+        metadata:
+          index % 2 === 1 && assistantInputTokens !== undefined
+            ? {
+                status: "completed",
+                usage: {
+                  inputTokens: assistantInputTokens,
+                },
+              }
+            : { status: "completed" },
+        role: index % 2 === 0 ? "user" : "assistant",
+        text: `Message ${index + 1}: ${"refactor-details ".repeat(60)}`,
+      }),
+    );
+  }
+
+  it("does not compact when the feature is disabled", async () => {
+    const messages = createLongConversation();
+
+    await runThreadChat(
+      {
+        id: "thread-1",
+        messages,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+    await flushAsyncWork();
+
+    const runtimeMessages =
+      createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
+
+    expect(generateText).not.toHaveBeenCalled();
+    expect(updateThreadContextCompactionCheckpoint).not.toHaveBeenCalled();
+    expect(runtimeMessages.map((message: any) => message.id)).toEqual(
+      messages.map((message) => message.id),
+    );
+  });
+
+  it("compacts older transcript history and persists a checkpoint", async () => {
+    const messages = createLongConversation(14, {
+      assistantInputTokens: 240,
+    });
+    resolvedChatModel.contextWindow = 400;
+    getContextCompactionSettings.mockImplementation(async () => ({
+      enabled: true,
+      fixedWindowSize: 128_000,
+      useFixedWindow: false,
+      windowPercent: 50,
+    }));
+    generateText.mockImplementationOnce(async () => ({
+      text: "<summary>Compacted thread state</summary>",
+    }));
+
+    await runThreadChat(
+      {
+        id: "thread-1",
+        messages,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+    await flushAsyncWork();
+
+    const compactedMessages =
+      createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
+
+    expect(generateText).toHaveBeenCalledTimes(1);
+    expect(generateText.mock.calls[0]?.[0]).toMatchObject({
+      model: resolvedChatModel.languageModel,
+      providerOptions: resolvedChatModel.providerOptions,
+    });
+    expect(updateThreadContextCompactionCheckpoint).toHaveBeenCalledWith(
+      "thread-1",
+      {
+        coveredThroughMessageId: "message-12",
+        summary: "Compacted thread state",
+      },
+    );
+    expect(upsertMessage).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          statusLabel: "Compacting context...",
+        }),
+      }),
+    );
+    expect(compactedMessages).toHaveLength(7);
+    expect(compactedMessages[0]).toMatchObject({
+      id: "context-compaction-summary:message-12",
+      role: "system",
+    });
+    expect(
+      compactedMessages.slice(1).map((message: any) => message.id),
+    ).toEqual([
+      "context-compaction-stripped:message-9",
+      "context-compaction-stripped:message-10",
+      "context-compaction-stripped:message-11",
+      "context-compaction-stripped:message-12",
+      "message-13",
+      "message-14",
+    ]);
+  });
+
+  it("does not compact when no prior assistant has exact input tokens", async () => {
+    const messages = createLongConversation();
+    resolvedChatModel.contextWindow = 400;
+    getContextCompactionSettings.mockImplementation(async () => ({
+      enabled: true,
+      fixedWindowSize: 128_000,
+      useFixedWindow: false,
+      windowPercent: 50,
+    }));
+
+    await runThreadChat(
+      {
+        id: "thread-1",
+        messages,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+    await flushAsyncWork();
+
+    const runtimeMessages =
+      createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
+
+    expect(generateText).not.toHaveBeenCalled();
+    expect(updateThreadContextCompactionCheckpoint).not.toHaveBeenCalled();
+    expect(runtimeMessages.map((message: any) => message.id)).toEqual(
+      messages.map((message) => message.id),
+    );
+  });
+
+  it("uses the fixed context window override when enabled", async () => {
+    const messages = createLongConversation(14, {
+      assistantInputTokens: 240,
+    });
+    resolvedChatModel.contextWindow = 10_000;
+    getContextCompactionSettings.mockImplementation(async () => ({
+      enabled: true,
+      fixedWindowSize: 400,
+      useFixedWindow: true,
+      windowPercent: 50,
+    }));
+    generateText.mockImplementationOnce(async () => ({
+      text: "<summary>Fixed window summary</summary>",
+    }));
+
+    await runThreadChat(
+      {
+        id: "thread-1",
+        messages,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+    await flushAsyncWork();
+
+    const compactedMessages =
+      createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
+
+    expect(generateText).toHaveBeenCalledTimes(1);
+    expect(updateThreadContextCompactionCheckpoint).toHaveBeenCalledWith(
+      "thread-1",
+      {
+        coveredThroughMessageId: "message-12",
+        summary: "Fixed window summary",
+      },
+    );
+    expect(compactedMessages[0]).toMatchObject({
+      id: "context-compaction-summary:message-12",
+      role: "system",
+    });
+  });
+
+  it("compacts short oversized branches without dropping the latest turn", async () => {
+    const messages = createLongConversation(5, {
+      assistantInputTokens: 103_040,
+    });
+    resolvedChatModel.contextWindow = 128_000;
+    getContextCompactionSettings.mockImplementation(async () => ({
+      enabled: true,
+      fixedWindowSize: 32_000,
+      useFixedWindow: true,
+      windowPercent: 50,
+    }));
+    generateText.mockImplementationOnce(async () => ({
+      text: "<summary>Short branch summary</summary>",
+    }));
+
+    await runThreadChat(
+      {
+        id: "thread-1",
+        messages,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+    await flushAsyncWork();
+
+    const compactedMessages =
+      createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
+
+    expect(generateText).toHaveBeenCalledTimes(1);
+    expect(updateThreadContextCompactionCheckpoint).toHaveBeenCalledWith(
+      "thread-1",
+      {
+        coveredThroughMessageId: "message-3",
+        summary: "Short branch summary",
+      },
+    );
+    expect(compactedMessages.map((message: any) => message.id)).toEqual([
+      "context-compaction-summary:message-3",
+      "context-compaction-stripped:message-1",
+      "context-compaction-stripped:message-2",
+      "context-compaction-stripped:message-3",
+      "message-4",
+      "message-5",
+    ]);
+  });
+
+  it("keeps only text and file parts in stripped compacted tail messages", async () => {
+    const completedAssistantMetadata = {
+      status: "completed",
+      usage: {
+        inputTokens: 103_040,
+      },
+    };
+    const messages = [
+      createMessageWithParts({
+        id: "message-1",
+        metadata: { status: "completed" },
+        parts: [{ text: "Review these exports", type: "text" }],
+        role: "user",
+      }),
+      createMessageWithParts({
+        id: "message-2",
+        metadata: completedAssistantMetadata,
+        parts: [
+          {
+            input: { command: "rg export src" },
+            output: { stdout: "export const thing = 1;" },
+            state: "output-available",
+            toolCallId: "tool-call-1",
+            type: "tool-shell_command",
+          },
+          { text: "I found the main exports.", type: "text" },
+          { text: "internal chain-of-thought", type: "reasoning" },
+        ],
+        role: "assistant",
+      }),
+      createMessageWithParts({
+        id: "message-3",
+        metadata: { status: "completed" },
+        parts: [
+          {
+            filename: "exports.csv",
+            mediaType: "text/csv",
+            type: "file",
+            url: "https://example.com/exports.csv",
+          },
+          { text: "Compare this file too.", type: "text" },
+        ],
+        role: "user",
+      }),
+      createMessageWithParts({
+        id: "message-4",
+        metadata: completedAssistantMetadata,
+        parts: [
+          {
+            approval: { id: "approval-1" },
+            input: { path: "src/index.ts" },
+            state: "approval-responded",
+            toolCallId: "tool-call-2",
+            type: "dynamic-tool",
+            toolName: "read_file",
+          },
+          { text: "File reviewed.", type: "text" },
+        ],
+        role: "assistant",
+      }),
+      createMessageWithParts({
+        id: "message-5",
+        metadata: { status: "completed" },
+        parts: [{ text: "What should we refactor next?", type: "text" }],
+        role: "user",
+      }),
+      createMessageWithParts({
+        id: "message-6",
+        metadata: completedAssistantMetadata,
+        parts: [
+          { text: "Next I would simplify the adapter.", type: "text" },
+          {
+            input: { command: "git diff" },
+            output: { stdout: "..." },
+            state: "output-available",
+            toolCallId: "tool-call-3",
+            type: "tool-shell_command",
+          },
+        ],
+        role: "assistant",
+      }),
+    ];
+    resolvedChatModel.contextWindow = 128_000;
+    getContextCompactionSettings.mockImplementation(async () => ({
+      enabled: true,
+      fixedWindowSize: 32_000,
+      useFixedWindow: true,
+      windowPercent: 50,
+    }));
+    generateText.mockImplementationOnce(async () => ({
+      text: "<summary>Tool-heavy summary</summary>",
+    }));
+
+    await runThreadChat(
+      {
+        id: "thread-1",
+        messages,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+    await flushAsyncWork();
+
+    const compactedMessages =
+      createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
+    const strippedTail = compactedMessages.slice(1, -2);
+
+    expect(updateThreadContextCompactionCheckpoint).toHaveBeenCalledWith(
+      "thread-1",
+      {
+        coveredThroughMessageId: "message-4",
+        summary: "Tool-heavy summary",
+      },
+    );
+    expect(strippedTail.map((message: any) => message.id)).toEqual([
+      "context-compaction-stripped:message-1",
+      "context-compaction-stripped:message-2",
+      "context-compaction-stripped:message-3",
+      "context-compaction-stripped:message-4",
+    ]);
+    expect(strippedTail.map((message: any) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+    ]);
+    expect(strippedTail[0].parts).toEqual([{ text: "Review these exports", type: "text" }]);
+    expect(strippedTail[1].parts).toEqual([
+      { text: "I found the main exports.", type: "text" },
+    ]);
+    expect(strippedTail[2].parts).toEqual([
+      {
+        filename: "exports.csv",
+        mediaType: "text/csv",
+        type: "file",
+        url: "https://example.com/exports.csv",
+      },
+      { text: "Compare this file too.", type: "text" },
+    ]);
+    expect(strippedTail[3].parts).toEqual([
+      { text: "File reviewed.", type: "text" },
+    ]);
+    expect(
+      compactedMessages.slice(-2).map((message: any) => message.id),
+    ).toEqual(["message-5", "message-6"]);
+    expect(upsertMessage).not.toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        id: expect.stringContaining("context-compaction-stripped:"),
+      }),
+    );
+  });
+
+  it("removes provider metadata from stripped assistant copies", async () => {
+    const completedAssistantMetadata = {
+      status: "completed",
+      usage: {
+        inputTokens: 103_040,
+      },
+    };
+    const messages = [
+      createMessageWithParts({
+        id: "message-1",
+        metadata: { status: "completed" },
+        parts: [{ text: "Continue", type: "text" }],
+        role: "user",
+      }),
+      createMessageWithParts({
+        id: "message-2",
+        metadata: completedAssistantMetadata,
+        parts: [
+          {
+            providerMetadata: {
+              openai: {
+                itemId: "rs_reasoning_1",
+                reasoningEncryptedContent: null,
+              },
+            },
+            text: "",
+            type: "reasoning",
+          },
+          {
+            providerMetadata: {
+              openai: {
+                itemId: "msg_answer_1",
+              },
+            },
+            text: "I checked the code path.",
+            type: "text",
+          },
+        ],
+        role: "assistant",
+      }),
+      createMessageWithParts({
+        id: "message-3",
+        metadata: { status: "completed" },
+        parts: [{ text: "What next?", type: "text" }],
+        role: "user",
+      }),
+      createMessageWithParts({
+        id: "message-4",
+        metadata: completedAssistantMetadata,
+        parts: [{ text: "We should compact this.", type: "text" }],
+        role: "assistant",
+      }),
+      createMessageWithParts({
+        id: "message-5",
+        metadata: { status: "completed" },
+        parts: [{ text: "Go on", type: "text" }],
+        role: "user",
+      }),
+    ];
+    getContextCompactionSettings.mockImplementation(async () => ({
+      enabled: true,
+      fixedWindowSize: 32_000,
+      useFixedWindow: true,
+      windowPercent: 50,
+    }));
+    generateText.mockImplementationOnce(async () => ({
+      text: "<summary>Provider metadata stripped</summary>",
+    }));
+
+    await runThreadChat(
+      {
+        id: "thread-1",
+        messages,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+    await flushAsyncWork();
+
+    const compactedMessages =
+      createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
+    const strippedAssistant = compactedMessages.find(
+      (message: any) => message.id === "context-compaction-stripped:message-2",
+    );
+
+    expect(strippedAssistant).toMatchObject({
+      id: "context-compaction-stripped:message-2",
+      role: "assistant",
+    });
+    expect(strippedAssistant.parts).toEqual([
+      {
+        text: "I checked the code path.",
+        type: "text",
+      },
+    ]);
+  });
+
+  it("omits stripped compacted messages that only contain tool or reasoning parts", async () => {
+    const completedAssistantMetadata = {
+      status: "completed",
+      usage: {
+        inputTokens: 103_040,
+      },
+    };
+    const messages = [
+      createMessageWithParts({
+        id: "message-1",
+        metadata: { status: "completed" },
+        parts: [{ text: "Run checks", type: "text" }],
+        role: "user",
+      }),
+      createMessageWithParts({
+        id: "message-2",
+        metadata: completedAssistantMetadata,
+        parts: [
+          {
+            input: { command: "bun test" },
+            output: { stdout: "ok" },
+            state: "output-available",
+            toolCallId: "tool-call-1",
+            type: "tool-shell_command",
+          },
+        ],
+        role: "assistant",
+      }),
+      createMessageWithParts({
+        id: "message-3",
+        metadata: { status: "completed" },
+        parts: [{ text: "Anything else?", type: "text" }],
+        role: "user",
+      }),
+      createMessageWithParts({
+        id: "message-4",
+        metadata: completedAssistantMetadata,
+        parts: [{ text: "private reasoning", type: "reasoning" }],
+        role: "assistant",
+      }),
+      createMessageWithParts({
+        id: "message-5",
+        metadata: { status: "completed" },
+        parts: [{ text: "Please continue", type: "text" }],
+        role: "user",
+      }),
+    ];
+    resolvedChatModel.contextWindow = 128_000;
+    getContextCompactionSettings.mockImplementation(async () => ({
+      enabled: true,
+      fixedWindowSize: 32_000,
+      useFixedWindow: true,
+      windowPercent: 50,
+    }));
+    generateText.mockImplementationOnce(async () => ({
+      text: "<summary>Minimal stripped summary</summary>",
+    }));
+
+    await runThreadChat(
+      {
+        id: "thread-1",
+        messages,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+    await flushAsyncWork();
+
+    const compactedMessages =
+      createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
+
+    expect(compactedMessages.map((message: any) => message.id)).toEqual([
+      "context-compaction-summary:message-3",
+      "context-compaction-stripped:message-1",
+      "context-compaction-stripped:message-3",
+      "message-4",
+      "message-5",
+    ]);
+  });
+
+  it("reuses an existing checkpoint when it is still valid", async () => {
+    const messages = createLongConversation(10, {
+      assistantInputTokens: 120,
+    });
+    getContextCompactionSettings.mockImplementation(async () => ({
+      enabled: true,
+      fixedWindowSize: 128_000,
+      useFixedWindow: false,
+      windowPercent: 95,
+    }));
+    getThreadContextCompactionCheckpoint.mockImplementation(async () => ({
+      coveredThroughMessageId: "message-2",
+      summary: "Existing summary",
+      updatedAt: new Date("2026-03-10T10:00:00.000Z"),
+    }));
+
+    await runThreadChat(
+      {
+        id: "thread-1",
+        messages,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+    await flushAsyncWork();
+
+    const compactedMessages =
+      createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
+
+    expect(generateText).not.toHaveBeenCalled();
+    expect(updateThreadContextCompactionCheckpoint).not.toHaveBeenCalled();
+    expect(compactedMessages[0]).toMatchObject({
+      id: "context-compaction-summary:message-2",
+      role: "system",
+    });
+    expect(
+      compactedMessages.slice(1).map((message: any) => message.id),
+    ).toEqual([
+      "message-3",
+      "message-4",
+      "message-5",
+      "message-6",
+      "message-7",
+      "message-8",
+      "message-9",
+      "message-10",
+    ]);
+  });
+
+  it("ignores an invalid checkpoint and leaves the raw tail intact", async () => {
+    const messages = createLongConversation(10, {
+      assistantInputTokens: 120,
+    });
+    getContextCompactionSettings.mockImplementation(async () => ({
+      enabled: true,
+      fixedWindowSize: 128_000,
+      useFixedWindow: false,
+      windowPercent: 95,
+    }));
+    getThreadContextCompactionCheckpoint.mockImplementation(async () => ({
+      coveredThroughMessageId: "missing-message",
+      summary: "Stale summary",
+      updatedAt: new Date("2026-03-10T10:00:00.000Z"),
+    }));
+
+    await runThreadChat(
+      {
+        id: "thread-1",
+        messages,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+    await flushAsyncWork();
+
+    const compactedMessages =
+      createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
+
+    expect(generateText).not.toHaveBeenCalled();
+    expect(updateThreadContextCompactionCheckpoint).not.toHaveBeenCalled();
+    expect(compactedMessages.map((message: any) => message.id)).toEqual(
+      messages.map((message) => message.id),
+    );
+  });
+});
+
 describe("runThreadChat approvals and lifecycle", () => {
   it("reuses the existing assistant id for approval continuation", async () => {
     const assistantMessage = createAssistantApprovalMessage();
@@ -1038,6 +1833,7 @@ describe("runThreadChat approvals and lifecycle", () => {
       {
         errorMessage: "Generation stopped.",
         status: "cancelled",
+        statusLabel: null,
       },
     );
   });
@@ -1113,6 +1909,7 @@ describe("runThreadChat approvals and lifecycle", () => {
       {
         errorMessage: "Generation stopped.",
         status: "cancelled",
+        statusLabel: null,
       },
     );
   });
@@ -1273,12 +2070,12 @@ describe("runThreadChat approvals and lifecycle", () => {
     await runThreadChat(createSubmitRequest(), "user-1");
     await flushAsyncWork();
 
-    expect(
-      await aiTestState.prepared?.tools.list.needsApproval({}, {}),
-    ).toBe(true);
-    expect(
-      await aiTestState.prepared?.tools.edit.needsApproval({}, {}),
-    ).toBe(false);
+    expect(await aiTestState.prepared?.tools.list.needsApproval({}, {})).toBe(
+      true,
+    );
+    expect(await aiTestState.prepared?.tools.edit.needsApproval({}, {})).toBe(
+      false,
+    );
   });
 
   it("builds a planning-only agent for plan-mode threads", async () => {

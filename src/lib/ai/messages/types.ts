@@ -51,11 +51,13 @@ export const threadMessageMetadataSchema = z
       .partial()
       .optional(),
     runId: z.string().optional(),
+    statusLabel: z.string().nullable().optional(),
     status: z
       .enum(["pending", "streaming", "completed", "error", "cancelled"])
       .optional(),
     usage: z
       .object({
+        inputTokens: z.number().optional(),
         outputTokens: z.number().optional(),
         reasoningTokens: z.number().optional(),
         totalTokens: z.number().optional(),
@@ -135,7 +137,9 @@ function getPartSyncToken(part: ThreadUIMessage["parts"][number]) {
         "toolCallId" in part ? String(part.toolCallId) : "",
         "state" in part ? String(part.state) : "",
         getValueFingerprint(
-          "callProviderMetadata" in part ? part.callProviderMetadata : undefined,
+          "callProviderMetadata" in part
+            ? part.callProviderMetadata
+            : undefined,
         ),
         getValueFingerprint(
           "providerMetadata" in part ? part.providerMetadata : undefined,
@@ -284,6 +288,7 @@ export function getThreadMessageSyncToken(message: ThreadUIMessage) {
     metadata?.finishReason ?? "",
     metadata?.revision ?? "",
     metadata?.runId ?? "",
+    metadata?.usage?.inputTokens ?? "",
     metadata?.usage?.totalTokens ?? "",
     metadata?.usage?.reasoningTokens ?? "",
     metadata?.reasoning?.durationMs ?? "",

@@ -13,6 +13,7 @@ type ReasoningStreamPart = {
     modelId?: string | null;
   };
   totalUsage?: {
+    inputTokens?: number;
     outputTokenDetails?: {
       reasoningTokens?: number;
     };
@@ -71,7 +72,9 @@ export type ReasoningMetadataTracker = {
     messages: ThreadUIMessage[],
     responseMessage: ThreadUIMessage,
   ): ThreadUIMessage[];
-  getMessageMetadata(part: ReasoningStreamPart): ThreadMessageMetadata | undefined;
+  getMessageMetadata(
+    part: ReasoningStreamPart,
+  ): ThreadMessageMetadata | undefined;
 };
 
 export function createReasoningMetadataTracker({
@@ -100,7 +103,9 @@ export function createReasoningMetadataTracker({
           ...message,
           metadata: mergeThreadMessageMetadata(message.metadata, {
             reasoning: {
-              ...(mergedDurations ? { segmentDurationsMs: mergedDurations } : {}),
+              ...(mergedDurations
+                ? { segmentDurationsMs: mergedDurations }
+                : {}),
             },
           }),
         };
@@ -186,6 +191,7 @@ export function createReasoningMetadataTracker({
             rawSegmentDurationsMs: [...rawReasoningDurationsMs],
           },
           usage: {
+            inputTokens: part.totalUsage.inputTokens,
             outputTokens: part.totalUsage.outputTokens,
             reasoningTokens:
               part.totalUsage.outputTokenDetails?.reasoningTokens ??
