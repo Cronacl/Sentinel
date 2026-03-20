@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AiIdeaIcon,
   ArrowDown01Icon,
   ArrowUp01Icon,
   CodeSquareIcon,
@@ -71,9 +72,12 @@ export function ThreadRepoActions({
   const [launchingTargetId, setLaunchingTargetId] = useState<string | null>(
     null,
   );
-  const [promptMode, setPromptMode] = useState<"branch" | "commit" | null>(
-    null,
-  );
+  const [preferredLaunchTargetId, setPreferredLaunchTargetId] = useState<
+    string | null
+  >(null);
+  const [promptMode, setPromptMode] = useState<
+    "branch" | "commit" | "pull-request-branch" | null
+  >(null);
   const [promptValue, setPromptValue] = useState("");
   const [promptError, setPromptError] = useState("");
 
@@ -81,7 +85,8 @@ export function ThreadRepoActions({
     { workspaceId },
     {
       enabled: isDesktop && Boolean(workspaceRootPath),
-      refetchOnWindowFocus: false,
+      refetchInterval: isDesktop && workspaceRootPath ? 2500 : false,
+      refetchOnWindowFocus: true,
     },
   );
 
@@ -90,12 +95,13 @@ export function ThreadRepoActions({
 
   const primaryLaunchTarget = useMemo(
     () =>
+      launchTargets.find((target) => target.id === preferredLaunchTargetId) ??
       launchTargets.find(
         (target) => target.kind === "editor" || target.kind === "ide",
       ) ??
       launchTargets[0] ??
       null,
-    [launchTargets],
+    [launchTargets, preferredLaunchTargetId],
   );
 
   const isRepoVisible = Boolean(
@@ -150,6 +156,43 @@ export function ThreadRepoActions({
     },
   });
 
+  const createPullRequestMutation = api.repo.createPullRequest.useMutation({
+    onSuccess: async (result) => {
+      setPromptMode(null);
+      setPromptValue("");
+      setPromptError("");
+
+      try {
+        if (desktop) {
+          await desktop.openExternal(result.pullRequestUrl);
+        }
+
+        setFeedback({
+          text: result.createdBranch
+            ? `Created PR from ${result.createdBranch}`
+            : result.branch
+              ? `Created PR from ${result.branch}`
+              : "Created PR",
+          tone: "success",
+        });
+      } catch (error) {
+        setFeedback({
+          text: getErrorMessage(error, "Unable to open the PR page."),
+          tone: "error",
+        });
+      }
+
+      await utils.repo.getContext.invalidate({ workspaceId });
+    },
+    onError: (error) => {
+      setPromptError(getErrorMessage(error, "Unable to create PR."));
+      setFeedback({
+        text: getErrorMessage(error, "Unable to create PR."),
+        tone: "error",
+      });
+    },
+  });
+
   const initMutation = api.repo.init.useMutation({
     onSuccess: async () => {
       setFeedback({
@@ -166,6 +209,22 @@ export function ThreadRepoActions({
     },
   });
 
+  const generateCommitMessageMutation =
+    api.repo.generateCommitMessage.useMutation({
+      onSuccess: (result) => {
+        setPromptError("");
+        setPromptValue(result.message);
+      },
+      onError: (error) => {
+        setPromptError(
+          getErrorMessage(error, "Unable to generate a commit message."),
+        );
+      },
+    });
+
+  const setPreferredOpenTargetMutation =
+    api.repo.setPreferredOpenTarget.useMutation();
+
   useEffect(() => {
     if (!feedback) {
       return;
@@ -174,6 +233,10 @@ export function ThreadRepoActions({
     const timeoutId = window.setTimeout(() => setFeedback(null), 3500);
     return () => window.clearTimeout(timeoutId);
   }, [feedback]);
+
+  useEffect(() => {
+    setPreferredLaunchTargetId(repoContext?.preferredOpenTargetId ?? null);
+  }, [repoContext?.preferredOpenTargetId]);
 
   useEffect(() => {
     if (!isRepoVisible || !launchPath || !desktop) {
@@ -218,12 +281,15 @@ export function ThreadRepoActions({
     };
   }, [desktop, isRepoVisible, launchPath]);
 
-  const setPrompt = useCallback((mode: "branch" | "commit") => {
-    setPromptMode(mode);
-    setPromptValue("");
-    setPromptError("");
-    setFeedback(null);
-  }, []);
+  const setPrompt = useCallback(
+    (mode: "branch" | "commit" | "pull-request-branch") => {
+      setPromptMode(mode);
+      setPromptValue("");
+      setPromptError("");
+      setFeedback(null);
+    },
+    [],
+  );
 
   const handleLaunchTarget = useCallback(
     async (target: DesktopOpenTarget) => {
@@ -243,9 +309,22 @@ export function ThreadRepoActions({
           await desktop.workspace.openInTarget(launchPath, target.id);
         }
 
+        setPreferredLaunchTargetId(target.id);
+
+        let didPersistPreference = true;
+        try {
+          await setPreferredOpenTargetMutation.mutateAsync({
+            targetId: target.id,
+          });
+        } catch {
+          didPersistPreference = false;
+        }
+
         setFeedback({
-          text: `Opened in ${target.label}`,
-          tone: "success",
+          text: didPersistPreference
+            ? `Opened in ${target.label}`
+            : `Opened in ${target.label}, but couldn't save it as default.`,
+          tone: didPersistPreference ? "success" : "error",
         });
       } catch (error) {
         setFeedback({
@@ -256,7 +335,7 @@ export function ThreadRepoActions({
         setLaunchingTargetId(null);
       }
     },
-    [desktop, launchPath],
+    [desktop, launchPath, setPreferredOpenTargetMutation],
   );
 
   const handlePromptSubmit = useCallback(
@@ -282,6 +361,14 @@ export function ThreadRepoActions({
         return;
       }
 
+      if (promptMode === "pull-request-branch") {
+        createPullRequestMutation.mutate({
+          branchName: trimmedValue,
+          workspaceId,
+        });
+        return;
+      }
+
       commitMutation.mutate({
         message: trimmedValue,
         workspaceId,
@@ -289,6 +376,7 @@ export function ThreadRepoActions({
     },
     [
       commitMutation,
+      createPullRequestMutation,
       createBranchMutation,
       promptMode,
       promptValue,
@@ -296,38 +384,30 @@ export function ThreadRepoActions({
     ],
   );
 
-  const handleCreatePullRequest = useCallback(async () => {
-    const targetUrl =
-      repoContext?.githubRemote?.pullRequestUrl ??
-      repoContext?.githubRemote?.pullRequestsUrl;
-
-    if (!desktop || !targetUrl) {
+  const handleCreatePullRequest = useCallback(() => {
+    if (!repoContext?.githubRemote) {
       return;
     }
 
-    try {
-      await desktop.openExternal(targetUrl);
-      setFeedback({
-        text: "Opened GitHub",
-        tone: "success",
-      });
-    } catch (error) {
-      setFeedback({
-        text: getErrorMessage(error, "Unable to open GitHub."),
-        tone: "error",
-      });
+    setPromptError("");
+    setFeedback(null);
+
+    if (repoContext.isDefaultBranch) {
+      setPrompt("pull-request-branch");
+      return;
     }
-  }, [
-    desktop,
-    repoContext?.githubRemote?.pullRequestUrl,
-    repoContext?.githubRemote?.pullRequestsUrl,
-  ]);
+
+    createPullRequestMutation.mutate({ workspaceId });
+  }, [createPullRequestMutation, repoContext, setPrompt, workspaceId]);
 
   const isMutating =
     commitMutation.isPending ||
+    createPullRequestMutation.isPending ||
     createBranchMutation.isPending ||
     initMutation.isPending ||
     pushMutation.isPending;
+  const isGeneratingCommitMessage =
+    promptMode === "commit" && generateCommitMessageMutation.isPending;
 
   if (!isDesktop || !workspaceRootPath) {
     return null;
@@ -374,13 +454,14 @@ export function ThreadRepoActions({
 
   const canCommit = Boolean(repoContext?.hasChanges) && !isMutating;
   const canPush =
-    Boolean(repoContext?.hasUpstream) &&
-    (repoContext?.aheadCount ?? 0) > 0 &&
-    !isMutating;
+    Boolean(
+      repoContext?.branch &&
+        repoContext?.hasCommits &&
+        repoContext?.pushRemoteName &&
+        (repoContext.hasUpstream ? (repoContext.aheadCount ?? 0) > 0 : true),
+    ) && !isMutating;
   const canCreatePullRequest =
-    Boolean(repoContext?.githubRemote) &&
-    !repoContext?.isDefaultBranch &&
-    !isMutating;
+    Boolean(repoContext?.githubRemote) && !isMutating;
   const canCreateBranch = !isMutating;
 
   return (
@@ -508,8 +589,13 @@ export function ThreadRepoActions({
                 aria-label="Commit changes"
                 className="max-h-7 pl-2 pr-3 rounded-r-none"
                 variant="tertiary"
-                isDisabled={!canCommit}
-                isPending={commitMutation.isPending}
+                isDisabled={!canCommit && !isMutating}
+                isPending={
+                  commitMutation.isPending ||
+                  pushMutation.isPending ||
+                  createPullRequestMutation.isPending ||
+                  createBranchMutation.isPending
+                }
                 onPress={() => setPrompt("commit")}
                 {...{ [BUTTON_GROUP_CHILD]: true }}
               >
@@ -548,34 +634,91 @@ export function ThreadRepoActions({
                     <Popover.Heading className="text-sm font-medium text-foreground">
                       {promptMode === "branch"
                         ? "Create branch"
-                        : "Commit changes"}
+                        : promptMode === "pull-request-branch"
+                          ? "Create PR branch"
+                          : "Commit changes"}
                     </Popover.Heading>
                     <p className="mt-0.5 text-xs text-muted">
                       {promptMode === "branch"
                         ? "Create and switch to a new branch."
-                        : "Stage all changes and create a commit."}
+                        : promptMode === "pull-request-branch"
+                          ? "Enter a branch name and continue creating the PR."
+                          : "Stage all changes and create a commit."}
                     </p>
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium text-muted">
-                      {promptMode === "branch"
-                        ? "Branch name"
-                        : "Commit message"}
-                    </label>
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="text-xs font-medium text-muted">
+                        {promptMode === "branch" ||
+                        promptMode === "pull-request-branch"
+                          ? "Branch name"
+                          : "Commit message"}
+                      </label>
+                      {promptMode === "commit" ? (
+                        <Button
+                          className="h-6 min-w-0 px-2 text-[11px]"
+                          isDisabled={
+                            commitMutation.isPending ||
+                            !repoContext?.hasChanges
+                          }
+                          isPending={isGeneratingCommitMessage}
+                          onPress={() => {
+                            setPromptError("");
+                            generateCommitMessageMutation.mutate({
+                              workspaceId,
+                            });
+                          }}
+                          size="sm"
+                          type="button"
+                          variant="ghost"
+                        >
+                          {({ isPending }) => (
+                            <>
+                              {isPending ? (
+                                <Spinner
+                                  className="size-3 min-w-3"
+                                  color="current"
+                                  size="sm"
+                                />
+                              ) : (
+                                <HugeiconsIcon
+                                  color="currentColor"
+                                  icon={AiIdeaIcon}
+                                  size={13}
+                                  strokeWidth={1.5}
+                                />
+                              )}
+                              <span>Generate</span>
+                            </>
+                          )}
+                        </Button>
+                      ) : null}
+                    </div>
                     <Input.Root
                       autoFocus
-                      name={promptMode === "branch" ? "branchName" : "message"}
+                      name={
+                        promptMode === "branch" ||
+                        promptMode === "pull-request-branch"
+                          ? "branchName"
+                          : "message"
+                      }
                       onChange={(event) =>
                         setPromptValue(event.currentTarget.value)
                       }
                       placeholder={
-                        promptMode === "branch"
+                        promptMode === "branch" ||
+                        promptMode === "pull-request-branch"
                           ? "feature/thread-header-actions"
                           : "Describe your changes"
                       }
                       value={promptValue}
                     />
+                    {promptMode === "commit" && isGeneratingCommitMessage ? (
+                      <p className="sentinel-thinking-shimmer text-xs">
+                        Generating commit message...
+                      </p>
+                    ) : null}
                     {promptError ? (
                       <p className="text-xs text-danger">{promptError}</p>
                     ) : null}
@@ -594,14 +737,20 @@ export function ThreadRepoActions({
                       Cancel
                     </Button>
                     <Button
+                      isDisabled={isGeneratingCommitMessage}
                       isPending={
                         commitMutation.isPending ||
-                        createBranchMutation.isPending
+                        createBranchMutation.isPending ||
+                        createPullRequestMutation.isPending
                       }
                       size="sm"
                       type="submit"
                     >
-                      {promptMode === "branch" ? "Create branch" : "Commit"}
+                      {promptMode === "branch"
+                        ? "Create branch"
+                        : promptMode === "pull-request-branch"
+                          ? "Continue"
+                          : "Commit"}
                     </Button>
                   </div>
                 </form>

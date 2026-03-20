@@ -47,6 +47,7 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     "default_chat_model_id" text,
     "default_chat_reasoning_effort" text,
     "selected_workspace_id" text,
+    "last_project_open_target_id" text,
     "thread_list_organize_by" text DEFAULT 'workspace' NOT NULL,
     "thread_list_sort_by" text DEFAULT 'updated' NOT NULL,
     "created_at" integer NOT NULL,
@@ -157,6 +158,12 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     db.run(
       sql`ALTER TABLE "user" ADD COLUMN "follow_up_behavior" text DEFAULT 'queue' NOT NULL`,
     );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(sql`ALTER TABLE "user" ADD COLUMN "last_project_open_target_id" text`);
   } catch {
     // column already exists
   }

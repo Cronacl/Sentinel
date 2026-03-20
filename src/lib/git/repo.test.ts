@@ -6,8 +6,10 @@ import path from "node:path";
 import { runCommand } from "@/lib/process/run-command";
 
 import {
+  buildFallbackCommitMessage,
   commitAllChanges,
   createAndCheckoutBranch,
+  getCommitMessageContext,
   initializeRepository,
   pushCurrentBranch,
   resolveRepoContext,
@@ -96,9 +98,37 @@ describe("resolveRepoContext", () => {
     expect(context.aheadCount).toBe(1);
     expect(context.hasChanges).toBe(false);
   });
+
+  it("detects first-push state when a remote exists without upstream", async () => {
+    const repoRoot = await createRepo();
+    const remoteRoot = await createDirectory("sentinel-first-push-");
+    await runGit(["init", "--bare"], remoteRoot);
+    await runGit(["remote", "add", "origin", remoteRoot], repoRoot);
+
+    const context = await resolveRepoContext(repoRoot);
+    expect(context.hasRemotes).toBe(true);
+    expect(context.hasCommits).toBe(true);
+    expect(context.hasUpstream).toBe(false);
+    expect(context.pushRemoteName).toBe("origin");
+  });
 });
 
 describe("repo actions", () => {
+  it("builds commit message context and a fallback message", async () => {
+    const repoRoot = await createRepo();
+    await writeFile(path.join(repoRoot, "src.ts"), "export const created = true;\n");
+
+    const context = await getCommitMessageContext(repoRoot);
+
+    expect(context.changes).toEqual([
+      {
+        path: "src.ts",
+        type: "untracked",
+      },
+    ]);
+    expect(buildFallbackCommitMessage(context.changes)).toBe("Add src");
+  });
+
   it("initializes a repository for a plain directory", async () => {
     const directory = await createDirectory("sentinel-init-");
 
@@ -150,5 +180,20 @@ describe("repo actions", () => {
 
     const context = await resolveRepoContext(repoRoot);
     expect(context.aheadCount).toBe(0);
+  });
+
+  it("pushes the current branch for the first time and sets upstream", async () => {
+    const repoRoot = await createRepo();
+    const remoteRoot = await createDirectory("sentinel-remote-first-push-");
+    await runGit(["init", "--bare"], remoteRoot);
+    await runGit(["remote", "add", "origin", remoteRoot], repoRoot);
+
+    await expect(pushCurrentBranch(repoRoot)).resolves.toEqual({
+      branch: "main",
+    });
+
+    const context = await resolveRepoContext(repoRoot);
+    expect(context.hasUpstream).toBe(true);
+    expect(context.pushRemoteName).toBe("origin");
   });
 });

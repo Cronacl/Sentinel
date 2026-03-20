@@ -90,6 +90,7 @@ export const users = sqliteTable(
       .notNull()
       .default("queue"),
     selectedWorkspaceId: text("selected_workspace_id"),
+    lastProjectOpenTargetId: text("last_project_open_target_id"),
     threadListOrganizeBy: text("thread_list_organize_by", {
       enum: THREAD_LIST_ORGANIZE_BY,
     })

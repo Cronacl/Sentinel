@@ -18,10 +18,18 @@ export type RepoContext = {
   branch: string | null;
   githubRemote: RepoGitHubRemote | null;
   hasChanges: boolean;
+  hasCommits: boolean;
+  hasRemotes: boolean;
   hasUpstream: boolean;
   isDefaultBranch: boolean;
   isGitRepo: boolean;
+  pushRemoteName: string | null;
   repoRoot: string | null;
+};
+
+type RepoFileChange = {
+  path: string;
+  type: "added" | "deleted" | "modified" | "renamed" | "untracked";
 };
 
 function emptyRepoContext(): RepoContext {
@@ -30,11 +38,98 @@ function emptyRepoContext(): RepoContext {
     branch: null,
     githubRemote: null,
     hasChanges: false,
+    hasCommits: false,
+    hasRemotes: false,
     hasUpstream: false,
     isDefaultBranch: false,
     isGitRepo: false,
+    pushRemoteName: null,
     repoRoot: null,
   };
+}
+
+function normalizeChangedPath(value: string) {
+  const trimmed = value.trim();
+  const renameParts = trimmed.split(" -> ");
+  return renameParts[renameParts.length - 1]!.trim();
+}
+
+function mapGitStatusCode(code: string): RepoFileChange["type"] {
+  if (code === "?") return "untracked";
+  if (code === "A") return "added";
+  if (code === "D") return "deleted";
+  if (code === "R") return "renamed";
+  return "modified";
+}
+
+function parseStatusChanges(statusOutput: string) {
+  const changes: RepoFileChange[] = [];
+
+  for (const line of statusOutput.split("\n")) {
+    if (!line.trim()) {
+      continue;
+    }
+
+    const stagedCode = line[0] ?? " ";
+    const unstagedCode = line[1] ?? " ";
+    const rawPath = line.slice(3).trim();
+    const path = normalizeChangedPath(rawPath);
+
+    if (stagedCode === "?" && unstagedCode === "?") {
+      changes.push({ path, type: "untracked" });
+      continue;
+    }
+
+    const typeCode =
+      stagedCode !== " " && stagedCode !== "?"
+        ? stagedCode
+        : unstagedCode !== " " && unstagedCode !== "?"
+          ? unstagedCode
+          : "M";
+
+    changes.push({ path, type: mapGitStatusCode(typeCode) });
+  }
+
+  return changes;
+}
+
+function summarizeChangeType(type: RepoFileChange["type"]) {
+  switch (type) {
+    case "added":
+      return "Add";
+    case "deleted":
+      return "Remove";
+    case "renamed":
+      return "Rename";
+    case "untracked":
+      return "Add";
+    default:
+      return "Update";
+  }
+}
+
+function formatPathForCommit(pathValue: string) {
+  const fileName = pathValue.split("/").filter(Boolean).at(-1) ?? pathValue;
+  return fileName.replace(/\.[a-z0-9]+$/i, "");
+}
+
+export function buildFallbackCommitMessage(changes: RepoFileChange[]) {
+  if (changes.length === 0) {
+    return "Update repository";
+  }
+
+  if (changes.length === 1) {
+    const change = changes[0]!;
+    return `${summarizeChangeType(change.type)} ${formatPathForCommit(change.path)}`;
+  }
+
+  const uniqueTypes = new Set(changes.map((change) => change.type));
+  if (uniqueTypes.size === 1) {
+    const [type] = [...uniqueTypes];
+    return `${summarizeChangeType(type!)} ${changes.length} files`;
+  }
+
+  return `Update ${changes.length} files`;
 }
 
 async function runGit(args: string[], cwd: string) {
@@ -239,6 +334,9 @@ export async function resolveRepoContext(
   const upstreamRef =
     upstreamResult.code === 0 ? upstreamResult.stdout.trim() : null;
   const hasUpstream = Boolean(upstreamRef);
+  const hasRemotes = remotes.length > 0;
+  const headResult = await runGit(["rev-parse", "--verify", "HEAD"], repoRoot);
+  const hasCommits = headResult.code === 0;
 
   const aheadResult = hasUpstream
     ? await runGit(["rev-list", "--count", "@{upstream}..HEAD"], repoRoot)
@@ -247,6 +345,12 @@ export async function resolveRepoContext(
     aheadResult?.code === 0 ? Number.parseInt(aheadResult.stdout, 10) || 0 : 0;
 
   const preferredRemoteName = upstreamRef?.split("/")[0] ?? null;
+  const pushRemoteName =
+    preferredRemoteName && remotes.some((remote) => remote.name === preferredRemoteName)
+      ? preferredRemoteName
+      : remotes.find((remote) => remote.name === "origin")?.name ??
+        remotes[0]?.name ??
+        null;
   const githubRemoteMatch =
     remotes.find(
       (remote) =>
@@ -259,9 +363,12 @@ export async function resolveRepoContext(
       branch,
       githubRemote: null,
       hasChanges,
+      hasCommits,
+      hasRemotes,
       hasUpstream,
       isDefaultBranch: false,
       isGitRepo: true,
+      pushRemoteName,
       repoRoot,
     };
   }
@@ -273,9 +380,12 @@ export async function resolveRepoContext(
       branch,
       githubRemote: null,
       hasChanges,
+      hasCommits,
+      hasRemotes,
       hasUpstream,
       isDefaultBranch: false,
       isGitRepo: true,
+      pushRemoteName,
       repoRoot,
     };
   }
@@ -305,11 +415,14 @@ export async function resolveRepoContext(
       repositoryUrl: urls.repositoryUrl,
     },
     hasChanges,
+    hasCommits,
+    hasRemotes,
     hasUpstream,
     isDefaultBranch: Boolean(
       branch && defaultBranch && branch === defaultBranch,
     ),
     isGitRepo: true,
+    pushRemoteName,
     repoRoot,
   };
 }
@@ -394,15 +507,26 @@ export async function pushCurrentBranch(pathValue: string | null | undefined) {
   const repoRoot = await resolveRepoRootOrThrow(pathValue);
   const context = await resolveRepoContext(repoRoot);
 
-  if (!context.hasUpstream) {
-    throw new Error("Push requires an existing upstream branch.");
+  if (!context.branch) {
+    throw new Error("Push requires a current branch.");
   }
 
-  if (context.aheadCount < 1) {
+  if (!context.hasRemotes || !context.pushRemoteName) {
+    throw new Error("Push requires a configured git remote.");
+  }
+
+  if (!context.hasCommits) {
+    throw new Error("Push requires at least one local commit.");
+  }
+
+  if (context.hasUpstream && context.aheadCount < 1) {
     throw new Error("Push requires commits ahead of upstream.");
   }
 
-  const pushResult = await runGit(["push"], repoRoot);
+  const pushArgs = context.hasUpstream
+    ? ["push"]
+    : ["push", "-u", context.pushRemoteName, context.branch];
+  const pushResult = await runGit(pushArgs, repoRoot);
   if (pushResult.code !== 0) {
     throw new Error(pushResult.stderr || "Failed to push branch.");
   }
@@ -447,4 +571,41 @@ export async function initializeRepository(
   }
 
   return { repoRoot };
+}
+
+export async function getCommitMessageContext(
+  pathValue: string | null | undefined,
+): Promise<{
+  branch: string | null;
+  changes: RepoFileChange[];
+  diffStat: string;
+  repoRoot: string;
+}> {
+  const repoRoot = await resolveRepoRootOrThrow(pathValue);
+  const context = await resolveRepoContext(repoRoot);
+  if (!context.hasChanges) {
+    throw new Error("Commit message generation requires changes in the working tree.");
+  }
+
+  const [statusResult, stagedDiffStat, unstagedDiffStat] = await Promise.all([
+    runGit(["status", "--porcelain=v1"], repoRoot),
+    runGit(["diff", "--stat", "--cached"], repoRoot),
+    runGit(["diff", "--stat"], repoRoot),
+  ]);
+
+  if (statusResult.code !== 0) {
+    throw new Error(statusResult.stderr || "Failed to inspect git status.");
+  }
+
+  const changes = parseStatusChanges(statusResult.stdout);
+  const diffStat = [stagedDiffStat.stdout.trim(), unstagedDiffStat.stdout.trim()]
+    .filter(Boolean)
+    .join("\n");
+
+  return {
+    branch: context.branch,
+    changes,
+    diffStat,
+    repoRoot,
+  };
 }
