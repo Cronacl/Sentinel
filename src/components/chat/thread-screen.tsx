@@ -42,6 +42,7 @@ import type { FileUIPart } from "ai";
 import { ChatComposer } from "./chat-composer";
 import { ChatMessage } from "./chat-message";
 import { ChatScrollControl, useChatScrollControl } from "./chat-scroll-control";
+import { ThreadRepoActions } from "./thread-repo-actions";
 
 type ThreadScreenProps = {
   initialMessages: ThreadUIMessage[];
@@ -626,6 +627,26 @@ export function ThreadScreen({
   return (
     <PageWrapper
       actions={
+        <ThreadRepoActions
+          workspaceId={workspace.id}
+          workspaceRootPath={workspace.rootPath}
+        />
+      }
+      title={
+        <span className="flex min-w-0 max-w-[min(52vw,36rem)] items-center gap-1.5">
+          {isPinned && (
+            <HugeiconsIcon
+              className="shrink-0 text-muted"
+              color="currentColor"
+              icon={PinIcon}
+              size={13}
+              strokeWidth={1.5}
+            />
+          )}
+          <span className="truncate">{threadTitle}</span>
+        </span>
+      }
+      titleActions={
         <Dropdown>
           <Button
             aria-label="Thread options"
@@ -641,7 +662,7 @@ export function ThreadScreen({
               strokeWidth={1.5}
             />
           </Button>
-          <Dropdown.Popover className="min-w-[200px]" placement="bottom end">
+          <Dropdown.Popover className="min-w-[200px]" placement="bottom start">
             <Dropdown.Menu
               onAction={(key) => {
                 if (key === "pin") handleTogglePin();
@@ -685,20 +706,6 @@ export function ThreadScreen({
             </Dropdown.Menu>
           </Dropdown.Popover>
         </Dropdown>
-      }
-      title={
-        <span className="flex items-center gap-1.5">
-          {isPinned && (
-            <HugeiconsIcon
-              className="shrink-0 text-muted"
-              color="currentColor"
-              icon={PinIcon}
-              size={13}
-              strokeWidth={1.5}
-            />
-          )}
-          <span className="truncate">{threadTitle}</span>
-        </span>
       }
       flush
     >

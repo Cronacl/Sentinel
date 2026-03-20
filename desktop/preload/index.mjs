@@ -6,12 +6,38 @@ contextBridge.exposeInMainWorld("sentinelDesktop", {
   app: {
     getVersion: () => ipcRenderer.invoke(DESKTOP_CHANNELS.APP_VERSION),
   },
+  openExternal: (url) =>
+    ipcRenderer.invoke(DESKTOP_CHANNELS.OPEN_EXTERNAL, url),
   pickFiles: () => ipcRenderer.invoke(DESKTOP_CHANNELS.PICK_FILES),
   pickDirectory: () => ipcRenderer.invoke(DESKTOP_CHANNELS.PICK_DIRECTORY),
   services: {
     start: () => ipcRenderer.invoke(DESKTOP_CHANNELS.SERVICES_START),
     status: () => ipcRenderer.invoke(DESKTOP_CHANNELS.SERVICES_STATUS),
     stop: () => ipcRenderer.invoke(DESKTOP_CHANNELS.SERVICES_STOP),
+  },
+  workspace: {
+    listOpenTargets: (projectPath) =>
+      ipcRenderer.invoke(
+        DESKTOP_CHANNELS.WORKSPACE_LIST_OPEN_TARGETS,
+        projectPath,
+      ),
+    openInTarget: (projectPath, targetId) =>
+      ipcRenderer.invoke(
+        DESKTOP_CHANNELS.WORKSPACE_OPEN_IN_TARGET,
+        projectPath,
+        targetId,
+      ),
+    openInTerminal: (projectPath, terminalTargetId) =>
+      ipcRenderer.invoke(
+        DESKTOP_CHANNELS.WORKSPACE_OPEN_IN_TERMINAL,
+        projectPath,
+        terminalTargetId,
+      ),
+    revealInFileManager: (projectPath) =>
+      ipcRenderer.invoke(
+        DESKTOP_CHANNELS.WORKSPACE_REVEAL_IN_FILE_MANAGER,
+        projectPath,
+      ),
   },
   window: {
     close: () => ipcRenderer.invoke(DESKTOP_CHANNELS.WINDOW_CLOSE),

@@ -5,13 +5,22 @@ import {
   ipcMain,
   nativeTheme,
   session,
+  shell,
 } from "electron";
+import { spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { DESKTOP_CHANNELS } from "../shared/channels.mjs";
-import { APP_PORT, createRuntimePaths } from "../../scripts/desktop/constants.mjs";
+import {
+  getOpenCommandForTarget,
+  resolveMacOpenTargets,
+} from "../shared/workspace-targets.mjs";
+import {
+  APP_PORT,
+  createRuntimePaths,
+} from "../../scripts/desktop/constants.mjs";
 import { ensureLocalEnv } from "../../scripts/desktop/service-manager.mjs";
 import {
   getAppServerStatus,
@@ -418,6 +427,77 @@ async function bootstrapDesktop() {
   await mainWindow?.loadURL(serverState.url);
 }
 
+async function assertProjectDirectory(projectPath) {
+  if (typeof projectPath !== "string" || !projectPath.trim()) {
+    throw new Error("Project path is required.");
+  }
+
+  const normalizedPath = projectPath.trim();
+  const stats = await stat(normalizedPath).catch(() => null);
+  if (!stats?.isDirectory()) {
+    throw new Error("Project path must point to an existing directory.");
+  }
+
+  return normalizedPath;
+}
+
+async function listWorkspaceTargets() {
+  if (process.platform !== "darwin") {
+    return [];
+  }
+
+  const targets = await resolveMacOpenTargets({
+    exists: async (candidatePath) => {
+      const stats = await stat(candidatePath).catch(() => null);
+      return Boolean(stats);
+    },
+    homePath: app.getPath("home"),
+  });
+
+  return targets.map(
+    ({ appPath: _appPath, systemApp: _systemApp, ...target }) => target,
+  );
+}
+
+async function resolveWorkspaceTarget(targetId) {
+  if (process.platform !== "darwin") {
+    throw new Error("Workspace launch targets are only supported on macOS.");
+  }
+
+  const targets = await resolveMacOpenTargets({
+    exists: async (candidatePath) => {
+      const stats = await stat(candidatePath).catch(() => null);
+      return Boolean(stats);
+    },
+    homePath: app.getPath("home"),
+  });
+
+  const target = targets.find((entry) => entry.id === targetId);
+  if (!target) {
+    throw new Error("The requested app target is not available.");
+  }
+
+  return target;
+}
+
+async function runOpenCommand(command, args) {
+  await new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: "ignore",
+    });
+
+    child.once("error", reject);
+    child.once("close", (code) => {
+      if (code === 0) {
+        resolve(undefined);
+        return;
+      }
+
+      reject(new Error(`Command failed with exit code ${code ?? 1}.`));
+    });
+  });
+}
+
 function registerIpc() {
   ipcMain.handle(DESKTOP_CHANNELS.PICK_DIRECTORY, async () => {
     const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
@@ -457,6 +537,48 @@ function registerIpc() {
     );
   });
 
+  ipcMain.handle(
+    DESKTOP_CHANNELS.WORKSPACE_LIST_OPEN_TARGETS,
+    async (_event, projectPath) => {
+      await assertProjectDirectory(projectPath);
+      return await listWorkspaceTargets();
+    },
+  );
+
+  ipcMain.handle(
+    DESKTOP_CHANNELS.WORKSPACE_OPEN_IN_TARGET,
+    async (_event, projectPath, targetId) => {
+      const normalizedPath = await assertProjectDirectory(projectPath);
+      const target = await resolveWorkspaceTarget(targetId);
+      const command = getOpenCommandForTarget(target, normalizedPath);
+      await runOpenCommand(command.command, command.args);
+    },
+  );
+
+  ipcMain.handle(
+    DESKTOP_CHANNELS.WORKSPACE_REVEAL_IN_FILE_MANAGER,
+    async (_event, projectPath) => {
+      const normalizedPath = await assertProjectDirectory(projectPath);
+      await runOpenCommand("open", [normalizedPath]);
+    },
+  );
+
+  ipcMain.handle(
+    DESKTOP_CHANNELS.WORKSPACE_OPEN_IN_TERMINAL,
+    async (_event, projectPath, terminalTargetId) => {
+      const normalizedPath = await assertProjectDirectory(projectPath);
+      const target = await resolveWorkspaceTarget(
+        terminalTargetId || "terminal",
+      );
+      if (target.kind !== "terminal") {
+        throw new Error("Selected target is not a terminal.");
+      }
+
+      const command = getOpenCommandForTarget(target, normalizedPath);
+      await runOpenCommand(command.command, command.args);
+    },
+  );
+
   ipcMain.handle(DESKTOP_CHANNELS.SERVICES_STATUS, async () => {
     const appServer = await getAppServerStatus(
       serverState?.url ??
@@ -492,6 +614,15 @@ function registerIpc() {
   });
 
   ipcMain.handle(DESKTOP_CHANNELS.APP_VERSION, async () => app.getVersion());
+  ipcMain.handle(DESKTOP_CHANNELS.OPEN_EXTERNAL, async (_event, url) => {
+    const normalizedUrl =
+      typeof url === "string" && url.trim() ? new URL(url).toString() : null;
+    if (!normalizedUrl) {
+      throw new Error("URL is required.");
+    }
+
+    await shell.openExternal(normalizedUrl);
+  });
   ipcMain.handle(DESKTOP_CHANNELS.WINDOW_CLOSE, async (event) => {
     BrowserWindow.fromWebContents(event.sender)?.close();
   });

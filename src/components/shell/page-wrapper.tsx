@@ -8,6 +8,8 @@ import { SidebarToggle } from "./sidebar-toggle";
 interface PageWrapperProps extends PropsWithChildren {
   /** Page title shown in the header. */
   title?: ReactNode;
+  /** Controls rendered directly after the title/subtitle block. */
+  titleActions?: ReactNode;
   /** Subtitle or description rendered below the title. */
   subtitle?: ReactNode;
   /** Slot for action buttons rendered at the end of the header row. */
@@ -29,6 +31,7 @@ const maxWidthMap = {
 
 export function PageWrapper({
   title,
+  titleActions,
   subtitle,
   actions,
   maxWidth = "full",
@@ -38,29 +41,36 @@ export function PageWrapper({
   const { leftSidebarOpen } = useShell();
   const showToggle = !leftSidebarOpen;
 
-  const hasHeader = title || showToggle || actions;
+  const hasHeader = title || showToggle || titleActions || actions;
 
   return (
     <div className="flex h-full w-full items-start flex-col overflow-clip">
       {hasHeader && (
         <header
-          className="app-region-no-drag flex shrink-0 items-center gap-3 px-4 lg:px-6"
+          className="app-region-no-drag flex w-full shrink-0 items-center gap-3 px-4 lg:px-6"
           style={{ minHeight: 44 }}
         >
           {showToggle && <SidebarToggle className="app-region-no-drag" />}
 
           {title && (
-            <div className="min-w-0 flex-1">
-              <h1 className="text-foreground truncate text-sm font-medium">
-                {title}
-              </h1>
-              {subtitle && (
-                <p className="text-muted truncate text-xs">{subtitle}</p>
-              )}
+            <div className="min-w-0 flex shrink items-center gap-2">
+              <div className="min-w-0 shrink">
+                <h1 className="text-foreground truncate text-sm font-medium">
+                  {title}
+                </h1>
+                {subtitle && (
+                  <p className="text-muted truncate text-xs">{subtitle}</p>
+                )}
+              </div>
+              {titleActions ? (
+                <div className="flex shrink-0 items-center gap-2">
+                  {titleActions}
+                </div>
+              ) : null}
             </div>
           )}
 
-          {!title && <div className="flex-1" />}
+          <div className="flex-1" />
 
           {actions && (
             <div className="flex shrink-0 items-center gap-2">{actions}</div>
