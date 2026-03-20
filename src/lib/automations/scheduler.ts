@@ -11,6 +11,16 @@ import { buildCronExpression } from "./schedule-utils";
 import { executeAutomationRun } from "./runner";
 
 const log = createLogger("Automations");
+const bakerLogger = {
+  debug() {},
+  error(message: unknown, ...args: unknown[]) {
+    log.error(String(message), ...args);
+  },
+  info() {},
+  warn(message: unknown, ...args: unknown[]) {
+    log.warn(String(message), ...args);
+  },
+} as const;
 
 function getStatePath(): string {
   const sentinelDir =
@@ -21,10 +31,13 @@ function getStatePath(): string {
 }
 
 let bakerInstance: ReturnType<typeof Baker.create> | null = null;
+let schedulerInitPromise: Promise<void> | null = null;
+let schedulerInitialized = false;
 
 function getBaker() {
   if (!bakerInstance) {
     bakerInstance = Baker.create({
+      logger: bakerLogger,
       persistence: {
         enabled: true,
         strategy: "file",
@@ -43,20 +56,35 @@ function getBaker() {
 }
 
 export async function initAutomationScheduler() {
-  const baker = getBaker();
-  await baker.ready();
-
-  const activeAutomations = await db.query.automations.findMany({
-    where: eq(automations.status, "active"),
-  });
-
-  const existingJobs = new Set(baker.getJobNames());
-
-  for (const automation of activeAutomations) {
-    if (!existingJobs.has(automation.id)) {
-      scheduleAutomation(automation);
-    }
+  if (schedulerInitialized) {
+    return;
   }
+
+  if (!schedulerInitPromise) {
+    schedulerInitPromise = (async () => {
+      const baker = getBaker();
+      await baker.ready();
+
+      const activeAutomations = await db.query.automations.findMany({
+        where: eq(automations.status, "active"),
+      });
+
+      const existingJobs = new Set(baker.getJobNames());
+
+      for (const automation of activeAutomations) {
+        if (!existingJobs.has(automation.id)) {
+          scheduleAutomation(automation);
+        }
+      }
+
+      schedulerInitialized = true;
+    })().catch((error) => {
+      schedulerInitPromise = null;
+      throw error;
+    });
+  }
+
+  await schedulerInitPromise;
 }
 
 export function scheduleAutomation(automation: {

@@ -5,6 +5,7 @@ import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 
 import {
   fetchThreadSessionSnapshot,
+  formatClientTimingLog,
   mergeThreadSessionStateFromSnapshot,
 } from "./use-thread-chat";
 
@@ -247,5 +248,15 @@ describe("fetchThreadSessionSnapshot", () => {
       cache: "no-store",
       method: "GET",
     });
+  });
+});
+
+describe("formatClientTimingLog", () => {
+  it("serializes readable client timing payloads into a single string", () => {
+    expect(
+      formatClientTimingLog("first_stream_event", 12.8, "thread-1"),
+    ).toBe(
+      '[ThreadChatClient] {"elapsedMs":13,"phase":"first_stream_event","threadId":"thread-1"}',
+    );
   });
 });

@@ -63,10 +63,6 @@ function ShellWarmCache() {
   api.workspaces.getCurrent.useQuery();
   api.workspaces.list.useQuery();
   api.workspaces.getPreferences.useQuery();
-  api.threads.list.useQuery({
-    organizeBy: "workspace",
-    sortBy: "updated",
-  });
 
   return null;
 }

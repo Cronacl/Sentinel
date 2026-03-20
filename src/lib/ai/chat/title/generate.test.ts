@@ -36,7 +36,13 @@ describe("generateThreadTitle", () => {
       "Generate a concise, specific chat thread title of 2 to 6 words.",
     );
     expect(TITLE_SYSTEM_PROMPT).toContain(
+      "Base the title only on the first user message that is provided.",
+    );
+    expect(TITLE_SYSTEM_PROMPT).toContain(
       "Avoid filler such as Help, Question, Task, Chat, Please, Need to, or Can you.",
+    );
+    expect(TITLE_SYSTEM_PROMPT).toContain(
+      "Never ask for more context, never mention that the message is too generic or vague, and never explain your reasoning.",
     );
     expect(buildTitlePrompt(firstUserText)).toContain("First user message:");
     expect(buildTitlePrompt(firstUserText)).toContain(
@@ -63,5 +69,23 @@ describe("generateThreadTitle", () => {
     });
 
     expect(title).toBe("Broken Thread Title");
+  });
+
+  it("drops meta responses that ask for more context", async () => {
+    generateText.mockImplementationOnce(async () => ({
+      text: "User message is too generic. Please provide more context.",
+    }));
+
+    const title = await generateThreadTitle({
+      firstUserText: "hello",
+      model: {
+        languageModel: { kind: "title-model" },
+        providerId: "openai",
+        requestedModelId: "openai:gpt-4.1-nano",
+        responseModelId: "gpt-4.1-nano",
+      },
+    });
+
+    expect(title).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 "use client";
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft01Icon,
   ArrowReloadHorizontalIcon,
@@ -12,6 +12,7 @@ import type {
   ThreadMessageMetadata,
   ThreadUIMessage,
 } from "@/lib/ai/messages/types";
+import { extractLastTitle } from "@/components/chat/message-parts/reasoning/reasoning-utils";
 
 import { FilePart } from "./message-parts/file";
 import { ReasoningPart } from "./message-parts/reasoning";
@@ -30,6 +31,105 @@ import {
   type MessagePart,
 } from "./message-parts/types";
 import { Button } from "@heroui/react";
+
+const PRE_RESPONSE_STATUS_LABELS = [
+  "Working...",
+  "Planning next steps...",
+  "Preparing response...",
+] as const;
+
+export function isVisibleAssistantPart(part: MessagePart) {
+  if (part.type === "text") {
+    return part.text.trim().length > 0;
+  }
+
+  return part.type === "file" || part.type === "reasoning" || isToolPart(part);
+}
+
+export function getPendingAssistantStatusLabel({
+  messageStatus,
+  reasoningMetadata,
+  reasoningText,
+  rotationIndex,
+}: {
+  messageStatus?: ThreadMessageMetadata["status"];
+  reasoningMetadata?: ThreadMessageMetadata["reasoning"];
+  reasoningText?: string;
+  rotationIndex?: number;
+}) {
+  const reasoningTitle = reasoningText ? extractLastTitle(reasoningText) : null;
+  if (reasoningTitle) {
+    return reasoningTitle;
+  }
+
+  if (reasoningMetadata?.isActive || reasoningMetadata?.activeSinceMs != null) {
+    return "Planning next steps...";
+  }
+
+  if (messageStatus === "pending" || messageStatus === "streaming") {
+    const index = Math.abs(rotationIndex ?? 0) % PRE_RESPONSE_STATUS_LABELS.length;
+    return PRE_RESPONSE_STATUS_LABELS[index]!;
+  }
+
+  return "Thinking...";
+}
+
+function PendingAssistantStatus({
+  messageStatus,
+  reasoningMetadata,
+  reasoningText,
+}: {
+  messageStatus?: ThreadMessageMetadata["status"];
+  reasoningMetadata?: ThreadMessageMetadata["reasoning"];
+  reasoningText?: string;
+}) {
+  const shouldRotate =
+    !extractLastTitle(reasoningText ?? "") &&
+    !(reasoningMetadata?.isActive || reasoningMetadata?.activeSinceMs != null) &&
+    (messageStatus === "pending" || messageStatus === "streaming");
+  const [rotationIndex, setRotationIndex] = useState(0);
+
+  useEffect(() => {
+    if (!shouldRotate) {
+      setRotationIndex(0);
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      setRotationIndex((current) => current + 1);
+    }, 2000);
+
+    return () => window.clearInterval(interval);
+  }, [shouldRotate]);
+
+  const statusLabel = getPendingAssistantStatusLabel({
+    messageStatus,
+    reasoningMetadata,
+    reasoningText,
+    rotationIndex,
+  });
+
+  return (
+    <div className="py-2">
+      <div className="flex items-center gap-2">
+        <div className="w-full overflow-hidden rounded-lg" aria-busy>
+          <div className="flex w-full items-center justify-between gap-3 pr-1">
+            <button
+              className="group flex min-w-0 flex-1 items-center gap-2 text-left text-default-600 transition-colors hover:text-foreground dark:text-default-400"
+              type="button"
+            >
+              <p className="flex min-w-0 items-center gap-2 text-xs font-medium text-foreground/70">
+                <span className="sentinel-thinking-shimmer truncate">
+                  {statusLabel}
+                </span>
+              </p>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function mergeReasoningText(current: string, next: string) {
   if (!current) return next;
@@ -210,13 +310,7 @@ function AssistantMessage({
   const branchOptions = getBranchOptions(metadata);
   const rawStatus = getMessageStatus(metadata);
   const hasVisibleParts = groups.some((group) =>
-    group.some(
-      ({ part }) =>
-        part.type === "file" ||
-        part.type === "text" ||
-        part.type === "reasoning" ||
-        isToolPart(part),
-    ),
+    group.some(({ part }) => isVisibleAssistantPart(part)),
   );
   const status =
     rawStatus ??
@@ -250,33 +344,17 @@ function AssistantMessage({
 
   if (!hasVisibleParts && isStreaming) {
     return (
-      <div className="py-2">
-        <div className="flex items-center gap-2">
-          <div
-            className="w-full overflow-hidden rounded-lg"
-            aria-busy={isStreaming}
-          >
-            <div className="flex w-full items-center justify-between gap-3 pr-1">
-              <button
-                className="group flex min-w-0 flex-1 items-center gap-2 text-left text-default-600 transition-colors hover:text-foreground dark:text-default-400"
-                type="button"
-              >
-                <p className="flex min-w-0 items-center gap-2 text-xs font-medium text-foreground/70">
-                  <span className={`truncate sentinel-thinking-shimmer`}>
-                    Thinking...
-                  </span>
-                </p>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <PendingAssistantStatus
+        messageStatus={status}
+        reasoningMetadata={reasoningMetadata}
+        reasoningText={mergedReasoningText}
+      />
     );
   }
 
   return (
     <div className="py-2">
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-0.5">
         {hasMergedReasoning ? (
           <ReasoningPart
             activeSinceMs={reasoningMetadata?.activeSinceMs}
@@ -291,7 +369,7 @@ function AssistantMessage({
 
         {displayGroups.map((group, groupIndex) => (
           <div
-            className={`${groupIndex > 0 ? "" : ""} flex flex-col gap-1`}
+            className={`${groupIndex > 0 ? "" : ""} flex flex-col gap-0.5`}
             key={`${message.id}:step:${groupIndex}`}
           >
             {group.map((entry) => {

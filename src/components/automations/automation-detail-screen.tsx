@@ -23,7 +23,7 @@ import { Time } from "@internationalized/date";
 import { formatDistanceToNowStrict } from "date-fns";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -280,11 +280,23 @@ export function AutomationDetailScreen({
     reValidateMode: "onChange",
   });
 
+  const hydratedAutomationIdRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!formDefaults) return;
+    if (!automation || !formDefaults) {
+      hydratedAutomationIdRef.current = null;
+      return;
+    }
+
+    if (hydratedAutomationIdRef.current !== automation.id) {
+      hydratedAutomationIdRef.current = automation.id;
+      form.reset(formDefaults);
+      return;
+    }
+
     if (form.formState.isDirty) return;
     form.reset(formDefaults);
-  }, [form, formDefaults, form.formState.isDirty]);
+  }, [automation, form, formDefaults, form.formState.isDirty]);
 
   const scheduleType = form.watch("scheduleType");
   const selectedModelKey = form.watch("modelId");

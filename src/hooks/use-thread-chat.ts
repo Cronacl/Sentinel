@@ -70,6 +70,13 @@ type ThreadConnectionState =
   | "error"
   | "idle";
 
+type ClientTimingPhase =
+  | "first_stream_event"
+  | "post_complete"
+  | "send_start"
+  | "snapshot_hydrated"
+  | "sse_connect_started";
+
 type ThreadSessionState = {
   activeRunId: string | null;
   composerState: {
@@ -95,6 +102,7 @@ type SessionStore = {
   ensureActive(): void;
   getState(): ThreadSessionState;
   hydrate(snapshot: ThreadSessionSnapshot): void;
+  markClientTiming(phase: ClientTimingPhase): void;
   refreshSnapshot(options?: { allowMissing?: boolean }): Promise<void>;
   setConnectionState(
     connectionState: ThreadConnectionState,
@@ -104,6 +112,36 @@ type SessionStore = {
 };
 
 const sessionStores = new Map<string, SessionStore>();
+
+function getClientTimingNow() {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
+
+export function formatClientTimingLog(
+  phase: ClientTimingPhase,
+  elapsedMs: number,
+  threadId: string,
+) {
+  return `[ThreadChatClient] ${JSON.stringify({
+    elapsedMs: Math.round(elapsedMs),
+    phase,
+    threadId,
+  })}`;
+}
+
+function logClientTiming(
+  threadId: string,
+  phase: ClientTimingPhase,
+  startedAt: number,
+) {
+  if (process.env.NODE_ENV !== "development") {
+    return;
+  }
+
+  console.debug(
+    formatClientTimingLog(phase, getClientTimingNow() - startedAt, threadId),
+  );
+}
 
 function areMessagesEqual(left: ThreadUIMessage[], right: ThreadUIMessage[]) {
   if (left === right) {
@@ -489,6 +527,8 @@ function createSessionStore(
   initialSnapshot?: ThreadSessionSnapshot,
 ): SessionStore {
   let state = createInitialState(threadId, initialSnapshot);
+  let clientTimingStartAt: number | null = null;
+  let firstStreamEventLogged = false;
   let subscriberCount = 0;
   let streamAbortController: AbortController | null = null;
   const listeners = new Set<() => void>();
@@ -530,7 +570,20 @@ function createSessionStore(
         current.activeRunId && current.threadStatus === "streaming"
           ? "disconnected"
           : "idle",
-    }));
+      }));
+  };
+
+  const markClientTiming = (phase: ClientTimingPhase) => {
+    if (phase === "send_start") {
+      clientTimingStartAt = getClientTimingNow();
+      firstStreamEventLogged = false;
+    }
+
+    if (clientTimingStartAt == null) {
+      return;
+    }
+
+    logClientTiming(threadId, phase, clientTimingStartAt);
   };
 
   const applyEvent = (event: ThreadStreamEvent) => {
@@ -540,6 +593,11 @@ function createSessionStore(
       event.runId !== state.activeRunId
     ) {
       return;
+    }
+
+    if (!firstStreamEventLogged) {
+      firstStreamEventLogged = true;
+      markClientTiming("first_stream_event");
     }
 
     switch (event.type) {
@@ -653,6 +711,7 @@ function createSessionStore(
       connectionState: "connecting",
       errorMessage: null,
     }));
+    markClientTiming("sse_connect_started");
 
     void consumeThreadStream(threadId, abortController.signal, applyEvent)
       .then(async () => {
@@ -778,6 +837,7 @@ function createSessionStore(
       });
       ensureConnected();
     },
+    markClientTiming,
     async refreshSnapshot(options) {
       const snapshot = await fetchThreadSessionSnapshot(threadId, options);
       if (!snapshot) {
@@ -954,6 +1014,7 @@ export function useThreadChat({
       body: Record<string, unknown>,
       localMessages?: ThreadUIMessage[],
     ): Promise<ThreadChatBootstrapResponse | null> => {
+      store.markClientTiming("send_start");
       store.beginAction();
 
       if (localMessages) {
@@ -962,11 +1023,13 @@ export function useThreadChat({
 
       try {
         const { data } = await postThreadAction(body);
+        store.markClientTiming("post_complete");
         if (data?.snapshot) {
           store.hydrate(data.snapshot);
         } else {
           await store.refreshSnapshot();
         }
+        store.markClientTiming("snapshot_hydrated");
         return data;
       } catch (error) {
         const nextError =

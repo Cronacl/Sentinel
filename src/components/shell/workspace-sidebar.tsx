@@ -705,6 +705,7 @@ export function WorkspaceSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const utils = api.useUtils();
+  const cachedPreferences = utils.workspaces.getPreferences.getData();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [renameWorkspaceId, setRenameWorkspaceId] = useState<string | null>(
     null,
@@ -713,8 +714,12 @@ export function WorkspaceSidebar() {
     null,
   );
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
-  const [organizeBy, setOrganizeBy] = useState<OrganizeBy>("workspace");
-  const [sortBy, setSortBy] = useState<SortBy>("updated");
+  const [organizeBy, setOrganizeBy] = useState<OrganizeBy>(
+    () => cachedPreferences?.organizeBy ?? "workspace",
+  );
+  const [sortBy, setSortBy] = useState<SortBy>(
+    () => cachedPreferences?.sortBy ?? "updated",
+  );
   const [threadVisibleCounts, setThreadVisibleCounts] = useState<
     Map<string, number>
   >(new Map());
@@ -752,9 +757,11 @@ export function WorkspaceSidebar() {
     const match = pathname.match(/\/thread\/([^/]+)/);
     return match?.[1] ?? null;
   }, [pathname]);
+  const effectiveOrganizeBy = preferences.data?.organizeBy ?? organizeBy;
+  const effectiveSortBy = preferences.data?.sortBy ?? sortBy;
 
   const threads = api.threads.list.useQuery(
-    { organizeBy, sortBy },
+    { organizeBy: effectiveOrganizeBy, sortBy: effectiveSortBy },
     {
       refetchInterval: (query) => {
         const data = query.state.data;
@@ -1073,8 +1080,12 @@ export function WorkspaceSidebar() {
       return;
     }
 
-    setOrganizeBy(preferences.data.organizeBy);
-    setSortBy(preferences.data.sortBy);
+    if (preferences.data.organizeBy !== organizeBy) {
+      setOrganizeBy(preferences.data.organizeBy);
+    }
+    if (preferences.data.sortBy !== sortBy) {
+      setSortBy(preferences.data.sortBy);
+    }
   }, [preferences.data]);
 
   useEffect(() => {
@@ -1130,8 +1141,8 @@ export function WorkspaceSidebar() {
         sortBy: SortBy;
       }>,
     ) => {
-      const nextOrganizeBy = nextValues.organizeBy ?? organizeBy;
-      const nextSortBy = nextValues.sortBy ?? sortBy;
+      const nextOrganizeBy = nextValues.organizeBy ?? effectiveOrganizeBy;
+      const nextSortBy = nextValues.sortBy ?? effectiveSortBy;
 
       setOrganizeBy(nextOrganizeBy);
       setSortBy(nextSortBy);
@@ -1141,7 +1152,7 @@ export function WorkspaceSidebar() {
         sortBy: nextSortBy,
       });
     },
-    [organizeBy, sortBy, updatePreferences],
+    [effectiveOrganizeBy, effectiveSortBy, updatePreferences],
   );
 
   const handleShowMoreThreads = useCallback((workspaceId: string) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, memo } from "react";
+import { type ReactNode, memo, useState } from "react";
 import { Disclosure } from "@heroui/react";
 
 type ToolLayoutProps = {
@@ -21,7 +21,7 @@ export const ToolLayout = memo(function ToolLayout({
   isRunning,
   isError,
   isExpandable = true,
-  isExpanded,
+  isExpanded: _isExpanded,
   onExpandedChange,
   children,
   footer,
@@ -30,6 +30,8 @@ export const ToolLayout = memo(function ToolLayout({
 }: ToolLayoutProps) {
   const hasContent = Boolean(children);
   const canToggle = isExpandable && hasContent;
+  const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
+  const effectiveExpanded = canToggle ? (userExpanded ?? false) : false;
 
   const headerContent = (
     <p
@@ -46,7 +48,13 @@ export const ToolLayout = memo(function ToolLayout({
   );
 
   return (
-    <Disclosure isExpanded={isExpanded} onExpandedChange={onExpandedChange}>
+    <Disclosure
+      isExpanded={effectiveExpanded}
+      onExpandedChange={(expanded) => {
+        setUserExpanded(expanded);
+        onExpandedChange(expanded);
+      }}
+    >
       <div>
         {canToggle ? (
           <Disclosure.Heading>
@@ -55,27 +63,23 @@ export const ToolLayout = memo(function ToolLayout({
             </Disclosure.Trigger>
           </Disclosure.Heading>
         ) : (
-          <div className="flex items-center gap-2">
-            {headerContent}
-          </div>
+          <div className="flex items-center gap-2">{headerContent}</div>
         )}
 
         {actions ? <div className="mt-1 ml-5">{actions}</div> : null}
 
-        {canToggle && isExpanded ? (
-          <Disclosure.Content>
-            <Disclosure.Body>
-              <div className="mt-1 overflow-hidden rounded-xl border border-border/40 bg-surface/20">
-                <div className="px-3 py-2">{children}</div>
-                {footer ? (
-                  <div className="border-t border-border/30 px-3 py-1.5 text-[10px] text-foreground/50">
-                    {footer}
-                  </div>
-                ) : null}
-              </div>
-            </Disclosure.Body>
-          </Disclosure.Content>
-        ) : null}
+        <Disclosure.Content hidden={!canToggle}>
+          <Disclosure.Body>
+            <div className="mt-1 overflow-hidden rounded-xl border border-border/40 bg-surface/20">
+              <div className="px-3 py-2">{children}</div>
+              {footer ? (
+                <div className="border-t border-border/30 px-3 py-1.5 text-[10px] text-foreground/50">
+                  {footer}
+                </div>
+              ) : null}
+            </div>
+          </Disclosure.Body>
+        </Disclosure.Content>
 
         {errorText ? (
           <div className="mt-1 rounded-lg border border-danger/20 bg-danger-soft px-3 py-1.5 text-[11px] text-danger-soft-foreground">

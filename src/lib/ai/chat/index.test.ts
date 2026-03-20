@@ -19,7 +19,7 @@ const aiState = {
 
 const createAgentUIStream = mock(async (args) => {
   if (aiTestState.agentConfig?.prepareCall && args.options) {
-    aiTestState.prepared = aiTestState.agentConfig.prepareCall({
+    aiTestState.prepared = await aiTestState.agentConfig.prepareCall({
       options: args.options,
     });
   }
@@ -58,6 +58,9 @@ const createUIMessageStreamResponse = mock(
 );
 const generateId = mock(() => "stream-id");
 const hasToolCall = mock((toolName) => ({ kind: "has-tool-call", toolName }));
+const Output = {
+  object: mock(({ schema }) => ({ schema })),
+};
 const readUIMessageStream = mock(async function* () {
   yield aiState.assistantResponseMessage;
 });
@@ -108,6 +111,38 @@ const tracker = {
   getMessageMetadata: mock(() => ({})),
 };
 const createReasoningMetadataTracker = mock(() => tracker);
+const buildToolRoutingEvidence = mock(() => ({
+  executionFailed: false,
+  explicitInstallRequest: false,
+  inspectionPerformed: false,
+  integrationNamespaces: [],
+  lastExitCode: null,
+  localInspectionWasInsufficient: false,
+  mcpNamespaces: [],
+  missingCommand: null,
+  missingToolchain: false,
+  projectContextFound: false,
+  suggestedNextAction: null,
+  targetFilesFound: false,
+}));
+const routeToolExposure = mock(async ({ availableToolNames, stage }) => ({
+  activeToolNames: availableToolNames,
+  audit: {
+    decision: null,
+    evidence: null,
+    finalActiveToolCount: availableToolNames.length,
+    mode: "deterministic-fallback",
+    reason: "test-router",
+    remediationTriggerSource: null,
+    rejectedSelections: [],
+    routerModelId: null,
+    selectedCategories: [],
+    selectedIntegrationNamespaces: [],
+    selectedMcpNamespaces: [],
+    stage,
+    usedFallbackModel: true,
+  },
+}));
 
 const buildActiveThreadMessages = mock((records) => records);
 const getLatestVisibleMessageId = mock(() => null);
@@ -168,6 +203,11 @@ const serializeThreadStreamEvent = mock(
 );
 
 const createNewResumableStream = mock(async () => {});
+const discoverProjectAwareness = mock(async () => ({
+  preferredProjectRoot: "/tmp/workspace-1",
+  projectCandidates: [],
+  shellStartDirectory: "/tmp/workspace-1",
+}));
 const getWorkspaceRootPath = mock(async () => "/tmp/workspace-1");
 const getSkillSnapshot = mock(async () => ({
   revision: 1,
@@ -176,6 +216,18 @@ const getSkillSnapshot = mock(async () => ({
   updatedAt: Date.now(),
 }));
 const loadSkillByName = mock(async () => null);
+const loadMcpTools = mock(async () => ({
+  closeAll: async () => {},
+  tools: {},
+}));
+const buildIntegrationContext = mock(async () => ({
+  databases: {},
+  tokens: {},
+}));
+const countIntegrationTools = mock(() => 0);
+const getEnabledIntegrations = mock(async () => []);
+const getIntegrationLabel = mock((provider) => provider);
+const loadIntegrationTools = mock(async () => ({}));
 const getMcpServerRuntime = mock(async () => []);
 const getToolPermissionMode = mock(async () => "default");
 const getMemorySettings = mock(async () => ({
@@ -234,6 +286,7 @@ const answerThreadPlanQuestionSet = mock(async () => ({
 const generateText = mock(async () => ({ text: "{}" }));
 
 mock.module("ai", () => ({
+  Output,
   createAgentUIStream,
   createUIMessageStream,
   createUIMessageStreamResponse,
@@ -267,6 +320,10 @@ mock.module("./title/generate", () => ({
 
 mock.module("./runtime/system-prompt", () => ({
   getSystemPrompt,
+}));
+
+mock.module("./runtime/project-discovery", () => ({
+  discoverProjectAwareness,
 }));
 
 mock.module("@/lib/memory/service", () => ({
@@ -427,6 +484,11 @@ mock.module("./runtime/reasoning", () => ({
   createReasoningMetadataTracker,
 }));
 
+mock.module("./tool-router", () => ({
+  buildToolRoutingEvidence,
+  routeToolExposure,
+}));
+
 mock.module("../messages/branches", () => ({
   buildActiveThreadMessages,
   getLatestVisibleMessageId,
@@ -474,6 +536,10 @@ mock.module("@/lib/streams", () => ({
   },
 }));
 
+mock.module("@/lib/mcp/tools", () => ({
+  loadMcpTools,
+}));
+
 mock.module("@/lib/plan/service", () => ({
   answerThreadPlanQuestionSet,
   createThreadPlanQuestionSet: mock(
@@ -495,6 +561,17 @@ mock.module("./runtime/workspace", () => ({
   getToolPermissionMode,
   getWebFetchSettings,
   getWorkspaceRootPath,
+}));
+
+mock.module("@/lib/integrations/runtime", () => ({
+  buildIntegrationContext,
+  countIntegrationTools,
+  getEnabledIntegrations,
+  getIntegrationLabel,
+}));
+
+mock.module("@/lib/integrations/registry", () => ({
+  loadIntegrationTools,
 }));
 
 mock.module("@/server/db", () => ({
@@ -555,6 +632,17 @@ async function flushAsyncWork() {
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
   await Promise.resolve();
+}
+
+function createDeferred() {
+  let resolve: (value: any) => void = () => {};
+  let reject: (error?: unknown) => void = () => {};
+  const promise = new Promise((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+
+  return { promise, reject, resolve };
 }
 
 function createUserMessage(text: string) {
@@ -742,6 +830,23 @@ beforeEach(() => {
     status: "answered",
   }));
   getWorkspaceRootPath.mockImplementation(async () => "/tmp/workspace-1");
+  discoverProjectAwareness.mockImplementation(async () => ({
+    preferredProjectRoot: "/tmp/workspace-1",
+    projectCandidates: [],
+    shellStartDirectory: "/tmp/workspace-1",
+  }));
+  loadMcpTools.mockImplementation(async () => ({
+    closeAll: async () => {},
+    tools: {},
+  }));
+  buildIntegrationContext.mockImplementation(async () => ({
+    databases: {},
+    tokens: {},
+  }));
+  countIntegrationTools.mockImplementation(() => 0);
+  getEnabledIntegrations.mockImplementation(async () => []);
+  getIntegrationLabel.mockImplementation((provider) => provider);
+  loadIntegrationTools.mockImplementation(async () => ({}));
   getLatestAssistantMessageId.mockImplementation(async () => "assistant-1");
 });
 
@@ -794,6 +899,13 @@ describe("runThreadChat title generation", () => {
     expect(aiTestState.prepared?.tools).toHaveProperty("save_memory");
     expect(aiTestState.prepared?.tools).toHaveProperty("forget_memory");
     expect(aiTestState.prepared?.tools).toHaveProperty("websearch");
+  });
+
+  it("uses default smooth streaming instead of line-buffered chunks", async () => {
+    await runThreadChat(createSubmitRequest(), "user-1");
+    await flushAsyncWork();
+
+    expect(smoothStream).toHaveBeenCalledWith();
   });
 
   it("skips title generation for non-new threads", async () => {
@@ -1395,6 +1507,128 @@ describe("runThreadChat approvals and lifecycle", () => {
         threadId: "thread-1",
         userId: "user-1",
         workspaceId: "workspace-1",
+      }),
+    );
+  });
+
+  it("starts preflight dependencies before project discovery resolves", async () => {
+    const projectDiscovery = createDeferred();
+    const started: string[] = [];
+
+    discoverProjectAwareness.mockImplementation(() => {
+      started.push("project-discovery");
+      return projectDiscovery.promise;
+    });
+    getSkillSnapshot.mockImplementation(async () => {
+      started.push("skills");
+      return {
+        revision: 1,
+        skillRoots: [],
+        skills: [],
+        updatedAt: Date.now(),
+      };
+    });
+    retrieveRelevantMemories.mockImplementation(async () => {
+      started.push("memory");
+      return [];
+    });
+    loadMcpTools.mockImplementation(async () => {
+      started.push("mcp");
+      return {
+        closeAll: async () => {},
+        tools: {},
+      };
+    });
+    getEnabledIntegrations.mockImplementation(async () => [
+      {
+        id: "integration-1",
+        isEnabled: true,
+        provider: "github",
+      },
+    ]);
+    buildIntegrationContext.mockImplementation(async () => {
+      started.push("integration-context");
+      return {
+        databases: {},
+        tokens: {},
+      };
+    });
+    loadIntegrationTools.mockImplementation(async () => {
+      started.push("integration-tools");
+      return {};
+    });
+
+    const response = await runThreadChat(createSubmitRequest(), "user-1");
+    await flushAsyncWork();
+
+    expect(response.status).toBe(202);
+    expect(started).toEqual(
+      expect.arrayContaining([
+        "project-discovery",
+        "skills",
+        "memory",
+        "mcp",
+        "integration-context",
+        "integration-tools",
+      ]),
+    );
+
+    projectDiscovery.resolve({
+      preferredProjectRoot: "/tmp/workspace-1",
+      projectCandidates: [],
+      shellStartDirectory: "/tmp/workspace-1",
+    });
+    await flushAsyncWork();
+  });
+
+  it("keeps startup fallback behavior non-fatal when optional preflight work fails", async () => {
+    getMemorySettings.mockImplementation(async () => ({
+      autoSaveEnabled: true,
+      autoSavePerTurnLimit: 3,
+      defaultScope: "global",
+      enabled: true,
+      memoryDimensions: 1536,
+      memoryModel: "text-embedding-3-small",
+      memoryProvider: "openai",
+      retrievalLimit: 6,
+    }));
+    getEnabledIntegrations.mockImplementation(async () => [
+      {
+        id: "integration-1",
+        isEnabled: true,
+        provider: "github",
+      },
+    ]);
+    getSkillSnapshot.mockImplementation(async () => {
+      throw new Error("skills failed");
+    });
+    retrieveRelevantMemories.mockImplementation(async () => {
+      throw new Error("memory failed");
+    });
+    loadMcpTools.mockImplementation(async () => {
+      throw new Error("mcp failed");
+    });
+    buildIntegrationContext.mockImplementation(async () => {
+      throw new Error("integration context failed");
+    });
+
+    const response = await runThreadChat(createSubmitRequest(), "user-1");
+    await flushAsyncWork();
+
+    expect(response.status).toBe(202);
+    expect(createAgentUIStream).toHaveBeenCalled();
+    expect(getSystemPrompt).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({
+        availableSkills: [],
+        enabledIntegrations: [
+          expect.objectContaining({
+            provider: "github",
+            toolCount: 0,
+          }),
+        ],
+        memoryPromptLines: [],
+        workspaceRoot: "/tmp/workspace-1",
       }),
     );
   });

@@ -7,6 +7,7 @@ import {
 } from "ai";
 
 import { streamContext } from "@/lib/streams";
+import { createLogger } from "@/lib/logger";
 import {
   mergeThreadMessageMetadata,
   normalizeThreadUIMessages,
@@ -86,6 +87,43 @@ type ActiveRunControl = {
 };
 
 const activeRunControls = new Map<string, ActiveRunControl>();
+const log = createLogger("ThreadChat");
+const EMPTY_INTEGRATION_CONTEXT = {
+  databases: {},
+  tokens: {},
+} as const;
+
+function logRuntimeTiming(
+  phase:
+    | "agent_stream_created"
+    | "bootstrap_ready"
+    | "first_message_upsert"
+    | "preflight_ready"
+    | "request_received"
+    | "run_failed"
+    | "run_finished"
+    | "stream_execute_started",
+  startedAt: number,
+  context: {
+    runId?: string | null;
+    threadId: string;
+    trigger?: string;
+    userId: string;
+    workspaceId?: string | null;
+  },
+  extra?: Record<string, unknown>,
+) {
+  if (process.env.NODE_ENV !== "development") {
+    return;
+  }
+
+  log.debug(`timing:${phase}`, {
+    elapsedMs: Date.now() - startedAt,
+    phase,
+    ...context,
+    ...(extra ?? {}),
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Stop-stream handler
@@ -479,6 +517,7 @@ type BootstrappedThreadRun = {
   request: ThreadChatRequest;
   runId: string;
   targetMessage: PersistedThreadMessageRecord | undefined;
+  timingStartedAt: number;
   threadMode: ReturnType<typeof normalizeThreadMode>;
 };
 
@@ -511,7 +550,7 @@ async function emitLatestThreadSnapshot(
 async function failThreadRun(
   run: Pick<
     BootstrappedThreadRun,
-    "assistantId" | "eventChannel" | "request" | "runId"
+    "assistantId" | "eventChannel" | "request" | "runId" | "timingStartedAt"
   >,
   error: unknown,
 ) {
@@ -532,6 +571,18 @@ async function failThreadRun(
     threadStatus: "idle",
     type: "run.failed",
   });
+  logRuntimeTiming(
+    "run_failed",
+    run.timingStartedAt,
+    {
+      runId: run.runId,
+      threadId: run.request.threadId,
+      trigger: run.request.trigger,
+      userId: run.request.userId,
+      workspaceId: run.request.workspaceId,
+    },
+    { error: message },
+  );
   run.eventChannel.close();
   activeRunControls.delete(run.runId);
 }
@@ -573,6 +624,7 @@ function launchTitleGeneration(
 async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
   const { abortController, assistantId, eventChannel, modelTranscript, parentId } =
     run;
+  let firstMessageUpsertLogged = false;
 
   try {
     const resolvedModel = await resolveThreadChatModel(
@@ -612,9 +664,13 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
     ]);
 
     const latestUserText = extractLatestUserText(run.baseMessages);
-    const projectAwareness = await discoverProjectAwareness(workspaceRoot);
-
-    const skillSnapshot = await getSkillSnapshot({
+    const toolsEnabled = Boolean(workspaceRoot);
+    const hasIntegrations =
+      run.threadMode === "chat" && enabledIntegrations.length > 0;
+    const integrationApprovalFn = (toolName: string) =>
+      (toolApprovalPolicies as Record<string, boolean>)[toolName] ?? true;
+    const projectAwarenessPromise = discoverProjectAwareness(workspaceRoot);
+    const skillSnapshotPromise = getSkillSnapshot({
       workspaceRoot,
       globalBase: skillsBasePath,
     }).catch(() => ({
@@ -623,23 +679,55 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
       skills: [],
       updatedAt: Date.now(),
     }));
-
-    const toolsEnabled = Boolean(workspaceRoot);
     const mcpRuntimePromise =
       run.threadMode === "chat"
         ? loadMcpTools({
             entries: mcpServers,
             userId: run.request.userId,
             workspaceRoot,
+          }).catch((error) => {
+            log.warn(
+              `Skipping MCP tools during startup: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+            return EMPTY_MCP_RUNTIME;
           })
         : Promise.resolve(EMPTY_MCP_RUNTIME);
-
-    const retrievedMemories = await retrieveRelevantMemories({
+    const retrievedMemoriesPromise = retrieveRelevantMemories({
       query: latestUserText,
       settings: memorySettings,
       userId: run.request.userId,
       workspaceId: run.request.workspaceId,
     }).catch(() => []);
+    const integrationContextPromise = hasIntegrations
+      ? buildIntegrationContext(enabledIntegrations).catch((error) => {
+          log.warn(
+            `Skipping integration context during startup: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+          return EMPTY_INTEGRATION_CONTEXT;
+        })
+      : Promise.resolve(EMPTY_INTEGRATION_CONTEXT);
+    const integrationToolsPromise = hasIntegrations
+      ? integrationContextPromise
+          .then((integrationContext) =>
+            loadIntegrationTools(
+              enabledIntegrations.map((integration) => integration.provider),
+              integrationContext,
+              integrationApprovalFn,
+            ),
+          )
+          .catch((error) => {
+            log.warn(
+              `Skipping integration tools during startup: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+            return {};
+          })
+      : Promise.resolve({});
 
     const agent = createThreadAgent({
       attachmentDownload: createAttachmentDownloadHandler(),
@@ -661,32 +749,36 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
       originalMessages: modelTranscript,
       execute: async ({ writer }) => {
         try {
-          const mcpRuntime =
-            run.threadMode === "chat"
-              ? await mcpRuntimePromise
-              : EMPTY_MCP_RUNTIME;
+          logRuntimeTiming("stream_execute_started", run.timingStartedAt, {
+            runId: run.runId,
+            threadId: run.request.threadId,
+            trigger: run.request.trigger,
+            userId: run.request.userId,
+            workspaceId: run.request.workspaceId,
+          });
+          const [
+            projectAwareness,
+            skillSnapshot,
+            retrievedMemories,
+            mcpRuntime,
+            integrationTools,
+          ] = await Promise.all([
+            projectAwarenessPromise,
+            skillSnapshotPromise,
+            retrievedMemoriesPromise,
+            mcpRuntimePromise,
+            integrationToolsPromise,
+          ]);
           closeMcpTools = mcpRuntime.closeAll;
           const mcpToolNames = Object.keys(mcpRuntime.tools);
-
-          const hasIntegrations =
-            run.threadMode === "chat" && enabledIntegrations.length > 0;
-
-          const integrationContext = hasIntegrations
-            ? await buildIntegrationContext(enabledIntegrations)
-            : { tokens: {}, databases: {} };
-
-          const integrationApprovalFn = (toolName: string) =>
-            (toolApprovalPolicies as Record<string, boolean>)[toolName] ?? true;
-
-          const integrationTools = hasIntegrations
-            ? await loadIntegrationTools(
-                enabledIntegrations.map((i) => i.provider),
-                integrationContext,
-                integrationApprovalFn,
-              )
-            : {};
-
           const integrationToolNames = Object.keys(integrationTools);
+          logRuntimeTiming("preflight_ready", run.timingStartedAt, {
+            runId: run.runId,
+            threadId: run.request.threadId,
+            trigger: run.request.trigger,
+            userId: run.request.userId,
+            workspaceId: run.request.workspaceId,
+          });
 
           const promptContext = buildThreadPromptContext({
             allowedInspectionRoots: [
@@ -770,7 +862,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           const result = await createAgentUIStream({
             agent,
             abortSignal: abortController.signal,
-            experimental_transform: smoothStream({ chunking: "line" }),
+            experimental_transform: smoothStream(),
             generateMessageId: () => assistantId,
             messageMetadata: ({ part }) => tracker.getMessageMetadata(part),
             onError: (error) => {
@@ -810,6 +902,13 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
             sendReasoning: true,
             sendSources: true,
             uiMessages: agentMessages as never,
+          });
+          logRuntimeTiming("agent_stream_created", run.timingStartedAt, {
+            runId: run.runId,
+            threadId: run.request.threadId,
+            trigger: run.request.trigger,
+            userId: run.request.userId,
+            workspaceId: run.request.workspaceId,
           });
           writer.merge(result as ReadableStream<any>);
         } catch (error) {
@@ -887,6 +986,13 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           threadStatus: hasApprovalPending ? "awaiting_approval" : "idle",
           type: "run.finished",
         });
+        logRuntimeTiming("run_finished", run.timingStartedAt, {
+          runId: run.runId,
+          threadId: run.request.threadId,
+          trigger: run.request.trigger,
+          userId: run.request.userId,
+          workspaceId: run.request.workspaceId,
+        });
         if (titleUpdatePromise) {
           await titleUpdatePromise;
         }
@@ -920,6 +1026,16 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
             runId: run.runId,
             type: "message.upsert",
           });
+          if (!firstMessageUpsertLogged) {
+            firstMessageUpsertLogged = true;
+            logRuntimeTiming("first_message_upsert", run.timingStartedAt, {
+              runId: run.runId,
+              threadId: run.request.threadId,
+              trigger: run.request.trigger,
+              userId: run.request.userId,
+              workspaceId: run.request.workspaceId,
+            });
+          }
         }
       } catch (error) {
         await closeMcpTools();
@@ -945,7 +1061,14 @@ async function runParsedThreadChat(
   userId: string,
   _options?: { detached?: boolean },
 ) {
+  const timingStartedAt = Date.now();
   const request = await parseRequest(rawInput, userId);
+  logRuntimeTiming("request_received", timingStartedAt, {
+    threadId: request.threadId,
+    trigger: request.trigger,
+    userId: request.userId,
+    workspaceId: request.workspaceId,
+  });
   const existingThread = await persist.loadThread(request.threadId);
 
   if (request.trigger === "stop-stream") {
@@ -1056,6 +1179,13 @@ async function runParsedThreadChat(
     if (!initialSnapshot) {
       throw new Error("Unable to bootstrap the chat session.");
     }
+    logRuntimeTiming("bootstrap_ready", timingStartedAt, {
+      runId,
+      threadId: request.threadId,
+      trigger: request.trigger,
+      userId: request.userId,
+      workspaceId: request.workspaceId,
+    });
 
     void executeBootstrappedThreadRun({
       abortController,
@@ -1069,6 +1199,7 @@ async function runParsedThreadChat(
       request,
       runId,
       targetMessage,
+      timingStartedAt,
       threadMode,
     });
 
