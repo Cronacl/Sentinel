@@ -265,7 +265,7 @@ export const loadSkillDescription = lines(
   [
     "- Loads the full SKILL.md body for one discovered skill by name.",
     "- Returns the skill base directory, source scope, source kind, and a sample of bundled files.",
-    "- Use this tool when the user's request matches a listed skill description.",
+    "- Use this tool when the user's request clearly matches a listed skill description.",
     "- Relative resource paths mentioned in the skill are relative to the returned directory.",
     "- Sentinel prepends runtime guidance so the returned directory takes priority over any stale home-directory examples embedded in the skill text.",
     "- This tool is always available when skills are discovered and does not require approval.",

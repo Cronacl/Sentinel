@@ -131,7 +131,7 @@ function buildCapabilityManifest(
       ? `MCP namespaces available for targeted activation: ${promptContext.latentToolSummary.mcpNamespaces.join(", ")}.`
       : "MCP namespaces available for targeted activation: none.",
     promptContext.availableSkills.length > 0
-      ? `Discovered skills: ${promptContext.availableSkills.length} available. Treat them as routing hints until load_skill is called.`
+      ? `Discovered skills: ${promptContext.availableSkills.length} available. If one is a clear match, call load_skill before proceeding; otherwise continue with the base tools.`
       : "Discovered skills: none.",
     promptContext.enabledIntegrations.length > 0
       ? `Connected integrations: ${promptContext.enabledIntegrations.map((i) => i.label).join(", ")}.`
@@ -187,9 +187,9 @@ function buildSkillsSection(promptContext: ThreadPromptContext) {
 
   return lines(
     "## Discovered Skills",
-    "Discovered skills stay latent until you call load_skill. Load only the skills that directly match the current task.",
-    "Use a skill when the request clearly matches a specialized workflow, toolchain, provider, or domain that the skill description covers.",
-    "How to use skills: pick the best matching discovered skill, call load_skill, then follow the loaded instructions and treat the returned directory as the source of truth for bundled resources.",
+    "Discovered skills stay latent until you call load_skill. If one is a clear match for the current task, call load_skill before proceeding with general reasoning or execution.",
+    "Use a skill when the request clearly matches a specialized workflow, toolchain, provider, framework, or domain that the skill description covers.",
+    "How to use skills: identify the best matching discovered skill, call load_skill, then follow the loaded instructions and treat the returned directory as the source of truth for bundled resources. If there is no clear match, continue with the base tools.",
     visible
       .map(
         (skill) =>
@@ -300,13 +300,13 @@ function buildDecisionHeuristics(
 
   if (categories.has("skill")) {
     heuristics.push(
-      `${step++}. Treat discovered skills as routing hints. Call load_skill before relying on a skill's instructions or bundled resources.`,
+      `${step++}. If a discovered skill is a clear match for the request, call load_skill before proceeding with general reasoning or execution.`,
     );
     heuristics.push(
       `${step++}. After load_skill, use the returned skill directory as the source of truth for scripts, references, and assets. Ignore stale home-directory examples such as ~/.codex/skills or $CODEX_HOME/skills.`,
     );
     heuristics.push(
-      `${step++}. Reach for a skill when the task matches a specialized provider, framework, workflow, or domain described by the discovered skill list; otherwise continue with the base tools.`,
+      `${step++}. Reach for a skill when the task clearly matches a specialized provider, framework, workflow, or domain described by the discovered skill list. If no installed skill is a clear match, continue with the base tools.`,
     );
   }
 

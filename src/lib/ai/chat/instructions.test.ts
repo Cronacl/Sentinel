@@ -164,7 +164,8 @@ describe("buildThreadAgentInstructions", () => {
     expect(instructions).toContain("Use batch_read when you need several files at once");
     expect(instructions).toContain("Prefer git over shell_command");
     expect(instructions).toContain("Prefer diagnostics over parsing raw lint or compiler stdout");
-    expect(instructions).toContain("Reach for a skill when the task matches a specialized provider");
+    expect(instructions).toContain("If a discovered skill is a clear match for the request");
+    expect(instructions).toContain("Reach for a skill when the task clearly matches a specialized provider");
     expect(instructions).toContain("Reach for an MCP server when the user is asking about a connected external system");
     expect(instructions).toContain(
       "For research tasks, prefer direct evidence over speculation",

@@ -102,6 +102,9 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain(
       "you may invoke host-installed package managers and toolchains such as brew, apt-get, npm, pnpm, yarn, bun, cargo, or pip",
     );
+    expect(prompt).toContain(
+      "When a discovered skill is a clear match for the request, call load_skill before relying on general reasoning or bundled resources.",
+    );
     expect(prompt).toContain("Never create commits unless the user explicitly asks for a commit");
     expect(prompt).toContain("[Global] preference: Prefers concise answers.");
   });

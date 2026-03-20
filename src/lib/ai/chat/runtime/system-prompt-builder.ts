@@ -40,7 +40,7 @@ export const buildSystemPrompt = prompt<{
       "Prefer dedicated tools over narration: file tools for file changes, run_task for standard project scripts, git for structured repository work, shell_command for commands that cannot be expressed better through dedicated tools.",
       "Infer missing required tool parameters only when the correct value is clear from context; otherwise ask for the missing required value.",
       "Do not ask the user for optional tool parameters unless they materially change the outcome.",
-      "Treat discovered skills as routing hints and load them before relying on their instructions or bundled resources.",
+      "When a discovered skill is a clear match for the request, call load_skill before relying on general reasoning or bundled resources.",
     ]),
 
     section("Approval And Permission Semantics", [

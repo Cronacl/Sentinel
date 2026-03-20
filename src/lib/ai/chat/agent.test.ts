@@ -437,13 +437,13 @@ describe("createThreadAgent", () => {
     expect(prepared.instructions).toContain("the grep tool");
     expect(prepared.instructions).toContain("the list tool");
     expect(prepared.instructions).toContain(
-      "Currently inactive tool categories available for later activation: memory, mutation, web.",
+      "Currently inactive tool categories available for later activation: memory.",
     );
     expect(prepared.instructions).toContain("Webfetch batching: enabled");
     expect(prepared.activeTools).toContain("list");
     expect(prepared.activeTools).toContain("run_task");
-    expect(prepared.activeTools).not.toContain("edit");
-    expect(prepared.activeTools).not.toContain("websearch");
+    expect(prepared.activeTools).toContain("edit");
+    expect(prepared.activeTools).toContain("websearch");
     expect(await prepared.tools.list.needsApproval({}, {})).toBe(false);
     expect(await prepared.tools.diff.needsApproval({}, {})).toBe(false);
     expect(await prepared.tools.batch_read.needsApproval({}, {})).toBe(false);
@@ -499,10 +499,14 @@ describe("createThreadAgent", () => {
     expect(toolNames).not.toContain("ask_question");
     expect(prepared.instructions).toContain("Workspace root: unavailable.");
     expect(prepared.instructions).toContain(
-      "Currently inactive tool categories available for later activation: memory, web.",
+      "Currently inactive tool categories available for later activation: memory.",
     );
     expect(prepared.instructions).toContain("Webfetch batching: disabled.");
-    expect(prepared.activeTools).toEqual(["manage_task"]);
+    expect(prepared.activeTools).toEqual([
+      "manage_task",
+      "webfetch",
+      "websearch",
+    ]);
   });
 
   it("keeps load_skill and filesystem inspection available when only skill roots exist", async () => {
@@ -637,7 +641,7 @@ describe("createThreadAgent", () => {
       "the list tool: to browse directory structure after approval.",
     );
     expect(prepared.instructions).toContain(
-      "Inactive but available later if needed: memory, mutation, web.",
+      "Inactive but available later if needed: memory.",
     );
   });
 

@@ -403,7 +403,6 @@ export function createThreadAgent({
       );
 
       const progressAddon = buildStepProgressAddon(steps, stepNumber);
-
       if (stepNumber >= 3 && !hasCreatedTasks) {
         return {
           activeTools: activeToolNames as never[],

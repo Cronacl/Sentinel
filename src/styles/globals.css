@@ -36,7 +36,7 @@
 
 .dark,
 [data-theme="dark"] {
-  --background: #181818;
+  --background: #111;
   --surface: #000;
   --accent: oklch(100% 0 0);
   --accent-foreground: oklch(0% 0 0);
