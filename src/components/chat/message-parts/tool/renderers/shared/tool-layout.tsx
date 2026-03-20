@@ -1,7 +1,7 @@
 "use client";
 
-import { type ReactNode, memo, useState } from "react";
-import { Disclosure } from "@heroui/react";
+import { type ReactNode, memo, useEffect, useState } from "react";
+import { useReducedMotion } from "motion/react";
 
 type ToolLayoutProps = {
   summary: ReactNode;
@@ -32,6 +32,26 @@ export const ToolLayout = memo(function ToolLayout({
   const canToggle = isExpandable && hasContent;
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
   const effectiveExpanded = canToggle ? (userExpanded ?? false) : false;
+  const prefersReducedMotion = useReducedMotion();
+  const [shouldRenderContent, setShouldRenderContent] = useState(effectiveExpanded);
+
+  useEffect(() => {
+    if (effectiveExpanded) {
+      setShouldRenderContent(true);
+      return;
+    }
+
+    if (prefersReducedMotion) {
+      setShouldRenderContent(false);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setShouldRenderContent(false);
+    }, 180);
+
+    return () => window.clearTimeout(timeout);
+  }, [effectiveExpanded, prefersReducedMotion]);
 
   const headerContent = (
     <p
@@ -48,45 +68,62 @@ export const ToolLayout = memo(function ToolLayout({
   );
 
   return (
-    <Disclosure
-      isExpanded={effectiveExpanded}
-      onExpandedChange={(expanded) => {
-        setUserExpanded(expanded);
-        onExpandedChange(expanded);
-      }}
-    >
-      <div>
-        {canToggle ? (
-          <Disclosure.Heading>
-            <Disclosure.Trigger className="flex w-full items-center gap-2 text-left">
-              {headerContent}
-            </Disclosure.Trigger>
-          </Disclosure.Heading>
-        ) : (
-          <div className="flex items-center gap-2">{headerContent}</div>
-        )}
+    <div>
+      {canToggle ? (
+        <button
+          className="flex w-full items-center gap-2 text-left"
+          onClick={() => {
+            const nextExpanded = !effectiveExpanded;
+            setUserExpanded(nextExpanded);
+            onExpandedChange(nextExpanded);
+          }}
+          type="button"
+        >
+          {headerContent}
+        </button>
+      ) : (
+        <div className="flex items-center gap-2">{headerContent}</div>
+      )}
 
-        {actions ? <div className="mt-1 ml-5">{actions}</div> : null}
+      {actions ? <div className="mt-1 ml-5">{actions}</div> : null}
 
-        <Disclosure.Content hidden={!canToggle}>
-          <Disclosure.Body>
-            <div className="mt-1 overflow-hidden rounded-xl border border-border/40 bg-surface/20">
-              <div className="px-3 py-2">{children}</div>
-              {footer ? (
-                <div className="border-t border-border/30 px-3 py-1.5 text-[10px] text-foreground/50">
-                  {footer}
-                </div>
-              ) : null}
-            </div>
-          </Disclosure.Body>
-        </Disclosure.Content>
-
-        {errorText ? (
-          <div className="mt-1 rounded-lg border border-danger/20 bg-danger-soft px-3 py-1.5 text-[11px] text-danger-soft-foreground">
-            {errorText}
+      {canToggle ? (
+        <div
+          aria-hidden={!effectiveExpanded}
+          className="grid transition-[grid-template-rows,opacity,margin] duration-180 ease-out"
+          style={{
+            gridTemplateRows: effectiveExpanded ? "1fr" : "0fr",
+            marginTop: effectiveExpanded ? "0.25rem" : "0rem",
+            opacity: effectiveExpanded ? 1 : 0,
+            transitionDuration: prefersReducedMotion ? "0ms" : undefined,
+          }}
+        >
+          <div className="min-h-0 overflow-hidden">
+            {shouldRenderContent ? (
+              <div
+                className="rounded-xl border border-border/40 bg-surface/20"
+                style={{
+                  contain: "layout paint style",
+                  contentVisibility: effectiveExpanded ? "visible" : "auto",
+                }}
+              >
+                <div className="px-3 py-2">{children}</div>
+                {footer ? (
+                  <div className="border-t border-border/30 px-3 py-1.5 text-[10px] text-foreground/50">
+                    {footer}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
-        ) : null}
-      </div>
-    </Disclosure>
+        </div>
+      ) : null}
+
+      {errorText ? (
+        <div className="mt-1 rounded-lg border border-danger/20 bg-danger-soft px-3 py-1.5 text-[11px] text-danger-soft-foreground">
+          {errorText}
+        </div>
+      ) : null}
+    </div>
   );
 });

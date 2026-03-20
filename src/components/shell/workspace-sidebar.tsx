@@ -420,19 +420,264 @@ function PinnedThreadsList({
 }
 
 const THREADS_PER_PAGE = 6;
+const SIDEBAR_COLLAPSE_TRANSITION = {
+  duration: 0.18,
+  ease: [0.22, 1, 0.36, 1],
+} as const;
+
+const SidebarCollapsible = memo(function SidebarCollapsible({
+  children,
+  isOpen,
+}: {
+  children: React.ReactNode;
+  isOpen: boolean;
+}) {
+  return (
+    <AnimatePresence initial={false}>
+      {isOpen ? (
+        <motion.div
+          animate={{ height: "auto", opacity: 1 }}
+          className="overflow-hidden"
+          exit={{ height: 0, opacity: 0 }}
+          initial={{ height: 0, opacity: 0 }}
+          transition={SIDEBAR_COLLAPSE_TRANSITION}
+        >
+          {children}
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+});
+
+function ThreadRow({
+  isPinned,
+  onArchive,
+  onPin,
+  onPressThread,
+  selectedThreadId,
+  thread,
+  workspaceId,
+}: {
+  isPinned: boolean;
+  onArchive: (threadId: string) => void;
+  onPin: (threadId: string) => void;
+  onPressThread: (workspaceId: string, threadId: string) => void;
+  selectedThreadId: string | null;
+  thread: {
+    id: string;
+    pinnedAt: Date | null;
+    status: ThreadStatusValue;
+    title: string;
+    updatedAt: Date;
+  };
+  workspaceId: string;
+}) {
+  const isActive = selectedThreadId === thread.id;
+
+  return (
+    <div
+      className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-sm transition-colors ${
+        isActive
+          ? "font-medium bg-default text-foreground"
+          : "text-foreground/60 hover:text-foreground"
+      }`}
+      onClick={() => onPressThread(workspaceId, thread.id)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onPressThread(workspaceId, thread.id);
+        }
+      }}
+    >
+      <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+        {thread.status !== "idle" ? (
+          <ThreadStatusIndicator status={thread.status} />
+        ) : thread.pinnedAt != null ? (
+          <HugeiconsIcon
+            className="shrink-0 text-foreground/40"
+            color="currentColor"
+            icon={PinIcon}
+            size={11}
+            strokeWidth={1.5}
+          />
+        ) : null}
+        <span className="min-w-0 truncate text-sm" title={thread.title}>
+          {thread.title}
+        </span>
+      </span>
+      <ThreadItemTrailing
+        isPinned={isPinned}
+        onArchive={onArchive}
+        onPin={onPin}
+        threadId={thread.id}
+        threadStatus={thread.status}
+        updatedAt={thread.updatedAt}
+      />
+    </div>
+  );
+}
+
+const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
+  group,
+  isExpanded,
+  onArchive,
+  onArchiveWorkspace,
+  onPin,
+  onPressThread,
+  onPressWorkspace,
+  onRenameWorkspace,
+  onToggleWorkspace,
+  selectedThreadId,
+}: {
+  group: ThreadGroup[number];
+  isExpanded: boolean;
+  onArchive: (threadId: string) => void;
+  onArchiveWorkspace: (workspaceId: string) => void;
+  onPin: (threadId: string) => void;
+  onPressThread: (workspaceId: string, threadId: string) => void;
+  onPressWorkspace: (workspaceId: string) => void;
+  onRenameWorkspace: (workspaceId: string) => void;
+  onToggleWorkspace: (workspaceId: string) => void;
+  selectedThreadId: string | null;
+}) {
+  const [showOverflowThreads, setShowOverflowThreads] = useState(false);
+  const allThreads = useMemo(
+    () => group.threads.filter((thread) => thread.pinnedAt == null),
+    [group.threads],
+  );
+  const visibleThreads = allThreads.slice(0, THREADS_PER_PAGE);
+  const overflowThreads = allThreads.slice(THREADS_PER_PAGE);
+
+  useEffect(() => {
+    if (!isExpanded) {
+      setShowOverflowThreads(false);
+    }
+  }, [isExpanded]);
+
+  return (
+    <section>
+      <div className="group relative">
+        <Button
+          className="text-foreground/70 hover:bg-default/60 hover:text-foreground justify-start rounded-xl pr-10"
+          fullWidth
+          onPress={() => {
+            onPressWorkspace(group.workspace.id);
+            onToggleWorkspace(group.workspace.id);
+          }}
+          size="sm"
+          variant="ghost"
+        >
+          <div className="flex w-full min-w-0 items-center gap-2">
+            <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+              <HugeiconsIcon
+                className="transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0"
+                color="currentColor"
+                icon={Folder01Icon}
+                size={18}
+                strokeWidth={1.5}
+              />
+              <HugeiconsIcon
+                className={`absolute transition-all duration-150 ${
+                  isExpanded ? "rotate-0" : "-rotate-90"
+                } opacity-0 group-hover:opacity-100 group-focus-within:opacity-100`}
+                color="currentColor"
+                icon={ArrowDown01Icon}
+                size={16}
+                strokeWidth={1.8}
+              />
+            </span>
+            <span className="truncate">{group.workspace.name}</span>
+          </div>
+        </Button>
+        <WorkspaceItemActions
+          onArchive={() => onArchiveWorkspace(group.workspace.id)}
+          onRename={() => onRenameWorkspace(group.workspace.id)}
+          workspaceName={group.workspace.name}
+        />
+      </div>
+
+      <SidebarCollapsible isOpen={isExpanded}>
+        <div className="mt-1 flex flex-col gap-0.5 pl-2">
+          {visibleThreads.length > 0 ? (
+            <>
+              {visibleThreads.map((thread) => (
+                <ThreadRow
+                  isPinned={thread.pinnedAt != null}
+                  key={thread.id}
+                  onArchive={onArchive}
+                  onPin={onPin}
+                  onPressThread={onPressThread}
+                  selectedThreadId={selectedThreadId}
+                  thread={thread}
+                  workspaceId={group.workspace.id}
+                />
+              ))}
+
+              {overflowThreads.length > 0 ? (
+                <>
+                  <button
+                    className="flex w-full items-center gap-1 px-2 py-1.5 text-left text-xs text-foreground/40 transition-colors hover:text-foreground/70"
+                    onClick={() => setShowOverflowThreads((current) => !current)}
+                    type="button"
+                  >
+                    <HugeiconsIcon
+                      className={`transition-transform duration-150 ${
+                        showOverflowThreads ? "rotate-0" : "-rotate-90"
+                      }`}
+                      color="currentColor"
+                      icon={ArrowDown01Icon}
+                      size={12}
+                      strokeWidth={1.8}
+                    />
+                    <span>
+                      {showOverflowThreads
+                        ? "Hide extra threads"
+                        : `Show ${overflowThreads.length} more`}
+                    </span>
+                  </button>
+                  <SidebarCollapsible isOpen={showOverflowThreads}>
+                    <div className="flex flex-col gap-0.5">
+                      {overflowThreads.map((thread) => (
+                        <ThreadRow
+                          isPinned={thread.pinnedAt != null}
+                          key={thread.id}
+                          onArchive={onArchive}
+                          onPin={onPin}
+                          onPressThread={onPressThread}
+                          selectedThreadId={selectedThreadId}
+                          thread={thread}
+                          workspaceId={group.workspace.id}
+                        />
+                      ))}
+                    </div>
+                  </SidebarCollapsible>
+                </>
+              ) : null}
+            </>
+          ) : (
+            <div className="text-foreground/40 px-3 py-2 text-xs">
+              No threads yet.
+            </div>
+          )}
+        </div>
+      </SidebarCollapsible>
+    </section>
+  );
+});
 
 const ThreadList = memo(function ThreadList({
-  onPressThread,
   groups,
-  onRenameWorkspace,
   onArchiveWorkspace,
+  onPressThread,
+  onPressWorkspace,
+  onRenameWorkspace,
   selectedThreadId,
   expandedWorkspaceIds,
-  onPressWorkspace,
   onPin,
   onArchive,
-  threadVisibleCounts,
-  onShowMore,
+  onToggleWorkspace,
 }: {
   expandedWorkspaceIds: Set<string>;
   groups: ThreadGroup;
@@ -442,139 +687,29 @@ const ThreadList = memo(function ThreadList({
   onPressThread: (workspaceId: string, threadId: string) => void;
   onPressWorkspace: (workspaceId: string) => void;
   onRenameWorkspace: (workspaceId: string) => void;
-  onShowMore: (workspaceId: string) => void;
   selectedThreadId: string | null;
-  threadVisibleCounts: Map<string, number>;
+  onToggleWorkspace: (workspaceId: string) => void;
 }) {
   return (
-    <div className="flex flex-col gap-1 px-3 py-1">
-      {groups.map((group) => {
-        const isExpanded = expandedWorkspaceIds.has(group.workspace.id);
-        const allThreads = group.threads.filter(
-          (thread) => thread.pinnedAt == null,
-        );
-        const limit =
-          threadVisibleCounts.get(group.workspace.id) ?? THREADS_PER_PAGE;
-        const visibleThreads = allThreads.slice(0, limit);
-        const hasMore = allThreads.length > limit;
-
-        return (
-          <section key={group.workspace.id}>
-            <div className="group relative">
-              <Button
-                className="text-foreground/70 hover:bg-default/60 hover:text-foreground justify-start rounded-xl pr-10"
-                fullWidth
-                onPress={() => onPressWorkspace(group.workspace.id)}
-                size="sm"
-                variant="ghost"
-              >
-                <div className="flex w-full min-w-0 items-center gap-2">
-                  <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
-                    <HugeiconsIcon
-                      className="transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0"
-                      color="currentColor"
-                      icon={Folder01Icon}
-                      size={18}
-                      strokeWidth={1.5}
-                    />
-                    <HugeiconsIcon
-                      className={`absolute transition-all duration-150 ${
-                        isExpanded ? "rotate-0" : "-rotate-90"
-                      } opacity-0 group-hover:opacity-100 group-focus-within:opacity-100`}
-                      color="currentColor"
-                      icon={ArrowDown01Icon}
-                      size={16}
-                      strokeWidth={1.8}
-                    />
-                  </span>
-                  <span className="truncate">{group.workspace.name}</span>
-                </div>
-              </Button>
-              <WorkspaceItemActions
-                onArchive={() => onArchiveWorkspace(group.workspace.id)}
-                onRename={() => onRenameWorkspace(group.workspace.id)}
-                workspaceName={group.workspace.name}
-              />
-            </div>
-
-            {isExpanded ? (
-              <div className="mt-1 flex flex-col gap-0.5 pl-2">
-                {visibleThreads.length > 0 ? (
-                  <>
-                    {visibleThreads.map((thread) => {
-                      const isActive = selectedThreadId === thread.id;
-
-                      return (
-                        <div
-                          className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-sm transition-colors ${
-                            isActive
-                              ? "font-medium bg-default text-foreground"
-                              : "text-foreground/60 hover:text-foreground"
-                          }`}
-                          key={thread.id}
-                          onClick={() =>
-                            onPressThread(group.workspace.id, thread.id)
-                          }
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              onPressThread(group.workspace.id, thread.id);
-                            }
-                          }}
-                        >
-                          <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-                            {thread.status !== "idle" ? (
-                              <ThreadStatusIndicator status={thread.status} />
-                            ) : thread.pinnedAt != null ? (
-                              <HugeiconsIcon
-                                className="shrink-0 text-foreground/40"
-                                color="currentColor"
-                                icon={PinIcon}
-                                size={11}
-                                strokeWidth={1.5}
-                              />
-                            ) : null}
-                            <span
-                              className="min-w-0 truncate text-sm"
-                              title={thread.title}
-                            >
-                              {thread.title}
-                            </span>
-                          </span>
-                          <ThreadItemTrailing
-                            isPinned={thread.pinnedAt != null}
-                            onArchive={onArchive}
-                            onPin={onPin}
-                            threadId={thread.id}
-                            threadStatus={thread.status}
-                            updatedAt={thread.updatedAt}
-                          />
-                        </div>
-                      );
-                    })}
-                    {hasMore && (
-                      <button
-                        className="cursor-pointer px-2 py-1.5 text-left text-xs text-foreground/40 transition-colors hover:text-foreground/70"
-                        onClick={() => onShowMore(group.workspace.id)}
-                        type="button"
-                      >
-                        Show more
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-foreground/40 px-3 py-2 text-xs">
-                    No threads yet.
-                  </div>
-                )}
-              </div>
-            ) : null}
-          </section>
-        );
-      })}
-    </div>
+    <ScrollShadow className="max-h-full px-3 py-1" orientation="vertical">
+      <div className="flex flex-col gap-1">
+        {groups.map((group) => (
+          <WorkspaceThreadSection
+            group={group}
+            isExpanded={expandedWorkspaceIds.has(group.workspace.id)}
+            key={group.workspace.id}
+            onArchive={onArchive}
+            onArchiveWorkspace={onArchiveWorkspace}
+            onPin={onPin}
+            onPressThread={onPressThread}
+            onPressWorkspace={onPressWorkspace}
+            onRenameWorkspace={onRenameWorkspace}
+            onToggleWorkspace={onToggleWorkspace}
+            selectedThreadId={selectedThreadId}
+          />
+        ))}
+      </div>
+    </ScrollShadow>
   );
 });
 
@@ -584,82 +719,74 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
   selectedThreadId,
   onPin,
   onArchive,
-  visibleCount,
-  onShowMore,
 }: {
   items: ChronologicalThreadItem;
   onArchive: (threadId: string) => void;
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
-  onShowMore: () => void;
   selectedThreadId: string | null;
-  visibleCount: number;
 }) {
-  const visibleItems = items.slice(0, visibleCount);
-  const hasMore = items.length > visibleCount;
+  const [showOverflowThreads, setShowOverflowThreads] = useState(false);
+  const visibleItems = items.slice(0, THREADS_PER_PAGE);
+  const overflowItems = items.slice(THREADS_PER_PAGE);
 
   return (
-    <div className="flex flex-col gap-1 px-4 py-1">
-      {visibleItems.map((item) => {
-        const isActive = selectedThreadId === item.id;
-
-        return (
-          <div
-            className={`group hover:bg-default/60 min-w-0 cursor-pointer rounded-xl px-1 py-1 text-sm transition-colors ${
-              isActive
-                ? "font-medium bg-default text-foreground"
-                : "text-foreground/60 hover:text-foreground"
-            }`}
+    <ScrollShadow className="max-h-full px-4 py-1" orientation="vertical">
+      <div className="flex flex-col gap-1">
+        {visibleItems.map((item) => (
+          <ThreadRow
+            isPinned={item.pinnedAt != null}
             key={item.id}
-            onClick={() => onPressThread(item.workspace.id, item.id)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onPressThread(item.workspace.id, item.id);
-              }
-            }}
-          >
-            <div className="flex min-w-0 items-center justify-between gap-2">
-              <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-                {item.status !== "idle" ? (
-                  <ThreadStatusIndicator status={item.status} />
-                ) : item.pinnedAt != null ? (
-                  <HugeiconsIcon
-                    className="shrink-0 text-foreground/40"
-                    color="currentColor"
-                    icon={PinIcon}
-                    size={11}
-                    strokeWidth={1.5}
-                  />
-                ) : null}
-                <span className="min-w-0 truncate" title={item.title}>
-                  {item.title}
-                </span>
-              </span>
-              <ThreadItemTrailing
-                isPinned={item.pinnedAt != null}
-                onArchive={onArchive}
-                onPin={onPin}
-                threadId={item.id}
-                threadStatus={item.status}
-                updatedAt={item.updatedAt}
+            onArchive={onArchive}
+            onPin={onPin}
+            onPressThread={onPressThread}
+            selectedThreadId={selectedThreadId}
+            thread={item}
+            workspaceId={item.workspace.id}
+          />
+        ))}
+        {overflowItems.length > 0 ? (
+          <>
+            <button
+              className="flex w-full items-center gap-1 px-3 py-1.5 text-left text-xs text-foreground/40 transition-colors hover:text-foreground/70"
+              onClick={() => setShowOverflowThreads((current) => !current)}
+              type="button"
+            >
+              <HugeiconsIcon
+                className={`transition-transform duration-150 ${
+                  showOverflowThreads ? "rotate-0" : "-rotate-90"
+                }`}
+                color="currentColor"
+                icon={ArrowDown01Icon}
+                size={12}
+                strokeWidth={1.8}
               />
-            </div>
-          </div>
-        );
-      })}
-      {hasMore && (
-        <button
-          className="cursor-pointer px-3 py-1.5 text-left text-xs text-foreground/40 transition-colors hover:text-foreground/70"
-          onClick={onShowMore}
-          type="button"
-        >
-          Show more
-        </button>
-      )}
-    </div>
+              <span>
+                {showOverflowThreads
+                  ? "Hide extra threads"
+                  : `Show ${overflowItems.length} more`}
+              </span>
+            </button>
+            <SidebarCollapsible isOpen={showOverflowThreads}>
+              <div className="flex flex-col gap-1">
+                {overflowItems.map((item) => (
+                  <ThreadRow
+                    isPinned={item.pinnedAt != null}
+                    key={item.id}
+                    onArchive={onArchive}
+                    onPin={onPin}
+                    onPressThread={onPressThread}
+                    selectedThreadId={selectedThreadId}
+                    thread={item}
+                    workspaceId={item.workspace.id}
+                  />
+                ))}
+              </div>
+            </SidebarCollapsible>
+          </>
+        ) : null}
+      </div>
+    </ScrollShadow>
   );
 });
 
@@ -720,10 +847,6 @@ export function WorkspaceSidebar() {
   const [sortBy, setSortBy] = useState<SortBy>(
     () => cachedPreferences?.sortBy ?? "updated",
   );
-  const [threadVisibleCounts, setThreadVisibleCounts] = useState<
-    Map<string, number>
-  >(new Map());
-  const [chronologicalVisibleCount, setChronologicalVisibleCount] = useState(6);
   const preferencesRef = useRef<HTMLDivElement | null>(null);
   const pinActionLockRef = useRef(new Set<string>());
   const renameWorkspaceState = useOverlayState({
@@ -1155,19 +1278,6 @@ export function WorkspaceSidebar() {
     [effectiveOrganizeBy, effectiveSortBy, updatePreferences],
   );
 
-  const handleShowMoreThreads = useCallback((workspaceId: string) => {
-    setThreadVisibleCounts((current) => {
-      const next = new Map(current);
-      const currentCount = next.get(workspaceId) ?? THREADS_PER_PAGE;
-      next.set(workspaceId, currentCount + THREADS_PER_PAGE);
-      return next;
-    });
-  }, []);
-
-  const handleShowMoreChronological = useCallback(() => {
-    setChronologicalVisibleCount((c) => c + THREADS_PER_PAGE);
-  }, []);
-
   const toggleExpanded = api.workspaces.toggleExpanded.useMutation({
     onMutate: async ({ workspaceId }) => {
       const previous = utils.workspaces.list.getData();
@@ -1188,9 +1298,15 @@ export function WorkspaceSidebar() {
       if (selectedWorkspaceId !== workspaceId) {
         void selectWorkspace.mutate({ workspaceId });
       }
+    },
+    [selectWorkspace, selectedWorkspaceId],
+  );
+
+  const handleToggleWorkspace = useCallback(
+    (workspaceId: string) => {
       void toggleExpanded.mutate({ workspaceId });
     },
-    [toggleExpanded, selectWorkspace, selectedWorkspaceId],
+    [toggleExpanded],
   );
 
   const handlePressThread = useCallback(
@@ -1400,7 +1516,7 @@ export function WorkspaceSidebar() {
       </div>
 
       <div className="min-h-0 flex-1">
-        <ScrollShadow className="sentinel-scroll-shell h-full">
+        <ScrollShadow className="sentinel-scroll-shell h-full" orientation="vertical">
           <div className="sentinel-scroll-area h-full">
             {showSidebarLoading ? <WorkspaceSidebarLoadingState /> : null}
 
@@ -1424,9 +1540,8 @@ export function WorkspaceSidebar() {
                 onPressThread={handlePressThread}
                 onPressWorkspace={handlePressWorkspace}
                 onRenameWorkspace={handleOpenRenameWorkspace}
-                onShowMore={handleShowMoreThreads}
                 selectedThreadId={selectedThreadId}
-                threadVisibleCounts={threadVisibleCounts}
+                onToggleWorkspace={handleToggleWorkspace}
               />
             ) : null}
 
@@ -1436,9 +1551,7 @@ export function WorkspaceSidebar() {
                 onArchive={handleArchiveThread}
                 onPin={handlePin}
                 onPressThread={handlePressThread}
-                onShowMore={handleShowMoreChronological}
                 selectedThreadId={selectedThreadId}
-                visibleCount={chronologicalVisibleCount}
               />
             ) : null}
 

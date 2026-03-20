@@ -77,7 +77,7 @@ const ResultCard = memo(function ResultCard({
 
   return (
     <a
-      className="group block rounded-xl border border-border/40 bg-background/50 px-3 py-2.5 transition-colors hover:bg-background/30"
+      className="group block rounded-xl border border-border/40 bg-background dark:bg-background/50 px-3 py-2.5 transition-colors hover:bg-background/30"
       href={result.url}
       rel="noreferrer"
       target="_blank"
@@ -137,7 +137,7 @@ export const WebSearchSidebar = memo(function WebSearchSidebar({
         <CloseButton aria-label="Close sidebar" onPress={handleClose} />
       </header>
 
-      <Separator variant="tertiary" />
+      <Separator variant="default" className="opacity-20" />
 
       <div className="min-h-0 flex-1">
         <ScrollShadow className="h-full px-3 py-3" orientation="vertical">

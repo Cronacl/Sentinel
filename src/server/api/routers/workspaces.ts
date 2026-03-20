@@ -78,7 +78,7 @@ export const workspacesRouter = createTRPCRouter({
         eq(workspaces.isArchived, false),
         eq(workspaces.userId, userId),
       ),
-      orderBy: (workspaces, { desc }) => [desc(workspaces.updatedAt)],
+      orderBy: (workspaces, { desc }) => [desc(workspaces.createdAt)],
     });
 
     const threadStats = ctx.db
@@ -189,7 +189,7 @@ export const workspacesRouter = createTRPCRouter({
             eq(workspaces.isArchived, false),
             eq(workspaces.userId, ctx.session.user.id),
           ),
-          orderBy: (workspaces, { desc }) => [desc(workspaces.updatedAt)],
+          orderBy: (workspaces, { desc }) => [desc(workspaces.createdAt)],
           columns: { id: true },
         });
 
@@ -269,7 +269,7 @@ export const workspacesRouter = createTRPCRouter({
         eq(workspaces.isArchived, false),
         eq(workspaces.userId, ctx.session.user.id),
       ),
-      orderBy: (workspaces, { desc }) => [desc(workspaces.updatedAt)],
+      orderBy: (workspaces, { desc }) => [desc(workspaces.createdAt)],
     });
 
     if (!fallbackWorkspace) {
