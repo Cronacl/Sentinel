@@ -41,7 +41,8 @@
   --accent: oklch(100% 0 0);
   --accent-foreground: oklch(0% 0 0);
   --default-hover: #202020;
-  --default: #121212;
+  /* a lighter 111; */
+  --default: #181818;
   --overlay: #1c1c1c;
   --code-bg: #0d0d0d;
   --code-border: #262626;
@@ -414,10 +415,19 @@ button[type="button"] {
 }
 
 .sentinel-diff-collapsed {
-  background-color: color-mix(in oklab, var(--color-foreground) 2%, transparent);
-  border-block: 1px solid color-mix(in oklab, var(--color-border) 10%, transparent);
+  background-color: color-mix(
+    in oklab,
+    var(--color-foreground) 2%,
+    transparent
+  );
+  border-block: 1px solid
+    color-mix(in oklab, var(--color-border) 10%, transparent);
 }
 
 .sentinel-diff-collapsed:hover {
-  background-color: color-mix(in oklab, var(--color-foreground) 4%, transparent);
+  background-color: color-mix(
+    in oklab,
+    var(--color-foreground) 4%,
+    transparent
+  );
 }
