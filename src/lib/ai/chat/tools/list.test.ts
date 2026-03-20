@@ -47,6 +47,9 @@ describe("executeList", () => {
     });
 
     expect(result.root).toBe(".");
+    expect(result.requestedPath).toBe(".");
+    expect(result.resolvedBase).toBe(defaultDirectory);
+    expect(result.resolvedPath).toBe(defaultDirectory);
     expect(result.entries.map((entry) => entry.path)).toEqual([
       "src",
       "src/lib",

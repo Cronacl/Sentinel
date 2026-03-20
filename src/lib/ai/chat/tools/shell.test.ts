@@ -2,8 +2,10 @@
 
 import { afterEach, describe, expect, it } from "bun:test";
 import { mkdir } from "node:fs/promises";
+import path from "node:path";
 
 const {
+  __internal,
   assertShellCommandAllowed,
   disposeShellSession,
   executeShellCommand,
@@ -20,6 +22,7 @@ afterEach(async () => {
   await disposeShellSession("thread-shell-stream");
   await disposeShellSession("thread-shell-tail");
   await disposeShellSession("thread-shell-activity");
+  await disposeShellSession("thread-shell-heartbeat");
 });
 
 describe("shell session manager", () => {
@@ -108,8 +111,10 @@ describe("shell session manager", () => {
     expect(finalEvent?.type).toBe("completed");
     expect(finalEvent && "output" in finalEvent ? finalEvent.output : null).toMatchObject({
       exitCode: 0,
+      failureKind: null,
       phase: "completed",
       stderr: "two",
+      suggestedNextAction: "none",
       stdout: "one",
     });
   });
@@ -138,6 +143,25 @@ describe("shell session manager", () => {
     expect(lastRunning?.truncated).toBe(true);
   });
 
+  it("emits heartbeat running updates while a quiet command is still running", async () => {
+    const runningEvents = [];
+
+    for await (const event of streamShellCommand({
+      allowedRoot: workspaceRoot,
+      command: 'sleep 2; printf "done\\n"',
+      defaultDirectory: workspaceRoot,
+      permissionMode: "full",
+      threadId: "thread-shell-heartbeat",
+    })) {
+      if (event.type === "running") {
+        runningEvents.push(event.output);
+      }
+    }
+
+    expect(runningEvents.length).toBeGreaterThanOrEqual(1);
+    expect(runningEvents.at(-1)?.durationMs ?? 0).toBeGreaterThanOrEqual(1_000);
+  });
+
   it("rejects obvious directory escape commands in default mode", () => {
     expect(() => assertShellCommandAllowed("cd ..")).toThrow(/violates default permissions mode/i);
     expect(() => assertShellCommandAllowed("pushd /tmp")).toThrow(
@@ -149,6 +173,24 @@ describe("shell session manager", () => {
     expect(() =>
       assertShellCommandAllowed(`cd ${workspaceRoot}`, [workspaceRoot]),
     ).not.toThrow();
+  });
+
+  it("rejects missing working directories before starting a shell session", async () => {
+    const missingDirectory = path.join(
+      workspaceRoot,
+      `sentinel-shell-missing-${Date.now()}`,
+    );
+
+    await expect(
+      executeShellCommand({
+        allowedRoot: missingDirectory,
+        command: "pwd",
+        defaultDirectory: missingDirectory,
+        permissionMode: "full",
+        threadId: "thread-shell-missing",
+      }),
+    ).rejects.toThrow(/working directory is unavailable/i);
+    expect(getShellSessionCount()).toBe(0);
   });
 
   it("resets the session if the shell leaves the allowed root in default mode", async () => {
@@ -164,5 +206,35 @@ describe("shell session manager", () => {
         threadId: "thread-shell-test",
       }),
     ).rejects.toThrow(/selected workspace root/i);
+  });
+
+  it("classifies missing command failures for remediation", async () => {
+    const commandName = "sentinel_missing_binary_for_shell_test";
+    const result = await executeShellCommand({
+      allowedRoot: workspaceRoot,
+      command: commandName,
+      defaultDirectory: workspaceRoot,
+      permissionMode: "full",
+      threadId: "thread-shell-test",
+    });
+
+    expect(result.exitCode).toBe(127);
+    expect(result.failureKind).toBe("missing_command");
+    expect(result.missingCommand).toBe(commandName);
+    expect(result.suggestedNextAction).toBe("install");
+  });
+
+  it("classifies permission errors as inspect-first failures", () => {
+    expect(
+      __internal.classifyShellCommandFailure({
+        exitCode: 1,
+        stderr: "Permission denied",
+        stdout: "",
+      }),
+    ).toEqual({
+      failureKind: "permission",
+      missingCommand: null,
+      suggestedNextAction: "inspect",
+    });
   });
 });

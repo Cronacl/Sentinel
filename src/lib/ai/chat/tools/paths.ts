@@ -64,7 +64,7 @@ export function resolveToolPath({
     !allowsAbsolutePath
   ) {
     throw new Error(
-      `The ${toolName} tool only accepts relative paths in default permissions mode.`,
+      `The ${toolName} tool only accepts relative paths in default permissions mode. Base root: ${toPosixPath(path.resolve(defaultDirectory))}.`,
     );
   }
 
@@ -77,7 +77,7 @@ export function resolveToolPath({
     !isPathWithinAnyRoot(resolvedPath, allowedRoots)
   ) {
     throw new Error(
-      "The requested path must stay inside the selected workspace root or a discovered skill directory.",
+      `The requested path must stay inside the selected workspace root or a discovered skill directory. Base root: ${toPosixPath(path.resolve(defaultDirectory))}.`,
     );
   }
 
@@ -90,6 +90,7 @@ export function resolveToolPath({
   return {
     label,
     rawPath,
+    resolvedBase: path.resolve(defaultDirectory),
     resolvedPath,
   };
 }
@@ -104,6 +105,8 @@ export function resolveToolDirectory(input: {
   const resolved = resolveToolPath(input);
 
   return {
+    requestedPath: resolved.rawPath,
+    resolvedBase: resolved.resolvedBase,
     resolvedDirectory: resolved.resolvedPath,
     rootLabel: resolved.label,
   };

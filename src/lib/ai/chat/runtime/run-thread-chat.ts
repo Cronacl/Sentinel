@@ -27,6 +27,7 @@ import {
   createMcpPromptNamespace,
 } from "../prompt-context";
 import type { ThreadPromptIntegration } from "../prompt-context";
+import { discoverProjectAwareness } from "./project-discovery";
 import { loadMcpTools } from "@/lib/mcp/tools";
 import {
   autosaveConversationMemories,
@@ -286,7 +287,6 @@ async function createThreadEventChannel(runId: string) {
 
 function buildPlaceholderMessage(
   request: ThreadChatRequest,
-  resolvedModel: ResolvedModel,
   parentId: string | null,
   assistantId: string,
   continuationAssistant: ThreadUIMessage | undefined,
@@ -296,10 +296,6 @@ function buildPlaceholderMessage(
       ...continuationAssistant,
       metadata: mergeThreadMessageMetadata(continuationAssistant.metadata, {
         isActive: true,
-        model: {
-          providerId: resolvedModel.providerId,
-          requestedModelId: resolvedModel.requestedModelId,
-        },
         parentMessageId:
           continuationAssistant.metadata?.parentMessageId ?? parentId,
         status: "pending",
@@ -319,10 +315,6 @@ function buildPlaceholderMessage(
     metadata: {
       branchId,
       isActive: true,
-      model: {
-        providerId: resolvedModel.providerId,
-        requestedModelId: resolvedModel.requestedModelId,
-      },
       parentMessageId: parentId,
       status: "pending",
     },
@@ -475,6 +467,475 @@ const EMPTY_MCP_RUNTIME = {
   tools: {} as Record<string, never>,
 } as const;
 
+type BootstrappedThreadRun = {
+  abortController: AbortController;
+  assistantId: string;
+  baseMessages: ThreadUIMessage[];
+  eventChannel: ThreadEventChannel;
+  isNewThread: boolean;
+  modelTranscript: ThreadUIMessage[];
+  parentId: string | null;
+  placeholderMessage: ThreadUIMessage;
+  request: ThreadChatRequest;
+  runId: string;
+  targetMessage: PersistedThreadMessageRecord | undefined;
+  threadMode: ReturnType<typeof normalizeThreadMode>;
+};
+
+async function emitLatestThreadSnapshot(
+  threadId: string,
+  eventChannel: ThreadEventChannel,
+  runId?: string,
+) {
+  const snapshot = await loadThreadSessionSnapshot(threadId);
+  if (!snapshot) {
+    return null;
+  }
+
+  eventChannel.emit({
+    snapshot,
+    type: "thread.snapshot",
+  });
+
+  if (runId) {
+    eventChannel.emit({
+      queuedFollowUps: snapshot.queuedFollowUps,
+      runId,
+      type: "queue.snapshot",
+    });
+  }
+
+  return snapshot;
+}
+
+async function failThreadRun(
+  run: Pick<
+    BootstrappedThreadRun,
+    "assistantId" | "eventChannel" | "request" | "runId"
+  >,
+  error: unknown,
+) {
+  const message =
+    error instanceof Error ? error.message : String(error ?? "Unknown error");
+
+  persist.clearActiveStream(run.request.threadId);
+  persist.setThreadStatus(run.request.threadId, "idle");
+  await persist.updateMessageMetadata(run.request.threadId, run.assistantId, {
+    errorMessage: message,
+    runId: run.runId,
+    status: "error",
+  });
+  await emitLatestThreadSnapshot(run.request.threadId, run.eventChannel);
+  run.eventChannel.emit({
+    error: message,
+    runId: run.runId,
+    threadStatus: "idle",
+    type: "run.failed",
+  });
+  run.eventChannel.close();
+  activeRunControls.delete(run.runId);
+}
+
+function launchTitleGeneration(
+  run: Pick<
+    BootstrappedThreadRun,
+    "baseMessages" | "eventChannel" | "isNewThread" | "request" | "runId"
+  >,
+  resolvedModel: ResolvedModel,
+): Promise<void> | null {
+  const titleTask = createTitleTask(
+    run.isNewThread,
+    run.request,
+    run.baseMessages,
+    resolvedModel,
+  );
+
+  if (!titleTask) {
+    return null;
+  }
+
+  return (async () => {
+    const title = await titleTask.catch(() => null);
+    if (!title) {
+      return;
+    }
+
+    persist.updateThreadTitle(run.request.threadId, title);
+
+    if (!activeRunControls.has(run.runId)) {
+      return;
+    }
+
+    await emitLatestThreadSnapshot(run.request.threadId, run.eventChannel);
+  })();
+}
+
+async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
+  const { abortController, assistantId, eventChannel, modelTranscript, parentId } =
+    run;
+
+  try {
+    const resolvedModel = await resolveThreadChatModel(
+      run.request,
+      run.targetMessage,
+    );
+
+    const titleUpdatePromise = launchTitleGeneration(run, resolvedModel);
+
+    const [
+      workspaceRoot,
+      permissionMode,
+      memorySettings,
+      mcpServers,
+      searchSettings,
+      searchProviders,
+      toolApprovalPolicies,
+      webFetchSettings,
+      planState,
+      skillsBasePath,
+      enabledIntegrations,
+    ] = await Promise.all([
+      getWorkspaceRootPath(run.request.workspaceId, run.request.userId),
+      getToolPermissionMode(run.request.userId),
+      getMemorySettings(run.request.userId),
+      getMcpServerRuntime(run.request.userId),
+      getSearchSettings(run.request.userId),
+      getSearchProviderRuntime(run.request.userId),
+      getToolApprovalPolicies(run.request.userId),
+      getWebFetchSettings(run.request.userId),
+      getThreadPlanState({ threadId: run.request.threadId }).catch(() => ({
+        pendingQuestionSet: null,
+        plan: null,
+      })),
+      getSkillsBasePath(run.request.userId),
+      getEnabledIntegrations(run.request.userId).catch(() => []),
+    ]);
+
+    const latestUserText = extractLatestUserText(run.baseMessages);
+    const projectAwareness = await discoverProjectAwareness(workspaceRoot);
+
+    const skillSnapshot = await getSkillSnapshot({
+      workspaceRoot,
+      globalBase: skillsBasePath,
+    }).catch(() => ({
+      revision: 0,
+      skillRoots: [],
+      skills: [],
+      updatedAt: Date.now(),
+    }));
+
+    const toolsEnabled = Boolean(workspaceRoot);
+    const mcpRuntimePromise =
+      run.threadMode === "chat"
+        ? loadMcpTools({
+            entries: mcpServers,
+            userId: run.request.userId,
+            workspaceRoot,
+          })
+        : Promise.resolve(EMPTY_MCP_RUNTIME);
+
+    const retrievedMemories = await retrieveRelevantMemories({
+      query: latestUserText,
+      settings: memorySettings,
+      userId: run.request.userId,
+      workspaceId: run.request.workspaceId,
+    }).catch(() => []);
+
+    const agent = createThreadAgent({
+      attachmentDownload: createAttachmentDownloadHandler(),
+      languageModel: resolvedModel.languageModel,
+      providerOptions: resolvedModel.providerOptions,
+    });
+
+    const tracker = createReasoningMetadataTracker({
+      clock: { now: () => Date.now() },
+      providerId: resolvedModel.providerId,
+      requestedModelId: resolvedModel.requestedModelId,
+    });
+
+    const agentMessages = prepareMessagesForModel(modelTranscript);
+    let streamErrorMessage: string | undefined;
+    let closeMcpTools = async () => {};
+
+    const stream = createUIMessageStream({
+      originalMessages: modelTranscript,
+      execute: async ({ writer }) => {
+        try {
+          const mcpRuntime =
+            run.threadMode === "chat"
+              ? await mcpRuntimePromise
+              : EMPTY_MCP_RUNTIME;
+          closeMcpTools = mcpRuntime.closeAll;
+          const mcpToolNames = Object.keys(mcpRuntime.tools);
+
+          const hasIntegrations =
+            run.threadMode === "chat" && enabledIntegrations.length > 0;
+
+          const integrationContext = hasIntegrations
+            ? await buildIntegrationContext(enabledIntegrations)
+            : { tokens: {}, databases: {} };
+
+          const integrationApprovalFn = (toolName: string) =>
+            (toolApprovalPolicies as Record<string, boolean>)[toolName] ?? true;
+
+          const integrationTools = hasIntegrations
+            ? await loadIntegrationTools(
+                enabledIntegrations.map((i) => i.provider),
+                integrationContext,
+                integrationApprovalFn,
+              )
+            : {};
+
+          const integrationToolNames = Object.keys(integrationTools);
+
+          const promptContext = buildThreadPromptContext({
+            allowedInspectionRoots: [
+              ...(workspaceRoot ? [workspaceRoot] : []),
+              ...skillSnapshot.skillRoots,
+            ],
+            allowedMutationRoot: workspaceRoot,
+            availableSkills: skillSnapshot.skills,
+            enabledIntegrations: buildIntegrationPromptSummary(
+              enabledIntegrations,
+              integrationToolNames,
+            ),
+            enabledMcpServers: mcpServers
+              .filter((entry) => entry.isEnabled)
+              .map((entry) => {
+                const namespace = createMcpPromptNamespace(
+                  entry.catalogId ?? entry.name,
+                );
+                return {
+                  ...(entry.catalogId ? { catalogId: entry.catalogId } : {}),
+                  id: entry.id,
+                  name: entry.name,
+                  namespace,
+                  toolCount: mcpToolNames.filter((toolName) =>
+                    toolName.startsWith(`mcp_${namespace}__`),
+                  ).length,
+                  transport: entry.transport,
+                };
+              }),
+            latestUserText,
+            latentToolSummary: {
+              categories: [],
+              integrationNamespaces: enabledIntegrations.map(
+                (integration) => integration.provider,
+              ),
+              mcpNamespaces: mcpServers
+                .filter((entry) => entry.isEnabled)
+                .map((entry) =>
+                  createMcpPromptNamespace(entry.catalogId ?? entry.name),
+                ),
+            },
+            mcpToolNames,
+            memoryPromptLines: buildMemoryPromptLines(retrievedMemories),
+            memorySettings,
+            permissionMode,
+            planSummary: planState.plan
+              ? {
+                  audience: planState.plan.audience,
+                  goal: planState.plan.goal,
+                  hasPendingQuestions: Boolean(planState.pendingQuestionSet),
+                  summary: planState.plan.summary,
+                  taskCount: planState.plan.tasks.length,
+                  title: planState.plan.title,
+                }
+              : null,
+            preferredProjectRoot: projectAwareness.preferredProjectRoot,
+            projectCandidates: projectAwareness.projectCandidates,
+            searchProviders,
+            searchSettings,
+            shellStartDirectory: projectAwareness.shellStartDirectory,
+            skillRoots: skillSnapshot.skillRoots,
+            sourceMessageId: parentId,
+            threadMode: run.threadMode,
+            toolApprovalPolicies,
+            webFetchSettings,
+            workspaceRoot,
+          });
+
+          const baseSystemPrompt = await getSystemPrompt(
+            run.request.userId,
+            promptContext,
+          );
+          const planPromptLines = buildPlanPromptLines(planState.plan);
+          const systemPrompt =
+            planPromptLines.length > 0
+              ? [baseSystemPrompt, ...planPromptLines]
+                  .filter(Boolean)
+                  .join("\n\n")
+              : baseSystemPrompt;
+
+          const result = await createAgentUIStream({
+            agent,
+            abortSignal: abortController.signal,
+            experimental_transform: smoothStream({ chunking: "line" }),
+            generateMessageId: () => assistantId,
+            messageMetadata: ({ part }) => tracker.getMessageMetadata(part),
+            onError: (error) => {
+              streamErrorMessage =
+                error instanceof Error
+                  ? error.message
+                  : String(error ?? "Unknown error");
+              return streamErrorMessage;
+            },
+            options: {
+              availableSkills: skillSnapshot.skills,
+              ...(workspaceRoot ? { defaultDirectory: workspaceRoot } : {}),
+              globalSkillsBasePath: skillsBasePath,
+              integrationTools,
+              mcpTools: mcpRuntime.tools,
+              memorySettings,
+              permissionMode,
+              promptContext,
+              preferredProjectRoot: projectAwareness.preferredProjectRoot,
+              resolvedModelId: resolvedModel.responseModelId,
+              resolvedProviderId: resolvedModel.providerId,
+              searchProviders,
+              searchSettings,
+              shellStartDirectory: projectAwareness.shellStartDirectory,
+              skillRoots: skillSnapshot.skillRoots,
+              sourceMessageId: parentId,
+              systemPrompt,
+              threadId: run.request.threadId,
+              threadMode: run.threadMode,
+              toolApprovalPolicies,
+              toolsEnabled,
+              userId: run.request.userId,
+              webFetchSettings,
+              workspaceId: run.request.workspaceId,
+            },
+            originalMessages: modelTranscript as never,
+            sendReasoning: true,
+            sendSources: true,
+            uiMessages: agentMessages as never,
+          });
+          writer.merge(result as ReadableStream<any>);
+        } catch (error) {
+          await closeMcpTools();
+          throw error;
+        }
+      },
+      onFinish: async ({ responseMessage }) => {
+        await closeMcpTools();
+        if (!(await streamStillOwnsThread(run.request.threadId, run.runId))) {
+          eventChannel.close();
+          activeRunControls.delete(run.runId);
+          return;
+        }
+
+        const finalized = tracker.finalize(
+          [...modelTranscript, responseMessage as ThreadUIMessage],
+          responseMessage as ThreadUIMessage,
+        );
+        const [finalAssistant] = normalizeThreadUIMessages(finalized).slice(-1);
+        const persistedAssistant = persist.upsertMessage(
+          run.request.threadId,
+          buildPersistedAssistantMessage({
+            assistantId,
+            ...(streamErrorMessage
+              ? { errorMessage: streamErrorMessage }
+              : {}),
+            finalAssistant,
+            placeholder: run.placeholderMessage,
+          }),
+        );
+        eventChannel.emit({
+          message: persistedAssistant,
+          runId: run.runId,
+          type: "message.upsert",
+        });
+        eventChannel.emit({
+          messageId: persistedAssistant.id,
+          runId: run.runId,
+          status: persistedAssistant.metadata?.status,
+          type: "message.status",
+        });
+
+        if (!streamErrorMessage) {
+          void autosaveConversationMemories({
+            messages: [...modelTranscript, responseMessage as ThreadUIMessage],
+            model: resolvedModel.languageModel,
+            providerOptions: resolvedModel.providerOptions,
+            settings: memorySettings,
+            sourceMessageId: assistantId,
+            threadId: run.request.threadId,
+            userId: run.request.userId,
+            workspaceId: run.request.workspaceId,
+          });
+        }
+
+        persist.clearActiveStream(run.request.threadId);
+
+        const hasApprovalPending = (
+          responseMessage as ThreadUIMessage
+        ).parts.some(
+          (part) => "state" in part && part.state === "approval-requested",
+        );
+        persist.setThreadStatus(
+          run.request.threadId,
+          hasApprovalPending ? "awaiting_approval" : "idle",
+        );
+        await emitLatestThreadSnapshot(
+          run.request.threadId,
+          eventChannel,
+          run.runId,
+        );
+        eventChannel.emit({
+          runId: run.runId,
+          threadStatus: hasApprovalPending ? "awaiting_approval" : "idle",
+          type: "run.finished",
+        });
+        if (titleUpdatePromise) {
+          await titleUpdatePromise;
+        }
+        eventChannel.close();
+        activeRunControls.delete(run.runId);
+
+        if (!hasApprovalPending) {
+          await drainFollowUpQueue(run.request);
+        }
+      },
+    });
+
+    void (async () => {
+      try {
+        for await (const assistantMessage of readUIMessageStream<ThreadUIMessage>({
+          message: run.placeholderMessage,
+          stream,
+        })) {
+          if (!(await streamStillOwnsThread(run.request.threadId, run.runId))) {
+            eventChannel.close();
+            return;
+          }
+
+          const persistedAssistant = persistAssistantSnapshot(
+            run.request.threadId,
+            run.runId,
+            assistantMessage,
+          );
+          eventChannel.emit({
+            message: persistedAssistant,
+            runId: run.runId,
+            type: "message.upsert",
+          });
+        }
+      } catch (error) {
+        await closeMcpTools();
+        if (await streamStillOwnsThread(run.request.threadId, run.runId)) {
+          await failThreadRun(run, error);
+          return;
+        }
+        eventChannel.close();
+        activeRunControls.delete(run.runId);
+      }
+    })();
+  } catch (error) {
+    await failThreadRun(run, error);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
@@ -482,7 +943,7 @@ const EMPTY_MCP_RUNTIME = {
 async function runParsedThreadChat(
   rawInput: unknown,
   userId: string,
-  options?: { detached?: boolean },
+  _options?: { detached?: boolean },
 ) {
   const request = await parseRequest(rawInput, userId);
   const existingThread = await persist.loadThread(request.threadId);
@@ -526,9 +987,7 @@ async function runParsedThreadChat(
     fallbackTitle,
     threadMode,
   );
-  const runId = generateId();
-  persist.setActiveStream(request.threadId, runId);
-  persist.setThreadStatus(request.threadId, "streaming");
+  let activeRunId: string | null = null;
 
   try {
     if (request.trigger === "submit-plan-answer" && request.planQuestionSetId) {
@@ -547,6 +1006,20 @@ async function runParsedThreadChat(
       mode: threadMode,
     });
 
+    const runId = generateId();
+    activeRunId = runId;
+    const continuationAssistant = findContinuationAssistant(
+      request,
+      modelTranscript,
+    );
+    const assistantId = continuationAssistant?.id ?? crypto.randomUUID();
+    const parentId = getParentMessageId(request, allRecords);
+    const placeholder = buildPlaceholderMessage(
+      request,
+      parentId,
+      assistantId,
+      continuationAssistant,
+    );
     const persistedUserId = persistUserMessage(
       request,
       transcript,
@@ -556,72 +1029,6 @@ async function runParsedThreadChat(
     if (persistedUserId) {
       await persist.setActiveMessage(request.threadId, persistedUserId);
     }
-
-    const resolvedModel = await resolveThreadChatModel(request, targetMessage);
-
-    const [
-      workspaceRoot,
-      permissionMode,
-      memorySettings,
-      mcpServers,
-      searchSettings,
-      searchProviders,
-      toolApprovalPolicies,
-      webFetchSettings,
-      planState,
-      skillsBasePath,
-      enabledIntegrations,
-    ] = await Promise.all([
-      getWorkspaceRootPath(request.workspaceId, request.userId),
-      getToolPermissionMode(request.userId),
-      getMemorySettings(request.userId),
-      getMcpServerRuntime(request.userId),
-      getSearchSettings(request.userId),
-      getSearchProviderRuntime(request.userId),
-      getToolApprovalPolicies(request.userId),
-      getWebFetchSettings(request.userId),
-      getThreadPlanState({ threadId: request.threadId }).catch(() => ({
-        pendingQuestionSet: null,
-        plan: null,
-      })),
-      getSkillsBasePath(request.userId),
-      getEnabledIntegrations(request.userId).catch(() => []),
-    ]);
-
-    const skillSnapshot = await getSkillSnapshot({
-      workspaceRoot,
-      globalBase: skillsBasePath,
-    }).catch(() => ({
-      revision: 0,
-      skillRoots: [],
-      skills: [],
-      updatedAt: Date.now(),
-    }));
-
-    const toolsEnabled = Boolean(workspaceRoot);
-    const continuationAssistant = findContinuationAssistant(
-      request,
-      modelTranscript,
-    );
-
-    const resolvedTitlePromise = createTitleTask(
-      isNewThread,
-      request,
-      baseMessages,
-      resolvedModel,
-    );
-
-    const assistantId = continuationAssistant?.id ?? crypto.randomUUID();
-    const parentId = getParentMessageId(request, allRecords);
-
-    const placeholder = buildPlaceholderMessage(
-      request,
-      resolvedModel,
-      parentId,
-      assistantId,
-      continuationAssistant,
-    );
-
     const placeholderMessage = persist.upsertMessage(request.threadId, {
       ...placeholder,
       metadata: mergeThreadMessageMetadata(placeholder.metadata, {
@@ -629,39 +1036,6 @@ async function runParsedThreadChat(
       }),
     });
     await persist.setActiveMessage(request.threadId, assistantId);
-
-    const mcpRuntimePromise =
-      threadMode === "chat"
-        ? loadMcpTools({
-            entries: mcpServers,
-            userId: request.userId,
-            workspaceRoot,
-          })
-        : Promise.resolve(EMPTY_MCP_RUNTIME);
-
-    const memoryQuery = extractLatestUserText(baseMessages);
-    const retrievedMemories = await retrieveRelevantMemories({
-      query: memoryQuery,
-      settings: memorySettings,
-      userId: request.userId,
-      workspaceId: request.workspaceId,
-    }).catch(() => []);
-
-    const agent = createThreadAgent({
-      attachmentDownload: createAttachmentDownloadHandler(),
-      languageModel: resolvedModel.languageModel,
-      providerOptions: resolvedModel.providerOptions,
-    });
-
-    const tracker = createReasoningMetadataTracker({
-      clock: { now: () => Date.now() },
-      providerId: resolvedModel.providerId,
-      requestedModelId: resolvedModel.requestedModelId,
-    });
-
-    const agentMessages = prepareMessagesForModel(modelTranscript);
-    let streamErrorMessage: string | undefined;
-    let closeMcpTools = async () => {};
     const abortController = new AbortController();
     const eventChannel = await createThreadEventChannel(runId);
     activeRunControls.set(runId, {
@@ -669,6 +1043,8 @@ async function runParsedThreadChat(
       cancelled: false,
       eventChannel,
     });
+    persist.setActiveStream(request.threadId, runId);
+    persist.setThreadStatus(request.threadId, "streaming");
     const initialSnapshot = await loadThreadSessionSnapshot(request.threadId);
     if (initialSnapshot) {
       eventChannel.emit({
@@ -677,301 +1053,39 @@ async function runParsedThreadChat(
       });
     }
     eventChannel.emit({ runId, type: "run.started" });
+    if (!initialSnapshot) {
+      throw new Error("Unable to bootstrap the chat session.");
+    }
 
-    const stream = createUIMessageStream({
-      originalMessages: modelTranscript,
-      execute: async ({ writer }) => {
-        try {
-          const mcpRuntime =
-            threadMode === "chat"
-              ? await mcpRuntimePromise
-              : EMPTY_MCP_RUNTIME;
-          closeMcpTools = mcpRuntime.closeAll;
-          const mcpToolNames = Object.keys(mcpRuntime.tools);
-
-          const hasIntegrations =
-            threadMode === "chat" && enabledIntegrations.length > 0;
-
-          const integrationContext = hasIntegrations
-            ? await buildIntegrationContext(enabledIntegrations)
-            : { tokens: {}, databases: {} };
-
-          const integrationApprovalFn = (toolName: string) =>
-            (toolApprovalPolicies as Record<string, boolean>)[toolName] ?? true;
-
-          const integrationTools = hasIntegrations
-            ? await loadIntegrationTools(
-                enabledIntegrations.map((i) => i.provider),
-                integrationContext,
-                integrationApprovalFn,
-              )
-            : {};
-
-          const integrationToolNames = Object.keys(integrationTools);
-
-          const promptContext = buildThreadPromptContext({
-            availableSkills: skillSnapshot.skills,
-            enabledIntegrations: buildIntegrationPromptSummary(
-              enabledIntegrations,
-              integrationToolNames,
-            ),
-            enabledMcpServers: mcpServers
-              .filter((entry) => entry.isEnabled)
-              .map((entry) => {
-                const namespace = createMcpPromptNamespace(
-                  entry.catalogId ?? entry.name,
-                );
-                return {
-                  ...(entry.catalogId ? { catalogId: entry.catalogId } : {}),
-                  id: entry.id,
-                  name: entry.name,
-                  namespace,
-                  toolCount: mcpToolNames.filter((toolName) =>
-                    toolName.startsWith(`mcp_${namespace}__`),
-                  ).length,
-                  transport: entry.transport,
-                };
-              }),
-            mcpToolNames,
-            memoryPromptLines: buildMemoryPromptLines(retrievedMemories),
-            memorySettings,
-            permissionMode,
-            planSummary: planState.plan
-              ? {
-                  audience: planState.plan.audience,
-                  goal: planState.plan.goal,
-                  hasPendingQuestions: Boolean(planState.pendingQuestionSet),
-                  summary: planState.plan.summary,
-                  taskCount: planState.plan.tasks.length,
-                  title: planState.plan.title,
-                }
-              : null,
-            searchProviders,
-            searchSettings,
-            skillRoots: skillSnapshot.skillRoots,
-            sourceMessageId: parentId,
-            threadMode,
-            toolApprovalPolicies,
-            webFetchSettings,
-            workspaceRoot,
-          });
-
-          const baseSystemPrompt = await getSystemPrompt(
-            request.userId,
-            promptContext,
-          );
-          const planPromptLines = buildPlanPromptLines(planState.plan);
-          const systemPrompt =
-            planPromptLines.length > 0
-              ? [baseSystemPrompt, ...planPromptLines]
-                  .filter(Boolean)
-                  .join("\n\n")
-              : baseSystemPrompt;
-
-          const result = await createAgentUIStream({
-            agent,
-            abortSignal: abortController.signal,
-            experimental_transform: smoothStream({ chunking: "line" }),
-            generateMessageId: () => assistantId,
-            messageMetadata: ({ part }) => tracker.getMessageMetadata(part),
-            onError: (error) => {
-              streamErrorMessage =
-                error instanceof Error
-                  ? error.message
-                  : String(error ?? "Unknown error");
-              return streamErrorMessage;
-            },
-            options: {
-              availableSkills: skillSnapshot.skills,
-              ...(workspaceRoot ? { defaultDirectory: workspaceRoot } : {}),
-              globalSkillsBasePath: skillsBasePath,
-              integrationTools,
-              mcpTools: mcpRuntime.tools,
-              memorySettings,
-              permissionMode,
-              promptContext,
-              searchProviders,
-              searchSettings,
-              skillRoots: skillSnapshot.skillRoots,
-              sourceMessageId: parentId,
-              systemPrompt,
-              threadId: request.threadId,
-              threadMode,
-              toolApprovalPolicies,
-              toolsEnabled,
-              userId: request.userId,
-              webFetchSettings,
-              workspaceId: request.workspaceId,
-            },
-            originalMessages: modelTranscript as never,
-            sendReasoning: true,
-            sendSources: true,
-            uiMessages: agentMessages as never,
-          });
-          writer.merge(result as ReadableStream<any>);
-        } catch (error) {
-          await closeMcpTools();
-          throw error;
-        }
-
-        if (resolvedTitlePromise) {
-          const title = await resolvedTitlePromise.catch(() => null);
-          if (title) {
-            persist.updateThreadTitle(request.threadId, title);
-          }
-        }
-      },
-      onFinish: async ({ responseMessage }) => {
-        await closeMcpTools();
-        if (!(await streamStillOwnsThread(request.threadId, runId))) {
-          eventChannel.close();
-          activeRunControls.delete(runId);
-          return;
-        }
-
-        const finalized = tracker.finalize(
-          [...modelTranscript, responseMessage as ThreadUIMessage],
-          responseMessage as ThreadUIMessage,
-        );
-        const [finalAssistant] = normalizeThreadUIMessages(finalized).slice(-1);
-        const persistedAssistant = persist.upsertMessage(
-          request.threadId,
-          buildPersistedAssistantMessage({
-            assistantId,
-            ...(streamErrorMessage
-              ? { errorMessage: streamErrorMessage }
-              : {}),
-            finalAssistant,
-            placeholder: placeholderMessage,
-          }),
-        );
-        eventChannel.emit({
-          message: persistedAssistant,
-          runId,
-          type: "message.upsert",
-        });
-        eventChannel.emit({
-          messageId: persistedAssistant.id,
-          runId,
-          status: persistedAssistant.metadata?.status,
-          type: "message.status",
-        });
-
-        if (!streamErrorMessage) {
-          void autosaveConversationMemories({
-            messages: [...modelTranscript, responseMessage as ThreadUIMessage],
-            model: resolvedModel.languageModel,
-            providerOptions: resolvedModel.providerOptions,
-            settings: memorySettings,
-            sourceMessageId: assistantId,
-            threadId: request.threadId,
-            userId: request.userId,
-            workspaceId: request.workspaceId,
-          });
-        }
-
-        persist.clearActiveStream(request.threadId);
-
-        const hasApprovalPending = (
-          responseMessage as ThreadUIMessage
-        ).parts.some(
-          (part) => "state" in part && part.state === "approval-requested",
-        );
-        persist.setThreadStatus(
-          request.threadId,
-          hasApprovalPending ? "awaiting_approval" : "idle",
-        );
-        const snapshot = await loadThreadSessionSnapshot(request.threadId);
-        if (snapshot) {
-          eventChannel.emit({
-            snapshot,
-            type: "thread.snapshot",
-          });
-          eventChannel.emit({
-            queuedFollowUps: snapshot.queuedFollowUps,
-            runId,
-            type: "queue.snapshot",
-          });
-        }
-        eventChannel.emit({
-          runId,
-          threadStatus: hasApprovalPending ? "awaiting_approval" : "idle",
-          type: "run.finished",
-        });
-        eventChannel.close();
-        activeRunControls.delete(runId);
-
-        if (!hasApprovalPending) {
-          await drainFollowUpQueue(request);
-        }
-      },
+    void executeBootstrappedThreadRun({
+      abortController,
+      assistantId,
+      baseMessages,
+      eventChannel,
+      isNewThread,
+      modelTranscript,
+      parentId,
+      placeholderMessage,
+      request,
+      runId,
+      targetMessage,
+      threadMode,
     });
-
-    void (async () => {
-      try {
-        for await (const assistantMessage of readUIMessageStream<ThreadUIMessage>({
-          message: placeholderMessage,
-          stream,
-        })) {
-          if (!(await streamStillOwnsThread(request.threadId, runId))) {
-            eventChannel.close();
-            return;
-          }
-
-          const persistedAssistant = persistAssistantSnapshot(
-            request.threadId,
-            runId,
-            assistantMessage,
-          );
-          eventChannel.emit({
-            message: persistedAssistant,
-            runId,
-            type: "message.upsert",
-          });
-        }
-      } catch (error) {
-        await closeMcpTools();
-        if (await streamStillOwnsThread(request.threadId, runId)) {
-          const message =
-            error instanceof Error
-              ? error.message
-              : String(error ?? "Unknown error");
-
-          persist.clearActiveStream(request.threadId);
-          persist.setThreadStatus(request.threadId, "idle");
-          await persist.updateMessageMetadata(request.threadId, assistantId, {
-            errorMessage: message,
-            runId,
-            status: "error",
-          });
-          const snapshot = await loadThreadSessionSnapshot(request.threadId);
-          if (snapshot) {
-            eventChannel.emit({
-              snapshot,
-              type: "thread.snapshot",
-            });
-          }
-          eventChannel.emit({
-            error: message,
-            runId,
-            threadStatus: "idle",
-            type: "run.failed",
-          });
-        }
-        eventChannel.close();
-        activeRunControls.delete(runId);
-      }
-    })();
 
     return Response.json(
       {
         activeRunId: runId,
+        snapshot: initialSnapshot,
       },
-      { status: options?.detached ? 202 : 200 },
+      { status: 202 },
     );
   } catch (error) {
     persist.clearActiveStream(request.threadId);
     persist.setThreadStatus(request.threadId, "idle");
+    if (activeRunId && activeRunControls.has(activeRunId)) {
+      activeRunControls.get(activeRunId)?.eventChannel.close();
+      activeRunControls.delete(activeRunId);
+    }
     throw error;
   }
 }

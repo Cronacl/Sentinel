@@ -76,6 +76,9 @@ export const listOutputSchema = z.object({
   directoryCount: z.number().int().min(0),
   entries: z.array(listEntrySchema),
   fileCount: z.number().int().min(0),
+  requestedPath: z.string(),
+  resolvedBase: z.string(),
+  resolvedPath: z.string(),
   root: z.string(),
   totalEntries: z.number().int().min(0),
   tree: z.string(),
@@ -181,7 +184,7 @@ export async function executeList({
   input: ListInput;
   permissionMode: PermissionMode;
 }): Promise<ListOutput> {
-  const { resolvedDirectory, rootLabel } = resolveToolDirectory({
+  const { requestedPath, resolvedBase, resolvedDirectory, rootLabel } = resolveToolDirectory({
     defaultDirectory,
     ...(extraAllowedRoots ? { extraAllowedRoots } : {}),
     permissionMode,
@@ -296,6 +299,9 @@ export async function executeList({
     directoryCount,
     entries,
     fileCount,
+    requestedPath,
+    resolvedBase,
+    resolvedPath: resolvedDirectory,
     root: rootLabel,
     totalEntries: entries.length,
     tree: formatTree(rootLabel, entries),

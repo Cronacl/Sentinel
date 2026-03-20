@@ -34,6 +34,16 @@ function createQueuedFollowUp(id: string, text: string) {
   };
 }
 
+function createSnapshot(
+  partial: Omit<ThreadSessionSnapshot, "threadTitle"> &
+    Partial<Pick<ThreadSessionSnapshot, "threadTitle">>,
+): ThreadSessionSnapshot {
+  return {
+    threadTitle: "Thread title",
+    ...partial,
+  };
+}
+
 afterEach(() => {
   mock.restore();
 });
@@ -51,15 +61,16 @@ describe("mergeThreadSessionStateFromSnapshot", () => {
       messages: [createMessage("assistant-1", "same assistant", 5)],
       queuedFollowUps,
       threadId: "thread-1",
+      threadTitle: "Thread title",
       threadStatus: "streaming" as const,
     };
-    const snapshot: ThreadSessionSnapshot = {
+    const snapshot = createSnapshot({
       activeRunId: "run-1",
       messages: current.messages,
       queuedFollowUps,
       threadId: "thread-1",
       threadStatus: "streaming",
-    };
+    });
 
     const result = mergeThreadSessionStateFromSnapshot(
       current,
@@ -81,15 +92,16 @@ describe("mergeThreadSessionStateFromSnapshot", () => {
       messages: [createMessage("assistant-1", "newer local assistant", 5)],
       queuedFollowUps: [createQueuedFollowUp("queued-old", "old queue")],
       threadId: "thread-1",
+      threadTitle: "Thread title",
       threadStatus: "streaming" as const,
     };
-    const snapshot: ThreadSessionSnapshot = {
+    const snapshot = createSnapshot({
       activeRunId: "run-1",
       messages: [createMessage("assistant-1", "older snapshot", 3)],
       queuedFollowUps: [createQueuedFollowUp("queued-new", "new queue")],
       threadId: "thread-1",
       threadStatus: "idle",
-    };
+    });
 
     const result = mergeThreadSessionStateFromSnapshot(
       current,
@@ -116,15 +128,16 @@ describe("mergeThreadSessionStateFromSnapshot", () => {
       messages: [createMessage("assistant-1", "older local assistant", 2)],
       queuedFollowUps: [],
       threadId: "thread-1",
+      threadTitle: "Thread title",
       threadStatus: "streaming" as const,
     };
-    const snapshot: ThreadSessionSnapshot = {
+    const snapshot = createSnapshot({
       activeRunId: "run-1",
       messages: [createMessage("assistant-1", "newer snapshot", 4)],
       queuedFollowUps: [],
       threadId: "thread-1",
       threadStatus: "streaming",
-    };
+    });
 
     const result = mergeThreadSessionStateFromSnapshot(
       current,
@@ -148,15 +161,16 @@ describe("mergeThreadSessionStateFromSnapshot", () => {
       messages: [createMessage("assistant-1", "same text", 1)],
       queuedFollowUps: [],
       threadId: "thread-1",
+      threadTitle: "Thread title",
       threadStatus: "idle" as const,
     };
-    const snapshot: ThreadSessionSnapshot = {
+    const snapshot = createSnapshot({
       activeRunId: null,
       messages: [createMessage("assistant-2", "same text", 1)],
       queuedFollowUps: [],
       threadId: "thread-1",
       threadStatus: "idle",
-    };
+    });
 
     const result = mergeThreadSessionStateFromSnapshot(
       current,
@@ -179,15 +193,16 @@ describe("mergeThreadSessionStateFromSnapshot", () => {
       messages: [createMessage("assistant-2", "newer branch", 5)],
       queuedFollowUps: [],
       threadId: "thread-1",
+      threadTitle: "Thread title",
       threadStatus: "idle" as const,
     };
-    const snapshot: ThreadSessionSnapshot = {
+    const snapshot = createSnapshot({
       activeRunId: null,
       messages: [createMessage("assistant-1", "older branch", 3)],
       queuedFollowUps: [],
       threadId: "thread-1",
       threadStatus: "idle",
-    };
+    });
 
     const result = mergeThreadSessionStateFromSnapshot(
       current,
@@ -209,5 +224,28 @@ describe("fetchThreadSessionSnapshot", () => {
     await expect(
       fetchThreadSessionSnapshot("thread-1", { allowMissing: true }),
     ).resolves.toBeNull();
+  });
+
+  it("requests session snapshots with no-store caching", async () => {
+    const fetchMock = mock(
+      async () =>
+        Response.json(
+          createSnapshot({
+            activeRunId: "run-1",
+            messages: [],
+            queuedFollowUps: [],
+            threadId: "thread-1",
+            threadStatus: "streaming",
+          }),
+        ),
+    );
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    await fetchThreadSessionSnapshot("thread-1");
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/chat/thread-1/session", {
+      cache: "no-store",
+      method: "GET",
+    });
   });
 });

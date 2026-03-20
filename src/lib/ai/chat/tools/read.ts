@@ -38,6 +38,9 @@ export const readOutputSchema = z.object({
   lines: z.array(readLineSchema),
   nextOffset: z.number().int().min(1).nullable(),
   path: z.string(),
+  requestedPath: z.string(),
+  resolvedBase: z.string(),
+  resolvedPath: z.string(),
   totalEntries: z.number().int().min(0).nullable(),
   totalLines: z.number().int().min(0).nullable(),
   truncated: z.boolean(),
@@ -91,7 +94,7 @@ export async function executeRead({
   input: ReadInput;
   permissionMode: PermissionMode;
 }): Promise<ReadOutput> {
-  const { label, resolvedPath } = resolveToolPath({
+  const { label, rawPath, resolvedBase, resolvedPath } = resolveToolPath({
     defaultDirectory,
     ...(extraAllowedRoots ? { extraAllowedRoots } : {}),
     permissionMode,
@@ -131,6 +134,9 @@ export async function executeRead({
       lines: [],
       nextOffset: truncated ? offset + slicedEntries.length : null,
       path: label,
+      requestedPath: rawPath,
+      resolvedBase,
+      resolvedPath,
       totalEntries: entries.length,
       totalLines: null,
       truncated,
@@ -203,6 +209,9 @@ export async function executeRead({
     lines,
     nextOffset: truncated && lines.length > 0 ? lines.at(-1)!.number + 1 : null,
     path: label,
+    requestedPath: rawPath,
+    resolvedBase,
+    resolvedPath,
     totalEntries: null,
     totalLines,
     truncated,

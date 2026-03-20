@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import crypto from "node:crypto";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -11,10 +11,12 @@ const COMMAND_MAX_DURATION_MS = 30 * 60_000;
 const IDLE_TIMEOUT_MS = 15 * 60_000;
 const MAX_OUTPUT_BYTES = 64 * 1024;
 const MAX_LIVE_TAIL_BYTES = 8 * 1024;
+const PROGRESS_HEARTBEAT_INTERVAL_MS = 1_000;
 const PROGRESS_UPDATE_INTERVAL_MS = 75;
 type Timer = ReturnType<typeof setTimeout>;
 
 export type ShellCommandRunningOutput = {
+  boundaryRoot: string | null;
   cwd: string;
   durationMs: number;
   phase: "running";
@@ -23,12 +25,16 @@ export type ShellCommandRunningOutput = {
 };
 
 export type ShellCommandCompletedOutput = {
+  boundaryRoot: string | null;
   cwd: string;
   durationMs: number;
   exitCode: number;
+  failureKind: ShellCommandFailureKind | null;
+  missingCommand: string | null;
   phase: "completed";
   stderr: string;
   stdout: string;
+  suggestedNextAction: ShellCommandSuggestedNextAction | null;
   truncated: boolean;
 };
 
@@ -37,6 +43,18 @@ export type ShellCommandOutput =
   | ShellCommandCompletedOutput;
 
 export type ShellCommandResult = ShellCommandCompletedOutput;
+
+export type ShellCommandFailureKind =
+  | "missing_command"
+  | "missing_toolchain"
+  | "other"
+  | "permission";
+
+export type ShellCommandSuggestedNextAction =
+  | "install"
+  | "inspect"
+  | "none"
+  | "retry";
 
 export type ShellCommandStreamEvent =
   | { output: ShellCommandRunningOutput; type: "running" }
@@ -56,6 +74,7 @@ type PendingExecution = {
   command: string;
   eventQueue: AsyncEventQueue<ShellCommandStreamEvent>;
   inactivityTimeoutMs: number;
+  heartbeatTimer: Timer | null;
   lastProgressAt: number;
   lastPreviewSent: string;
   marker: string;
@@ -302,8 +321,18 @@ function clearProgressTimer(pending: PendingExecution) {
   pending.progressTimer = null;
 }
 
+function clearHeartbeatTimer(pending: PendingExecution) {
+  if (!pending.heartbeatTimer) {
+    return;
+  }
+
+  clearTimeout(pending.heartbeatTimer);
+  pending.heartbeatTimer = null;
+}
+
 function clearExecutionTimers(pending: PendingExecution) {
   clearTimeout(pending.maxDurationTimeout);
+  clearHeartbeatTimer(pending);
   if (pending.inactivityTimeout) {
     clearTimeout(pending.inactivityTimeout);
     pending.inactivityTimeout = null;
@@ -352,6 +381,8 @@ function emitRunningUpdate(session: ShellSession, force = false) {
   pending.lastProgressAt = Date.now();
   pending.eventQueue.push({
     output: {
+      boundaryRoot:
+        pending.allowedRoot ?? pending.allowedRoots?.[0] ?? null,
       cwd: session.currentDirectory,
       durationMs: Math.max(0, Date.now() - pending.startedAt),
       phase: "running",
@@ -360,6 +391,25 @@ function emitRunningUpdate(session: ShellSession, force = false) {
     },
     type: "running",
   });
+}
+
+function scheduleHeartbeat(session: ShellSession) {
+  const pending = session.pending;
+  if (!pending || !pending.started || pending.heartbeatTimer) {
+    return;
+  }
+
+  pending.heartbeatTimer = createTimer(() => {
+    pending.heartbeatTimer = null;
+
+    const activePending = session.pending;
+    if (!activePending || activePending.marker !== pending.marker) {
+      return;
+    }
+
+    emitRunningUpdate(session, true);
+    scheduleHeartbeat(session);
+  }, PROGRESS_HEARTBEAT_INTERVAL_MS);
 }
 
 function scheduleRunningUpdate(session: ShellSession, flushNow = false) {
@@ -392,6 +442,7 @@ function rejectPendingExecution(session: ShellSession, error: Error) {
 
   clearExecutionTimers(pending);
   clearProgressTimer(pending);
+  clearHeartbeatTimer(pending);
   session.pending = null;
   pending.eventQueue.push({ error, type: "error" });
   pending.eventQueue.fail(error);
@@ -439,6 +490,24 @@ function isPathInsideRoot(candidatePath: string, allowedRoot: string) {
   );
 }
 
+function assertShellWorkingDirectoryAvailable(defaultDirectory: string) {
+  const candidate = defaultDirectory.trim();
+  if (!candidate) {
+    throw new Error("Shell working directory is unavailable.");
+  }
+
+  let stats;
+  try {
+    stats = statSync(candidate);
+  } catch {
+    throw new Error(`Shell working directory is unavailable: ${candidate}`);
+  }
+
+  if (!stats.isDirectory()) {
+    throw new Error(`Shell working directory is not a directory: ${candidate}`);
+  }
+}
+
 function normalizeAllowedRoots({
   allowedRoot,
   allowedRoots,
@@ -463,6 +532,85 @@ function isPathInsideAllowedRoots(
   );
 }
 
+function extractMissingCommand(text: string) {
+  const patterns = [
+    /(?:^|\n)\s*([a-z0-9._+-]+): command not found\b/i,
+    /(?:^|\n)(?:bash|zsh|sh):\s*(?:line\s+\d+:\s*)?([a-z0-9._+-]+):\s*command not found\b/i,
+    /(?:^|\n)(?:\/bin\/sh|\/bin\/bash|\/bin\/zsh):\s*(?:line\s+\d+:\s*)?([a-z0-9._+-]+):\s*(?:not found|command not found)\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = pattern.exec(text);
+    if (match?.[1]) {
+      return match[1].trim();
+    }
+  }
+
+  return null;
+}
+
+function classifyShellCommandFailure({
+  exitCode,
+  stderr,
+  stdout,
+}: {
+  exitCode: number;
+  stderr: string;
+  stdout: string;
+}): {
+  failureKind: ShellCommandFailureKind | null;
+  missingCommand: string | null;
+  suggestedNextAction: ShellCommandSuggestedNextAction | null;
+} {
+  if (exitCode === 0) {
+    return {
+      failureKind: null,
+      missingCommand: null,
+      suggestedNextAction: "none",
+    };
+  }
+
+  const combined = `${stderr}\n${stdout}`;
+  const missingCommand = extractMissingCommand(combined);
+
+  if (missingCommand || exitCode === 127) {
+    return {
+      failureKind: "missing_command",
+      missingCommand,
+      suggestedNextAction: "install",
+    };
+  }
+
+  if (
+    /\b(toolchain|sdk|compiler)\b.*\b(missing|not found|not installed|unavailable)\b/i.test(
+      combined,
+    ) ||
+    /\brequires\b.*\b(toolchain|sdk|compiler)\b/i.test(combined)
+  ) {
+    return {
+      failureKind: "missing_toolchain",
+      missingCommand: null,
+      suggestedNextAction: "install",
+    };
+  }
+
+  if (
+    /\b(permission denied|operation not permitted|eacces|eperm)\b/i.test(combined)
+  ) {
+    return {
+      failureKind: "permission",
+      missingCommand: null,
+      suggestedNextAction: "inspect",
+    };
+  }
+
+  return {
+    failureKind: "other",
+    missingCommand: null,
+    suggestedNextAction: "inspect",
+  };
+}
+
 function finalizePendingExecution(
   session: ShellSession,
   exitCode: number,
@@ -480,14 +628,25 @@ function finalizePendingExecution(
   resetIdleTimer(session);
   const resolvedDirectory = nextDirectory?.trim() || session.currentDirectory;
   session.currentDirectory = resolvedDirectory;
+  const stdout = `${pending.stdout}${pending.stdoutCarry}`.trimEnd();
+  const stderr = pending.stderr.trimEnd();
+  const failure = classifyShellCommandFailure({
+    exitCode,
+    stderr,
+    stdout,
+  });
 
   const output: ShellCommandCompletedOutput = {
+    boundaryRoot: pending.allowedRoot ?? pending.allowedRoots?.[0] ?? null,
     cwd: resolvedDirectory,
     durationMs: Math.max(0, Date.now() - pending.startedAt),
     exitCode,
+    failureKind: failure.failureKind,
+    missingCommand: failure.missingCommand,
     phase: "completed",
-    stderr: pending.stderr.trimEnd(),
-    stdout: `${pending.stdout}${pending.stdoutCarry}`.trimEnd(),
+    stderr,
+    stdout,
+    suggestedNextAction: failure.suggestedNextAction,
     truncated: pending.truncated,
   };
 
@@ -556,6 +715,7 @@ function handleStdoutChunk(session: ShellSession, chunk: string) {
     pending.started = true;
     pending.stdoutCarry = "";
     resetInactivityTimer(session, pending, pending.inactivityTimeoutMs);
+    scheduleHeartbeat(session);
     const rest = combined
       .slice(markerIndex + startMarker.length)
       .replace(/^\r?\n/, "");
@@ -628,6 +788,7 @@ function handleStreamChunk(
 }
 
 function createShellSession(threadId: string, cwd: string): ShellSession {
+  assertShellWorkingDirectoryAvailable(cwd);
   const shell = getShellCommand();
   const child = spawn(shell.executable, shell.args, {
     cwd,
@@ -659,6 +820,23 @@ function createShellSession(threadId: string, cwd: string): ShellSession {
   });
   child.stderr.on("data", (chunk) => {
     handleStreamChunk(session, "stderr", chunk);
+  });
+  child.once("error", (error) => {
+    const pending = session.pending;
+    session.pending = null;
+    sessions.delete(threadId);
+    if (session.idleTimer) {
+      clearTimeout(session.idleTimer);
+      session.idleTimer = null;
+    }
+
+    if (pending) {
+      clearExecutionTimers(pending);
+      clearProgressTimer(pending);
+      pending.eventQueue.push({ error, type: "error" });
+      pending.eventQueue.fail(error);
+      pending.rejectCompletion(error);
+    }
   });
   child.once("exit", (code, signal) => {
     const pending = session.pending;
@@ -763,6 +941,7 @@ function runCommandInSession(
     previewTail: "",
     previewTruncated: false,
     progressTimer: null,
+    heartbeatTimer: null,
     rejectCompletion,
     resolveCompletion,
     started: false,
@@ -862,6 +1041,7 @@ export async function* streamShellCommand({
   timeoutMs?: number;
   threadId: string;
 }): AsyncIterable<ShellCommandStreamEvent> {
+  assertShellWorkingDirectoryAvailable(defaultDirectory);
   const session = getOrCreateSession(threadId, defaultDirectory);
   await session.queue.catch(() => undefined);
 
@@ -959,3 +1139,8 @@ export async function disposeShellSession(threadId: string) {
 export function getShellSessionCount() {
   return sessions.size;
 }
+
+export const __internal = {
+  classifyShellCommandFailure,
+  extractMissingCommand,
+};

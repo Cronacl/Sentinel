@@ -30,6 +30,7 @@ import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import {
+  applyThreadSnapshotCacheUpdate,
   applyThreadSettingsCacheUpdate,
   applyThreadStatusCacheUpdate,
   applyOptimisticThreadPinUpdate,
@@ -92,6 +93,34 @@ export function ThreadScreen({
   const handleError = useCallback((error: Error) => {
     setChatError(error.message);
   }, []);
+  const handleSnapshot = useCallback(
+    (snapshot: {
+      activeRunId: string | null;
+      messages: ThreadUIMessage[];
+      queuedFollowUps: QueuedFollowUpSummary[];
+      threadStatus: "idle" | "streaming" | "awaiting_approval";
+      threadTitle: string;
+    }) => {
+      const current = utils.threads.get.getData({ threadId: thread.id });
+      applyThreadSnapshotCacheUpdate({
+        snapshot: {
+          messages: snapshot.messages,
+          queuedFollowUps: snapshot.queuedFollowUps,
+          thread: {
+            activeRunId: snapshot.activeRunId,
+            status: snapshot.threadStatus,
+            title: snapshot.threadTitle,
+          },
+        },
+        thread: current?.thread,
+        threadId: thread.id,
+        utils,
+        workspace: current?.workspace,
+        workspaceId: workspace.id,
+      });
+    },
+    [thread.id, utils, workspace.id],
+  );
 
   const currentWorkspace = api.workspaces.getCurrent.useQuery();
   const selectWorkspace = api.workspaces.select.useMutation({
@@ -215,8 +244,10 @@ export function ThreadScreen({
     initialMessages,
     initialQueuedFollowUps: queuedFollowUps,
     initialThreadStatus: thread.status,
+    initialThreadTitle: thread.title,
     workspaceId: workspace.id,
     onError: handleError,
+    onSnapshot: handleSnapshot,
   });
   const {
     addToolApprovalResponse,
@@ -682,7 +713,9 @@ export function ThreadScreen({
                 <ChatMessage
                   key={message.id}
                   message={message}
-                  isStreaming={isBusy && idx === messages.length - 1}
+                  isStreaming={
+                    status === "streaming" && idx === messages.length - 1
+                  }
                   onApproveTool={handleApproveTool}
                   onAnswerPlanQuestions={handleAnswerPlanQuestions}
                   onDenyTool={handleDenyTool}

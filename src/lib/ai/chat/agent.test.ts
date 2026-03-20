@@ -4,9 +4,63 @@ import { afterEach, describe, expect, it, mock } from "bun:test";
 import { z } from "zod";
 
 const tool = mock((config) => config);
-const generateText = mock(async () => ({ text: "{}" }));
+const generateText = mock(async () => ({
+  output: {
+    categories: ["inspection", "execution"],
+    confidence: "high",
+    integrationNamespaces: [],
+    mcpNamespaces: [],
+    reasoning: "Use local inspection and execution tools for coding tasks.",
+  },
+  text: "{}",
+}));
 const hasToolCall = mock((toolName) => ({ kind: "has-tool-call", toolName }));
+const Output = {
+  object: mock((config) => config),
+};
 const stepCountIs = mock(() => ({ kind: "stop-when" }));
+const getEnabledModelsMock = mock(async () => [
+  {
+    compositeId: "openai:gpt-5-mini",
+    displayName: "GPT-5 Mini",
+    isCustom: false,
+    modelId: "gpt-5-mini",
+    provider: "openai",
+  },
+  {
+    compositeId: "anthropic:claude-haiku-4-5",
+    displayName: "Claude Haiku 4.5",
+    isCustom: false,
+    modelId: "claude-haiku-4-5",
+    provider: "anthropic",
+  },
+  {
+    compositeId: "google:gemini-2.5-flash",
+    displayName: "Gemini 2.5 Flash",
+    isCustom: false,
+    modelId: "gemini-2.5-flash",
+    provider: "google",
+  },
+  {
+    compositeId: "google_vertex:gemini-2.5-flash",
+    displayName: "Gemini 2.5 Flash",
+    isCustom: false,
+    modelId: "gemini-2.5-flash",
+    provider: "google_vertex",
+  },
+]);
+const getLanguageModelMock = mock(async (_userId, compositeId) => ({
+  compositeId,
+  kind: "router-model",
+}));
+const getReasoningProviderOptionsMock = mock(
+  (provider, modelId, reasoningEffort) => ({
+    [provider === "google_vertex" ? "google" : provider]: {
+      modelId,
+      reasoningEffort,
+    },
+  }),
+);
 const executeLoadSkillMock = mock(async () => ({
   content: "# Loaded skill",
   description: "Helpful skill",
@@ -29,11 +83,21 @@ class MockToolLoopAgent {
 }
 
 mock.module("ai", () => ({
+  Output,
   generateText,
   hasToolCall,
   stepCountIs,
   tool,
   ToolLoopAgent: MockToolLoopAgent,
+}));
+
+mock.module("@/lib/ai/providers/resolver", () => ({
+  getEnabledModels: getEnabledModelsMock,
+  getLanguageModel: getLanguageModelMock,
+}));
+
+mock.module("@/lib/ai/providers/models", () => ({
+  getReasoningProviderOptions: getReasoningProviderOptionsMock,
 }));
 
 mock.module("./tools/search-memory", () => ({
@@ -229,18 +293,31 @@ const defaultMemorySettings = {
   retrievalLimit: 6,
 };
 
-function prepareWith(options) {
-  createThreadAgent({ languageModel: { kind: "model" } });
+async function prepareWith(options) {
+  createThreadAgent({ languageModel: options.languageModel ?? { kind: "model" } });
   const promptContext = buildThreadPromptContext({
+    allowedInspectionRoots: options.defaultDirectory
+      ? [options.defaultDirectory, ...(options.skillRoots ?? [])]
+      : [...(options.skillRoots ?? [])],
+    allowedMutationRoot: options.defaultDirectory ?? null,
     availableSkills: options.availableSkills ?? [],
     enabledMcpServers: options.enabledMcpServers ?? [],
+    latestUserText: options.latestUserText ?? "Inspect the workspace and fix the issue.",
+    latentToolSummary: {
+      categories: [],
+      integrationNamespaces: [],
+      mcpNamespaces: [],
+    },
     mcpToolNames: Object.keys(options.mcpTools ?? {}),
     memoryPromptLines: options.memoryPromptLines ?? [],
     memorySettings: options.memorySettings,
     permissionMode: options.permissionMode,
     planSummary: options.planSummary ?? null,
+    preferredProjectRoot: options.preferredProjectRoot ?? options.defaultDirectory ?? null,
+    projectCandidates: options.projectCandidates ?? [],
     searchProviders: options.searchProviders,
     searchSettings: options.searchSettings,
+    shellStartDirectory: options.shellStartDirectory ?? options.defaultDirectory ?? null,
     skillRoots: options.skillRoots ?? [],
     sourceMessageId: options.sourceMessageId ?? null,
     threadMode: options.threadMode,
@@ -252,6 +329,8 @@ function prepareWith(options) {
     options: {
       availableSkills: [],
       promptContext,
+      resolvedModelId: options.resolvedModelId ?? "gpt-5.2",
+      resolvedProviderId: options.resolvedProviderId ?? "openai",
       skillRoots: [],
       ...options,
     },
@@ -265,7 +344,7 @@ afterEach(() => {
 
 describe("createThreadAgent", () => {
   it("registers workspace inspection tools and guidance", async () => {
-    const prepared = prepareWith({
+    const prepared = await prepareWith({
       defaultDirectory: "/tmp/workspace",
       mcpTools: {
         mcp_server__list_files: {
@@ -357,15 +436,14 @@ describe("createThreadAgent", () => {
     expect(prepared.instructions).toContain("run_task");
     expect(prepared.instructions).toContain("the grep tool");
     expect(prepared.instructions).toContain("the list tool");
-    expect(prepared.instructions).toContain("search_memory");
-    expect(prepared.instructions).toContain("save_memory");
-    expect(prepared.instructions).toContain("forget_memory");
-    expect(prepared.instructions).toContain("the websearch tool");
-    expect(prepared.instructions).toContain("the webfetch tool");
     expect(prepared.instructions).toContain(
-      "When using the searxng provider, use searchType auto and leave livecrawl unset.",
+      "Currently inactive tool categories available for later activation: memory, mutation, web.",
     );
     expect(prepared.instructions).toContain("Webfetch batching: enabled");
+    expect(prepared.activeTools).toContain("list");
+    expect(prepared.activeTools).toContain("run_task");
+    expect(prepared.activeTools).not.toContain("edit");
+    expect(prepared.activeTools).not.toContain("websearch");
     expect(await prepared.tools.list.needsApproval({}, {})).toBe(false);
     expect(await prepared.tools.diff.needsApproval({}, {})).toBe(false);
     expect(await prepared.tools.batch_read.needsApproval({}, {})).toBe(false);
@@ -385,8 +463,8 @@ describe("createThreadAgent", () => {
     expect(await prepared.tools.websearch.needsApproval({}, {})).toBe(true);
   });
 
-  it("keeps webfetch available without a workspace root", () => {
-    const prepared = prepareWith({
+  it("keeps webfetch available without a workspace root", async () => {
+    const prepared = await prepareWith({
       languageModel: { kind: "model" },
       memorySettings: defaultMemorySettings,
       permissionMode: "default",
@@ -420,16 +498,15 @@ describe("createThreadAgent", () => {
     expect(toolNames).not.toContain("update_plan");
     expect(toolNames).not.toContain("ask_question");
     expect(prepared.instructions).toContain("Workspace root: unavailable.");
-    expect(prepared.instructions).toContain("search_memory");
-    expect(prepared.instructions).toContain("save_memory");
-    expect(prepared.instructions).toContain("forget_memory");
-    expect(prepared.instructions).toContain("websearch");
-    expect(prepared.instructions).toContain("webfetch");
+    expect(prepared.instructions).toContain(
+      "Currently inactive tool categories available for later activation: memory, web.",
+    );
     expect(prepared.instructions).toContain("Webfetch batching: disabled.");
+    expect(prepared.activeTools).toEqual(["manage_task"]);
   });
 
-  it("keeps load_skill and filesystem inspection available when only skill roots exist", () => {
-    const prepared = prepareWith({
+  it("keeps load_skill and filesystem inspection available when only skill roots exist", async () => {
+    const prepared = await prepareWith({
       availableSkills: [
         {
           description: "Helpful skill",
@@ -474,7 +551,7 @@ describe("createThreadAgent", () => {
   });
 
   it("passes the configured global skills base into load_skill execution", async () => {
-    const prepared = prepareWith({
+    const prepared = await prepareWith({
       availableSkills: [
         {
           description: "Helpful skill",
@@ -521,7 +598,7 @@ describe("createThreadAgent", () => {
     toolApprovalPolicies.list = true;
     toolApprovalPolicies.edit = false;
 
-    const prepared = prepareWith({
+    const prepared = await prepareWith({
       defaultDirectory: "/tmp/workspace",
       availableSkills: [
         {
@@ -560,12 +637,12 @@ describe("createThreadAgent", () => {
       "the list tool: to browse directory structure after approval.",
     );
     expect(prepared.instructions).toContain(
-      "the edit tool: for targeted file edits without approval.",
+      "Inactive but available later if needed: memory, mutation, web.",
     );
   });
 
   it("builds a planning agent with read-only inspection tools for plan mode threads", async () => {
-    const prepared = prepareWith({
+    const prepared = await prepareWith({
       defaultDirectory: "/tmp/workspace",
       availableSkills: [
         {
@@ -630,8 +707,8 @@ describe("createThreadAgent", () => {
     expect(typeof aiTestState.agentConfig.stopWhen[2]).toBe("function");
   });
 
-  it("keeps manage_task available in chat mode when a thread already has a plan", () => {
-    const prepared = prepareWith({
+  it("keeps manage_task available in chat mode when a thread already has a plan", async () => {
+    const prepared = await prepareWith({
       defaultDirectory: "/tmp/workspace",
       memorySettings: defaultMemorySettings,
       permissionMode: "default",
@@ -667,5 +744,137 @@ describe("createThreadAgent", () => {
     expect(prepared.instructions).toContain(
       "Always decompose multi-step work into tasks using manage_task before starting execution.",
     );
+  });
+
+  it("uses the fixed compact router model for the active provider", async () => {
+    await prepareWith({
+      defaultDirectory: "/tmp/workspace",
+      memorySettings: defaultMemorySettings,
+      permissionMode: "default",
+      resolvedModelId: "gpt-5.2",
+      resolvedProviderId: "openai",
+      searchProviders: {},
+      searchSettings: {
+        defaultProvider: "exa",
+        defaultResultCount: 5,
+        maxResultCount: 10,
+      },
+      sourceMessageId: "user-message-router-model",
+      systemPrompt: "System prompt",
+      threadId: "thread-router-model",
+      threadMode: "chat",
+      userId: "user-1",
+      toolApprovalPolicies: getDefaultToolApprovalPolicies(),
+      toolsEnabled: true,
+      webFetchSettings: { batchEnabled: false, batchLimit: 10 },
+      workspaceId: "workspace-1",
+    });
+
+    expect(getEnabledModelsMock).toHaveBeenCalledWith("user-1");
+    expect(getLanguageModelMock).toHaveBeenCalledWith(
+      "user-1",
+      "openai:gpt-5-mini",
+    );
+    expect(generateText.mock.calls[0]?.[0]?.model).toEqual({
+      compositeId: "openai:gpt-5-mini",
+      kind: "router-model",
+    });
+  });
+
+  it("falls back to deterministic exposure when the router is low confidence", async () => {
+    generateText.mockImplementationOnce(async () => ({
+      output: {
+        categories: ["memory"],
+        confidence: "low",
+        integrationNamespaces: [],
+        mcpNamespaces: [],
+        reasoning: "Low-confidence guess.",
+      },
+      text: "{}",
+    }));
+
+    const prepared = await prepareWith({
+      defaultDirectory: "/tmp/workspace",
+      memorySettings: defaultMemorySettings,
+      permissionMode: "default",
+      searchProviders: {},
+      searchSettings: {
+        defaultProvider: "exa",
+        defaultResultCount: 5,
+        maxResultCount: 10,
+      },
+      sourceMessageId: "user-message-low-confidence",
+      systemPrompt: "System prompt",
+      threadId: "thread-low-confidence",
+      threadMode: "chat",
+      userId: "user-1",
+      toolApprovalPolicies: getDefaultToolApprovalPolicies(),
+      toolsEnabled: true,
+      webFetchSettings: { batchEnabled: false, batchLimit: 10 },
+      workspaceId: "workspace-1",
+    });
+
+    expect(prepared.activeTools).toContain("list");
+    expect(prepared.activeTools).toContain("run_task");
+    expect(prepared.activeTools).toContain("search_memory");
+  });
+
+  it("re-routes on later steps when inspection evidence identifies target files", async () => {
+    generateText.mockImplementationOnce(async () => ({
+      output: {
+        categories: ["inspection"],
+        confidence: "high",
+        integrationNamespaces: [],
+        mcpNamespaces: [],
+        reasoning: "Start with inspection.",
+      },
+      text: "{}",
+    }));
+    generateText.mockImplementationOnce(async () => ({
+      output: {
+        categories: ["mutation"],
+        confidence: "high",
+        integrationNamespaces: [],
+        mcpNamespaces: [],
+        reasoning: "Target files are known now.",
+      },
+      text: "{}",
+    }));
+
+    await prepareWith({
+      defaultDirectory: "/tmp/workspace",
+      latestUserText: "Implement the fix in the workspace.",
+      memorySettings: defaultMemorySettings,
+      permissionMode: "default",
+      searchProviders: {},
+      searchSettings: {
+        defaultProvider: "exa",
+        defaultResultCount: 5,
+        maxResultCount: 10,
+      },
+      sourceMessageId: "user-message-step-reroute",
+      systemPrompt: "System prompt",
+      threadId: "thread-step-reroute",
+      threadMode: "chat",
+      userId: "user-1",
+      toolApprovalPolicies: getDefaultToolApprovalPolicies(),
+      toolsEnabled: true,
+      webFetchSettings: { batchEnabled: false, batchLimit: 10 },
+      workspaceId: "workspace-1",
+    });
+
+    const nextStep = await aiTestState.agentConfig.prepareStep({
+      experimental_context: null,
+      stepNumber: 2,
+      steps: [
+        {
+          toolCalls: [{ toolName: "read" }],
+          toolResults: [{ files: ["src/app.tsx"] }],
+        },
+      ],
+    });
+
+    expect(nextStep.activeTools).toContain("edit");
+    expect(nextStep.activeTools).toContain("apply_patch");
   });
 });

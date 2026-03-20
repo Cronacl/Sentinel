@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 import path from "node:path";
 
 import { APP_HOST, APP_PORT, APP_URL } from "./constants.mjs";
@@ -56,6 +56,27 @@ export async function getAppServerStatus(baseUrl) {
   }
 }
 
+export async function killProcessOnPort(port) {
+  try {
+    const pids = execSync(`lsof -ti :${port}`, { encoding: "utf-8" })
+      .trim()
+      .split("\n")
+      .filter(Boolean);
+
+    for (const pid of pids) {
+      try {
+        process.kill(Number(pid), "SIGKILL");
+      } catch {}
+    }
+
+    if (pids.length > 0) {
+      await wait(500);
+    }
+  } catch {
+    // lsof exits with code 1 when no process is found
+  }
+}
+
 export async function startLocalServer(runtimePaths) {
   if (process.env.SENTINEL_APP_URL) {
     return {
@@ -67,6 +88,8 @@ export async function startLocalServer(runtimePaths) {
   if (!runtimePaths.serverEntryPath) {
     throw new Error("Packaged server entrypoint is missing.");
   }
+
+  await killProcessOnPort(APP_PORT);
 
   const env = await loadRuntimeEnv(runtimePaths);
   const child = spawn(getPackagedServerRuntimePath(), [runtimePaths.serverEntryPath], {
@@ -122,5 +145,27 @@ export async function stopLocalServer(serverState) {
     return;
   }
 
-  serverState.process.kill("SIGTERM");
+  const child = serverState.process;
+
+  await new Promise((resolve) => {
+    let exited = false;
+
+    const onExit = () => {
+      exited = true;
+      clearTimeout(forceKillTimer);
+      resolve();
+    };
+
+    child.once("exit", onExit);
+    child.kill("SIGTERM");
+
+    const forceKillTimer = setTimeout(() => {
+      if (!exited) {
+        try {
+          child.kill("SIGKILL");
+        } catch {}
+      }
+      setTimeout(resolve, 1000);
+    }, 3000);
+  });
 }

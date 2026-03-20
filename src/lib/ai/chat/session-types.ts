@@ -20,7 +20,13 @@ export type ThreadSessionSnapshot = {
   messages: ThreadUIMessage[];
   queuedFollowUps: QueuedFollowUpSummary[];
   threadId: string;
+  threadTitle: string;
   threadStatus: ThreadStatus;
+};
+
+export type ThreadChatBootstrapResponse = {
+  activeRunId: string;
+  snapshot: ThreadSessionSnapshot;
 };
 
 export type ThreadStreamEvent =

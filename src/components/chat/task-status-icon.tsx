@@ -1,6 +1,15 @@
 "use client";
 
-import { Icon } from "@iconify/react";
+import type { IconSvgElement } from "@hugeicons/react";
+
+import {
+  CancelCircleIcon,
+  CheckmarkCircle02Icon,
+  Clock01Icon,
+  Forward01Icon,
+  PlayCircleIcon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 
 type TaskStatusIconStatus =
   | "blocked"
@@ -10,16 +19,16 @@ type TaskStatusIconStatus =
   | "pending"
   | "skipped";
 
-const TASK_STATUS_ICONS: Record<TaskStatusIconStatus, string> = {
-  blocked: "solar:close-circle-linear",
-  canceled: "solar:close-circle-linear",
-  completed: "solar:check-circle-bold",
-  in_progress: "solar:play-circle-bold",
-  pending: "solar:clock-circle-linear",
-  skipped: "solar:skip-next-linear",
+const TASK_STATUS_ICONS: Record<TaskStatusIconStatus, IconSvgElement> = {
+  blocked: CancelCircleIcon,
+  canceled: CancelCircleIcon,
+  completed: CheckmarkCircle02Icon,
+  in_progress: PlayCircleIcon,
+  pending: Clock01Icon,
+  skipped: Forward01Icon,
 };
 
-export function getTaskStatusIconName(status?: string) {
+function getTaskStatusIcon(status?: string): IconSvgElement {
   if (!status) return TASK_STATUS_ICONS.pending;
   return (
     TASK_STATUS_ICONS[status as TaskStatusIconStatus] ??
@@ -37,11 +46,11 @@ export function TaskStatusIcon({
   status?: string;
 }) {
   return (
-    <Icon
+    <HugeiconsIcon
       className={className}
-      height={size}
-      icon={getTaskStatusIconName(status)}
-      width={size}
+      color="currentColor"
+      icon={getTaskStatusIcon(status)}
+      size={size}
     />
   );
 }

@@ -23,6 +23,7 @@ const runTaskNameSchema = z.enum([
 const packageManagerSchema = z.enum(["bun", "npm", "pnpm", "yarn"]);
 
 const runTaskBaseOutputSchema = z.object({
+  boundaryRoot: z.string().nullable(),
   command: z.string(),
   cwd: z.string(),
   durationMs: z.number(),
@@ -57,9 +58,16 @@ export const runTaskRunningOutputSchema = runTaskBaseOutputSchema.extend({
 
 export const runTaskCompletedOutputSchema = runTaskBaseOutputSchema.extend({
   exitCode: z.number(),
+  failureKind: z
+    .enum(["missing_command", "missing_toolchain", "permission", "other"])
+    .nullable(),
+  missingCommand: z.string().nullable(),
   phase: z.literal("completed"),
   stderr: z.string(),
   stdout: z.string(),
+  suggestedNextAction: z
+    .enum(["install", "inspect", "none", "retry"])
+    .nullable(),
 });
 
 export const runTaskOutputSchema = z.discriminatedUnion("phase", [
@@ -169,18 +177,22 @@ async function resolvePackageRoot({
 export async function resolveRunTaskCommand({
   defaultDirectory,
   input,
+  projectDirectory,
   permissionMode,
 }: {
   defaultDirectory: string;
   input: RunTaskInput;
+  projectDirectory?: string;
   permissionMode: PermissionMode;
 }) {
-  const { resolvedDirectory } = resolveToolDirectory({
-    defaultDirectory,
-    permissionMode,
-    requestedPath: input.path,
-    toolName: "run_task",
-  });
+  const resolvedDirectory = input.path
+    ? resolveToolDirectory({
+        defaultDirectory,
+        permissionMode,
+        requestedPath: input.path,
+        toolName: "run_task",
+      }).resolvedDirectory
+    : (projectDirectory ?? defaultDirectory);
   const directoryStats = await stat(resolvedDirectory).catch(() => null);
 
   if (!directoryStats) {
@@ -243,9 +255,11 @@ export async function resolveRunTaskCommand({
 function toRunTaskOutput(
   resolved: Awaited<ReturnType<typeof resolveRunTaskCommand>>,
   output: ShellCommandRunningOutput | ShellCommandCompletedOutput,
+  boundaryRoot: string | undefined,
 ): RunTaskOutput {
   if (output.phase === "running") {
     return {
+      boundaryRoot: boundaryRoot ?? null,
       command: resolved.command,
       cwd: output.cwd,
       durationMs: output.durationMs,
@@ -259,15 +273,19 @@ function toRunTaskOutput(
   }
 
   return {
+    boundaryRoot: boundaryRoot ?? null,
     command: resolved.command,
     cwd: output.cwd,
     durationMs: output.durationMs,
     exitCode: output.exitCode,
+    failureKind: output.failureKind,
+    missingCommand: output.missingCommand,
     packageManager: resolved.packageManager,
     phase: "completed",
     script: resolved.script,
     stderr: output.stderr,
     stdout: output.stdout,
+    suggestedNextAction: output.suggestedNextAction,
     task: resolved.task,
     truncated: output.truncated,
   };
@@ -277,18 +295,21 @@ export async function* streamRunTask({
   allowedRoot,
   defaultDirectory,
   input,
+  projectDirectory,
   permissionMode,
   threadId,
 }: {
   allowedRoot?: string;
   defaultDirectory: string;
   input: RunTaskInput;
+  projectDirectory?: string;
   permissionMode: PermissionMode;
   threadId: string;
 }): AsyncIterable<RunTaskStreamEvent> {
   const resolved = await resolveRunTaskCommand({
     defaultDirectory,
     input,
+    ...(projectDirectory ? { projectDirectory } : {}),
     permissionMode,
   });
 
@@ -305,7 +326,7 @@ export async function* streamRunTask({
     }
 
     yield {
-      output: toRunTaskOutput(resolved, event.output),
+      output: toRunTaskOutput(resolved, event.output, allowedRoot),
       type: event.type,
     };
   }

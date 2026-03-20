@@ -52,6 +52,26 @@ function buildRuntimeSnapshot(
     promptContext.workspaceRoot
       ? `Workspace root: ${promptContext.workspaceRoot}.`
       : "Workspace root: unavailable.",
+    promptContext.preferredProjectRoot
+      ? `Preferred project root: ${promptContext.preferredProjectRoot}.`
+      : "Preferred project root: unavailable.",
+    promptContext.projectCandidates.length > 0
+      ? `Project candidates: ${promptContext.projectCandidates
+          .map(
+            (candidate) =>
+              `${candidate.path} (${candidate.kind}, ${(candidate.confidence * 100).toFixed(0)}%)`,
+          )
+          .join(", ")}.`
+      : "Project candidates: none discovered.",
+    promptContext.allowedInspectionRoots.length > 0
+      ? `Allowed inspection roots: ${promptContext.allowedInspectionRoots.join(", ")}.`
+      : "Allowed inspection roots: none.",
+    promptContext.allowedMutationRoot
+      ? `Allowed mutation root: ${promptContext.allowedMutationRoot}.`
+      : "Allowed mutation root: unavailable.",
+    promptContext.shellStartDirectory
+      ? `Shell start directory: ${promptContext.shellStartDirectory}.`
+      : "Shell start directory: unavailable.",
     promptContext.skillRoots.length > 0
       ? `Skill roots: ${promptContext.skillRoots.join(", ")}.`
       : "Skill roots: none.",
@@ -59,6 +79,9 @@ function buildRuntimeSnapshot(
     categories.length > 0
       ? `Active tool categories: ${categories.join(", ")}.`
       : "Active tool categories: none.",
+    promptContext.latentToolSummary.categories.length > 0
+      ? `Currently inactive tool categories available for later activation: ${promptContext.latentToolSummary.categories.join(", ")}.`
+      : "Currently inactive tool categories available for later activation: none.",
     promptContext.planSummary
       ? `Current plan: present (${promptContext.planSummary.taskCount} tasks${promptContext.planSummary.hasPendingQuestions ? "; pending clarification questions" : ""}).`
       : "Current plan: none.",
@@ -80,17 +103,33 @@ function buildRuntimeSnapshot(
 function buildCapabilityManifest(
   promptContext: ThreadPromptContext,
   activeToolNames: string[],
+  allToolNames: string[],
 ) {
   const toolNames = activeToolNames.filter((toolName) =>
     Boolean(TOOL_CATALOG[toolName]),
   );
+  const inactiveToolNames = allToolNames.filter(
+    (toolName) => !activeToolNames.includes(toolName),
+  );
+  const inactiveCategories = Array.from(
+    getActiveCategories(inactiveToolNames),
+  ).sort();
 
   return section("Capability Manifest", [
-    "Tool availability is specific to this call. Do not rely on tools that are not listed here.",
+    "Tool availability is specific to this step. Use only the active tools listed here, and treat inactive families as latent until the runtime re-activates them.",
     ...toolNames.map((toolName) => {
       const entry = TOOL_CATALOG[toolName]!;
       return `${entry.label}: ${entry.capability} ${approvalLabel(promptContext.toolApprovalPolicies, toolName)}.`;
     }),
+    inactiveCategories.length > 0
+      ? `Inactive but available later if needed: ${inactiveCategories.join(", ")}.`
+      : "Inactive but available later if needed: none.",
+    promptContext.latentToolSummary.integrationNamespaces.length > 0
+      ? `Integration namespaces available for targeted activation: ${promptContext.latentToolSummary.integrationNamespaces.join(", ")}.`
+      : "Integration namespaces available for targeted activation: none.",
+    promptContext.latentToolSummary.mcpNamespaces.length > 0
+      ? `MCP namespaces available for targeted activation: ${promptContext.latentToolSummary.mcpNamespaces.join(", ")}.`
+      : "MCP namespaces available for targeted activation: none.",
     promptContext.availableSkills.length > 0
       ? `Discovered skills: ${promptContext.availableSkills.length} available. Treat them as routing hints until load_skill is called.`
       : "Discovered skills: none.",
@@ -100,6 +139,39 @@ function buildCapabilityManifest(
     promptContext.enabledMcpServers.length > 0
       ? `Enabled MCP servers: ${promptContext.enabledMcpServers.length}. Use them when the task targets those external systems or when the integration is more direct than workspace or web tools.`
       : "Enabled MCP servers: none.",
+  ]);
+}
+
+function buildPathSemanticsSection(
+  promptContext: ThreadPromptContext,
+  activeToolNames: string[],
+) {
+  return section("Path Semantics", [
+    promptContext.workspaceRoot
+      ? `Relative workspace paths resolve from ${promptContext.workspaceRoot} unless a tool explicitly says otherwise.`
+      : "Relative workspace paths are unavailable because no workspace root is selected.",
+    '"." means the active tool base for that call, not the filesystem root.',
+    promptContext.preferredProjectRoot
+      ? `Inspect ${promptContext.preferredProjectRoot} first when the task depends on the main project layout, unless newer evidence points to another candidate.`
+      : "No preferred project root has been discovered yet.",
+    promptContext.shellStartDirectory
+      ? `shell_command starts in ${promptContext.shellStartDirectory} and may persist its cwd across calls.`
+      : "shell_command has no workspace start directory unless a valid root is available.",
+    activeToolNames.includes("shell_command")
+      ? "shell_command may invoke host-installed executables such as brew, apt-get, npm, pnpm, yarn, bun, cargo, or pip from the allowed cwd when the runtime exposes them."
+      : "shell_command is not active for this step.",
+    promptContext.allowedInspectionRoots.length > 0
+      ? `Inspection tools must stay inside: ${promptContext.allowedInspectionRoots.join(", ")}.`
+      : "Inspection tools are limited by the currently active roots only.",
+    promptContext.allowedMutationRoot
+      ? `Mutation tools remain restricted to ${promptContext.allowedMutationRoot}.`
+      : "Mutation tools are unavailable without a valid mutation root.",
+    promptContext.permissionMode === "default"
+      ? "In default permissions mode, shell and path-based tools must remain inside the allowed roots even if the shell cwd changes."
+      : "In full permissions mode, active tools may use absolute paths outside the workspace when the task requires it.",
+    promptContext.allowedMutationRoot
+      ? "run_task may resolve upward to the nearest package.json, but only within the workspace boundary."
+      : "run_task remains unavailable until a valid workspace boundary exists.",
   ]);
 }
 
@@ -211,6 +283,9 @@ function buildDecisionHeuristics(
     heuristics.push(
       `${step++}. When repository or file state matters, inspect first. Prefer list for directory overview, glob for filename patterns, read for concrete file contents, and grep for content search.`,
     );
+    heuristics.push(
+      `${step++}. Before asking the user about repo layout, entrypoints, or file locations, inspect the workspace root and likely project candidates first. If one likely project root is discovered, inspect it before asking clarification questions.`,
+    );
     if (activeToolNames.includes("diff")) {
       heuristics.push(
         `${step++}. Use diff to preview or compare changes before mutating files, especially when validating a proposed edit or patch.`,
@@ -244,6 +319,9 @@ function buildDecisionHeuristics(
   if (categories.has("execution")) {
     heuristics.push(
       `${step++}. Prefer run_task for standard scripts such as test, lint, build, format, or typecheck. Use shell_command only when the task cannot be expressed as a standard script.`,
+    );
+    heuristics.push(
+      `${step++}. Interpret shell cwd, run_task cwd, and permission boundaries literally from tool outputs. Do not treat a relative root label like "." as evidence that the workspace is empty or misconfigured.`,
     );
     if (activeToolNames.includes("git")) {
       heuristics.push(
@@ -327,6 +405,36 @@ function buildDecisionHeuristics(
   return section("Decision Heuristics", heuristics.join("\n"));
 }
 
+function buildExecutionRecoverySection(
+  promptContext: ThreadPromptContext,
+  activeToolNames: string[],
+) {
+  if (
+    !activeToolNames.includes("run_task") &&
+    !activeToolNames.includes("shell_command")
+  ) {
+    return "";
+  }
+
+  return section("Execution Recovery", [
+    activeToolNames.includes("run_task")
+      ? "Prefer run_task for standard project scripts such as test, lint, build, format, or typecheck."
+      : "Use the available execution tools according to the next-step need.",
+    activeToolNames.includes("shell_command")
+      ? "If run_task fails because a command is missing, a toolchain is absent, or the environment needs setup, promote remediation via shell_command instead of retrying the same failure blindly."
+      : "If execution fails because of missing commands or setup issues, treat it as remediation work rather than a normal script retry.",
+    activeToolNames.includes("shell_command")
+      ? "When the user explicitly asks to install, set up, or retry after a missing command, shell_command is an appropriate tool even when the action requires approval."
+      : "When the user explicitly asks to install or set up missing dependencies, prefer an execution path over plain-text narration when the runtime exposes one.",
+    activeToolNames.includes("shell_command")
+      ? "Do not claim that you lack access to the host package manager or shell when shell_command is active. Use the tool from the allowed cwd and let approval policies enforce the boundary."
+      : "Do not infer host package-manager limitations unless a tool result explicitly reports them.",
+    "Do not respond with a plain-text refusal when an approval-gated execution path exists; choose the right tool and let the approval workflow handle the boundary.",
+    "Treat tool outputs as the source of truth for what is possible. Do not infer fake package-manager, shell, or network limitations that the runtime did not report.",
+    "After approval-required shell or install actions, continue automatically through the approval workflow instead of asking redundant chat questions.",
+  ]);
+}
+
 function permissionOverlay(promptContext: ThreadPromptContext) {
   if (promptContext.permissionMode === "full") {
     return "Full permissions mode is active. Available file and task tools may use absolute paths outside the workspace when the task requires it.";
@@ -368,6 +476,12 @@ function buildChatModeOverlay(
     categories.has("execution") || categories.has("web")
       ? "When a tool requires approval, pause for the approval workflow before continuing."
       : "If a capability is missing, say so directly and continue with the best available path.",
+    ...(categories.has("execution")
+      ? [
+          "If shell_command is available and the user explicitly asks to install or set up something, choose it when appropriate instead of narrating a manual install path.",
+          "A workspace-bound shell cwd does not prevent invoking host-installed package managers such as brew or npm. Do not describe that as impossible unless a real tool result proves it.",
+        ]
+      : []),
   ]);
 }
 
@@ -398,21 +512,25 @@ function buildPlanModeOverlay(
 
 export function buildThreadAgentInstructions({
   activeToolNames,
+  allToolNames,
   promptContext,
   systemPrompt,
 }: {
   activeToolNames: string[];
+  allToolNames: string[];
   promptContext: ThreadPromptContext;
   systemPrompt: string;
 }) {
   return lines(
     systemPrompt.trim(),
     buildRuntimeSnapshot(promptContext, activeToolNames),
-    buildCapabilityManifest(promptContext, activeToolNames),
+    buildPathSemanticsSection(promptContext, activeToolNames),
+    buildCapabilityManifest(promptContext, activeToolNames, allToolNames),
     buildSkillsSection(promptContext),
     buildIntegrationsSection(promptContext),
     buildMcpToolsSection(promptContext),
     buildDecisionHeuristics(promptContext, activeToolNames),
+    buildExecutionRecoverySection(promptContext, activeToolNames),
     promptContext.threadMode === "plan"
       ? buildPlanModeOverlay(promptContext, activeToolNames)
       : buildChatModeOverlay(promptContext, activeToolNames),

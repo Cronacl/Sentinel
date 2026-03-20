@@ -48,6 +48,7 @@ export async function loadThreadSessionSnapshot(
     columns: {
       activeStreamId: true,
       id: true,
+      title: true,
       status: true,
     },
   });
@@ -69,6 +70,7 @@ export async function loadThreadSessionSnapshot(
       .filter((followUp) => followUp.status === "queued")
       .map(summarizeQueuedFollowUp),
     threadId: thread.id,
+    threadTitle: thread.title,
     threadStatus: thread.status,
   };
 }

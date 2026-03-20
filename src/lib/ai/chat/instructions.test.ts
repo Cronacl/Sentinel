@@ -6,9 +6,17 @@ import { buildThreadAgentInstructions } from "./instructions";
 
 function createPromptContext(overrides: Record<string, unknown> = {}) {
   return buildThreadPromptContext({
+    allowedInspectionRoots: ["/tmp/workspace"],
+    allowedMutationRoot: "/tmp/workspace",
     availableSkills: [],
     enabledIntegrations: [],
     enabledMcpServers: [],
+    latestUserText: "Inspect the workspace and fix the issue.",
+    latentToolSummary: {
+      categories: [],
+      integrationNamespaces: [],
+      mcpNamespaces: [],
+    },
     mcpToolNames: [],
     memoryPromptLines: [],
     memorySettings: {
@@ -23,6 +31,8 @@ function createPromptContext(overrides: Record<string, unknown> = {}) {
     },
     permissionMode: "default",
     planSummary: null,
+    preferredProjectRoot: "/tmp/workspace",
+    projectCandidates: [],
     searchProviders: {
       exa: {
         config: {} as never,
@@ -37,6 +47,7 @@ function createPromptContext(overrides: Record<string, unknown> = {}) {
       maxResultCount: 10,
     },
     skillRoots: [],
+    shellStartDirectory: "/tmp/workspace",
     sourceMessageId: "user-message-1",
     threadMode: "chat",
     toolApprovalPolicies: getDefaultToolApprovalPolicies(),
@@ -100,6 +111,25 @@ describe("buildThreadAgentInstructions", () => {
         "diagnostics",
         "git",
         "run_task",
+        "shell_command",
+        "search_memory",
+        "websearch",
+        "webfetch",
+        "load_skill",
+        "mcp_server__list_files",
+      ],
+      allToolNames: [
+        "list",
+        "read",
+        "diff",
+        "batch_read",
+        "edit",
+        "move_file",
+        "apply_patch",
+        "diagnostics",
+        "git",
+        "run_task",
+        "shell_command",
         "search_memory",
         "websearch",
         "webfetch",
@@ -113,6 +143,10 @@ describe("buildThreadAgentInstructions", () => {
     expect(instructions).toContain("System prompt");
     expect(instructions).toContain("## Runtime Snapshot");
     expect(instructions).toContain("Workspace root: /tmp/workspace.");
+    expect(instructions).toContain("## Path Semantics");
+    expect(instructions).toContain(
+      '\".\" means the active tool base for that call, not the filesystem root.',
+    );
     expect(instructions).toContain("Long-term memory: enabled");
     expect(instructions).toContain("## Capability Manifest");
     expect(instructions).toContain(
@@ -144,6 +178,22 @@ describe("buildThreadAgentInstructions", () => {
     expect(instructions).toContain(
       "Be proactive when the next step is clear, low-risk, and allowed",
     );
+    expect(instructions).toContain("## Execution Recovery");
+    expect(instructions).toContain(
+      "If run_task fails because a command is missing, a toolchain is absent, or the environment needs setup, promote remediation via shell_command",
+    );
+    expect(instructions).toContain(
+      "Do not respond with a plain-text refusal when an approval-gated execution path exists",
+    );
+    expect(instructions).toContain(
+      "Treat tool outputs as the source of truth for what is possible.",
+    );
+    expect(instructions).toContain(
+      "shell_command may invoke host-installed executables such as brew, apt-get, npm, pnpm, yarn, bun, cargo, or pip",
+    );
+    expect(instructions).toContain(
+      "Do not claim that you lack access to the host package manager or shell when shell_command is active.",
+    );
     expect(instructions).toContain("## Mode Overlay");
     expect(instructions).toContain("Chat mode is active.");
     expect(instructions).toContain(
@@ -157,6 +207,14 @@ describe("buildThreadAgentInstructions", () => {
   it("renders plan-mode overlays without execution guidance", () => {
     const instructions = buildThreadAgentInstructions({
       activeToolNames: [
+        "list",
+        "read",
+        "create_plan",
+        "update_plan",
+        "manage_task",
+        "ask_question",
+      ],
+      allToolNames: [
         "list",
         "read",
         "create_plan",
@@ -211,6 +269,7 @@ describe("buildThreadAgentInstructions", () => {
 
     const instructions = buildThreadAgentInstructions({
       activeToolNames: ["load_skill", "mcp_server__tool_1"],
+      allToolNames: ["load_skill", "mcp_server__tool_1"],
       promptContext,
       systemPrompt: "System prompt",
     });
@@ -222,8 +281,13 @@ describe("buildThreadAgentInstructions", () => {
   it("omits empty optional sections cleanly", () => {
     const instructions = buildThreadAgentInstructions({
       activeToolNames: ["websearch", "webfetch"],
+      allToolNames: ["websearch", "webfetch"],
       promptContext: createPromptContext({
         workspaceRoot: null,
+        allowedInspectionRoots: [],
+        allowedMutationRoot: null,
+        preferredProjectRoot: null,
+        shellStartDirectory: null,
       }),
       systemPrompt: "System prompt",
     });

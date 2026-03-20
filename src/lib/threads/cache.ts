@@ -4,6 +4,8 @@ import { api, type RouterOutputs } from "@/trpc/react";
 type TrpcUtils = ReturnType<typeof api.useUtils>;
 type ThreadGetData = RouterOutputs["threads"]["get"];
 type ThreadListData = RouterOutputs["threads"]["list"];
+type ThreadGetThread = ThreadGetData["thread"];
+type ThreadGetWorkspace = ThreadGetData["workspace"];
 type ThreadSettingsPatch = {
   chatModelId?: string | null;
   chatReasoningEffort?: string | null;
@@ -191,6 +193,98 @@ export function restoreOptimisticThreadPinUpdate(
 
 type ThreadStatusValue = "idle" | "streaming" | "awaiting_approval";
 
+function buildThreadListItem(
+  thread: ThreadGetThread,
+): ThreadListData extends { items: infer T } ? T extends Array<infer U> ? U : never : never {
+  return {
+    archivedAt: thread.archivedAt,
+    chatModelId: thread.chatModelId,
+    chatReasoningEffort: thread.chatReasoningEffort,
+    createdAt: thread.createdAt,
+    id: thread.id,
+    mode: thread.mode,
+    pinnedAt: thread.pinnedAt,
+    status: thread.status,
+    summary: thread.summary,
+    title: thread.title,
+    updatedAt: thread.updatedAt,
+  } as ThreadListData extends { items: infer T }
+    ? T extends Array<infer U>
+      ? U
+      : never
+    : never;
+}
+
+function upsertThreadInListData<T extends ThreadListData | undefined>(
+  data: T,
+  thread: ThreadGetThread,
+  workspace?: ThreadGetWorkspace,
+): T {
+  if (!data) {
+    return data;
+  }
+
+  const listItem = buildThreadListItem(thread);
+
+  if ("groups" in data) {
+    const matchesWorkspace = (groupWorkspaceId?: string) =>
+      !workspace || groupWorkspaceId === workspace.id;
+    let inserted = false;
+    const groups = (data.groups ?? []).map((group) => {
+      if (!matchesWorkspace(group.workspace.id)) {
+        return group;
+      }
+
+      const existingIndex = group.threads.findIndex((item) => item.id === thread.id);
+      if (existingIndex === -1) {
+        if (!workspace || group.workspace.id !== workspace.id) {
+          return group;
+        }
+        inserted = true;
+        return {
+          ...group,
+          threads: [listItem, ...group.threads],
+        };
+      }
+
+      inserted = true;
+      return {
+        ...group,
+        threads: group.threads.map((item) =>
+          item.id === thread.id ? { ...item, ...(listItem as object) } : item,
+        ),
+      };
+    });
+
+    if (!inserted || !workspace) {
+      return {
+        ...data,
+        groups,
+      } as T;
+    }
+
+    return {
+      ...data,
+      groups,
+    } as T;
+  }
+
+  const existingIndex = (data.items ?? []).findIndex((item) => item.id === thread.id);
+  if (existingIndex === -1) {
+    return {
+      ...data,
+      items: [listItem, ...(data.items ?? [])],
+    } as T;
+  }
+
+  return {
+    ...data,
+    items: (data.items ?? []).map((item) =>
+      item.id === thread.id ? { ...item, ...(listItem as object) } : item,
+    ),
+  } as T;
+}
+
 function updateThreadStatusInListData<T extends ThreadListData | undefined>(
   data: T,
   threadId: string,
@@ -234,6 +328,73 @@ export function applyThreadStatusCacheUpdate({
   for (const input of getThreadListInputs(workspaceId)) {
     utils.threads.list.setData(input, (current) =>
       updateThreadStatusInListData(current, threadId, status),
+    );
+  }
+}
+
+export function applyThreadSnapshotCacheUpdate({
+  snapshot,
+  thread,
+  threadId,
+  utils,
+  workspace,
+  workspaceId,
+}: {
+  snapshot: Pick<ThreadGetData, "messages" | "queuedFollowUps"> & {
+    thread: Pick<ThreadGetThread, "activeRunId" | "status" | "title">;
+  };
+  thread?: ThreadGetThread;
+  threadId: string;
+  utils: TrpcUtils;
+  workspace?: ThreadGetWorkspace;
+  workspaceId?: string;
+}) {
+  utils.threads.get.setData({ threadId }, (current) => {
+    if (current) {
+      return {
+        ...current,
+        messages: snapshot.messages,
+        queuedFollowUps: snapshot.queuedFollowUps,
+        thread: {
+          ...current.thread,
+          activeRunId: snapshot.thread.activeRunId,
+          status: snapshot.thread.status,
+          title: snapshot.thread.title,
+        },
+      };
+    }
+
+    if (!thread || !workspace) {
+      return current;
+    }
+
+    return {
+      messages: snapshot.messages,
+      queuedFollowUps: snapshot.queuedFollowUps,
+      thread: {
+        ...thread,
+        activeRunId: snapshot.thread.activeRunId,
+        status: snapshot.thread.status,
+        title: snapshot.thread.title,
+      },
+      workspace,
+    };
+  });
+
+  if (!thread) {
+    return;
+  }
+
+  const nextThread = {
+    ...thread,
+    activeRunId: snapshot.thread.activeRunId,
+    status: snapshot.thread.status,
+    title: snapshot.thread.title,
+  };
+
+  for (const input of getThreadListInputs(workspaceId ?? workspace?.id)) {
+    utils.threads.list.setData(input, (current) =>
+      upsertThreadInListData(current, nextThread, workspace),
     );
   }
 }

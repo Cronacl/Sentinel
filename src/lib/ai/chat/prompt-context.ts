@@ -24,6 +24,19 @@ export type ThreadPromptPlanSummary = {
   title: string;
 };
 
+export type ThreadPromptProjectCandidate = {
+  confidence: number;
+  kind: "app" | "package" | "repo";
+  path: string;
+  signals: string[];
+};
+
+export type ThreadPromptLatentToolSummary = {
+  categories: string[];
+  integrationNamespaces: string[];
+  mcpNamespaces: string[];
+};
+
 export type ThreadPromptMcpServer = {
   catalogId?: string;
   id: string;
@@ -35,15 +48,22 @@ export type ThreadPromptMcpServer = {
 
 export type ThreadPromptContext = {
   availableSkills: SkillMetadata[];
+  allowedInspectionRoots: string[];
+  allowedMutationRoot: string | null;
   enabledIntegrations: ThreadPromptIntegration[];
   enabledMcpServers: ThreadPromptMcpServer[];
+  latestUserText: string | null;
+  latentToolSummary: ThreadPromptLatentToolSummary;
   mcpToolNames: string[];
   memoryPromptLines: string[];
   memorySettings: MemorySettings;
   permissionMode: PermissionMode;
   planSummary: ThreadPromptPlanSummary | null;
+  preferredProjectRoot: string | null;
+  projectCandidates: ThreadPromptProjectCandidate[];
   searchProviders: SearchProviderRuntimeMap;
   searchSettings: SearchSettings;
+  shellStartDirectory: string | null;
   skillRoots: string[];
   sourceMessageId: string | null;
   threadMode: ThreadMode;
@@ -74,18 +94,40 @@ export function buildThreadPromptContext(
 ): ThreadPromptContext {
   return {
     ...input,
+    allowedInspectionRoots: uniqueStrings(input.allowedInspectionRoots ?? []),
+    allowedMutationRoot: input.allowedMutationRoot?.trim() || null,
     availableSkills: [...input.availableSkills],
-    enabledIntegrations: [...input.enabledIntegrations].sort((left, right) =>
-      left.label.localeCompare(right.label, undefined, { sensitivity: "base" }),
+    enabledIntegrations: [...(input.enabledIntegrations ?? [])].sort(
+      (left, right) =>
+        left.label.localeCompare(right.label, undefined, {
+          sensitivity: "base",
+        }),
     ),
-    enabledMcpServers: [...input.enabledMcpServers].sort((left, right) =>
+    enabledMcpServers: [...(input.enabledMcpServers ?? [])].sort((left, right) =>
       left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
     ),
+    latestUserText: input.latestUserText?.trim() || null,
+    latentToolSummary: {
+      categories: uniqueStrings(input.latentToolSummary?.categories ?? []),
+      integrationNamespaces: uniqueStrings(
+        input.latentToolSummary?.integrationNamespaces ?? [],
+      ),
+      mcpNamespaces: uniqueStrings(input.latentToolSummary?.mcpNamespaces ?? []),
+    },
     mcpToolNames: uniqueStrings(input.mcpToolNames),
     memoryPromptLines: input.memoryPromptLines
       .map((line) => line.trim())
       .filter(Boolean),
     skillRoots: uniqueStrings(input.skillRoots),
+    preferredProjectRoot: input.preferredProjectRoot?.trim() || null,
+    projectCandidates: [...(input.projectCandidates ?? [])].sort(
+      (left, right) =>
+        right.confidence - left.confidence ||
+        left.path.localeCompare(right.path, undefined, {
+          sensitivity: "base",
+        }),
+    ),
+    shellStartDirectory: input.shellStartDirectory?.trim() || null,
     sourceMessageId: input.sourceMessageId?.trim() || null,
     workspaceRoot: input.workspaceRoot?.trim() || null,
   };

@@ -73,10 +73,52 @@ describe("run_task", () => {
     const completed = events.filter((event) => event.type === "completed").at(-1);
 
     expect(completed && "output" in completed ? completed.output : null).toMatchObject({
+      boundaryRoot: defaultDirectory,
       command: "bun run test",
       exitCode: 0,
+      failureKind: null,
       phase: "completed",
+      suggestedNextAction: "none",
       stdout: "task-ok",
+      task: "test",
+    });
+  });
+
+  it("surfaces missing command failures as remediation metadata", async () => {
+    const defaultDirectory = await createDirectory();
+    const missingBinary = "sentinel_missing_binary_for_run_task_test";
+    await writeFile(
+      path.join(defaultDirectory, "package.json"),
+      JSON.stringify({
+        packageManager: "npm@10.0.0",
+        scripts: {
+          test: missingBinary,
+        },
+      }),
+    );
+
+    const events = [];
+
+    for await (const event of streamRunTask({
+      allowedRoot: defaultDirectory,
+      defaultDirectory,
+      input: {
+        rationale: "Run tests",
+        task: "test",
+      },
+      permissionMode: "default",
+      threadId: "thread-run-task",
+    })) {
+      events.push(event);
+    }
+
+    const completed = events.filter((event) => event.type === "completed").at(-1);
+
+    expect(completed && "output" in completed ? completed.output : null).toMatchObject({
+      exitCode: 127,
+      failureKind: "missing_command",
+      missingCommand: missingBinary,
+      suggestedNextAction: "install",
       task: "test",
     });
   });

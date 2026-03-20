@@ -17,8 +17,10 @@ import { SentinelLogoBadge } from "@/components/shared/logo";
 import { useOutsideClick } from "@/hooks/use-outside-click";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
+import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import {
+  applyThreadSnapshotCacheUpdate,
   applyThreadSettingsCacheUpdate,
   applyThreadStatusCacheUpdate,
 } from "@/lib/threads/cache";
@@ -155,6 +157,34 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   const handleError = useCallback((error: Error) => {
     setChatError(error.message);
   }, []);
+  const handleSnapshot = useCallback(
+    (snapshot: {
+      activeRunId: string | null;
+      messages: ThreadUIMessage[];
+      queuedFollowUps: QueuedFollowUpSummary[];
+      threadStatus: "idle" | "streaming" | "awaiting_approval";
+      threadTitle: string;
+    }) => {
+      const current = utils.threads.get.getData({ threadId: draftThreadId });
+      applyThreadSnapshotCacheUpdate({
+        snapshot: {
+          messages: snapshot.messages,
+          queuedFollowUps: snapshot.queuedFollowUps,
+          thread: {
+            activeRunId: snapshot.activeRunId,
+            status: snapshot.threadStatus,
+            title: snapshot.threadTitle,
+          },
+        },
+        thread: current?.thread,
+        threadId: draftThreadId,
+        utils,
+        workspace: current?.workspace,
+        workspaceId: selectedWorkspace?.id,
+      });
+    },
+    [draftThreadId, selectedWorkspace?.id, utils],
+  );
 
   const chat = useThreadChat({
     initialActiveRunId: cachedThreadDetails?.thread.activeRunId ?? null,
@@ -163,8 +193,10 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     initialQueuedFollowUps:
       (cachedThreadDetails?.queuedFollowUps as QueuedFollowUpSummary[]) ?? [],
     initialThreadStatus: cachedThreadDetails?.thread.status ?? "idle",
+    initialThreadTitle: cachedThreadDetails?.thread.title ?? "New thread",
     workspaceId: selectedWorkspace?.id ?? "",
     onError: handleError,
+    onSnapshot: handleSnapshot,
   });
   const {
     addToolApprovalResponse,
@@ -216,7 +248,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   }, [isBusy]);
 
   const handleSend = useCallback(
-    ({
+    async ({
       files,
       modelId,
       reasoningEffort,
@@ -266,7 +298,32 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
           },
         }));
       }
-      void sendMessage({ files, modelId, reasoningEffort, text, threadMode });
+      const bootstrap = await sendMessage({
+        files,
+        modelId,
+        reasoningEffort,
+        text,
+        threadMode,
+      });
+      if (bootstrap?.snapshot) {
+        const current = utils.threads.get.getData({ threadId: draftThreadId });
+        applyThreadSnapshotCacheUpdate({
+          snapshot: {
+            messages: bootstrap.snapshot.messages,
+            queuedFollowUps: bootstrap.snapshot.queuedFollowUps,
+            thread: {
+              activeRunId: bootstrap.snapshot.activeRunId,
+              status: bootstrap.snapshot.threadStatus,
+              title: bootstrap.snapshot.threadTitle,
+            },
+          },
+          thread: current?.thread,
+          threadId: draftThreadId,
+          utils,
+          workspace: current?.workspace,
+          workspaceId: selectedWorkspace?.id,
+        });
+      }
       if (!threadId && !hasHandedOffRef.current) {
         hasHandedOffRef.current = true;
         window.history.replaceState(null, "", `/thread/${draftThreadId}`);
@@ -282,6 +339,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       sendMessage,
       threadId,
       utils.threads.get,
+      utils,
     ],
   );
 
@@ -530,7 +588,9 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                   <ChatMessage
                     key={message.id}
                     message={message}
-                    isStreaming={isBusy && idx === messages.length - 1}
+                    isStreaming={
+                      status === "streaming" && idx === messages.length - 1
+                    }
                     onApproveTool={handleApproveTool}
                     onAnswerPlanQuestions={handleAnswerPlanQuestions}
                     onDenyTool={handleDenyTool}

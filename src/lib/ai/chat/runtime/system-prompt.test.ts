@@ -6,9 +6,17 @@ import { buildSystemPrompt } from "./system-prompt-builder";
 
 function createPromptContext(memoryPromptLines: string[] = []) {
   return buildThreadPromptContext({
+    allowedInspectionRoots: ["/tmp/workspace"],
+    allowedMutationRoot: "/tmp/workspace",
     availableSkills: [],
     enabledIntegrations: [],
     enabledMcpServers: [],
+    latestUserText: "Inspect the workspace and fix the issue.",
+    latentToolSummary: {
+      categories: [],
+      integrationNamespaces: [],
+      mcpNamespaces: [],
+    },
     mcpToolNames: [],
     memoryPromptLines,
     memorySettings: {
@@ -23,12 +31,15 @@ function createPromptContext(memoryPromptLines: string[] = []) {
     },
     permissionMode: "default",
     planSummary: null,
+    preferredProjectRoot: "/tmp/workspace",
+    projectCandidates: [],
     searchProviders: {},
     searchSettings: {
       defaultProvider: "exa",
       defaultResultCount: 5,
       maxResultCount: 10,
     },
+    shellStartDirectory: "/tmp/workspace",
     skillRoots: [],
     sourceMessageId: null,
     threadMode: "chat",
@@ -51,44 +62,45 @@ describe("buildSystemPrompt", () => {
     });
 
     expect(prompt).toContain("## Identity");
-    expect(prompt).toContain("## Application Context");
-    expect(prompt).toContain("## Core Operating Model");
-    expect(prompt).toContain("## Response Discipline");
-    expect(prompt).toContain("## Context Priorities");
-    expect(prompt).toContain("## Research Discipline");
-    expect(prompt).toContain("## General Task Handling");
-    expect(prompt).toContain("## Autonomy");
-    expect(prompt).toContain("## Tool Calling Discipline");
-    expect(prompt).toContain("## Mutation Discipline");
-    expect(prompt).toContain("## Git Safety");
+    expect(prompt).toContain("## Mission And Operating Stance");
+    expect(prompt).toContain("## Proactive Execution Standard");
+    expect(prompt).toContain("## Evidence And Inspection Discipline");
+    expect(prompt).toContain("## Tool Exploitation Discipline");
+    expect(prompt).toContain("## Approval And Permission Semantics");
+    expect(prompt).toContain("## Failure Recovery And Remediation");
+    expect(prompt).toContain("## Validation And Completion Standard");
+    expect(prompt).toContain("## Communication Discipline");
     expect(prompt).toContain("## Capability Boundaries");
     expect(prompt).toContain("## Memory");
     expect(prompt).toContain("## Personalization");
 
     expect(prompt.indexOf("## Identity")).toBeLessThan(
-      prompt.indexOf("## Application Context"),
+      prompt.indexOf("## Mission And Operating Stance"),
     );
-    expect(prompt.indexOf("## Application Context")).toBeLessThan(
-      prompt.indexOf("## Core Operating Model"),
+    expect(prompt.indexOf("## Mission And Operating Stance")).toBeLessThan(
+      prompt.indexOf("## Proactive Execution Standard"),
     );
-    expect(prompt.indexOf("## Core Operating Model")).toBeLessThan(
-      prompt.indexOf("## Response Discipline"),
+    expect(prompt.indexOf("## Proactive Execution Standard")).toBeLessThan(
+      prompt.indexOf("## Evidence And Inspection Discipline"),
     );
-    expect(prompt.indexOf("## Context Priorities")).toBeLessThan(
-      prompt.indexOf("## Research Discipline"),
+    expect(prompt.indexOf("## Tool Exploitation Discipline")).toBeLessThan(
+      prompt.indexOf("## Approval And Permission Semantics"),
     );
     expect(prompt).toContain("coding-first workspace agent");
     expect(prompt).toContain("present yourself simply as Sentinel");
-    expect(prompt).toContain("Only act on tools, permissions, and integrations");
-    expect(prompt).toContain("Prefer primary sources, official documentation");
+    expect(prompt).toContain("Approval-required tools are still available capabilities");
     expect(prompt).toContain(
-      "avoid unnecessary tool use when the request can be answered directly",
+      "missing binaries, missing toolchains, and `command not found` failures as environment-remediation problems",
     );
+    expect(prompt).toContain("Go above and beyond by bundling obvious follow-through work");
     expect(prompt).toContain(
       "Do not stop to ask for confirmation when the user has already made the goal clear",
     );
     expect(prompt).toContain(
-      "Do not ask the user for optional tool parameters unless they materially change the outcome",
+      "Do not claim shell, package-manager, or install actions are impossible",
+    );
+    expect(prompt).toContain(
+      "you may invoke host-installed package managers and toolchains such as brew, apt-get, npm, pnpm, yarn, bun, cargo, or pip",
     );
     expect(prompt).toContain("Never create commits unless the user explicitly asks for a commit");
     expect(prompt).toContain("[Global] preference: Prefers concise answers.");

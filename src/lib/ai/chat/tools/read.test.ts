@@ -44,6 +44,9 @@ describe("executeRead", () => {
     });
 
     expect(result.kind).toBe("directory");
+    expect(result.requestedPath).toBe(".");
+    expect(result.resolvedBase).toBe(defaultDirectory);
+    expect(result.resolvedPath).toBe(defaultDirectory);
     expect(result.entries).toEqual(["README.md", "src/"]);
   });
 

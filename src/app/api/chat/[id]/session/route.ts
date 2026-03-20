@@ -18,7 +18,11 @@ export async function GET(
       return new Response(null, { status: 404 });
     }
 
-    return Response.json(snapshot);
+    return Response.json(snapshot, {
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    });
   } catch (error) {
     return createThreadChatErrorResponse(error);
   }

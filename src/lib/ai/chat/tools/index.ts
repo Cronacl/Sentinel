@@ -164,6 +164,7 @@ const shellCommandInputSchema = z.object({
 });
 
 const shellCommandRunningOutputSchema = z.object({
+  boundaryRoot: z.string().nullable(),
   cwd: z.string(),
   durationMs: z.number(),
   phase: z.literal("running"),
@@ -172,12 +173,20 @@ const shellCommandRunningOutputSchema = z.object({
 });
 
 const shellCommandCompletedOutputSchema = z.object({
+  boundaryRoot: z.string().nullable(),
   cwd: z.string(),
   durationMs: z.number(),
   exitCode: z.number(),
+  failureKind: z
+    .enum(["missing_command", "missing_toolchain", "permission", "other"])
+    .nullable(),
+  missingCommand: z.string().nullable(),
   phase: z.literal("completed"),
   stderr: z.string(),
   stdout: z.string(),
+  suggestedNextAction: z
+    .enum(["install", "inspect", "none", "retry"])
+    .nullable(),
   truncated: z.boolean(),
 });
 
@@ -375,11 +384,15 @@ function buildExecutionTools(options: ThreadAgentCallOptions) {
   const {
     defaultDirectory,
     permissionMode,
+    preferredProjectRoot,
+    shellStartDirectory,
     skillRoots,
     threadId,
     toolApprovalPolicies,
   } = options;
   const filesystemRoot = defaultDirectory ?? skillRoots[0];
+  const preferredExecutionDirectory = preferredProjectRoot ?? defaultDirectory;
+  const shellDirectory = shellStartDirectory ?? preferredExecutionDirectory ?? filesystemRoot;
 
   return {
     ...(defaultDirectory
@@ -437,6 +450,9 @@ function buildExecutionTools(options: ThreadAgentCallOptions) {
                       : undefined,
                   defaultDirectory: defaultDirectory!,
                   input,
+                  ...(preferredExecutionDirectory
+                    ? { projectDirectory: preferredExecutionDirectory }
+                    : {}),
                   permissionMode,
                   threadId,
                 })) {
@@ -480,7 +496,7 @@ function buildExecutionTools(options: ThreadAgentCallOptions) {
                   ]
                 : undefined,
             command,
-            defaultDirectory: filesystemRoot!,
+            defaultDirectory: shellDirectory!,
             permissionMode,
             threadId,
           })) {

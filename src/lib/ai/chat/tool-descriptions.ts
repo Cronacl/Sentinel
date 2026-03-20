@@ -150,10 +150,10 @@ export const runTaskDescription = lines(
     "- Automatically detects the package manager from lockfile or packageManager field.",
     "- Supported tasks: build, format, lint, test, typecheck.",
     "- Streams output so intermediate progress is visible before completion.",
-    "- Returns exit code, stdout, and stderr on completion.",
+    "- Returns exit code, stdout, stderr, and structured failure metadata on completion.",
     "- Requires a rationale explaining why the task should run.",
     "- Use this tool for standard project scripts instead of raw shell commands.",
-    "- Prefer shell_command only when the task cannot be expressed as a standard script.",
+    "- Prefer shell_command only when the task cannot be expressed as a standard script or when a missing command/toolchain requires remediation.",
   ].join("\n"),
 );
 
@@ -162,11 +162,13 @@ export const shellCommandDescription = lines(
   [
     "- Executes one shell command at a time in the current linked filesystem root.",
     "- Streams output so intermediate progress is visible before completion.",
-    "- Returns exit code, stdout, stderr, and working directory on completion.",
+    "- Returns exit code, stdout, stderr, working directory, and structured failure metadata on completion.",
     "- Requires a rationale explaining why the command is needed and what you expect to learn.",
     "- In default permissions mode, commands must stay inside the selected workspace root or discovered skill directories.",
+    "- Running from an allowed workspace cwd does not prevent invoking host-installed executables or package managers such as brew, apt-get, npm, pnpm, yarn, bun, cargo, or pip when they exist on PATH.",
     "- Avoid full-screen or interactive TUI programs.",
     "- Prefer non-interactive flags for scaffolding, installs, and builds.",
+    "- Use this tool for environment remediation, setup, and package-manager installs when the user asks for them or when a missing binary/toolchain blocks progress.",
     "- Prefer run_task for standard project scripts (test, lint, build, format, typecheck).",
     "- Prefer edit, create_file, and delete_file for direct file changes instead of shell commands.",
   ].join("\n"),

@@ -23,6 +23,9 @@ describe("executeGlob", () => {
     });
 
     expect(result.files).toEqual(["src/app.test.ts"]);
+    expect(result.requestedPath).toBe(".");
+    expect(result.resolvedBase).toBe(defaultDirectory);
+    expect(result.resolvedPath).toBe(defaultDirectory);
     expect(result.truncated).toBe(false);
   });
 

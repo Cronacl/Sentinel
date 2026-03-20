@@ -30,6 +30,7 @@ import {
   users,
   workspaces,
 } from "@/server/db/schema";
+import { resolveAvailableWorkspaceRootPath } from "./workspace-path";
 
 export async function getWorkspaceRootPath(
   workspaceId: string,
@@ -44,7 +45,7 @@ export async function getWorkspaceRootPath(
     columns: { rootPath: true },
   });
 
-  return workspace?.rootPath?.trim() || null;
+  return resolveAvailableWorkspaceRootPath(workspace?.rootPath);
 }
 
 export async function getToolPermissionMode(

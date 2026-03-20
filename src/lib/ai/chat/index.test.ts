@@ -129,20 +129,39 @@ const moveThreadFollowUpToFront = mock(() => {});
 const removeThreadFollowUp = mock(() => {});
 const requeueThreadFollowUp = mock(() => {});
 const resetProcessingThreadFollowUps = mock(() => {});
-const setThreadStatus = mock(() => {});
+const sessionSnapshotState = {
+  activeRunId: null as string | null,
+  threadStatus: "idle" as "idle" | "streaming" | "awaiting_approval",
+  threadTitle: "New thread",
+};
+const setThreadStatus = mock(
+  (
+    _threadId: string,
+    status: "idle" | "streaming" | "awaiting_approval",
+  ) => {
+    sessionSnapshotState.threadStatus = status;
+  },
+);
 const updateThreadChatSettings = mock(() => {});
 const upsertMessage = mock((_threadId, message) => message);
 const setActiveMessage = mock(async () => {});
-const clearActiveStream = mock(() => {});
-const updateThreadTitle = mock(() => {});
-const setActiveStream = mock(() => {});
+const clearActiveStream = mock(() => {
+  sessionSnapshotState.activeRunId = null;
+});
+const updateThreadTitle = mock((_threadId: string, title: string) => {
+  sessionSnapshotState.threadTitle = title;
+});
+const setActiveStream = mock((_threadId: string, streamId: string) => {
+  sessionSnapshotState.activeRunId = streamId;
+});
 const updateMessageMetadata = mock(async () => {});
 const loadThreadSessionSnapshot = mock(async (threadId: string) => ({
-  activeRunId: null,
+  activeRunId: sessionSnapshotState.activeRunId,
   messages: [],
   queuedFollowUps: [],
   threadId,
-  threadStatus: "idle",
+  threadTitle: sessionSnapshotState.threadTitle,
+  threadStatus: sessionSnapshotState.threadStatus,
 }));
 const serializeThreadStreamEvent = mock(
   (event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
@@ -651,6 +670,9 @@ beforeEach(() => {
   aiTestState.agentConfig = null;
   aiTestState.prepared = null;
   aiState.streamChunks = [];
+  sessionSnapshotState.activeRunId = null;
+  sessionSnapshotState.threadStatus = "idle";
+  sessionSnapshotState.threadTitle = "New thread";
   aiState.assistantResponseMessage = {
     id: "assistant-response",
     metadata: {},
@@ -731,9 +753,19 @@ afterEach(() => {
 describe("runThreadChat title generation", () => {
   it("uses the provider-specific fast title model and keeps thread chat settings on the selected model", async () => {
     const response = await runThreadChat(createSubmitRequest(), "user-1");
+    const payload = await response.json();
     await flushAsyncWork();
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
+    expect(payload).toMatchObject({
+      activeRunId: "stream-id",
+      snapshot: {
+        activeRunId: "stream-id",
+        threadId: "thread-1",
+        threadStatus: "streaming",
+        threadTitle: "New thread",
+      },
+    });
     expect(resolveThreadTitleModel).toHaveBeenCalledWith({
       providerId: "openai",
       userId: "user-1",
@@ -857,7 +889,7 @@ describe("runThreadChat approvals and lifecycle", () => {
     const response = await runThreadChat(request, "user-1");
     await flushAsyncWork();
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
     expect(createAgentUIStream).toHaveBeenCalledWith(
       expect.objectContaining({
         generateMessageId: expect.any(Function),
@@ -885,6 +917,7 @@ describe("runThreadChat approvals and lifecycle", () => {
       },
       "user-1",
     );
+    await flushAsyncWork();
 
     expect(response.status).toBe(204);
     expect(updateMessageMetadata).toHaveBeenCalledWith(
@@ -1013,7 +1046,6 @@ describe("runThreadChat approvals and lifecycle", () => {
     );
 
     expect(response.status).toBe(204);
-    expect(createAgentUIStream).toHaveBeenCalled();
     expect(createNewResumableStream).toHaveBeenCalled();
     expect(deleteThreadFollowUp).toHaveBeenCalledWith("thread-1", "queued-1");
   });
@@ -1060,10 +1092,10 @@ describe("runThreadChat approvals and lifecycle", () => {
     const response = await runThreadChat(createSubmitRequest(), "user-1");
     await flushAsyncWork();
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
     expect(buildPersistedAssistantMessage).not.toHaveBeenCalled();
     expect(clearActiveStream).toHaveBeenCalledTimes(0);
-    expect(createAgentUIStream).toHaveBeenCalledTimes(1);
+    expect(createAgentUIStream).toHaveBeenCalled();
     expect(deleteThreadFollowUp).not.toHaveBeenCalled();
   });
 
@@ -1186,6 +1218,7 @@ describe("runThreadChat approvals and lifecycle", () => {
       },
       "user-1",
     );
+    await flushAsyncWork();
 
     expect(Object.keys(aiTestState.prepared?.tools ?? {})).toEqual([
       "list",
@@ -1460,7 +1493,7 @@ describe("runThreadChat approvals and lifecycle", () => {
     const response = await runThreadChat(createSubmitRequest(), "user-1");
     await flushAsyncWork();
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
     expect(createAgentUIStream).toHaveBeenCalledTimes(2);
     expect(createNewResumableStream).toHaveBeenCalledTimes(2);
     expect(deleteThreadFollowUp).toHaveBeenCalledWith("thread-1", "queued-1");

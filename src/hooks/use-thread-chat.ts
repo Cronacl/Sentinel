@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import type {
+  ThreadChatBootstrapResponse,
   QueuedFollowUpSummary,
   ThreadSessionSnapshot,
   ThreadStreamEvent,
@@ -31,7 +32,9 @@ type UseThreadChatOptions = {
   initialMessages?: ThreadUIMessage[];
   initialQueuedFollowUps?: QueuedFollowUpSummary[];
   initialThreadStatus?: ThreadStatus;
+  initialThreadTitle?: string;
   onError?: (error: Error) => void;
+  onSnapshot?: (snapshot: ThreadSessionSnapshot) => void;
   threadId: string;
   workspaceId: string;
 };
@@ -79,10 +82,12 @@ type ThreadSessionState = {
   messages: ThreadUIMessage[];
   queuedFollowUps: QueuedFollowUpSummary[];
   threadId: string;
+  threadTitle: string;
   threadStatus: ThreadStatus;
 };
 
 type SessionStore = {
+  addSnapshotListener(listener: (snapshot: ThreadSessionSnapshot) => void): () => void;
   applyLocalMessages(messages: ThreadUIMessage[]): void;
   beginAction(): void;
   disconnect(): void;
@@ -166,6 +171,7 @@ function areThreadSessionStatesEqual(
       areMessagesEqual(current.messages, next.messages) &&
       areQueuedFollowUpsEqual(current.queuedFollowUps, next.queuedFollowUps) &&
       current.threadId === next.threadId &&
+      current.threadTitle === next.threadTitle &&
       current.threadStatus === next.threadStatus)
   );
 }
@@ -224,6 +230,7 @@ function createInitialState(
     messages: normalizedSnapshot?.messages ?? [],
     queuedFollowUps: normalizedSnapshot?.queuedFollowUps ?? [],
     threadId,
+    threadTitle: normalizedSnapshot?.threadTitle ?? "New thread",
     threadStatus: normalizedSnapshot?.threadStatus ?? "idle",
   };
 }
@@ -233,6 +240,7 @@ export async function fetchThreadSessionSnapshot(
   options?: { allowMissing?: boolean },
 ): Promise<ThreadSessionSnapshot | null> {
   const response = await fetch(`/api/chat/${threadId}/session`, {
+    cache: "no-store",
     method: "GET",
   });
 
@@ -280,6 +288,7 @@ export function mergeThreadSessionStateFromSnapshot(
       current.queuedFollowUps,
       normalizedSnapshot.queuedFollowUps,
     ) &&
+    current.threadTitle === normalizedSnapshot.threadTitle &&
     current.threadStatus === normalizedSnapshot.threadStatus
   ) {
     return current;
@@ -294,6 +303,7 @@ export function mergeThreadSessionStateFromSnapshot(
     lastSyncedAt: Date.now(),
     messages: nextMessages,
     queuedFollowUps: normalizedSnapshot.queuedFollowUps,
+    threadTitle: normalizedSnapshot.threadTitle,
     threadStatus: normalizedSnapshot.threadStatus,
   };
 }
@@ -482,6 +492,15 @@ function createSessionStore(
   let subscriberCount = 0;
   let streamAbortController: AbortController | null = null;
   const listeners = new Set<() => void>();
+  const snapshotListeners = new Set<
+    (snapshot: ThreadSessionSnapshot) => void
+  >();
+
+  const emitSnapshot = (snapshot: ThreadSessionSnapshot) => {
+    for (const listener of snapshotListeners) {
+      listener(snapshot);
+    }
+  };
 
   const emit = () => {
     for (const listener of listeners) {
@@ -525,6 +544,7 @@ function createSessionStore(
 
     switch (event.type) {
       case "thread.snapshot":
+        emitSnapshot(event.snapshot);
         setState((current) => {
           return mergeThreadSessionStateFromSnapshot(
             current,
@@ -708,6 +728,13 @@ function createSessionStore(
   };
 
   return {
+    addSnapshotListener(listener) {
+      snapshotListeners.add(listener);
+
+      return () => {
+        snapshotListeners.delete(listener);
+      };
+    },
     applyLocalMessages(messages) {
       setState((current) => ({
         ...current,
@@ -741,6 +768,7 @@ function createSessionStore(
       return state;
     },
     hydrate(snapshot) {
+      emitSnapshot(snapshot);
       setState((current) => {
         return mergeThreadSessionStateFromSnapshot(
           current,
@@ -820,7 +848,9 @@ export function useThreadChat({
   initialMessages = [],
   initialQueuedFollowUps = [],
   initialThreadStatus = "idle",
+  initialThreadTitle = "New thread",
   onError,
+  onSnapshot,
   threadId,
   workspaceId,
 }: UseThreadChatOptions) {
@@ -831,6 +861,7 @@ export function useThreadChat({
         messages: initialMessages,
         queuedFollowUps: initialQueuedFollowUps,
         threadId,
+        threadTitle: initialThreadTitle,
         threadStatus: initialThreadStatus,
       }),
     [threadId],
@@ -850,6 +881,7 @@ export function useThreadChat({
       messages: initialMessages,
       queuedFollowUps: initialQueuedFollowUps,
       threadId,
+      threadTitle: initialThreadTitle,
       threadStatus: initialThreadStatus,
     });
   }, [
@@ -857,9 +889,18 @@ export function useThreadChat({
     initialMessages,
     initialQueuedFollowUps,
     initialThreadStatus,
+    initialThreadTitle,
     store,
     threadId,
   ]);
+
+  useEffect(() => {
+    if (!onSnapshot) {
+      return;
+    }
+
+    return store.addSnapshotListener(onSnapshot);
+  }, [onSnapshot, store]);
 
   useEffect(() => {
     if (!hydrateFromServer) {
@@ -898,7 +939,12 @@ export function useThreadChat({
         throw new Error(message);
       }
 
-      return response;
+      const contentType = response.headers.get("content-type") ?? "";
+      const data = contentType.includes("application/json")
+        ? ((await response.json()) as ThreadChatBootstrapResponse)
+        : null;
+
+      return { data, response };
     },
     [],
   );
@@ -907,7 +953,7 @@ export function useThreadChat({
     async (
       body: Record<string, unknown>,
       localMessages?: ThreadUIMessage[],
-    ) => {
+    ): Promise<ThreadChatBootstrapResponse | null> => {
       store.beginAction();
 
       if (localMessages) {
@@ -915,8 +961,13 @@ export function useThreadChat({
       }
 
       try {
-        await postThreadAction(body);
-        await store.refreshSnapshot();
+        const { data } = await postThreadAction(body);
+        if (data?.snapshot) {
+          store.hydrate(data.snapshot);
+        } else {
+          await store.refreshSnapshot();
+        }
+        return data;
       } catch (error) {
         const nextError =
           error instanceof Error
@@ -939,7 +990,7 @@ export function useThreadChat({
       text,
       threadMode,
     }: SendThreadMessageInput) => {
-      await runAction({
+      return runAction({
         id: threadId,
         message: createUserThreadMessage({ files, text }),
         modelId,
@@ -1116,6 +1167,7 @@ export function useThreadChat({
     status,
     steerFollowUp,
     stopStream,
+    threadTitle: state.threadTitle,
     threadStatus: state.threadStatus,
   };
 }

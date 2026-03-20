@@ -37,6 +37,9 @@ export const globInputSchema = z.object({
 export const globOutputSchema = z.object({
   files: z.array(z.string()),
   pattern: z.string(),
+  requestedPath: z.string(),
+  resolvedBase: z.string(),
+  resolvedPath: z.string(),
   root: z.string(),
   shownFiles: z.number().int().min(0),
   totalFiles: z.number().int().min(0),
@@ -70,7 +73,7 @@ export async function executeGlob({
   input: GlobInput;
   permissionMode: PermissionMode;
 }): Promise<GlobOutput> {
-  const { resolvedDirectory, rootLabel } = resolveToolDirectory({
+  const { requestedPath, resolvedBase, resolvedDirectory, rootLabel } = resolveToolDirectory({
     defaultDirectory,
     ...(extraAllowedRoots ? { extraAllowedRoots } : {}),
     permissionMode,
@@ -153,6 +156,9 @@ export async function executeGlob({
   return {
     files,
     pattern: input.pattern,
+    requestedPath,
+    resolvedBase,
+    resolvedPath: resolvedDirectory,
     root: rootLabel,
     shownFiles: files.length,
     totalFiles,

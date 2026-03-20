@@ -11,10 +11,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { DESKTOP_CHANNELS } from "../shared/channels.mjs";
-import { createRuntimePaths } from "../../scripts/desktop/constants.mjs";
+import { APP_PORT, createRuntimePaths } from "../../scripts/desktop/constants.mjs";
 import { ensureLocalEnv } from "../../scripts/desktop/service-manager.mjs";
 import {
   getAppServerStatus,
+  killProcessOnPort,
   startLocalServer,
   stopLocalServer,
 } from "../../scripts/desktop/server-manager.mjs";
@@ -22,6 +23,7 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let mainWindow = null;
 let serverState = null;
+let isQuitting = false;
 let resolvedTheme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
 
 // GPU acceleration is required for smooth backdrop-blur, shadows, and animations.
@@ -533,15 +535,40 @@ app.whenReady().then(async () => {
   }
 });
 
+app.on("before-quit", () => {
+  isQuitting = true;
+});
+
 app.on("window-all-closed", async () => {
-  await stopLocalServer(serverState);
-  if (process.platform !== "darwin") {
+  if (process.platform !== "darwin" || isQuitting) {
+    await stopLocalServer(serverState);
+    serverState = null;
     app.quit();
   }
 });
 
-app.on("activate", () => {
+app.on("will-quit", async (event) => {
+  if (serverState?.process && !serverState.process.killed) {
+    event.preventDefault();
+    await stopLocalServer(serverState);
+    serverState = null;
+    await killProcessOnPort(APP_PORT);
+    app.quit();
+  }
+});
+
+app.on("activate", async () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
+  }
+
+  if (!serverState || serverState.process?.killed) {
+    try {
+      await bootstrapDesktop();
+    } catch (error) {
+      await loadFailureState(error);
+    }
+  } else if (serverState.url) {
+    await mainWindow?.loadURL(serverState.url);
   }
 });

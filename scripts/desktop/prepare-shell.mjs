@@ -11,16 +11,28 @@ const rootPackageJson = JSON.parse(
 await rm(shellRoot, { force: true, recursive: true });
 await mkdir(shellRoot, { recursive: true });
 
-await cp(path.join(projectRoot, "desktop"), path.join(shellRoot, "desktop"), {
-  recursive: true,
-});
-await cp(
-  path.join(projectRoot, "scripts", "desktop"),
-  path.join(shellRoot, "scripts", "desktop"),
-  {
-    recursive: true,
-  },
-);
+for (const subdir of ["main", "preload", "shared"]) {
+  await cp(
+    path.join(projectRoot, "desktop", subdir),
+    path.join(shellRoot, "desktop", subdir),
+    { recursive: true },
+  );
+}
+
+const runtimeScripts = [
+  "constants.mjs",
+  "server-manager.mjs",
+  "service-manager.mjs",
+  "state.mjs",
+];
+const scriptsTarget = path.join(shellRoot, "scripts", "desktop");
+await mkdir(scriptsTarget, { recursive: true });
+for (const file of runtimeScripts) {
+  await cp(
+    path.join(projectRoot, "scripts", "desktop", file),
+    path.join(scriptsTarget, file),
+  );
+}
 
 const shellPackageJson = {
   name: `${rootPackageJson.name}-desktop-shell`,

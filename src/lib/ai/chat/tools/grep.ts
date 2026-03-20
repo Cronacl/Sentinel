@@ -52,6 +52,9 @@ export const grepOutputSchema = z.object({
   hasPartialErrors: z.boolean(),
   include: z.string().nullable(),
   pattern: z.string(),
+  requestedPath: z.string(),
+  resolvedBase: z.string(),
+  resolvedPath: z.string(),
   root: z.string(),
   shownMatches: z.number().int().min(0),
   totalMatches: z.number().int().min(0),
@@ -115,7 +118,7 @@ export async function executeGrep({
   input: GrepInput;
   permissionMode: PermissionMode;
 }): Promise<GrepOutput> {
-  const { resolvedDirectory, rootLabel } = resolveToolDirectory({
+  const { requestedPath, resolvedBase, resolvedDirectory, rootLabel } = resolveToolDirectory({
     defaultDirectory,
     ...(extraAllowedRoots ? { extraAllowedRoots } : {}),
     permissionMode,
@@ -240,6 +243,9 @@ export async function executeGrep({
     hasPartialErrors: exitCode === 2,
     include: input.include ?? null,
     pattern: input.pattern,
+    requestedPath,
+    resolvedBase,
+    resolvedPath: resolvedDirectory,
     root: rootLabel,
     shownMatches,
     totalMatches,

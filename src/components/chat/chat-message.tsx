@@ -169,7 +169,10 @@ function AssistantMessage({
   message: ThreadUIMessage;
 }) {
   const assistantText = useMemo(() => getAssistantText(message), [message]);
-  const groups = useMemo(() => groupMessageParts(message.parts), [message.parts]);
+  const groups = useMemo(
+    () => groupMessageParts(message.parts),
+    [message.parts],
+  );
   const lastReasoningIndex = useMemo(() => {
     let last = -1;
     message.parts.forEach((part, partIndex) => {
@@ -220,7 +223,14 @@ function AssistantMessage({
     (isStreaming ? "streaming" : hasVisibleParts ? "completed" : undefined);
 
   const stableOnAnswerPlanQuestions = useCallback(
-    (input: { answers: Array<{ answer: string; optionLabel?: string | null; questionId: string }>; questionSetId: string }) => {
+    (input: {
+      answers: Array<{
+        answer: string;
+        optionLabel?: string | null;
+        questionId: string;
+      }>;
+      questionSetId: string;
+    }) => {
       onAnswerPlanQuestions?.({ ...input, assistantMessageId: message.id });
     },
     [onAnswerPlanQuestions, message.id],
@@ -280,45 +290,45 @@ function AssistantMessage({
         ) : null}
 
         {displayGroups.map((group, groupIndex) => (
-            <div
-              className={`${groupIndex > 0 ? "" : ""} flex flex-col gap-1`}
-              key={`${message.id}:step:${groupIndex}`}
-            >
-              {group.map((entry) => {
-                const key = getPartKey(message.id, entry);
-                const { part } = entry;
+          <div
+            className={`${groupIndex > 0 ? "" : ""} flex flex-col gap-1`}
+            key={`${message.id}:step:${groupIndex}`}
+          >
+            {group.map((entry) => {
+              const key = getPartKey(message.id, entry);
+              const { part } = entry;
 
-                if (part.type === "text") {
-                  return (
-                    <TextPart
-                      isStreaming={isStreaming && part.state === "streaming"}
-                      key={key}
-                      part={part}
-                    />
-                  );
-                }
+              if (part.type === "text") {
+                return (
+                  <TextPart
+                    isStreaming={isStreaming && part.state === "streaming"}
+                    key={key}
+                    part={part}
+                  />
+                );
+              }
 
-                if (part.type === "file") {
-                  return <FilePart key={key} part={part} />;
-                }
+              if (part.type === "file") {
+                return <FilePart key={key} part={part} />;
+              }
 
-                if (isToolPart(part)) {
-                  return (
-                    <ToolPart
-                      key={key}
-                      onApprove={onApproveTool}
-                      onAnswerPlanQuestions={stableOnAnswerPlanQuestions}
-                      onDeny={onDenyTool}
-                      onStartPlanImplementation={onStartPlanImplementation}
-                      part={part}
-                    />
-                  );
-                }
+              if (isToolPart(part)) {
+                return (
+                  <ToolPart
+                    key={key}
+                    onApprove={onApproveTool}
+                    onAnswerPlanQuestions={stableOnAnswerPlanQuestions}
+                    onDeny={onDenyTool}
+                    onStartPlanImplementation={onStartPlanImplementation}
+                    part={part}
+                  />
+                );
+              }
 
-                return null;
-              })}
-            </div>
-          ))}
+              return null;
+            })}
+          </div>
+        ))}
 
         {assistantText ||
         status === "completed" ||
@@ -422,10 +432,7 @@ function UserMessage({
               onClick={() => onEdit(message)}
             />
           ) : null}
-          <BranchSwitcher
-            onSelect={onSelectBranch}
-            options={branchOptions}
-          />
+          <BranchSwitcher onSelect={onSelectBranch} options={branchOptions} />
         </div>
       </div>
     </div>

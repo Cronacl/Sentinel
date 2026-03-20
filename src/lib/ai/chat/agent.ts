@@ -19,6 +19,10 @@ import { z } from "zod";
 
 import type { ToolApprovalPolicyMap } from "./tool-approval-policy";
 import type { ThreadPromptContext } from "./prompt-context";
+import {
+  computeLatentToolSummary,
+} from "./tool-selection";
+import { buildToolRoutingEvidence, routeToolExposure } from "./tool-router";
 import { buildTools } from "./tools";
 import { buildThreadAgentInstructions } from "./instructions";
 
@@ -33,9 +37,15 @@ const threadAgentCallOptionsSchema = z.object({
   memorySettings: z.custom<MemorySettings>(),
   mcpTools: z.custom<ToolSet>().optional(),
   permissionMode: z.custom<PermissionMode>(),
+  preferredProjectRoot: z.string().nullable().optional(),
   promptContext: z.custom<ThreadPromptContext>(),
+  resolvedModelId: z.string().optional(),
+  resolvedProviderId: z
+    .enum(["openai", "anthropic", "google", "google_vertex"])
+    .optional(),
   searchProviders: z.custom<SearchProviderRuntimeMap>(),
   searchSettings: z.custom<SearchSettings>(),
+  shellStartDirectory: z.string().nullable().optional(),
   availableSkills: z.array(z.custom<SkillMetadata>()),
   skillRoots: z.array(z.string()),
   sourceMessageId: z.string().nullable().optional(),
@@ -141,6 +151,28 @@ function buildStepProgressAddon(
   ].join("\n");
 }
 
+function mergeToolRoutingContext(
+  experimentalContext: unknown,
+  toolRouting: unknown,
+) {
+  if (!toolRouting) {
+    return experimentalContext;
+  }
+
+  if (
+    experimentalContext &&
+    typeof experimentalContext === "object" &&
+    !Array.isArray(experimentalContext)
+  ) {
+    return {
+      ...experimentalContext,
+      toolRouting,
+    };
+  }
+
+  return { toolRouting };
+}
+
 // ---------------------------------------------------------------------------
 // Agent factory
 // ---------------------------------------------------------------------------
@@ -165,6 +197,21 @@ export function createThreadAgent({
   providerOptions?: SharedV3ProviderOptions;
 }) {
   let cachedInstructions: string | undefined;
+  let cachedActiveToolNames: string[] = [];
+  let cachedAllToolNames: string[] = [];
+  let cachedPromptContext: ThreadPromptContext | null = null;
+  let cachedInitialActiveTools: string[] = [];
+  let cachedResolvedModelId: string | undefined;
+  let cachedResolvedProviderId:
+    | "anthropic"
+    | "google"
+    | "google_vertex"
+    | "openai"
+    | undefined;
+  let cachedRoutingAudit: unknown = null;
+  let cachedRoutingEvidenceSignature: string | null = null;
+  let cachedSystemPrompt = "";
+  let cachedUserId = "";
 
   const model = languageModel as ConstructorParameters<
     typeof ToolLoopAgent
@@ -214,22 +261,137 @@ export function createThreadAgent({
         return null;
       }
     },
-    prepareCall: ({ options, ...settings }) => {
+    prepareCall: async ({ options, ...settings }) => {
       const tools = buildTools(options);
+      const allToolNames = Object.keys(tools);
+      const initialRouting = await routeToolExposure({
+        availableToolNames: allToolNames,
+        mainLanguageModel: model,
+        mainProviderOptions: providerOptions,
+        promptContext: {
+          ...options.promptContext,
+          latentToolSummary: computeLatentToolSummary(
+            allToolNames,
+            [],
+            options.promptContext,
+          ),
+        },
+        ...(options.resolvedModelId
+          ? { resolvedModelId: options.resolvedModelId }
+          : {}),
+        ...(options.resolvedProviderId
+          ? { resolvedProviderId: options.resolvedProviderId }
+          : {}),
+        stage: "initial",
+        userId: options.userId,
+      });
+      const initialActiveTools = initialRouting.activeToolNames;
+      const promptContext = {
+        ...options.promptContext,
+        latentToolSummary: computeLatentToolSummary(
+          allToolNames,
+          initialActiveTools,
+          options.promptContext,
+        ),
+      };
       const instructions = buildThreadAgentInstructions({
-        activeToolNames: Object.keys(tools),
-        promptContext: options.promptContext,
+        activeToolNames: initialActiveTools,
+        allToolNames,
+        promptContext,
         systemPrompt: options.systemPrompt,
       });
       cachedInstructions = instructions;
+      cachedActiveToolNames = initialActiveTools;
+      cachedAllToolNames = allToolNames;
+      cachedPromptContext = promptContext;
+      cachedInitialActiveTools = initialActiveTools;
+      cachedResolvedModelId = options.resolvedModelId;
+      cachedResolvedProviderId = options.resolvedProviderId;
+      cachedRoutingAudit = initialRouting.audit;
+      cachedRoutingEvidenceSignature = null;
+      cachedSystemPrompt = options.systemPrompt;
+      cachedUserId = options.userId;
       return {
         ...settings,
+        activeTools: initialActiveTools as never[],
+        experimental_context: {
+          toolRouting: initialRouting.audit,
+        },
         instructions,
         tools,
       };
     },
-    prepareStep: async ({ stepNumber, steps }) => {
-      const baseSystem = cachedInstructions ?? "";
+    prepareStep: async ({ experimental_context, stepNumber, steps }) => {
+      const promptContext = cachedPromptContext;
+      let activeToolNames = cachedActiveToolNames;
+
+      if (promptContext && cachedAllToolNames.length > 0 && steps.length > 0) {
+        const evidence = buildToolRoutingEvidence(
+          steps,
+          promptContext.latestUserText,
+        );
+        const evidenceSignature = JSON.stringify(evidence);
+        const hasMaterialEvidence =
+          evidence.inspectionPerformed ||
+          evidence.projectContextFound ||
+          evidence.targetFilesFound ||
+          evidence.localInspectionWasInsufficient ||
+          evidence.executionFailed ||
+          evidence.explicitInstallRequest ||
+          evidence.integrationNamespaces.length > 0 ||
+          evidence.mcpNamespaces.length > 0 ||
+          evidence.missingCommand !== null ||
+          evidence.missingToolchain ||
+          evidence.suggestedNextAction === "install";
+
+        if (
+          hasMaterialEvidence &&
+          evidenceSignature !== cachedRoutingEvidenceSignature
+        ) {
+          const reroute = await routeToolExposure({
+            availableToolNames: cachedAllToolNames,
+            evidence,
+            initialActiveTools: cachedInitialActiveTools,
+            mainLanguageModel: model,
+            mainProviderOptions: providerOptions,
+            promptContext,
+            ...(cachedResolvedModelId
+              ? { resolvedModelId: cachedResolvedModelId }
+              : {}),
+            ...(cachedResolvedProviderId
+              ? { resolvedProviderId: cachedResolvedProviderId }
+              : {}),
+            stage: "step",
+            steps,
+            userId: cachedUserId,
+          });
+          activeToolNames = reroute.activeToolNames;
+          cachedRoutingAudit = reroute.audit;
+          cachedRoutingEvidenceSignature = evidenceSignature;
+        }
+      }
+
+      cachedActiveToolNames = activeToolNames;
+      const stepPromptContext =
+        promptContext && cachedAllToolNames.length > 0
+          ? {
+              ...promptContext,
+              latentToolSummary: computeLatentToolSummary(
+                cachedAllToolNames,
+                activeToolNames,
+                promptContext,
+              ),
+            }
+          : promptContext;
+      const baseSystem =
+        stepPromptContext && cachedAllToolNames.length > 0
+          ? buildThreadAgentInstructions({
+              activeToolNames,
+              allToolNames: cachedAllToolNames,
+              promptContext: stepPromptContext,
+              systemPrompt: cachedSystemPrompt,
+            })
+          : cachedInstructions ?? "";
 
       const allToolCalls = steps.flatMap((s) => s.toolCalls ?? []);
       const hasCreatedTasks = allToolCalls.some(
@@ -244,21 +406,44 @@ export function createThreadAgent({
 
       if (stepNumber >= 3 && !hasCreatedTasks) {
         return {
+          activeTools: activeToolNames as never[],
+          experimental_context: mergeToolRoutingContext(
+            experimental_context,
+            cachedRoutingAudit,
+          ),
           system: baseSystem + TASK_ENFORCEMENT_ADDON + progressAddon,
         };
       }
 
       if (lastStepHadMutations) {
         return {
+          activeTools: activeToolNames as never[],
+          experimental_context: mergeToolRoutingContext(
+            experimental_context,
+            cachedRoutingAudit,
+          ),
           system: baseSystem + VALIDATION_ADDON + progressAddon,
         };
       }
 
       if (progressAddon) {
-        return { system: baseSystem + progressAddon };
+        return {
+          activeTools: activeToolNames as never[],
+          experimental_context: mergeToolRoutingContext(
+            experimental_context,
+            cachedRoutingAudit,
+          ),
+          system: baseSystem + progressAddon,
+        };
       }
 
-      return {};
+      return {
+        activeTools: activeToolNames as never[],
+        experimental_context: mergeToolRoutingContext(
+          experimental_context,
+          cachedRoutingAudit,
+        ),
+      };
     },
   });
 }
