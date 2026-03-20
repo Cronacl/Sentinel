@@ -1,11 +1,14 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { ScrollShadow } from "@heroui/react";
 
 import type { RendererProps } from "../../renderer";
 import { ToolLayout } from "../shared/tool-layout";
+import { CodePreview } from "../shared/code-preview";
+import { MarkdownContent } from "../../../text/markdown-content";
+import { detectLanguageFromPath } from "@/lib/syntax/highlighter";
 
 type ReadToolInput = {
   limit?: number;
@@ -68,6 +71,18 @@ function isReadToolOutput(value: unknown): value is ReadToolOutput {
   );
 }
 
+const MARKDOWN_EXTENSIONS = new Set(["md", "mdx", "markdown"]);
+
+function isMarkdownFile(path: string): boolean {
+  const ext = path.split(".").pop()?.toLowerCase();
+  return ext ? MARKDOWN_EXTENSIONS.has(ext) : false;
+}
+
+function isCodeFile(path: string): boolean {
+  const lang = detectLanguageFromPath(path);
+  return lang !== "text";
+}
+
 function buildSummary(
   part: RendererProps["part"],
   shownPath: string,
@@ -106,6 +121,74 @@ function buildSummary(
   );
 }
 
+function buildBody(
+  output: ReadToolOutput | null,
+  shownPath: string,
+  errorText?: string,
+): ReactNode {
+  if (!output) {
+    return (
+      <p className="font-mono text-[11px] text-foreground/50">
+        Reading {shownPath}...
+      </p>
+    );
+  }
+
+  if (output.kind === "directory") {
+    return (
+      <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
+        {output.entries.length > 0 ? output.entries.join("\n") : "(empty directory)"}
+      </ScrollShadow>
+    );
+  }
+
+  const content = output.content?.trim();
+  if (!content && output.lines.length === 0) {
+    if (errorText) {
+      return (
+        <p className="text-[11px] text-danger-soft-foreground">{errorText}</p>
+      );
+    }
+    return (
+      <p className="font-mono text-[11px] text-foreground/50">(empty file)</p>
+    );
+  }
+
+  if (isMarkdownFile(output.path)) {
+    const mdContent = output.lines.length > 0
+      ? output.lines.map((l) => l.text).join("\n")
+      : content ?? "";
+    return (
+      <ScrollShadow className="max-h-[300px]">
+        <MarkdownContent text={mdContent} />
+      </ScrollShadow>
+    );
+  }
+
+  if (isCodeFile(output.path)) {
+    const codeLines = output.lines.length > 0
+      ? output.lines
+      : undefined;
+    const codeStr = codeLines ? undefined : (content ?? "");
+    return (
+      <CodePreview
+        code={codeStr}
+        lines={codeLines}
+        path={output.path}
+        showHeader={false}
+      />
+    );
+  }
+
+  return (
+    <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
+      {output.lines.length > 0
+        ? output.lines.map((l) => `${l.number}: ${l.text}`).join("\n")
+        : content}
+    </ScrollShadow>
+  );
+}
+
 export const ReadTool = memo(function ReadTool({
   part,
 }: RendererProps) {
@@ -126,12 +209,10 @@ export const ReadTool = memo(function ReadTool({
 
   const shownPath = readOutput?.path ?? readInput?.path ?? ".";
   const summary = buildSummary(part, shownPath, readOutput);
-
-  const bodyText = readOutput?.content?.trim()
-    ? readOutput.content
-    : readOutput?.kind === "directory" && readOutput.entries.length > 0
-      ? readOutput.entries.join("\n")
-      : partErrorText ?? `Reading ${readInput?.path ?? "."}`;
+  const body = useMemo(
+    () => buildBody(readOutput, shownPath, partErrorText),
+    [readOutput, shownPath, partErrorText],
+  );
 
   const footer = readOutput ? (
     <span>
@@ -155,9 +236,7 @@ export const ReadTool = memo(function ReadTool({
       errorText={partErrorText && part.state !== "output-error" ? partErrorText : undefined}
       footer={footer}
     >
-      <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
-        {bodyText}
-      </ScrollShadow>
+      {body}
     </ToolLayout>
   );
 });

@@ -6,6 +6,7 @@ import { Button, ScrollShadow } from "@heroui/react";
 
 import type { RendererProps } from "../../renderer";
 import { ToolLayout } from "../shared/tool-layout";
+import { MarkdownContent } from "../../../text/markdown-content";
 
 type WebFetchToolInput = {
   format?: "text" | "markdown" | "html";
@@ -238,15 +239,25 @@ function buildSingleResultBody(result: WebFetchSuccessResult): ReactNode {
     );
   }
 
+  const content = result.content ?? "";
+
+  if (result.format === "markdown" && content.trim()) {
+    return (
+      <ScrollShadow className="max-h-[300px]">
+        <MarkdownContent text={content} />
+      </ScrollShadow>
+    );
+  }
+
   return (
     <ScrollShadow
-      className={`max-h-[220px] overflow-x-auto whitespace-pre-wrap break-words ${
+      className={`max-h-[220px] overflow-x-auto whitespace-pre-wrap wrap-break-word ${
         result.format === "html"
           ? "font-mono text-[11px] text-foreground/70"
           : "text-[12px] text-foreground/70"
       }`}
     >
-      {result.content ?? ""}
+      {content}
     </ScrollShadow>
   );
 }

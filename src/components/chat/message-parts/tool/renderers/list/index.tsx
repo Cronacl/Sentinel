@@ -3,23 +3,30 @@
 import type { ReactNode } from "react";
 import { memo, useEffect, useState } from "react";
 import { ScrollShadow } from "@heroui/react";
+import { Icon } from "@iconify/react";
 
 import type { RendererProps } from "../../renderer";
 import { ToolLayout } from "../shared/tool-layout";
+import {
+  detectLanguageFromPath,
+  languageToVSCodeIcon,
+} from "@/lib/syntax/highlighter";
 
 type ListToolInput = {
   ignore?: string[];
   path?: string;
 };
 
+type ListToolEntry = {
+  depth: number;
+  kind: "directory" | "file";
+  name: string;
+  path: string;
+};
+
 type ListToolOutput = {
   directoryCount: number;
-  entries: Array<{
-    depth: number;
-    kind: "directory" | "file";
-    name: string;
-    path: string;
-  }>;
+  entries: ListToolEntry[];
   fileCount: number;
   root: string;
   totalEntries: number;
@@ -98,6 +105,74 @@ function buildSummary(
   );
 }
 
+const DIR_ICON = "vscode-icons:default-folder";
+
+function TreeEntry({ entry }: { entry: ListToolEntry }) {
+  const isDir = entry.kind === "directory";
+  let iconName: string;
+
+  if (isDir) {
+    iconName = DIR_ICON;
+  } else {
+    const lang = detectLanguageFromPath(entry.name);
+    iconName = languageToVSCodeIcon[lang] ?? "vscode-icons:default-file";
+  }
+
+  return (
+    <div
+      className="flex items-center gap-1.5 py-px"
+      style={{ paddingLeft: `${entry.depth * 16}px` }}
+    >
+      <Icon
+        className="h-3 w-3 shrink-0"
+        icon={iconName}
+      />
+      <span
+        className={`truncate font-mono text-[11px] ${isDir ? "text-foreground/60 font-medium" : "text-foreground/50"}`}
+        title={entry.path}
+      >
+        {entry.name}
+      </span>
+    </div>
+  );
+}
+
+function ListBody({
+  errorText,
+  output,
+  requestedPath,
+}: {
+  errorText?: string;
+  output: ListToolOutput | null;
+  requestedPath: string;
+}) {
+  if (!output) {
+    return (
+      <p className="font-mono text-[11px] text-foreground/50">
+        {errorText ?? `Listing ${requestedPath}`}
+      </p>
+    );
+  }
+
+  if (output.entries.length === 0) {
+    return (
+      <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
+        {output.tree.trim() || "(empty directory)"}
+      </ScrollShadow>
+    );
+  }
+
+  return (
+    <ScrollShadow className="max-h-[280px]">
+      <div className="flex flex-col">
+        {output.entries.map((entry) => (
+          <TreeEntry key={entry.path} entry={entry} />
+        ))}
+      </div>
+    </ScrollShadow>
+  );
+}
+
 export const ListTool = memo(function ListTool({
   part,
 }: RendererProps) {
@@ -120,10 +195,6 @@ export const ListTool = memo(function ListTool({
   const shownRoot = listOutput?.root ?? requestedPath;
   const summary = buildSummary(part, shownRoot, listOutput);
 
-  const bodyText = listOutput?.tree.trim()
-    ? listOutput.tree
-    : partErrorText ?? `Listing ${requestedPath}`;
-
   const footer = listOutput ? (
     <span>
       {listOutput.directoryCount} dir{listOutput.directoryCount === 1 ? "" : "s"} · {listOutput.fileCount} file{listOutput.fileCount === 1 ? "" : "s"} · {listOutput.totalEntries} shown
@@ -142,9 +213,11 @@ export const ListTool = memo(function ListTool({
       errorText={partErrorText && part.state !== "output-error" ? partErrorText : undefined}
       footer={footer}
     >
-      <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
-        {bodyText}
-      </ScrollShadow>
+      <ListBody
+        errorText={partErrorText}
+        output={listOutput}
+        requestedPath={requestedPath}
+      />
     </ToolLayout>
   );
 });

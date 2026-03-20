@@ -192,6 +192,40 @@ function isGitOutput(value: unknown): value is GitOutput {
   return !!candidate && typeof candidate.action === "string";
 }
 
+function splitPatchByFile(
+  patchText: string,
+): Array<{ diff: string; path: string }> {
+  const results: Array<{ diff: string; path: string }> = [];
+  const lines = patchText.split("\n");
+  let currentPath = "";
+  let currentLines: string[] = [];
+
+  function flush() {
+    if (currentPath && currentLines.length > 0) {
+      results.push({ diff: currentLines.join("\n"), path: currentPath });
+    }
+    currentLines = [];
+    currentPath = "";
+  }
+
+  for (const line of lines) {
+    if (line.startsWith("--- a/") || line.startsWith("--- /dev/null")) {
+      flush();
+      currentLines.push(line);
+    } else if (line.startsWith("+++ b/")) {
+      currentPath = line.slice(6);
+      currentLines.push(line);
+    } else if (line.startsWith("+++ /dev/null")) {
+      currentLines.push(line);
+    } else {
+      currentLines.push(line);
+    }
+  }
+
+  flush();
+  return results;
+}
+
 function buildSummary(
   toolName: string,
   part: RendererProps["part"],
@@ -558,6 +592,16 @@ function renderBody(
 
   if ("input" in part && part.input !== undefined) {
     if (toolName === "apply_patch" && isApplyPatchInput(part.input)) {
+      const fileDiffs = splitPatchByFile(part.input.patchText);
+      if (fileDiffs.length > 0) {
+        return (
+          <div className="flex flex-col gap-2">
+            {fileDiffs.map((fd, i) => (
+              <DiffView key={`${fd.path}-${i}`} diff={fd.diff} path={fd.path} />
+            ))}
+          </div>
+        );
+      }
       return (
         <ScrollShadow className="max-h-[220px] whitespace-pre-wrap rounded-lg border border-border/30 p-2 font-mono text-[11px] text-foreground/70">
           {part.input.patchText}

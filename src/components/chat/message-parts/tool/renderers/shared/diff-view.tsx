@@ -1,11 +1,19 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { Button, ScrollShadow } from "@heroui/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ScrollShadow } from "@heroui/react";
 import { Copy01Icon, Tick01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Icon } from "@iconify/react";
 
 import { createUnifiedDiff } from "@/lib/diff/unified";
+import {
+  detectLanguageFromPath,
+  highlightToTokens,
+  languageToVSCodeIcon,
+  type ThemedToken,
+} from "@/lib/syntax/highlighter";
+import { useResolvedTheme } from "@/lib/syntax/use-resolved-theme";
 
 type DiffLineKind = "add" | "ctx" | "del";
 
@@ -22,7 +30,15 @@ type DiffGroup =
 
 type WordSegment = { highlight: boolean; text: string };
 
-const CONTEXT_KEEP = 2;
+type SyntaxSegment = { color?: string; text: string };
+
+type HighlightedWordSegment = {
+  color?: string;
+  highlight: boolean;
+  text: string;
+};
+
+const CONTEXT_KEEP = 3;
 
 function parseDiff(raw: string): {
   additions: number;
@@ -230,6 +246,89 @@ function computeWordDiffsForLines(lines: DiffLine[]) {
   return wordDiffByIndex;
 }
 
+function shikiTokensToSegments(tokens: ThemedToken[]): SyntaxSegment[] {
+  return tokens.map((t) => ({ color: t.color, text: t.content }));
+}
+
+function buildSyntaxMaps(
+  lines: DiffLine[],
+  oldTokenLines: ThemedToken[][] | null,
+  newTokenLines: ThemedToken[][] | null,
+): Map<number, SyntaxSegment[]> {
+  const map = new Map<number, SyntaxSegment[]>();
+
+  if (oldTokenLines) {
+    let tokenIdx = 0;
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i]!;
+      if (line.kind === "del" || line.kind === "ctx") {
+        if (tokenIdx < oldTokenLines.length) {
+          map.set(i, shikiTokensToSegments(oldTokenLines[tokenIdx]!));
+        }
+        tokenIdx += 1;
+      }
+    }
+  }
+
+  if (newTokenLines) {
+    let tokenIdx = 0;
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i]!;
+      if (line.kind === "add" || line.kind === "ctx") {
+        if (line.kind === "add" && tokenIdx < newTokenLines.length) {
+          map.set(i, shikiTokensToSegments(newTokenLines[tokenIdx]!));
+        }
+        tokenIdx += 1;
+      }
+    }
+  }
+
+  return map;
+}
+
+function overlayWordDiffOnSyntax(
+  syntaxSegments: SyntaxSegment[],
+  wordSegments: WordSegment[],
+): HighlightedWordSegment[] {
+  const result: HighlightedWordSegment[] = [];
+
+  let syntaxPos = 0;
+  let syntaxCharPos = 0;
+
+  for (const wordSeg of wordSegments) {
+    let remaining = wordSeg.text.length;
+
+    while (remaining > 0 && syntaxPos < syntaxSegments.length) {
+      const syntaxSeg = syntaxSegments[syntaxPos]!;
+      const availableChars = syntaxSeg.text.length - syntaxCharPos;
+      const take = Math.min(remaining, availableChars);
+
+      result.push({
+        color: syntaxSeg.color,
+        highlight: wordSeg.highlight,
+        text: syntaxSeg.text.slice(syntaxCharPos, syntaxCharPos + take),
+      });
+
+      remaining -= take;
+      syntaxCharPos += take;
+
+      if (syntaxCharPos >= syntaxSeg.text.length) {
+        syntaxPos += 1;
+        syntaxCharPos = 0;
+      }
+    }
+
+    if (remaining > 0) {
+      result.push({
+        highlight: wordSeg.highlight,
+        text: wordSeg.text.slice(wordSeg.text.length - remaining),
+      });
+    }
+  }
+
+  return result;
+}
+
 function CollapsedRegion({
   count,
   onExpand,
@@ -239,41 +338,107 @@ function CollapsedRegion({
 }) {
   return (
     <button
-      className="flex w-full items-center gap-2 bg-foreground/2 px-0 py-px text-left hover:bg-foreground/4"
+      className="sentinel-diff-collapsed flex w-full items-center gap-2 px-0 py-[3px] text-left"
       onClick={onExpand}
       type="button"
     >
-      <span className="w-[72px] shrink-0 select-none border-r border-border/20 text-center font-mono text-[10px] text-foreground/20">
+      <span className="sentinel-diff-gutter w-[76px] shrink-0 select-none border-r border-border/15 text-center font-mono text-[10px] text-foreground/20">
         ···
       </span>
-      <span className="font-mono text-[10px] text-foreground/30">
+      <span className="flex items-center gap-1 pl-1 font-mono text-[10px] text-foreground/30">
+        <svg
+          className="h-3 w-3 text-foreground/20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          viewBox="0 0 24 24"
+        >
+          <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
         {count} unchanged line{count !== 1 ? "s" : ""}
       </span>
     </button>
   );
 }
 
-function WordDiffLine({
+function SyntaxLine({
+  segments,
+  fallbackText,
+  opacity,
+}: {
+  fallbackText: string;
+  opacity?: string;
+  segments: SyntaxSegment[] | undefined;
+}) {
+  if (!segments) {
+    return <span className={opacity}>{fallbackText}</span>;
+  }
+
+  return (
+    <>
+      {segments.map((seg, i) => (
+        <span key={i} className={opacity} style={seg.color ? { color: seg.color } : undefined}>
+          {seg.text}
+        </span>
+      ))}
+    </>
+  );
+}
+
+function HighlightedWordDiffLine({
+  segments,
+  kind,
+}: {
+  kind: "add" | "del";
+  segments: HighlightedWordSegment[];
+}) {
+  const hlClass =
+    kind === "add"
+      ? "sentinel-diff-word-add"
+      : "sentinel-diff-word-del";
+
+  return (
+    <>
+      {segments.map((seg, i) =>
+        seg.highlight ? (
+          <span
+            key={i}
+            className={hlClass}
+            style={seg.color ? { color: seg.color } : undefined}
+          >
+            {seg.text}
+          </span>
+        ) : (
+          <span key={i} style={seg.color ? { color: seg.color } : undefined}>
+            {seg.text}
+          </span>
+        ),
+      )}
+    </>
+  );
+}
+
+function PlainWordDiffLine({
   segments,
   kind,
 }: {
   kind: "add" | "del";
   segments: WordSegment[];
 }) {
-  const highlightClass =
+  const hlClass =
     kind === "add"
-      ? "rounded-[2px] bg-success/20 px-px"
-      : "rounded-[2px] bg-danger/20 px-px";
+      ? "sentinel-diff-word-add"
+      : "sentinel-diff-word-del";
 
   return (
     <>
-      {segments.map((segment, index) =>
-        segment.highlight ? (
-          <span key={index} className={highlightClass}>
-            {segment.text}
+      {segments.map((seg, i) =>
+        seg.highlight ? (
+          <span key={i} className={hlClass}>
+            {seg.text}
           </span>
         ) : (
-          <span key={index}>{segment.text}</span>
+          <span key={i}>{seg.text}</span>
         ),
       )}
     </>
@@ -297,11 +462,28 @@ export function buildPreviewUnifiedDiff({
   }).diff;
 }
 
-export function DiffView({ diff, path }: { diff: string; path: string }) {
+export function DiffView({
+  diff,
+  path,
+  language: languageOverride,
+}: {
+  diff: string;
+  language?: string;
+  path: string;
+}) {
+  const theme = useResolvedTheme();
   const [copied, setCopied] = useState(false);
   const [expandedRegions, setExpandedRegions] = useState<Set<number>>(
     () => new Set(),
   );
+  const [syntaxMap, setSyntaxMap] = useState<Map<number, SyntaxSegment[]>>(
+    () => new Map(),
+  );
+  const [hasBeenVisible, setHasBeenVisible] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const language = languageOverride ?? detectLanguageFromPath(path);
+  const fileIcon = languageToVSCodeIcon[language] ?? null;
 
   const { additions, allLines, deletions, groups, wordDiffs } = useMemo(() => {
     const {
@@ -317,6 +499,59 @@ export function DiffView({ diff, path }: { diff: string; path: string }) {
       wordDiffs: computeWordDiffsForLines(lines),
     };
   }, [diff]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || hasBeenVisible) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setHasBeenVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "300px 0px" },
+    );
+
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [hasBeenVisible]);
+
+  useEffect(() => {
+    if (!hasBeenVisible || language === "text" || allLines.length === 0) return;
+
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        const oldContent = allLines
+          .filter((l) => l.kind === "del" || l.kind === "ctx")
+          .map((l) => l.text)
+          .join("\n");
+        const newContent = allLines
+          .filter((l) => l.kind === "add" || l.kind === "ctx")
+          .map((l) => l.text)
+          .join("\n");
+
+        const [oldTokens, newTokens] = await Promise.all([
+          highlightToTokens(oldContent, language, theme),
+          highlightToTokens(newContent, language, theme),
+        ]);
+
+        if (!cancelled) {
+          setSyntaxMap(buildSyntaxMaps(allLines, oldTokens, newTokens));
+        }
+      } catch {
+        // Syntax highlighting is best-effort
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasBeenVisible, language, theme, allLines]);
 
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(diff);
@@ -338,30 +573,43 @@ export function DiffView({ diff, path }: { diff: string; path: string }) {
   );
 
   const fileName = path.split("/").pop() ?? path;
-  const gutterWidth = "w-[34px]";
+  const isFullPath = path.includes("/");
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border/40">
-      <div className="flex items-center justify-between border-b border-border/30 px-3 py-1">
-        <span className="font-mono text-[11px] text-foreground/50">
-          {fileName}
-        </span>
-        <div className="flex items-center gap-2.5">
+    <div ref={containerRef} className="sentinel-diff overflow-hidden rounded-lg border border-border/40">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-border/30 bg-foreground/2 px-3 py-1.5">
+        <div className="flex min-w-0 items-center gap-1.5">
+          {fileIcon ? (
+            <Icon className="h-3.5 w-3.5 shrink-0 text-foreground/50" icon={fileIcon} />
+          ) : null}
+          <span className="truncate font-mono text-[11px] text-foreground/50" title={path}>
+            {isFullPath ? (
+              <>
+                <span className="text-foreground/30">
+                  {path.slice(0, path.length - fileName.length)}
+                </span>
+                <span className="text-foreground/60">{fileName}</span>
+              </>
+            ) : (
+              <span className="text-foreground/60">{path}</span>
+            )}
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-2.5">
           <div className="flex items-center gap-1.5 font-mono text-[11px]">
             {additions > 0 ? (
               <span className="text-success">+{additions}</span>
             ) : null}
             {deletions > 0 ? (
-              <span className="text-danger">-{deletions}</span>
+              <span className="text-danger">{"\u2212"}{deletions}</span>
             ) : null}
           </div>
-          <Button
-            isIconOnly
+          <button
             aria-label="Copy diff"
-            className="h-5 min-w-0 bg-transparent p-0 text-foreground/30 hover:text-foreground/60"
-            onPress={() => void handleCopy()}
-            size="sm"
-            variant="ghost"
+            className="flex cursor-pointer items-center justify-center rounded p-0.5 text-foreground/30 transition-colors hover:text-foreground/60"
+            onClick={() => void handleCopy()}
+            type="button"
           >
             <HugeiconsIcon
               color="currentColor"
@@ -369,11 +617,13 @@ export function DiffView({ diff, path }: { diff: string; path: string }) {
               size={11}
               strokeWidth={1.5}
             />
-          </Button>
+          </button>
         </div>
       </div>
-      <ScrollShadow className="max-h-[320px]">
-        <div className="font-mono text-[11px]">
+
+      {/* Lines */}
+      <ScrollShadow className="max-h-[400px] overflow-x-auto">
+        <div className="font-mono text-[11px] leading-[18px]">
           {groups.map((group, groupIndex) => {
             if (
               group.type === "collapsed" &&
@@ -394,74 +644,97 @@ export function DiffView({ diff, path }: { diff: string; path: string }) {
                 line.kind === "del" ? wordDiffs.get(lineIndex) : undefined;
               const previousWordDiff =
                 line.kind === "add" ? wordDiffs.get(lineIndex - 1) : undefined;
+              const lineSyntax = syntaxMap.get(lineIndex);
+
+              const bgClass =
+                line.kind === "add"
+                  ? "sentinel-diff-add"
+                  : line.kind === "del"
+                    ? "sentinel-diff-del"
+                    : "sentinel-diff-ctx";
+
+              const gutterColor =
+                line.kind === "add"
+                  ? "text-success/40"
+                  : line.kind === "del"
+                    ? "text-danger/40"
+                    : "text-foreground/15";
+
+              const signChar =
+                line.kind === "add"
+                  ? "+"
+                  : line.kind === "del"
+                    ? "\u2212"
+                    : " ";
+
+              const signColor =
+                line.kind === "add"
+                  ? "text-success/50"
+                  : line.kind === "del"
+                    ? "text-danger/50"
+                    : "text-foreground/10";
 
               return (
                 <div
-                  key={`${lineIndex}:${line.kind}:${line.text}`}
-                  className={
-                    line.kind === "add"
-                      ? "bg-success/6"
-                      : line.kind === "del"
-                        ? "bg-danger/6"
-                        : ""
-                  }
+                  key={`${lineIndex}:${line.kind}`}
+                  className={`sentinel-diff-line ${bgClass} flex`}
                 >
+                  {/* Old line number */}
                   <span
-                    className={`${gutterWidth} inline-block shrink-0 select-none border-r border-border/20 pr-1 text-right text-[10px] ${
-                      line.kind === "add"
-                        ? "text-success/40"
-                        : line.kind === "del"
-                          ? "text-danger/40"
-                          : "text-foreground/15"
-                    }`}
+                    className={`sentinel-diff-gutter w-[38px] shrink-0 select-none border-r border-border/15 pr-1.5 text-right text-[10px] leading-[18px] ${gutterColor}`}
                   >
-                    {line.oldNum ?? " "}
+                    {line.oldNum ?? ""}
                   </span>
+                  {/* New line number */}
                   <span
-                    className={`${gutterWidth} inline-block shrink-0 select-none border-r border-border/20 pr-1 text-right text-[10px] ${
-                      line.kind === "add"
-                        ? "text-success/40"
-                        : line.kind === "del"
-                          ? "text-danger/40"
-                          : "text-foreground/15"
-                    }`}
+                    className={`sentinel-diff-gutter w-[38px] shrink-0 select-none border-r border-border/15 pr-1.5 text-right text-[10px] leading-[18px] ${gutterColor}`}
                   >
-                    {line.newNum ?? " "}
+                    {line.newNum ?? ""}
                   </span>
+                  {/* Sign */}
                   <span
-                    className={`inline-block w-4 select-none text-center ${
-                      line.kind === "add"
-                        ? "text-success/60"
-                        : line.kind === "del"
-                          ? "text-danger/60"
-                          : "text-foreground/10"
-                    }`}
+                    className={`w-[18px] shrink-0 select-none text-center leading-[18px] ${signColor}`}
                   >
-                    {line.kind === "add"
-                      ? "+"
-                      : line.kind === "del"
-                        ? "−"
-                        : " "}
+                    {signChar}
                   </span>
-                  <span
-                    className={
-                      line.kind === "ctx"
-                        ? "text-foreground/40"
-                        : "text-foreground/80"
-                    }
-                  >
+                  {/* Content */}
+                  <span className="whitespace-pre pr-3">
                     {line.kind === "del" && wordDiff ? (
-                      <WordDiffLine
-                        kind="del"
-                        segments={wordDiff.oldSegments}
-                      />
+                      lineSyntax ? (
+                        <HighlightedWordDiffLine
+                          kind="del"
+                          segments={overlayWordDiffOnSyntax(
+                            lineSyntax,
+                            wordDiff.oldSegments,
+                          )}
+                        />
+                      ) : (
+                        <PlainWordDiffLine
+                          kind="del"
+                          segments={wordDiff.oldSegments}
+                        />
+                      )
                     ) : line.kind === "add" && previousWordDiff ? (
-                      <WordDiffLine
-                        kind="add"
-                        segments={previousWordDiff.newSegments}
-                      />
+                      lineSyntax ? (
+                        <HighlightedWordDiffLine
+                          kind="add"
+                          segments={overlayWordDiffOnSyntax(
+                            lineSyntax,
+                            previousWordDiff.newSegments,
+                          )}
+                        />
+                      ) : (
+                        <PlainWordDiffLine
+                          kind="add"
+                          segments={previousWordDiff.newSegments}
+                        />
+                      )
                     ) : (
-                      line.text
+                      <SyntaxLine
+                        fallbackText={line.text}
+                        opacity={line.kind === "ctx" ? "opacity-50" : undefined}
+                        segments={lineSyntax}
+                      />
                     )}
                   </span>
                 </div>

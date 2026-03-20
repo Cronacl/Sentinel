@@ -4,83 +4,20 @@ import { Copy01Icon, Tick01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import {
-  bundledLanguages,
-  createHighlighter,
-  type BundledLanguage,
-} from "shiki";
+  getCachedHighlightHtml,
+  getShikiThemeName,
+  highlighterPromise,
+  isBundledLanguage,
+  languageToVSCodeIcon,
+  normalizeLanguage,
+  setCachedHighlightHtml,
+  ensureLanguageLoaded,
+} from "@/lib/syntax/highlighter";
+import { useResolvedTheme } from "@/lib/syntax/use-resolved-theme";
 
-const highlighterPromise = createHighlighter({
-  themes: ["github-light", "github-dark"],
-  langs: [],
-});
-
-const highlightedHtmlCache = new Map<string, string>();
-const MAX_HIGHLIGHT_CACHE_SIZE = 200;
 const DEFAULT_MAX_LINES = 10;
-
-const languageToVSCodeIcon: Record<string, string> = {
-  bash: "vscode-icons:file-type-shell",
-  c: "vscode-icons:file-type-c",
-  cpp: "vscode-icons:file-type-cpp",
-  css: "vscode-icons:file-type-css",
-  docker: "vscode-icons:file-type-docker",
-  dockerfile: "vscode-icons:file-type-docker",
-  go: "vscode-icons:file-type-go",
-  graphql: "vscode-icons:file-type-graphql",
-  html: "vscode-icons:file-type-html",
-  java: "vscode-icons:file-type-java",
-  javascript: "vscode-icons:file-type-js",
-  json: "vscode-icons:file-type-json",
-  jsx: "vscode-icons:file-type-jsx",
-  markdown: "vscode-icons:file-type-markdown",
-  md: "vscode-icons:file-type-markdown",
-  php: "vscode-icons:file-type-php",
-  prisma: "vscode-icons:file-type-light-prisma",
-  python: "vscode-icons:file-type-python",
-  ruby: "vscode-icons:file-type-ruby",
-  rust: "vscode-icons:file-type-rust",
-  shell: "vscode-icons:file-type-shell",
-  sql: "vscode-icons:file-type-sql",
-  swift: "vscode-icons:file-type-swift",
-  ts: "vscode-icons:file-type-typescript",
-  tsx: "vscode-icons:file-type-tsx",
-  typescript: "vscode-icons:file-type-typescript",
-  vue: "vscode-icons:file-type-vue",
-  xml: "vscode-icons:file-type-xml",
-  yaml: "vscode-icons:file-type-yaml",
-  yml: "vscode-icons:file-type-yaml",
-  zsh: "vscode-icons:file-type-shell",
-};
-
-function setCachedHighlight(key: string, value: string) {
-  if (highlightedHtmlCache.has(key)) {
-    highlightedHtmlCache.delete(key);
-  }
-
-  highlightedHtmlCache.set(key, value);
-
-  if (highlightedHtmlCache.size <= MAX_HIGHLIGHT_CACHE_SIZE) {
-    return;
-  }
-
-  const oldestKey = highlightedHtmlCache.keys().next().value;
-  if (oldestKey) {
-    highlightedHtmlCache.delete(oldestKey);
-  }
-}
-
-function normalizeLanguage(language: string | undefined) {
-  if (!language) return "text";
-
-  const normalized = language
-    .replace(/^language-/, "")
-    .replace(/^lang-/, "")
-    .trim()
-    .toLowerCase();
-
-  return normalized || "text";
-}
 
 function getLineCount(text: string) {
   return text.split("\n").length;
@@ -93,38 +30,6 @@ function truncateCodeByLines(text: string, maxLines: number) {
   }
 
   return lines.slice(0, maxLines).join("\n");
-}
-
-function resolveTheme() {
-  if (typeof document === "undefined") {
-    return "dark";
-  }
-
-  return document.documentElement.getAttribute("data-theme") === "light"
-    ? "light"
-    : "dark";
-}
-
-function useResolvedTheme() {
-  const [theme, setTheme] = useState<"light" | "dark">(() => resolveTheme());
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-
-    const root = document.documentElement;
-    const syncTheme = () => setTheme(resolveTheme());
-    const observer = new MutationObserver(syncTheme);
-
-    observer.observe(root, {
-      attributeFilter: ["class", "data-theme"],
-      attributes: true,
-    });
-    syncTheme();
-
-    return () => observer.disconnect();
-  }, []);
-
-  return theme;
 }
 
 export function CodeBlock({
@@ -210,7 +115,7 @@ export function CodeBlock({
 
     const highlight = async () => {
       const cacheKey = `${theme}:${normalizedLanguage}:${displayedCode}`;
-      const cachedHtml = highlightedHtmlCache.get(cacheKey);
+      const cachedHtml = getCachedHighlightHtml(cacheKey);
       if (cachedHtml) {
         setHighlightedHtml(cachedHtml);
         return;
@@ -218,24 +123,16 @@ export function CodeBlock({
 
       try {
         const highlighter = await highlighterPromise;
-        const languageKey = normalizedLanguage as BundledLanguage;
-
-        if (
-          normalizedLanguage !== "text" &&
-          Object.hasOwn(bundledLanguages, languageKey) &&
-          !highlighter.getLoadedLanguages().includes(languageKey)
-        ) {
-          await highlighter.loadLanguage(languageKey);
-        }
+        await ensureLanguageLoaded(normalizedLanguage);
 
         const html = highlighter.codeToHtml(displayedCode, {
-          lang: Object.hasOwn(bundledLanguages, languageKey)
-            ? languageKey
+          lang: isBundledLanguage(normalizedLanguage)
+            ? normalizedLanguage
             : "text",
-          theme: theme === "light" ? "github-light" : "github-dark",
+          theme: getShikiThemeName(theme),
         });
 
-        setCachedHighlight(cacheKey, html);
+        setCachedHighlightHtml(cacheKey, html);
         if (!isCancelled) {
           setHighlightedHtml(html);
         }

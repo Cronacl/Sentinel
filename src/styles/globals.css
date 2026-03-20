@@ -373,3 +373,51 @@ button[type="button"] {
 .sentinel-shiki pre code {
   padding: 8px 8px;
 }
+
+/* ── Diff view ──────────────────────────────────────────────── */
+
+.sentinel-diff {
+  contain: layout style;
+  font-variant-ligatures: none;
+}
+
+.sentinel-diff-line {
+  min-height: 18px;
+}
+
+.sentinel-diff-add {
+  background-color: color-mix(in oklab, var(--color-success) 6%, transparent);
+}
+
+.sentinel-diff-del {
+  background-color: color-mix(in oklab, var(--color-danger) 6%, transparent);
+}
+
+.sentinel-diff-ctx {
+  background-color: transparent;
+}
+
+.sentinel-diff-gutter {
+  font-variant-numeric: tabular-nums;
+}
+
+.sentinel-diff-word-add {
+  background-color: color-mix(in oklab, var(--color-success) 20%, transparent);
+  border-radius: 2px;
+  padding-inline: 1px;
+}
+
+.sentinel-diff-word-del {
+  background-color: color-mix(in oklab, var(--color-danger) 20%, transparent);
+  border-radius: 2px;
+  padding-inline: 1px;
+}
+
+.sentinel-diff-collapsed {
+  background-color: color-mix(in oklab, var(--color-foreground) 2%, transparent);
+  border-block: 1px solid color-mix(in oklab, var(--color-border) 10%, transparent);
+}
+
+.sentinel-diff-collapsed:hover {
+  background-color: color-mix(in oklab, var(--color-foreground) 4%, transparent);
+}

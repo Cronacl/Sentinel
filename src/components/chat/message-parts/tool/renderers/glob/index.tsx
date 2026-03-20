@@ -3,9 +3,14 @@
 import type { ReactNode } from "react";
 import { memo, useEffect, useState } from "react";
 import { ScrollShadow } from "@heroui/react";
+import { Icon } from "@iconify/react";
 
 import type { RendererProps } from "../../renderer";
 import { ToolLayout } from "../shared/tool-layout";
+import {
+  detectLanguageFromPath,
+  languageToVSCodeIcon,
+} from "@/lib/syntax/highlighter";
 
 type GlobToolInput = {
   path?: string;
@@ -92,6 +97,71 @@ function buildSummary(
   );
 }
 
+function FileEntry({ path }: { path: string }) {
+  const language = detectLanguageFromPath(path);
+  const iconName = languageToVSCodeIcon[language] ?? null;
+  const fileName = path.split("/").pop() ?? path;
+  const dirPrefix = path.includes("/")
+    ? path.slice(0, path.length - fileName.length)
+    : null;
+
+  return (
+    <div className="flex items-center gap-1.5 py-px">
+      {iconName ? (
+        <Icon className="h-3 w-3 shrink-0 text-foreground/40" icon={iconName} />
+      ) : (
+        <span className="h-3 w-3 shrink-0" />
+      )}
+      <span className="truncate font-mono text-[11px]" title={path}>
+        {dirPrefix ? (
+          <>
+            <span className="text-foreground/25">{dirPrefix}</span>
+            <span className="text-foreground/60">{fileName}</span>
+          </>
+        ) : (
+          <span className="text-foreground/60">{fileName}</span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function GlobBody({
+  errorText,
+  output,
+  pattern,
+}: {
+  errorText?: string;
+  output: GlobToolOutput | null;
+  pattern: string;
+}) {
+  if (!output) {
+    return (
+      <p className="font-mono text-[11px] text-foreground/50">
+        {errorText ?? `Searching for ${pattern}`}
+      </p>
+    );
+  }
+
+  if (output.files.length === 0) {
+    return (
+      <p className="font-mono text-[11px] text-foreground/50">
+        No files matched {pattern}
+      </p>
+    );
+  }
+
+  return (
+    <ScrollShadow className="max-h-[280px]">
+      <div className="flex flex-col">
+        {output.files.map((file) => (
+          <FileEntry key={file} path={file} />
+        ))}
+      </div>
+    </ScrollShadow>
+  );
+}
+
 export const GlobTool = memo(function GlobTool({
   part,
 }: RendererProps) {
@@ -113,12 +183,6 @@ export const GlobTool = memo(function GlobTool({
   const pattern = globOutput?.pattern ?? globInput?.pattern ?? "";
   const summary = buildSummary(part, pattern, globOutput);
 
-  const bodyText = globOutput
-    ? globOutput.files.length === 0
-      ? `No files matched ${pattern}`
-      : globOutput.files.join("\n")
-    : partErrorText ?? `Searching for ${pattern}`;
-
   const footer = globOutput ? (
     <span>
       {globOutput.totalFiles} file{globOutput.totalFiles === 1 ? "" : "s"}
@@ -137,9 +201,11 @@ export const GlobTool = memo(function GlobTool({
       errorText={partErrorText && part.state !== "output-error" ? partErrorText : undefined}
       footer={footer}
     >
-      <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
-        {bodyText}
-      </ScrollShadow>
+      <GlobBody
+        errorText={partErrorText}
+        output={globOutput}
+        pattern={pattern}
+      />
     </ToolLayout>
   );
 });
