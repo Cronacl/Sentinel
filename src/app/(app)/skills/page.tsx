@@ -28,6 +28,7 @@ import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import Link from "next/link";
 import type { ComponentType, SVGProps } from "react";
 import { useCallback, useMemo, useState } from "react";
+import { sileo } from "sileo";
 
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { CustomSkillInstallSidebar } from "@/components/skills/custom-skill-install-sidebar";
@@ -384,6 +385,7 @@ export default function SkillsPage() {
         });
         void utils.skills.list.invalidate();
         void utils.skills.registry.invalidate();
+        sileo.success({ description: "Skill installed." });
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Installation failed.";
@@ -408,8 +410,14 @@ export default function SkillsPage() {
         await uninstallMutation.mutateAsync({ name, scope });
         void utils.skills.list.invalidate();
         void utils.skills.registry.invalidate();
-      } catch {
-        // failure surfaced by mutation state
+        sileo.success({ description: "Skill uninstalled." });
+      } catch (error) {
+        sileo.error({
+          description:
+            error instanceof Error
+              ? error.message
+              : "Failed to uninstall skill.",
+        });
       } finally {
         setUninstallingSkills((prev) => {
           const next = new Set(prev);

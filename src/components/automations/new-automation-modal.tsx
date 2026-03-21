@@ -24,6 +24,7 @@ import {
   ControlledTextField,
 } from "@/components/forms/controlled-fields";
 import { getErrorMessage } from "@/lib/errors";
+import { sileo } from "sileo";
 import { AUTOMATION_SCHEDULE_TYPES } from "@/server/db/enums";
 import {
   getDefaultReasoningEffort,
@@ -411,6 +412,7 @@ export function NewAutomationModal({
 
       const created = await createMutation.mutateAsync(validated.data);
       await utils.automations.list.invalidate();
+      sileo.success({ description: "Automation created." });
       state.close();
       router.push(`/automations/${encodeURIComponent(created.id)}`);
     } catch (error) {

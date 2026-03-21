@@ -2,6 +2,7 @@
 
 import { Button, Chip, Skeleton, Switch } from "@heroui/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { sileo } from "sileo";
 
 import { IntegrationProviderIcon } from "@/components/icons/integration-provider-icon";
 import {
@@ -203,11 +204,17 @@ export default function IntegrationsSettingsPage() {
 
       return { previousIntegrations };
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       utils.integrations.list.setData(
         undefined,
         context?.previousIntegrations ?? [],
       );
+      sileo.error({
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to update integration.",
+      });
     },
     onSettled: async () => {
       await utils.integrations.list.invalidate();
@@ -334,6 +341,13 @@ export default function IntegrationsSettingsPage() {
       });
 
       await utils.integrations.list.invalidate();
+    } catch (error) {
+      sileo.error({
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to connect integration.",
+      });
     } finally {
       setConnectingProvider(null);
     }

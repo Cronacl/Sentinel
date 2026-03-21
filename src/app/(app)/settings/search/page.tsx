@@ -7,6 +7,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { sileo } from "sileo";
 
 import {
   ControlledNumberField,
@@ -113,6 +114,7 @@ export default function SearchSettingsPage() {
         setSettingsError("");
         utils.searchSettings.get.setData(undefined, data);
         form.reset(data);
+        sileo.success({ description: "Search settings saved." });
       },
       setData: (value) => {
         utils.searchSettings.get.setData(undefined, value);
@@ -141,7 +143,7 @@ export default function SearchSettingsPage() {
 
       return { previousProvider, previousProviders };
     },
-    onError: (_error, variables, context) => {
+    onError: (error, variables, context) => {
       utils.searchProviders.list.setData(
         undefined,
         context?.previousProviders ?? [],
@@ -150,6 +152,12 @@ export default function SearchSettingsPage() {
         { provider: variables.provider },
         context?.previousProvider ?? null,
       );
+      sileo.error({
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to toggle search provider.",
+      });
     },
   });
 

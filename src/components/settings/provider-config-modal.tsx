@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { getErrorMessage } from "@/lib/errors";
+import { sileo } from "sileo";
 import type { AIProvider } from "@/server/db/enums";
 import {
   ControlledSwitchField,
@@ -195,6 +196,7 @@ export function ProviderConfigModal({
             : item,
         ),
       );
+      sileo.success({ description: "Provider saved." });
       state.close();
     } catch (mutationError) {
       setSubmitError(
@@ -229,6 +231,7 @@ export function ProviderConfigModal({
             : item,
         ),
       );
+      sileo.success({ description: "Provider removed." });
       state.close();
     } catch (mutationError) {
       setSubmitError(

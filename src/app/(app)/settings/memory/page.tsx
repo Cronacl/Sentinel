@@ -14,6 +14,7 @@ import { AiIdeaIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { sileo } from "sileo";
 
 import {
   ControlledNumberField,
@@ -356,6 +357,7 @@ export default function MemorySettingsPage() {
         memoryProfileId: profile.id,
         retrievalLimit: data.retrievalLimit,
       });
+      sileo.success({ description: "Memory settings saved." });
     },
     onError: (error) => {
       setActionError(error.message);
@@ -370,6 +372,7 @@ export default function MemorySettingsPage() {
         utils.memory.list.invalidate(),
         utils.memorySettings.get.invalidate(),
       ]);
+      sileo.success({ description: "All memories cleared." });
     },
     onError: (error) => {
       setActionError(error.message);
@@ -384,6 +387,7 @@ export default function MemorySettingsPage() {
         utils.memory.list.invalidate(),
         utils.memorySettings.get.invalidate(),
       ]);
+      sileo.success({ description: "Memory reindexed." });
     },
     onError: (error) => {
       setActionError(error.message);
@@ -394,6 +398,7 @@ export default function MemorySettingsPage() {
     onSuccess: async () => {
       setPendingDeleteMemory(null);
       await utils.memory.list.invalidate();
+      sileo.success({ description: "Memory deleted." });
     },
     onError: (error) => {
       setActionError(error.message);
@@ -404,6 +409,14 @@ export default function MemorySettingsPage() {
   const togglePinned = api.memory.togglePinned.useMutation({
     onSuccess: async () => {
       await utils.memory.list.invalidate();
+    },
+    onError: (error) => {
+      sileo.error({
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to update pin status.",
+      });
     },
   });
 

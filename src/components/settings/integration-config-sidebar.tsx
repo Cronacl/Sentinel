@@ -14,6 +14,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { getErrorMessage } from "@/lib/errors";
+import { sileo } from "sileo";
 import {
   ControlledSwitchField,
   ControlledTextField,
@@ -352,6 +353,7 @@ export function IntegrationConfigSidebar({
       }
 
       await utils.integrations.list.invalidate();
+      sileo.success({ description: "Integration saved." });
     } catch (error) {
       setSubmitError(
         getErrorMessage(error, "Unable to save integration settings."),
@@ -372,6 +374,7 @@ export function IntegrationConfigSidebar({
       });
 
       await utils.integrations.list.invalidate();
+      sileo.success({ description: "Integration connected." });
     } catch (error) {
       setSubmitError(
         getErrorMessage(error, "Unable to connect this integration."),
@@ -385,6 +388,7 @@ export function IntegrationConfigSidebar({
     try {
       await disconnect.mutateAsync({ provider: integration.provider });
       await utils.integrations.list.invalidate();
+      sileo.success({ description: "Integration disconnected." });
     } catch (error) {
       setSubmitError(
         getErrorMessage(error, "Unable to disconnect this integration."),
@@ -398,6 +402,7 @@ export function IntegrationConfigSidebar({
     try {
       await deleteOAuthApp.mutateAsync({ provider: integration.provider });
       await utils.integrations.list.invalidate();
+      sileo.success({ description: "Credentials removed." });
     } catch (error) {
       setSubmitError(
         getErrorMessage(error, "Unable to remove saved credentials."),

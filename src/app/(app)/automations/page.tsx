@@ -11,6 +11,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
+import { sileo } from "sileo";
 
 import { NewAutomationModal } from "@/components/automations/new-automation-modal";
 import {
@@ -216,6 +217,14 @@ export default function AutomationsPage() {
       setRunningNowSet((prev) => new Set(prev).add(id));
       try {
         await runNowMutation.mutateAsync({ id });
+        sileo.success({ description: "Automation triggered." });
+      } catch (error) {
+        sileo.error({
+          description:
+            error instanceof Error
+              ? error.message
+              : "Failed to run automation.",
+        });
       } finally {
         setRunningNowSet((prev) => {
           const next = new Set(prev);
@@ -229,6 +238,8 @@ export default function AutomationsPage() {
 
   const handleToggleStatus = useCallback(
     async (id: string) => {
+      const automation = [...active, ...paused].find((a) => a.id === id);
+      const wasPaused = automation?.status !== "active";
       setTogglingSet((prev) => new Set(prev).add(id));
       try {
         await toggleMutation.mutateAsync({ id });
@@ -236,6 +247,16 @@ export default function AutomationsPage() {
           utils.automations.list.invalidate(),
           utils.automations.get.invalidate({ id }),
         ]);
+        sileo.success({
+          description: wasPaused ? "Automation resumed." : "Automation paused.",
+        });
+      } catch (error) {
+        sileo.error({
+          description:
+            error instanceof Error
+              ? error.message
+              : "Failed to update automation status.",
+        });
       } finally {
         setTogglingSet((prev) => {
           const next = new Set(prev);
@@ -244,7 +265,7 @@ export default function AutomationsPage() {
         });
       }
     },
-    [toggleMutation, utils],
+    [active, paused, toggleMutation, utils],
   );
 
   return (

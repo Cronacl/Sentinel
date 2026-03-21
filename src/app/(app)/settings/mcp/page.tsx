@@ -6,6 +6,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { sileo } from "sileo";
 
 import { getMcpCatalogIconComponent } from "@/components/settings/mcp-catalog-icons";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
@@ -192,6 +193,7 @@ export default function McpSettingsPage() {
     onError: (error, _variables, context) => {
       setMutationError(error.message);
       utils.mcpServers.list.setData(undefined, context?.previous ?? []);
+      sileo.error({ description: error.message });
     },
     onSettled: async () => {
       await utils.mcpServers.list.invalidate();
@@ -202,10 +204,12 @@ export default function McpSettingsPage() {
     onSuccess: async (server) => {
       setMutationError("");
       await utils.mcpServers.list.invalidate();
+      sileo.success({ description: "MCP server installed." });
       router.push(`/settings/mcp/${server.id}`);
     },
     onError: (error) => {
       setMutationError(error.message);
+      sileo.error({ description: error.message });
     },
   });
 

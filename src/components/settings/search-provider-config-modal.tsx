@@ -12,6 +12,7 @@ import {
 } from "@/components/forms/controlled-fields";
 import { getErrorMessage } from "@/lib/errors";
 import { LIVECRAWL_MODE_VALUES, SEARCH_TYPE_VALUES } from "@/lib/search";
+import { sileo } from "sileo";
 import {
   exaSearchProviderConfigFormSchema,
   searxngSearchProviderConfigFormSchema,
@@ -167,6 +168,7 @@ export function SearchProviderConfigModal({
             : item,
         ),
       );
+      sileo.success({ description: "Search provider saved." });
       state.close();
     } catch (error) {
       setSubmitError(
@@ -191,6 +193,7 @@ export function SearchProviderConfigModal({
             : item,
         ),
       );
+      sileo.success({ description: "Search provider removed." });
       state.close();
     } catch (error) {
       setSubmitError(

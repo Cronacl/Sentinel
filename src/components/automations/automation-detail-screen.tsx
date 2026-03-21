@@ -46,6 +46,7 @@ import {
 } from "@/lib/ai/providers/models";
 import { AUTOMATION_SCHEDULE_TYPES } from "@/server/db/enums";
 import { isLikelyCronExpression } from "@/schemas/automation.schema";
+import { sileo } from "sileo";
 import { api } from "@/trpc/react";
 
 function parseTimeString(value: string | null | undefined): Time | null {
@@ -432,6 +433,7 @@ export function AutomationDetailScreen({
           utils.automations.list.invalidate(),
         ]);
         form.reset(values);
+        sileo.success({ description: "Automation updated." });
       } catch (error) {
         setSubmitError(
           error instanceof Error ? error.message : "Unable to save automation.",
@@ -443,25 +445,58 @@ export function AutomationDetailScreen({
 
   const handleRunNow = async () => {
     if (!automation) return;
-    await runNowMutation.mutateAsync({ id: automation.id });
-    await automationQuery.refetch();
+    try {
+      await runNowMutation.mutateAsync({ id: automation.id });
+      await automationQuery.refetch();
+      sileo.success({ description: "Automation triggered." });
+    } catch (error) {
+      sileo.error({
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to run automation.",
+      });
+    }
   };
 
   const handleToggleStatus = async () => {
     if (!automation) return;
-    await toggleMutation.mutateAsync({ id: automation.id });
-    await Promise.all([
-      automationQuery.refetch(),
-      utils.automations.list.invalidate(),
-      utils.automations.get.invalidate({ id: automation.id }),
-    ]);
+    const wasActive = automation.status === "active";
+    try {
+      await toggleMutation.mutateAsync({ id: automation.id });
+      await Promise.all([
+        automationQuery.refetch(),
+        utils.automations.list.invalidate(),
+        utils.automations.get.invalidate({ id: automation.id }),
+      ]);
+      sileo.success({
+        description: wasActive ? "Automation paused." : "Automation resumed.",
+      });
+    } catch (error) {
+      sileo.error({
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to update automation status.",
+      });
+    }
   };
 
   const handleDelete = async () => {
     if (!automation) return;
-    await deleteMutation.mutateAsync({ id: automation.id });
-    await utils.automations.list.invalidate();
-    router.push("/automations");
+    try {
+      await deleteMutation.mutateAsync({ id: automation.id });
+      await utils.automations.list.invalidate();
+      sileo.success({ description: "Automation deleted." });
+      router.push("/automations");
+    } catch (error) {
+      sileo.error({
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to delete automation.",
+      });
+    }
   };
 
   const isActive = automation?.status === "active";

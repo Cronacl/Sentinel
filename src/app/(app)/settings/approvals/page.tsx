@@ -11,6 +11,7 @@ import {
 import { ValidationApprovalIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useState } from "react";
+import { sileo } from "sileo";
 
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import type { EffectiveToolApprovalPolicy } from "@/lib/ai/chat/tool-approval-policy";
@@ -153,8 +154,14 @@ export default function ApprovalsSettingsPage() {
 
       return { previousApprovals };
     },
-    onError: (_error, _input, context) => {
+    onError: (error, _input, context) => {
       utils.approvals.get.setData(undefined, context?.previousApprovals ?? []);
+      sileo.error({
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to update approval setting.",
+      });
     },
   });
 

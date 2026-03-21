@@ -2,10 +2,12 @@
 
 import { Button, Chip, Skeleton, Switch } from "@heroui/react";
 import { useState } from "react";
+import { sileo } from "sileo";
 
 import { ProviderIcon } from "@/components/icons/provider-icon";
 import { ProviderConfigModal } from "@/components/settings/provider-config-modal";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
+import { getErrorMessage } from "@/lib/errors";
 import { api } from "@/trpc/react";
 
 type ProviderKey = "openai" | "anthropic" | "google" | "google_vertex";
@@ -79,9 +81,12 @@ export default function ProvidersPage() {
         previousProviders,
       };
     },
-    onError: (_error, _variables, context) => {
+    onError: (error, _variables, context) => {
       utils.providers.list.setData(undefined, context?.previousProviders ?? []);
       utils.models.list.setData(undefined, context?.previousModels ?? []);
+      sileo.error({
+        description: getErrorMessage(error, "Failed to update provider."),
+      });
     },
   });
   const isToggling = toggle.isPending;

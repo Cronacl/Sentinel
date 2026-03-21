@@ -10,6 +10,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { sileo } from "sileo";
 
 import { ControlledSelectField } from "@/components/forms/controlled-fields";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
@@ -140,6 +141,7 @@ export default function SecuritySettingsPage() {
         setSettingsError("");
         utils.security.get.setData(undefined, data);
         form.reset(data);
+        sileo.success({ description: "Security settings saved." });
       },
       setData: (value) => {
         utils.security.get.setData(undefined, value);

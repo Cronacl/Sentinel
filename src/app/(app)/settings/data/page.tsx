@@ -8,6 +8,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useState } from "react";
+import { sileo } from "sileo";
 
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { api } from "@/trpc/react";
@@ -57,7 +58,6 @@ function DataSettingsSkeleton() {
 export default function DataSettingsPage() {
   const utils = api.useUtils();
   const [actionError, setActionError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
   const [pendingDeleteFilename, setPendingDeleteFilename] = useState<
     string | null
   >(null);
@@ -67,9 +67,8 @@ export default function DataSettingsPage() {
   const createBackup = api.backup.create.useMutation({
     onSuccess: async (data) => {
       setActionError("");
-      setSuccessMessage(`Backup created: ${data.filename}`);
       await utils.backup.list.invalidate();
-      setTimeout(() => setSuccessMessage(""), 4000);
+      sileo.success({ description: `Backup created: ${data.filename}` });
     },
     onError: (error) => {
       setActionError(error.message);
@@ -81,6 +80,7 @@ export default function DataSettingsPage() {
       setActionError("");
       setPendingDeleteFilename(null);
       await utils.backup.list.invalidate();
+      sileo.success({ description: "Backup deleted." });
     },
     onError: (error) => {
       setActionError(error.message);
@@ -102,12 +102,6 @@ export default function DataSettingsPage() {
       {actionError ? (
         <p className="border-danger-soft-hover bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
           {actionError}
-        </p>
-      ) : null}
-
-      {successMessage ? (
-        <p className="border-success-soft-hover bg-success/10 text-success mb-4 rounded-xl border px-3 py-2.5 text-xs">
-          {successMessage}
         </p>
       ) : null}
 
@@ -145,7 +139,6 @@ export default function DataSettingsPage() {
                 isPending={createBackup.isPending}
                 onPress={() => {
                   setActionError("");
-                  setSuccessMessage("");
                   createBackup.mutate({ label: "manual" });
                 }}
                 size="sm"

@@ -14,6 +14,7 @@ import {
   ControlledTextField,
 } from "@/components/forms/controlled-fields";
 import { getErrorMessage } from "@/lib/errors";
+import { sileo } from "sileo";
 import { useRightSidebar } from "@/components/shell/shell-context";
 import { buildInstallSteps } from "@/lib/skills/registry";
 import {
@@ -97,6 +98,7 @@ export function CustomSkillInstallSidebar({
         utils.skills.list.invalidate(),
         utils.skills.registry.invalidate(),
       ]);
+      sileo.success({ description: "Custom skill installed." });
       close();
     } catch (error) {
       setSubmitError(

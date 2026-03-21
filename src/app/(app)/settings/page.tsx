@@ -10,6 +10,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { sileo } from "sileo";
 
 import {
   ControlledNumberField,
@@ -140,6 +141,7 @@ export default function GeneralSettingsPage() {
         setThemePreference(data.themePreference);
         applyThemePreference(data.themePreference);
         window.dispatchEvent(new Event("sentinel-theme-change"));
+        sileo.success({ description: "Theme updated." });
       },
       setData: (value) => {
         utils.appearance.get.setData(undefined, value);
@@ -167,6 +169,7 @@ export default function GeneralSettingsPage() {
         setGeneralSettingsError("");
         utils.generalSettings.get.setData(undefined, data);
         generalSettingsForm.reset(data);
+        sileo.success({ description: "Settings saved." });
       },
       setData: (value) => {
         utils.generalSettings.get.setData(undefined, value);

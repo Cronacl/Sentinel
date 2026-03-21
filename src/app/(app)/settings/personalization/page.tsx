@@ -4,6 +4,7 @@ import { Button, Form, Skeleton, Spinner } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { sileo } from "sileo";
 
 import {
   ControlledSelectField,
@@ -108,6 +109,7 @@ export default function PersonalizationPage() {
         setSubmitError("");
         utils.personalization.get.setData(undefined, data);
         form.reset(data);
+        sileo.success({ description: "Personalization saved." });
       },
       setData: (value) => {
         utils.personalization.get.setData(undefined, value);

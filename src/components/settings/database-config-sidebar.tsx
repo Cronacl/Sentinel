@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
+import { sileo } from "sileo";
 import {
   ControlledSwitchField,
   ControlledTextField,
@@ -206,6 +207,7 @@ export function DatabaseConfigSidebar({
       }
 
       await utils.integrations.list.invalidate();
+      sileo.success({ description: "Database configuration saved." });
     } catch (error) {
       setSubmitError(
         error instanceof Error
@@ -249,6 +251,7 @@ export function DatabaseConfigSidebar({
         provider: integration.provider,
       });
       await utils.integrations.list.invalidate();
+      sileo.success({ description: "Database disconnected." });
       handleSidebarClose();
     } catch (error) {
       setSubmitError(

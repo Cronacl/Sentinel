@@ -16,6 +16,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm, type Resolver, type UseFormReturn } from "react-hook-form";
 import { ZodError } from "zod";
 
+import { sileo } from "sileo";
+
 import {
   McpHttpTransportSection,
   McpStdioTransportSection,
@@ -87,6 +89,7 @@ export function McpServerForm({ mode, serverId }: McpServerFormProps) {
     onSuccess: async () => {
       setSubmitError("");
       await utils.mcpServers.list.invalidate();
+      sileo.success({ description: "MCP server saved." });
       router.push("/settings/mcp");
     },
     onError: (error) => {
@@ -97,6 +100,7 @@ export function McpServerForm({ mode, serverId }: McpServerFormProps) {
   const remove = api.mcpServers.delete.useMutation({
     onSuccess: async () => {
       await utils.mcpServers.list.invalidate();
+      sileo.success({ description: "MCP server removed." });
       router.push("/settings/mcp");
     },
     onError: (error) => {

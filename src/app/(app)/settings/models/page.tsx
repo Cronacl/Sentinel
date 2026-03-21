@@ -4,6 +4,7 @@ import { Button, Chip, Form, Skeleton, Spinner, Switch } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { sileo } from "sileo";
 
 import type { AIProvider } from "@/server/db/enums";
 import { ProviderIcon } from "@/components/icons/provider-icon";
@@ -102,6 +103,7 @@ export default function ModelsPage() {
     },
     onError: (_error, _variables, context) => {
       utils.models.list.setData(undefined, context?.previousModels ?? []);
+      sileo.error({ description: "Failed to enable model." });
     },
   });
   const disable = api.models.disable.useMutation({
@@ -118,6 +120,7 @@ export default function ModelsPage() {
     },
     onError: (_error, _variables, context) => {
       utils.models.list.setData(undefined, context?.previousModels ?? []);
+      sileo.error({ description: "Failed to disable model." });
     },
   });
   const addCustom = api.models.addCustom.useMutation({
@@ -145,6 +148,7 @@ export default function ModelsPage() {
         modelId: "",
         provider: variables.provider,
       });
+      sileo.success({ description: "Custom model added." });
     },
     onError: (_error, _variables, context) => {
       utils.models.list.setData(undefined, context?.previousModels ?? []);
@@ -167,6 +171,7 @@ export default function ModelsPage() {
     },
     onError: (_error, _variables, context) => {
       utils.models.list.setData(undefined, context?.previousModels ?? []);
+      sileo.error({ description: "Failed to remove model." });
     },
   });
 
