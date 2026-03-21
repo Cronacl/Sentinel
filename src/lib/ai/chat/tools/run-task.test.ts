@@ -50,7 +50,7 @@ describe("run_task", () => {
       JSON.stringify({
         packageManager: "bun@1.3.6",
         scripts: {
-          test: 'node -e "console.log(\'task-ok\')"',
+          test: "node -e \"console.log('task-ok')\"",
         },
       }),
     );
@@ -70,9 +70,13 @@ describe("run_task", () => {
       events.push(event);
     }
 
-    const completed = events.filter((event) => event.type === "completed").at(-1);
+    const completed = events
+      .filter((event) => event.type === "completed")
+      .at(-1);
 
-    expect(completed && "output" in completed ? completed.output : null).toMatchObject({
+    expect(
+      completed && "output" in completed ? completed.output : null,
+    ).toMatchObject({
       boundaryRoot: defaultDirectory,
       command: "bun run test",
       exitCode: 0,
@@ -112,9 +116,13 @@ describe("run_task", () => {
       events.push(event);
     }
 
-    const completed = events.filter((event) => event.type === "completed").at(-1);
+    const completed = events
+      .filter((event) => event.type === "completed")
+      .at(-1);
 
-    expect(completed && "output" in completed ? completed.output : null).toMatchObject({
+    expect(
+      completed && "output" in completed ? completed.output : null,
+    ).toMatchObject({
       exitCode: 127,
       failureKind: "missing_command",
       missingCommand: missingBinary,

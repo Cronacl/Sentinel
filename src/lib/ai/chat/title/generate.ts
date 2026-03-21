@@ -59,7 +59,9 @@ export async function generateThreadTitle({
     prompt: buildTitlePrompt(firstUserText),
     system: TITLE_SYSTEM_PROMPT,
     temperature: 0.2,
-    ...(model.providerOptions ? { providerOptions: model.providerOptions } : {}),
+    ...(model.providerOptions
+      ? { providerOptions: model.providerOptions }
+      : {}),
   });
 
   const title = sanitizeGeneratedTitle(result.text);

@@ -98,7 +98,8 @@ export async function beginIntegrationOAuth(
   const oauthConfig = resolveOAuthConfig(provider);
   const appConfig = await resolveOAuthAppConfig(userId, provider);
 
-  const scopeSeparator = isLinearProvider(provider) || isSlackProvider(provider) ? "," : " ";
+  const scopeSeparator =
+    isLinearProvider(provider) || isSlackProvider(provider) ? "," : " ";
   const scopeString = oauthConfig.scopes.join(scopeSeparator);
 
   let codeVerifier: string | undefined;
@@ -149,7 +150,8 @@ export async function completeIntegrationOAuth(
   const oauthConfig = resolveOAuthConfig(provider);
   const appConfig = await resolveOAuthAppConfig(userId, provider);
 
-  const usesBasicAuth = isNotionProvider(provider) || isAirtableProvider(provider);
+  const usesBasicAuth =
+    isNotionProvider(provider) || isAirtableProvider(provider);
 
   const headers: Record<string, string> = {
     "Content-Type": "application/x-www-form-urlencoded",
@@ -160,7 +162,8 @@ export async function completeIntegrationOAuth(
   }
 
   if (usesBasicAuth) {
-    headers["Authorization"] = `Basic ${Buffer.from(`${appConfig.clientId}:${appConfig.clientSecret}`).toString("base64")}`;
+    headers["Authorization"] =
+      `Basic ${Buffer.from(`${appConfig.clientId}:${appConfig.clientSecret}`).toString("base64")}`;
   }
 
   const body = new URLSearchParams({
@@ -173,7 +176,11 @@ export async function completeIntegrationOAuth(
     body.set("client_secret", appConfig.clientSecret);
   }
 
-  if (isGoogleProvider(provider) || isLinearProvider(provider) || usesBasicAuth) {
+  if (
+    isGoogleProvider(provider) ||
+    isLinearProvider(provider) ||
+    usesBasicAuth
+  ) {
     body.set("grant_type", "authorization_code");
   }
 
@@ -211,9 +218,7 @@ export async function completeIntegrationOAuth(
   };
 
   if (tokenData.error) {
-    throw new Error(
-      tokenData.error_description ?? tokenData.error,
-    );
+    throw new Error(tokenData.error_description ?? tokenData.error);
   }
 
   // Slack V2 OAuth returns the user token under authed_user
@@ -231,9 +236,17 @@ export async function completeIntegrationOAuth(
       ? new Date(Date.now() + tokenData.expires_in * 1000)
       : null,
     refreshToken: tokenData.refresh_token ?? null,
-    scope: (isSlackProvider(provider) ? tokenData.authed_user?.scope : tokenData.scope)
-      ?? oauthConfig.scopes.join(isLinearProvider(provider) || isSlackProvider(provider) ? "," : " "),
-    tokenType: (isSlackProvider(provider) ? tokenData.authed_user?.token_type : tokenData.token_type) ?? "Bearer",
+    scope:
+      (isSlackProvider(provider)
+        ? tokenData.authed_user?.scope
+        : tokenData.scope) ??
+      oauthConfig.scopes.join(
+        isLinearProvider(provider) || isSlackProvider(provider) ? "," : " ",
+      ),
+    tokenType:
+      (isSlackProvider(provider)
+        ? tokenData.authed_user?.token_type
+        : tokenData.token_type) ?? "Bearer",
   };
 
   const existingIntegration = await db.query.integrations.findFirst({

@@ -1,16 +1,16 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
 
-const generateText = mock(async () => ({ text: 'Title: "Broken Thread Title."' }));
+const generateText = mock(async () => ({
+  text: 'Title: "Broken Thread Title."',
+}));
 
 mock.module("ai", () => ({
   generateText,
 }));
 
-const {
-  buildTitlePrompt,
-  generateThreadTitle,
-  TITLE_SYSTEM_PROMPT,
-} = await import("./generate");
+const { buildTitlePrompt, generateThreadTitle, TITLE_SYSTEM_PROMPT } =
+  await import("./generate");
+mock.restore();
 
 afterEach(() => {
   mock.restore();

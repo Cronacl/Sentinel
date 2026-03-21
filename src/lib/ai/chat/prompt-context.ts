@@ -127,7 +127,9 @@ export function buildThreadPromptContext(
       integrationNamespaces: uniqueStrings(
         input.latentToolSummary?.integrationNamespaces ?? [],
       ),
-      mcpNamespaces: uniqueStrings(input.latentToolSummary?.mcpNamespaces ?? []),
+      mcpNamespaces: uniqueStrings(
+        input.latentToolSummary?.mcpNamespaces ?? [],
+      ),
     },
     mcpToolNames: uniqueStrings(input.mcpToolNames),
     memoryPromptLines: input.memoryPromptLines

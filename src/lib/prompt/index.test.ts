@@ -180,7 +180,10 @@ describe("prompt", () => {
 
   it("filters out empty conditional sections", () => {
     const p = prompt<{ extra?: string }>((v) =>
-      lines("Base content.", when(v.extra, () => `Extra: ${v.extra}`)),
+      lines(
+        "Base content.",
+        when(v.extra, () => `Extra: ${v.extra}`),
+      ),
     );
 
     expect(p({})).toBe("Base content.");
@@ -215,13 +218,11 @@ describe("composition", () => {
       lines(
         section("Identity", "You are Sentinel."),
         personalization(v.personalization),
-        when(
-          v.documents.length > 0,
-          () =>
-            section(
-              "Documents",
-              each(v.documents, (d) => `- **${d.label}**: ${d.value}`),
-            ),
+        when(v.documents.length > 0, () =>
+          section(
+            "Documents",
+            each(v.documents, (d) => `- **${d.label}**: ${d.value}`),
+          ),
         ),
       ),
     );
@@ -241,10 +242,7 @@ describe("composition", () => {
   it("omits entire conditional blocks cleanly", () => {
     const result = lines(
       section("Always", "This is always here."),
-      when(
-        false,
-        section("Hidden", "Should not appear."),
-      ),
+      when(false, section("Hidden", "Should not appear.")),
       section("Also Always", "This too."),
     );
 
@@ -257,13 +255,11 @@ describe("composition", () => {
 
   it("handles nested each inside when inside section", () => {
     const memory = ["Prefers TypeScript", "Uses Vim"];
-    const result = when(
-      memory.length > 0,
-      () =>
-        section(
-          "Memory",
-          each(memory, (m) => `- ${m}`),
-        ),
+    const result = when(memory.length > 0, () =>
+      section(
+        "Memory",
+        each(memory, (m) => `- ${m}`),
+      ),
     );
     expect(result).toBe("## Memory\n\n- Prefers TypeScript\n- Uses Vim");
   });

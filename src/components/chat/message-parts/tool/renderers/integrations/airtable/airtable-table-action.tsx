@@ -134,14 +134,19 @@ export const AirtableTableActionTool = memo(function AirtableTableActionTool({
                     {humanizeKey(key)}
                   </span>
                   <span className="text-foreground/70 break-all">
-                    {typeof val === "object" ? JSON.stringify(val, null, 2) : String(val)}
+                    {typeof val === "object"
+                      ? JSON.stringify(val, null, 2)
+                      : String(val)}
                   </span>
                 </div>
               ))}
             </div>
           </div>
         ) : null}
-        {!state.needsApproval && output && isCreateTable && "fields" in output ? (
+        {!state.needsApproval &&
+        output &&
+        isCreateTable &&
+        "fields" in output ? (
           <div className="rounded-lg p-2">
             <div className="flex items-center gap-2">
               <Icon
@@ -173,7 +178,10 @@ export const AirtableTableActionTool = memo(function AirtableTableActionTool({
             ) : null}
           </div>
         ) : null}
-        {!state.needsApproval && output && !isCreateTable && "type" in output ? (
+        {!state.needsApproval &&
+        output &&
+        !isCreateTable &&
+        "type" in output ? (
           <div className="rounded-lg p-2">
             <div className="flex items-center gap-2">
               <Icon

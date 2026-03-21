@@ -26,7 +26,10 @@ type MessageOutput = {
 type ListOutput = { messages: MessageOutput[]; totalCount: number };
 
 const TOOL_LABELS: Record<string, { running: string; done: string }> = {
-  slack_search_messages: { running: "Searching messages\u2026", done: "message" },
+  slack_search_messages: {
+    running: "Searching messages\u2026",
+    done: "message",
+  },
   slack_get_history: { running: "Fetching history\u2026", done: "message" },
   slack_get_thread: { running: "Fetching thread\u2026", done: "reply" },
 };
@@ -63,9 +66,7 @@ export const SlackMessageTool = memo(function SlackMessageTool({
   };
 
   const output =
-    state.hasOutput && "output" in part
-      ? (part.output as ListOutput)
-      : null;
+    state.hasOutput && "output" in part ? (part.output as ListOutput) : null;
 
   const messages = output?.messages ?? [];
   const totalCount = output?.totalCount ?? messages.length;
@@ -122,9 +123,7 @@ function MessageContent({ msg }: { msg: MessageOutput }) {
         <Icon icon="solar:chat-round-dots-linear" className="h-4 w-4" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-[12.5px] text-foreground line-clamp-2">
-          {msg.text}
-        </p>
+        <p className="text-[12.5px] text-foreground line-clamp-2">{msg.text}</p>
         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10.5px] text-foreground/45">
           {msg.username || msg.userId ? (
             <span className="inline-flex items-center gap-1 rounded bg-foreground/4 px-1.5 py-0.5">
@@ -138,9 +137,7 @@ function MessageContent({ msg }: { msg: MessageOutput }) {
               {msg.channelName}
             </span>
           ) : null}
-          {msg.timestamp ? (
-            <span>{formatTimestamp(msg.timestamp)}</span>
-          ) : null}
+          {msg.timestamp ? <span>{formatTimestamp(msg.timestamp)}</span> : null}
           {msg.replyCount > 0 ? (
             <span className="inline-flex items-center gap-1 rounded bg-foreground/4 px-1.5 py-0.5">
               {msg.replyCount} repl{msg.replyCount === 1 ? "y" : "ies"}

@@ -15,9 +15,19 @@ import { toolApprovalPolicies } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
 function toUpdates(input: ToolApprovalUpdateInput) {
-  if ("policies" in input) return { type: "batch" as const, policies: input.policies };
-  if ("groupId" in input) return { type: "group" as const, groupId: input.groupId, requireApproval: input.requireApproval };
-  return { type: "single" as const, toolName: input.toolName, requireApproval: input.requireApproval };
+  if ("policies" in input)
+    return { type: "batch" as const, policies: input.policies };
+  if ("groupId" in input)
+    return {
+      type: "group" as const,
+      groupId: input.groupId,
+      requireApproval: input.requireApproval,
+    };
+  return {
+    type: "single" as const,
+    toolName: input.toolName,
+    requireApproval: input.requireApproval,
+  };
 }
 
 export const approvalsRouter = createTRPCRouter({
@@ -43,7 +53,8 @@ export const approvalsRouter = createTRPCRouter({
 
       if (parsed.type === "group") {
         const group = TOOL_APPROVAL_GROUPS[parsed.groupId];
-        if (!group) throw new Error(`Unknown approval group: ${parsed.groupId}`);
+        if (!group)
+          throw new Error(`Unknown approval group: ${parsed.groupId}`);
 
         ctx.db.transaction((tx) => {
           tx.delete(toolApprovalPolicies)
@@ -75,8 +86,7 @@ export const approvalsRouter = createTRPCRouter({
           }
         });
       } else {
-        const updates =
-          parsed.type === "batch" ? parsed.policies : [parsed];
+        const updates = parsed.type === "batch" ? parsed.policies : [parsed];
 
         ctx.db.transaction((tx) => {
           for (const update of updates) {

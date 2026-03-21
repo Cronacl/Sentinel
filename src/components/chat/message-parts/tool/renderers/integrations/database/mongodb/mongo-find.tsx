@@ -49,13 +49,10 @@ export const MongoFindTool = memo(function MongoFindTool({
     return [];
   })();
 
-  const count =
-    output && "count" in output ? output.count : documents.length;
+  const count = output && "count" in output ? output.count : documents.length;
   const canOpen = documents.length > 0;
 
-  const queryStr = input?.query
-    ? JSON.stringify(input.query, null, 2)
-    : "{}";
+  const queryStr = input?.query ? JSON.stringify(input.query, null, 2) : "{}";
 
   const handleOpenSidebar = useCallback(() => {
     if (!canOpen) return;

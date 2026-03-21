@@ -51,11 +51,13 @@ const MIME_TYPE_MAP: Record<string, string> = {
   ".mp4": "video/mp4",
   ".webm": "video/webm",
   ".doc": "application/msword",
-  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".docx":
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ".xls": "application/vnd.ms-excel",
   ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ".ppt": "application/vnd.ms-powerpoint",
-  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".pptx":
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   ".md": "text/markdown",
   ".yaml": "text/yaml",
   ".yml": "text/yaml",
@@ -331,9 +333,7 @@ export function buildGoogleDriveTools(
       description: "Move a file to a different folder in Google Drive.",
       inputSchema: z.object({
         fileId: z.string().describe("The file ID to move."),
-        newParentFolderId: z
-          .string()
-          .describe("The destination folder ID."),
+        newParentFolderId: z.string().describe("The destination folder ID."),
       }),
       outputSchema: z.object({ file: driveFileSchema }),
       needsApproval: () => approvalFn("gdrive_move"),
@@ -381,7 +381,10 @@ export function buildGoogleDriveTools(
         "Share a Google Drive file with another user by email address.",
       inputSchema: z.object({
         fileId: z.string().describe("The file ID to share."),
-        email: z.string().email().describe("Email address of the user to share with."),
+        email: z
+          .string()
+          .email()
+          .describe("Email address of the user to share with."),
         role: z
           .enum(["reader", "commenter", "writer"])
           .describe("Permission role to grant."),

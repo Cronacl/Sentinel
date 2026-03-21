@@ -40,9 +40,8 @@ export const GHBranchTool = memo(function GHBranchTool({
     state.hasOutput && "output" in part
       ? (part.output as BranchOutput | ListBranchesOutput)
       : null;
-  const input = "input" in part
-    ? (part.input as Record<string, unknown>)
-    : null;
+  const input =
+    "input" in part ? (part.input as Record<string, unknown>) : null;
 
   const branches: BranchOutput[] = output
     ? "branches" in output

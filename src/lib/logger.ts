@@ -73,15 +73,11 @@ class Logger {
   private context: Record<string, unknown>;
   private minLevel: number;
 
-  constructor(
-    context: Record<string, unknown> = {},
-    minLevel?: LogLevel,
-  ) {
+  constructor(context: Record<string, unknown> = {}, minLevel?: LogLevel) {
     this.context = context;
     this.minLevel =
       LOG_LEVEL_PRIORITY[
-        minLevel ??
-          (process.env.NODE_ENV === "development" ? "debug" : "info")
+        minLevel ?? (process.env.NODE_ENV === "development" ? "debug" : "info")
       ];
   }
 

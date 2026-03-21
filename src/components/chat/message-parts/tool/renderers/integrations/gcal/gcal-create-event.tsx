@@ -93,9 +93,7 @@ export const GCalCreateEventTool = memo(function GCalCreateEventTool({
               icon="solar:calendar-add-linear"
               className="h-3.5 w-3.5 shrink-0 text-foreground/40"
             />
-            <span className="font-medium text-foreground">
-              {input.summary}
-            </span>
+            <span className="font-medium text-foreground">{input.summary}</span>
           </div>
           <div className="flex items-center gap-2">
             <Icon

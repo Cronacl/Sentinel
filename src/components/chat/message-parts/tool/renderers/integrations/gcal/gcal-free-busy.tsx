@@ -90,10 +90,7 @@ export const GCalFreeBusyTool = memo(function GCalFreeBusyTool({
           {output.calendars.map((cal) => (
             <div key={cal.calendarId}>
               <div className="mb-1 flex items-center gap-1.5 text-[10px] font-medium text-foreground/50">
-                <Icon
-                  icon="solar:calendar-linear"
-                  className="h-3 w-3"
-                />
+                <Icon icon="solar:calendar-linear" className="h-3 w-3" />
                 <span className="truncate">{cal.calendarId}</span>
               </div>
               {cal.busy.length > 0 ? (
@@ -112,10 +109,7 @@ export const GCalFreeBusyTool = memo(function GCalFreeBusyTool({
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5 px-2 text-[11px] text-success">
-                  <Icon
-                    icon="solar:check-circle-linear"
-                    className="h-3 w-3"
-                  />
+                  <Icon icon="solar:check-circle-linear" className="h-3 w-3" />
                   <span>Available</span>
                 </div>
               )}

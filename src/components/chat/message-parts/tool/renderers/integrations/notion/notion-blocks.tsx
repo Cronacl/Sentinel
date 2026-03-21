@@ -55,7 +55,10 @@ export const NotionBlocksTool = memo(function NotionBlocksTool({
   const toolName = getToolName(part as ToolPart);
   const isAppend = toolName === "notion_append_blocks";
 
-  const input = state.hasInput && "input" in part ? (part.input as Record<string, unknown>) : null;
+  const input =
+    state.hasInput && "input" in part
+      ? (part.input as Record<string, unknown>)
+      : null;
   const output =
     state.hasOutput && "output" in part ? (part.output as BlocksOutput) : null;
 
@@ -127,24 +130,26 @@ export const NotionBlocksTool = memo(function NotionBlocksTool({
             </div>
             {Array.isArray(input.children) ? (
               <div className="space-y-1">
-                {(input.children as Array<{ type: string; content: string }>).map(
-                  (child, i) => (
-                    <div
-                      key={i}
-                      className="flex items-start gap-2 rounded-md p-1.5 text-xs"
-                    >
-                      <Icon
-                        icon={BLOCK_ICONS[child.type] ?? "solar:document-text-linear"}
-                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-foreground/40"
-                      />
-                      <span className="text-foreground/70">
-                        {child.content.length > 80
-                          ? `${child.content.slice(0, 80)}\u2026`
-                          : child.content}
-                      </span>
-                    </div>
-                  ),
-                )}
+                {(
+                  input.children as Array<{ type: string; content: string }>
+                ).map((child, i) => (
+                  <div
+                    key={i}
+                    className="flex items-start gap-2 rounded-md p-1.5 text-xs"
+                  >
+                    <Icon
+                      icon={
+                        BLOCK_ICONS[child.type] ?? "solar:document-text-linear"
+                      }
+                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-foreground/40"
+                    />
+                    <span className="text-foreground/70">
+                      {child.content.length > 80
+                        ? `${child.content.slice(0, 80)}\u2026`
+                        : child.content}
+                    </span>
+                  </div>
+                ))}
               </div>
             ) : null}
           </div>

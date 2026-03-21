@@ -15,7 +15,9 @@ export function resolveMemoryProfileFromSettings(settings: MemorySettings) {
   );
 
   if (!profile || profile.dimensions !== settings.memoryDimensions) {
-    throw new Error("The configured memory embedding profile is not supported.");
+    throw new Error(
+      "The configured memory embedding profile is not supported.",
+    );
   }
 
   return profile;

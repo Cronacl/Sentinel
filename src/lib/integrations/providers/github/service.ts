@@ -136,15 +136,12 @@ function parseIssue(i: Record<string, unknown>): GHIssue {
     state: i.state as string,
     htmlUrl: i.html_url as string,
     labels: ((i.labels as { name: string }[]) ?? []).map((l) => l.name),
-    assignees: ((i.assignees as { login: string }[]) ?? []).map(
-      (a) => a.login,
-    ),
+    assignees: ((i.assignees as { login: string }[]) ?? []).map((a) => a.login),
     author: (i.user as { login: string })?.login ?? "",
     createdAt: i.created_at as string,
     updatedAt: i.updated_at as string,
     comments: i.comments as number,
-    milestone:
-      (i.milestone as { title: string } | null)?.title ?? "",
+    milestone: (i.milestone as { title: string } | null)?.title ?? "",
   };
 }
 
@@ -192,7 +189,9 @@ export class GitHubService {
       sort: "updated",
     });
     return {
-      repos: data.items.map((r) => parseRepo(r as unknown as Record<string, unknown>)),
+      repos: data.items.map((r) =>
+        parseRepo(r as unknown as Record<string, unknown>),
+      ),
       totalCount: data.total_count,
     };
   }
@@ -450,11 +449,12 @@ export class GitHubService {
         path: item.path,
         htmlUrl: item.html_url,
         repository: item.repository.full_name,
-        textMatches: (
-          (item as Record<string, unknown>).text_matches as
-            | { fragment: string }[]
-            | undefined
-        )?.map((m) => m.fragment) ?? [],
+        textMatches:
+          (
+            (item as Record<string, unknown>).text_matches as
+              | { fragment: string }[]
+              | undefined
+          )?.map((m) => m.fragment) ?? [],
       })),
       totalCount: data.total_count,
     };

@@ -56,7 +56,9 @@ export async function executeMoveFile({
     throw new Error(`Path is not a movable file: ${source.label}`);
   }
 
-  const destinationStats = await stat(destination.resolvedPath).catch(() => null);
+  const destinationStats = await stat(destination.resolvedPath).catch(
+    () => null,
+  );
   if (destinationStats) {
     throw new Error(`Destination already exists: ${destination.label}`);
   }

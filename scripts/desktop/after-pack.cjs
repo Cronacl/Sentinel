@@ -37,7 +37,12 @@ module.exports = async function afterPack(context) {
 
   const resourcesPath =
     context.electronPlatformName === "darwin"
-      ? path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`, "Contents", "Resources")
+      ? path.join(
+          context.appOutDir,
+          `${context.packager.appInfo.productFilename}.app`,
+          "Contents",
+          "Resources",
+        )
       : path.join(context.appOutDir, "resources");
 
   const targetNodeModulesPath = path.join(
@@ -48,5 +53,7 @@ module.exports = async function afterPack(context) {
 
   await fs.rm(targetNodeModulesPath, { force: true, recursive: true });
   await fs.mkdir(path.dirname(targetNodeModulesPath), { recursive: true });
-  await fs.cp(sourceNodeModulesPath, targetNodeModulesPath, { recursive: true });
+  await fs.cp(sourceNodeModulesPath, targetNodeModulesPath, {
+    recursive: true,
+  });
 };

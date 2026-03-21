@@ -16,15 +16,13 @@ const PROVIDER_TOOL_LOADERS: Partial<
     return buildGmailTools;
   },
   google_calendar: async () => {
-    const { buildGoogleCalendarTools } = await import(
-      "./providers/google-calendar/tools"
-    );
+    const { buildGoogleCalendarTools } =
+      await import("./providers/google-calendar/tools");
     return buildGoogleCalendarTools;
   },
   google_drive: async () => {
-    const { buildGoogleDriveTools } = await import(
-      "./providers/google-drive/tools"
-    );
+    const { buildGoogleDriveTools } =
+      await import("./providers/google-drive/tools");
     return buildGoogleDriveTools;
   },
   github: async () => {
@@ -48,9 +46,7 @@ const PROVIDER_TOOL_LOADERS: Partial<
     return buildSlackTools;
   },
   postgresql: async () => {
-    const { buildPostgresTools } = await import(
-      "./providers/postgresql/tools"
-    );
+    const { buildPostgresTools } = await import("./providers/postgresql/tools");
     return buildPostgresTools;
   },
   mysql: async () => {

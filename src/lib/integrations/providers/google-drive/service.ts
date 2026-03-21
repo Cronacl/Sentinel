@@ -29,10 +29,22 @@ export type DriveFileContent = {
 const STANDARD_FILE_FIELDS =
   "id, name, mimeType, size, createdTime, modifiedTime, owners(displayName, emailAddress), webViewLink, iconLink, starred, trashed, parents, shared";
 
-const GOOGLE_WORKSPACE_EXPORT_MAP: Record<string, { mimeType: string; ext: string }> = {
-  "application/vnd.google-apps.document": { mimeType: "text/plain", ext: ".txt" },
-  "application/vnd.google-apps.spreadsheet": { mimeType: "text/csv", ext: ".csv" },
-  "application/vnd.google-apps.presentation": { mimeType: "application/pdf", ext: ".pdf" },
+const GOOGLE_WORKSPACE_EXPORT_MAP: Record<
+  string,
+  { mimeType: string; ext: string }
+> = {
+  "application/vnd.google-apps.document": {
+    mimeType: "text/plain",
+    ext: ".txt",
+  },
+  "application/vnd.google-apps.spreadsheet": {
+    mimeType: "text/csv",
+    ext: ".csv",
+  },
+  "application/vnd.google-apps.presentation": {
+    mimeType: "application/pdf",
+    ext: ".pdf",
+  },
   "application/vnd.google-apps.drawing": { mimeType: "image/png", ext: ".png" },
 };
 
@@ -211,10 +223,7 @@ export class GoogleDriveService {
     return { name: meta.name, mimeType: meta.mimeType, buffer };
   }
 
-  async moveFile(
-    fileId: string,
-    newParentId: string,
-  ): Promise<DriveFile> {
+  async moveFile(fileId: string, newParentId: string): Promise<DriveFile> {
     const current = await this.drive.files.get({
       fileId,
       fields: "parents",

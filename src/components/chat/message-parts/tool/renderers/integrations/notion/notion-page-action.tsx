@@ -38,7 +38,10 @@ export const NotionPageActionTool = memo(function NotionPageActionTool({
   const toolName = getToolName(part as ToolPart);
   const actionLabel = ACTION_LABELS[toolName] ?? "Page Action";
 
-  const input = state.hasInput && "input" in part ? (part.input as Record<string, unknown>) : null;
+  const input =
+    state.hasInput && "input" in part
+      ? (part.input as Record<string, unknown>)
+      : null;
   const output =
     state.hasOutput && "output" in part ? (part.output as PageOutput) : null;
 
@@ -114,10 +117,7 @@ export const NotionPageActionTool = memo(function NotionPageActionTool({
               {Object.entries(input)
                 .filter(([, v]) => v !== undefined && v !== null && v !== "")
                 .map(([key, value]) => (
-                  <div
-                    key={key}
-                    className="flex items-start gap-2 text-xs"
-                  >
+                  <div key={key} className="flex items-start gap-2 text-xs">
                     <span className="shrink-0 text-foreground/40 min-w-[72px] capitalize">
                       {key.replace(/([A-Z])/g, " $1").trim()}
                     </span>
@@ -140,9 +140,13 @@ export const NotionPageActionTool = memo(function NotionPageActionTool({
           >
             <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center text-sm">
               {output.icon?.startsWith("http") ? (
-                <img src={output.icon} alt="" className="h-4 w-4 object-contain" />
+                <img
+                  src={output.icon}
+                  alt=""
+                  className="h-4 w-4 object-contain"
+                />
               ) : (
-                output.icon ?? "\u{1F4C4}"
+                (output.icon ?? "\u{1F4C4}")
               )}
             </span>
             <div className="min-w-0 flex-1">
@@ -154,7 +158,9 @@ export const NotionPageActionTool = memo(function NotionPageActionTool({
                   {actionLabel} completed
                 </span>
                 {output.archived ? (
-                  <span className="inline-flex items-center rounded bg-warning/10 px-1.5 py-0.5 text-warning">Archived</span>
+                  <span className="inline-flex items-center rounded bg-warning/10 px-1.5 py-0.5 text-warning">
+                    Archived
+                  </span>
                 ) : null}
               </div>
             </div>

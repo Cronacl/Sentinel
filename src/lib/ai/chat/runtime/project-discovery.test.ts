@@ -8,14 +8,18 @@ import { discoverProjectAwareness } from "./project-discovery";
 const tempRoots: string[] = [];
 
 async function createWorkspace() {
-  const root = await mkdtemp(path.join(os.tmpdir(), "sentinel-project-discovery-"));
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "sentinel-project-discovery-"),
+  );
   tempRoots.push(root);
   return root;
 }
 
 afterEach(async () => {
   await Promise.all(
-    tempRoots.splice(0).map((root) => rm(root, { force: true, recursive: true })),
+    tempRoots
+      .splice(0)
+      .map((root) => rm(root, { force: true, recursive: true })),
   );
 });
 

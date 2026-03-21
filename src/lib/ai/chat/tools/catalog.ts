@@ -150,9 +150,7 @@ export const TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
   },
 };
 
-export function getActiveCategories(
-  toolNames: string[],
-): Set<ToolCategory> {
+export function getActiveCategories(toolNames: string[]): Set<ToolCategory> {
   const categories = new Set<ToolCategory>();
   for (const name of toolNames) {
     const entry = TOOL_CATALOG[name];

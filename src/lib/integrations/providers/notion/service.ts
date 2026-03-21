@@ -88,7 +88,10 @@ function extractParent(parent: any): { type: string; id: string | null } {
   if (parent.type === "database_id")
     return { type: "database", id: parent.database_id };
   if (parent.type === "data_source_id")
-    return { type: "database", id: parent.data_source_id ?? parent.database_id };
+    return {
+      type: "database",
+      id: parent.data_source_id ?? parent.database_id,
+    };
   if (parent.type === "page_id") return { type: "page", id: parent.page_id };
   if (parent.type === "workspace") return { type: "workspace", id: null };
   if (parent.type === "block_id") return { type: "block", id: parent.block_id };

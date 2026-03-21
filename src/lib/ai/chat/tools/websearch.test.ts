@@ -191,9 +191,7 @@ describe("executeWebSearch", () => {
       );
       expect(url.searchParams.get("format")).toBe("json");
       expect(url.searchParams.get("categories")).toBe("general");
-      expect(url.searchParams.get("engines")).toBe(
-        __internal.SEARXNG_ENGINES,
-      );
+      expect(url.searchParams.get("engines")).toBe(__internal.SEARXNG_ENGINES);
       expect(url.searchParams.get("safesearch")).toBe("0");
       expect(url.searchParams.get("q")).toBe("privacy search");
 

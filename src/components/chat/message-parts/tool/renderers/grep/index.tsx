@@ -109,19 +109,17 @@ function buildSummary(
     }
     return (
       <>
-        Found{" "}
-        <span className="text-foreground/50">{output.totalMatches}</span>{" "}
+        Found <span className="text-foreground/50">{output.totalMatches}</span>{" "}
         match{output.totalMatches === 1 ? "" : "es"} in{" "}
-        <span className="text-foreground/50">{output.files.length}</span>{" "}
-        file{output.files.length === 1 ? "" : "s"}
+        <span className="text-foreground/50">{output.files.length}</span> file
+        {output.files.length === 1 ? "" : "s"}
       </>
     );
   }
 
   return (
     <>
-      Searching for{" "}
-      <span className="font-mono text-[12px]">/{pattern}/</span>
+      Searching for <span className="font-mono text-[12px]">/{pattern}/</span>
       {root !== "." ? (
         <span className="text-foreground/40"> in {root}</span>
       ) : null}
@@ -175,7 +173,8 @@ function FileMatchGroup({
   }, [hasBeenVisible]);
 
   useEffect(() => {
-    if (!hasBeenVisible || language === "text" || file.matches.length === 0) return;
+    if (!hasBeenVisible || language === "text" || file.matches.length === 0)
+      return;
 
     let cancelled = false;
 
@@ -208,12 +207,21 @@ function FileMatchGroup({
   }
 
   return (
-    <div ref={ref} className="overflow-hidden rounded-md border border-border/30">
+    <div
+      ref={ref}
+      className="overflow-hidden rounded-md border border-border/30"
+    >
       <div className="flex items-center gap-1.5 border-b border-border/20 bg-foreground/2 px-2.5 py-1">
         {fileIcon ? (
-          <Icon className="h-3 w-3 shrink-0 text-foreground/40" icon={fileIcon} />
+          <Icon
+            className="h-3 w-3 shrink-0 text-foreground/40"
+            icon={fileIcon}
+          />
         ) : null}
-        <span className="truncate font-mono text-[10px] text-foreground/50" title={file.path}>
+        <span
+          className="truncate font-mono text-[10px] text-foreground/50"
+          title={file.path}
+        >
           {file.path.includes("/") ? (
             <>
               <span className="text-foreground/25">
@@ -231,7 +239,10 @@ function FileMatchGroup({
       </div>
       <div className="font-mono text-[11px] leading-[18px]">
         {file.matches.map((match, idx) => (
-          <div key={`${match.lineNumber}-${idx}`} className="flex hover:bg-foreground/2">
+          <div
+            key={`${match.lineNumber}-${idx}`}
+            className="flex hover:bg-foreground/2"
+          >
             <span
               className="shrink-0 select-none border-r border-border/15 pr-1.5 text-right text-[10px] leading-[18px] text-foreground/20"
               style={{ width: gutterWidth, fontVariantNumeric: "tabular-nums" }}
@@ -251,11 +262,16 @@ function FileMatchGroup({
               ) : patternRegex ? (
                 match.text.split(patternRegex).map((part, pi) =>
                   pi % 2 === 1 ? (
-                    <span key={pi} className="rounded-[2px] bg-warning-soft-hover px-px font-medium">
+                    <span
+                      key={pi}
+                      className="rounded-[2px] bg-warning-soft-hover px-px font-medium"
+                    >
                       {part}
                     </span>
                   ) : (
-                    <span key={pi} className="text-foreground/70">{part}</span>
+                    <span key={pi} className="text-foreground/70">
+                      {part}
+                    </span>
                   ),
                 )
               ) : (
@@ -305,13 +321,12 @@ function GrepBody({
   );
 }
 
-export const GrepTool = memo(function GrepTool({
-  part,
-}: RendererProps) {
+export const GrepTool = memo(function GrepTool({ part }: RendererProps) {
   const hasInput = "input" in part && part.input !== undefined;
   const hasOutput = "output" in part && part.output !== undefined;
   const grepInput = hasInput && isGrepToolInput(part.input) ? part.input : null;
-  const grepOutput = hasOutput && isGrepToolOutput(part.output) ? part.output : null;
+  const grepOutput =
+    hasOutput && isGrepToolOutput(part.output) ? part.output : null;
   const partErrorText = "errorText" in part ? part.errorText : undefined;
   const isFinishedState =
     part.state === "output-error" ||
@@ -329,7 +344,8 @@ export const GrepTool = memo(function GrepTool({
 
   const footer = grepOutput ? (
     <span>
-      {grepOutput.totalMatches} match{grepOutput.totalMatches === 1 ? "" : "es"} · {grepOutput.files.length} file{grepOutput.files.length === 1 ? "" : "s"}
+      {grepOutput.totalMatches} match{grepOutput.totalMatches === 1 ? "" : "es"}{" "}
+      · {grepOutput.files.length} file{grepOutput.files.length === 1 ? "" : "s"}
       {grepOutput.truncated ? ` · showing ${grepOutput.shownMatches}` : ""}
       {grepOutput.hasPartialErrors ? " · partial" : ""}
     </span>
@@ -343,7 +359,11 @@ export const GrepTool = memo(function GrepTool({
       isExpandable={isFinishedState}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={partErrorText && part.state !== "output-error" ? partErrorText : undefined}
+      errorText={
+        partErrorText && part.state !== "output-error"
+          ? partErrorText
+          : undefined
+      }
       footer={footer}
     >
       <GrepBody

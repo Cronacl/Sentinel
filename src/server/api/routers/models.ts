@@ -30,13 +30,14 @@ export const modelsRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
 
-      const connectedProviders = await ctx.db.query.providerCredentials.findMany({
-        where: and(
-          eq(providerCredentials.userId, userId),
-          eq(providerCredentials.isEnabled, true),
-        ),
-        columns: { provider: true },
-      });
+      const connectedProviders =
+        await ctx.db.query.providerCredentials.findMany({
+          where: and(
+            eq(providerCredentials.userId, userId),
+            eq(providerCredentials.isEnabled, true),
+          ),
+          columns: { provider: true },
+        });
 
       const connectedSet = new Set(connectedProviders.map((p) => p.provider));
 
@@ -117,7 +118,11 @@ export const modelsRouter = createTRPCRouter({
           .set({ isEnabled: true })
           .where(eq(modelPreferences.id, existing.id))
           .run();
-        return { provider: input.provider, modelId: input.modelId, isEnabled: true };
+        return {
+          provider: input.provider,
+          modelId: input.modelId,
+          isEnabled: true,
+        };
       }
 
       ctx.db
@@ -130,7 +135,11 @@ export const modelsRouter = createTRPCRouter({
         })
         .run();
 
-      return { provider: input.provider, modelId: input.modelId, isEnabled: true };
+      return {
+        provider: input.provider,
+        modelId: input.modelId,
+        isEnabled: true,
+      };
     }),
 
   disable: protectedProcedure
@@ -157,7 +166,11 @@ export const modelsRouter = createTRPCRouter({
           .set({ isEnabled: false })
           .where(eq(modelPreferences.id, existing.id))
           .run();
-        return { provider: input.provider, modelId: input.modelId, isEnabled: false };
+        return {
+          provider: input.provider,
+          modelId: input.modelId,
+          isEnabled: false,
+        };
       }
 
       ctx.db
@@ -170,7 +183,11 @@ export const modelsRouter = createTRPCRouter({
         })
         .run();
 
-      return { provider: input.provider, modelId: input.modelId, isEnabled: false };
+      return {
+        provider: input.provider,
+        modelId: input.modelId,
+        isEnabled: false,
+      };
     }),
 
   addCustom: protectedProcedure

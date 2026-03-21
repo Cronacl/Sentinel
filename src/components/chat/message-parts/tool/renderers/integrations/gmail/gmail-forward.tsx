@@ -39,9 +39,7 @@ export const GmailForwardTool = memo(function GmailForwardTool({
 
   const input = "input" in part ? (part.input as ForwardInput) : null;
   const output =
-    state.hasOutput && "output" in part
-      ? (part.output as ForwardOutput)
-      : null;
+    state.hasOutput && "output" in part ? (part.output as ForwardOutput) : null;
 
   const summary = state.needsApproval
     ? `Forward to ${input?.to ?? ""} — awaiting approval`

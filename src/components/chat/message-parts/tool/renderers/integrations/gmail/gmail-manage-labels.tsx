@@ -35,8 +35,7 @@ export const GmailManageLabelsTool = memo(function GmailManageLabelsTool({
     setIsExpanded(state.needsApproval || state.isRunning);
   }, [part.toolCallId, state.isRunning, state.needsApproval]);
 
-  const input =
-    "input" in part ? (part.input as ManageLabelsInput) : null;
+  const input = "input" in part ? (part.input as ManageLabelsInput) : null;
   const output =
     state.hasOutput && "output" in part
       ? (part.output as ManageLabelsOutput)
@@ -106,7 +105,10 @@ export const GmailManageLabelsTool = memo(function GmailManageLabelsTool({
       {input ? (
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-xs text-foreground/70">
-            <Icon icon="solar:letter-linear" className="h-3.5 w-3.5 shrink-0 text-foreground/40" />
+            <Icon
+              icon="solar:letter-linear"
+              className="h-3.5 w-3.5 shrink-0 text-foreground/40"
+            />
             <span>
               {msgCount} message{msgCount !== 1 ? "s" : ""}
             </span>

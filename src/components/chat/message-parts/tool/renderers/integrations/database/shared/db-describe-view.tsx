@@ -36,10 +36,7 @@ type DescribeOutput = {
   foreignKeys: ForeignKey[];
 };
 
-export function createDbDescribeTool(
-  provider: string,
-  providerLabel: string,
-) {
+export function createDbDescribeTool(provider: string, providerLabel: string) {
   return memo(function DbDescribeTool({
     part,
     onApprove,
@@ -92,10 +89,7 @@ export function createDbDescribeTool(
             <div className="space-y-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5 text-[10px] font-medium text-foreground/40">
-                  <Icon
-                    icon="solar:list-check-linear"
-                    className="h-3 w-3"
-                  />
+                  <Icon icon="solar:list-check-linear" className="h-3 w-3" />
                   Columns
                 </div>
                 <div className="flex flex-col gap-0.5">
@@ -151,7 +145,11 @@ export function createDbDescribeTool(
                           {idx.name}
                         </span>
                         <span className="text-[10px] text-foreground/30">
-                          ({Array.isArray(idx.columns) ? idx.columns.join(", ") : String(idx.columns ?? "")})
+                          (
+                          {Array.isArray(idx.columns)
+                            ? idx.columns.join(", ")
+                            : String(idx.columns ?? "")}
+                          )
                         </span>
                         {idx.unique ? (
                           <Chip

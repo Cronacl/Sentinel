@@ -53,7 +53,11 @@ export const SlackChannelActionTool = memo(function SlackChannelActionTool({
       : null;
   const output =
     state.hasOutput && "output" in part
-      ? (part.output as ChannelOutput | SuccessOutput | TopicOutput | PurposeOutput)
+      ? (part.output as
+          | ChannelOutput
+          | SuccessOutput
+          | TopicOutput
+          | PurposeOutput)
       : null;
 
   const [isExpanded, setIsExpanded] = useState(state.needsApproval);
@@ -73,7 +77,7 @@ export const SlackChannelActionTool = memo(function SlackChannelActionTool({
         ? `${actionLabel} \u2014 failed`
         : state.isDenied
           ? `${actionLabel} \u2014 denied`
-              : channelOutput
+          : channelOutput
             ? `Created #${channelOutput.name}`
             : output && "topic" in output
               ? "Topic updated"
@@ -113,8 +117,7 @@ export const SlackChannelActionTool = memo(function SlackChannelActionTool({
       isError={state.isError}
       errorText={state.isError ? state.errorText : undefined}
       isExpandable={Boolean(
-        (state.needsApproval && input) ||
-          (state.hasOutput && channelOutput),
+        (state.needsApproval && input) || (state.hasOutput && channelOutput),
       )}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
@@ -144,7 +147,11 @@ export const SlackChannelActionTool = memo(function SlackChannelActionTool({
           <div className="rounded-lg p-2">
             <div className="flex items-center gap-2">
               <Icon
-                icon={channelOutput.isPrivate ? "solar:lock-linear" : "solar:hashtag-linear"}
+                icon={
+                  channelOutput.isPrivate
+                    ? "solar:lock-linear"
+                    : "solar:hashtag-linear"
+                }
                 className="h-4 w-4 text-foreground/50"
               />
               <p className="text-[12.5px] font-medium text-foreground">
@@ -153,7 +160,10 @@ export const SlackChannelActionTool = memo(function SlackChannelActionTool({
             </div>
             <div className="mt-1 flex items-center gap-1.5 text-[10.5px] text-foreground/45">
               <span className="inline-flex items-center gap-1 rounded bg-foreground/4 px-1.5 py-0.5">
-                <Icon icon="solar:users-group-rounded-linear" className="h-3 w-3" />
+                <Icon
+                  icon="solar:users-group-rounded-linear"
+                  className="h-3 w-3"
+                />
                 {channelOutput.memberCount}
               </span>
               {channelOutput.isPrivate ? (

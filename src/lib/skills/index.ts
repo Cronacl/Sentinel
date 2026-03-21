@@ -1,10 +1,5 @@
 import { watch, type FSWatcher } from "node:fs";
-import {
-  readdir,
-  readFile,
-  realpath,
-  stat,
-} from "node:fs/promises";
+import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -154,13 +149,12 @@ function buildConventionalRoots(
   workspaceRoot: string | null,
   globalBase?: string | null,
 ) {
-  const homeDirectory = globalBase?.trim() || process.env.HOME?.trim() || os.homedir();
+  const homeDirectory =
+    globalBase?.trim() || process.env.HOME?.trim() || os.homedir();
 
   return SOURCE_PRECEDENCE.map((entry, index) => {
     const baseDirectory =
-      entry.scope === "workspace"
-        ? workspaceRoot
-        : homeDirectory;
+      entry.scope === "workspace" ? workspaceRoot : homeDirectory;
 
     if (!baseDirectory) {
       return null;
@@ -183,9 +177,9 @@ async function listSampleFiles(skillDirectory: string) {
       return;
     }
 
-    const entries = await readdir(currentDirectory, { withFileTypes: true }).catch(
-      () => [],
-    );
+    const entries = await readdir(currentDirectory, {
+      withFileTypes: true,
+    }).catch(() => []);
 
     entries.sort((left, right) =>
       left.name.localeCompare(right.name, undefined, {
@@ -387,7 +381,10 @@ async function buildWatchTargets(
   workspaceRoot: string | null,
   globalBase?: string | null,
 ) {
-  const { effectiveSkills, roots } = await discoverSkillState(workspaceRoot, globalBase);
+  const { effectiveSkills, roots } = await discoverSkillState(
+    workspaceRoot,
+    globalBase,
+  );
   const targets = new Map<string, string>();
 
   for (const root of roots) {
@@ -418,7 +415,10 @@ async function refreshEntry(entry: SkillRegistryEntry) {
   }
 
   entry.refreshPromise = (async () => {
-    const { effectiveSkills } = await discoverSkillState(entry.workspaceRoot, entry.globalBase);
+    const { effectiveSkills } = await discoverSkillState(
+      entry.workspaceRoot,
+      entry.globalBase,
+    );
     const { fingerprint, snapshot } = toSkillSnapshot(
       effectiveSkills,
       entry.snapshot,
@@ -443,7 +443,10 @@ function closeWatchers(entry: SkillRegistryEntry) {
 }
 
 async function syncWatchers(entry: SkillRegistryEntry) {
-  const { targets } = await buildWatchTargets(entry.workspaceRoot, entry.globalBase);
+  const { targets } = await buildWatchTargets(
+    entry.workspaceRoot,
+    entry.globalBase,
+  );
   const nextTargets = new Map<string, string>();
 
   for (const target of targets) {
@@ -545,7 +548,10 @@ export async function watchSkillRoots({
   workspaceRoot: string | null;
   globalBase?: string | null;
 }) {
-  const entry = getOrCreateEntry(workspaceRoot ? path.resolve(workspaceRoot) : null, globalBase);
+  const entry = getOrCreateEntry(
+    workspaceRoot ? path.resolve(workspaceRoot) : null,
+    globalBase,
+  );
   await refreshEntry(entry);
   await syncWatchers(entry);
   return entry.snapshot;
@@ -558,8 +564,14 @@ export async function getSkillSnapshot({
   workspaceRoot: string | null;
   globalBase?: string | null;
 }) {
-  const entry = getOrCreateEntry(workspaceRoot ? path.resolve(workspaceRoot) : null, globalBase);
-  await watchSkillRoots({ workspaceRoot: entry.workspaceRoot, globalBase: entry.globalBase });
+  const entry = getOrCreateEntry(
+    workspaceRoot ? path.resolve(workspaceRoot) : null,
+    globalBase,
+  );
+  await watchSkillRoots({
+    workspaceRoot: entry.workspaceRoot,
+    globalBase: entry.globalBase,
+  });
 
   if (!entry.snapshot) {
     throw new Error("Skill snapshot is unavailable.");
@@ -578,7 +590,10 @@ export async function loadSkillByName({
   globalBase?: string | null;
 }) {
   const normalizedName = normalizeSkillName(name);
-  const roots = buildConventionalRoots(workspaceRoot ? path.resolve(workspaceRoot) : null, globalBase);
+  const roots = buildConventionalRoots(
+    workspaceRoot ? path.resolve(workspaceRoot) : null,
+    globalBase,
+  );
   const seenRealFiles = new Set<string>();
 
   for (const root of roots) {

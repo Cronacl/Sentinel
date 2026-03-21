@@ -19,13 +19,15 @@ export const threadPlanQuestionOptionSchema = z.object({
   label: z.string().trim().min(1).max(80),
 });
 
-export const threadPlanQuestionSchema: z.ZodType<ThreadPlanQuestion> = z.object({
-  allowMultiple: z.boolean().optional(),
-  header: z.string().trim().min(1).max(24),
-  id: z.string().trim().min(1).max(80),
-  options: z.array(threadPlanQuestionOptionSchema).min(2).max(4),
-  question: z.string().trim().min(1).max(240),
-});
+export const threadPlanQuestionSchema: z.ZodType<ThreadPlanQuestion> = z.object(
+  {
+    allowMultiple: z.boolean().optional(),
+    header: z.string().trim().min(1).max(24),
+    id: z.string().trim().min(1).max(80),
+    options: z.array(threadPlanQuestionOptionSchema).min(2).max(4),
+    question: z.string().trim().min(1).max(240),
+  },
+);
 
 export const threadPlanAnswerSchema = z.object({
   answer: z.string().trim().min(1).max(400),

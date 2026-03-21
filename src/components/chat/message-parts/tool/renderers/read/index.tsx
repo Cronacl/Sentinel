@@ -32,7 +32,11 @@ type ReadToolOutput = {
 };
 
 function isReadToolInput(value: unknown): value is ReadToolInput {
-  const candidate = value as { limit?: unknown; offset?: unknown; path?: unknown };
+  const candidate = value as {
+    limit?: unknown;
+    offset?: unknown;
+    path?: unknown;
+  };
 
   return (
     !!candidate &&
@@ -63,10 +67,13 @@ function isReadToolOutput(value: unknown): value is ReadToolOutput {
     Array.isArray(candidate.entries) &&
     (candidate.kind === "directory" || candidate.kind === "file") &&
     Array.isArray(candidate.lines) &&
-    (candidate.nextOffset === null || typeof candidate.nextOffset === "number") &&
+    (candidate.nextOffset === null ||
+      typeof candidate.nextOffset === "number") &&
     typeof candidate.path === "string" &&
-    (candidate.totalEntries === null || typeof candidate.totalEntries === "number") &&
-    (candidate.totalLines === null || typeof candidate.totalLines === "number") &&
+    (candidate.totalEntries === null ||
+      typeof candidate.totalEntries === "number") &&
+    (candidate.totalLines === null ||
+      typeof candidate.totalLines === "number") &&
     typeof candidate.truncated === "boolean"
   );
 }
@@ -104,19 +111,15 @@ function buildSummary(
         : `${output.totalEntries ?? 0} entries`;
     return (
       <>
-        Read{" "}
-        <span className="font-mono text-[12px]">{output.path}</span>
-        <span className="ml-1.5 text-[11px] text-foreground/40">
-          {detail}
-        </span>
+        Read <span className="font-mono text-[12px]">{output.path}</span>
+        <span className="ml-1.5 text-[11px] text-foreground/40">{detail}</span>
       </>
     );
   }
 
   return (
     <>
-      Reading{" "}
-      <span className="font-mono text-[12px]">{shownPath}</span>
+      Reading <span className="font-mono text-[12px]">{shownPath}</span>
     </>
   );
 }
@@ -137,7 +140,9 @@ function buildBody(
   if (output.kind === "directory") {
     return (
       <ScrollShadow className="max-h-[220px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
-        {output.entries.length > 0 ? output.entries.join("\n") : "(empty directory)"}
+        {output.entries.length > 0
+          ? output.entries.join("\n")
+          : "(empty directory)"}
       </ScrollShadow>
     );
   }
@@ -155,9 +160,10 @@ function buildBody(
   }
 
   if (isMarkdownFile(output.path)) {
-    const mdContent = output.lines.length > 0
-      ? output.lines.map((l) => l.text).join("\n")
-      : content ?? "";
+    const mdContent =
+      output.lines.length > 0
+        ? output.lines.map((l) => l.text).join("\n")
+        : (content ?? "");
     return (
       <ScrollShadow className="max-h-[300px]">
         <MarkdownContent text={mdContent} />
@@ -166,9 +172,7 @@ function buildBody(
   }
 
   if (isCodeFile(output.path)) {
-    const codeLines = output.lines.length > 0
-      ? output.lines
-      : undefined;
+    const codeLines = output.lines.length > 0 ? output.lines : undefined;
     const codeStr = codeLines ? undefined : (content ?? "");
     return (
       <CodePreview
@@ -189,13 +193,12 @@ function buildBody(
   );
 }
 
-export const ReadTool = memo(function ReadTool({
-  part,
-}: RendererProps) {
+export const ReadTool = memo(function ReadTool({ part }: RendererProps) {
   const hasInput = "input" in part && part.input !== undefined;
   const hasOutput = "output" in part && part.output !== undefined;
   const readInput = hasInput && isReadToolInput(part.input) ? part.input : null;
-  const readOutput = hasOutput && isReadToolOutput(part.output) ? part.output : null;
+  const readOutput =
+    hasOutput && isReadToolOutput(part.output) ? part.output : null;
   const partErrorText = "errorText" in part ? part.errorText : undefined;
   const isFinishedState =
     part.state === "output-error" ||
@@ -233,7 +236,11 @@ export const ReadTool = memo(function ReadTool({
       isExpandable={isFinishedState}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={partErrorText && part.state !== "output-error" ? partErrorText : undefined}
+      errorText={
+        partErrorText && part.state !== "output-error"
+          ? partErrorText
+          : undefined
+      }
       footer={footer}
     >
       {body}

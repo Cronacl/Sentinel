@@ -4,7 +4,10 @@ import { z } from "zod";
 
 import type { AIProvider } from "@/server/db/enums";
 import { getReasoningProviderOptions } from "@/lib/ai/providers/models";
-import { getEnabledModels, getLanguageModel } from "@/lib/ai/providers/resolver";
+import {
+  getEnabledModels,
+  getLanguageModel,
+} from "@/lib/ai/providers/resolver";
 
 import type { ThreadPromptContext } from "./prompt-context";
 import {
@@ -39,7 +42,9 @@ const toolCategoryValues = [
 ] as const satisfies readonly ToolCategory[];
 
 const toolRoutingDecisionSchema = z.object({
-  categories: z.array(z.enum(toolCategoryValues)).max(toolCategoryValues.length),
+  categories: z
+    .array(z.enum(toolCategoryValues))
+    .max(toolCategoryValues.length),
   confidence: z.enum(["low", "medium", "high"]),
   integrationNamespaces: z.array(z.string().trim().min(1)).max(12),
   mcpNamespaces: z.array(z.string().trim().min(1)).max(12),
@@ -139,8 +144,10 @@ type RouteToolExposureInput = {
 };
 
 function uniqueStrings(values: string[]) {
-  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))).sort(
-    (left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }),
+  return Array.from(
+    new Set(values.map((value) => value.trim()).filter(Boolean)),
+  ).sort((left, right) =>
+    left.localeCompare(right, undefined, { sensitivity: "base" }),
   );
 }
 
@@ -188,9 +195,7 @@ function applyAlwaysOnChatBaseline(
   }
 }
 
-function buildFallbackActiveTools(
-  input: RouteToolExposureInput,
-) {
+function buildFallbackActiveTools(input: RouteToolExposureInput) {
   if (input.stage === "step") {
     return uniqueStrings(
       selectStepActiveTools({
@@ -215,10 +220,10 @@ function getRemediationTriggerSource(
 ): boolean {
   return Boolean(
     evidence &&
-      (Boolean(evidence.missingCommand) ||
-        evidence.missingToolchain ||
-        evidence.lastExitCode === 127 ||
-        evidence.suggestedNextAction === "install"),
+    (Boolean(evidence.missingCommand) ||
+      evidence.missingToolchain ||
+      evidence.lastExitCode === 127 ||
+      evidence.suggestedNextAction === "install"),
   );
 }
 
@@ -234,7 +239,8 @@ export function buildToolRoutingEvidence(
   let missingCommand: string | null = null;
   let missingToolchain = false;
   let projectContextFound = false;
-  let suggestedNextAction: "install" | "inspect" | "none" | "retry" | null = null;
+  let suggestedNextAction: "install" | "inspect" | "none" | "retry" | null =
+    null;
   let targetFilesFound = false;
 
   const projectMarkerPattern =
@@ -306,7 +312,10 @@ export function buildToolRoutingEvidence(
             missingToolchain = true;
           }
         }
-        if (typeof output.missingCommand === "string" && output.missingCommand.trim()) {
+        if (
+          typeof output.missingCommand === "string" &&
+          output.missingCommand.trim()
+        ) {
           missingCommand = output.missingCommand.trim();
         }
         if (
@@ -330,7 +339,10 @@ export function buildToolRoutingEvidence(
         executionFailed = true;
         suggestedNextAction ??= "install";
       }
-      if (/exitCode":127\b/.test(serialized) || /\bexit 127\b/i.test(serialized)) {
+      if (
+        /exitCode":127\b/.test(serialized) ||
+        /\bexit 127\b/i.test(serialized)
+      ) {
         executionFailed = true;
         missingToolchain = true;
         suggestedNextAction ??= "install";
@@ -367,14 +379,18 @@ export function buildToolRoutingManifest({
   return {
     allowedInspectionRoots: promptContext.allowedInspectionRoots,
     allowedMutationRoot: promptContext.allowedMutationRoot,
-    availableCategories: Array.from(getActiveCategories(availableToolNames)).sort(),
-    availableIntegrations: promptContext.enabledIntegrations.map((integration) => ({
-      aliases: integration.aliases ?? [],
-      capabilitySummary: integration.capabilitySummary ?? "",
-      label: integration.label,
-      provider: integration.provider,
-      toolCount: integration.toolCount,
-    })),
+    availableCategories: Array.from(
+      getActiveCategories(availableToolNames),
+    ).sort(),
+    availableIntegrations: promptContext.enabledIntegrations.map(
+      (integration) => ({
+        aliases: integration.aliases ?? [],
+        capabilitySummary: integration.capabilitySummary ?? "",
+        label: integration.label,
+        provider: integration.provider,
+        toolCount: integration.toolCount,
+      }),
+    ),
     availableMcpServers: promptContext.enabledMcpServers.map((server) => ({
       aliases: server.aliases ?? [],
       capabilitySummary: server.capabilitySummary ?? "",
@@ -384,7 +400,9 @@ export function buildToolRoutingManifest({
       toolCount: server.toolCount,
     })),
     availableIntegrationNamespaces: uniqueStrings(
-      promptContext.enabledIntegrations.map((integration) => integration.provider),
+      promptContext.enabledIntegrations.map(
+        (integration) => integration.provider,
+      ),
     ),
     availableMcpNamespaces: uniqueStrings(
       promptContext.enabledMcpServers.map((server) => server.namespace),
@@ -422,8 +440,11 @@ export async function resolveToolRouterModel({
       : null;
   const fallbackProviderOptions =
     resolvedProviderId && resolvedModelId
-      ? getReasoningProviderOptions(resolvedProviderId, resolvedModelId, "minimal") ??
-        mainProviderOptions
+      ? (getReasoningProviderOptions(
+          resolvedProviderId,
+          resolvedModelId,
+          "minimal",
+        ) ?? mainProviderOptions)
       : mainProviderOptions;
 
   if (!resolvedProviderId) {
@@ -522,7 +543,9 @@ function expandIntegrationTools(
 ) {
   const acceptedNamespaces = new Set<string>();
   const allowedNamespaces = new Set<string>(
-    promptContext.enabledIntegrations.map((integration) => integration.provider),
+    promptContext.enabledIntegrations.map(
+      (integration) => integration.provider,
+    ),
   );
 
   for (const namespace of uniqueStrings(integrationNamespaces)) {
@@ -624,7 +647,8 @@ export function validateToolRoutingDecision({
           }),
         )
       : new Set<ToolCategory>();
-  const workspaceContextAvailable = hasWorkspaceInspectionContext(promptContext);
+  const workspaceContextAvailable =
+    hasWorkspaceInspectionContext(promptContext);
 
   for (const category of uniqueStrings(decision.categories)) {
     if (!availableCategories.has(category as ToolCategory)) {
@@ -664,7 +688,10 @@ export function validateToolRoutingDecision({
       continue;
     }
 
-    if ((category === "inspection" || category === "execution") && !workspaceContextAvailable) {
+    if (
+      (category === "inspection" || category === "execution") &&
+      !workspaceContextAvailable
+    ) {
       rejectedSelections.push(`category:${category}:no-workspace-context`);
       continue;
     }
@@ -708,7 +735,8 @@ export function validateToolRoutingDecision({
   applyAlwaysOnChatBaseline(activeTools, availableToolNames, promptContext);
 
   const remediationTriggerSource =
-    getRemediationTriggerSource(evidence) && decision.categories.includes("execution")
+    getRemediationTriggerSource(evidence) &&
+    decision.categories.includes("execution")
       ? "router"
       : null;
 
@@ -792,7 +820,9 @@ export async function routeToolExposure(
 
   try {
     const { output } = await generateText({
-      model: routerModel.languageModel as Parameters<typeof generateText>[0]["model"],
+      model: routerModel.languageModel as Parameters<
+        typeof generateText
+      >[0]["model"],
       output: Output.object({ schema: toolRoutingDecisionSchema }),
       ...(routerModel.providerOptions
         ? { providerOptions: routerModel.providerOptions }

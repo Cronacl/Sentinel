@@ -21,9 +21,7 @@ const STREAM_TTL_MS = 60_000;
 
 declare global {
   // eslint-disable-next-line no-var
-  var __sentinelActiveStreams:
-    | Map<string, ActiveStreamRecord>
-    | undefined;
+  var __sentinelActiveStreams: Map<string, ActiveStreamRecord> | undefined;
 }
 
 const activeStreams =

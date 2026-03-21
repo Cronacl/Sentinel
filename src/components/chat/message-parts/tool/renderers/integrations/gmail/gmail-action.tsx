@@ -21,7 +21,13 @@ type ActionOutput = {
 
 const ACTION_META: Record<
   string,
-  { label: string; pastTense: string; gerund: string; icon: string; iconClass: string }
+  {
+    label: string;
+    pastTense: string;
+    gerund: string;
+    icon: string;
+    iconClass: string;
+  }
 > = {
   gmail_archive: {
     label: "Archive",
@@ -92,9 +98,7 @@ export const GmailActionTool = memo(function GmailActionTool({
 
   const input = "input" in part ? (part.input as ActionInput) : null;
   const output =
-    state.hasOutput && "output" in part
-      ? (part.output as ActionOutput)
-      : null;
+    state.hasOutput && "output" in part ? (part.output as ActionOutput) : null;
 
   const summary = state.needsApproval
     ? `${meta.label} email — awaiting approval`
@@ -153,7 +157,10 @@ export const GmailActionTool = memo(function GmailActionTool({
         <div className="flex items-center gap-2 text-xs text-foreground/70">
           <Icon icon={meta.icon} className={`h-4 w-4 ${meta.iconClass}`} />
           <span>
-            {meta.label} message <code className="rounded bg-foreground/5 px-1 py-0.5 text-[10px]">{input.messageId}</code>
+            {meta.label} message{" "}
+            <code className="rounded bg-foreground/5 px-1 py-0.5 text-[10px]">
+              {input.messageId}
+            </code>
           </span>
         </div>
       ) : null}

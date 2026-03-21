@@ -16,15 +16,13 @@ import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { getOwnedThreadOrThrow } from "./workspace-thread-helpers";
 
 export const planRouter = createTRPCRouter({
-  get: protectedProcedure
-    .input(planGetSchema)
-    .query(async ({ ctx, input }) => {
-      await getOwnedThreadOrThrow(ctx, input.threadId);
-      return getThreadPlanState({
-        database: ctx.db,
-        threadId: input.threadId,
-      });
-    }),
+  get: protectedProcedure.input(planGetSchema).query(async ({ ctx, input }) => {
+    await getOwnedThreadOrThrow(ctx, input.threadId);
+    return getThreadPlanState({
+      database: ctx.db,
+      threadId: input.threadId,
+    });
+  }),
 
   upsert: protectedProcedure
     .input(planUpsertSchema)

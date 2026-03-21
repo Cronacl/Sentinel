@@ -63,7 +63,8 @@ export const GDriveSearchTool = memo(function GDriveSearchTool({
   }, [open, output, input?.query, isListMode]);
 
   const label = (() => {
-    if (isError) return isListMode ? "Failed to list Drive files" : "Drive search failed";
+    if (isError)
+      return isListMode ? "Failed to list Drive files" : "Drive search failed";
     if (isRunning) {
       if (isListMode) return "Listing Drive files\u2026";
       return input?.query

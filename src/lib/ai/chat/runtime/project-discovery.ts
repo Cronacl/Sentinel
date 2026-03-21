@@ -69,7 +69,9 @@ async function collectCandidateSignals(candidatePath: string) {
     return null;
   }
 
-  const kind: ThreadPromptProjectCandidate["kind"] = entryNames.has("package.json")
+  const kind: ThreadPromptProjectCandidate["kind"] = entryNames.has(
+    "package.json",
+  )
     ? "package"
     : entryNames.has(".git")
       ? "repo"
@@ -120,7 +122,10 @@ export async function discoverProjectAwareness(rootPath: string | null) {
     };
   }
 
-  const candidatePaths = [rootPath, ...(await listImmediateDirectories(rootPath))];
+  const candidatePaths = [
+    rootPath,
+    ...(await listImmediateDirectories(rootPath)),
+  ];
   const candidates: ScoredCandidate[] = [];
 
   for (const candidatePath of candidatePaths) {
@@ -150,7 +155,9 @@ export async function discoverProjectAwareness(rootPath: string | null) {
 
   return {
     preferredProjectRoot,
-    projectCandidates: candidates.map(({ score: _score, ...candidate }) => candidate),
+    projectCandidates: candidates.map(
+      ({ score: _score, ...candidate }) => candidate,
+    ),
     shellStartDirectory: preferredProjectRoot,
   };
 }

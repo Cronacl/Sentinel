@@ -120,9 +120,7 @@ function getDraftSources(part: PlanDraftPart) {
   return sources;
 }
 
-export function getPlanToolName(
-  part: PlanDraftPart,
-): PlanToolName | null {
+export function getPlanToolName(part: PlanDraftPart): PlanToolName | null {
   const toolName =
     part.type === "dynamic-tool" ? part.toolName : part.type.slice(5);
 
@@ -148,21 +146,26 @@ export function getPlanDraft(
 
   const sources = getDraftSources(part);
   const document =
-    readFieldFromSources(sources, (source) => readStringField(source, "document")) ??
-    "";
+    readFieldFromSources(sources, (source) =>
+      readStringField(source, "document"),
+    ) ?? "";
   const goal =
-    readFieldFromSources(sources, (source) => readStringField(source, "goal")) ??
-    "";
+    readFieldFromSources(sources, (source) =>
+      readStringField(source, "goal"),
+    ) ?? "";
   const summary =
-    readFieldFromSources(sources, (source) => readStringField(source, "summary")) ??
-    "";
+    readFieldFromSources(sources, (source) =>
+      readStringField(source, "summary"),
+    ) ?? "";
   const title =
-    readFieldFromSources(sources, (source) => readStringField(source, "title")) ??
-    (toolName === "create_plan" ? "Drafting plan" : "Updating plan");
+    readFieldFromSources(sources, (source) =>
+      readStringField(source, "title"),
+    ) ?? (toolName === "create_plan" ? "Drafting plan" : "Updating plan");
   const tasks = readFieldFromSources(sources, readTaskDrafts);
   const taskCount =
-    readFieldFromSources(sources, (source) => readNumberField(source, "taskCount")) ??
-    tasks?.length;
+    readFieldFromSources(sources, (source) =>
+      readNumberField(source, "taskCount"),
+    ) ?? tasks?.length;
   const audience =
     readFieldFromSources(sources, readAudienceField) ?? "technical";
   const isStreaming =

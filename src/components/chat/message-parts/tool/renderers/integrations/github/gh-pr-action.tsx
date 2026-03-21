@@ -69,9 +69,8 @@ export const GHPRActionTool = memo(function GHPRActionTool({
     onDeny,
   });
 
-  const input = "input" in part
-    ? (part.input as Record<string, unknown>)
-    : null;
+  const input =
+    "input" in part ? (part.input as Record<string, unknown>) : null;
 
   const output =
     state.hasOutput && "output" in part
@@ -164,11 +163,11 @@ export const GHPRActionTool = memo(function GHPRActionTool({
         <div className="space-y-1 text-xs text-foreground/70">
           <div className="flex items-center gap-1.5">
             <Icon icon={meta.icon} className={`h-4 w-4 ${meta.iconClass}`} />
-            <span className="font-medium text-foreground">{meta.pastTense}</span>
+            <span className="font-medium text-foreground">
+              {meta.pastTense}
+            </span>
           </div>
-          {output.title ? (
-            <p>{String(output.title)}</p>
-          ) : null}
+          {output.title ? <p>{String(output.title)}</p> : null}
           {output.number ? (
             <p className="text-[11px] text-foreground/50">
               PR #{String(output.number)}
@@ -189,7 +188,11 @@ export const GHPRActionTool = memo(function GHPRActionTool({
           ) : null}
           {output.merged !== undefined ? (
             <p className="text-[11px] text-foreground/50">
-              {output.merged ? "Merged" : output.message ? String(output.message) : ""}
+              {output.merged
+                ? "Merged"
+                : output.message
+                  ? String(output.message)
+                  : ""}
             </p>
           ) : null}
           {output.sha ? (

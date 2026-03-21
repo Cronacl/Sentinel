@@ -111,24 +111,20 @@ function buildSyntheticStrippedMessage(
 
   for (const part of message.parts) {
     if (part.type === "text") {
-      parts.push(
-        {
-          text: part.text,
-          type: "text" as const,
-        },
-      );
+      parts.push({
+        text: part.text,
+        type: "text" as const,
+      });
       continue;
     }
 
     if (part.type === "file") {
-      parts.push(
-        {
-          filename: part.filename,
-          mediaType: part.mediaType,
-          type: "file" as const,
-          url: part.url,
-        },
-      );
+      parts.push({
+        filename: part.filename,
+        mediaType: part.mediaType,
+        type: "file" as const,
+        url: part.url,
+      });
       continue;
     }
   }

@@ -8,10 +8,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 
 import type { RendererProps } from "../../renderer";
 import { ToolLayout } from "../shared/tool-layout";
-import {
-  highlightToTokens,
-  type ThemedToken,
-} from "@/lib/syntax/highlighter";
+import { highlightToTokens, type ThemedToken } from "@/lib/syntax/highlighter";
 import { useResolvedTheme } from "@/lib/syntax/use-resolved-theme";
 
 type ShellToolInput = {
@@ -110,8 +107,7 @@ function buildSummary(
   if (part.state === "output-error") {
     return (
       <>
-        Shell failed{" "}
-        <span className="font-mono text-[12px]">$ {cmd}</span>
+        Shell failed <span className="font-mono text-[12px]">$ {cmd}</span>
       </>
     );
   }
@@ -120,8 +116,7 @@ function buildSummary(
     const succeeded = output.exitCode === 0;
     return (
       <>
-        Ran{" "}
-        <span className="font-mono text-[12px]">$ {cmd}</span>
+        Ran <span className="font-mono text-[12px]">$ {cmd}</span>
         <span className="ml-1.5 text-[11px] text-foreground/40">
           {formatDuration(output.durationMs)}
           {!succeeded ? ` · exit ${output.exitCode}` : ""}
@@ -133,16 +128,14 @@ function buildSummary(
   if (part.state === "approval-requested") {
     return (
       <>
-        Run{" "}
-        <span className="font-mono text-[12px]">$ {cmd}</span>
+        Run <span className="font-mono text-[12px]">$ {cmd}</span>
       </>
     );
   }
 
   return (
     <>
-      Running{" "}
-      <span className="font-mono text-[12px]">$ {cmd}</span>
+      Running <span className="font-mono text-[12px]">$ {cmd}</span>
     </>
   );
 }
@@ -186,11 +179,7 @@ function tokenLinesToSegments(
   );
 }
 
-function TerminalOutput({
-  text,
-}: {
-  text: string;
-}) {
+function TerminalOutput({ text }: { text: string }) {
   const theme = useResolvedTheme();
   const [copied, setCopied] = useState(false);
   const [hasBeenVisible, setHasBeenVisible] = useState(false);
@@ -277,7 +266,11 @@ function TerminalOutput({
                   </span>
                 ))
               ) : (
-                <span className={idx === 0 ? "text-foreground/50" : "text-foreground/70"}>
+                <span
+                  className={
+                    idx === 0 ? "text-foreground/50" : "text-foreground/70"
+                  }
+                >
                   {line}
                 </span>
               )}
@@ -297,8 +290,10 @@ export const ShellTool = memo(function ShellTool({
   const approval = "approval" in part ? part.approval : undefined;
   const hasInput = "input" in part && part.input !== undefined;
   const hasOutput = "output" in part && part.output !== undefined;
-  const shellInput = hasInput && isShellToolInput(part.input) ? part.input : null;
-  const shellOutput = hasOutput && isShellToolOutput(part.output) ? part.output : null;
+  const shellInput =
+    hasInput && isShellToolInput(part.input) ? part.input : null;
+  const shellOutput =
+    hasOutput && isShellToolOutput(part.output) ? part.output : null;
   const partErrorText = "errorText" in part ? part.errorText : undefined;
   const approvalId = approval?.id;
   const showApprovalActions =
@@ -325,7 +320,12 @@ export const ShellTool = memo(function ShellTool({
   if (!shellInput) return null;
 
   const summary = buildSummary(part, shellInput, shellOutput);
-  const terminalText = getTerminalText(shellInput, shellOutput, part.state, partErrorText);
+  const terminalText = getTerminalText(
+    shellInput,
+    shellOutput,
+    part.state,
+    partErrorText,
+  );
 
   const footer = shellOutput ? (
     <div className="flex items-center justify-between">
@@ -334,8 +334,14 @@ export const ShellTool = memo(function ShellTool({
         {shellOutput.truncated ? " · truncated" : ""}
       </span>
       {isCompletedShellOutput(shellOutput) ? (
-        <span className={shellOutput.exitCode === 0 ? "text-success" : "text-danger"}>
-          {shellOutput.exitCode === 0 ? "Success" : `Exit ${shellOutput.exitCode}`}
+        <span
+          className={
+            shellOutput.exitCode === 0 ? "text-success" : "text-danger"
+          }
+        >
+          {shellOutput.exitCode === 0
+            ? "Success"
+            : `Exit ${shellOutput.exitCode}`}
         </span>
       ) : null}
     </div>
@@ -349,12 +355,18 @@ export const ShellTool = memo(function ShellTool({
       isExpandable={isFinishedShellState || isRunningShellState}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={partErrorText && part.state !== "output-error" ? partErrorText : undefined}
+      errorText={
+        partErrorText && part.state !== "output-error"
+          ? partErrorText
+          : undefined
+      }
       footer={footer}
       actions={
         <>
           {part.state === "approval-requested" ? (
-            <p className="mb-1.5 line-clamp-2 text-[11px] text-muted">{shellInput.rationale}</p>
+            <p className="mb-1.5 line-clamp-2 text-[11px] text-muted">
+              {shellInput.rationale}
+            </p>
           ) : null}
           {showApprovalActions ? (
             <div className="flex flex-wrap gap-2">

@@ -3,9 +3,7 @@ import {
   normalizeThreadUIMessages,
   type ThreadUIMessage,
 } from "@/lib/ai/messages/types";
-import {
-  validateThreadUIMessage,
-} from "@/lib/ai/messages/ui";
+import { validateThreadUIMessage } from "@/lib/ai/messages/ui";
 import { type ThreadPlanAnswer } from "@/lib/plan";
 
 import { InvalidThreadChatRequestError } from "../errors";

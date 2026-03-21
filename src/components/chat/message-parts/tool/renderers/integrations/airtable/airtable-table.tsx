@@ -136,7 +136,8 @@ export const AirtableTableTool = memo(function AirtableTableTool({
                 {table.name}
               </p>
               <span className="text-[10.5px] text-foreground/40">
-                {table.fields.length} field{table.fields.length !== 1 ? "s" : ""}
+                {table.fields.length} field
+                {table.fields.length !== 1 ? "s" : ""}
                 {" \u00B7 "}
                 {table.views.length} view{table.views.length !== 1 ? "s" : ""}
               </span>

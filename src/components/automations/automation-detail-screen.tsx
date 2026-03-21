@@ -452,9 +452,7 @@ export function AutomationDetailScreen({
     } catch (error) {
       sileo.error({
         description:
-          error instanceof Error
-            ? error.message
-            : "Failed to run automation.",
+          error instanceof Error ? error.message : "Failed to run automation.",
       });
     }
   };

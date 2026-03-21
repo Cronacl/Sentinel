@@ -9,8 +9,7 @@ export const exaSearchProviderMeta: SearchProviderMeta = {
     defaultLivecrawl: DEFAULT_EXA_LIVECRAWL_MODE,
     defaultSearchType: DEFAULT_EXA_SEARCH_TYPE,
   },
-  description:
-    "Exa web search with LLM-oriented summaries and crawl options.",
+  description: "Exa web search with LLM-oriented summaries and crawl options.",
   displayName: "Exa",
   id: "exa",
   supportsLivecrawlModes: ["never", "preferred", "always"],

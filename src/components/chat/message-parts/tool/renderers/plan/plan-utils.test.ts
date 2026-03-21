@@ -1,9 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import {
-  getPlanDraft,
-  getPlanToolName,
-} from "./plan-utils";
+import { getPlanDraft, getPlanToolName } from "./plan-utils";
 
 describe("getPlanDraft", () => {
   it("reads partial create_plan input while the tool input is streaming", () => {

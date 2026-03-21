@@ -4,10 +4,7 @@ import { and, eq } from "drizzle-orm";
 
 import { decrypt } from "@/lib/ai/providers/encrypt";
 import { db } from "@/server/db";
-import {
-  integrationDatabaseConfigs,
-  integrations,
-} from "@/server/db/schema";
+import { integrationDatabaseConfigs, integrations } from "@/server/db/schema";
 import type {
   DatabaseIntegrationProvider,
   IntegrationProvider,
@@ -36,19 +33,20 @@ const INTEGRATION_LABELS: Partial<Record<IntegrationProvider, string>> = {
   mongodb: "MongoDB",
 };
 
-const INTEGRATION_TOOL_PREFIXES: Partial<Record<IntegrationProvider, string>> = {
-  gmail: "gmail_",
-  google_calendar: "gcal_",
-  google_drive: "gdrive_",
-  github: "gh_",
-  linear: "linear_",
-  notion: "notion_",
-  slack: "slack_",
-  airtable: "airtable_",
-  postgresql: "pg_",
-  mysql: "mysql_",
-  mongodb: "mongo_",
-};
+const INTEGRATION_TOOL_PREFIXES: Partial<Record<IntegrationProvider, string>> =
+  {
+    gmail: "gmail_",
+    google_calendar: "gcal_",
+    google_drive: "gdrive_",
+    github: "gh_",
+    linear: "linear_",
+    notion: "notion_",
+    slack: "slack_",
+    airtable: "airtable_",
+    postgresql: "pg_",
+    mysql: "mysql_",
+    mongodb: "mongo_",
+  };
 
 const INTEGRATION_TOOL_COUNTS: Partial<Record<IntegrationProvider, number>> = {
   gmail: 16,
@@ -102,7 +100,9 @@ async function loadDatabaseConfig(
   return {
     host: decrypt(row.encryptedHost),
     port: Number(decrypt(row.encryptedPort)),
-    database: row.encryptedDatabase ? decrypt(row.encryptedDatabase) : undefined,
+    database: row.encryptedDatabase
+      ? decrypt(row.encryptedDatabase)
+      : undefined,
     username: decrypt(row.encryptedUsername),
     password: decrypt(row.encryptedPassword),
     connectionUrl: row.encryptedConnectionUrl
@@ -150,7 +150,9 @@ export function getIntegrationLabel(provider: IntegrationProvider): string {
   return INTEGRATION_LABELS[provider] ?? provider;
 }
 
-export function getIntegrationToolPrefix(provider: IntegrationProvider): string | null {
+export function getIntegrationToolPrefix(
+  provider: IntegrationProvider,
+): string | null {
   return INTEGRATION_TOOL_PREFIXES[provider] ?? null;
 }
 

@@ -59,10 +59,14 @@ export const buildPersonalizationPrompt = prompt<PersonalizationPromptInput>(
     return lines(
       when(preset, () => `Default personality: ${preset!.prompt}`),
       when(v.nickname?.trim(), () => `User nickname: ${v.nickname!.trim()}`),
-      when(v.occupation?.trim(), () => `User occupation: ${v.occupation!.trim()}`),
+      when(
+        v.occupation?.trim(),
+        () => `User occupation: ${v.occupation!.trim()}`,
+      ),
       when(v.aboutUser?.trim(), () => `About the user: ${v.aboutUser!.trim()}`),
-      when(v.customInstructions?.trim(), () =>
-        `Custom instructions: ${v.customInstructions!.trim()}`,
+      when(
+        v.customInstructions?.trim(),
+        () => `Custom instructions: ${v.customInstructions!.trim()}`,
       ),
     );
   },

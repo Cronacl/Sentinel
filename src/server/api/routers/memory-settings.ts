@@ -36,7 +36,10 @@ export const memorySettingsRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       const profile = input.enabled
-        ? await resolveConfiguredMemoryProfileFromId(userId, input.memoryProfileId)
+        ? await resolveConfiguredMemoryProfileFromId(
+            userId,
+            input.memoryProfileId,
+          )
         : getMemoryEmbeddingProfileById(input.memoryProfileId);
 
       if (!profile) {

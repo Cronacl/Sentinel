@@ -88,7 +88,9 @@ export const integrationsRouter = createTRPCRouter({
         isEnabled: row?.isEnabled ?? false,
         hasOAuthApp,
         hasDbConfig,
-        authType: row?.authType ?? (isDatabaseProvider(provider) ? "connection_config" : "oauth"),
+        authType:
+          row?.authType ??
+          (isDatabaseProvider(provider) ? "connection_config" : "oauth"),
       };
     });
   }),
@@ -336,7 +338,7 @@ export const integrationsRouter = createTRPCRouter({
         encryptedUsername: encrypt(input.username || ""),
         encryptedPassword: input.password
           ? encrypt(input.password)
-          : existing?.encryptedPassword ?? encrypt(""),
+          : (existing?.encryptedPassword ?? encrypt("")),
         encryptedConnectionUrl: input.connectionUrl
           ? encrypt(input.connectionUrl)
           : null,
@@ -424,9 +426,7 @@ export const integrationsRouter = createTRPCRouter({
       if (integration) {
         await ctx.db
           .delete(integrationDatabaseConfigs)
-          .where(
-            eq(integrationDatabaseConfigs.integrationId, integration.id),
-          );
+          .where(eq(integrationDatabaseConfigs.integrationId, integration.id));
         await ctx.db
           .delete(integrations)
           .where(eq(integrations.id, integration.id));

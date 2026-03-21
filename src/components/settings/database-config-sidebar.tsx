@@ -141,8 +141,7 @@ export function DatabaseConfigSidebar({
     { enabled: true },
   );
   const saveDatabaseConfig = api.integrations.saveDatabaseConfig.useMutation();
-  const testConnection =
-    api.integrations.testDatabaseConnection.useMutation();
+  const testConnection = api.integrations.testDatabaseConnection.useMutation();
   const removeDatabaseConfig =
     api.integrations.removeDatabaseConfig.useMutation();
   const toggle = api.integrations.toggle.useMutation();
@@ -167,7 +166,13 @@ export function DatabaseConfigSidebar({
       ssl: data.ssl,
       isEnabled: integration.isEnabled,
     });
-  }, [dbConfigQuery.data, dbConfigQuery.isSuccess, form, integration.isEnabled, integration.provider]);
+  }, [
+    dbConfigQuery.data,
+    dbConfigQuery.isSuccess,
+    form,
+    integration.isEnabled,
+    integration.provider,
+  ]);
 
   const useConnectionUrl = form.watch("useConnectionUrl");
 
@@ -384,9 +389,7 @@ export function DatabaseConfigSidebar({
                       inputProps={{
                         autoComplete: "off",
                         placeholder:
-                          integration.provider === "mongodb"
-                            ? "admin"
-                            : "mydb",
+                          integration.provider === "mongodb" ? "admin" : "mydb",
                       }}
                       label="Database"
                       name="database"
@@ -528,9 +531,7 @@ export function DatabaseConfigSidebar({
                 >
                   {({ isPending }) => (
                     <>
-                      {isPending ? (
-                        <Spinner color="current" size="sm" />
-                      ) : null}
+                      {isPending ? <Spinner color="current" size="sm" /> : null}
                       Disconnect
                     </>
                   )}

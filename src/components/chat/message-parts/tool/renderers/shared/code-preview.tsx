@@ -110,7 +110,8 @@ export function CodePreview({
   }, [hasBeenVisible]);
 
   useEffect(() => {
-    if (!hasBeenVisible || language === "text" || codeLines.length === 0) return;
+    if (!hasBeenVisible || language === "text" || codeLines.length === 0)
+      return;
 
     let cancelled = false;
 
@@ -137,19 +138,29 @@ export function CodePreview({
     window.setTimeout(() => setCopied(false), 2000);
   }, [rawCode]);
 
-  const gutterWidth = codeLines.length > 0
-    ? `${Math.max(3, String(codeLines[codeLines.length - 1]!.number).length) * 8 + 16}px`
-    : "32px";
+  const gutterWidth =
+    codeLines.length > 0
+      ? `${Math.max(3, String(codeLines[codeLines.length - 1]!.number).length) * 8 + 16}px`
+      : "32px";
 
   return (
-    <div ref={containerRef} className="overflow-hidden rounded-lg border border-border/40">
+    <div
+      ref={containerRef}
+      className="overflow-hidden rounded-lg border border-border/40"
+    >
       {showHeader ? (
         <div className="flex items-center justify-between border-b border-border/30 bg-foreground/2 px-3 py-1.5">
           <div className="flex min-w-0 items-center gap-1.5">
             {fileIcon ? (
-              <Icon className="h-3.5 w-3.5 shrink-0 text-foreground/50" icon={fileIcon} />
+              <Icon
+                className="h-3.5 w-3.5 shrink-0 text-foreground/50"
+                icon={fileIcon}
+              />
             ) : null}
-            <span className="truncate font-mono text-[11px] text-foreground/50" title={path}>
+            <span
+              className="truncate font-mono text-[11px] text-foreground/50"
+              title={path}
+            >
               {isFullPath ? (
                 <>
                   <span className="text-foreground/30">
@@ -190,7 +201,10 @@ export function CodePreview({
               {showLineNumbers ? (
                 <span
                   className="shrink-0 select-none border-r border-border/15 pr-1.5 text-right text-[10px] leading-[18px] text-foreground/15"
-                  style={{ width: gutterWidth, fontVariantNumeric: "tabular-nums" }}
+                  style={{
+                    width: gutterWidth,
+                    fontVariantNumeric: "tabular-nums",
+                  }}
                 >
                   {line.number}
                 </span>

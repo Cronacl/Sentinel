@@ -94,7 +94,9 @@ type ThreadSessionState = {
 };
 
 type SessionStore = {
-  addSnapshotListener(listener: (snapshot: ThreadSessionSnapshot) => void): () => void;
+  addSnapshotListener(
+    listener: (snapshot: ThreadSessionSnapshot) => void,
+  ): () => void;
   applyLocalMessages(messages: ThreadUIMessage[]): void;
   beginAction(): void;
   disconnect(): void;
@@ -156,7 +158,8 @@ function areMessagesEqual(left: ThreadUIMessage[], right: ThreadUIMessage[]) {
     const other = right[index];
     return other
       ? message.id === other.id &&
-          getThreadMessageSyncToken(message) === getThreadMessageSyncToken(other)
+          getThreadMessageSyncToken(message) ===
+            getThreadMessageSyncToken(other)
       : false;
   });
 }
@@ -570,7 +573,7 @@ function createSessionStore(
         current.activeRunId && current.threadStatus === "streaming"
           ? "disconnected"
           : "idle",
-      }));
+    }));
   };
 
   const markClientTiming = (phase: ClientTimingPhase) => {

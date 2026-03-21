@@ -33,7 +33,10 @@ export const NotionCommentTool = memo(function NotionCommentTool({
   const toolName = getToolName(part as ToolPart);
   const isCreate = toolName === "notion_create_comment";
 
-  const input = state.hasInput && "input" in part ? (part.input as Record<string, unknown>) : null;
+  const input =
+    state.hasInput && "input" in part
+      ? (part.input as Record<string, unknown>)
+      : null;
   const output =
     state.hasOutput && "output" in part
       ? (part.output as CommentOutput | ListOutput)
@@ -128,10 +131,7 @@ export const NotionCommentTool = memo(function NotionCommentTool({
         {comments.length > 0 ? (
           <div className="space-y-1 p-1">
             {comments.map((comment) => (
-              <div
-                key={comment.id}
-                className="rounded-lg p-2"
-              >
+              <div key={comment.id} className="rounded-lg p-2">
                 <p className="text-[12px] text-foreground/70">
                   {comment.richText}
                 </p>

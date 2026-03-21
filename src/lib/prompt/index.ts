@@ -12,9 +12,7 @@ export function prompt<T>(renderFn: (vars: T) => string): (vars: T) => string {
  * Composition primitive. Filters out falsy/empty values, joins the rest with
  * paragraph spacing (`\n\n`), and trims the result.
  */
-export function lines(
-  ...parts: Array<string | Falsy>
-): string {
+export function lines(...parts: Array<string | Falsy>): string {
   return parts
     .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
     .join("\n\n")

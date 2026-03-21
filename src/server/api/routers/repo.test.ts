@@ -15,7 +15,8 @@ const resolveRepoContext = mock(async () => ({
   githubRemote: {
     defaultBranch: "main",
     owner: "openai",
-    pullRequestUrl: "https://github.com/openai/sentinel/compare/main...feature/test?expand=1",
+    pullRequestUrl:
+      "https://github.com/openai/sentinel/compare/main...feature/test?expand=1",
     pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
     remoteName: "origin",
     remoteUrl: "git@github.com:openai/sentinel.git",
@@ -238,7 +239,10 @@ describe("repoRouter.createPullRequest", () => {
       },
     });
 
-    expect(commitAllChanges).toHaveBeenCalledWith("/tmp/workspace", "Update file");
+    expect(commitAllChanges).toHaveBeenCalledWith(
+      "/tmp/workspace",
+      "Update file",
+    );
     expect(pushCurrentBranch).toHaveBeenCalledWith("/tmp/workspace");
     expect(result.pullRequestUrl).toContain("/compare/main...feature/test");
   });

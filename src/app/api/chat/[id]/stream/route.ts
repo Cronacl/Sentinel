@@ -28,7 +28,8 @@ export async function GET(
   );
 
   if (resumedStream == null) {
-    await db.update(threads)
+    await db
+      .update(threads)
       .set({ activeStreamId: null })
       .where(eq(threads.id, id))
       .run();

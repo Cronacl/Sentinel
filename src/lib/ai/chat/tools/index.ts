@@ -66,11 +66,7 @@ import {
   diagnosticsOutputSchema,
   executeDiagnostics,
 } from "./diagnostics";
-import {
-  diffInputSchema,
-  diffOutputSchema,
-  executeDiff,
-} from "./diff";
+import { diffInputSchema, diffOutputSchema, executeDiff } from "./diff";
 import {
   executeForgetMemory,
   forgetMemoryInputSchema,
@@ -392,7 +388,8 @@ function buildExecutionTools(options: ThreadAgentCallOptions) {
   } = options;
   const filesystemRoot = defaultDirectory ?? skillRoots[0];
   const preferredExecutionDirectory = preferredProjectRoot ?? defaultDirectory;
-  const shellDirectory = shellStartDirectory ?? preferredExecutionDirectory ?? filesystemRoot;
+  const shellDirectory =
+    shellStartDirectory ?? preferredExecutionDirectory ?? filesystemRoot;
 
   return {
     ...(defaultDirectory

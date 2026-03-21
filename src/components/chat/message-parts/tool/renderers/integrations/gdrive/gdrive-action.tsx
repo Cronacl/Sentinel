@@ -52,7 +52,9 @@ const ACTION_META: Record<
     icon: "solar:share-linear",
     iconClass: "text-primary",
     inputLabel: (input) =>
-      input.email ? `Share with ${input.email} (${input.role ?? "reader"})` : "Share file",
+      input.email
+        ? `Share with ${input.email} (${input.role ?? "reader"})`
+        : "Share file",
   },
 };
 
@@ -79,9 +81,8 @@ export const GDriveActionTool = memo(function GDriveActionTool({
     setIsExpanded(state.needsApproval);
   }, [part.toolCallId, state.needsApproval]);
 
-  const input = "input" in part
-    ? (part.input as Record<string, unknown>)
-    : null;
+  const input =
+    "input" in part ? (part.input as Record<string, unknown>) : null;
 
   const summary = state.needsApproval
     ? `${meta.label} file — awaiting approval`

@@ -6,7 +6,10 @@ import { SlackService } from "./service";
 
 function getSlackService(context: IntegrationContext): SlackService {
   const token = context.tokens.slack;
-  if (!token) throw new Error("Slack is not connected. Please connect Slack in Settings > Integrations.");
+  if (!token)
+    throw new Error(
+      "Slack is not connected. Please connect Slack in Settings > Integrations.",
+    );
   return new SlackService(token);
 }
 
@@ -59,9 +62,17 @@ export function buildSlackTools(
         types: z
           .string()
           .optional()
-          .describe("Channel types to list, e.g. 'public_channel,private_channel'. Defaults to both."),
-        limit: z.number().optional().describe("Max channels to return (default 100)"),
-        excludeArchived: z.boolean().optional().describe("Exclude archived channels (default true)"),
+          .describe(
+            "Channel types to list, e.g. 'public_channel,private_channel'. Defaults to both.",
+          ),
+        limit: z
+          .number()
+          .optional()
+          .describe("Max channels to return (default 100)"),
+        excludeArchived: z
+          .boolean()
+          .optional()
+          .describe("Exclude archived channels (default true)"),
       }),
       outputSchema: z.object({
         channels: z.array(channelSchema),
@@ -78,7 +89,10 @@ export function buildSlackTools(
       description:
         "Get detailed information about a specific Slack channel by its ID, including topic, purpose, and member count.",
       inputSchema: z.object({
-        channelId: z.string().min(1).describe("The Slack channel ID (e.g. C01ABCDEF)"),
+        channelId: z
+          .string()
+          .min(1)
+          .describe("The Slack channel ID (e.g. C01ABCDEF)"),
       }),
       outputSchema: channelSchema,
       needsApproval: () => approvalFn("slack_get_channel"),
@@ -92,8 +106,14 @@ export function buildSlackTools(
       description:
         "Create a new Slack channel. Can create public or private channels.",
       inputSchema: z.object({
-        name: z.string().min(1).describe("Channel name (lowercase, no spaces, max 80 chars)"),
-        isPrivate: z.boolean().optional().describe("Create as private channel (default false)"),
+        name: z
+          .string()
+          .min(1)
+          .describe("Channel name (lowercase, no spaces, max 80 chars)"),
+        isPrivate: z
+          .boolean()
+          .optional()
+          .describe("Create as private channel (default false)"),
       }),
       outputSchema: channelSchema,
       needsApproval: () => approvalFn("slack_create_channel"),
@@ -120,7 +140,10 @@ export function buildSlackTools(
       description: "Invite one or more users to a Slack channel.",
       inputSchema: z.object({
         channelId: z.string().min(1).describe("The channel ID"),
-        userIds: z.array(z.string().min(1)).min(1).describe("User IDs to invite"),
+        userIds: z
+          .array(z.string().min(1))
+          .min(1)
+          .describe("User IDs to invite"),
       }),
       outputSchema: z.object({ success: z.boolean() }),
       needsApproval: () => approvalFn("slack_invite_to_channel"),
@@ -176,9 +199,18 @@ export function buildSlackTools(
       description:
         "Search Slack messages across the workspace by query text. Supports Slack search modifiers like from:, in:, before:, after:, etc.",
       inputSchema: z.object({
-        query: z.string().min(1).describe("Search query text (at least 1 character)"),
-        count: z.number().optional().describe("Max results to return (default 20)"),
-        sortBy: z.enum(["timestamp", "score"]).optional().describe("Sort by timestamp or relevance score"),
+        query: z
+          .string()
+          .min(1)
+          .describe("Search query text (at least 1 character)"),
+        count: z
+          .number()
+          .optional()
+          .describe("Max results to return (default 20)"),
+        sortBy: z
+          .enum(["timestamp", "score"])
+          .optional()
+          .describe("Sort by timestamp or relevance score"),
         sortDir: z.enum(["asc", "desc"]).optional().describe("Sort direction"),
       }),
       outputSchema: z.object({
@@ -197,7 +229,10 @@ export function buildSlackTools(
         "Post a new message to a Slack channel. Supports Slack markdown formatting (mrkdwn).",
       inputSchema: z.object({
         channelId: z.string().min(1).describe("The channel ID to post to"),
-        text: z.string().min(1).describe("Message text (supports Slack mrkdwn)"),
+        text: z
+          .string()
+          .min(1)
+          .describe("Message text (supports Slack mrkdwn)"),
       }),
       outputSchema: messageSchema,
       needsApproval: () => approvalFn("slack_post_message"),
@@ -208,11 +243,13 @@ export function buildSlackTools(
     }),
 
     slack_reply_to_thread: tool({
-      description:
-        "Reply to an existing message thread in a Slack channel.",
+      description: "Reply to an existing message thread in a Slack channel.",
       inputSchema: z.object({
         channelId: z.string().min(1).describe("The channel ID"),
-        threadTs: z.string().min(1).describe("The timestamp (ts) of the parent message"),
+        threadTs: z
+          .string()
+          .min(1)
+          .describe("The timestamp (ts) of the parent message"),
         text: z.string().min(1).describe("Reply text"),
       }),
       outputSchema: messageSchema,
@@ -227,7 +264,10 @@ export function buildSlackTools(
       description: "Update an existing Slack message.",
       inputSchema: z.object({
         channelId: z.string().min(1).describe("The channel ID"),
-        ts: z.string().min(1).describe("The timestamp (ts) of the message to update"),
+        ts: z
+          .string()
+          .min(1)
+          .describe("The timestamp (ts) of the message to update"),
         text: z.string().min(1).describe("New message text"),
       }),
       outputSchema: messageSchema,
@@ -242,7 +282,10 @@ export function buildSlackTools(
       description: "Delete a Slack message.",
       inputSchema: z.object({
         channelId: z.string().min(1).describe("The channel ID"),
-        ts: z.string().min(1).describe("The timestamp (ts) of the message to delete"),
+        ts: z
+          .string()
+          .min(1)
+          .describe("The timestamp (ts) of the message to delete"),
       }),
       outputSchema: z.object({ success: z.boolean() }),
       needsApproval: () => approvalFn("slack_delete_message"),
@@ -258,7 +301,10 @@ export function buildSlackTools(
       inputSchema: z.object({
         channelId: z.string().min(1).describe("The channel ID"),
         ts: z.string().min(1).describe("The timestamp (ts) of the message"),
-        emoji: z.string().min(1).describe("Emoji name without colons (e.g. 'thumbsup')"),
+        emoji: z
+          .string()
+          .min(1)
+          .describe("Emoji name without colons (e.g. 'thumbsup')"),
       }),
       outputSchema: z.object({ success: z.boolean() }),
       needsApproval: () => approvalFn("slack_add_reaction"),
@@ -274,7 +320,9 @@ export function buildSlackTools(
       inputSchema: z.object({
         channelId: z.string().min(1).describe("The channel ID"),
         text: z.string().min(1).describe("Message text"),
-        postAt: z.number().describe("Unix timestamp for when to send the message"),
+        postAt: z
+          .number()
+          .describe("Unix timestamp for when to send the message"),
       }),
       outputSchema: z.object({
         scheduledMessageId: z.string(),
@@ -291,7 +339,10 @@ export function buildSlackTools(
       description: "Pin a message in a Slack channel.",
       inputSchema: z.object({
         channelId: z.string().min(1).describe("The channel ID"),
-        ts: z.string().min(1).describe("The timestamp (ts) of the message to pin"),
+        ts: z
+          .string()
+          .min(1)
+          .describe("The timestamp (ts) of the message to pin"),
       }),
       outputSchema: z.object({ success: z.boolean() }),
       needsApproval: () => approvalFn("slack_pin_message"),
@@ -305,7 +356,10 @@ export function buildSlackTools(
       description: "Unpin a message in a Slack channel.",
       inputSchema: z.object({
         channelId: z.string().min(1).describe("The channel ID"),
-        ts: z.string().min(1).describe("The timestamp (ts) of the message to unpin"),
+        ts: z
+          .string()
+          .min(1)
+          .describe("The timestamp (ts) of the message to unpin"),
       }),
       outputSchema: z.object({ success: z.boolean() }),
       needsApproval: () => approvalFn("slack_unpin_message"),
@@ -320,8 +374,14 @@ export function buildSlackTools(
         "Get all replies in a Slack message thread, including the parent message.",
       inputSchema: z.object({
         channelId: z.string().min(1).describe("The channel ID"),
-        threadTs: z.string().min(1).describe("The timestamp (ts) of the parent message"),
-        limit: z.number().optional().describe("Max replies to return (default 50)"),
+        threadTs: z
+          .string()
+          .min(1)
+          .describe("The timestamp (ts) of the parent message"),
+        limit: z
+          .number()
+          .optional()
+          .describe("Max replies to return (default 50)"),
       }),
       outputSchema: z.object({
         messages: z.array(messageSchema),
@@ -338,7 +398,10 @@ export function buildSlackTools(
       description:
         "List members of the Slack workspace. Excludes bots and Slackbot.",
       inputSchema: z.object({
-        limit: z.number().optional().describe("Max users to return (default 200)"),
+        limit: z
+          .number()
+          .optional()
+          .describe("Max users to return (default 200)"),
       }),
       outputSchema: z.object({
         users: z.array(userSchema),
@@ -352,9 +415,13 @@ export function buildSlackTools(
     }),
 
     slack_get_user: tool({
-      description: "Get detailed information about a specific Slack user by their user ID.",
+      description:
+        "Get detailed information about a specific Slack user by their user ID.",
       inputSchema: z.object({
-        userId: z.string().min(1).describe("The Slack user ID (e.g. U01ABCDEF)"),
+        userId: z
+          .string()
+          .min(1)
+          .describe("The Slack user ID (e.g. U01ABCDEF)"),
       }),
       outputSchema: userSchema,
       needsApproval: () => approvalFn("slack_get_user"),
@@ -369,9 +436,18 @@ export function buildSlackTools(
         "Get recent message history from a Slack channel. Returns messages in reverse chronological order.",
       inputSchema: z.object({
         channelId: z.string().min(1).describe("The channel ID"),
-        limit: z.number().optional().describe("Max messages to return (default 30)"),
-        oldest: z.string().optional().describe("Only messages after this Unix timestamp"),
-        latest: z.string().optional().describe("Only messages before this Unix timestamp"),
+        limit: z
+          .number()
+          .optional()
+          .describe("Max messages to return (default 30)"),
+        oldest: z
+          .string()
+          .optional()
+          .describe("Only messages after this Unix timestamp"),
+        latest: z
+          .string()
+          .optional()
+          .describe("Only messages before this Unix timestamp"),
       }),
       outputSchema: z.object({
         messages: z.array(messageSchema),

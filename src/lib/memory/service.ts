@@ -71,7 +71,8 @@ function truncate(value: string, maxChars: number) {
 function getTextParts(message: ThreadUIMessage) {
   return message.parts
     .filter(
-      (part): part is Extract<typeof part, { type: "text" }> => part.type === "text",
+      (part): part is Extract<typeof part, { type: "text" }> =>
+        part.type === "text",
     )
     .map((part) => part.text.trim())
     .filter(Boolean);
@@ -83,7 +84,9 @@ export function buildMemoryPromptLines(memories: MemorySearchResult[]) {
       memory.scope === "workspace"
         ? `[Workspace ${memory.workspaceId}]`
         : "[Global]";
-    const label = memory.summary?.trim() || truncate(memory.content, MEMORY_PROMPT_CONTENT_MAX_CHARS);
+    const label =
+      memory.summary?.trim() ||
+      truncate(memory.content, MEMORY_PROMPT_CONTENT_MAX_CHARS);
     return `${prefix} ${memory.kind}: ${label}`;
   });
 }
@@ -282,7 +285,10 @@ export async function autosaveConversationMemories({
 
     const candidates = result.object.memories
       .slice(0, settings.autoSavePerTurnLimit)
-      .filter((memory) => !redactable(memory.content) && !redactable(memory.summary ?? ""));
+      .filter(
+        (memory) =>
+          !redactable(memory.content) && !redactable(memory.summary ?? ""),
+      );
 
     if (candidates.length === 0) {
       return [] as MemoryItem[];
@@ -291,27 +297,32 @@ export async function autosaveConversationMemories({
     const profile = resolveProfile(settings);
     const embeddings = await embedTextsForMemory({
       profile,
-      texts: candidates.map((candidate) => candidate.summary?.trim() || candidate.content.trim()),
+      texts: candidates.map(
+        (candidate) => candidate.summary?.trim() || candidate.content.trim(),
+      ),
       userId,
     });
 
-    return candidates.map((candidate, index) =>
-      upsertMemory({
-        content: candidate.content,
-        embedding: embeddings[index]!,
-        embeddingDimensions: profile.dimensions,
-        embeddingModel: profile.model,
-        embeddingProvider: profile.provider,
-        kind: candidate.kind,
-        salience: candidate.salience ?? 0.6,
-        scope:
-          candidate.scope === "workspace" && workspaceId ? "workspace" : "global",
-        sourceMessageId,
-        sourceThreadId: threadId,
-        summary: candidate.summary ?? null,
-        userId,
-        workspaceId,
-      }).memory,
+    return candidates.map(
+      (candidate, index) =>
+        upsertMemory({
+          content: candidate.content,
+          embedding: embeddings[index]!,
+          embeddingDimensions: profile.dimensions,
+          embeddingModel: profile.model,
+          embeddingProvider: profile.provider,
+          kind: candidate.kind,
+          salience: candidate.salience ?? 0.6,
+          scope:
+            candidate.scope === "workspace" && workspaceId
+              ? "workspace"
+              : "global",
+          sourceMessageId,
+          sourceThreadId: threadId,
+          summary: candidate.summary ?? null,
+          userId,
+          workspaceId,
+        }).memory,
     );
   } catch {
     return [] as MemoryItem[];

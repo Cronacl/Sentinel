@@ -115,17 +115,12 @@ export class GoogleCalendarService {
     });
 
     return {
-      events: (response.data.items ?? []).map((e) =>
-        parseEvent(e, calendarId),
-      ),
+      events: (response.data.items ?? []).map((e) => parseEvent(e, calendarId)),
       nextPageToken: response.data.nextPageToken ?? undefined,
     };
   }
 
-  async getEvent(
-    calendarId: string,
-    eventId: string,
-  ): Promise<CalendarEvent> {
+  async getEvent(calendarId: string, eventId: string): Promise<CalendarEvent> {
     const response = await this.calendar.events.get({
       calendarId,
       eventId,
@@ -188,7 +183,12 @@ export class GoogleCalendarService {
         : {}),
       ...(params.location !== undefined ? { location: params.location } : {}),
       ...(params.startDateTime
-        ? { start: { dateTime: params.startDateTime, timeZone: params.timeZone } }
+        ? {
+            start: {
+              dateTime: params.startDateTime,
+              timeZone: params.timeZone,
+            },
+          }
         : {}),
       ...(params.endDateTime
         ? { end: { dateTime: params.endDateTime, timeZone: params.timeZone } }
@@ -242,9 +242,7 @@ export class GoogleCalendarService {
       busy: Array<{ start: string; end: string }>;
     }> = [];
 
-    for (const [calId, info] of Object.entries(
-      response.data.calendars ?? {},
-    )) {
+    for (const [calId, info] of Object.entries(response.data.calendars ?? {})) {
       result.push({
         calendarId: calId,
         busy: (info.busy ?? []).map((b) => ({
@@ -257,10 +255,7 @@ export class GoogleCalendarService {
     return result;
   }
 
-  async quickAdd(
-    calendarId: string,
-    text: string,
-  ): Promise<CalendarEvent> {
+  async quickAdd(calendarId: string, text: string): Promise<CalendarEvent> {
     const response = await this.calendar.events.quickAdd({
       calendarId: calendarId || "primary",
       text,
@@ -277,28 +272,28 @@ export class GoogleCalendarService {
 
     const updatedAttendees = existing.attendees.map((a) => ({
       email: a.email,
-      responseStatus: a.email === existing.organizer.email
-        ? a.responseStatus
-        : a.responseStatus,
+      responseStatus:
+        a.email === existing.organizer.email
+          ? a.responseStatus
+          : a.responseStatus,
     }));
 
     const response = await this.calendar.events.patch({
       calendarId,
       eventId,
       requestBody: {
-        attendees: updatedAttendees.length > 0
-          ? updatedAttendees.map((a) => ({
-              email: a.email,
-              responseStatus: a.responseStatus,
-            }))
-          : undefined,
+        attendees:
+          updatedAttendees.length > 0
+            ? updatedAttendees.map((a) => ({
+                email: a.email,
+                responseStatus: a.responseStatus,
+              }))
+            : undefined,
       },
       sendUpdates: "all",
     });
 
-    const selfEntry = response.data.attendees?.find(
-      (a) => a.self === true,
-    );
+    const selfEntry = response.data.attendees?.find((a) => a.self === true);
     if (selfEntry) {
       selfEntry.responseStatus = responseStatus;
       await this.calendar.events.patch({

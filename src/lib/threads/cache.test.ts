@@ -89,8 +89,14 @@ function createUtils() {
     [JSON.stringify({ threadId: "thread-1" }), threadData],
   ]);
   const listStore = new Map<string, any>([
-    [JSON.stringify({ organizeBy: "chronological", sortBy: "updated" }), chronologicalData],
-    [JSON.stringify({ organizeBy: "workspace", sortBy: "updated" }), workspaceData],
+    [
+      JSON.stringify({ organizeBy: "chronological", sortBy: "updated" }),
+      chronologicalData,
+    ],
+    [
+      JSON.stringify({ organizeBy: "workspace", sortBy: "updated" }),
+      workspaceData,
+    ],
     [JSON.stringify({ workspaceId: "workspace-1" }), chronologicalData],
   ]);
 
@@ -141,7 +147,9 @@ describe("applyThreadSettingsCacheUpdate", () => {
       workspaceId: "workspace-1",
     });
 
-    expect(utils.threads.get.getData({ threadId: "thread-1" }).thread).toMatchObject({
+    expect(
+      utils.threads.get.getData({ threadId: "thread-1" }).thread,
+    ).toMatchObject({
       chatModelId: "openai:gpt-5.4",
       chatReasoningEffort: "high",
       mode: "plan",

@@ -46,7 +46,8 @@ function getProviderCopy(provider: IntegrationProvider) {
       clientIdDescription:
         "Paste the OAuth client ID from your Google Cloud credentials.",
       clientSecretPlaceholder: "GOCSPX-...",
-      clientSecretDescription: "Paste the OAuth client secret from Google Cloud.",
+      clientSecretDescription:
+        "Paste the OAuth client secret from Google Cloud.",
       redirectUriDescription:
         "This must exactly match an authorized redirect URI in your Google Cloud OAuth client.",
       redirectUriNote:
@@ -547,8 +548,7 @@ export function IntegrationConfigSidebar({
                       description={providerCopy.redirectUriDescription}
                       inputProps={{
                         autoComplete: "off",
-                        placeholder:
-                          buildIntegrationOAuthRedirectUri(),
+                        placeholder: buildIntegrationOAuthRedirectUri(),
                         type: "url",
                       }}
                       label="Redirect URI"

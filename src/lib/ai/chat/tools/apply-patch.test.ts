@@ -12,9 +12,15 @@ async function createDirectory() {
 describe("executeApplyPatch", () => {
   it("applies add, update, delete, and move operations", async () => {
     const defaultDirectory = await createDirectory();
-    await writeFile(path.join(defaultDirectory, "edit.ts"), "const value = 1;\n");
+    await writeFile(
+      path.join(defaultDirectory, "edit.ts"),
+      "const value = 1;\n",
+    );
     await writeFile(path.join(defaultDirectory, "delete.ts"), "delete me\n");
-    await writeFile(path.join(defaultDirectory, "move.ts"), "export const moveMe = true;\n");
+    await writeFile(
+      path.join(defaultDirectory, "move.ts"),
+      "export const moveMe = true;\n",
+    );
 
     const result = await executeApplyPatch({
       defaultDirectory,
@@ -41,15 +47,15 @@ describe("executeApplyPatch", () => {
     });
 
     expect(result.files).toHaveLength(4);
-    expect(await readFile(path.join(defaultDirectory, "added.ts"), "utf8")).toBe(
-      "export const added = true;",
-    );
+    expect(
+      await readFile(path.join(defaultDirectory, "added.ts"), "utf8"),
+    ).toBe("export const added = true;");
     expect(await readFile(path.join(defaultDirectory, "edit.ts"), "utf8")).toBe(
       "const value = 2;\n",
     );
-    expect(await readFile(path.join(defaultDirectory, "nested", "moved.ts"), "utf8")).toBe(
-      "export const moved = true;\n",
-    );
+    expect(
+      await readFile(path.join(defaultDirectory, "nested", "moved.ts"), "utf8"),
+    ).toBe("export const moved = true;\n");
   });
 
   it("rejects malformed and empty patches", async () => {

@@ -73,7 +73,9 @@ export function createBrowserAttachments(files: File[]) {
   return { accepted, rejected };
 }
 
-export function createComposerAttachmentFromFilePart(part: FileUIPart): ComposerAttachment {
+export function createComposerAttachmentFromFilePart(
+  part: FileUIPart,
+): ComposerAttachment {
   return {
     filePart: part,
     fileType: detectAttachmentType(

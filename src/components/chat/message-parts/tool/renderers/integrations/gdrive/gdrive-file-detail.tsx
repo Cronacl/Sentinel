@@ -53,9 +53,7 @@ export const GDriveFileDetailTool = memo(function GDriveFileDetailTool({
   const [isExpanded, setIsExpanded] = useState(false);
 
   const output =
-    state.hasOutput && "output" in part
-      ? (part.output as FileOutput)
-      : null;
+    state.hasOutput && "output" in part ? (part.output as FileOutput) : null;
 
   const summary = state.isRunning
     ? "Getting file details…"

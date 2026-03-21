@@ -39,11 +39,15 @@ export class MongoDBService {
     const auth = `${encodeURIComponent(this.config.username)}:${encodeURIComponent(this.config.password)}`;
     const host = `${this.config.host}:${this.config.port}`;
     const db = this.config.database ?? "";
-    const params = this.config.ssl ? "?tls=true&tlsAllowInvalidCertificates=true" : "";
+    const params = this.config.ssl
+      ? "?tls=true&tlsAllowInvalidCertificates=true"
+      : "";
     return `mongodb://${auth}@${host}/${db}${params}`;
   }
 
-  private async withClient<T>(fn: (client: MongoClient) => Promise<T>): Promise<T> {
+  private async withClient<T>(
+    fn: (client: MongoClient) => Promise<T>,
+  ): Promise<T> {
     const client = new MongoClient(this.buildUri(), {
       connectTimeoutMS: CONNECT_TIMEOUT_MS,
       serverSelectionTimeoutMS: CONNECT_TIMEOUT_MS,
@@ -120,7 +124,8 @@ export class MongoDBService {
 
       if (options?.skip) cursor = cursor.skip(options.skip);
       if (options?.sort) cursor = cursor.sort(options.sort as Document);
-      if (options?.projection) cursor = cursor.project(options.projection as Document);
+      if (options?.projection)
+        cursor = cursor.project(options.projection as Document);
 
       const docs = await cursor.toArray();
       return {
@@ -149,7 +154,9 @@ export class MongoDBService {
   ): Promise<{ insertedId: string }> {
     return this.withClient(async (client) => {
       const db = this.getDb(client, database);
-      const result = await db.collection(collection).insertOne(document as Document);
+      const result = await db
+        .collection(collection)
+        .insertOne(document as Document);
       return { insertedId: result.insertedId.toHexString() };
     });
   }
@@ -161,7 +168,9 @@ export class MongoDBService {
   ): Promise<{ insertedCount: number; insertedIds: string[] }> {
     return this.withClient(async (client) => {
       const db = this.getDb(client, database);
-      const result = await db.collection(collection).insertMany(documents as Document[]);
+      const result = await db
+        .collection(collection)
+        .insertMany(documents as Document[]);
       return {
         insertedCount: result.insertedCount,
         insertedIds: Object.values(result.insertedIds).map((id) =>
@@ -232,9 +241,7 @@ export class MongoDBService {
   ): Promise<{ count: number }> {
     return this.withClient(async (client) => {
       const db = this.getDb(client, database);
-      const count = await db
-        .collection(collection)
-        .countDocuments(query ?? {});
+      const count = await db.collection(collection).countDocuments(query ?? {});
       return { count };
     });
   }

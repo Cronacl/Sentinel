@@ -94,7 +94,9 @@ export async function executeApplyPatch({
         requestedPath: hunk.path,
         toolName: "apply_patch",
       });
-      const previous = await readFile(current.resolvedPath, "utf8").catch(() => null);
+      const previous = await readFile(current.resolvedPath, "utf8").catch(
+        () => null,
+      );
       if (previous == null) {
         throw new Error(`Path not found: ${current.label}`);
       }
@@ -121,7 +123,9 @@ export async function executeApplyPatch({
       requestedPath: hunk.path,
       toolName: "apply_patch",
     });
-    const previous = await readFile(current.resolvedPath, "utf8").catch(() => null);
+    const previous = await readFile(current.resolvedPath, "utf8").catch(
+      () => null,
+    );
     if (previous == null) {
       throw new Error(`Path not found: ${current.label}`);
     }

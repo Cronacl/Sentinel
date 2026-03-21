@@ -80,10 +80,7 @@ export const LinearCycleTool = memo(function LinearCycleTool({
     >
       <div className="space-y-1 p-1">
         {cycles.map((c) => (
-          <div
-            key={c.id}
-            className="flex items-center gap-2.5 rounded-lg p-2"
-          >
+          <div key={c.id} className="flex items-center gap-2.5 rounded-lg p-2">
             <Icon
               icon="solar:restart-linear"
               className="h-4 w-4 shrink-0 text-primary"

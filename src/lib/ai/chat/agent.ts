@@ -19,9 +19,7 @@ import { z } from "zod";
 
 import type { ToolApprovalPolicyMap } from "./tool-approval-policy";
 import type { ThreadPromptContext } from "./prompt-context";
-import {
-  computeLatentToolSummary,
-} from "./tool-selection";
+import { computeLatentToolSummary } from "./tool-selection";
 import { buildToolRoutingEvidence, routeToolExposure } from "./tool-router";
 import { buildTools } from "./tools";
 import { buildThreadAgentInstructions } from "./instructions";
@@ -229,11 +227,7 @@ export function createThreadAgent({
       hasToolCall("ask_question"),
       allTasksResolved,
     ],
-    experimental_repairToolCall: async ({
-      toolCall,
-      inputSchema,
-      error,
-    }) => {
+    experimental_repairToolCall: async ({ toolCall, inputSchema, error }) => {
       if (isNoSuchToolError(error)) {
         return null;
       }
@@ -387,7 +381,7 @@ export function createThreadAgent({
               promptContext: stepPromptContext,
               systemPrompt: cachedSystemPrompt,
             })
-          : cachedInstructions ?? "";
+          : (cachedInstructions ?? "");
 
       const allToolCalls = steps.flatMap((s) => s.toolCalls ?? []);
       const hasCreatedTasks = allToolCalls.some(

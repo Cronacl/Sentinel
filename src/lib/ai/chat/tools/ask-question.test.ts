@@ -11,11 +11,8 @@ mock.module("@/lib/plan/service", () => ({
   createThreadPlanQuestionSet,
 }));
 
-const {
-  askQuestionInputSchema,
-  executeAskQuestion,
-  sanitizeAskQuestionInput,
-} = await import("./ask-question");
+const { askQuestionInputSchema, executeAskQuestion, sanitizeAskQuestionInput } =
+  await import("./ask-question");
 
 describe("ask_question", () => {
   it("accepts oversized model input and trims it to supported limits", () => {
@@ -63,9 +60,9 @@ describe("ask_question", () => {
 
     expect(sanitized.questions).toHaveLength(3);
     expect(sanitized.questions[0]?.options).toHaveLength(4);
-    expect(sanitized.questions[0]?.options.map((option) => option.label)).toEqual(
-      ["One", "Two", "Three", "Four"],
-    );
+    expect(
+      sanitized.questions[0]?.options.map((option) => option.label),
+    ).toEqual(["One", "Two", "Three", "Four"]);
   });
 
   it("stores sanitized questions instead of surfacing a raw validation error", async () => {
@@ -127,9 +124,11 @@ describe("ask_question", () => {
       runtime: { threadId: "thread-2" },
     });
 
-    const storedQuestion =
-      (createThreadPlanQuestionSet.mock.calls[0]?.[0] as { questions: Array<{ allowMultiple?: boolean }> })
-        .questions[0];
+    const storedQuestion = (
+      createThreadPlanQuestionSet.mock.calls[0]?.[0] as {
+        questions: Array<{ allowMultiple?: boolean }>;
+      }
+    ).questions[0];
     expect(storedQuestion?.allowMultiple).toBe(true);
   });
 

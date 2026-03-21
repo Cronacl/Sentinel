@@ -118,7 +118,10 @@ describe("resolveRepoContext", () => {
 describe("repo actions", () => {
   it("builds commit message context and a fallback message", async () => {
     const repoRoot = await createRepo();
-    await writeFile(path.join(repoRoot, "src.ts"), "export const created = true;\n");
+    await writeFile(
+      path.join(repoRoot, "src.ts"),
+      "export const created = true;\n",
+    );
 
     const context = await getCommitMessageContext(repoRoot);
 
@@ -184,7 +187,9 @@ describe("repo actions", () => {
     await createAndCheckoutBranch(repoRoot, "feature/switch-target");
     await runGit(["checkout", "main"], repoRoot);
 
-    await expect(checkoutBranch(repoRoot, "feature/switch-target")).resolves.toEqual({
+    await expect(
+      checkoutBranch(repoRoot, "feature/switch-target"),
+    ).resolves.toEqual({
       branch: "feature/switch-target",
     });
   });

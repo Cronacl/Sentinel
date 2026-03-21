@@ -112,9 +112,9 @@ export const SlackMessageActionTool = memo(function SlackMessageActionTool({
       errorText={state.isError ? state.errorText : undefined}
       isExpandable={Boolean(
         (state.needsApproval && input) ||
-          (state.hasOutput &&
-            output &&
-            ("text" in output || "scheduledMessageId" in output)),
+        (state.hasOutput &&
+          output &&
+          ("text" in output || "scheduledMessageId" in output)),
       )}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
@@ -157,8 +157,7 @@ export const SlackMessageActionTool = memo(function SlackMessageActionTool({
             <div className="flex items-center gap-2 text-xs text-foreground/70">
               <Icon icon="solar:clock-circle-linear" className="h-4 w-4" />
               <span>
-                Scheduled for{" "}
-                {new Date(output.postAt * 1000).toLocaleString()}
+                Scheduled for {new Date(output.postAt * 1000).toLocaleString()}
               </span>
             </div>
           </div>

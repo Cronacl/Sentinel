@@ -40,9 +40,7 @@ export const GCalMoveEventTool = memo(function GCalMoveEventTool({
 
   const input = "input" in part ? (part.input as MoveInput) : null;
   const output =
-    state.hasOutput && "output" in part
-      ? (part.output as MoveOutput)
-      : null;
+    state.hasOutput && "output" in part ? (part.output as MoveOutput) : null;
 
   const summary = state.needsApproval
     ? "Move event — awaiting approval"

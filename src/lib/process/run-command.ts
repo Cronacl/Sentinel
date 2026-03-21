@@ -45,7 +45,9 @@ export async function runCommand({
 
       const availableBytes = maxOutputBytes - usedBytes;
       const nextChunk =
-        chunk.byteLength > availableBytes ? chunk.subarray(0, availableBytes) : chunk;
+        chunk.byteLength > availableBytes
+          ? chunk.subarray(0, availableBytes)
+          : chunk;
       return {
         next: current + nextChunk.toString("utf8"),
         nextBytes: usedBytes + nextChunk.byteLength,

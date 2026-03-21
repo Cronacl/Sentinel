@@ -96,8 +96,7 @@ const automationFormSchema = z
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message:
-          "Cron expression must use a macro like @hourly or 5-6 fields.",
+        message: "Cron expression must use a macro like @hourly or 5-6 fields.",
         path: ["scheduleCron"],
       });
     }
@@ -181,14 +180,17 @@ function createDefaultValues(
   };
 }
 
-function normalizeCreateInput(values: AutomationFormValues): CreateAutomationInput {
+function normalizeCreateInput(
+  values: AutomationFormValues,
+): CreateAutomationInput {
   const scheduleTime =
     values.scheduleType === "daily" ||
     values.scheduleType === "weekly" ||
     values.scheduleType === "weekdays"
       ? values.scheduleTime
       : null;
-  const scheduleCron = values.scheduleType === "custom" ? values.scheduleCron : null;
+  const scheduleCron =
+    values.scheduleType === "custom" ? values.scheduleCron : null;
   const scheduleDayOfWeek =
     values.scheduleType === "weekly"
       ? Number.parseInt(values.scheduleDayOfWeek, 10)
@@ -202,7 +204,8 @@ function normalizeCreateInput(values: AutomationFormValues): CreateAutomationInp
   return {
     title: values.title,
     prompt: values.prompt,
-    workspaceId: values.workspaceId === "__current__" ? null : values.workspaceId,
+    workspaceId:
+      values.workspaceId === "__current__" ? null : values.workspaceId,
     scheduleType: values.scheduleType,
     scheduleDayOfWeek,
     scheduleTime,
@@ -264,8 +267,8 @@ export function NewAutomationModal({
       createDefaultValues(template, {
         modelId: normalizedGlobalModelId,
         reasoningEffort:
-          (chatPreferencesQuery.data?.reasoningEffort as ReasoningEffort | null) ??
-          null,
+          (chatPreferencesQuery.data
+            ?.reasoningEffort as ReasoningEffort | null) ?? null,
       }),
     [
       chatPreferencesQuery.data?.reasoningEffort,
@@ -342,14 +345,18 @@ export function NewAutomationModal({
     return (
       availableModels.find(
         (model) =>
-          getCompositeModelId(model.provider, model.modelId) === selectedModelKey,
+          getCompositeModelId(model.provider, model.modelId) ===
+          selectedModelKey,
       ) ?? null
     );
   }, [availableModels, selectedModelKey]);
 
   const supportedReasoningEfforts = useMemo(() => {
     if (!selectedModel) return [];
-    return getSupportedReasoningEfforts(selectedModel.provider, selectedModel.modelId);
+    return getSupportedReasoningEfforts(
+      selectedModel.provider,
+      selectedModel.modelId,
+    );
   }, [selectedModel]);
 
   const reasoningOptions = useMemo(
@@ -390,7 +397,12 @@ export function NewAutomationModal({
     }
 
     form.setValue("reasoningEffort", supportedReasoningEfforts[0] ?? "");
-  }, [form, form.formState.dirtyFields.modelId, selectedModel, supportedReasoningEfforts]);
+  }, [
+    form,
+    form.formState.dirtyFields.modelId,
+    selectedModel,
+    supportedReasoningEfforts,
+  ]);
 
   const isBusy =
     form.formState.isSubmitting ||
@@ -406,7 +418,9 @@ export function NewAutomationModal({
       const input = normalizeCreateInput(values);
       const validated = createAutomationSchema.safeParse(input);
       if (!validated.success) {
-        setSubmitError(validated.error.issues[0]?.message ?? "Invalid automation.");
+        setSubmitError(
+          validated.error.issues[0]?.message ?? "Invalid automation.",
+        );
         return;
       }
 
@@ -466,7 +480,8 @@ export function NewAutomationModal({
                     label="Prompt"
                     name="prompt"
                     textAreaProps={{
-                      placeholder: "Audit performance regressions and propose fixes.",
+                      placeholder:
+                        "Audit performance regressions and propose fixes.",
                       rows: 6,
                     }}
                     textFieldProps={{ isRequired: true }}
@@ -528,7 +543,8 @@ export function NewAutomationModal({
                     </div>
                   ) : null}
 
-                  {(scheduleType === "daily" || scheduleType === "weekdays") && (
+                  {(scheduleType === "daily" ||
+                    scheduleType === "weekdays") && (
                     <Controller
                       control={form.control}
                       name="scheduleTime"

@@ -18,7 +18,9 @@ import { executeAutomationRun } from "@/lib/automations/runner";
 import { computeNextRunAt } from "@/lib/automations/schedule-utils";
 import { getOwnedWorkspaceOrThrow } from "./workspace-thread-helpers";
 
-type AutomationWorkspaceContext = Parameters<typeof getOwnedWorkspaceOrThrow>[0] & {
+type AutomationWorkspaceContext = Parameters<
+  typeof getOwnedWorkspaceOrThrow
+>[0] & {
   user: {
     selectedWorkspaceId?: string | null;
   };
@@ -100,7 +102,14 @@ export const automationsRouter = createTRPCRouter({
             orderBy: [desc(automationRuns.startedAt)],
             limit: 20,
             with: {
-              thread: { columns: { id: true, title: true, summary: true, archivedAt: true } },
+              thread: {
+                columns: {
+                  id: true,
+                  title: true,
+                  summary: true,
+                  archivedAt: true,
+                },
+              },
             },
           },
         },
@@ -195,8 +204,7 @@ export const automationsRouter = createTRPCRouter({
           input.scheduleCron !== undefined
             ? input.scheduleCron
             : existing.scheduleCron,
-        modelId:
-          input.modelId !== undefined ? input.modelId : existing.modelId,
+        modelId: input.modelId !== undefined ? input.modelId : existing.modelId,
         reasoningEffort:
           input.reasoningEffort !== undefined
             ? input.reasoningEffort
@@ -228,8 +236,10 @@ export const automationsRouter = createTRPCRouter({
 
       const { id: _id, ...updateFields } = input;
       const updateData: Record<string, unknown> = {};
-      if (updateFields.title !== undefined) updateData.title = updateFields.title;
-      if (updateFields.prompt !== undefined) updateData.prompt = updateFields.prompt;
+      if (updateFields.title !== undefined)
+        updateData.title = updateFields.title;
+      if (updateFields.prompt !== undefined)
+        updateData.prompt = updateFields.prompt;
       if (updateFields.workspaceId !== undefined)
         updateData.workspaceId = merged.workspaceId;
       if (updateFields.scheduleType !== undefined)

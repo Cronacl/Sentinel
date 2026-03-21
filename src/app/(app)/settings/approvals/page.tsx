@@ -185,9 +185,7 @@ export default function ApprovalsSettingsPage() {
           : "Unable to update that approval.",
       );
     } finally {
-      setPendingToggleKey((current) =>
-        current === toolName ? null : current,
-      );
+      setPendingToggleKey((current) => (current === toolName ? null : current));
     }
   };
 

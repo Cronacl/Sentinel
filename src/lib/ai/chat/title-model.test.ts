@@ -9,6 +9,7 @@ mock.module("../providers/resolver", () => ({
 }));
 
 const { getThreadTitleModelId } = await import("./title/model");
+mock.restore();
 
 afterEach(() => {
   mock.clearAllMocks();

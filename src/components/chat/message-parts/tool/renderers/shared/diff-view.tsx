@@ -353,7 +353,11 @@ function CollapsedRegion({
           strokeWidth="2"
           viewBox="0 0 24 24"
         >
-          <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M19 9l-7 7-7-7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
         {count} unchanged line{count !== 1 ? "s" : ""}
       </span>
@@ -377,7 +381,11 @@ function SyntaxLine({
   return (
     <>
       {segments.map((seg, i) => (
-        <span key={i} className={opacity} style={seg.color ? { color: seg.color } : undefined}>
+        <span
+          key={i}
+          className={opacity}
+          style={seg.color ? { color: seg.color } : undefined}
+        >
           {seg.text}
         </span>
       ))}
@@ -393,9 +401,7 @@ function HighlightedWordDiffLine({
   segments: HighlightedWordSegment[];
 }) {
   const hlClass =
-    kind === "add"
-      ? "sentinel-diff-word-add"
-      : "sentinel-diff-word-del";
+    kind === "add" ? "sentinel-diff-word-add" : "sentinel-diff-word-del";
 
   return (
     <>
@@ -426,9 +432,7 @@ function PlainWordDiffLine({
   segments: WordSegment[];
 }) {
   const hlClass =
-    kind === "add"
-      ? "sentinel-diff-word-add"
-      : "sentinel-diff-word-del";
+    kind === "add" ? "sentinel-diff-word-add" : "sentinel-diff-word-del";
 
   return (
     <>
@@ -576,14 +580,23 @@ export function DiffView({
   const isFullPath = path.includes("/");
 
   return (
-    <div ref={containerRef} className="sentinel-diff overflow-hidden rounded-lg border border-border/40">
+    <div
+      ref={containerRef}
+      className="sentinel-diff overflow-hidden rounded-lg border border-border/40"
+    >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/30 bg-foreground/2 px-3 py-1.5">
         <div className="flex min-w-0 items-center gap-1.5">
           {fileIcon ? (
-            <Icon className="h-3.5 w-3.5 shrink-0 text-foreground/50" icon={fileIcon} />
+            <Icon
+              className="h-3.5 w-3.5 shrink-0 text-foreground/50"
+              icon={fileIcon}
+            />
           ) : null}
-          <span className="truncate font-mono text-[11px] text-foreground/50" title={path}>
+          <span
+            className="truncate font-mono text-[11px] text-foreground/50"
+            title={path}
+          >
             {isFullPath ? (
               <>
                 <span className="text-foreground/30">
@@ -602,7 +615,10 @@ export function DiffView({
               <span className="text-success">+{additions}</span>
             ) : null}
             {deletions > 0 ? (
-              <span className="text-danger">{"\u2212"}{deletions}</span>
+              <span className="text-danger">
+                {"\u2212"}
+                {deletions}
+              </span>
             ) : null}
           </div>
           <button

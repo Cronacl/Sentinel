@@ -45,9 +45,11 @@ async function resolveOAuthAppConfig(
 }
 
 function resolveTokenEndpoint(provider: IntegrationProvider): string {
-  if (isGoogleProvider(provider)) return getGoogleOAuthConfig(provider).tokenEndpoint;
+  if (isGoogleProvider(provider))
+    return getGoogleOAuthConfig(provider).tokenEndpoint;
   if (isLinearProvider(provider)) return getLinearOAuthConfig().tokenEndpoint;
-  if (isAirtableProvider(provider)) return getAirtableOAuthConfig().tokenEndpoint;
+  if (isAirtableProvider(provider))
+    return getAirtableOAuthConfig().tokenEndpoint;
   throw new Error(`Token refresh not supported for provider: ${provider}`);
 }
 
@@ -125,7 +127,11 @@ export async function getValidAccessToken(
   }
 
   // GitHub, Notion, and Slack tokens don't expire -- always return the stored token
-  if (isGitHubProvider(integration.provider) || isNotionProvider(integration.provider) || isSlackProvider(integration.provider)) {
+  if (
+    isGitHubProvider(integration.provider) ||
+    isNotionProvider(integration.provider) ||
+    isSlackProvider(integration.provider)
+  ) {
     return decrypt(tokenRow.encryptedAccessToken);
   }
 

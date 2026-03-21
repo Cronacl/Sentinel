@@ -88,10 +88,10 @@ function buildSummary(
   if (part.state === "output-available" && output) {
     return (
       <>
-        Listed{" "}
-        <span className="font-mono text-[12px]">{shownRoot}</span>
+        Listed <span className="font-mono text-[12px]">{shownRoot}</span>
         <span className="ml-1.5 text-[11px] text-foreground/40">
-          {output.directoryCount} dir{output.directoryCount === 1 ? "" : "s"}, {output.fileCount} file{output.fileCount === 1 ? "" : "s"}
+          {output.directoryCount} dir{output.directoryCount === 1 ? "" : "s"},{" "}
+          {output.fileCount} file{output.fileCount === 1 ? "" : "s"}
         </span>
       </>
     );
@@ -99,8 +99,7 @@ function buildSummary(
 
   return (
     <>
-      Listing{" "}
-      <span className="font-mono text-[12px]">{shownRoot}</span>
+      Listing <span className="font-mono text-[12px]">{shownRoot}</span>
     </>
   );
 }
@@ -123,10 +122,7 @@ function TreeEntry({ entry }: { entry: ListToolEntry }) {
       className="flex items-center gap-1.5 py-px"
       style={{ paddingLeft: `${entry.depth * 16}px` }}
     >
-      <Icon
-        className="h-3 w-3 shrink-0"
-        icon={iconName}
-      />
+      <Icon className="h-3 w-3 shrink-0" icon={iconName} />
       <span
         className={`truncate font-mono text-[11px] ${isDir ? "text-foreground/60 font-medium" : "text-foreground/50"}`}
         title={entry.path}
@@ -173,13 +169,12 @@ function ListBody({
   );
 }
 
-export const ListTool = memo(function ListTool({
-  part,
-}: RendererProps) {
+export const ListTool = memo(function ListTool({ part }: RendererProps) {
   const hasInput = "input" in part && part.input !== undefined;
   const hasOutput = "output" in part && part.output !== undefined;
   const listInput = hasInput && isListToolInput(part.input) ? part.input : null;
-  const listOutput = hasOutput && isListToolOutput(part.output) ? part.output : null;
+  const listOutput =
+    hasOutput && isListToolOutput(part.output) ? part.output : null;
   const partErrorText = "errorText" in part ? part.errorText : undefined;
   const isFinishedState =
     part.state === "output-error" ||
@@ -197,7 +192,9 @@ export const ListTool = memo(function ListTool({
 
   const footer = listOutput ? (
     <span>
-      {listOutput.directoryCount} dir{listOutput.directoryCount === 1 ? "" : "s"} · {listOutput.fileCount} file{listOutput.fileCount === 1 ? "" : "s"} · {listOutput.totalEntries} shown
+      {listOutput.directoryCount} dir
+      {listOutput.directoryCount === 1 ? "" : "s"} · {listOutput.fileCount} file
+      {listOutput.fileCount === 1 ? "" : "s"} · {listOutput.totalEntries} shown
       {listOutput.truncated ? " · truncated" : ""}
     </span>
   ) : null;
@@ -210,7 +207,11 @@ export const ListTool = memo(function ListTool({
       isExpandable={isFinishedState}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={partErrorText && part.state !== "output-error" ? partErrorText : undefined}
+      errorText={
+        partErrorText && part.state !== "output-error"
+          ? partErrorText
+          : undefined
+      }
       footer={footer}
     >
       <ListBody

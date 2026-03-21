@@ -56,6 +56,7 @@ mock.module("@/lib/mcp/oauth", () => ({
 }));
 
 const { mcpServersRouter } = await import("./mcp-servers");
+mock.restore();
 
 beforeEach(() => {
   findFirst.mockReset();

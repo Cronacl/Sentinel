@@ -24,9 +24,9 @@ describe("executeCreateFile", () => {
     });
 
     expect(result.path).toBe("src/value.ts");
-    expect(await readFile(path.join(defaultDirectory, "src", "value.ts"), "utf8")).toBe(
-      "export const value = 1;\n",
-    );
+    expect(
+      await readFile(path.join(defaultDirectory, "src", "value.ts"), "utf8"),
+    ).toBe("export const value = 1;\n");
   });
 
   it("rejects existing paths", async () => {

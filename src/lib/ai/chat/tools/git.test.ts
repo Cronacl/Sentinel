@@ -36,7 +36,10 @@ async function createRepo() {
 describe("executeGit", () => {
   it("returns structured status, diff, and log output", async () => {
     const defaultDirectory = await createRepo();
-    await writeFile(path.join(defaultDirectory, "file.ts"), "export const value = 2;\n");
+    await writeFile(
+      path.join(defaultDirectory, "file.ts"),
+      "export const value = 2;\n",
+    );
 
     const status = await executeGit({
       defaultDirectory,
@@ -54,7 +57,11 @@ describe("executeGit", () => {
       permissionMode: "default",
     });
 
-    if (status.action !== "status" || diff.action !== "diff" || log.action !== "log") {
+    if (
+      status.action !== "status" ||
+      diff.action !== "diff" ||
+      log.action !== "log"
+    ) {
       throw new Error("Unexpected git action output");
     }
 
@@ -68,7 +75,10 @@ describe("executeGit", () => {
 
   it("rejects branch changes on a dirty worktree", async () => {
     const defaultDirectory = await createRepo();
-    await writeFile(path.join(defaultDirectory, "file.ts"), "export const value = 2;\n");
+    await writeFile(
+      path.join(defaultDirectory, "file.ts"),
+      "export const value = 2;\n",
+    );
 
     await expect(
       executeGit({
@@ -89,7 +99,10 @@ describe("executeGit", () => {
 
   it("stages and commits files with structured responses", async () => {
     const defaultDirectory = await createRepo();
-    await writeFile(path.join(defaultDirectory, "file.ts"), "export const value = 2;\n");
+    await writeFile(
+      path.join(defaultDirectory, "file.ts"),
+      "export const value = 2;\n",
+    );
 
     const addResult = await executeGit({
       defaultDirectory,

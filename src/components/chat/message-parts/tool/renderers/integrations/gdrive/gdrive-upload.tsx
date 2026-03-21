@@ -50,9 +50,7 @@ export const GDriveUploadTool = memo(function GDriveUploadTool({
 
   const input = "input" in part ? (part.input as UploadInput) : null;
   const output =
-    state.hasOutput && "output" in part
-      ? (part.output as UploadOutput)
-      : null;
+    state.hasOutput && "output" in part ? (part.output as UploadOutput) : null;
 
   const fileName = output?.name ?? input?.name ?? input?.localPath ?? "";
 

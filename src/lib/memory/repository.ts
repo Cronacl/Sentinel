@@ -75,9 +75,15 @@ function normalizeMemoryText(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
 
-function createFingerprint(kind: MemoryKind, scopeKey: string, content: string) {
+function createFingerprint(
+  kind: MemoryKind,
+  scopeKey: string,
+  content: string,
+) {
   return createHash("sha256")
-    .update(`${kind}\n${scopeKey}\n${normalizeMemoryText(content).toLowerCase()}`)
+    .update(
+      `${kind}\n${scopeKey}\n${normalizeMemoryText(content).toLowerCase()}`,
+    )
     .digest("hex");
 }
 
@@ -174,7 +180,8 @@ function mapMemoryRow(row: Record<string, unknown>): MemoryItem {
     createdAt: row.created_at as number,
     embeddingDimensions: row.embedding_dimensions as number,
     embeddingModel: row.embedding_model as string,
-    embeddingProvider: row.embedding_provider as MemoryItem["embeddingProvider"],
+    embeddingProvider:
+      row.embedding_provider as MemoryItem["embeddingProvider"],
     id: row.id as string,
     isPinned: Boolean(row.is_pinned),
     kind: row.kind as MemoryKind,
@@ -190,7 +197,10 @@ function mapMemoryRow(row: Record<string, unknown>): MemoryItem {
   };
 }
 
-function deleteEmbeddingAcrossTables(db: ReturnType<typeof requireVectorDb>, id: string) {
+function deleteEmbeddingAcrossTables(
+  db: ReturnType<typeof requireVectorDb>,
+  id: string,
+) {
   for (const dimensions of MEMORY_VECTOR_DIMENSIONS) {
     db.prepare(
       `DELETE FROM ${getMemoryEmbeddingTableName(dimensions)} WHERE memory_id = ?`,
@@ -302,10 +312,10 @@ export function getMemoryFacetCounts(
         GROUP BY kind, workspace_id`,
     )
     .all(...params) as Array<{
-      count: number;
-      kind: MemoryKind;
-      workspace_id: string | null;
-    }>;
+    count: number;
+    kind: MemoryKind;
+    workspace_id: string | null;
+  }>;
 
   const kindCounts = MEMORY_KIND_VALUES.reduce(
     (accumulator, kind) => ({ ...accumulator, [kind]: 0 }),
@@ -328,7 +338,10 @@ export function getMemoryFacetCounts(
   };
 }
 
-export function getMemoryById(userId: string, memoryId: string): MemoryItem | null {
+export function getMemoryById(
+  userId: string,
+  memoryId: string,
+): MemoryItem | null {
   const db = requireVectorDb();
   const row = db
     .prepare("SELECT * FROM memory_items WHERE user_id = ? AND id = ?")
@@ -341,11 +354,17 @@ export function upsertMemory(input: UpsertMemoryInput) {
   const db = requireVectorDb();
   const now = Date.now();
   const normalizedContent = normalizeMemoryText(input.content);
-  const normalizedSummary = input.summary ? normalizeMemoryText(input.summary) : null;
+  const normalizedSummary = input.summary
+    ? normalizeMemoryText(input.summary)
+    : null;
   const workspaceId =
     input.scope === "workspace" ? (input.workspaceId ?? null) : null;
   const scopeKey = workspaceId ?? "__global__";
-  const fingerprint = createFingerprint(input.kind, scopeKey, normalizedContent);
+  const fingerprint = createFingerprint(
+    input.kind,
+    scopeKey,
+    normalizedContent,
+  );
   const tableName = getMemoryEmbeddingTableName(input.embeddingDimensions);
   const existing = db
     .prepare(
@@ -359,10 +378,10 @@ export function upsertMemory(input: UpsertMemoryInput) {
     .get(input.userId, input.kind, workspaceId ?? "", fingerprint) as
     | { id: string }
     | undefined;
-  const semanticDuplicate =
-    existing
-      ? null
-      : ((db
+  const semanticDuplicate = existing
+    ? null
+    : ((
+        db
           .prepare(
             `SELECT
                m.id,
@@ -383,15 +402,16 @@ export function upsertMemory(input: UpsertMemoryInput) {
             input.embeddingProvider,
             input.embeddingModel,
             input.embeddingDimensions,
-          ) as Array<{ id: string; stored_embedding: unknown }>)
-          .map((row) => ({
-            id: row.id,
-            similarity: cosineSimilarity(
-              input.embedding,
-              fromEmbeddingBuffer(row.stored_embedding),
-            ),
-          }))
-          .sort((left, right) => right.similarity - left.similarity)[0] ?? null);
+          ) as Array<{ id: string; stored_embedding: unknown }>
+      )
+        .map((row) => ({
+          id: row.id,
+          similarity: cosineSimilarity(
+            input.embedding,
+            fromEmbeddingBuffer(row.stored_embedding),
+          ),
+        }))
+        .sort((left, right) => right.similarity - left.similarity)[0] ?? null);
 
   const duplicateId = existing?.id
     ? existing.id
@@ -401,7 +421,9 @@ export function upsertMemory(input: UpsertMemoryInput) {
       : undefined;
   const id = duplicateId ?? createId();
   const buffer = toEmbeddingBuffer(input.embedding);
-  const existingMemory = duplicateId ? getMemoryById(input.userId, duplicateId) : null;
+  const existingMemory = duplicateId
+    ? getMemoryById(input.userId, duplicateId)
+    : null;
 
   db.transaction(() => {
     if (existingMemory) {
@@ -496,7 +518,11 @@ export function clearMemoriesForUser(userId: string) {
   return memoryIds.length;
 }
 
-export function toggleMemoryPinned(userId: string, memoryId: string, isPinned: boolean) {
+export function toggleMemoryPinned(
+  userId: string,
+  memoryId: string,
+  isPinned: boolean,
+) {
   const db = requireVectorDb();
   db.prepare(
     "UPDATE memory_items SET is_pinned = ?, updated_at = ? WHERE user_id = ? AND id = ?",

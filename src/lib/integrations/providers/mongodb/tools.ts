@@ -14,9 +14,7 @@ function getService(context: IntegrationContext): MongoDBService {
   return new MongoDBService(config);
 }
 
-const jsonObject = z
-  .record(z.unknown())
-  .describe("A JSON object.");
+const jsonObject = z.record(z.unknown()).describe("A JSON object.");
 
 export function buildMongoDBTools(
   context: IntegrationContext,
@@ -49,9 +47,7 @@ export function buildMongoDBTools(
           .describe("Target database. Uses the configured default if omitted."),
       }),
       outputSchema: z.object({
-        collections: z.array(
-          z.object({ name: z.string(), type: z.string() }),
-        ),
+        collections: z.array(z.object({ name: z.string(), type: z.string() })),
       }),
       needsApproval: () => approvalFn("mongo_list_collections"),
       execute: async ({ database }) => {
@@ -86,7 +82,15 @@ export function buildMongoDBTools(
         count: z.number(),
       }),
       needsApproval: () => approvalFn("mongo_find"),
-      execute: async ({ collection, query, sort, projection, limit, skip, database }) => {
+      execute: async ({
+        collection,
+        query,
+        sort,
+        projection,
+        limit,
+        skip,
+        database,
+      }) => {
         const service = getService(context);
         return service.find(
           collection,
@@ -140,7 +144,9 @@ export function buildMongoDBTools(
       description: "Insert multiple documents into a MongoDB collection.",
       inputSchema: z.object({
         collection: z.string().describe("Collection name."),
-        documents: z.array(jsonObject).describe("Array of documents to insert."),
+        documents: z
+          .array(jsonObject)
+          .describe("Array of documents to insert."),
         database: z
           .string()
           .optional()
@@ -163,8 +169,12 @@ export function buildMongoDBTools(
       inputSchema: z.object({
         collection: z.string().describe("Collection name."),
         filter: jsonObject.describe("Query filter to match the document."),
-        update: jsonObject.describe("Update operations (e.g. { $set: { ... } })."),
-        options: jsonObject.optional().describe("Update options (e.g. upsert)."),
+        update: jsonObject.describe(
+          "Update operations (e.g. { $set: { ... } }).",
+        ),
+        options: jsonObject
+          .optional()
+          .describe("Update options (e.g. upsert)."),
         database: z
           .string()
           .optional()
@@ -187,7 +197,9 @@ export function buildMongoDBTools(
       inputSchema: z.object({
         collection: z.string().describe("Collection name."),
         filter: jsonObject.describe("Query filter to match documents."),
-        update: jsonObject.describe("Update operations (e.g. { $set: { ... } })."),
+        update: jsonObject.describe(
+          "Update operations (e.g. { $set: { ... } }).",
+        ),
         options: jsonObject.optional().describe("Update options."),
         database: z
           .string()
@@ -216,9 +228,7 @@ export function buildMongoDBTools(
         "Run an aggregation pipeline on a MongoDB collection. Powerful for grouping, filtering, and transforming data.",
       inputSchema: z.object({
         collection: z.string().describe("Collection name."),
-        pipeline: z
-          .array(jsonObject)
-          .describe("Aggregation pipeline stages."),
+        pipeline: z.array(jsonObject).describe("Aggregation pipeline stages."),
         database: z
           .string()
           .optional()

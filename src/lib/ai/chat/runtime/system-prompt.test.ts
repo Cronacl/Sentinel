@@ -88,11 +88,15 @@ describe("buildSystemPrompt", () => {
     );
     expect(prompt).toContain("coding-first workspace agent");
     expect(prompt).toContain("present yourself simply as Sentinel");
-    expect(prompt).toContain("Approval-required tools are still available capabilities");
+    expect(prompt).toContain(
+      "Approval-required tools are still available capabilities",
+    );
     expect(prompt).toContain(
       "missing binaries, missing toolchains, and `command not found` failures as environment-remediation problems",
     );
-    expect(prompt).toContain("Go above and beyond by bundling obvious follow-through work");
+    expect(prompt).toContain(
+      "Go above and beyond by bundling obvious follow-through work",
+    );
     expect(prompt).toContain(
       "Do not stop to ask for confirmation when the user has already made the goal clear",
     );
@@ -111,7 +115,9 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain(
       "Do not claim a connected integration or enabled MCP server is inactive, unavailable, or not usable unless the prompt context shows it is disconnected or a real tool call fails.",
     );
-    expect(prompt).toContain("Never create commits unless the user explicitly asks for a commit");
+    expect(prompt).toContain(
+      "Never create commits unless the user explicitly asks for a commit",
+    );
     expect(prompt).toContain("[Global] preference: Prefers concise answers.");
   });
 

@@ -25,9 +25,7 @@ export const AirtableUserTool = memo(function AirtableUserTool({
   });
 
   const output =
-    state.hasOutput && "output" in part
-      ? (part.output as UserOutput)
-      : null;
+    state.hasOutput && "output" in part ? (part.output as UserOutput) : null;
 
   const [isExpanded, setIsExpanded] = useState(false);
 

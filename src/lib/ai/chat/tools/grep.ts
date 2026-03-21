@@ -118,13 +118,14 @@ export async function executeGrep({
   input: GrepInput;
   permissionMode: PermissionMode;
 }): Promise<GrepOutput> {
-  const { requestedPath, resolvedBase, resolvedDirectory, rootLabel } = resolveToolDirectory({
-    defaultDirectory,
-    ...(extraAllowedRoots ? { extraAllowedRoots } : {}),
-    permissionMode,
-    requestedPath: input.path,
-    toolName: "grep",
-  });
+  const { requestedPath, resolvedBase, resolvedDirectory, rootLabel } =
+    resolveToolDirectory({
+      defaultDirectory,
+      ...(extraAllowedRoots ? { extraAllowedRoots } : {}),
+      permissionMode,
+      requestedPath: input.path,
+      toolName: "grep",
+    });
   const rgPath = await resolveRipgrepPath();
   const args = [
     "--json",

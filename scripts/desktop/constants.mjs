@@ -19,8 +19,7 @@ export function createRuntimePaths({
     appRoot,
     envPath: stableEnvPath,
     isPackaged,
-    legacyEnvPaths:
-      stableEnvPath === legacyEnvPath ? [] : [legacyEnvPath],
+    legacyEnvPaths: stableEnvPath === legacyEnvPath ? [] : [legacyEnvPath],
     serverEntryPath: isPackaged
       ? path.join(resourcesPath, "server", "server.js")
       : null,

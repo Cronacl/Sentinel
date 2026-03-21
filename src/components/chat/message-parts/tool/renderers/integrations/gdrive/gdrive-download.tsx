@@ -128,7 +128,10 @@ export const GDriveDownloadTool = memo(function GDriveDownloadTool({
                 className="h-3.5 w-3.5 shrink-0 text-foreground/40"
               />
               <span className="text-foreground/70">
-                File ID: <code className="rounded bg-foreground/5 px-1 py-0.5 text-[10px]">{input.fileId}</code>
+                File ID:{" "}
+                <code className="rounded bg-foreground/5 px-1 py-0.5 text-[10px]">
+                  {input.fileId}
+                </code>
               </span>
             </div>
           ) : null}

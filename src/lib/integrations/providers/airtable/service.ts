@@ -57,10 +57,7 @@ export class AirtableService {
     this.accessToken = accessToken;
   }
 
-  private async request<T>(
-    url: string,
-    options: RequestInit = {},
-  ): Promise<T> {
+  private async request<T>(url: string, options: RequestInit = {}): Promise<T> {
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -72,18 +69,16 @@ export class AirtableService {
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(
-        `Airtable API error (${response.status}): ${errorBody}`,
-      );
+      throw new Error(`Airtable API error (${response.status}): ${errorBody}`);
     }
 
     return response.json() as Promise<T>;
   }
 
   async listBases(): Promise<{ bases: AtBase[]; totalCount: number }> {
-    const data = await this.request<{ bases: Array<{ id: string; name: string; permissionLevel: string }> }>(
-      `${META_BASE_URL}/bases`,
-    );
+    const data = await this.request<{
+      bases: Array<{ id: string; name: string; permissionLevel: string }>;
+    }>(`${META_BASE_URL}/bases`);
 
     const bases: AtBase[] = (data.bases ?? []).map((b) => ({
       id: b.id,
@@ -169,7 +164,10 @@ export class AirtableService {
     description?: string;
     options?: Record<string, unknown>;
   }): Promise<AtField> {
-    const tableId = await this.resolveTableId(params.baseId, params.tableIdOrName);
+    const tableId = await this.resolveTableId(
+      params.baseId,
+      params.tableIdOrName,
+    );
     const body: Record<string, unknown> = {
       name: params.name,
       type: params.type,
@@ -192,7 +190,10 @@ export class AirtableService {
     name?: string;
     description?: string;
   }): Promise<AtField> {
-    const tableId = await this.resolveTableId(params.baseId, params.tableIdOrName);
+    const tableId = await this.resolveTableId(
+      params.baseId,
+      params.tableIdOrName,
+    );
     const body: Record<string, unknown> = {};
     if (params.name) body.name = params.name;
     if (params.description !== undefined) body.description = params.description;
@@ -205,7 +206,10 @@ export class AirtableService {
     return parseField(data);
   }
 
-  private async resolveTableId(baseId: string, tableIdOrName: string): Promise<string> {
+  private async resolveTableId(
+    baseId: string,
+    tableIdOrName: string,
+  ): Promise<string> {
     if (tableIdOrName.startsWith("tbl")) return tableIdOrName;
     const { tables } = await this.listTables({ baseId });
     const match = tables.find(
@@ -245,7 +249,8 @@ export class AirtableService {
     if (params.sort) {
       params.sort.forEach((s, i) => {
         url.searchParams.set(`sort[${i}][field]`, s.field);
-        if (s.direction) url.searchParams.set(`sort[${i}][direction]`, s.direction);
+        if (s.direction)
+          url.searchParams.set(`sort[${i}][direction]`, s.direction);
       });
     }
 
@@ -314,10 +319,9 @@ export class AirtableService {
       url.searchParams.append("records[]", id);
     }
 
-    const data = await this.request<{ records: Array<{ id: string; deleted: boolean }> }>(
-      url.toString(),
-      { method: "DELETE" },
-    );
+    const data = await this.request<{
+      records: Array<{ id: string; deleted: boolean }>;
+    }>(url.toString(), { method: "DELETE" });
 
     const deletedIds = (data.records ?? [])
       .filter((r) => r.deleted)
@@ -334,7 +338,9 @@ export class AirtableService {
       `${DATA_BASE_URL}/${params.baseId}/${encodeURIComponent(params.tableIdOrName)}/${params.recordId}/comments`,
     );
 
-    const comments: AtComment[] = (data.comments ?? []).map((c) => parseComment(c));
+    const comments: AtComment[] = (data.comments ?? []).map((c) =>
+      parseComment(c),
+    );
     return { comments, totalCount: comments.length };
   }
 

@@ -8,9 +8,11 @@ import * as schema from "@/server/db/schema";
 
 mock.module("@/server/db", () => ({
   db: null,
+  vectorDb: null,
 }));
 
 const { getThreadPlanState, upsertThreadPlan } = await import("./service");
+mock.restore();
 
 function createPlanTestDb() {
   const sqlite = new SQLiteDatabase(":memory:");
@@ -28,7 +30,11 @@ function createPlanTestDb() {
       "updated_at" integer NOT NULL,
       "archived_at" integer,
       "pinned_at" integer,
-      "active_stream_id" text
+      "active_stream_id" text,
+      "context_compaction_summary" text,
+      "context_compaction_covered_through_message_id" text,
+      "context_compaction_updated_at" integer,
+      "status" text DEFAULT 'idle' NOT NULL
     );
 
     CREATE TABLE "thread_plan" (
@@ -77,28 +83,34 @@ describe("plan service", () => {
     const { drizzleDb } = createPlanTestDb();
     const now = new Date();
 
-    drizzleDb.insert(schema.threadPlans).values({
-      audience: "technical",
-      createdAt: now,
-      document: "",
-      goal: "Ship richer plan mode",
-      id: "plan-1",
-      summary: "Upgrade plan rendering and persistence",
-      threadId: "thread-1",
-      title: "Legacy plan",
-      updatedAt: now,
-    }).run();
+    drizzleDb
+      .insert(schema.threadPlans)
+      .values({
+        audience: "technical",
+        createdAt: now,
+        document: "",
+        goal: "Ship richer plan mode",
+        id: "plan-1",
+        summary: "Upgrade plan rendering and persistence",
+        threadId: "thread-1",
+        title: "Legacy plan",
+        updatedAt: now,
+      })
+      .run();
 
-    drizzleDb.insert(schema.threadPlanTasks).values({
-      createdAt: now,
-      description: "Store the markdown document",
-      id: "task-1",
-      planId: "plan-1",
-      sortOrder: 0,
-      status: "pending",
-      title: "Update persistence",
-      updatedAt: now,
-    }).run();
+    drizzleDb
+      .insert(schema.threadPlanTasks)
+      .values({
+        createdAt: now,
+        description: "Store the markdown document",
+        id: "task-1",
+        planId: "plan-1",
+        sortOrder: 0,
+        status: "pending",
+        title: "Update persistence",
+        updatedAt: now,
+      })
+      .run();
 
     const result = await getThreadPlanState({
       database: drizzleDb,
@@ -119,19 +131,23 @@ describe("plan service", () => {
     const { drizzleDb } = createPlanTestDb();
     const now = new Date();
 
-    drizzleDb.insert(schema.threads).values({
-      createdAt: now,
-      id: "thread-1",
-      title: "Thread title",
-      updatedAt: now,
-      userId: "user-1",
-      workspaceId: "workspace-1",
-    }).run();
+    drizzleDb
+      .insert(schema.threads)
+      .values({
+        createdAt: now,
+        id: "thread-1",
+        title: "Thread title",
+        updatedAt: now,
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      })
+      .run();
 
     const result = await upsertThreadPlan({
       audience: "general",
       database: drizzleDb,
-      document: "# Rollout plan\n\n## Overview\n\nCommunicate the change clearly.",
+      document:
+        "# Rollout plan\n\n## Overview\n\nCommunicate the change clearly.",
       goal: "Explain the feature clearly",
       summary: "A public-facing rollout plan",
       tasks: [{ title: "Draft announcement" }],
@@ -147,7 +163,8 @@ describe("plan service", () => {
     });
     expect(stored).toMatchObject({
       audience: "general",
-      document: "# Rollout plan\n\n## Overview\n\nCommunicate the change clearly.",
+      document:
+        "# Rollout plan\n\n## Overview\n\nCommunicate the change clearly.",
     });
   });
 
@@ -155,14 +172,17 @@ describe("plan service", () => {
     const { drizzleDb } = createPlanTestDb();
     const now = new Date();
 
-    drizzleDb.insert(schema.threads).values({
-      createdAt: now,
-      id: "thread-2",
-      title: "Thread title",
-      updatedAt: now,
-      userId: "user-1",
-      workspaceId: "workspace-1",
-    }).run();
+    drizzleDb
+      .insert(schema.threads)
+      .values({
+        createdAt: now,
+        id: "thread-2",
+        title: "Thread title",
+        updatedAt: now,
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      })
+      .run();
 
     const result = await upsertThreadPlan({
       audience: "technical",

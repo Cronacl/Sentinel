@@ -123,7 +123,10 @@ export function buildLinearTools(
       description:
         "Search Linear issues by text query. Returns matching issues across all teams.",
       inputSchema: z.object({
-        query: z.string().min(1).describe("Search query text (at least 1 character)"),
+        query: z
+          .string()
+          .min(1)
+          .describe("Search query text (at least 1 character)"),
         maxResults: z.number().optional().describe("Max results (default 20)"),
       }),
       outputSchema: z.object({
@@ -143,9 +146,19 @@ export function buildLinearTools(
       inputSchema: z.object({
         teamId: z.string().optional().describe("Filter by team ID"),
         projectId: z.string().optional().describe("Filter by project ID"),
-        assigneeId: z.string().optional().describe("Filter by assignee user ID"),
+        assigneeId: z
+          .string()
+          .optional()
+          .describe("Filter by assignee user ID"),
         stateType: z
-          .enum(["triage", "backlog", "unstarted", "started", "completed", "cancelled"])
+          .enum([
+            "triage",
+            "backlog",
+            "unstarted",
+            "started",
+            "completed",
+            "cancelled",
+          ])
           .optional()
           .describe("Filter by workflow state type"),
         maxResults: z.number().optional().describe("Max results (default 25)"),
@@ -177,7 +190,10 @@ export function buildLinearTools(
       inputSchema: z.object({
         teamId: z.string().describe("Team ID to create the issue in"),
         title: z.string().describe("Issue title"),
-        description: z.string().optional().describe("Issue description (markdown)"),
+        description: z
+          .string()
+          .optional()
+          .describe("Issue description (markdown)"),
         assigneeId: z.string().optional().describe("Assignee user ID"),
         priority: z
           .number()
@@ -315,7 +331,12 @@ export function buildLinearTools(
         targetDate: z.string().optional().describe("New target date"),
         startDate: z.string().optional().describe("New start date"),
         leadId: z.string().optional().describe("New lead user ID"),
-        state: z.string().optional().describe("New state (planned, started, paused, completed, cancelled)"),
+        state: z
+          .string()
+          .optional()
+          .describe(
+            "New state (planned, started, paused, completed, cancelled)",
+          ),
       }),
       outputSchema: projectSchema,
       needsApproval: () => approvalFn("linear_update_project"),

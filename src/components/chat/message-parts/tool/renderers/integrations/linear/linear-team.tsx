@@ -77,10 +77,7 @@ export const LinearTeamTool = memo(function LinearTeamTool({
     >
       <div className="space-y-1 p-1">
         {teams.map((t) => (
-          <div
-            key={t.id}
-            className="flex items-center gap-2.5 rounded-lg p-2"
-          >
+          <div key={t.id} className="flex items-center gap-2.5 rounded-lg p-2">
             <div
               className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[10px] font-bold text-white"
               style={{ backgroundColor: t.color || "#5e6ad2" }}
@@ -93,7 +90,10 @@ export const LinearTeamTool = memo(function LinearTeamTool({
               </p>
               <div className="mt-0.5 flex items-center gap-2 text-[10px] text-foreground/40">
                 <span className="flex items-center gap-0.5">
-                  <Icon icon="solar:users-group-rounded-linear" className="h-3 w-3" />
+                  <Icon
+                    icon="solar:users-group-rounded-linear"
+                    className="h-3 w-3"
+                  />
                   {t.memberCount}
                 </span>
                 <span>{t.issueCount} issues</span>

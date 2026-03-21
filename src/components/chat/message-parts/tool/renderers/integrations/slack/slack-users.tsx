@@ -105,9 +105,7 @@ export const SlackUsersTool = memo(function SlackUsersTool({
                 {user.realName || user.displayName || user.name}
               </p>
               {user.displayName && user.displayName !== user.realName ? (
-                <p className="text-[11px] text-foreground/50">
-                  @{user.name}
-                </p>
+                <p className="text-[11px] text-foreground/50">@{user.name}</p>
               ) : null}
               <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10.5px] text-foreground/45">
                 {user.isAdmin ? (
@@ -122,7 +120,10 @@ export const SlackUsersTool = memo(function SlackUsersTool({
                 ) : null}
                 {user.timezone ? (
                   <span className="inline-flex items-center gap-1 rounded bg-foreground/4 px-1.5 py-0.5">
-                    <Icon icon="solar:clock-circle-linear" className="h-3 w-3" />
+                    <Icon
+                      icon="solar:clock-circle-linear"
+                      className="h-3 w-3"
+                    />
                     {user.timezone}
                   </span>
                 ) : null}

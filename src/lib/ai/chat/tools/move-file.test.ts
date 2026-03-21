@@ -12,7 +12,10 @@ async function createDirectory() {
 describe("executeMoveFile", () => {
   it("moves a file across directories", async () => {
     const defaultDirectory = await createDirectory();
-    await writeFile(path.join(defaultDirectory, "old.ts"), "export const value = 1;\n");
+    await writeFile(
+      path.join(defaultDirectory, "old.ts"),
+      "export const value = 1;\n",
+    );
 
     const result = await executeMoveFile({
       defaultDirectory,
@@ -26,9 +29,9 @@ describe("executeMoveFile", () => {
 
     expect(result.fromPath).toBe("old.ts");
     expect(result.toPath).toBe("src/new.ts");
-    expect(await readFile(path.join(defaultDirectory, "src", "new.ts"), "utf8")).toBe(
-      "export const value = 1;\n",
-    );
+    expect(
+      await readFile(path.join(defaultDirectory, "src", "new.ts"), "utf8"),
+    ).toBe("export const value = 1;\n");
   });
 
   it("rejects missing sources", async () => {
@@ -49,8 +52,14 @@ describe("executeMoveFile", () => {
 
   it("rejects existing destinations", async () => {
     const defaultDirectory = await createDirectory();
-    await writeFile(path.join(defaultDirectory, "old.ts"), "export const oldValue = 1;\n");
-    await writeFile(path.join(defaultDirectory, "new.ts"), "export const newValue = 2;\n");
+    await writeFile(
+      path.join(defaultDirectory, "old.ts"),
+      "export const oldValue = 1;\n",
+    );
+    await writeFile(
+      path.join(defaultDirectory, "new.ts"),
+      "export const newValue = 2;\n",
+    );
 
     await expect(
       executeMoveFile({

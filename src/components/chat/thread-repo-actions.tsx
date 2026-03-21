@@ -324,7 +324,10 @@ export function ThreadRepoActions({
         }
       } catch (error) {
         sileo.error({
-          description: getErrorMessage(error, `Unable to open ${target.label}.`),
+          description: getErrorMessage(
+            error,
+            `Unable to open ${target.label}.`,
+          ),
           title: "Open project failed",
         });
       } finally {
@@ -451,9 +454,9 @@ export function ThreadRepoActions({
   const canPush =
     Boolean(
       repoContext?.branch &&
-        repoContext?.hasCommits &&
-        repoContext?.pushRemoteName &&
-        (repoContext.hasUpstream ? (repoContext.aheadCount ?? 0) > 0 : true),
+      repoContext?.hasCommits &&
+      repoContext?.pushRemoteName &&
+      (repoContext.hasUpstream ? (repoContext.aheadCount ?? 0) > 0 : true),
     ) && !isMutating;
   const canCreatePullRequest =
     Boolean(repoContext?.githubRemote) && !isMutating;
@@ -654,8 +657,7 @@ export function ThreadRepoActions({
                         <Button
                           className="h-6 min-w-0 px-2 text-[11px]"
                           isDisabled={
-                            commitMutation.isPending ||
-                            !repoContext?.hasChanges
+                            commitMutation.isPending || !repoContext?.hasChanges
                           }
                           isPending={isGeneratingCommitMessage}
                           onPress={() => {
@@ -931,10 +933,7 @@ export function ThreadRepoActions({
               </p>
             </AlertDialog.Body>
             <AlertDialog.Footer>
-              <Button
-                onPress={() => confirmPRState.close()}
-                variant="tertiary"
-              >
+              <Button onPress={() => confirmPRState.close()} variant="tertiary">
                 Cancel
               </Button>
               <Button

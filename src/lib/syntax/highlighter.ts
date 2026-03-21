@@ -136,7 +136,9 @@ export function detectLanguageFromPath(path: string): string {
   if (fileName.toLowerCase() === "dockerfile") return "dockerfile";
   if (fileName.toLowerCase() === "makefile") return "makefile";
 
-  const ext = fileName.includes(".") ? fileName.split(".").pop()?.toLowerCase() : undefined;
+  const ext = fileName.includes(".")
+    ? fileName.split(".").pop()?.toLowerCase()
+    : undefined;
   if (!ext) return "text";
 
   return extensionToLanguage[ext] ?? "text";

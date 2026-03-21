@@ -304,7 +304,9 @@ export function normalizeAttachmentMimeType(mimeType?: string | null) {
 
 export function inferAttachmentMimeType(fileName: string) {
   const extension = getAttachmentExtension(fileName);
-  return extension ? (EXTENSION_TO_MIME[extension] ?? "application/octet-stream") : "application/octet-stream";
+  return extension
+    ? (EXTENSION_TO_MIME[extension] ?? "application/octet-stream")
+    : "application/octet-stream";
 }
 
 function getAttachmentDisplayType(extension: string | null, mimeType?: string) {
@@ -382,7 +384,8 @@ export function detectAttachmentType(
   const displayType = getAttachmentDisplayType(extension, normalizedMimeType);
   const kind = getAttachmentKind(displayType);
   const language = extension ? EXTENSION_TO_LANGUAGE[extension] : undefined;
-  const isSupportedInChat = kind === "image" || kind === "document" || kind === "code-text";
+  const isSupportedInChat =
+    kind === "image" || kind === "document" || kind === "code-text";
   const confidence =
     extension && EXTENSION_TO_DISPLAY_TYPE[extension]
       ? "high"

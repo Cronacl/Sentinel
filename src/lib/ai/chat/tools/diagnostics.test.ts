@@ -18,8 +18,14 @@ async function writeExecutable(executablePath: string, contents: string) {
 describe("executeDiagnostics", () => {
   it("prefers eslint diagnostics in auto mode", async () => {
     const defaultDirectory = await createDirectory();
-    await writeFile(path.join(defaultDirectory, "package.json"), JSON.stringify({ name: "test" }));
-    await writeFile(path.join(defaultDirectory, "src.ts"), "const value = 1;\n");
+    await writeFile(
+      path.join(defaultDirectory, "package.json"),
+      JSON.stringify({ name: "test" }),
+    );
+    await writeFile(
+      path.join(defaultDirectory, "src.ts"),
+      "const value = 1;\n",
+    );
     await writeExecutable(
       path.join(defaultDirectory, "node_modules", ".bin", "eslint"),
       `#!/bin/sh
@@ -43,8 +49,14 @@ printf '%s' '[{"filePath":"${path.join(defaultDirectory, "src.ts")}","messages":
 
   it("falls back to tsc when eslint is unavailable", async () => {
     const defaultDirectory = await createDirectory();
-    await writeFile(path.join(defaultDirectory, "package.json"), JSON.stringify({ name: "test" }));
-    await writeFile(path.join(defaultDirectory, "src.ts"), "const value: string = 1;\n");
+    await writeFile(
+      path.join(defaultDirectory, "package.json"),
+      JSON.stringify({ name: "test" }),
+    );
+    await writeFile(
+      path.join(defaultDirectory, "src.ts"),
+      "const value: string = 1;\n",
+    );
     await writeExecutable(
       path.join(defaultDirectory, "node_modules", ".bin", "tsc"),
       `#!/bin/sh
@@ -68,7 +80,10 @@ exit 2
 
   it("returns a clear unsupported summary for lsp mode", async () => {
     const defaultDirectory = await createDirectory();
-    await writeFile(path.join(defaultDirectory, "package.json"), JSON.stringify({ name: "test" }));
+    await writeFile(
+      path.join(defaultDirectory, "package.json"),
+      JSON.stringify({ name: "test" }),
+    );
 
     const result = await executeDiagnostics({
       defaultDirectory,

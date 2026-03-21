@@ -2,10 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 
-import type {
-  ThreadPlanAudience,
-  ThreadPlanTaskStatus,
-} from "@/lib/plan";
+import type { ThreadPlanAudience, ThreadPlanTaskStatus } from "@/lib/plan";
 
 type PlanSidebarTask = {
   description?: string | null;

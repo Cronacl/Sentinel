@@ -1,9 +1,6 @@
 import { z } from "zod";
 
-import {
-  LIVECRAWL_MODE_VALUES,
-  SEARCH_TYPE_VALUES,
-} from "@/lib/search";
+import { LIVECRAWL_MODE_VALUES, SEARCH_TYPE_VALUES } from "@/lib/search";
 
 export const exaSearchProviderConfigSchema = z.object({
   apiKey: z.string().min(1, "API key is required"),

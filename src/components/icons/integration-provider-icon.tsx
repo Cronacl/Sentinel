@@ -19,11 +19,7 @@ const LinearIcon = (props: SVGProps<SVGSVGElement>) => (
 );
 
 const AirtableIcon = (props: SVGProps<SVGSVGElement>) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 200 170"
-    {...props}
-  >
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 170" {...props}>
     <path
       fill="#FCB400"
       d="M90.039 12.368 24.079 39.66c-3.667 1.519-3.63 6.729.062 8.192l66.235 26.266a24.17 24.17 0 0 0 17.803 0l66.236-26.266c3.691-1.463 3.729-6.673.06-8.191l-65.96-27.293a24.172 24.172 0 0 0-18.476 0Z"

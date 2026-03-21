@@ -33,8 +33,10 @@ export function buildModelTranscript(
 
   switch (request.trigger) {
     case "submit-user-message":
-      return request.messages ??
-        (request.message ? [...transcript, request.message] : transcript);
+      return (
+        request.messages ??
+        (request.message ? [...transcript, request.message] : transcript)
+      );
 
     case "submit-tool-approval":
     case "submit-plan-answer":

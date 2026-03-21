@@ -56,7 +56,9 @@ beforeEach(() => {
 
 describe("automationsRouter", () => {
   it("resolves the selected workspace when create uses the current workspace option", async () => {
-    const returning = mock(async () => [{ id: "automation-1", workspaceId: "workspace-1" }]);
+    const returning = mock(async () => [
+      { id: "automation-1", workspaceId: "workspace-1" },
+    ]);
     const values = mock(() => ({ returning }));
     const insert = mock(() => ({ values }));
 

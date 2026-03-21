@@ -165,16 +165,14 @@ async function getStatusEntries(cwd: string) {
 
   let branch: string | null = null;
   const staged: Array<{ path: string; staged: string; unstaged: string }> = [];
-  const unstaged: Array<{ path: string; staged: string; unstaged: string }> = [];
+  const unstaged: Array<{ path: string; staged: string; unstaged: string }> =
+    [];
   const untracked: string[] = [];
 
   for (const line of result.stdout.split("\n")) {
     if (!line) continue;
     if (line.startsWith("## ")) {
-      branch = line
-        .slice(3)
-        .split("...")[0]
-        ?.trim() || null;
+      branch = line.slice(3).split("...")[0]?.trim() || null;
       continue;
     }
 
@@ -187,7 +185,11 @@ async function getStatusEntries(cwd: string) {
       continue;
     }
 
-    const entry = { path: filePath, staged: stagedCode, unstaged: unstagedCode };
+    const entry = {
+      path: filePath,
+      staged: stagedCode,
+      unstaged: unstagedCode,
+    };
 
     if (stagedCode !== " ") staged.push(entry);
     if (unstagedCode !== " ") unstaged.push(entry);
@@ -195,7 +197,8 @@ async function getStatusEntries(cwd: string) {
 
   return {
     branch,
-    isClean: staged.length === 0 && unstaged.length === 0 && untracked.length === 0,
+    isClean:
+      staged.length === 0 && unstaged.length === 0 && untracked.length === 0,
     staged,
     untracked,
     unstaged,
@@ -255,7 +258,10 @@ export async function executeGit({
         args.push(input.ref);
       }
       if (input.path) {
-        args.push("--", resolveGitPath(input.path, defaultDirectory, permissionMode));
+        args.push(
+          "--",
+          resolveGitPath(input.path, defaultDirectory, permissionMode),
+        );
       }
       const result = await runGit(args, defaultDirectory);
       if (result.code !== 0) {
@@ -292,7 +298,8 @@ export async function executeGit({
         .split("\n")
         .filter(Boolean)
         .map((line) => {
-          const [hash = "", author = "", date = "", subject = ""] = line.split("\u001f");
+          const [hash = "", author = "", date = "", subject = ""] =
+            line.split("\u001f");
           return { author, date, hash, subject };
         });
       return {
@@ -382,7 +389,10 @@ export async function executeGit({
       if (!message) {
         throw new Error("message is required for commit");
       }
-      const staged = await runGit(["diff", "--cached", "--name-only"], defaultDirectory);
+      const staged = await runGit(
+        ["diff", "--cached", "--name-only"],
+        defaultDirectory,
+      );
       if (staged.code !== 0) {
         throw new Error(staged.stderr || "Failed to inspect staged changes.");
       }

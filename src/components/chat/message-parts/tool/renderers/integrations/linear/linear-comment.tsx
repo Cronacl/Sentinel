@@ -39,9 +39,8 @@ export const LinearCommentTool = memo(function LinearCommentTool({
       ? (part.output as CommentOutput | CommentListOutput)
       : null;
 
-  const input = "input" in part
-    ? (part.input as Record<string, unknown>)
-    : null;
+  const input =
+    "input" in part ? (part.input as Record<string, unknown>) : null;
 
   const comments: CommentOutput[] = output
     ? "comments" in output

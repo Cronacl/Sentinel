@@ -231,15 +231,15 @@ function formatDate(timestamp: number | null) {
 export default function MemorySettingsPage() {
   const utils = api.useUtils();
   const [query, setQuery] = useState("");
-  const [scopeFilter, setScopeFilter] = useState<"all" | "global" | "workspace">(
-    "all",
-  );
-  const [kindFilter, setKindFilter] = useState<"all" | (typeof MEMORY_KIND_VALUES)[number]>(
-    "all",
-  );
-  const [pinnedFilter, setPinnedFilter] = useState<"all" | "pinned" | "unpinned">(
-    "all",
-  );
+  const [scopeFilter, setScopeFilter] = useState<
+    "all" | "global" | "workspace"
+  >("all");
+  const [kindFilter, setKindFilter] = useState<
+    "all" | (typeof MEMORY_KIND_VALUES)[number]
+  >("all");
+  const [pinnedFilter, setPinnedFilter] = useState<
+    "all" | "pinned" | "unpinned"
+  >("all");
   const [workspaceFilter, setWorkspaceFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
@@ -312,7 +312,8 @@ export default function MemorySettingsPage() {
       !options.some((option) => option.value === currentProfile.id)
     ) {
       options.unshift({
-        description: "Current profile is not available until its provider is active.",
+        description:
+          "Current profile is not available until its provider is active.",
         label: `${currentProfile.displayName} (Unavailable)`,
         value: currentProfile.id,
       });
@@ -431,11 +432,21 @@ export default function MemorySettingsPage() {
   const totalPages = Math.max(1, Math.ceil(filteredCount / MEMORIES_PER_PAGE));
   const safePage = Math.min(page, totalPages);
   const startIndex = (safePage - 1) * MEMORIES_PER_PAGE;
-  const paginatedItems = allItems.slice(startIndex, startIndex + MEMORIES_PER_PAGE);
+  const paginatedItems = allItems.slice(
+    startIndex,
+    startIndex + MEMORIES_PER_PAGE,
+  );
   const startItem = filteredCount > 0 ? startIndex + 1 : 0;
   const endItem = Math.min(startIndex + MEMORIES_PER_PAGE, filteredCount);
   const kindBrowseOptions: BrowseChipOption<typeof kindFilter>[] = [
-    { count: Object.values(kindFacetCounts ?? {}).reduce((sum, count) => sum + count, 0), label: "All kinds", value: "all" },
+    {
+      count: Object.values(kindFacetCounts ?? {}).reduce(
+        (sum, count) => sum + count,
+        0,
+      ),
+      label: "All kinds",
+      value: "all",
+    },
     ...MEMORY_KIND_VALUES.map((value) => ({
       count: kindFacetCounts?.[value] ?? 0,
       label: value[0]?.toUpperCase() + value.slice(1),
@@ -444,7 +455,8 @@ export default function MemorySettingsPage() {
   ];
   const scopeBrowseOptions: BrowseChipOption<typeof scopeFilter>[] = [
     {
-      count: (scopeFacetCounts?.global ?? 0) + (scopeFacetCounts?.workspace ?? 0),
+      count:
+        (scopeFacetCounts?.global ?? 0) + (scopeFacetCounts?.workspace ?? 0),
       label: "All scopes",
       value: "all",
     },
@@ -657,9 +669,7 @@ export default function MemorySettingsPage() {
 
             <div className="mb-4 grid gap-3 md:grid-cols-2">
               <label className="space-y-1">
-                <span className="text-muted text-xs font-medium">
-                  Search
-                </span>
+                <span className="text-muted text-xs font-medium">Search</span>
                 <input
                   className="border-separator bg-background/70 text-foreground placeholder:text-muted/70 w-full rounded-xl border px-3 py-2.5 text-sm outline-none"
                   onChange={(event) => setQuery(event.target.value)}
@@ -687,9 +697,7 @@ export default function MemorySettingsPage() {
               </label>
 
               <label className="space-y-1">
-                <span className="text-muted text-xs font-medium">
-                  Pinned
-                </span>
+                <span className="text-muted text-xs font-medium">Pinned</span>
                 <select
                   className="border-separator bg-background/70 text-foreground w-full rounded-xl border px-3 py-2.5 text-sm outline-none"
                   onChange={(event) =>
@@ -739,7 +747,11 @@ export default function MemorySettingsPage() {
                             {memory.kind}
                           </Chip>
                           <Chip
-                            color={memory.scope === "workspace" ? "warning" : "default"}
+                            color={
+                              memory.scope === "workspace"
+                                ? "warning"
+                                : "default"
+                            }
                             size="sm"
                             variant="soft"
                           >
@@ -771,9 +783,7 @@ export default function MemorySettingsPage() {
                           <span>
                             Last used: {formatDate(memory.lastAccessedAt)}
                           </span>
-                          <span>
-                            Updated: {formatDate(memory.updatedAt)}
-                          </span>
+                          <span>Updated: {formatDate(memory.updatedAt)}</span>
                         </div>
                       </div>
 
@@ -923,7 +933,9 @@ export default function MemorySettingsPage() {
 
                   if (confirmAction === "clear") {
                     void clearAll.mutate({
-                      ...(selectedProfile ? { nextProfileId: selectedProfile.id } : {}),
+                      ...(selectedProfile
+                        ? { nextProfileId: selectedProfile.id }
+                        : {}),
                     });
                     return;
                   }

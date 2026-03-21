@@ -44,9 +44,8 @@ export const GHRepoTool = memo(function GHRepoTool({ part }: RendererProps) {
     hasOutput && "output" in part
       ? (part.output as GetRepoOutput | ListReposOutput)
       : null;
-  const input = "input" in part
-    ? (part.input as { owner?: string; repo?: string })
-    : null;
+  const input =
+    "input" in part ? (part.input as { owner?: string; repo?: string }) : null;
 
   const repos = output
     ? "repos" in output
@@ -98,10 +97,7 @@ export const GHRepoTool = memo(function GHRepoTool({ part }: RendererProps) {
             : "text-foreground/70"
       } ${canOpen ? "cursor-pointer hover:text-foreground transition-colors" : ""}`}
     >
-      <IntegrationProviderIcon
-        provider="github"
-        className="h-4 w-4 shrink-0"
-      />
+      <IntegrationProviderIcon provider="github" className="h-4 w-4 shrink-0" />
       <span className="min-w-0 flex-1">{label}</span>
       {canOpen ? (
         <span className="shrink-0 text-[11px] text-foreground/30 opacity-0 transition-opacity group-hover:opacity-100">

@@ -30,9 +30,7 @@ export const GCalListCalendarsTool = memo(function GCalListCalendarsTool({
   const hasOutput = part.state === "output-available";
 
   const output =
-    hasOutput && "output" in part
-      ? (part.output as ListCalendarsOutput)
-      : null;
+    hasOutput && "output" in part ? (part.output as ListCalendarsOutput) : null;
 
   const summary = isRunning
     ? "Loading calendars…"

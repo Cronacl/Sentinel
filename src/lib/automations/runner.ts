@@ -157,7 +157,9 @@ export async function executeAutomationRun(
   });
 
   if (!startedRun) {
-    log.warn(`Skipping run for "${automation.title}": another run is already in progress`);
+    log.warn(
+      `Skipping run for "${automation.title}": another run is already in progress`,
+    );
     return;
   }
 

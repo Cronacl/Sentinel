@@ -29,7 +29,8 @@ describe("shell session manager", () => {
   it("persists shell state across commands in the same thread", async () => {
     const first = await executeShellCommand({
       allowedRoot: workspaceRoot,
-      command: 'export SENTINEL_TEST_VALUE="persisted"; printf "$SENTINEL_TEST_VALUE"',
+      command:
+        'export SENTINEL_TEST_VALUE="persisted"; printf "$SENTINEL_TEST_VALUE"',
       defaultDirectory: workspaceRoot,
       permissionMode: "full",
       threadId: "thread-shell-test",
@@ -50,7 +51,7 @@ describe("shell session manager", () => {
   it("truncates oversized stdout", async () => {
     const result = await executeShellCommand({
       allowedRoot: workspaceRoot,
-      command: 'node -e "process.stdout.write(\'a\'.repeat(70000))"',
+      command: "node -e \"process.stdout.write('a'.repeat(70000))\"",
       defaultDirectory: workspaceRoot,
       permissionMode: "full",
       threadId: "thread-shell-truncation",
@@ -109,7 +110,9 @@ describe("shell session manager", () => {
     expect(events.length).toBeGreaterThanOrEqual(2);
     expect(events[0]?.type).toBe("running");
     expect(finalEvent?.type).toBe("completed");
-    expect(finalEvent && "output" in finalEvent ? finalEvent.output : null).toMatchObject({
+    expect(
+      finalEvent && "output" in finalEvent ? finalEvent.output : null,
+    ).toMatchObject({
       exitCode: 0,
       failureKind: null,
       phase: "completed",
@@ -124,7 +127,8 @@ describe("shell session manager", () => {
 
     for await (const event of streamShellCommand({
       allowedRoot: workspaceRoot,
-      command: 'node -e "process.stdout.write(\'a\'.repeat(9000)); process.stdout.write(\'\\n\')"',
+      command:
+        "node -e \"process.stdout.write('a'.repeat(9000)); process.stdout.write('\\n')\"",
       defaultDirectory: workspaceRoot,
       permissionMode: "full",
       threadId: "thread-shell-tail",
@@ -137,9 +141,9 @@ describe("shell session manager", () => {
     expect(runningEvents.length).toBeGreaterThan(0);
     const lastRunning = runningEvents.at(-1);
     expect(lastRunning?.phase).toBe("running");
-    expect(Buffer.byteLength(lastRunning?.tail ?? "", "utf8")).toBeLessThanOrEqual(
-      8 * 1024,
-    );
+    expect(
+      Buffer.byteLength(lastRunning?.tail ?? "", "utf8"),
+    ).toBeLessThanOrEqual(8 * 1024);
     expect(lastRunning?.truncated).toBe(true);
   });
 
@@ -163,7 +167,9 @@ describe("shell session manager", () => {
   });
 
   it("rejects obvious directory escape commands in default mode", () => {
-    expect(() => assertShellCommandAllowed("cd ..")).toThrow(/violates default permissions mode/i);
+    expect(() => assertShellCommandAllowed("cd ..")).toThrow(
+      /violates default permissions mode/i,
+    );
     expect(() => assertShellCommandAllowed("pushd /tmp")).toThrow(
       /violates default permissions mode/i,
     );

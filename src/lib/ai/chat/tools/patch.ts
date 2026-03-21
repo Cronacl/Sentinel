@@ -36,9 +36,7 @@ function parsePatchHeader(
     let movePath: string | undefined;
 
     if (lines[nextIndex]?.startsWith("*** Move to:")) {
-      movePath = lines[nextIndex]
-        ?.slice("*** Move to:".length)
-        .trim();
+      movePath = lines[nextIndex]?.slice("*** Move to:".length).trim();
       nextIndex += 1;
     }
 
@@ -125,7 +123,9 @@ function parseUpdateChunks(lines: string[], startIndex: number) {
 
 export function parsePatch(patchText: string): { hunks: PatchHunk[] } {
   const lines = patchText.trim().split("\n");
-  const beginIndex = lines.findIndex((line) => line.trim() === "*** Begin Patch");
+  const beginIndex = lines.findIndex(
+    (line) => line.trim() === "*** Begin Patch",
+  );
   const endIndex = lines.findIndex((line) => line.trim() === "*** End Patch");
 
   if (beginIndex === -1 || endIndex === -1 || beginIndex >= endIndex) {
@@ -201,7 +201,11 @@ function tryMatch(
     }
   }
 
-  for (let index = startIndex; index <= lines.length - pattern.length; index += 1) {
+  for (
+    let index = startIndex;
+    index <= lines.length - pattern.length;
+    index += 1
+  ) {
     const matches = pattern.every((value, offset) =>
       compare(lines[index + offset] ?? "", value),
     );

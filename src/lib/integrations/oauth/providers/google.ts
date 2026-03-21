@@ -16,9 +16,7 @@ const GOOGLE_CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
 ];
 
-const GOOGLE_DRIVE_SCOPES = [
-  "https://www.googleapis.com/auth/drive",
-];
+const GOOGLE_DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive"];
 
 const PROVIDER_SCOPES: Partial<Record<IntegrationProvider, string[]>> = {
   gmail: GMAIL_SCOPES,

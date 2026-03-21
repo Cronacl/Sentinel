@@ -25,7 +25,11 @@ type ListOutput = {
 
 function resolveListItems(output: ListOutput): ListItem[] {
   return (
-    output.databases ?? output.schemas ?? output.tables ?? output.collections ?? []
+    output.databases ??
+    output.schemas ??
+    output.tables ??
+    output.collections ??
+    []
   );
 }
 
@@ -46,10 +50,7 @@ function resolveItemIcon(toolName: string): string {
   return "solar:list-linear";
 }
 
-export function createDbListTool(
-  provider: string,
-  providerLabel: string,
-) {
+export function createDbListTool(provider: string, providerLabel: string) {
   return memo(function DbListTool({ part, onApprove, onDeny }: RendererProps) {
     const toolName = getToolName(part as ToolPart);
     const state = getIntegrationToolInteractionState(part as ToolPart, {

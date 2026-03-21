@@ -30,7 +30,9 @@ export const manageTaskInputSchema = z.object({
     .string()
     .min(1)
     .optional()
-    .describe("Required for update and delete actions. The ID of the task to modify."),
+    .describe(
+      "Required for update and delete actions. The ID of the task to modify.",
+    ),
   title: z
     .string()
     .trim()
@@ -71,14 +73,12 @@ export async function executeManageTask({
     threadId: runtime.threadId,
     title: input.title,
   });
-  const task = result.task as
-    | {
-        description: string | null;
-        id: string;
-        status: "blocked" | "completed" | "in_progress" | "pending";
-        title: string;
-      }
-    | null;
+  const task = result.task as {
+    description: string | null;
+    id: string;
+    status: "blocked" | "completed" | "in_progress" | "pending";
+    title: string;
+  } | null;
 
   return {
     action: input.action,

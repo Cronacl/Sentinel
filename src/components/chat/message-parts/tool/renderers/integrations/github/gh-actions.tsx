@@ -38,9 +38,15 @@ function conclusionIcon(conclusion: string | null, status: string) {
     case "failure":
       return { icon: "solar:close-circle-linear", cls: "text-danger" };
     case "cancelled":
-      return { icon: "solar:forbidden-circle-linear", cls: "text-foreground/40" };
+      return {
+        icon: "solar:forbidden-circle-linear",
+        cls: "text-foreground/40",
+      };
     default:
-      return { icon: "solar:question-circle-linear", cls: "text-foreground/40" };
+      return {
+        icon: "solar:question-circle-linear",
+        cls: "text-foreground/40",
+      };
   }
 }
 
@@ -65,8 +71,7 @@ export const GHActionsTool = memo(function GHActionsTool({
       ? (part.output as ListRunsOutput | RunLogsOutput | RerunOutput)
       : null;
 
-  const runs: WorkflowRun[] =
-    output && "runs" in output ? output.runs : [];
+  const runs: WorkflowRun[] = output && "runs" in output ? output.runs : [];
   const logUrl = output && "url" in output ? output.url : null;
   const rerunSuccess = output && "success" in output ? output.success : null;
 

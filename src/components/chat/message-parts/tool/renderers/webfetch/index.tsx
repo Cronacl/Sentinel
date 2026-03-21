@@ -150,7 +150,8 @@ function getHostname(value: string) {
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+  if (bytes < 1024 * 1024)
+    return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
@@ -177,9 +178,12 @@ function buildSummary(
       return (
         <>
           Fetched{" "}
-          <span className="text-foreground/50">{output.successCount}</span>/{output.requestedCount} URLs
+          <span className="text-foreground/50">{output.successCount}</span>/
+          {output.requestedCount} URLs
           {output.failureCount > 0 ? (
-            <span className="ml-1 text-[11px] text-danger/60">{output.failureCount} failed</span>
+            <span className="ml-1 text-[11px] text-danger/60">
+              {output.failureCount} failed
+            </span>
           ) : null}
         </>
       );
@@ -190,8 +194,7 @@ function buildSummary(
       : getHostname(input.url ?? "");
     return (
       <>
-        Fetched{" "}
-        <span className="text-[12px]">{hostname}</span>
+        Fetched <span className="text-[12px]">{hostname}</span>
         {firstSuccess ? (
           <span className="ml-1.5 text-[11px] text-foreground/40">
             {formatBytes(firstSuccess.sizeBytes)}
@@ -202,20 +205,29 @@ function buildSummary(
   }
 
   if (part.state === "approval-requested") {
-    const target = input.url ?? (input.urls?.length ? `${input.urls.length} URLs` : "remote content");
+    const target =
+      input.url ??
+      (input.urls?.length ? `${input.urls.length} URLs` : "remote content");
     return (
       <>
         Fetch{" "}
-        <span className="text-[12px]">{typeof target === "string" && target.startsWith("http") ? getHostname(target) : target}</span>
+        <span className="text-[12px]">
+          {typeof target === "string" && target.startsWith("http")
+            ? getHostname(target)
+            : target}
+        </span>
       </>
     );
   }
 
-  const target = input.url ? getHostname(input.url) : (input.urls?.length ? `${input.urls.length} URLs` : "remote content");
+  const target = input.url
+    ? getHostname(input.url)
+    : input.urls?.length
+      ? `${input.urls.length} URLs`
+      : "remote content";
   return (
     <>
-      Fetching{" "}
-      <span className="text-[12px]">{target}</span>
+      Fetching <span className="text-[12px]">{target}</span>
     </>
   );
 }
@@ -308,7 +320,10 @@ function buildBatchResultCard(
         </a>
       ) : (
         <p className="mt-1.5 line-clamp-3 text-[11px] text-foreground/60">
-          {truncatePreview(result.content?.replace(/\s+/g, " ").trim() ?? "", 240) || "(no content)"}
+          {truncatePreview(
+            result.content?.replace(/\s+/g, " ").trim() ?? "",
+            240,
+          ) || "(no content)"}
         </p>
       )}
     </div>
@@ -326,7 +341,9 @@ function buildBody(
   }
 
   if (errorText && !output) {
-    return <p className="text-[11px] text-danger-soft-foreground">{errorText}</p>;
+    return (
+      <p className="text-[11px] text-danger-soft-foreground">{errorText}</p>
+    );
   }
 
   if (!output) {
@@ -370,7 +387,8 @@ export const WebFetchTool = memo(function WebFetchTool({
   const hasInput = "input" in part && part.input !== undefined;
   const hasOutput = "output" in part && part.output !== undefined;
   const input = hasInput && isWebFetchInput(part.input) ? part.input : null;
-  const output = hasOutput && isWebFetchOutput(part.output) ? part.output : null;
+  const output =
+    hasOutput && isWebFetchOutput(part.output) ? part.output : null;
   const partErrorText = "errorText" in part ? part.errorText : undefined;
   const showApprovalActions =
     part.state === "approval-requested" && approvalId && onApprove && onDeny;
@@ -399,10 +417,13 @@ export const WebFetchTool = memo(function WebFetchTool({
   const firstSuccess = output?.results.find(isSuccessResult) ?? null;
   const footer = output ? (
     output.isBatch ? (
-      <span>{output.successCount} success · {output.failureCount} failed</span>
+      <span>
+        {output.successCount} success · {output.failureCount} failed
+      </span>
     ) : firstSuccess ? (
       <span>
-        {firstSuccess.statusCode} · {firstSuccess.contentType} · {formatBytes(firstSuccess.sizeBytes)}
+        {firstSuccess.statusCode} · {firstSuccess.contentType} ·{" "}
+        {formatBytes(firstSuccess.sizeBytes)}
         {firstSuccess.truncated ? " · truncated" : ""}
       </span>
     ) : null
@@ -411,12 +432,19 @@ export const WebFetchTool = memo(function WebFetchTool({
   return (
     <ToolLayout
       summary={summary}
-      isRunning={isRunningState || (!isFinishedState && part.state !== "approval-requested")}
+      isRunning={
+        isRunningState ||
+        (!isFinishedState && part.state !== "approval-requested")
+      }
       isError={Boolean(isErrorState)}
       isExpandable={isFinishedState}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={partErrorText && part.state !== "output-error" ? partErrorText : undefined}
+      errorText={
+        partErrorText && part.state !== "output-error"
+          ? partErrorText
+          : undefined
+      }
       footer={footer}
       actions={
         <>

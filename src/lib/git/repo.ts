@@ -351,11 +351,12 @@ export async function resolveRepoContext(
 
   const preferredRemoteName = upstreamRef?.split("/")[0] ?? null;
   const pushRemoteName =
-    preferredRemoteName && remotes.some((remote) => remote.name === preferredRemoteName)
+    preferredRemoteName &&
+    remotes.some((remote) => remote.name === preferredRemoteName)
       ? preferredRemoteName
-      : remotes.find((remote) => remote.name === "origin")?.name ??
+      : (remotes.find((remote) => remote.name === "origin")?.name ??
         remotes[0]?.name ??
-        null;
+        null);
   const githubRemoteMatch =
     remotes.find(
       (remote) =>
@@ -644,7 +645,9 @@ export async function getCommitMessageContext(
   const repoRoot = await resolveRepoRootOrThrow(pathValue);
   const context = await resolveRepoContext(repoRoot);
   if (!context.hasChanges) {
-    throw new Error("Commit message generation requires changes in the working tree.");
+    throw new Error(
+      "Commit message generation requires changes in the working tree.",
+    );
   }
 
   const [statusResult, stagedDiffStat, unstagedDiffStat] = await Promise.all([
@@ -658,7 +661,10 @@ export async function getCommitMessageContext(
   }
 
   const changes = parseStatusChanges(statusResult.stdout);
-  const diffStat = [stagedDiffStat.stdout.trim(), unstagedDiffStat.stdout.trim()]
+  const diffStat = [
+    stagedDiffStat.stdout.trim(),
+    unstagedDiffStat.stdout.trim(),
+  ]
     .filter(Boolean)
     .join("\n");
 

@@ -24,7 +24,8 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
   {
     id: "code-review",
     title: "Daily Code Review",
-    description: "Review recent changes for quality, consistency, and potential issues.",
+    description:
+      "Review recent changes for quality, consistency, and potential issues.",
     icon: DocumentValidationIcon,
     defaults: {
       title: "Daily Code Review",
@@ -37,7 +38,8 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
   {
     id: "performance-audit",
     title: "Performance Audit",
-    description: "Analyze code for performance bottlenecks and optimization opportunities.",
+    description:
+      "Analyze code for performance bottlenecks and optimization opportunities.",
     icon: DashboardSpeed01Icon,
     defaults: {
       title: "Performance Audit",
@@ -51,7 +53,8 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
   {
     id: "security-scan",
     title: "Security Scan",
-    description: "Check for security vulnerabilities, outdated dependencies, and misconfigurations.",
+    description:
+      "Check for security vulnerabilities, outdated dependencies, and misconfigurations.",
     icon: SecurityLockIcon,
     defaults: {
       title: "Security Scan",
@@ -78,7 +81,8 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
   {
     id: "bug-triage",
     title: "Bug Triage",
-    description: "Scan for potential bugs, anti-patterns, and error-prone code.",
+    description:
+      "Scan for potential bugs, anti-patterns, and error-prone code.",
     icon: Bug02Icon,
     defaults: {
       title: "Bug Triage",
@@ -105,7 +109,8 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
   {
     id: "dependency-audit",
     title: "Dependency Audit",
-    description: "Review project dependencies for updates, deprecations, and conflicts.",
+    description:
+      "Review project dependencies for updates, deprecations, and conflicts.",
     icon: AnalyticsUpIcon,
     defaults: {
       title: "Dependency Audit",
@@ -119,7 +124,8 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
   {
     id: "code-cleanup",
     title: "Code Cleanup",
-    description: "Detect dead code, unused imports, and opportunities to simplify.",
+    description:
+      "Detect dead code, unused imports, and opportunities to simplify.",
     icon: CleaningBucketIcon,
     defaults: {
       title: "Code Cleanup",

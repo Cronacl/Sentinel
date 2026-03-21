@@ -97,7 +97,9 @@ async function generateWorkspaceCommitMessage({
         : "Current branch: unknown",
       "",
       "Changed files:",
-      ...commitContext.changes.map((change) => `- ${change.type}: ${change.path}`),
+      ...commitContext.changes.map(
+        (change) => `- ${change.type}: ${change.path}`,
+      ),
       "",
       commitContext.diffStat
         ? `Diff stat:\n${commitContext.diffStat}`
@@ -111,7 +113,9 @@ async function generateWorkspaceCommitMessage({
       prompt,
       system: COMMIT_MESSAGE_SYSTEM_PROMPT,
       temperature: 0.2,
-      ...(model.providerOptions ? { providerOptions: model.providerOptions } : {}),
+      ...(model.providerOptions
+        ? { providerOptions: model.providerOptions }
+        : {}),
     });
 
     const message = sanitizeCommitMessage(result.text);
@@ -249,11 +253,15 @@ export const repoRouter = createTRPCRouter({
         if (!input.branchName?.trim()) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: "Create PR from the default branch requires a new branch name.",
+            message:
+              "Create PR from the default branch requires a new branch name.",
           });
         }
 
-        const created = await createAndCheckoutBranch(rootPath, input.branchName);
+        const created = await createAndCheckoutBranch(
+          rootPath,
+          input.branchName,
+        );
         createdBranch = created.branch;
         repoContext = await resolveRepoContext(rootPath);
       }

@@ -94,7 +94,10 @@ function createFakeVectorDb() {
 
       if (sql.includes("SELECT kind, workspace_id, COUNT(*) as count")) {
         const userId = params[0] as string;
-        const grouped = new Map<string, { count: number; kind: string; workspace_id: string | null }>();
+        const grouped = new Map<
+          string,
+          { count: number; kind: string; workspace_id: string | null }
+        >();
 
         for (const row of memoryItems.values()) {
           if (row.user_id !== userId) {
@@ -130,7 +133,8 @@ function createFakeVectorDb() {
           .map((row) => {
             const storedEmbedding =
               embeddingTable.get(row.id) ?? new Float32Array(dimensions);
-            const distance = 1 - cosineSimilarity(queryEmbedding, storedEmbedding);
+            const distance =
+              1 - cosineSimilarity(queryEmbedding, storedEmbedding);
 
             return {
               ...row,
@@ -143,14 +147,8 @@ function createFakeVectorDb() {
       }
 
       if (sql.includes("SELECT") && sql.includes("stored_embedding")) {
-        const [userId, kind, workspaceId, provider, model, dimensions] = params as [
-          string,
-          string,
-          string,
-          string,
-          string,
-          number,
-        ];
+        const [userId, kind, workspaceId, provider, model, dimensions] =
+          params as [string, string, string, string, string, number];
         const embeddingTable = embeddings.get(dimensions) ?? new Map();
 
         return [...memoryItems.values()]
@@ -166,7 +164,8 @@ function createFakeVectorDb() {
           .map((row) => ({
             id: row.id,
             stored_embedding: Buffer.from(
-              (embeddingTable.get(row.id) ?? new Float32Array(dimensions)).buffer,
+              (embeddingTable.get(row.id) ?? new Float32Array(dimensions))
+                .buffer,
             ),
           }));
       }
@@ -174,23 +173,34 @@ function createFakeVectorDb() {
       throw new Error(`Unsupported all() query in test double:\n${sql}`);
     },
     get: (...params: unknown[]) => {
-      if (sql.includes("SELECT COUNT(*) as count FROM memory_items WHERE user_id = ?")) {
+      if (
+        sql.includes(
+          "SELECT COUNT(*) as count FROM memory_items WHERE user_id = ?",
+        )
+      ) {
         const userId = params[0] as string;
         return {
-          count: [...memoryItems.values()].filter((row) => row.user_id === userId)
-            .length,
+          count: [...memoryItems.values()].filter(
+            (row) => row.user_id === userId,
+          ).length,
         };
       }
 
-      if (sql.includes("SELECT COUNT(*) as count") && sql.includes("FROM memory_items")) {
+      if (
+        sql.includes("SELECT COUNT(*) as count") &&
+        sql.includes("FROM memory_items")
+      ) {
         const userId = params[0] as string;
         return {
-          count: [...memoryItems.values()].filter((row) => row.user_id === userId)
-            .length,
+          count: [...memoryItems.values()].filter(
+            (row) => row.user_id === userId,
+          ).length,
         };
       }
 
-      if (sql.includes("SELECT * FROM memory_items WHERE user_id = ? AND id = ?")) {
+      if (
+        sql.includes("SELECT * FROM memory_items WHERE user_id = ? AND id = ?")
+      ) {
         const [userId, id] = params as [string, string];
         const row = memoryItems.get(id);
         return row?.user_id === userId ? row : undefined;
@@ -218,7 +228,9 @@ function createFakeVectorDb() {
     },
     run: (...params: unknown[]) => {
       if (sql.startsWith("DELETE FROM memory_embeddings_")) {
-        const dimensions = Number(sql.match(/memory_embeddings_(\d+)/)?.[1] ?? "0");
+        const dimensions = Number(
+          sql.match(/memory_embeddings_(\d+)/)?.[1] ?? "0",
+        );
         const table = embeddings.get(dimensions);
 
         if (params.length === 0) {
@@ -294,7 +306,10 @@ function createFakeVectorDb() {
         return;
       }
 
-      if (sql.includes("UPDATE memory_items") && sql.includes("SET content = ?")) {
+      if (
+        sql.includes("UPDATE memory_items") &&
+        sql.includes("SET content = ?")
+      ) {
         const [
           content,
           summary,
@@ -337,7 +352,9 @@ function createFakeVectorDb() {
       }
 
       if (sql.startsWith("INSERT INTO memory_embeddings_")) {
-        const dimensions = Number(sql.match(/memory_embeddings_(\d+)/)?.[1] ?? "0");
+        const dimensions = Number(
+          sql.match(/memory_embeddings_(\d+)/)?.[1] ?? "0",
+        );
         const [memoryId, buffer] = params as [string, Uint8Array];
         embeddings.get(dimensions)?.set(memoryId, fromBuffer(buffer));
         return;
@@ -372,10 +389,13 @@ mock.module("@paralleldrive/cuid2", () => ({
 }));
 
 mock.module("@/server/db", () => ({
+  db: null,
   vectorDb,
 }));
 
-const { listMemories, searchMemories, upsertMemory } = await import("./repository");
+const { listMemories, searchMemories, upsertMemory } =
+  await import("./repository");
+mock.restore();
 
 function resetVectorDb() {
   vectorDb.prepare("DELETE FROM memory_embeddings_1536").run();
@@ -570,7 +590,9 @@ describe("memory repository", () => {
       recentMemory.memory.id,
       oldMemory.memory.id,
     ]);
-    expect(results[0]?.decayFactor).toBeGreaterThan(results[1]?.decayFactor ?? 0);
+    expect(results[0]?.decayFactor).toBeGreaterThan(
+      results[1]?.decayFactor ?? 0,
+    );
   });
 
   it("lets pinned memories bypass decay during retrieval ranking", () => {

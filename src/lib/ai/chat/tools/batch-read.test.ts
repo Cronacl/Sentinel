@@ -13,8 +13,14 @@ describe("executeBatchRead", () => {
   it("reads multiple paths in order", async () => {
     const defaultDirectory = await createDirectory();
     await mkdir(path.join(defaultDirectory, "src"), { recursive: true });
-    await writeFile(path.join(defaultDirectory, "src", "a.ts"), "export const a = 1;\n");
-    await writeFile(path.join(defaultDirectory, "src", "b.ts"), "export const b = 2;\n");
+    await writeFile(
+      path.join(defaultDirectory, "src", "a.ts"),
+      "export const a = 1;\n",
+    );
+    await writeFile(
+      path.join(defaultDirectory, "src", "b.ts"),
+      "export const b = 2;\n",
+    );
 
     const result = await executeBatchRead({
       defaultDirectory,

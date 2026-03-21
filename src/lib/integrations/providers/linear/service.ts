@@ -162,7 +162,10 @@ export class LinearService {
     stateId?: string;
     estimate?: number;
   }): Promise<LnIssue> {
-    const clean: Record<string, unknown> = { teamId: params.teamId, title: params.title };
+    const clean: Record<string, unknown> = {
+      teamId: params.teamId,
+      title: params.title,
+    };
     for (const [k, v] of Object.entries(params)) {
       if (k === "teamId" || k === "title") continue;
       if (v === undefined || v === null || v === "") continue;
@@ -240,9 +243,7 @@ export class LinearService {
     };
   }
 
-  async listProjects(params?: {
-    maxResults?: number;
-  }): Promise<LnProject[]> {
+  async listProjects(params?: { maxResults?: number }): Promise<LnProject[]> {
     const result = await this.client.projects({
       first: params?.maxResults ?? 25,
     });
@@ -469,8 +470,10 @@ export class LinearService {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async parseSafeProject(node: any): Promise<LnProject> {
     const lead = node.lead ? await node.lead : null;
-    const members = typeof node.members === "function" ? await node.members() : { nodes: [] };
-    const issues = typeof node.issues === "function" ? await node.issues() : { nodes: [] };
+    const members =
+      typeof node.members === "function" ? await node.members() : { nodes: [] };
+    const issues =
+      typeof node.issues === "function" ? await node.issues() : { nodes: [] };
 
     return {
       id: node.id,

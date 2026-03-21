@@ -102,7 +102,11 @@ export class PostgreSQLService {
          ORDER BY c.relname`,
         [schemaFilter],
       );
-      return res.rows as { name: string; schema: string; rowEstimate: number }[];
+      return res.rows as {
+        name: string;
+        schema: string;
+        rowEstimate: number;
+      }[];
     }, database);
   }
 
@@ -203,7 +207,10 @@ export class PostgreSQLService {
           columns: Array.isArray(row.columns)
             ? row.columns
             : typeof row.columns === "string"
-              ? row.columns.replace(/^\{|\}$/g, "").split(",").filter(Boolean)
+              ? row.columns
+                  .replace(/^\{|\}$/g, "")
+                  .split(",")
+                  .filter(Boolean)
               : [],
           unique: row.unique,
         })),

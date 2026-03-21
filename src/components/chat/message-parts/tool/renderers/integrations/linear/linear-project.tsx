@@ -53,9 +53,8 @@ export const LinearProjectTool = memo(function LinearProjectTool({
       ? (part.output as ProjectOutput | ProjectListOutput)
       : null;
 
-  const input = "input" in part
-    ? (part.input as Record<string, unknown>)
-    : null;
+  const input =
+    "input" in part ? (part.input as Record<string, unknown>) : null;
 
   const projects: ProjectOutput[] = output
     ? "projects" in output
@@ -164,7 +163,9 @@ export const LinearProjectTool = memo(function LinearProjectTool({
                   {p.leadName ? <span>{p.leadName}</span> : null}
                   <span>{p.issueCount} issues</span>
                   {p.targetDate ? (
-                    <span>Due {new Date(p.targetDate).toLocaleDateString()}</span>
+                    <span>
+                      Due {new Date(p.targetDate).toLocaleDateString()}
+                    </span>
                   ) : null}
                 </div>
               </div>

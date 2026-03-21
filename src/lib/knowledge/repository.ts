@@ -63,9 +63,7 @@ export function getSourceById(id: string): KnowledgeSource | null {
   return row ? mapSourceRow(row) : null;
 }
 
-export function listSourcesByWorkspace(
-  workspaceId: string,
-): KnowledgeSource[] {
+export function listSourcesByWorkspace(workspaceId: string): KnowledgeSource[] {
   const db = requireVectorDb();
   const rows = db
     .prepare(

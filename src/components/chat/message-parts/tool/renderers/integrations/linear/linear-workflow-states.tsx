@@ -39,66 +39,64 @@ function typeIcon(type: string) {
   }
 }
 
-export const LinearWorkflowStatesTool = memo(
-  function LinearWorkflowStatesTool({
+export const LinearWorkflowStatesTool = memo(function LinearWorkflowStatesTool({
+  onApprove,
+  onDeny,
+  part,
+}: RendererProps) {
+  const state = getIntegrationToolInteractionState(part as ToolPart, {
     onApprove,
     onDeny,
-    part,
-  }: RendererProps) {
-    const state = getIntegrationToolInteractionState(part as ToolPart, {
-      onApprove,
-      onDeny,
-    });
+  });
 
-    const output =
-      state.hasOutput && "output" in part
-        ? (part.output as StatesListOutput)
-        : null;
+  const output =
+    state.hasOutput && "output" in part
+      ? (part.output as StatesListOutput)
+      : null;
 
-    const states = output?.states ?? [];
-    const [isExpanded, setIsExpanded] = useState(false);
+  const states = output?.states ?? [];
+  const [isExpanded, setIsExpanded] = useState(false);
 
-    const summary = state.isRunning
-      ? "Fetching workflow states\u2026"
-      : state.isError
-        ? "Failed to fetch workflow states"
-        : `Listed ${states.length} workflow state${states.length !== 1 ? "s" : ""}`;
+  const summary = state.isRunning
+    ? "Fetching workflow states\u2026"
+    : state.isError
+      ? "Failed to fetch workflow states"
+      : `Listed ${states.length} workflow state${states.length !== 1 ? "s" : ""}`;
 
-    return (
-      <IntegrationToolLayout
-        provider="Linear"
-        providerIcon={
-          <IntegrationProviderIcon provider="linear" className="h-4 w-4" />
-        }
-        summary={summary}
-        isRunning={state.isRunning}
-        isError={state.isError}
-        errorText={state.isError ? state.errorText : undefined}
-        isExpandable={states.length > 0}
-        isExpanded={isExpanded}
-        onExpandedChange={setIsExpanded}
-      >
-        <div className="space-y-1 p-1">
-          {states.map((s) => (
-            <div
-              key={s.id}
-              className="flex items-center gap-2 rounded-lg px-2 py-1.5"
-            >
-              <Icon
-                icon={typeIcon(s.type)}
-                className="h-3.5 w-3.5 shrink-0"
-                style={{ color: s.color }}
-              />
-              <span className="flex-1 text-[11px] text-foreground/70">
-                {s.name}
-              </span>
-              <span className="shrink-0 text-[10px] text-foreground/30">
-                {s.type}
-              </span>
-            </div>
-          ))}
-        </div>
-      </IntegrationToolLayout>
-    );
-  },
-);
+  return (
+    <IntegrationToolLayout
+      provider="Linear"
+      providerIcon={
+        <IntegrationProviderIcon provider="linear" className="h-4 w-4" />
+      }
+      summary={summary}
+      isRunning={state.isRunning}
+      isError={state.isError}
+      errorText={state.isError ? state.errorText : undefined}
+      isExpandable={states.length > 0}
+      isExpanded={isExpanded}
+      onExpandedChange={setIsExpanded}
+    >
+      <div className="space-y-1 p-1">
+        {states.map((s) => (
+          <div
+            key={s.id}
+            className="flex items-center gap-2 rounded-lg px-2 py-1.5"
+          >
+            <Icon
+              icon={typeIcon(s.type)}
+              className="h-3.5 w-3.5 shrink-0"
+              style={{ color: s.color }}
+            />
+            <span className="flex-1 text-[11px] text-foreground/70">
+              {s.name}
+            </span>
+            <span className="shrink-0 text-[10px] text-foreground/30">
+              {s.type}
+            </span>
+          </div>
+        ))}
+      </div>
+    </IntegrationToolLayout>
+  );
+});

@@ -5,10 +5,7 @@ import { memo, useEffect, useState } from "react";
 import { Button } from "@heroui/react";
 
 import type { RendererProps } from "../../renderer";
-import {
-  buildPreviewUnifiedDiff,
-  DiffView,
-} from "../shared/diff-view";
+import { buildPreviewUnifiedDiff, DiffView } from "../shared/diff-view";
 import { ToolLayout } from "../shared/tool-layout";
 
 type EditInput = {
@@ -397,33 +394,39 @@ function buildBody(
     const diffNode = buildDiffFromInput(part, toolName);
 
     if (toolName === "edit" && isEditOutput(part.output)) {
-      return diffNode ?? (
-        <p className="whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
-          {[
-            `${part.output.replacements} replacement${part.output.replacements === 1 ? "" : "s"} applied`,
-            `${part.output.bytesWritten} bytes written`,
-          ].join("\n")}
-        </p>
+      return (
+        diffNode ?? (
+          <p className="whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
+            {[
+              `${part.output.replacements} replacement${part.output.replacements === 1 ? "" : "s"} applied`,
+              `${part.output.bytesWritten} bytes written`,
+            ].join("\n")}
+          </p>
+        )
       );
     }
 
     if (toolName === "multiedit" && isMultiEditOutput(part.output)) {
-      return diffNode ?? (
-        <p className="whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
-          {[
-            `${part.output.editsApplied} edit${part.output.editsApplied === 1 ? "" : "s"} applied`,
-            `${part.output.replacements} replacement${part.output.replacements === 1 ? "" : "s"}`,
-            `${part.output.bytesWritten} bytes written`,
-          ].join("\n")}
-        </p>
+      return (
+        diffNode ?? (
+          <p className="whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
+            {[
+              `${part.output.editsApplied} edit${part.output.editsApplied === 1 ? "" : "s"} applied`,
+              `${part.output.replacements} replacement${part.output.replacements === 1 ? "" : "s"}`,
+              `${part.output.bytesWritten} bytes written`,
+            ].join("\n")}
+          </p>
+        )
       );
     }
 
     if (toolName === "create_file" && isCreateFileOutput(part.output)) {
-      return diffNode ?? (
-        <p className="whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
-          {`${part.output.lineCount} lines · ${part.output.bytesWritten} bytes written`}
-        </p>
+      return (
+        diffNode ?? (
+          <p className="whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
+            {`${part.output.lineCount} lines · ${part.output.bytesWritten} bytes written`}
+          </p>
+        )
       );
     }
 

@@ -14,10 +14,7 @@ type QueryOutput = {
   fields: { name: string; dataType: string }[];
 };
 
-export function createDbQueryTool(
-  provider: string,
-  providerLabel: string,
-) {
+export function createDbQueryTool(provider: string, providerLabel: string) {
   return memo(function DbQueryTool({ part }: RendererProps) {
     const { open } = useRightSidebar();
 

@@ -381,8 +381,7 @@ function emitRunningUpdate(session: ShellSession, force = false) {
   pending.lastProgressAt = Date.now();
   pending.eventQueue.push({
     output: {
-      boundaryRoot:
-        pending.allowedRoot ?? pending.allowedRoots?.[0] ?? null,
+      boundaryRoot: pending.allowedRoot ?? pending.allowedRoots?.[0] ?? null,
       cwd: session.currentDirectory,
       durationMs: Math.max(0, Date.now() - pending.startedAt),
       phase: "running",
@@ -595,7 +594,9 @@ function classifyShellCommandFailure({
   }
 
   if (
-    /\b(permission denied|operation not permitted|eacces|eperm)\b/i.test(combined)
+    /\b(permission denied|operation not permitted|eacces|eperm)\b/i.test(
+      combined,
+    )
   ) {
     return {
       failureKind: "permission",

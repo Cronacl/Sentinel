@@ -49,9 +49,8 @@ export const GHReleaseTool = memo(function GHReleaseTool({
     state.hasOutput && "output" in part
       ? (part.output as ReleaseOutput | ListReleasesOutput)
       : null;
-  const input = "input" in part
-    ? (part.input as Record<string, unknown>)
-    : null;
+  const input =
+    "input" in part ? (part.input as Record<string, unknown>) : null;
 
   const releases: ReleaseOutput[] = output
     ? "releases" in output

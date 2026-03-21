@@ -22,8 +22,8 @@ describe("buildPlanPromptLines", () => {
 
     expect(lines).toContain("Current plan audience: Technical");
     expect(lines).toContain("Current plan markdown document:");
-    expect(lines.some((line) => line.includes("Detailed implementation document."))).toBe(
-      true,
-    );
+    expect(
+      lines.some((line) => line.includes("Detailed implementation document.")),
+    ).toBe(true);
   });
 });

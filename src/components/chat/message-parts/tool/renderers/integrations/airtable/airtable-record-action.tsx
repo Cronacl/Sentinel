@@ -199,7 +199,10 @@ export const AirtableRecordActionTool = memo(function AirtableRecordActionTool({
             </div>
             <div className="mt-1 space-y-0.5">
               {output.deletedIds.map((id) => (
-                <p key={id} className="font-mono text-[10px] text-foreground/35">
+                <p
+                  key={id}
+                  className="font-mono text-[10px] text-foreground/35"
+                >
                   {id}
                 </p>
               ))}

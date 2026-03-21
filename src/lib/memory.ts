@@ -87,9 +87,7 @@ export function clampMemoryRetrievalLimit(value: number | null | undefined) {
   );
 }
 
-export function clampAutoSavePerTurnLimit(
-  value: number | null | undefined,
-) {
+export function clampAutoSavePerTurnLimit(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return DEFAULT_MEMORY_AUTO_SAVE_PER_TURN_LIMIT;
   }
@@ -133,7 +131,10 @@ export function getDefaultMemorySettings(): MemorySettings {
 }
 
 export function getMemoryProfileFromSettings(
-  settings: Pick<MemorySettings, "memoryDimensions" | "memoryModel" | "memoryProvider">,
+  settings: Pick<
+    MemorySettings,
+    "memoryDimensions" | "memoryModel" | "memoryProvider"
+  >,
 ): MemoryEmbeddingProfile | null {
   const profile = getMemoryEmbeddingProfile(
     settings.memoryProvider,
@@ -177,7 +178,10 @@ export function normalizeMemorySettings(
   const fallback = getDefaultMemorySettings();
   const storedProfile =
     candidate.memoryProvider && candidate.memoryModel
-      ? getMemoryEmbeddingProfile(candidate.memoryProvider, candidate.memoryModel)
+      ? getMemoryEmbeddingProfile(
+          candidate.memoryProvider,
+          candidate.memoryModel,
+        )
       : null;
 
   const profile =

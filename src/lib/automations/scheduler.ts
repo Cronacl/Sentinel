@@ -23,10 +23,9 @@ const bakerLogger = {
 } as const;
 
 function getStatePath(): string {
-  const sentinelDir =
-    process.env.SENTINEL_DB_PATH?.trim()
-      ? path.dirname(process.env.SENTINEL_DB_PATH.trim())
-      : path.join(os.homedir(), ".sentinel");
+  const sentinelDir = process.env.SENTINEL_DB_PATH?.trim()
+    ? path.dirname(process.env.SENTINEL_DB_PATH.trim())
+    : path.join(os.homedir(), ".sentinel");
   return path.join(sentinelDir, "automations-state.json");
 }
 

@@ -228,17 +228,16 @@ describe("fetchThreadSessionSnapshot", () => {
   });
 
   it("requests session snapshots with no-store caching", async () => {
-    const fetchMock = mock(
-      async () =>
-        Response.json(
-          createSnapshot({
-            activeRunId: "run-1",
-            messages: [],
-            queuedFollowUps: [],
-            threadId: "thread-1",
-            threadStatus: "streaming",
-          }),
-        ),
+    const fetchMock = mock(async () =>
+      Response.json(
+        createSnapshot({
+          activeRunId: "run-1",
+          messages: [],
+          queuedFollowUps: [],
+          threadId: "thread-1",
+          threadStatus: "streaming",
+        }),
+      ),
     );
     globalThis.fetch = fetchMock as typeof fetch;
 
@@ -253,9 +252,7 @@ describe("fetchThreadSessionSnapshot", () => {
 
 describe("formatClientTimingLog", () => {
   it("serializes readable client timing payloads into a single string", () => {
-    expect(
-      formatClientTimingLog("first_stream_event", 12.8, "thread-1"),
-    ).toBe(
+    expect(formatClientTimingLog("first_stream_event", 12.8, "thread-1")).toBe(
       '[ThreadChatClient] {"elapsedMs":13,"phase":"first_stream_event","threadId":"thread-1"}',
     );
   });

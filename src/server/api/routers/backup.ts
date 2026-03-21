@@ -1,10 +1,6 @@
 import { z } from "zod";
 
-import {
-  createBackup,
-  deleteBackup,
-  listBackups,
-} from "@/server/db/backup";
+import { createBackup, deleteBackup, listBackups } from "@/server/db/backup";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
 export const backupRouter = createTRPCRouter({

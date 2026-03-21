@@ -85,7 +85,10 @@ export function buildAirtableTools(
       description:
         "List all tables in an Airtable base, including their fields and views. Use this to explore a base's schema.",
       inputSchema: z.object({
-        baseId: z.string().min(1).describe("The Airtable base ID (e.g. appXXXXXXXXXXXXXX)"),
+        baseId: z
+          .string()
+          .min(1)
+          .describe("The Airtable base ID (e.g. appXXXXXXXXXXXXXX)"),
       }),
       outputSchema: z.object({
         tables: z.array(tableSchema),
@@ -124,7 +127,12 @@ export function buildAirtableTools(
           .array(
             z.object({
               name: z.string().min(1),
-              type: z.string().min(1).describe("Field type (e.g. singleLineText, number, singleSelect)"),
+              type: z
+                .string()
+                .min(1)
+                .describe(
+                  "Field type (e.g. singleLineText, number, singleSelect)",
+                ),
               description: z.string().optional(),
               options: z.record(z.unknown()).optional(),
             }),
@@ -142,14 +150,27 @@ export function buildAirtableTools(
 
     airtable_create_field: tool({
       description:
-        "Add a new field (column) to an existing Airtable table. IMPORTANT: For singleSelect and multipleSelects types, you MUST provide options with a choices array, e.g. options: { choices: [{ name: \"Option A\" }, { name: \"Option B\" }] }. For number fields, options.precision sets decimal places.",
+        'Add a new field (column) to an existing Airtable table. IMPORTANT: For singleSelect and multipleSelects types, you MUST provide options with a choices array, e.g. options: { choices: [{ name: "Option A" }, { name: "Option B" }] }. For number fields, options.precision sets decimal places.',
       inputSchema: z.object({
         baseId: z.string().min(1).describe("The Airtable base ID"),
-        tableIdOrName: z.string().min(1).describe("The table ID or name (name will be resolved to ID)"),
+        tableIdOrName: z
+          .string()
+          .min(1)
+          .describe("The table ID or name (name will be resolved to ID)"),
         name: z.string().min(1).describe("Name for the new field"),
-        type: z.string().min(1).describe("Field type: singleLineText, multilineText, number, singleSelect, multipleSelects, date, dateTime, checkbox, email, url, phoneNumber, currency, percent, rating"),
+        type: z
+          .string()
+          .min(1)
+          .describe(
+            "Field type: singleLineText, multilineText, number, singleSelect, multipleSelects, date, dateTime, checkbox, email, url, phoneNumber, currency, percent, rating",
+          ),
         description: z.string().optional().describe("Optional description"),
-        options: z.record(z.unknown()).optional().describe("REQUIRED for singleSelect/multipleSelects: { choices: [{ name: \"Value\" }] }. For number: { precision: 0 }. For currency: { precision: 2, symbol: \"$\" }"),
+        options: z
+          .record(z.unknown())
+          .optional()
+          .describe(
+            'REQUIRED for singleSelect/multipleSelects: { choices: [{ name: "Value" }] }. For number: { precision: 0 }. For currency: { precision: 2, symbol: "$" }',
+          ),
       }),
       outputSchema: fieldSchema,
       needsApproval: () => approvalFn("airtable_create_field"),
@@ -164,8 +185,14 @@ export function buildAirtableTools(
         "Update the name or description of an existing field in an Airtable table. Use the field ID (fldXXX) for best results.",
       inputSchema: z.object({
         baseId: z.string().min(1).describe("The Airtable base ID"),
-        tableIdOrName: z.string().min(1).describe("The table ID or name (name will be resolved to ID)"),
-        fieldIdOrName: z.string().min(1).describe("The field ID (e.g. fldXXXXXXXXXXXXXX)"),
+        tableIdOrName: z
+          .string()
+          .min(1)
+          .describe("The table ID or name (name will be resolved to ID)"),
+        fieldIdOrName: z
+          .string()
+          .min(1)
+          .describe("The field ID (e.g. fldXXXXXXXXXXXXXX)"),
         name: z.string().optional().describe("New name for the field"),
         description: z.string().optional().describe("New description"),
       }),
@@ -184,8 +211,16 @@ export function buildAirtableTools(
         baseId: z.string().min(1).describe("The Airtable base ID"),
         tableIdOrName: z.string().min(1).describe("The table ID or name"),
         view: z.string().optional().describe("View name or ID to filter by"),
-        fields: z.array(z.string()).optional().describe("Specific field names to return"),
-        filterByFormula: z.string().optional().describe("Airtable formula to filter records (e.g. {Status}='Done')"),
+        fields: z
+          .array(z.string())
+          .optional()
+          .describe("Specific field names to return"),
+        filterByFormula: z
+          .string()
+          .optional()
+          .describe(
+            "Airtable formula to filter records (e.g. {Status}='Done')",
+          ),
         sort: z
           .array(
             z.object({
@@ -195,8 +230,14 @@ export function buildAirtableTools(
           )
           .optional()
           .describe("Sort configuration"),
-        maxRecords: z.number().optional().describe("Maximum number of records to return"),
-        pageSize: z.number().optional().describe("Number of records per page (max 100)"),
+        maxRecords: z
+          .number()
+          .optional()
+          .describe("Maximum number of records to return"),
+        pageSize: z
+          .number()
+          .optional()
+          .describe("Number of records per page (max 100)"),
       }),
       outputSchema: z.object({
         records: z.array(recordSchema),
@@ -215,7 +256,10 @@ export function buildAirtableTools(
       inputSchema: z.object({
         baseId: z.string().min(1).describe("The Airtable base ID"),
         tableIdOrName: z.string().min(1).describe("The table ID or name"),
-        recordId: z.string().min(1).describe("The record ID (e.g. recXXXXXXXXXXXXXX)"),
+        recordId: z
+          .string()
+          .min(1)
+          .describe("The record ID (e.g. recXXXXXXXXXXXXXX)"),
       }),
       outputSchema: recordSchema,
       needsApproval: () => approvalFn("airtable_get_record"),
@@ -234,7 +278,9 @@ export function buildAirtableTools(
         records: z
           .array(
             z.object({
-              fields: z.record(z.unknown()).describe("Field values for the record"),
+              fields: z
+                .record(z.unknown())
+                .describe("Field values for the record"),
             }),
           )
           .min(1)
@@ -323,8 +369,7 @@ export function buildAirtableTools(
     }),
 
     airtable_create_comment: tool({
-      description:
-        "Add a comment to a specific record in an Airtable table.",
+      description: "Add a comment to a specific record in an Airtable table.",
       inputSchema: z.object({
         baseId: z.string().min(1).describe("The Airtable base ID"),
         tableIdOrName: z.string().min(1).describe("The table ID or name"),

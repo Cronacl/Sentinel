@@ -664,6 +664,7 @@ mock.module("@/server/db", () => ({
       })),
     })),
   },
+  vectorDb: null,
 }));
 
 mock.module("@/lib/skills", () => ({
@@ -672,6 +673,7 @@ mock.module("@/lib/skills", () => ({
 }));
 
 const { runThreadChat } = await import("./index");
+mock.restore();
 
 async function flushAsyncWork() {
   await Promise.resolve();
@@ -1472,7 +1474,9 @@ describe("runThreadChat context compaction", () => {
       "user",
       "assistant",
     ]);
-    expect(strippedTail[0].parts).toEqual([{ text: "Review these exports", type: "text" }]);
+    expect(strippedTail[0].parts).toEqual([
+      { text: "Review these exports", type: "text" },
+    ]);
     expect(strippedTail[1].parts).toEqual([
       { text: "I found the main exports.", type: "text" },
     ]);

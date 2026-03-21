@@ -61,10 +61,7 @@ export const LinearUsersTool = memo(function LinearUsersTool({
     >
       <div className="space-y-1 p-1">
         {users.map((u) => (
-          <div
-            key={u.id}
-            className="flex items-center gap-2.5 rounded-lg p-2"
-          >
+          <div key={u.id} className="flex items-center gap-2.5 rounded-lg p-2">
             {u.avatarUrl ? (
               <img
                 src={u.avatarUrl}

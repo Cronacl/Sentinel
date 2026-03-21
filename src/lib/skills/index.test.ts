@@ -1,11 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import {
-  mkdtemp,
-  mkdir,
-  rm,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -126,7 +120,10 @@ describe("skills", () => {
     });
 
     const skills = await discoverSkills({ workspaceRoot });
-    const loaded = await loadSkillByName({ name: "valid-skill", workspaceRoot });
+    const loaded = await loadSkillByName({
+      name: "valid-skill",
+      workspaceRoot,
+    });
 
     expect(skills.map((skill) => skill.name)).toEqual(["valid-skill"]);
     expect(loaded?.content).toBe("## Steps\n\n1. Do the thing.");

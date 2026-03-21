@@ -12,8 +12,14 @@ async function createDirectory() {
 describe("executeDiff", () => {
   it("compares two files", async () => {
     const defaultDirectory = await createDirectory();
-    await writeFile(path.join(defaultDirectory, "before.ts"), "const value = 1;\n");
-    await writeFile(path.join(defaultDirectory, "after.ts"), "const value = 2;\n");
+    await writeFile(
+      path.join(defaultDirectory, "before.ts"),
+      "const value = 1;\n",
+    );
+    await writeFile(
+      path.join(defaultDirectory, "after.ts"),
+      "const value = 2;\n",
+    );
 
     const result = await executeDiff({
       defaultDirectory,
@@ -32,7 +38,10 @@ describe("executeDiff", () => {
 
   it("compares a file against proposed content", async () => {
     const defaultDirectory = await createDirectory();
-    await writeFile(path.join(defaultDirectory, "src.ts"), "const value = 1;\n");
+    await writeFile(
+      path.join(defaultDirectory, "src.ts"),
+      "const value = 1;\n",
+    );
 
     const result = await executeDiff({
       defaultDirectory,
@@ -50,8 +59,14 @@ describe("executeDiff", () => {
   it("rejects paths outside the workspace in default mode", async () => {
     const defaultDirectory = await createDirectory();
     const externalDirectory = await createDirectory();
-    await writeFile(path.join(defaultDirectory, "src.ts"), "const value = 1;\n");
-    await writeFile(path.join(externalDirectory, "other.ts"), "const value = 2;\n");
+    await writeFile(
+      path.join(defaultDirectory, "src.ts"),
+      "const value = 1;\n",
+    );
+    await writeFile(
+      path.join(externalDirectory, "other.ts"),
+      "const value = 2;\n",
+    );
 
     await expect(
       executeDiff({

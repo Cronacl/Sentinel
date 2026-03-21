@@ -148,7 +148,10 @@ export const AirtableCommentTool = memo(function AirtableCommentTool({
                 className="flex items-start gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-foreground/5"
               >
                 <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center text-foreground/50">
-                  <Icon icon="solar:chat-round-dots-linear" className="h-4 w-4" />
+                  <Icon
+                    icon="solar:chat-round-dots-linear"
+                    className="h-4 w-4"
+                  />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-[12.5px] text-foreground/80 line-clamp-3">
@@ -160,7 +163,9 @@ export const AirtableCommentTool = memo(function AirtableCommentTool({
                       {c.author.name ?? c.author.email}
                     </span>
                     {c.createdTime ? (
-                      <span>{new Date(c.createdTime).toLocaleDateString()}</span>
+                      <span>
+                        {new Date(c.createdTime).toLocaleDateString()}
+                      </span>
                     ) : null}
                   </div>
                 </div>

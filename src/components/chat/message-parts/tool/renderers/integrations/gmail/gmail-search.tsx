@@ -80,10 +80,7 @@ export const GmailSearchTool = memo(function GmailSearchTool({
             : "text-foreground/70"
       } ${canOpen ? "cursor-pointer hover:text-foreground transition-colors" : ""}`}
     >
-      <IntegrationProviderIcon
-        provider="gmail"
-        className="h-4 w-4 shrink-0"
-      />
+      <IntegrationProviderIcon provider="gmail" className="h-4 w-4 shrink-0" />
       <span className="min-w-0 flex-1">{label}</span>
       {canOpen ? (
         <span className="shrink-0 text-[11px] text-foreground/30 opacity-0 transition-opacity group-hover:opacity-100">

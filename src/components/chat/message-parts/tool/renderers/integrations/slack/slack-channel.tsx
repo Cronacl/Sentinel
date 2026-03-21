@@ -86,7 +86,9 @@ export const SlackChannelTool = memo(function SlackChannelTool({
           >
             <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center text-foreground/50">
               <Icon
-                icon={ch.isPrivate ? "solar:lock-linear" : "solar:hashtag-linear"}
+                icon={
+                  ch.isPrivate ? "solar:lock-linear" : "solar:hashtag-linear"
+                }
                 className="h-4 w-4"
               />
             </span>
@@ -101,7 +103,10 @@ export const SlackChannelTool = memo(function SlackChannelTool({
               ) : null}
               <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10.5px] text-foreground/45">
                 <span className="inline-flex items-center gap-1 rounded bg-foreground/4 px-1.5 py-0.5">
-                  <Icon icon="solar:users-group-rounded-linear" className="h-3 w-3" />
+                  <Icon
+                    icon="solar:users-group-rounded-linear"
+                    className="h-3 w-3"
+                  />
                   {ch.memberCount}
                 </span>
                 {ch.isPrivate ? (

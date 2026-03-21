@@ -47,9 +47,7 @@ export const MongoCountTool = memo(function MongoCountTool({
         : `MongoDB: Counting documents in ${input?.collection ?? "collection"}...`;
     }
     if (state.isError) {
-      return isDistinct
-        ? "MongoDB: Distinct failed"
-        : "MongoDB: Count failed";
+      return isDistinct ? "MongoDB: Distinct failed" : "MongoDB: Count failed";
     }
     if (output) {
       if ("count" in output) {

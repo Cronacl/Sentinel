@@ -41,9 +41,7 @@ export interface BackupInfo {
   createdAt: string;
 }
 
-export async function createBackup(
-  label?: string,
-): Promise<BackupInfo> {
+export async function createBackup(label?: string): Promise<BackupInfo> {
   const dbPath = getDbPath();
 
   if (!fs.existsSync(dbPath)) {

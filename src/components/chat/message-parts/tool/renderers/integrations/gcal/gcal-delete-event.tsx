@@ -36,9 +36,7 @@ export const GCalDeleteEventTool = memo(function GCalDeleteEventTool({
 
   const input = "input" in part ? (part.input as DeleteInput) : null;
   const output =
-    state.hasOutput && "output" in part
-      ? (part.output as DeleteOutput)
-      : null;
+    state.hasOutput && "output" in part ? (part.output as DeleteOutput) : null;
 
   const summary = state.needsApproval
     ? "Delete event — awaiting approval"

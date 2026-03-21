@@ -178,9 +178,7 @@ export default function DataSettingsPage() {
 
           <section className="border-separator bg-surface rounded-xl border p-5">
             <div className="mb-4 space-y-1">
-              <h2 className="text-foreground text-base font-medium">
-                Backups
-              </h2>
+              <h2 className="text-foreground text-base font-medium">Backups</h2>
               <p className="text-muted text-sm">
                 {backups.data && backups.data.length > 0
                   ? `${backups.data.length} backup${backups.data.length === 1 ? "" : "s"} stored in ~/.sentinel/backups/`

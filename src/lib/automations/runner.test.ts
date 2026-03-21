@@ -8,6 +8,7 @@ const db: Record<string, any> = {};
 
 mock.module("@/server/db", () => ({
   db,
+  vectorDb: null,
 }));
 
 mock.module("@/lib/ai/chat", () => ({
@@ -19,6 +20,7 @@ mock.module("./schedule-utils", () => ({
 }));
 
 const { executeAutomationRun } = await import("./runner");
+mock.restore();
 
 describe("executeAutomationRun", () => {
   let insertedValues: unknown[];

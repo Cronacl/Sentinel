@@ -15,7 +15,9 @@ async function createTempRoot() {
 
 afterEach(async () => {
   await Promise.all(
-    tempRoots.splice(0).map((root) => rm(root, { force: true, recursive: true })),
+    tempRoots
+      .splice(0)
+      .map((root) => rm(root, { force: true, recursive: true })),
   );
 });
 
@@ -66,9 +68,9 @@ describe("resolveRipgrepPath", () => {
     }));
     const extractArchive = mock(
       async ({ extractDirectory }: { extractDirectory: string }) => {
-      const extractedPath = path.join(extractDirectory, "ripgrep", "rg");
-      await mkdir(path.dirname(extractedPath), { recursive: true });
-      await writeFile(extractedPath, "rg");
+        const extractedPath = path.join(extractDirectory, "ripgrep", "rg");
+        await mkdir(path.dirname(extractedPath), { recursive: true });
+        await writeFile(extractedPath, "rg");
       },
     );
 

@@ -29,7 +29,8 @@ export const chatPreferencesRouter = createTRPCRouter({
         ctx.user.defaultChatModelId ?? null,
         enabledModels,
       );
-      const currentReasoningEffort = ctx.user.defaultChatReasoningEffort ?? null;
+      const currentReasoningEffort =
+        ctx.user.defaultChatReasoningEffort ?? null;
 
       ctx.db
         .update(users)

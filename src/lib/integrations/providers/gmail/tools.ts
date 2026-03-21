@@ -453,10 +453,7 @@ export function buildGmailTools(
       needsApproval: () => approvalFn("gmail_bulk_action"),
       execute: async (input) => {
         const service = getGmailService(context);
-        const result = await service.bulkModify(
-          input.messageIds,
-          input.action,
-        );
+        const result = await service.bulkModify(input.messageIds, input.action);
         return { action: input.action, ...result };
       },
     }),

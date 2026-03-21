@@ -214,19 +214,21 @@ export function buildDefaultPlanDocument(plan: {
   ].join("\n\n");
 }
 
-export function buildPlanPromptLines(plan: {
-  audience: ThreadPlanAudience;
-  document: string;
-  goal: string;
-  questions?: ThreadPlanQuestionSet | null;
-  summary: string;
-  tasks: Array<{
-    description?: string | null;
-    status: ThreadPlanTaskStatus;
+export function buildPlanPromptLines(
+  plan: {
+    audience: ThreadPlanAudience;
+    document: string;
+    goal: string;
+    questions?: ThreadPlanQuestionSet | null;
+    summary: string;
+    tasks: Array<{
+      description?: string | null;
+      status: ThreadPlanTaskStatus;
+      title: string;
+    }>;
     title: string;
-  }>;
-  title: string;
-} | null) {
+  } | null,
+) {
   if (!plan) {
     return [];
   }

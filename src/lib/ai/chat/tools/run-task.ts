@@ -42,10 +42,7 @@ export const runTaskInputSchema = z.object({
     .describe(
       "Directory path to run the task from. In default permissions mode this must be relative to the selected workspace root.",
     ),
-  rationale: z
-    .string()
-    .min(1)
-    .describe("Why this project task should run."),
+  rationale: z.string().min(1).describe("Why this project task should run."),
   task: runTaskNameSchema.describe(
     "Project task to run using the nearest package.json script.",
   ),
@@ -160,7 +157,10 @@ async function resolvePackageRoot({
       return packageJsonPath;
     }
 
-    if (boundaryRoot && path.resolve(currentDirectory) === path.resolve(boundaryRoot)) {
+    if (
+      boundaryRoot &&
+      path.resolve(currentDirectory) === path.resolve(boundaryRoot)
+    ) {
       return null;
     }
 
@@ -203,7 +203,8 @@ export async function resolveRunTaskCommand({
     throw new Error(`Path is not a directory: ${input.path ?? "."}`);
   }
 
-  const boundaryRoot = permissionMode === "default" ? defaultDirectory : undefined;
+  const boundaryRoot =
+    permissionMode === "default" ? defaultDirectory : undefined;
   const packageJsonPath = await resolvePackageRoot({
     ...(boundaryRoot ? { boundaryRoot } : {}),
     searchDirectory: resolvedDirectory,
@@ -230,7 +231,9 @@ export async function resolveRunTaskCommand({
   };
   const scripts = packageJson.scripts ?? {};
   const script =
-    TASK_SCRIPT_CANDIDATES[input.task].find((candidate) => candidate in scripts) ?? null;
+    TASK_SCRIPT_CANDIDATES[input.task].find(
+      (candidate) => candidate in scripts,
+    ) ?? null;
 
   if (!script) {
     const availableScripts = Object.keys(scripts).sort();

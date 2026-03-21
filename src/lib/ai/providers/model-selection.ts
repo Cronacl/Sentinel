@@ -33,7 +33,9 @@ export function normalizeSelectedModelId(
     return null;
   }
 
-  const byModelId = availableModels.filter((model) => model.modelId === trimmed);
+  const byModelId = availableModels.filter(
+    (model) => model.modelId === trimmed,
+  );
   if (byModelId.length === 1) {
     const match = byModelId[0]!;
     return getCompositeModelId(match.provider, match.modelId);

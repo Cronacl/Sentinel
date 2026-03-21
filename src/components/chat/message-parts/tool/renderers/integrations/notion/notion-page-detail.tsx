@@ -41,7 +41,13 @@ function isDatabase(item: PageOutput | DatabaseOutput): item is DatabaseOutput {
   return "propertyNames" in item;
 }
 
-function NotionIcon({ icon, fallback }: { icon: string | null; fallback: string }) {
+function NotionIcon({
+  icon,
+  fallback,
+}: {
+  icon: string | null;
+  fallback: string;
+}) {
   if (!icon) return <span>{fallback}</span>;
   if (icon.startsWith("http")) {
     return <img src={icon} alt="" className="h-4 w-4 object-contain" />;
@@ -120,7 +126,10 @@ export const NotionPageDetailTool = memo(function NotionPageDetailTool({
             className="flex items-start gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-foreground/5"
           >
             <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">
-              <NotionIcon icon={item.icon} fallback={isDatabase(item) ? "\u{1F5C3}" : "\u{1F4C4}"} />
+              <NotionIcon
+                icon={item.icon}
+                fallback={isDatabase(item) ? "\u{1F5C3}" : "\u{1F4C4}"}
+              />
             </span>
             <div className="min-w-0 flex-1">
               <p className="text-[12.5px] font-medium text-foreground">
@@ -140,7 +149,10 @@ export const NotionPageDetailTool = memo(function NotionPageDetailTool({
                 ) : (
                   <>
                     <span className="inline-flex items-center gap-1 rounded bg-foreground/4 px-1.5 py-0.5">
-                      <Icon icon="solar:document-text-linear" className="h-3 w-3" />
+                      <Icon
+                        icon="solar:document-text-linear"
+                        className="h-3 w-3"
+                      />
                       Page
                     </span>
                     {item.parentType ? (
@@ -151,7 +163,9 @@ export const NotionPageDetailTool = memo(function NotionPageDetailTool({
                   </>
                 )}
                 {item.archived ? (
-                  <span className="inline-flex items-center rounded bg-warning/10 px-1.5 py-0.5 text-warning">Archived</span>
+                  <span className="inline-flex items-center rounded bg-warning/10 px-1.5 py-0.5 text-warning">
+                    Archived
+                  </span>
                 ) : null}
               </div>
               {!isDatabase(item) && Object.keys(item.properties).length > 0 ? (
@@ -164,7 +178,9 @@ export const NotionPageDetailTool = memo(function NotionPageDetailTool({
                         className="inline-flex items-center gap-1 rounded bg-foreground/4 px-1.5 py-0.5 text-[10.5px] text-foreground/50"
                       >
                         <span className="text-foreground/30">{key}:</span>
-                        <span>{val.length > 30 ? `${val.slice(0, 30)}\u2026` : val}</span>
+                        <span>
+                          {val.length > 30 ? `${val.slice(0, 30)}\u2026` : val}
+                        </span>
                       </span>
                     ))}
                 </div>

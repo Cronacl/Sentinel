@@ -140,7 +140,10 @@ function buildHunkRanges(ops: DiffOp[], contextLines: number): HunkRange[] {
   for (let index = 0; index < ops.length; index += 1) {
     if (ops[index]?.kind === "equal") continue;
 
-    const start = Math.max(0, index - countContextBackward(ops, index, contextLines));
+    const start = Math.max(
+      0,
+      index - countContextBackward(ops, index, contextLines),
+    );
     const end = Math.min(
       ops.length - 1,
       index + countContextForward(ops, index, contextLines),

@@ -26,14 +26,11 @@ export async function GET() {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const filename = `sentinel-export-${timestamp}.db`;
 
-  return new NextResponse(
-    stream as unknown as ReadableStream,
-    {
-      headers: {
-        "Content-Type": "application/x-sqlite3",
-        "Content-Disposition": `attachment; filename="${filename}"`,
-        "Content-Length": String(stat.size),
-      },
+  return new NextResponse(stream as unknown as ReadableStream, {
+    headers: {
+      "Content-Type": "application/x-sqlite3",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length": String(stat.size),
     },
-  );
+  });
 }

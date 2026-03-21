@@ -29,7 +29,9 @@ export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 type ReasoningConfig = {
   defaultEffort: ReasoningEffort;
   forceReasoning?: boolean;
-  providerOptionsMap?: Partial<Record<ReasoningEffort, SharedV3ProviderOptions>>;
+  providerOptionsMap?: Partial<
+    Record<ReasoningEffort, SharedV3ProviderOptions>
+  >;
   providerValueMap?: Partial<Record<ReasoningEffort, string>>;
   reasoningSummary?: "auto" | "concise" | "detailed";
   strategy:

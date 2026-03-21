@@ -113,7 +113,9 @@ async function runCommand(command: string, args: string[]) {
         return;
       }
 
-      reject(new Error(`Command failed with exit code ${code ?? -1}: ${command}`));
+      reject(
+        new Error(`Command failed with exit code ${code ?? -1}: ${command}`),
+      );
     });
   });
 }
@@ -135,7 +137,10 @@ async function defaultExtractArchive({
   ]);
 }
 
-async function findFileRecursively(rootPath: string, filename: string): Promise<string | null> {
+async function findFileRecursively(
+  rootPath: string,
+  filename: string,
+): Promise<string | null> {
   const directoryEntries = await readdir(rootPath, { withFileTypes: true });
 
   for (const directoryEntry of directoryEntries) {
@@ -241,9 +246,7 @@ async function installManagedRipgrep({
       );
 
       if (!extractedExecutablePath) {
-        throw new Error(
-          `Ripgrep archive did not contain ${executableName}.`,
-        );
+        throw new Error(`Ripgrep archive did not contain ${executableName}.`);
       }
 
       await rename(extractedExecutablePath, finalExecutablePath);
@@ -267,9 +270,7 @@ async function installManagedRipgrep({
   }
 }
 
-export async function resolveRipgrepPath(
-  options: RipgrepResolverOptions = {},
-) {
+export async function resolveRipgrepPath(options: RipgrepResolverOptions = {}) {
   const arch = options.arch ?? process.arch;
   const platform = options.platform ?? process.platform;
   const platformKey = getPlatformKey({ arch, platform });
@@ -284,9 +285,7 @@ export async function resolveRipgrepPath(
   }
 
   if (!platformConfig) {
-    throw new Error(
-      `Ripgrep is not supported on platform ${platformKey}.`,
-    );
+    throw new Error(`Ripgrep is not supported on platform ${platformKey}.`);
   }
 
   const homeDir = options.homeDir ?? os.homedir();

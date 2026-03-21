@@ -79,9 +79,7 @@ export const GmailBulkActionTool = memo(function GmailBulkActionTool({
 
   const input = "input" in part ? (part.input as BulkInput) : null;
   const output =
-    state.hasOutput && "output" in part
-      ? (part.output as BulkOutput)
-      : null;
+    state.hasOutput && "output" in part ? (part.output as BulkOutput) : null;
 
   const actionKey = input?.action ?? output?.action ?? "";
   const meta = BULK_ACTION_META[actionKey] ?? {

@@ -36,7 +36,11 @@ type RunTaskToolOutput = {
 );
 
 function isRunTaskInput(value: unknown): value is RunTaskToolInput {
-  const candidate = value as { path?: unknown; rationale?: unknown; task?: unknown };
+  const candidate = value as {
+    path?: unknown;
+    rationale?: unknown;
+    task?: unknown;
+  };
 
   return (
     !!candidate &&
@@ -111,7 +115,9 @@ function buildSummary(
     return (
       <>
         Task <span className="font-medium">{input.task}</span> failed
-        {input.path ? <span className="text-foreground/40"> in {input.path}</span> : null}
+        {input.path ? (
+          <span className="text-foreground/40"> in {input.path}</span>
+        ) : null}
       </>
     );
   }
@@ -121,7 +127,9 @@ function buildSummary(
     return (
       <>
         Ran <span className="font-medium">{output.task}</span>
-        {input.path ? <span className="text-foreground/40"> in {input.path}</span> : null}
+        {input.path ? (
+          <span className="text-foreground/40"> in {input.path}</span>
+        ) : null}
         <span className="ml-1.5 text-[11px] text-foreground/40">
           {formatDuration(output.durationMs)}
           {!succeeded ? ` · exit ${output.exitCode}` : ""}
@@ -134,7 +142,9 @@ function buildSummary(
     return (
       <>
         Run <span className="font-medium">{input.task}</span>
-        {input.path ? <span className="text-foreground/40"> in {input.path}</span> : null}
+        {input.path ? (
+          <span className="text-foreground/40"> in {input.path}</span>
+        ) : null}
       </>
     );
   }
@@ -142,7 +152,9 @@ function buildSummary(
   return (
     <>
       Running <span className="font-medium">{input.task}</span>
-      {input.path ? <span className="text-foreground/40"> in {input.path}</span> : null}
+      {input.path ? (
+        <span className="text-foreground/40"> in {input.path}</span>
+      ) : null}
     </>
   );
 }
@@ -187,8 +199,10 @@ export const RunTaskTool = memo(function RunTaskTool({
   const approvalId = approval?.id;
   const hasInput = "input" in part && part.input !== undefined;
   const hasOutput = "output" in part && part.output !== undefined;
-  const runTaskInput = hasInput && isRunTaskInput(part.input) ? part.input : null;
-  const runTaskOutput = hasOutput && isRunTaskOutput(part.output) ? part.output : null;
+  const runTaskInput =
+    hasInput && isRunTaskInput(part.input) ? part.input : null;
+  const runTaskOutput =
+    hasOutput && isRunTaskOutput(part.output) ? part.output : null;
   const partErrorText = "errorText" in part ? part.errorText : undefined;
   const showApprovalActions =
     part.state === "approval-requested" && approvalId && onApprove && onDeny;
@@ -214,7 +228,12 @@ export const RunTaskTool = memo(function RunTaskTool({
   if (!runTaskInput) return null;
 
   const summary = buildSummary(part, runTaskInput, runTaskOutput);
-  const terminalText = buildBody(runTaskInput, runTaskOutput, part.state, partErrorText);
+  const terminalText = buildBody(
+    runTaskInput,
+    runTaskOutput,
+    part.state,
+    partErrorText,
+  );
 
   const footer = runTaskOutput ? (
     <div className="flex items-center justify-between">
@@ -223,8 +242,14 @@ export const RunTaskTool = memo(function RunTaskTool({
         {runTaskOutput.truncated ? " · truncated" : ""}
       </span>
       {isCompletedOutput(runTaskOutput) ? (
-        <span className={runTaskOutput.exitCode === 0 ? "text-success" : "text-danger"}>
-          {runTaskOutput.exitCode === 0 ? "Success" : `Exit ${runTaskOutput.exitCode}`}
+        <span
+          className={
+            runTaskOutput.exitCode === 0 ? "text-success" : "text-danger"
+          }
+        >
+          {runTaskOutput.exitCode === 0
+            ? "Success"
+            : `Exit ${runTaskOutput.exitCode}`}
         </span>
       ) : null}
     </div>
@@ -238,12 +263,18 @@ export const RunTaskTool = memo(function RunTaskTool({
       isExpandable={isFinishedState}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={partErrorText && part.state !== "output-error" ? partErrorText : undefined}
+      errorText={
+        partErrorText && part.state !== "output-error"
+          ? partErrorText
+          : undefined
+      }
       footer={footer}
       actions={
         <>
           {part.state === "approval-requested" ? (
-            <p className="mb-1.5 line-clamp-2 text-[11px] text-muted">{runTaskInput.rationale}</p>
+            <p className="mb-1.5 line-clamp-2 text-[11px] text-muted">
+              {runTaskInput.rationale}
+            </p>
           ) : null}
           {showApprovalActions ? (
             <div className="flex flex-wrap gap-2">

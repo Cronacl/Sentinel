@@ -89,8 +89,7 @@ export const AUTOMATION_SCHEDULE_TYPES = [
   "weekdays",
   "custom",
 ] as const;
-export type AutomationScheduleType =
-  (typeof AUTOMATION_SCHEDULE_TYPES)[number];
+export type AutomationScheduleType = (typeof AUTOMATION_SCHEDULE_TYPES)[number];
 
 export const AUTOMATION_RUN_STATUSES = [
   "pending",

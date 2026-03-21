@@ -164,13 +164,17 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
   }
 
   try {
-    db.run(sql`ALTER TABLE "user" ADD COLUMN "last_project_open_target_id" text`);
+    db.run(
+      sql`ALTER TABLE "user" ADD COLUMN "last_project_open_target_id" text`,
+    );
   } catch {
     // column already exists
   }
 
   try {
-    db.run(sql`ALTER TABLE "workspace" ADD COLUMN "permission_mode_override" text`);
+    db.run(
+      sql`ALTER TABLE "workspace" ADD COLUMN "permission_mode_override" text`,
+    );
   } catch {
     // column already exists
   }
@@ -697,7 +701,9 @@ if (!globalForDb.startupBackupInit) {
       const { createStartupBackup } = await import("@/server/db/backup");
       const result = await createStartupBackup();
       if (result) {
-        createLogger("Backup").info(`Startup backup created: ${result.filename}`);
+        createLogger("Backup").info(
+          `Startup backup created: ${result.filename}`,
+        );
       }
     })
     .catch((error) => {

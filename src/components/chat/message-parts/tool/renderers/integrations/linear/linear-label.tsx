@@ -39,9 +39,8 @@ export const LinearLabelTool = memo(function LinearLabelTool({
       ? (part.output as LabelOutput | LabelListOutput)
       : null;
 
-  const input = "input" in part
-    ? (part.input as Record<string, unknown>)
-    : null;
+  const input =
+    "input" in part ? (part.input as Record<string, unknown>) : null;
 
   const labels: LabelOutput[] = output
     ? "labels" in output

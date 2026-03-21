@@ -37,7 +37,9 @@ function appendMatchingTools(
   }
 }
 
-export function hasWorkspaceInspectionContext(promptContext: ThreadPromptContext) {
+export function hasWorkspaceInspectionContext(
+  promptContext: ThreadPromptContext,
+) {
   return (
     promptContext.allowedInspectionRoots.length > 0 ||
     promptContext.skillRoots.length > 0
@@ -65,8 +67,16 @@ function selectPlanCoreTools(activeTools: string[], availableTools: string[]) {
   ]);
 }
 
-function selectInspectionTools(activeTools: string[], availableTools: string[]) {
-  appendMatchingTools(activeTools, availableTools, ["list", "glob", "read", "grep"]);
+function selectInspectionTools(
+  activeTools: string[],
+  availableTools: string[],
+) {
+  appendMatchingTools(activeTools, availableTools, [
+    "list",
+    "glob",
+    "read",
+    "grep",
+  ]);
 }
 
 function selectExecutionTools(activeTools: string[], availableTools: string[]) {

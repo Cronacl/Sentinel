@@ -35,8 +35,7 @@ type PROutput = {
 type PRListOutput = { prs: PROutput[] };
 
 function prStateIcon(pr: PROutput) {
-  if (pr.merged)
-    return { icon: "solar:merge-linear", cls: "text-primary" };
+  if (pr.merged) return { icon: "solar:merge-linear", cls: "text-primary" };
   if (pr.draft)
     return { icon: "solar:document-linear", cls: "text-foreground/40" };
   if (pr.state === "open")

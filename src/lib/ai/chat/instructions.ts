@@ -203,7 +203,9 @@ function buildSkillsSection(promptContext: ThreadPromptContext) {
   );
 }
 
-function mcpServerUsageHint(server: ThreadPromptContext["enabledMcpServers"][number]) {
+function mcpServerUsageHint(
+  server: ThreadPromptContext["enabledMcpServers"][number],
+) {
   switch (server.catalogId) {
     case "playwright":
       return "Use for browser inspection and automation tasks; start with read-only browser state before clicks or typing.";
@@ -229,7 +231,10 @@ function buildMcpToolsSection(promptContext: ThreadPromptContext) {
     promptContext.enabledMcpServers,
     MCP_SUMMARY_LIMIT,
   );
-  const loadedToolExamples = truncateList(promptContext.mcpToolNames, MCP_SUMMARY_LIMIT);
+  const loadedToolExamples = truncateList(
+    promptContext.mcpToolNames,
+    MCP_SUMMARY_LIMIT,
+  );
 
   return lines(
     "## Enabled MCP Servers",
@@ -239,7 +244,9 @@ function buildMcpToolsSection(promptContext: ThreadPromptContext) {
     visible
       .map((server) => {
         const toolCountLabel =
-          server.toolCount > 0 ? `${server.toolCount} tools loaded` : "tools load on demand";
+          server.toolCount > 0
+            ? `${server.toolCount} tools loaded`
+            : "tools load on demand";
         const capabilitySuffix = server.capabilitySummary
           ? ` Capability: ${server.capabilitySummary}`
           : "";

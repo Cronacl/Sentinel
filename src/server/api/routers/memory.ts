@@ -28,7 +28,9 @@ export const memoryRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const filters = input ?? {};
       const listFilters = {
-        ...(filters.kind && filters.kind !== "all" ? { kind: filters.kind } : {}),
+        ...(filters.kind && filters.kind !== "all"
+          ? { kind: filters.kind }
+          : {}),
         ...(typeof filters.pinned === "boolean"
           ? { pinned: filters.pinned }
           : {}),
@@ -58,7 +60,9 @@ export const memoryRouter = createTRPCRouter({
         ...new Set(
           memories
             .map((memory) => memory.workspaceId)
-            .filter((workspaceId): workspaceId is string => Boolean(workspaceId)),
+            .filter((workspaceId): workspaceId is string =>
+              Boolean(workspaceId),
+            ),
         ),
       ];
       const threadIds = [
@@ -90,8 +94,12 @@ export const memoryRouter = createTRPCRouter({
             })
           : [];
 
-      const workspaceMap = new Map(workspaceRows.map((workspace) => [workspace.id, workspace.name]));
-      const threadMap = new Map(threadRows.map((thread) => [thread.id, thread.title]));
+      const workspaceMap = new Map(
+        workspaceRows.map((workspace) => [workspace.id, workspace.name]),
+      );
+      const threadMap = new Map(
+        threadRows.map((thread) => [thread.id, thread.title]),
+      );
 
       return {
         items: memories.map((memory) => ({
@@ -115,7 +123,10 @@ export const memoryRouter = createTRPCRouter({
       const memory = getMemoryById(ctx.session.user.id, input.memoryId);
 
       if (!memory) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Memory not found." });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Memory not found.",
+        });
       }
 
       const removed = forgetMemoryRecord(ctx.session.user.id, input.memoryId);

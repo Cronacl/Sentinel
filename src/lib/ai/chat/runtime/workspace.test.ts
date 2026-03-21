@@ -14,13 +14,17 @@ afterEach(async () => {
       continue;
     }
 
-    await rm(targetPath, { force: true, recursive: true }).catch(() => undefined);
+    await rm(targetPath, { force: true, recursive: true }).catch(
+      () => undefined,
+    );
   }
 });
 
 describe("resolveAvailableWorkspaceRootPath", () => {
   it("returns a normalized existing directory path", async () => {
-    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "sentinel-workspace-"));
+    const tempDirectory = await mkdtemp(
+      path.join(os.tmpdir(), "sentinel-workspace-"),
+    );
     cleanupPaths.push(tempDirectory);
 
     expect(
@@ -34,11 +38,15 @@ describe("resolveAvailableWorkspaceRootPath", () => {
       `sentinel-missing-${Date.now()}`,
     );
 
-    expect(await resolveAvailableWorkspaceRootPath(missingDirectory)).toBeNull();
+    expect(
+      await resolveAvailableWorkspaceRootPath(missingDirectory),
+    ).toBeNull();
   });
 
   it("returns null for a file path", async () => {
-    const tempDirectory = await mkdtemp(path.join(os.tmpdir(), "sentinel-workspace-"));
+    const tempDirectory = await mkdtemp(
+      path.join(os.tmpdir(), "sentinel-workspace-"),
+    );
     cleanupPaths.push(tempDirectory);
     const filePath = path.join(tempDirectory, "file.txt");
     await writeFile(filePath, "value", "utf8");

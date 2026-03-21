@@ -88,7 +88,10 @@ function IntegrationRow({
   const canManage = integration.isConnected || isSetupReady;
   const isConnecting = connectingProvider === integration.provider;
   const showConnectButton =
-    !isDb && !integration.isConnected && isSetupReady && integration.hasOAuthApp;
+    !isDb &&
+    !integration.isConnected &&
+    isSetupReady &&
+    integration.hasOAuthApp;
   const detailLabel = integration.isConnected ? "Details" : "Setup";
 
   const statusChip = integration.isConnected ? (

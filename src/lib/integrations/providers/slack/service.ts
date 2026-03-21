@@ -234,7 +234,9 @@ export class SlackService {
       channelName: "",
       threadTs: null,
       replyCount: 0,
-      timestamp: res.ts ? new Date(parseFloat(res.ts) * 1000).toISOString() : "",
+      timestamp: res.ts
+        ? new Date(parseFloat(res.ts) * 1000).toISOString()
+        : "",
       permalink: null,
     };
   }

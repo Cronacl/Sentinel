@@ -551,308 +551,352 @@ export const TOOL_APPROVAL_METADATA: Record<
     description: "Search emails by query, label, or date.",
     group: "gmail",
     label: "Gmail search",
-    riskSummary: "Sentinel can search your Gmail emails without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can search your Gmail emails without stopping for confirmation.",
   },
   gmail_get_email: {
     defaultRequireApproval: false,
     description: "Get full email content by ID.",
     group: "gmail",
     label: "Gmail get email",
-    riskSummary: "Sentinel can read your Gmail emails without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can read your Gmail emails without stopping for confirmation.",
   },
   gmail_send: {
     defaultRequireApproval: true,
     description: "Send a new email.",
     group: "gmail",
     label: "Gmail send",
-    riskSummary: "Sentinel can send emails from your Gmail account without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can send emails from your Gmail account without stopping for confirmation.",
   },
   gmail_reply: {
     defaultRequireApproval: true,
     description: "Reply to an email thread.",
     group: "gmail",
     label: "Gmail reply",
-    riskSummary: "Sentinel can reply to emails from your Gmail account without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can reply to emails from your Gmail account without stopping for confirmation.",
   },
   gmail_create_draft: {
     defaultRequireApproval: true,
     description: "Create a draft email.",
     group: "gmail",
     label: "Gmail create draft",
-    riskSummary: "Sentinel can create draft emails in your Gmail account without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can create draft emails in your Gmail account without stopping for confirmation.",
   },
   gmail_list_labels: {
     defaultRequireApproval: false,
     description: "List Gmail labels.",
     group: "gmail",
     label: "Gmail list labels",
-    riskSummary: "Sentinel can view your Gmail labels without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can view your Gmail labels without stopping for confirmation.",
   },
   gmail_manage_labels: {
     defaultRequireApproval: true,
     description: "Add or remove labels from emails.",
     group: "gmail",
     label: "Gmail manage labels",
-    riskSummary: "Sentinel can modify labels on your emails without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can modify labels on your emails without stopping for confirmation.",
   },
   gmail_archive: {
     defaultRequireApproval: true,
     description: "Archive an email.",
     group: "gmail",
     label: "Gmail archive",
-    riskSummary: "Sentinel can archive your emails without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can archive your emails without stopping for confirmation.",
   },
   gmail_trash: {
     defaultRequireApproval: true,
     description: "Move email to trash.",
     group: "gmail",
     label: "Gmail trash",
-    riskSummary: "Sentinel can trash your emails without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can trash your emails without stopping for confirmation.",
   },
   gmail_star: {
     defaultRequireApproval: true,
     description: "Star an email.",
     group: "gmail",
     label: "Gmail star",
-    riskSummary: "Sentinel can star your emails without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can star your emails without stopping for confirmation.",
   },
   gmail_unstar: {
     defaultRequireApproval: true,
     description: "Remove star from an email.",
     group: "gmail",
     label: "Gmail unstar",
-    riskSummary: "Sentinel can unstar your emails without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can unstar your emails without stopping for confirmation.",
   },
   gmail_mark_read: {
     defaultRequireApproval: true,
     description: "Mark an email as read.",
     group: "gmail",
     label: "Gmail mark read",
-    riskSummary: "Sentinel can mark your emails as read without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can mark your emails as read without stopping for confirmation.",
   },
   gmail_mark_unread: {
     defaultRequireApproval: true,
     description: "Mark an email as unread.",
     group: "gmail",
     label: "Gmail mark unread",
-    riskSummary: "Sentinel can mark your emails as unread without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can mark your emails as unread without stopping for confirmation.",
   },
   gmail_forward: {
     defaultRequireApproval: true,
     description: "Forward an email to another recipient.",
     group: "gmail",
     label: "Gmail forward",
-    riskSummary: "Sentinel can forward your emails without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can forward your emails without stopping for confirmation.",
   },
   gmail_get_thread: {
     defaultRequireApproval: false,
     description: "Get all messages in an email thread.",
     group: "gmail",
     label: "Gmail get thread",
-    riskSummary: "Sentinel can read email threads without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can read email threads without stopping for confirmation.",
   },
   gmail_bulk_action: {
     defaultRequireApproval: true,
     description: "Perform bulk actions on multiple emails.",
     group: "gmail",
     label: "Gmail bulk action",
-    riskSummary: "Sentinel can modify multiple emails at once without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can modify multiple emails at once without stopping for confirmation.",
   },
   gcal_list_calendars: {
     defaultRequireApproval: false,
     description: "List user's calendars.",
     group: "google_calendar",
     label: "Calendar list",
-    riskSummary: "Sentinel can view your calendar list without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can view your calendar list without stopping for confirmation.",
   },
   gcal_get_events: {
     defaultRequireApproval: false,
     description: "Get events in a date range.",
     group: "google_calendar",
     label: "Calendar get events",
-    riskSummary: "Sentinel can view your calendar events without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can view your calendar events without stopping for confirmation.",
   },
   gcal_get_event: {
     defaultRequireApproval: false,
     description: "Get a single event's details.",
     group: "google_calendar",
     label: "Calendar get event",
-    riskSummary: "Sentinel can view event details without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can view event details without stopping for confirmation.",
   },
   gcal_create_event: {
     defaultRequireApproval: true,
     description: "Create a new event.",
     group: "google_calendar",
     label: "Calendar create event",
-    riskSummary: "Sentinel can create events on your calendar without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can create events on your calendar without stopping for confirmation.",
   },
   gcal_update_event: {
     defaultRequireApproval: true,
     description: "Update an existing event.",
     group: "google_calendar",
     label: "Calendar update event",
-    riskSummary: "Sentinel can modify your calendar events without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can modify your calendar events without stopping for confirmation.",
   },
   gcal_delete_event: {
     defaultRequireApproval: true,
     description: "Delete an event.",
     group: "google_calendar",
     label: "Calendar delete event",
-    riskSummary: "Sentinel can delete your calendar events without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can delete your calendar events without stopping for confirmation.",
   },
   gcal_get_free_busy: {
     defaultRequireApproval: false,
     description: "Check free/busy status.",
     group: "google_calendar",
     label: "Calendar free/busy",
-    riskSummary: "Sentinel can check your availability without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can check your availability without stopping for confirmation.",
   },
   gcal_quick_add: {
     defaultRequireApproval: true,
     description: "Create event from natural language text.",
     group: "google_calendar",
     label: "Calendar quick add",
-    riskSummary: "Sentinel can create calendar events from text without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can create calendar events from text without stopping for confirmation.",
   },
   gcal_rsvp: {
     defaultRequireApproval: true,
     description: "Respond to an event invitation.",
     group: "google_calendar",
     label: "Calendar RSVP",
-    riskSummary: "Sentinel can respond to calendar invitations without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can respond to calendar invitations without stopping for confirmation.",
   },
   gcal_move_event: {
     defaultRequireApproval: true,
     description: "Move event between calendars.",
     group: "google_calendar",
     label: "Calendar move event",
-    riskSummary: "Sentinel can move events between calendars without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can move events between calendars without stopping for confirmation.",
   },
   gcal_get_today: {
     defaultRequireApproval: false,
     description: "Get today's calendar events.",
     group: "google_calendar",
     label: "Calendar today",
-    riskSummary: "Sentinel can view today's events without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can view today's events without stopping for confirmation.",
   },
   gdrive_search: {
     defaultRequireApproval: false,
     description: "Search files in Google Drive.",
     group: "google_drive",
     label: "Drive search",
-    riskSummary: "Sentinel can search your Google Drive files without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can search your Google Drive files without stopping for confirmation.",
   },
   gdrive_list_files: {
     defaultRequireApproval: false,
     description: "List files in a Google Drive folder.",
     group: "google_drive",
     label: "Drive list files",
-    riskSummary: "Sentinel can browse your Google Drive folders without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can browse your Google Drive folders without stopping for confirmation.",
   },
   gdrive_get_file: {
     defaultRequireApproval: false,
     description: "Get file metadata and text content.",
     group: "google_drive",
     label: "Drive get file",
-    riskSummary: "Sentinel can read your Google Drive files without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can read your Google Drive files without stopping for confirmation.",
   },
   gdrive_create_folder: {
     defaultRequireApproval: true,
     description: "Create a new folder in Google Drive.",
     group: "google_drive",
     label: "Drive create folder",
-    riskSummary: "Sentinel can create folders in your Drive without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can create folders in your Drive without stopping for confirmation.",
   },
   gdrive_upload: {
     defaultRequireApproval: true,
     description: "Upload a local file to Google Drive.",
     group: "google_drive",
     label: "Drive upload",
-    riskSummary: "Sentinel can upload files from your workspace to Drive without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can upload files from your workspace to Drive without stopping for confirmation.",
   },
   gdrive_download: {
     defaultRequireApproval: true,
     description: "Download a file from Google Drive to the local filesystem.",
     group: "google_drive",
     label: "Drive download",
-    riskSummary: "Sentinel can download files from Drive to your workspace without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can download files from Drive to your workspace without stopping for confirmation.",
   },
   gdrive_move: {
     defaultRequireApproval: true,
     description: "Move a file to a different folder.",
     group: "google_drive",
     label: "Drive move",
-    riskSummary: "Sentinel can move files between Drive folders without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can move files between Drive folders without stopping for confirmation.",
   },
   gdrive_rename: {
     defaultRequireApproval: true,
     description: "Rename a file in Google Drive.",
     group: "google_drive",
     label: "Drive rename",
-    riskSummary: "Sentinel can rename your Drive files without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can rename your Drive files without stopping for confirmation.",
   },
   gdrive_trash: {
     defaultRequireApproval: true,
     description: "Move a file to trash in Google Drive.",
     group: "google_drive",
     label: "Drive trash",
-    riskSummary: "Sentinel can trash your Drive files without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can trash your Drive files without stopping for confirmation.",
   },
   gdrive_share: {
     defaultRequireApproval: true,
     description: "Share a file with another user.",
     group: "google_drive",
     label: "Drive share",
-    riskSummary: "Sentinel can share your Drive files without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can share your Drive files without stopping for confirmation.",
   },
   gh_search_repos: {
     defaultRequireApproval: false,
     description: "Search GitHub repositories.",
     group: "github",
     label: "GitHub search repos",
-    riskSummary: "Sentinel can search GitHub repositories without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can search GitHub repositories without stopping for confirmation.",
   },
   gh_list_repos: {
     defaultRequireApproval: false,
     description: "List your GitHub repositories.",
     group: "github",
     label: "GitHub list repos",
-    riskSummary: "Sentinel can list your repositories without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can list your repositories without stopping for confirmation.",
   },
   gh_get_repo: {
     defaultRequireApproval: false,
     description: "Get details of a GitHub repository.",
     group: "github",
     label: "GitHub get repo",
-    riskSummary: "Sentinel can view repository details without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can view repository details without stopping for confirmation.",
   },
   gh_list_issues: {
     defaultRequireApproval: false,
     description: "List issues in a repository.",
     group: "github",
     label: "GitHub list issues",
-    riskSummary: "Sentinel can list repository issues without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can list repository issues without stopping for confirmation.",
   },
   gh_get_issue: {
     defaultRequireApproval: false,
     description: "Get details of a GitHub issue.",
     group: "github",
     label: "GitHub get issue",
-    riskSummary: "Sentinel can view issue details without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can view issue details without stopping for confirmation.",
   },
   gh_create_issue: {
     defaultRequireApproval: true,
     description: "Create a new issue in a repository.",
     group: "github",
     label: "GitHub create issue",
-    riskSummary: "Sentinel can create issues without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can create issues without stopping for confirmation.",
   },
   gh_update_issue: {
     defaultRequireApproval: true,
     description: "Update an existing issue.",
     group: "github",
     label: "GitHub update issue",
-    riskSummary: "Sentinel can modify issues without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can modify issues without stopping for confirmation.",
   },
   gh_close_issue: {
     defaultRequireApproval: true,
@@ -866,105 +910,120 @@ export const TOOL_APPROVAL_METADATA: Record<
     description: "Add a comment to a GitHub issue.",
     group: "github",
     label: "GitHub issue comment",
-    riskSummary: "Sentinel can comment on issues without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can comment on issues without stopping for confirmation.",
   },
   gh_list_prs: {
     defaultRequireApproval: false,
     description: "List pull requests in a repository.",
     group: "github",
     label: "GitHub list PRs",
-    riskSummary: "Sentinel can list pull requests without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can list pull requests without stopping for confirmation.",
   },
   gh_get_pr: {
     defaultRequireApproval: false,
     description: "Get details of a pull request.",
     group: "github",
     label: "GitHub get PR",
-    riskSummary: "Sentinel can view pull request details without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can view pull request details without stopping for confirmation.",
   },
   gh_create_pr: {
     defaultRequireApproval: true,
     description: "Create a new pull request.",
     group: "github",
     label: "GitHub create PR",
-    riskSummary: "Sentinel can create pull requests without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can create pull requests without stopping for confirmation.",
   },
   gh_merge_pr: {
     defaultRequireApproval: true,
     description: "Merge a pull request.",
     group: "github",
     label: "GitHub merge PR",
-    riskSummary: "Sentinel can merge pull requests without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can merge pull requests without stopping for confirmation.",
   },
   gh_review_pr: {
     defaultRequireApproval: true,
     description: "Submit a review on a pull request.",
     group: "github",
     label: "GitHub review PR",
-    riskSummary: "Sentinel can submit PR reviews without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can submit PR reviews without stopping for confirmation.",
   },
   gh_add_pr_comment: {
     defaultRequireApproval: true,
     description: "Add a comment to a pull request.",
     group: "github",
     label: "GitHub PR comment",
-    riskSummary: "Sentinel can comment on pull requests without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can comment on pull requests without stopping for confirmation.",
   },
   gh_search_code: {
     defaultRequireApproval: false,
     description: "Search code across GitHub repositories.",
     group: "github",
     label: "GitHub search code",
-    riskSummary: "Sentinel can search code on GitHub without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can search code on GitHub without stopping for confirmation.",
   },
   gh_list_branches: {
     defaultRequireApproval: false,
     description: "List branches in a repository.",
     group: "github",
     label: "GitHub list branches",
-    riskSummary: "Sentinel can list branches without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can list branches without stopping for confirmation.",
   },
   gh_create_branch: {
     defaultRequireApproval: true,
     description: "Create a new branch.",
     group: "github",
     label: "GitHub create branch",
-    riskSummary: "Sentinel can create branches without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can create branches without stopping for confirmation.",
   },
   gh_list_runs: {
     defaultRequireApproval: false,
     description: "List GitHub Actions workflow runs.",
     group: "github",
     label: "GitHub list runs",
-    riskSummary: "Sentinel can view workflow runs without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can view workflow runs without stopping for confirmation.",
   },
   gh_get_run_logs: {
     defaultRequireApproval: false,
     description: "Get workflow run log URL.",
     group: "github",
     label: "GitHub run logs",
-    riskSummary: "Sentinel can view workflow logs without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can view workflow logs without stopping for confirmation.",
   },
   gh_rerun_workflow: {
     defaultRequireApproval: true,
     description: "Re-run a workflow.",
     group: "github",
     label: "GitHub rerun workflow",
-    riskSummary: "Sentinel can re-run workflows without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can re-run workflows without stopping for confirmation.",
   },
   gh_list_releases: {
     defaultRequireApproval: false,
     description: "List releases in a repository.",
     group: "github",
     label: "GitHub list releases",
-    riskSummary: "Sentinel can view releases without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can view releases without stopping for confirmation.",
   },
   gh_create_release: {
     defaultRequireApproval: true,
     description: "Create a new release.",
     group: "github",
     label: "GitHub create release",
-    riskSummary: "Sentinel can create releases without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can create releases without stopping for confirmation.",
   },
   linear_search_issues: {
     defaultRequireApproval: false,
@@ -992,14 +1051,16 @@ export const TOOL_APPROVAL_METADATA: Record<
     description: "Create a new Linear issue.",
     group: "linear",
     label: "Linear create issue",
-    riskSummary: "Sentinel can create issues in Linear without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can create issues in Linear without stopping for confirmation.",
   },
   linear_update_issue: {
     defaultRequireApproval: true,
     description: "Update an existing Linear issue.",
     group: "linear",
     label: "Linear update issue",
-    riskSummary: "Sentinel can modify issues in Linear without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can modify issues in Linear without stopping for confirmation.",
   },
   linear_delete_issue: {
     defaultRequireApproval: true,
@@ -1020,7 +1081,8 @@ export const TOOL_APPROVAL_METADATA: Record<
     description: "Add a comment to a Linear issue.",
     group: "linear",
     label: "Linear create comment",
-    riskSummary: "Sentinel can add comments to Linear issues without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can add comments to Linear issues without stopping for confirmation.",
   },
   linear_list_projects: {
     defaultRequireApproval: false,
@@ -1041,14 +1103,16 @@ export const TOOL_APPROVAL_METADATA: Record<
     description: "Create a new Linear project.",
     group: "linear",
     label: "Linear create project",
-    riskSummary: "Sentinel can create projects in Linear without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can create projects in Linear without stopping for confirmation.",
   },
   linear_update_project: {
     defaultRequireApproval: true,
     description: "Update an existing Linear project.",
     group: "linear",
     label: "Linear update project",
-    riskSummary: "Sentinel can modify projects in Linear without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can modify projects in Linear without stopping for confirmation.",
   },
   linear_list_teams: {
     defaultRequireApproval: false,
@@ -1090,7 +1154,8 @@ export const TOOL_APPROVAL_METADATA: Record<
     description: "Create a new issue label in Linear.",
     group: "linear",
     label: "Linear create label",
-    riskSummary: "Sentinel can create labels in Linear without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can create labels in Linear without stopping for confirmation.",
   },
   linear_list_users: {
     defaultRequireApproval: false,
@@ -1125,21 +1190,24 @@ export const TOOL_APPROVAL_METADATA: Record<
     description: "Create a new Notion page.",
     group: "notion",
     label: "Notion create page",
-    riskSummary: "Sentinel can create pages in Notion without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can create pages in Notion without stopping for confirmation.",
   },
   notion_update_page: {
     defaultRequireApproval: true,
     description: "Update a Notion page's properties.",
     group: "notion",
     label: "Notion update page",
-    riskSummary: "Sentinel can modify Notion pages without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can modify Notion pages without stopping for confirmation.",
   },
   notion_archive_page: {
     defaultRequireApproval: true,
     description: "Archive a Notion page.",
     group: "notion",
     label: "Notion archive page",
-    riskSummary: "Sentinel can archive Notion pages without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can archive Notion pages without stopping for confirmation.",
   },
   notion_list_databases: {
     defaultRequireApproval: false,
@@ -1160,14 +1228,16 @@ export const TOOL_APPROVAL_METADATA: Record<
     description: "Create a new entry in a Notion database.",
     group: "notion",
     label: "Notion create database entry",
-    riskSummary: "Sentinel can add entries to Notion databases without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can add entries to Notion databases without stopping for confirmation.",
   },
   notion_update_database_entry: {
     defaultRequireApproval: true,
     description: "Update a Notion database entry.",
     group: "notion",
     label: "Notion update database entry",
-    riskSummary: "Sentinel can modify database entries without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can modify database entries without stopping for confirmation.",
   },
   notion_get_blocks: {
     defaultRequireApproval: false,
@@ -1181,7 +1251,8 @@ export const TOOL_APPROVAL_METADATA: Record<
     description: "Append content blocks to a Notion page.",
     group: "notion",
     label: "Notion append blocks",
-    riskSummary: "Sentinel can add content to Notion pages without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can add content to Notion pages without stopping for confirmation.",
   },
   notion_list_comments: {
     defaultRequireApproval: false,
@@ -1195,7 +1266,8 @@ export const TOOL_APPROVAL_METADATA: Record<
     description: "Create a comment on a Notion page.",
     group: "notion",
     label: "Notion create comment",
-    riskSummary: "Sentinel can add comments to Notion pages without stopping for confirmation.",
+    riskSummary:
+      "Sentinel can add comments to Notion pages without stopping for confirmation.",
   },
   notion_list_users: {
     defaultRequireApproval: false,
@@ -1402,7 +1474,8 @@ export const TOOL_APPROVAL_METADATA: Record<
     description: "Update a field's name or description in an Airtable table.",
     group: "airtable",
     label: "Airtable update field",
-    riskSummary: "Sentinel can rename or modify field descriptions in your Airtable tables.",
+    riskSummary:
+      "Sentinel can rename or modify field descriptions in your Airtable tables.",
   },
   airtable_list_records: {
     defaultRequireApproval: false,
@@ -1416,7 +1489,8 @@ export const TOOL_APPROVAL_METADATA: Record<
     description: "Get a single record from an Airtable table.",
     group: "airtable",
     label: "Airtable get record",
-    riskSummary: "Sentinel can view individual records in your Airtable tables.",
+    riskSummary:
+      "Sentinel can view individual records in your Airtable tables.",
   },
   airtable_create_records: {
     defaultRequireApproval: true,
@@ -1437,7 +1511,8 @@ export const TOOL_APPROVAL_METADATA: Record<
     description: "Delete records from an Airtable table.",
     group: "airtable",
     label: "Airtable delete records",
-    riskSummary: "Sentinel can permanently delete records from your Airtable tables.",
+    riskSummary:
+      "Sentinel can permanently delete records from your Airtable tables.",
   },
   airtable_list_comments: {
     defaultRequireApproval: false,

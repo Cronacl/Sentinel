@@ -39,7 +39,7 @@ jobs:
         run: bun run typecheck
 
       - name: Run tests
-        run: bun test
+        run: bun run test
 
       - name: Linux desktop packaging smoke test
         run: bun run build:desktop:linux

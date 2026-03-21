@@ -119,7 +119,9 @@ function updateThreadSettingsInListData<T extends ThreadListData | undefined>(
       groups: (data.groups ?? []).map((group) => ({
         ...group,
         threads: group.threads.map((thread) =>
-          thread.id === threadId ? applyThreadSettingsPatch(thread, patch) : thread,
+          thread.id === threadId
+            ? applyThreadSettingsPatch(thread, patch)
+            : thread,
         ),
       })),
     } as T;
@@ -195,7 +197,11 @@ type ThreadStatusValue = "idle" | "streaming" | "awaiting_approval";
 
 function buildThreadListItem(
   thread: ThreadGetThread,
-): ThreadListData extends { items: infer T } ? T extends Array<infer U> ? U : never : never {
+): ThreadListData extends { items: infer T }
+  ? T extends Array<infer U>
+    ? U
+    : never
+  : never {
   return {
     archivedAt: thread.archivedAt,
     chatModelId: thread.chatModelId,
@@ -235,7 +241,9 @@ function upsertThreadInListData<T extends ThreadListData | undefined>(
         return group;
       }
 
-      const existingIndex = group.threads.findIndex((item) => item.id === thread.id);
+      const existingIndex = group.threads.findIndex(
+        (item) => item.id === thread.id,
+      );
       if (existingIndex === -1) {
         if (!workspace || group.workspace.id !== workspace.id) {
           return group;
@@ -269,7 +277,9 @@ function upsertThreadInListData<T extends ThreadListData | undefined>(
     } as T;
   }
 
-  const existingIndex = (data.items ?? []).findIndex((item) => item.id === thread.id);
+  const existingIndex = (data.items ?? []).findIndex(
+    (item) => item.id === thread.id,
+  );
   if (existingIndex === -1) {
     return {
       ...data,

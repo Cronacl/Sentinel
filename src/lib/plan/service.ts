@@ -44,14 +44,15 @@ function normalizePlanDocumentPayload({
   document: unknown;
   goal: unknown;
   summary: unknown;
-  tasks: Array<{ description?: string | null; title: string }> | ThreadPlanTask[];
+  tasks:
+    | Array<{ description?: string | null; title: string }>
+    | ThreadPlanTask[];
   title: unknown;
 }) {
   const normalizedTitle = trimToString(title) || "Plan";
   const normalizedGoal =
     trimToString(goal) || "Clarify the implementation goal.";
-  const normalizedSummary =
-    trimToString(summary) || normalizedGoal;
+  const normalizedSummary = trimToString(summary) || normalizedGoal;
   const normalizedDocument =
     trimToString(document) ||
     buildDefaultPlanDocument({
@@ -119,9 +120,7 @@ async function ensurePlanDocumentBackfill({
   };
 }
 
-function mapTask(
-  row: typeof threadPlanTasks.$inferSelect,
-): ThreadPlanTask {
+function mapTask(row: typeof threadPlanTasks.$inferSelect): ThreadPlanTask {
   return {
     createdAt: row.createdAt,
     description: row.description,
@@ -158,17 +157,22 @@ async function loadPlanState(
   const taskRows = planRow
     ? await database.query.threadPlanTasks.findMany({
         where: eq(threadPlanTasks.planId, planRow.id),
-        orderBy: (table, { asc }) => [asc(table.sortOrder), asc(table.createdAt)],
+        orderBy: (table, { asc }) => [
+          asc(table.sortOrder),
+          asc(table.createdAt),
+        ],
       })
     : [];
 
-  const pendingQuestionRow = await database.query.threadPlanQuestions.findFirst({
-    where: and(
-      eq(threadPlanQuestions.threadId, threadId),
-      eq(threadPlanQuestions.status, "pending"),
-    ),
-    orderBy: (table, { desc }) => [desc(table.createdAt)],
-  });
+  const pendingQuestionRow = await database.query.threadPlanQuestions.findFirst(
+    {
+      where: and(
+        eq(threadPlanQuestions.threadId, threadId),
+        eq(threadPlanQuestions.status, "pending"),
+      ),
+      orderBy: (table, { desc }) => [desc(table.createdAt)],
+    },
+  );
 
   const tasks = taskRows.map(mapTask);
   const hydratedPlan = planRow
@@ -180,7 +184,9 @@ async function loadPlanState(
     : null;
 
   return {
-    pendingQuestionSet: pendingQuestionRow ? mapQuestionSet(pendingQuestionRow) : null,
+    pendingQuestionSet: pendingQuestionRow
+      ? mapQuestionSet(pendingQuestionRow)
+      : null,
     plan: planRow
       ? {
           audience: hydratedPlan!.audience,
@@ -296,7 +302,10 @@ export async function upsertThreadPlan({
       }
     }
 
-    tx.update(threads).set({ updatedAt: new Date() }).where(eq(threads.id, threadId)).run();
+    tx.update(threads)
+      .set({ updatedAt: new Date() })
+      .where(eq(threads.id, threadId))
+      .run();
   });
 
   return loadPlanState(threadId, database);
@@ -351,7 +360,10 @@ export async function updateThreadPlan({
       .where(eq(threadPlans.id, existing.id))
       .run();
 
-    tx.update(threads).set({ updatedAt: new Date() }).where(eq(threads.id, threadId)).run();
+    tx.update(threads)
+      .set({ updatedAt: new Date() })
+      .where(eq(threads.id, threadId))
+      .run();
   });
 
   return loadPlanState(threadId, database);
@@ -485,7 +497,10 @@ export async function manageThreadPlanTask({
       .set({ updatedAt: new Date() })
       .where(eq(threadPlans.id, resolvedPlan.id))
       .run();
-    tx.update(threads).set({ updatedAt: new Date() }).where(eq(threads.id, threadId)).run();
+    tx.update(threads)
+      .set({ updatedAt: new Date() })
+      .where(eq(threads.id, threadId))
+      .run();
   });
 
   return {
@@ -527,7 +542,10 @@ export async function createThreadPlanQuestionSet({
       })
       .run();
 
-    tx.update(threads).set({ updatedAt: new Date() }).where(eq(threads.id, threadId)).run();
+    tx.update(threads)
+      .set({ updatedAt: new Date() })
+      .where(eq(threads.id, threadId))
+      .run();
   });
 
   const created = await database.query.threadPlanQuestions.findFirst({
@@ -552,7 +570,8 @@ export async function answerThreadPlanQuestionSet({
   questionSetId: string;
   threadId: string;
 }) {
-  database.update(threadPlanQuestions)
+  database
+    .update(threadPlanQuestions)
     .set({
       answeredAt: new Date(),
       response: answers,
@@ -566,7 +585,11 @@ export async function answerThreadPlanQuestionSet({
     )
     .run();
 
-  database.update(threads).set({ updatedAt: new Date() }).where(eq(threads.id, threadId)).run();
+  database
+    .update(threads)
+    .set({ updatedAt: new Date() })
+    .where(eq(threads.id, threadId))
+    .run();
 
   const questionSet = await database.query.threadPlanQuestions.findFirst({
     where: and(

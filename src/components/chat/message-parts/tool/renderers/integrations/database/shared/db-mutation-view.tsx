@@ -23,10 +23,7 @@ type MongoMutationOutput = {
   modifiedCount?: number;
 };
 
-export function createDbExecuteTool(
-  provider: string,
-  providerLabel: string,
-) {
+export function createDbExecuteTool(provider: string, providerLabel: string) {
   return memo(function DbExecuteTool({
     part,
     onApprove,
@@ -42,10 +39,7 @@ export function createDbExecuteTool(
       if (state.hasOutput) setIsExpanded(true);
     }, [state.hasOutput]);
 
-    const input =
-      "input" in part
-        ? (part.input as { sql?: string })
-        : null;
+    const input = "input" in part ? (part.input as { sql?: string }) : null;
     const output =
       state.hasOutput && "output" in part
         ? (part.output as ExecuteOutput)
@@ -74,9 +68,7 @@ export function createDbExecuteTool(
         errorText={state.isError ? state.errorText : undefined}
       >
         <div className="space-y-2">
-          {input?.sql ? (
-            <CodeBlock code={input.sql} language="sql" />
-          ) : null}
+          {input?.sql ? <CodeBlock code={input.sql} language="sql" /> : null}
           {output ? (
             <div className="flex items-center gap-2 text-xs text-foreground/60">
               <Chip

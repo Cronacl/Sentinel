@@ -16,10 +16,7 @@ export const searchMemoryInputSchema = z.object({
     .max(12)
     .optional()
     .describe("Maximum number of memories to return."),
-  query: z
-    .string()
-    .min(1)
-    .describe("What to look up in long-term memory."),
+  query: z.string().min(1).describe("What to look up in long-term memory."),
   scope: z
     .enum(MEMORY_SEARCH_SCOPE_VALUES)
     .optional()
@@ -61,7 +58,9 @@ export async function executeSearchMemory({
 }): Promise<SearchMemoryOutput> {
   const results = await retrieveRelevantMemories({
     abortSignal,
-    limit: clampMemoryRetrievalLimit(input.limit ?? runtime.settings.retrievalLimit),
+    limit: clampMemoryRetrievalLimit(
+      input.limit ?? runtime.settings.retrievalLimit,
+    ),
     query: input.query,
     requestedScope: input.scope ?? "auto",
     settings: runtime.settings,
@@ -69,7 +68,9 @@ export async function executeSearchMemory({
     workspaceId: runtime.workspaceId,
   });
   const resolvedScope =
-    input.scope === "global" || input.scope === "workspace" || input.scope === "both"
+    input.scope === "global" ||
+    input.scope === "workspace" ||
+    input.scope === "both"
       ? input.scope
       : runtime.settings.defaultScope === "workspace"
         ? "both"

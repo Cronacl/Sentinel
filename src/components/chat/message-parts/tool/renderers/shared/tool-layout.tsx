@@ -33,7 +33,8 @@ export const ToolLayout = memo(function ToolLayout({
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
   const effectiveExpanded = canToggle ? (userExpanded ?? false) : false;
   const prefersReducedMotion = useReducedMotion();
-  const [shouldRenderContent, setShouldRenderContent] = useState(effectiveExpanded);
+  const [shouldRenderContent, setShouldRenderContent] =
+    useState(effectiveExpanded);
 
   useEffect(() => {
     if (effectiveExpanded) {

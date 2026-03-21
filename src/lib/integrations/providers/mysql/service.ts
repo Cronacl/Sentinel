@@ -8,9 +8,7 @@ const CONNECT_TIMEOUT_MS = 10_000;
 export class MySQLService {
   constructor(private config: DatabaseConnectionConfig) {}
 
-  private buildConnectionOptions(
-    database?: string,
-  ): mysql.ConnectionOptions {
+  private buildConnectionOptions(database?: string): mysql.ConnectionOptions {
     if (this.config.useConnectionUrl && this.config.connectionUrl) {
       return {
         uri: this.config.connectionUrl,
@@ -153,13 +151,13 @@ export class MySQLService {
           default: string | null;
           isPrimaryKey: boolean;
         }[],
-        indexes: (idxRows as { name: string; cols: string; unique: boolean }[]).map(
-          (r) => ({
-            name: r.name,
-            columns: r.cols ? r.cols.split(",") : [],
-            unique: Boolean(r.unique),
-          }),
-        ),
+        indexes: (
+          idxRows as { name: string; cols: string; unique: boolean }[]
+        ).map((r) => ({
+          name: r.name,
+          columns: r.cols ? r.cols.split(",") : [],
+          unique: Boolean(r.unique),
+        })),
         foreignKeys: fkRows as {
           column: string;
           referencesTable: string;

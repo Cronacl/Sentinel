@@ -40,9 +40,7 @@ export const GDriveFolderTool = memo(function GDriveFolderTool({
 
   const input = "input" in part ? (part.input as FolderInput) : null;
   const output =
-    state.hasOutput && "output" in part
-      ? (part.output as FolderOutput)
-      : null;
+    state.hasOutput && "output" in part ? (part.output as FolderOutput) : null;
 
   const folderName = output?.folder.name ?? input?.name ?? "";
 

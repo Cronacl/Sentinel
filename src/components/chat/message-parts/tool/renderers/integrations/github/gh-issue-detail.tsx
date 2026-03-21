@@ -103,9 +103,7 @@ export const GHIssueDetailTool = memo(function GHIssueDetailTool({
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-foreground/40">
                 <span>{issue.author}</span>
-                <span>
-                  {new Date(issue.createdAt).toLocaleDateString()}
-                </span>
+                <span>{new Date(issue.createdAt).toLocaleDateString()}</span>
                 {issue.comments > 0 ? (
                   <span className="flex items-center gap-0.5">
                     <Icon

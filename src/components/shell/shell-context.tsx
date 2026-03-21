@@ -93,9 +93,7 @@ export function ShellProvider({ children }: PropsWithChildren) {
   );
 
   return (
-    <ShellContext.Provider value={value}>
-      {children}
-    </ShellContext.Provider>
+    <ShellContext.Provider value={value}>{children}</ShellContext.Provider>
   );
 }
 

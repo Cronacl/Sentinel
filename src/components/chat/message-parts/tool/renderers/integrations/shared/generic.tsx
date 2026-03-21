@@ -39,7 +39,10 @@ function getProviderFromToolName(toolName: string) {
 
 function humanizeToolName(toolName: string): string {
   return toolName
-    .replace(/^(gmail_|gcal_|gdrive_|gh_|linear_|notion_|slack_|airtable_|pg_|mysql_|mongo_)/, "")
+    .replace(
+      /^(gmail_|gcal_|gdrive_|gh_|linear_|notion_|slack_|airtable_|pg_|mysql_|mongo_)/,
+      "",
+    )
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -67,7 +70,10 @@ function renderValue(value: unknown): string {
     const entries = Object.entries(value as Record<string, unknown>);
     if (entries.length === 0) return "—";
     return entries
-      .map(([k, v]) => `${humanizeKey(k)}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
+      .map(
+        ([k, v]) =>
+          `${humanizeKey(k)}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`,
+      )
       .join(", ");
   }
   return String(value);

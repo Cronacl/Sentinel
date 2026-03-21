@@ -37,7 +37,10 @@ export const NotionDatabaseActionTool = memo(function NotionDatabaseActionTool({
   const toolName = getToolName(part as ToolPart);
   const actionLabel = ACTION_LABELS[toolName] ?? "Database Action";
 
-  const input = state.hasInput && "input" in part ? (part.input as Record<string, unknown>) : null;
+  const input =
+    state.hasInput && "input" in part
+      ? (part.input as Record<string, unknown>)
+      : null;
   const output =
     state.hasOutput && "output" in part ? (part.output as PageOutput) : null;
 
@@ -113,10 +116,7 @@ export const NotionDatabaseActionTool = memo(function NotionDatabaseActionTool({
               {Object.entries(input)
                 .filter(([, v]) => v !== undefined && v !== null && v !== "")
                 .map(([key, value]) => (
-                  <div
-                    key={key}
-                    className="flex items-start gap-2 text-xs"
-                  >
+                  <div key={key} className="flex items-start gap-2 text-xs">
                     <span className="shrink-0 text-foreground/40 min-w-[72px] capitalize">
                       {key.replace(/([A-Z])/g, " $1").trim()}
                     </span>
@@ -139,9 +139,13 @@ export const NotionDatabaseActionTool = memo(function NotionDatabaseActionTool({
           >
             <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center text-sm">
               {output.icon?.startsWith("http") ? (
-                <img src={output.icon} alt="" className="h-4 w-4 object-contain" />
+                <img
+                  src={output.icon}
+                  alt=""
+                  className="h-4 w-4 object-contain"
+                />
               ) : (
-                output.icon ?? "\u{1F4C4}"
+                (output.icon ?? "\u{1F4C4}")
               )}
             </span>
             <div className="min-w-0 flex-1">
@@ -158,7 +162,9 @@ export const NotionDatabaseActionTool = memo(function NotionDatabaseActionTool({
                         className="inline-flex items-center gap-1 rounded bg-foreground/4 px-1.5 py-0.5 text-[10.5px] text-foreground/50"
                       >
                         <span className="text-foreground/30">{key}:</span>
-                        <span>{val.length > 30 ? `${val.slice(0, 30)}\u2026` : val}</span>
+                        <span>
+                          {val.length > 30 ? `${val.slice(0, 30)}\u2026` : val}
+                        </span>
                       </span>
                     ))}
                 </div>

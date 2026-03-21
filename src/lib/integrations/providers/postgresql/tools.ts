@@ -146,9 +146,7 @@ export function buildPostgresTools(
       outputSchema: z.object({
         rows: z.array(z.record(z.unknown())),
         rowCount: z.number(),
-        fields: z.array(
-          z.object({ name: z.string(), dataType: z.string() }),
-        ),
+        fields: z.array(z.object({ name: z.string(), dataType: z.string() })),
       }),
       needsApproval: () => approvalFn("pg_query"),
       execute: async ({ sql, params, database }) => {

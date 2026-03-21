@@ -109,12 +109,20 @@ export async function executeRead({
 
   if (targetStats.isDirectory()) {
     const offset = input.offset ?? 1;
-    const limit = Math.min(input.limit ?? DEFAULT_READ_LIMIT, DIRECTORY_ENTRY_LIMIT);
-    const directoryEntries = await readdir(resolvedPath, { withFileTypes: true });
+    const limit = Math.min(
+      input.limit ?? DEFAULT_READ_LIMIT,
+      DIRECTORY_ENTRY_LIMIT,
+    );
+    const directoryEntries = await readdir(resolvedPath, {
+      withFileTypes: true,
+    });
     const entries = directoryEntries
       .map((entry) => (entry.isDirectory() ? `${entry.name}/` : entry.name))
       .sort((left, right) =>
-        left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" }),
+        left.localeCompare(right, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        }),
       );
     const start = offset - 1;
 
@@ -180,7 +188,8 @@ export async function executeRead({
 
       const text = truncateLine(rawLine);
       const serialized = `${totalLines}: ${text}`;
-      const nextBytes = Buffer.byteLength(serialized, "utf8") + (lines.length > 0 ? 1 : 0);
+      const nextBytes =
+        Buffer.byteLength(serialized, "utf8") + (lines.length > 0 ? 1 : 0);
 
       if (consumedBytes + nextBytes > MAX_READ_BYTES) {
         truncated = true;
@@ -199,7 +208,9 @@ export async function executeRead({
   }
 
   if (lines.length === 0 && totalLines > 0 && offset > totalLines) {
-    throw new Error(`Offset ${offset} is out of range for this file (${totalLines} lines).`);
+    throw new Error(
+      `Offset ${offset} is out of range for this file (${totalLines} lines).`,
+    );
   }
 
   return {

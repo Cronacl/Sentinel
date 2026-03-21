@@ -41,9 +41,15 @@ export type DiagnosticItem = z.infer<typeof diagnosticItemSchema>;
 type PackageManager = "bun" | "npm" | "pnpm" | "yarn";
 
 function formatSummary(source: string, diagnostics: DiagnosticItem[]) {
-  const errorCount = diagnostics.filter((item) => item.severity === "error").length;
-  const warningCount = diagnostics.filter((item) => item.severity === "warning").length;
-  const infoCount = diagnostics.filter((item) => item.severity === "info").length;
+  const errorCount = diagnostics.filter(
+    (item) => item.severity === "error",
+  ).length;
+  const warningCount = diagnostics.filter(
+    (item) => item.severity === "warning",
+  ).length;
+  const infoCount = diagnostics.filter(
+    (item) => item.severity === "info",
+  ).length;
 
   if (diagnostics.length === 0) {
     return `${source}: no diagnostics found.`;
@@ -79,7 +85,9 @@ async function resolvePackageRoot(searchDirectory: string) {
   }
 }
 
-async function detectPackageManager(packageRoot: string): Promise<PackageManager> {
+async function detectPackageManager(
+  packageRoot: string,
+): Promise<PackageManager> {
   const candidates: Array<[string, PackageManager]> = [
     ["bun.lock", "bun"],
     ["pnpm-lock.yaml", "pnpm"],
@@ -88,7 +96,9 @@ async function detectPackageManager(packageRoot: string): Promise<PackageManager
   ];
 
   for (const [filename, manager] of candidates) {
-    const exists = await stat(path.join(packageRoot, filename)).catch(() => null);
+    const exists = await stat(path.join(packageRoot, filename)).catch(
+      () => null,
+    );
     if (exists?.isFile()) {
       return manager;
     }
@@ -128,7 +138,9 @@ async function runEslint({
     return null;
   }
 
-  const target = requestedPath ? path.relative(packageRoot, requestedPath) || "." : ".";
+  const target = requestedPath
+    ? path.relative(packageRoot, requestedPath) || "."
+    : ".";
   const result = await runCommand({
     args: [target, "--format", "json"],
     command: eslintPath,
@@ -260,7 +272,9 @@ export async function executeDiagnostics({
       })
     : null;
   const requestedPath = requested?.resolvedPath;
-  const packageRoot = await resolvePackageRoot(requestedPath ?? defaultDirectory);
+  const packageRoot = await resolvePackageRoot(
+    requestedPath ?? defaultDirectory,
+  );
 
   if (!packageRoot) {
     return {

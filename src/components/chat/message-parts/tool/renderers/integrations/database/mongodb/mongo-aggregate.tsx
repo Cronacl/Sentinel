@@ -28,9 +28,7 @@ export const MongoAggregateTool = memo(function MongoAggregateTool({
   const hasOutput = part.state === "output-available";
 
   const output =
-    hasOutput && "output" in part
-      ? (part.output as AggregateOutput)
-      : null;
+    hasOutput && "output" in part ? (part.output as AggregateOutput) : null;
   const input = "input" in part ? (part.input as AggregateInput) : null;
 
   const documents = output?.documents ?? [];

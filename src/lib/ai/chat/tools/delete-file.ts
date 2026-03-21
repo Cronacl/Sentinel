@@ -12,10 +12,7 @@ export const deleteFileInputSchema = z.object({
     .describe(
       "File path to delete. In default permissions mode this must be relative to the selected workspace root.",
     ),
-  rationale: z
-    .string()
-    .min(1)
-    .describe("Why this file should be deleted."),
+  rationale: z.string().min(1).describe("Why this file should be deleted."),
 });
 
 export const deleteFileOutputSchema = z.object({

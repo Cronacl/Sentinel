@@ -281,6 +281,7 @@ const { getDefaultToolApprovalPolicies } =
   await import("./tool-approval-policy");
 const { buildThreadPromptContext } = await import("./prompt-context");
 const { createThreadAgent } = await import("./agent.ts");
+mock.restore();
 
 const defaultMemorySettings = {
   autoSaveEnabled: true,
@@ -294,7 +295,9 @@ const defaultMemorySettings = {
 };
 
 async function prepareWith(options) {
-  createThreadAgent({ languageModel: options.languageModel ?? { kind: "model" } });
+  createThreadAgent({
+    languageModel: options.languageModel ?? { kind: "model" },
+  });
   const promptContext = buildThreadPromptContext({
     allowedInspectionRoots: options.defaultDirectory
       ? [options.defaultDirectory, ...(options.skillRoots ?? [])]
@@ -302,7 +305,8 @@ async function prepareWith(options) {
     allowedMutationRoot: options.defaultDirectory ?? null,
     availableSkills: options.availableSkills ?? [],
     enabledMcpServers: options.enabledMcpServers ?? [],
-    latestUserText: options.latestUserText ?? "Inspect the workspace and fix the issue.",
+    latestUserText:
+      options.latestUserText ?? "Inspect the workspace and fix the issue.",
     latentToolSummary: {
       categories: [],
       integrationNamespaces: [],
@@ -313,11 +317,13 @@ async function prepareWith(options) {
     memorySettings: options.memorySettings,
     permissionMode: options.permissionMode,
     planSummary: options.planSummary ?? null,
-    preferredProjectRoot: options.preferredProjectRoot ?? options.defaultDirectory ?? null,
+    preferredProjectRoot:
+      options.preferredProjectRoot ?? options.defaultDirectory ?? null,
     projectCandidates: options.projectCandidates ?? [],
     searchProviders: options.searchProviders,
     searchSettings: options.searchSettings,
-    shellStartDirectory: options.shellStartDirectory ?? options.defaultDirectory ?? null,
+    shellStartDirectory:
+      options.shellStartDirectory ?? options.defaultDirectory ?? null,
     skillRoots: options.skillRoots ?? [],
     sourceMessageId: options.sourceMessageId ?? null,
     threadMode: options.threadMode,

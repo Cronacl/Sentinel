@@ -81,7 +81,7 @@ export async function executeDiff({
 
   const after =
     right == null
-      ? input.proposedContent ?? ""
+      ? (input.proposedContent ?? "")
       : await readTextFile(right.resolvedPath, right.label);
 
   const result = createUnifiedDiff({

@@ -73,13 +73,14 @@ export async function executeGlob({
   input: GlobInput;
   permissionMode: PermissionMode;
 }): Promise<GlobOutput> {
-  const { requestedPath, resolvedBase, resolvedDirectory, rootLabel } = resolveToolDirectory({
-    defaultDirectory,
-    ...(extraAllowedRoots ? { extraAllowedRoots } : {}),
-    permissionMode,
-    requestedPath: input.path,
-    toolName: "glob",
-  });
+  const { requestedPath, resolvedBase, resolvedDirectory, rootLabel } =
+    resolveToolDirectory({
+      defaultDirectory,
+      ...(extraAllowedRoots ? { extraAllowedRoots } : {}),
+      permissionMode,
+      requestedPath: input.path,
+      toolName: "glob",
+    });
   const targetStats = await stat(resolvedDirectory).catch(() => null);
 
   if (!targetStats) {

@@ -184,13 +184,14 @@ export async function executeList({
   input: ListInput;
   permissionMode: PermissionMode;
 }): Promise<ListOutput> {
-  const { requestedPath, resolvedBase, resolvedDirectory, rootLabel } = resolveToolDirectory({
-    defaultDirectory,
-    ...(extraAllowedRoots ? { extraAllowedRoots } : {}),
-    permissionMode,
-    requestedPath: input.path,
-    toolName: "list",
-  });
+  const { requestedPath, resolvedBase, resolvedDirectory, rootLabel } =
+    resolveToolDirectory({
+      defaultDirectory,
+      ...(extraAllowedRoots ? { extraAllowedRoots } : {}),
+      permissionMode,
+      requestedPath: input.path,
+      toolName: "list",
+    });
   const directoryStats = await stat(resolvedDirectory).catch(() => null);
 
   if (!directoryStats) {

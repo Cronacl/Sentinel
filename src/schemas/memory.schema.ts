@@ -32,9 +32,11 @@ export const memoryReindexSchema = z.object({
   nextProfileId: z.enum(MEMORY_EMBEDDING_PROFILE_IDS),
 });
 
-export const memoryToolSearchScopeSchema = z.enum(
-  ["auto", "both", ...MEMORY_SCOPE_VALUES] as const,
-);
+export const memoryToolSearchScopeSchema = z.enum([
+  "auto",
+  "both",
+  ...MEMORY_SCOPE_VALUES,
+] as const);
 
 export const memoryToolResultLimitSchema = z
   .number()

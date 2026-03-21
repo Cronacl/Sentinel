@@ -73,6 +73,7 @@ mock.module("@/lib/mcp/oauth", () => ({
 const { buildMcpServerRuntimeEntries } = await import("./runtime");
 const { getResolvedStdioCwd, loadMcpTools, resetMcpToolCache } =
   await import("./tools");
+mock.restore();
 
 beforeEach(() => {
   close.mockReset();

@@ -76,14 +76,14 @@ function buildSummary(
     if (output.files.length === 0) {
       return (
         <>
-          No files matched <span className="font-mono text-[12px]">{pattern}</span>
+          No files matched{" "}
+          <span className="font-mono text-[12px]">{pattern}</span>
         </>
       );
     }
     return (
       <>
-        Found{" "}
-        <span className="text-foreground/50">{output.totalFiles}</span>{" "}
+        Found <span className="text-foreground/50">{output.totalFiles}</span>{" "}
         file{output.totalFiles === 1 ? "" : "s"} matching{" "}
         <span className="font-mono text-[12px]">{pattern}</span>
       </>
@@ -162,13 +162,12 @@ function GlobBody({
   );
 }
 
-export const GlobTool = memo(function GlobTool({
-  part,
-}: RendererProps) {
+export const GlobTool = memo(function GlobTool({ part }: RendererProps) {
   const hasInput = "input" in part && part.input !== undefined;
   const hasOutput = "output" in part && part.output !== undefined;
   const globInput = hasInput && isGlobToolInput(part.input) ? part.input : null;
-  const globOutput = hasOutput && isGlobToolOutput(part.output) ? part.output : null;
+  const globOutput =
+    hasOutput && isGlobToolOutput(part.output) ? part.output : null;
   const partErrorText = "errorText" in part ? part.errorText : undefined;
   const isFinishedState =
     part.state === "output-error" ||
@@ -198,7 +197,11 @@ export const GlobTool = memo(function GlobTool({
       isExpandable={isFinishedState}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={partErrorText && part.state !== "output-error" ? partErrorText : undefined}
+      errorText={
+        partErrorText && part.state !== "output-error"
+          ? partErrorText
+          : undefined
+      }
       footer={footer}
     >
       <GlobBody

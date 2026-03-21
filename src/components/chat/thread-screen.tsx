@@ -851,8 +851,7 @@ export function ThreadScreen({
             </AlertDialog.Header>
             <AlertDialog.Body>
               <p className="text-sm text-foreground">
-                Archive{" "}
-                <span className="font-medium">{threadTitle}</span>?
+                Archive <span className="font-medium">{threadTitle}</span>?
               </p>
               <p className="mt-1 text-xs text-muted">
                 The thread will be removed from your active list. You can

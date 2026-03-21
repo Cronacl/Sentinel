@@ -205,11 +205,7 @@ export const DbQuerySidebar = memo(function DbQuerySidebar({
                     Results
                   </span>
                   {rowCount !== undefined ? (
-                    <Chip
-                      size="sm"
-                      variant="soft"
-                      className="h-5 text-[10px]"
-                    >
+                    <Chip size="sm" variant="soft" className="h-5 text-[10px]">
                       {rowCount}
                     </Chip>
                   ) : null}
@@ -281,11 +277,7 @@ export const DbDocumentSidebar = memo(function DbDocumentSidebar({
                   Documents
                 </span>
                 {count !== undefined ? (
-                  <Chip
-                    size="sm"
-                    variant="soft"
-                    className="h-5 text-[10px]"
-                  >
+                  <Chip size="sm" variant="soft" className="h-5 text-[10px]">
                     {count}
                   </Chip>
                 ) : null}

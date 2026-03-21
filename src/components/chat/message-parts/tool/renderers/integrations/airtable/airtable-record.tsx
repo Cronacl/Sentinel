@@ -67,9 +67,7 @@ export const AirtableRecordTool = memo(function AirtableRecordTool({
           : "Record details";
 
   const fieldNames =
-    records.length > 0
-      ? Object.keys(records[0]!.fields).slice(0, 6)
-      : [];
+    records.length > 0 ? Object.keys(records[0]!.fields).slice(0, 6) : [];
 
   return (
     <IntegrationToolLayout

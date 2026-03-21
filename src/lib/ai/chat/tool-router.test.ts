@@ -49,11 +49,7 @@ const getLanguageModelMock = mock(
 );
 
 const getReasoningProviderOptionsMock = mock(
-  (
-    provider: string,
-    modelId: string,
-    reasoningEffort: string,
-  ) => ({
+  (provider: string, modelId: string, reasoningEffort: string) => ({
     [provider === "google_vertex" ? "google" : provider]: {
       modelId,
       reasoningEffort,
@@ -71,7 +67,8 @@ mock.module("@/lib/ai/providers/models", () => ({
 }));
 
 const { buildThreadPromptContext } = await import("./prompt-context");
-const { getDefaultToolApprovalPolicies } = await import("./tool-approval-policy");
+const { getDefaultToolApprovalPolicies } =
+  await import("./tool-approval-policy");
 const {
   buildToolRoutingManifest,
   buildToolRoutingEvidence,
@@ -80,7 +77,8 @@ const {
   routeToolExposure,
   resolveToolRouterModel,
   validateToolRoutingDecision,
-} = await import("./tool-router.ts?tool-router-test");
+} = await import("./tool-router");
+mock.restore();
 
 function createPromptContext(overrides: Record<string, unknown> = {}) {
   return buildThreadPromptContext({
@@ -198,7 +196,13 @@ describe("tool router", () => {
     });
 
     const validated = validateToolRoutingDecision({
-      availableToolNames: ["manage_task", "edit", "apply_patch", "list", "read"],
+      availableToolNames: [
+        "manage_task",
+        "edit",
+        "apply_patch",
+        "list",
+        "read",
+      ],
       decision: {
         categories: ["inspection", "mutation"],
         confidence: "high",
@@ -248,7 +252,9 @@ describe("tool router", () => {
     expect(validated.audit.rejectedSelections).toContain(
       "integration:slack:not-enabled",
     );
-    expect(validated.audit.rejectedSelections).toContain("mcp:figma:not-enabled");
+    expect(validated.audit.rejectedSelections).toContain(
+      "mcp:figma:not-enabled",
+    );
   });
 
   it("builds a minimal next-step routing prompt with explicit narrowing rules", () => {
@@ -269,7 +275,8 @@ describe("tool router", () => {
       availableMcpServers: [
         {
           aliases: ["browser", "playwright"],
-          capabilitySummary: "Integrate browser automation to implement design and test UI.",
+          capabilitySummary:
+            "Integrate browser automation to implement design and test UI.",
           catalogId: "playwright",
           name: "Playwright",
           namespace: "playwright",
@@ -309,10 +316,10 @@ describe("tool router", () => {
     expect(prompt).toContain(
       "Workspace and web baseline tools are already active in chat mode",
     );
+    expect(prompt).toContain('"availableIntegrations"');
     expect(prompt).toContain(
-      '"availableIntegrations"',
+      "Return empty arrays for unused categories or namespaces.",
     );
-    expect(prompt).toContain("Return empty arrays for unused categories or namespaces.");
     expect(prompt).toContain('"toolUniverseSize": 24');
   });
 
@@ -362,28 +369,26 @@ describe("tool router", () => {
     const promptContext = createPromptContext({
       latestUserText: "fix the missing toolchain issue",
     });
-    const evidence = buildToolRoutingEvidence(
-      [
-        {
-          toolCalls: [{ toolName: "run_task" }],
-          toolResults: [
-            {
-              result: {
-                output: {
-                  exitCode: 127,
-                  failureKind: "missing_command",
-                  missingCommand: "zig",
-                  phase: "completed",
-                  stderr: "bash: line 2: zig: command not found",
-                  stdout: "",
-                  suggestedNextAction: "install",
-                },
+    const evidence = buildToolRoutingEvidence([
+      {
+        toolCalls: [{ toolName: "run_task" }],
+        toolResults: [
+          {
+            result: {
+              output: {
+                exitCode: 127,
+                failureKind: "missing_command",
+                missingCommand: "zig",
+                phase: "completed",
+                stderr: "bash: line 2: zig: command not found",
+                stdout: "",
+                suggestedNextAction: "install",
               },
             },
-          ],
-        } as never,
-      ],
-    );
+          },
+        ],
+      } as never,
+    ]);
 
     const validated = validateToolRoutingDecision({
       availableToolNames: ["manage_task", "run_task", "shell_command"],
@@ -462,7 +467,12 @@ describe("tool router", () => {
     });
 
     const manifest = buildToolRoutingManifest({
-      availableToolNames: ["manage_task", "list", "websearch", "gdrive_list_files"],
+      availableToolNames: [
+        "manage_task",
+        "list",
+        "websearch",
+        "gdrive_list_files",
+      ],
       promptContext,
       stage: "initial",
     });
@@ -484,7 +494,13 @@ describe("tool router", () => {
     });
 
     const validated = validateToolRoutingDecision({
-      availableToolNames: ["manage_task", "edit", "apply_patch", "list", "read"],
+      availableToolNames: [
+        "manage_task",
+        "edit",
+        "apply_patch",
+        "list",
+        "read",
+      ],
       decision: {
         categories: ["inspection", "mutation"],
         confidence: "high",

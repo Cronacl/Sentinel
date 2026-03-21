@@ -60,8 +60,7 @@ function addScheduleValidationIssues(
     if (!isLikelyCronExpression(data.scheduleCron)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message:
-          "Cron expression must use a macro like @hourly or 5-6 fields.",
+        message: "Cron expression must use a macro like @hourly or 5-6 fields.",
         path: ["scheduleCron"],
       });
     }
