@@ -10,6 +10,8 @@ import type { WebFetchSettings } from "@/lib/webfetch";
 import type { ToolApprovalPolicyMap } from "./tool-approval-policy";
 
 export type ThreadPromptIntegration = {
+  aliases?: string[];
+  capabilitySummary?: string;
   provider: IntegrationProvider;
   label: string;
   toolCount: number;
@@ -38,6 +40,8 @@ export type ThreadPromptLatentToolSummary = {
 };
 
 export type ThreadPromptMcpServer = {
+  aliases?: string[];
+  capabilitySummary?: string;
   catalogId?: string;
   id: string;
   name: string;
@@ -97,16 +101,27 @@ export function buildThreadPromptContext(
     allowedInspectionRoots: uniqueStrings(input.allowedInspectionRoots ?? []),
     allowedMutationRoot: input.allowedMutationRoot?.trim() || null,
     availableSkills: [...input.availableSkills],
-    enabledIntegrations: [...(input.enabledIntegrations ?? [])].sort(
-      (left, right) =>
+    latestUserText: input.latestUserText?.trim() || null,
+    enabledIntegrations: [...(input.enabledIntegrations ?? [])]
+      .map((integration) => ({
+        ...integration,
+        aliases: uniqueStrings(integration.aliases ?? []),
+        capabilitySummary: integration.capabilitySummary?.trim() ?? "",
+      }))
+      .sort((left, right) =>
         left.label.localeCompare(right.label, undefined, {
           sensitivity: "base",
         }),
-    ),
-    enabledMcpServers: [...(input.enabledMcpServers ?? [])].sort((left, right) =>
-      left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
-    ),
-    latestUserText: input.latestUserText?.trim() || null,
+      ),
+    enabledMcpServers: [...(input.enabledMcpServers ?? [])]
+      .map((server) => ({
+        ...server,
+        aliases: uniqueStrings(server.aliases ?? []),
+        capabilitySummary: server.capabilitySummary?.trim() ?? "",
+      }))
+      .sort((left, right) =>
+        left.name.localeCompare(right.name, undefined, { sensitivity: "base" }),
+      ),
     latentToolSummary: {
       categories: uniqueStrings(input.latentToolSummary?.categories ?? []),
       integrationNamespaces: uniqueStrings(

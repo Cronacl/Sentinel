@@ -63,6 +63,13 @@ function createPromptContext(overrides: Record<string, unknown> = {}) {
 describe("buildThreadAgentInstructions", () => {
   it("renders layered runtime-aware chat instructions", () => {
     const promptContext = createPromptContext({
+      enabledIntegrations: [
+        {
+          label: "Google Drive",
+          provider: "google_drive",
+          toolCount: 10,
+        },
+      ],
       availableSkills: [
         {
           description: "Helpful skill",
@@ -150,13 +157,23 @@ describe("buildThreadAgentInstructions", () => {
     expect(instructions).toContain("Long-term memory: enabled");
     expect(instructions).toContain("## Capability Manifest");
     expect(instructions).toContain(
+      "Workspace and web baseline tools stay active in chat mode.",
+    );
+    expect(instructions).toContain(
       "the list tool: to browse directory structure without approval.",
+    );
+    expect(instructions).toContain("## Connected Integrations");
+    expect(instructions).toContain(
+      "do not describe it as unavailable unless the connection state or a tool call proves that",
     );
     expect(instructions).toContain("## Discovered Skills");
     expect(instructions).toContain("helpful-skill [workspace/sentinel]: Helpful skill");
     expect(instructions).toContain("## Enabled MCP Servers");
     expect(instructions).toContain("mcp_playwright__*");
     expect(instructions).toContain("Use for browser inspection and automation tasks");
+    expect(instructions).toContain(
+      "Treat enabled MCP servers as available capabilities for this conversation.",
+    );
     expect(instructions).toContain("server -> list files");
     expect(instructions).toContain("## Decision Heuristics");
     expect(instructions).toContain("Prefer run_task for standard scripts");
@@ -167,6 +184,9 @@ describe("buildThreadAgentInstructions", () => {
     expect(instructions).toContain("If a discovered skill is a clear match for the request");
     expect(instructions).toContain("Reach for a skill when the task clearly matches a specialized provider");
     expect(instructions).toContain("Reach for an MCP server when the user is asking about a connected external system");
+    expect(instructions).toContain(
+      "Prefer the most direct connected integration over workspace or web tools",
+    );
     expect(instructions).toContain(
       "For research tasks, prefer direct evidence over speculation",
     );

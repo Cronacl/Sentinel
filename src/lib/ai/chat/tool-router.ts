@@ -20,8 +20,6 @@ import {
   type ToolCategory,
 } from "./tools/catalog";
 
-const TOOL_ROUTER_SKIP_THRESHOLD = 8;
-
 const ROUTER_MODEL_BY_PROVIDER = {
   anthropic: "claude-haiku-4-5",
   google: "gemini-2.5-flash",
@@ -52,7 +50,6 @@ export type ToolRoutingDecision = z.infer<typeof toolRoutingDecisionSchema>;
 
 export type ToolRoutingEvidence = {
   executionFailed: boolean;
-  explicitInstallRequest: boolean;
   inspectionPerformed: boolean;
   integrationNamespaces: string[];
   lastExitCode: number | null;
@@ -69,14 +66,23 @@ export type ToolRoutingManifest = {
   allowedInspectionRoots: string[];
   allowedMutationRoot: string | null;
   availableCategories: ToolCategory[];
+  availableIntegrations: Array<{
+    aliases: string[];
+    capabilitySummary: string;
+    label: string;
+    provider: string;
+    toolCount: number;
+  }>;
+  availableMcpServers: Array<{
+    aliases: string[];
+    capabilitySummary: string;
+    catalogId?: string;
+    name: string;
+    namespace: string;
+    toolCount: number;
+  }>;
   availableIntegrationNamespaces: string[];
   availableMcpNamespaces: string[];
-  intentHints: {
-    explicitInstallRequest: boolean;
-    likelyExternalResearch: boolean;
-    likelyIntegrationTask: boolean;
-    likelyProjectWork: boolean;
-  };
   permissionMode: ThreadPromptContext["permissionMode"];
   planSummary: ThreadPromptContext["planSummary"];
   preferredProjectRoot: string | null;
@@ -96,11 +102,7 @@ export type ToolRoutingAudit = {
   finalActiveToolCount: number;
   mode: "deterministic-fallback" | "model-router";
   reason: string;
-  remediationTriggerSource:
-    | "explicit-install-request"
-    | "missing-command-evidence"
-    | "router"
-    | null;
+  remediationTriggerSource: "router" | null;
   rejectedSelections: string[];
   routerModelId: string | null;
   selectedCategories: string[];
@@ -140,66 +142,6 @@ function uniqueStrings(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))).sort(
     (left, right) => left.localeCompare(right, undefined, { sensitivity: "base" }),
   );
-}
-
-function hasExplicitInstallIntent(text: string | null | undefined) {
-  const normalized = text?.toLowerCase().trim() ?? "";
-  if (!normalized) {
-    return false;
-  }
-
-  return [
-    /\binstall\b/,
-    /\bset up\b/,
-    /\bsetup\b/,
-    /\bbrew install\b/,
-    /\bapt(?:-get)? install\b/,
-    /\bnpm install\b/,
-    /\bpnpm add\b/,
-    /\bbun add\b/,
-    /\byarn add\b/,
-    /\buse the shell tool\b/,
-  ].some((pattern) => pattern.test(normalized));
-}
-
-function hasLikelyResearchIntent(text: string | null | undefined) {
-  const normalized = text?.toLowerCase().trim() ?? "";
-  return /\bdocs?\b|\blatest\b|\bresearch\b|https?:\/\//.test(normalized);
-}
-
-function hasLikelyIntegrationIntent(promptContext: ThreadPromptContext) {
-  const normalized = promptContext.latestUserText?.toLowerCase().trim() ?? "";
-
-  return (
-    promptContext.enabledIntegrations.some(
-      (integration) =>
-        normalized.includes(integration.provider) ||
-        normalized.includes(integration.provider.replaceAll("_", " ")),
-    ) ||
-    promptContext.enabledMcpServers.some(
-      (server) =>
-        normalized.includes(server.namespace) ||
-        normalized.includes(server.name.toLowerCase()),
-    )
-  );
-}
-
-function hasLikelyProjectIntent(promptContext: ThreadPromptContext) {
-  const normalized = promptContext.latestUserText?.toLowerCase().trim() ?? "";
-
-  return [
-    /\bfix\b/,
-    /\bbuild\b/,
-    /\btest\b/,
-    /\blint\b/,
-    /\btypecheck\b/,
-    /\brefactor\b/,
-    /\bedit\b/,
-    /\bimplement\b/,
-    /\bworkspace\b/,
-    /\brepo\b/,
-    /\bproject\b/,
-  ].some((pattern) => pattern.test(normalized));
 }
 
 function buildCoreTools(
@@ -268,99 +210,20 @@ function buildFallbackActiveTools(
   );
 }
 
-function hasShellRemediationContext(
-  availableToolNames: string[],
-  promptContext: ThreadPromptContext,
-) {
-  if (!availableToolNames.includes("shell_command")) {
-    return false;
-  }
-
-  return (
-    promptContext.permissionMode === "full" ||
-    Boolean(promptContext.shellStartDirectory) ||
-    Boolean(promptContext.workspaceRoot) ||
-    promptContext.skillRoots.length > 0
-  );
-}
-
 function getRemediationTriggerSource(
-  promptContext: ThreadPromptContext,
   evidence: ToolRoutingEvidence | null,
-): ToolRoutingAudit["remediationTriggerSource"] {
-  if (
-    hasExplicitInstallIntent(promptContext.latestUserText) ||
-    evidence?.explicitInstallRequest
-  ) {
-    return "explicit-install-request";
-  }
-
-  if (
+): boolean {
+  return Boolean(
     evidence &&
-    (Boolean(evidence.missingCommand) ||
-      evidence.missingToolchain ||
-      evidence.lastExitCode === 127 ||
-      evidence.suggestedNextAction === "install")
-  ) {
-    return "missing-command-evidence";
-  }
-
-  return null;
-}
-
-function shouldForceShellRemediation(
-  availableToolNames: string[],
-  promptContext: ThreadPromptContext,
-  evidence: ToolRoutingEvidence | null,
-) {
-  if (!hasShellRemediationContext(availableToolNames, promptContext)) {
-    return false;
-  }
-
-  return getRemediationTriggerSource(promptContext, evidence) !== null;
-}
-
-function buildForcedRemediationResult(
-  input: RouteToolExposureInput,
-  evidence: ToolRoutingEvidence | null,
-  reason: string,
-): ValidatedToolRoutingDecision {
-  const activeTools = buildCoreTools(input.availableToolNames, input.promptContext);
-  applyAlwaysOnChatBaseline(
-    activeTools,
-    input.availableToolNames,
-    input.promptContext,
+      (Boolean(evidence.missingCommand) ||
+        evidence.missingToolchain ||
+        evidence.lastExitCode === 127 ||
+        evidence.suggestedNextAction === "install"),
   );
-  activeTools.add("shell_command");
-  const activeToolNames = uniqueStrings([...activeTools]);
-  const remediationTriggerSource = getRemediationTriggerSource(
-    input.promptContext,
-    evidence,
-  );
-
-  return {
-    activeToolNames,
-    audit: {
-      decision: null,
-      evidence,
-      finalActiveToolCount: activeToolNames.length,
-      mode: "deterministic-fallback",
-      reason,
-      remediationTriggerSource,
-      rejectedSelections: [],
-      routerModelId: null,
-      selectedCategories: ["execution"],
-      selectedIntegrationNamespaces: [],
-      selectedMcpNamespaces: [],
-      stage: input.stage,
-      usedFallbackModel: true,
-    },
-  };
 }
 
 export function buildToolRoutingEvidence(
   steps: ReadonlyArray<StepResult<ToolSet>>,
-  latestUserText?: string | null,
 ): ToolRoutingEvidence {
   const integrationNamespaces = new Set<string>();
   const mcpNamespaces = new Set<string>();
@@ -477,7 +340,6 @@ export function buildToolRoutingEvidence(
 
   return {
     executionFailed,
-    explicitInstallRequest: hasExplicitInstallIntent(latestUserText),
     inspectionPerformed,
     integrationNamespaces: uniqueStrings([...integrationNamespaces]),
     lastExitCode,
@@ -506,18 +368,27 @@ export function buildToolRoutingManifest({
     allowedInspectionRoots: promptContext.allowedInspectionRoots,
     allowedMutationRoot: promptContext.allowedMutationRoot,
     availableCategories: Array.from(getActiveCategories(availableToolNames)).sort(),
+    availableIntegrations: promptContext.enabledIntegrations.map((integration) => ({
+      aliases: integration.aliases ?? [],
+      capabilitySummary: integration.capabilitySummary ?? "",
+      label: integration.label,
+      provider: integration.provider,
+      toolCount: integration.toolCount,
+    })),
+    availableMcpServers: promptContext.enabledMcpServers.map((server) => ({
+      aliases: server.aliases ?? [],
+      capabilitySummary: server.capabilitySummary ?? "",
+      ...(server.catalogId ? { catalogId: server.catalogId } : {}),
+      name: server.name,
+      namespace: server.namespace,
+      toolCount: server.toolCount,
+    })),
     availableIntegrationNamespaces: uniqueStrings(
       promptContext.enabledIntegrations.map((integration) => integration.provider),
     ),
     availableMcpNamespaces: uniqueStrings(
       promptContext.enabledMcpServers.map((server) => server.namespace),
     ),
-    intentHints: {
-      explicitInstallRequest: hasExplicitInstallIntent(promptContext.latestUserText),
-      likelyExternalResearch: hasLikelyResearchIntent(promptContext.latestUserText),
-      likelyIntegrationTask: hasLikelyIntegrationIntent(promptContext),
-      likelyProjectWork: hasLikelyProjectIntent(promptContext),
-    },
     ...(evidence ? { evidence } : {}),
     permissionMode: promptContext.permissionMode,
     planSummary: promptContext.planSummary,
@@ -530,21 +401,6 @@ export function buildToolRoutingManifest({
     userRequest: promptContext.latestUserText?.trim() || "",
     workspaceRoot: promptContext.workspaceRoot,
   };
-}
-
-export function shouldSkipToolRouter(
-  availableToolNames: string[],
-  promptContext: ThreadPromptContext,
-) {
-  if (!promptContext.latestUserText?.trim()) {
-    return true;
-  }
-
-  if (availableToolNames.length <= TOOL_ROUTER_SKIP_THRESHOLD) {
-    return true;
-  }
-
-  return false;
 }
 
 export async function resolveToolRouterModel({
@@ -622,21 +478,24 @@ export function buildToolRouterSystemPrompt() {
     "Choose the smallest set of tool categories and namespaces needed for the next step only, not for the whole task.",
     "Minimize context cost aggressively, but do not under-route in a way that blocks obvious next actions.",
     "Do not activate tool families just because they might be useful later.",
-    "In chat mode, local workspace tools and web tools may already be active as the default baseline. Focus your routing decision on additional specialized families and namespaces beyond that baseline.",
+    "In chat mode, workspace and web baseline tools are always on. Focus your routing decision on specialized add-on families and namespaces beyond that baseline.",
     "Distinguish carefully between project work, environment/bootstrap remediation, external research, and integration-targeted tasks.",
+    "Default to the most direct source of truth: connected integrations or MCP servers before workspace or web when the user is clearly targeting that external system.",
+    "Prefer read-only external tools before mutating ones.",
     "Default to inspection first when a workspace or skill root can answer the question.",
-    "Promote execution only when the user explicitly wants commands/checks or inspection has revealed a real project context.",
+    "Do not spend routing budget on inspection, execution, mutation, or web in chat mode unless the thread is in plan mode; those baseline tools are already handled separately.",
     "For environment remediation, installs, setup, missing commands, or missing toolchains, prefer shell_command exposure over plain-text refusal or useless run_task retries.",
     "Promote mutation only when the task clearly requires changes and the likely target files or edit scope are known.",
-    "Use integrationNamespaces and mcpNamespaces only when the task explicitly targets that connected system.",
+    "Use integrationNamespaces and mcpNamespaces when the task clearly targets that connected system, even if the user does not say the provider or namespace literally.",
     "Use web only for freshness, external documentation, or when local inspection has already proven insufficient.",
     "In plan mode, keep activation especially narrow and prefer planning plus inspection over execution or mutation.",
-    "If confidence is low, stay narrow and rely on the runtime fallback instead of activating broad tool families.",
+    "If confidence is low, stay narrow instead of activating broad tool families speculatively.",
     '"." means the active tool base for that call, not the filesystem root.',
     "Relative paths resolve from the selected workspace root unless a tool says otherwise.",
     "shell_command starts in shellStartDirectory and must stay inside allowed roots in default permissions mode.",
     "run_task may resolve upward to the nearest package.json, but only inside the workspace boundary.",
     "Approval-gated tools are still available capabilities. Route to them when they are the right next step.",
+    "If prompt context says an integration or MCP server is connected, do not treat it as unavailable or inactive. Only a missing connection or failed tool call proves that.",
     "Return compact, minimal routing decisions.",
   ].join("\n");
 }
@@ -645,7 +504,8 @@ export function buildToolRouterPrompt(manifest: ToolRoutingManifest) {
   return [
     "Choose which tool categories and namespaces should be active for the next agent step.",
     "Select only what is necessary immediately.",
-    "Use shell remediation for explicit install/setup intent or missing-command evidence when shell_command is available.",
+    "Workspace and web baseline tools are already active in chat mode; choose only the extra specialized families and namespaces needed on top.",
+    "When an external connected system is the clear target, prefer that integration or MCP namespace as the direct source.",
     "Return empty arrays for unused categories or namespaces.",
     "The runtime will enforce permissions and may reject unsafe selections.",
     "",
@@ -735,7 +595,6 @@ function expandMcpTools(
 export function validateToolRoutingDecision({
   availableToolNames,
   decision,
-  fallbackActiveToolNames,
   promptContext,
   routerModelId,
   stage,
@@ -745,7 +604,6 @@ export function validateToolRoutingDecision({
   availableToolNames: string[];
   decision: ToolRoutingDecision;
   evidence?: ToolRoutingEvidence | null;
-  fallbackActiveToolNames: string[];
   promptContext: ThreadPromptContext;
   routerModelId: string | null;
   stage: "initial" | "step";
@@ -757,11 +615,25 @@ export function validateToolRoutingDecision({
   const acceptedIntegrationNamespaces = new Set<string>();
   const acceptedMcpNamespaces = new Set<string>();
   const availableCategories = getActiveCategories(availableToolNames);
+  const baselineManagedCategories =
+    promptContext.threadMode === "chat"
+      ? getActiveCategories(
+          selectAlwaysOnChatTools({
+            availableToolNames,
+            promptContext,
+          }),
+        )
+      : new Set<ToolCategory>();
   const workspaceContextAvailable = hasWorkspaceInspectionContext(promptContext);
 
   for (const category of uniqueStrings(decision.categories)) {
     if (!availableCategories.has(category as ToolCategory)) {
       rejectedSelections.push(`category:${category}:unavailable`);
+      continue;
+    }
+
+    if (baselineManagedCategories.has(category as ToolCategory)) {
+      rejectedSelections.push(`category:${category}:baseline-managed`);
       continue;
     }
 
@@ -833,31 +705,12 @@ export function validateToolRoutingDecision({
     acceptedMcpNamespaces.add(namespace);
   }
 
-  const hasNonCoreTools = [...activeTools].some(
-    (toolName) => !buildCoreTools(availableToolNames, promptContext).has(toolName),
-  );
-  const shouldMergeFallback =
-    decision.confidence === "low" || !hasNonCoreTools;
-
-  if (shouldMergeFallback) {
-    for (const toolName of fallbackActiveToolNames) {
-      activeTools.add(toolName);
-    }
-  }
-
   applyAlwaysOnChatBaseline(activeTools, availableToolNames, promptContext);
 
-  const remediationTriggerSource = getRemediationTriggerSource(
-    promptContext,
-    evidence,
-  );
-  if (
-    remediationTriggerSource &&
-    hasShellRemediationContext(availableToolNames, promptContext)
-  ) {
-    activeTools.add("shell_command");
-    acceptedCategories.add("execution");
-  }
+  const remediationTriggerSource =
+    getRemediationTriggerSource(evidence) && decision.categories.includes("execution")
+      ? "router"
+      : null;
 
   const activeToolNames = uniqueStrings([...activeTools]);
 
@@ -868,13 +721,9 @@ export function validateToolRoutingDecision({
       evidence,
       finalActiveToolCount: activeToolNames.length,
       mode: "model-router",
-      reason: shouldMergeFallback
-        ? remediationTriggerSource
-          ? "merged-deterministic-fallback+forced-remediation"
-          : "merged-deterministic-fallback"
-        : remediationTriggerSource
-          ? "validated-model-decision+forced-remediation"
-          : "validated-model-decision",
+      reason: remediationTriggerSource
+        ? "validated-model-decision+forced-remediation"
+        : "validated-model-decision",
       remediationTriggerSource:
         remediationTriggerSource && !decision.categories.includes("execution")
           ? remediationTriggerSource
@@ -927,28 +776,6 @@ export async function routeToolExposure(
 ): Promise<ValidatedToolRoutingDecision> {
   const evidence = input.evidence ?? null;
 
-  if (
-    shouldForceShellRemediation(
-      input.availableToolNames,
-      input.promptContext,
-      evidence,
-    )
-  ) {
-    return buildForcedRemediationResult(
-      input,
-      evidence,
-      "forced-shell-remediation",
-    );
-  }
-
-  if (shouldSkipToolRouter(input.availableToolNames, input.promptContext)) {
-    return buildDeterministicFallbackResult(
-      input,
-      "skipped-small-tool-universe",
-      evidence,
-    );
-  }
-
   const manifest = buildToolRoutingManifest({
     availableToolNames: input.availableToolNames,
     ...(evidence ? { evidence } : {}),
@@ -978,7 +805,6 @@ export async function routeToolExposure(
       availableToolNames: input.availableToolNames,
       decision: output,
       evidence,
-      fallbackActiveToolNames: buildFallbackActiveTools(input),
       promptContext: input.promptContext,
       routerModelId: routerModel.routerModelId,
       stage: input.stage,

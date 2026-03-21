@@ -326,10 +326,7 @@ export function createThreadAgent({
       let activeToolNames = cachedActiveToolNames;
 
       if (promptContext && cachedAllToolNames.length > 0 && steps.length > 0) {
-        const evidence = buildToolRoutingEvidence(
-          steps,
-          promptContext.latestUserText,
-        );
+        const evidence = buildToolRoutingEvidence(steps);
         const evidenceSignature = JSON.stringify(evidence);
         const hasMaterialEvidence =
           evidence.inspectionPerformed ||
@@ -337,7 +334,6 @@ export function createThreadAgent({
           evidence.targetFilesFound ||
           evidence.localInspectionWasInsufficient ||
           evidence.executionFailed ||
-          evidence.explicitInstallRequest ||
           evidence.integrationNamespaces.length > 0 ||
           evidence.mcpNamespaces.length > 0 ||
           evidence.missingCommand !== null ||

@@ -1,5 +1,22 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
 
+const generateTextMock = mock(async () => ({
+  output: {
+    categories: [],
+    confidence: "high",
+    integrationNamespaces: [],
+    mcpNamespaces: [],
+    reasoning: "Use no specialized tools.",
+  },
+}));
+
+mock.module("ai", () => ({
+  Output: {
+    object: ({ schema }: { schema: unknown }) => ({ schema }),
+  },
+  generateText: generateTextMock,
+}));
+
 const getEnabledModelsMock = mock(async () => [
   {
     compositeId: "openai:gpt-5-mini",
@@ -56,13 +73,14 @@ mock.module("@/lib/ai/providers/models", () => ({
 const { buildThreadPromptContext } = await import("./prompt-context");
 const { getDefaultToolApprovalPolicies } = await import("./tool-approval-policy");
 const {
+  buildToolRoutingManifest,
   buildToolRoutingEvidence,
   buildToolRouterPrompt,
   buildToolRouterSystemPrompt,
   routeToolExposure,
   resolveToolRouterModel,
   validateToolRoutingDecision,
-} = await import("./tool-router");
+} = await import("./tool-router.ts?tool-router-test");
 
 function createPromptContext(overrides: Record<string, unknown> = {}) {
   return buildThreadPromptContext({
@@ -188,7 +206,6 @@ describe("tool router", () => {
         mcpNamespaces: [],
         reasoning: "Inspect then edit.",
       },
-      fallbackActiveToolNames: ["manage_task", "list", "read"],
       promptContext,
       routerModelId: "openai:gpt-5-mini",
       stage: "initial",
@@ -221,7 +238,6 @@ describe("tool router", () => {
         mcpNamespaces: ["figma"],
         reasoning: "Use external systems.",
       },
-      fallbackActiveToolNames: ["manage_task"],
       promptContext,
       routerModelId: "openai:gpt-5-mini",
       stage: "initial",
@@ -241,14 +257,27 @@ describe("tool router", () => {
       allowedInspectionRoots: ["/tmp/workspace"],
       allowedMutationRoot: "/tmp/workspace",
       availableCategories: ["inspection", "execution", "mutation", "web"],
+      availableIntegrations: [
+        {
+          aliases: ["github", "pull request"],
+          capabilitySummary: "Search repos, issues, and pull requests.",
+          label: "GitHub",
+          provider: "github",
+          toolCount: 4,
+        },
+      ],
+      availableMcpServers: [
+        {
+          aliases: ["browser", "playwright"],
+          capabilitySummary: "Integrate browser automation to implement design and test UI.",
+          catalogId: "playwright",
+          name: "Playwright",
+          namespace: "playwright",
+          toolCount: 2,
+        },
+      ],
       availableIntegrationNamespaces: ["github"],
       availableMcpNamespaces: ["playwright"],
-      intentHints: {
-        explicitInstallRequest: false,
-        likelyExternalResearch: false,
-        likelyIntegrationTask: false,
-        likelyProjectWork: true,
-      },
       permissionMode: "default",
       planSummary: null,
       preferredProjectRoot: "/tmp/workspace/app",
@@ -274,19 +303,32 @@ describe("tool router", () => {
       "Approval-gated tools are still available capabilities.",
     );
     expect(systemPrompt).toContain(
-      "If confidence is low, stay narrow and rely on the runtime fallback",
+      "If confidence is low, stay narrow instead of activating broad tool families speculatively.",
     );
     expect(prompt).toContain("Select only what is necessary immediately.");
     expect(prompt).toContain(
-      "Use shell remediation for explicit install/setup intent or missing-command evidence when shell_command is available.",
+      "Workspace and web baseline tools are already active in chat mode",
+    );
+    expect(prompt).toContain(
+      '"availableIntegrations"',
     );
     expect(prompt).toContain("Return empty arrays for unused categories or namespaces.");
     expect(prompt).toContain('"toolUniverseSize": 24');
   });
 
-  it("forces shell remediation for explicit install requests", async () => {
+  it("uses the model router to activate a specialized integration namespace", async () => {
+    generateTextMock.mockResolvedValueOnce({
+      output: {
+        categories: [],
+        confidence: "high",
+        integrationNamespaces: ["github"],
+        mcpNamespaces: [],
+        reasoning: "The task targets GitHub.",
+      },
+    });
+
     const promptContext = createPromptContext({
-      latestUserText: "install it using brew",
+      latestUserText: "check my github issues",
     });
 
     const routed = await routeToolExposure({
@@ -300,6 +342,7 @@ describe("tool router", () => {
         "apply_patch",
         "websearch",
         "webfetch",
+        "gh_list_issues",
       ],
       mainLanguageModel: { kind: "main-model" },
       promptContext,
@@ -309,20 +352,15 @@ describe("tool router", () => {
       userId: "user-1",
     });
 
-    expect(routed.activeToolNames).toContain("shell_command");
+    expect(routed.activeToolNames).toContain("gh_list_issues");
     expect(routed.activeToolNames).toContain("websearch");
-    expect(routed.activeToolNames).toContain("webfetch");
-    expect(routed.activeToolNames).toContain("list");
-    expect(routed.activeToolNames).toContain("run_task");
-    expect(routed.audit.reason).toBe("forced-shell-remediation");
-    expect(routed.audit.remediationTriggerSource).toBe(
-      "explicit-install-request",
-    );
+    expect(routed.audit.reason).toBe("validated-model-decision");
+    expect(routed.audit.selectedIntegrationNamespaces).toEqual(["github"]);
   });
 
-  it("promotes shell remediation when prior execution shows a missing command", () => {
+  it("records remediation as model-driven when evidence exists and the router selects execution", () => {
     const promptContext = createPromptContext({
-      latestUserText: "install it",
+      latestUserText: "fix the missing toolchain issue",
     });
     const evidence = buildToolRoutingEvidence(
       [
@@ -345,20 +383,18 @@ describe("tool router", () => {
           ],
         } as never,
       ],
-      "install it",
     );
 
     const validated = validateToolRoutingDecision({
       availableToolNames: ["manage_task", "run_task", "shell_command"],
       decision: {
-        categories: [],
+        categories: ["execution"],
         confidence: "high",
         integrationNamespaces: [],
         mcpNamespaces: [],
-        reasoning: "No execution needed.",
+        reasoning: "Use execution tools.",
       },
       evidence,
-      fallbackActiveToolNames: ["manage_task"],
       promptContext,
       routerModelId: "openai:gpt-5-mini",
       stage: "step",
@@ -366,9 +402,7 @@ describe("tool router", () => {
     });
 
     expect(validated.activeToolNames).toContain("shell_command");
-    expect(validated.audit.remediationTriggerSource).toBe(
-      "explicit-install-request",
-    );
+    expect(validated.audit.remediationTriggerSource).toBe("router");
   });
 
   it("keeps local and web baseline tools active even when the router only asks for integrations", () => {
@@ -394,7 +428,6 @@ describe("tool router", () => {
         mcpNamespaces: [],
         reasoning: "Use GitHub only.",
       },
-      fallbackActiveToolNames: ["manage_task"],
       promptContext,
       routerModelId: "openai:gpt-5-mini",
       stage: "initial",
@@ -414,5 +447,99 @@ describe("tool router", () => {
         "gh_search_repositories",
       ]),
     );
+  });
+
+  it("surfaces connected integration metadata in the routing manifest without precomputed intent matches", () => {
+    const promptContext = createPromptContext({
+      enabledIntegrations: [
+        {
+          label: "Google Drive",
+          provider: "google_drive",
+          toolCount: 10,
+        },
+      ],
+      latestUserText: "list my drive files",
+    });
+
+    const manifest = buildToolRoutingManifest({
+      availableToolNames: ["manage_task", "list", "websearch", "gdrive_list_files"],
+      promptContext,
+      stage: "initial",
+    });
+
+    expect(manifest.availableIntegrations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Google Drive",
+          provider: "google_drive",
+        }),
+      ]),
+    );
+  });
+
+  it("keeps mutation routing specific when mutation is not baseline-managed", () => {
+    const promptContext = createPromptContext({
+      allowedMutationRoot: null,
+      workspaceRoot: null,
+    });
+
+    const validated = validateToolRoutingDecision({
+      availableToolNames: ["manage_task", "edit", "apply_patch", "list", "read"],
+      decision: {
+        categories: ["inspection", "mutation"],
+        confidence: "high",
+        integrationNamespaces: [],
+        mcpNamespaces: [],
+        reasoning: "Inspect then edit.",
+      },
+      promptContext,
+      routerModelId: "openai:gpt-5-mini",
+      stage: "initial",
+      usedFallbackModel: false,
+    });
+
+    expect(validated.activeToolNames).not.toContain("edit");
+    expect(validated.audit.rejectedSelections).toContain(
+      "category:mutation:no-mutation-root",
+    );
+  });
+
+  it("falls back to baseline tools only when the model router errors", async () => {
+    generateTextMock.mockRejectedValueOnce(new Error("router failed"));
+
+    const routed = await routeToolExposure({
+      availableToolNames: [
+        "manage_task",
+        "list",
+        "read",
+        "run_task",
+        "shell_command",
+        "websearch",
+        "webfetch",
+        "gh_list_issues",
+      ],
+      mainLanguageModel: { kind: "main-model" },
+      promptContext: createPromptContext({
+        latestUserText: "check my github issues",
+      }),
+      resolvedModelId: "gpt-5.2",
+      resolvedProviderId: "openai",
+      stage: "initial",
+      userId: "user-1",
+    });
+
+    expect(routed.activeToolNames).toEqual(
+      expect.arrayContaining([
+        "manage_task",
+        "list",
+        "read",
+        "run_task",
+        "shell_command",
+        "websearch",
+        "webfetch",
+      ]),
+    );
+    expect(routed.activeToolNames).not.toContain("gh_list_issues");
+    expect(routed.audit.mode).toBe("deterministic-fallback");
   });
 });

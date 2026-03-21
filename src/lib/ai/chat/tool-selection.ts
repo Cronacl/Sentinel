@@ -25,18 +25,6 @@ function uniqueToolNames(toolNames: string[]) {
   return Array.from(new Set(toolNames));
 }
 
-function matchesAny(text: string, patterns: RegExp[]) {
-  return patterns.some((pattern) => pattern.test(text));
-}
-
-function getLatestUserText(promptContext: ThreadPromptContext) {
-  return promptContext.latestUserText?.toLowerCase().trim() ?? "";
-}
-
-function hasAnyTool(toolNames: string[], names: string[]) {
-  return names.some((name) => toolNames.includes(name));
-}
-
 function appendMatchingTools(
   activeTools: string[],
   availableTools: string[],
@@ -47,49 +35,6 @@ function appendMatchingTools(
       activeTools.push(name);
     }
   }
-}
-
-function getIntegrationToolsForPrompt(
-  promptContext: ThreadPromptContext,
-  availableTools: string[],
-  text: string,
-) {
-  const requestedPrefixes = promptContext.enabledIntegrations
-    .map((integration) => ({
-      prefix: INTEGRATION_TOOL_PREFIXES[integration.provider],
-      provider: integration.provider,
-    }))
-    .filter(
-      (entry) =>
-        entry.prefix &&
-        (text.includes(entry.provider.replaceAll("_", " ")) ||
-          text.includes(entry.provider)),
-    )
-    .map((entry) => entry.prefix)
-    .filter((prefix): prefix is string => Boolean(prefix));
-
-  return availableTools.filter((toolName) =>
-    requestedPrefixes.some((prefix) => toolName.startsWith(prefix)),
-  );
-}
-
-function getMcpToolsForPrompt(
-  promptContext: ThreadPromptContext,
-  availableTools: string[],
-  text: string,
-) {
-  const requestedNamespaces = promptContext.enabledMcpServers
-    .map((server) => server.namespace)
-    .filter(
-      (namespace) =>
-        text.includes(namespace.replaceAll("_", " ")) || text.includes(namespace),
-    );
-
-  return availableTools.filter((toolName) =>
-    requestedNamespaces.some((namespace) =>
-      toolName.startsWith(`mcp_${namespace}__`),
-    ),
-  );
 }
 
 export function hasWorkspaceInspectionContext(promptContext: ThreadPromptContext) {
@@ -148,14 +93,6 @@ function selectMutationTools(activeTools: string[], availableTools: string[]) {
 
 function selectWebTools(activeTools: string[], availableTools: string[]) {
   appendMatchingTools(activeTools, availableTools, ["websearch", "webfetch"]);
-}
-
-function selectMemoryTools(activeTools: string[], availableTools: string[]) {
-  appendMatchingTools(activeTools, availableTools, [
-    "search_memory",
-    "save_memory",
-    "forget_memory",
-  ]);
 }
 
 export function selectAlwaysOnChatTools({
@@ -220,51 +157,6 @@ export function selectInitialActiveTools({
   promptContext: ThreadPromptContext;
 }) {
   const activeTools: string[] = [];
-  const latestUserText = getLatestUserText(promptContext);
-  const wantsExecution = matchesAny(latestUserText, [
-    /\btest\b/,
-    /\blint\b/,
-    /\btypecheck\b/,
-    /\bbuild\b/,
-    /\bdebug\b/,
-    /\bfix\b/,
-    /\bfailing\b/,
-    /\berror\b/,
-  ]);
-  const wantsMutation = matchesAny(latestUserText, [
-    /\bimplement\b/,
-    /\bedit\b/,
-    /\bchange\b/,
-    /\bupdate\b/,
-    /\brefactor\b/,
-    /\bfix\b/,
-    /\bcreate\b/,
-    /\bdelete\b/,
-    /\brename\b/,
-  ]);
-  const wantsGit = matchesAny(latestUserText, [
-    /\bgit\b/,
-    /\bcommit\b/,
-    /\bbranch\b/,
-    /\bdiff\b/,
-    /\bstatus\b/,
-  ]);
-  const wantsWeb = matchesAny(latestUserText, [
-    /\bweb\b/,
-    /\binternet\b/,
-    /\bresearch\b/,
-    /\blatest\b/,
-    /\bdocs?\b/,
-    /\bsearch\b/,
-    /\bfetch\b/,
-    /https?:\/\//,
-  ]);
-  const wantsMemory = matchesAny(latestUserText, [
-    /\bremember\b/,
-    /\bpreference\b/,
-    /\bas usual\b/,
-    /\blike before\b/,
-  ]);
 
   if (promptContext.threadMode === "plan") {
     selectPlanCoreTools(activeTools, availableToolNames);
@@ -285,71 +177,13 @@ export function selectInitialActiveTools({
     }),
   );
 
-  if (wantsMemory) {
-    selectMemoryTools(activeTools, availableToolNames);
-  }
-
-  activeTools.push(
-    ...getIntegrationToolsForPrompt(
-      promptContext,
-      availableToolNames,
-      latestUserText,
-    ),
-  );
-  activeTools.push(
-    ...getMcpToolsForPrompt(promptContext, availableToolNames, latestUserText),
-  );
-
-  if (wantsMutation && hasWorkspaceInspectionContext(promptContext)) {
-    appendMatchingTools(activeTools, availableToolNames, ["diff", "batch_read"]);
-  }
-
-  if (wantsExecution || wantsGit) {
-    selectExecutionTools(activeTools, availableToolNames);
-  }
-
-  if (wantsWeb) {
-    selectWebTools(activeTools, availableToolNames);
-  }
-
   return uniqueToolNames(activeTools);
-}
-
-function toolCallsInclude(
-  steps: ReadonlyArray<StepResult<ToolSet>>,
-  toolNames: string[],
-) {
-  return steps.some((step) =>
-    (step.toolCalls ?? []).some((toolCall) => toolNames.includes(toolCall.toolName)),
-  );
-}
-
-function outputsSuggestProjectContext(steps: ReadonlyArray<StepResult<ToolSet>>) {
-  const projectMarkerPattern =
-    /\b(package\.json|bun\.lockb?|pnpm-lock\.yaml|package-lock\.json|yarn\.lock|tsconfig\.json|next\.config|vite\.config|src\/|app\/|pages\/)\b/i;
-
-  return steps.some((step) =>
-    (step.toolResults ?? []).some((toolResult) =>
-      projectMarkerPattern.test(JSON.stringify(toolResult)),
-    ),
-  );
-}
-
-function outputsSuggestTargetFiles(steps: ReadonlyArray<StepResult<ToolSet>>) {
-  const filePattern = /\b[\w./-]+\.(ts|tsx|js|jsx|json|md|css|scss|py|go|rs)\b/i;
-
-  return steps.some((step) =>
-    (step.toolResults ?? []).some((toolResult) =>
-      filePattern.test(JSON.stringify(toolResult)),
-    ),
-  );
 }
 
 export function selectStepActiveTools({
   availableToolNames,
   initialActiveTools,
   promptContext,
-  steps,
 }: {
   availableToolNames: string[];
   initialActiveTools: string[];
@@ -363,48 +197,6 @@ export function selectStepActiveTools({
       promptContext,
     }),
   ];
-  const latestUserText = getLatestUserText(promptContext);
-  const userRequestedMutation = matchesAny(latestUserText, [
-    /\bimplement\b/,
-    /\bfix\b/,
-    /\bedit\b/,
-    /\bchange\b/,
-    /\bupdate\b/,
-    /\bcreate\b/,
-    /\bdelete\b/,
-  ]);
-
-  if (
-    promptContext.preferredProjectRoot &&
-    (toolCallsInclude(steps, ["list", "glob", "read", "grep"]) ||
-      outputsSuggestProjectContext(steps))
-  ) {
-    selectExecutionTools(activeTools, availableToolNames);
-  }
-
-  if (
-    promptContext.allowedMutationRoot &&
-    userRequestedMutation &&
-    (toolCallsInclude(steps, ["read", "batch_read", "diff", "glob", "grep"]) ||
-      outputsSuggestTargetFiles(steps))
-  ) {
-    selectMutationTools(activeTools, availableToolNames);
-  }
-
-  if (
-    toolCallsInclude(steps, ["list", "glob", "read", "grep"]) &&
-    !hasAnyTool(activeTools, ["websearch", "webfetch"]) &&
-    matchesAny(latestUserText, [/\bdocs?\b/, /\blatest\b/, /\bresearch\b/])
-  ) {
-    selectWebTools(activeTools, availableToolNames);
-  }
-
-  if (
-    toolCallsInclude(steps, ["list", "glob", "read"]) &&
-    availableToolNames.includes("batch_read")
-  ) {
-    appendMatchingTools(activeTools, availableToolNames, ["batch_read", "diff"]);
-  }
 
   return uniqueToolNames(activeTools);
 }

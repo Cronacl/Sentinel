@@ -173,4 +173,38 @@ describe("tool selection baselines", () => {
       }),
     ).toEqual([]);
   });
+  it("does not deterministically activate specialized tools from user text", () => {
+    const promptContext = createPromptContext({
+      enabledIntegrations: [
+        {
+          label: "Google Drive",
+          provider: "google_drive",
+          toolCount: 10,
+        },
+      ],
+      enabledMcpServers: [
+        {
+          catalogId: "playwright",
+          id: "mcp-1",
+          name: "Playwright",
+          namespace: "playwright",
+          toolCount: 2,
+          transport: "stdio",
+        },
+      ],
+      latestUserText: "list my drive files and open the browser",
+    });
+
+    const activeTools = selectInitialActiveTools({
+      availableToolNames: [
+        ...availableToolNames,
+        "gdrive_list_files",
+        "mcp_playwright__browser_snapshot",
+      ],
+      promptContext,
+    });
+
+    expect(activeTools).not.toContain("gdrive_list_files");
+    expect(activeTools).not.toContain("mcp_playwright__browser_snapshot");
+  });
 });

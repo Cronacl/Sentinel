@@ -116,7 +116,10 @@ function buildCapabilityManifest(
   ).sort();
 
   return section("Capability Manifest", [
-    "Tool availability is specific to this step. Use only the active tools listed here, and treat inactive families as latent until the runtime re-activates them.",
+    "Tool availability is specific to this step. Use only the active tools listed here.",
+    promptContext.threadMode === "chat"
+      ? "Workspace and web baseline tools stay active in chat mode. Connected integrations and enabled MCP servers remain available for targeted activation when the request clearly points to them."
+      : "Treat inactive families as latent until the runtime re-activates them.",
     ...toolNames.map((toolName) => {
       const entry = TOOL_CATALOG[toolName]!;
       return `${entry.label}: ${entry.capability} ${approvalLabel(promptContext.toolApprovalPolicies, toolName)}.`;
@@ -134,10 +137,10 @@ function buildCapabilityManifest(
       ? `Discovered skills: ${promptContext.availableSkills.length} available. If one is a clear match, call load_skill before proceeding; otherwise continue with the base tools.`
       : "Discovered skills: none.",
     promptContext.enabledIntegrations.length > 0
-      ? `Connected integrations: ${promptContext.enabledIntegrations.map((i) => i.label).join(", ")}.`
+      ? `Connected integrations: ${promptContext.enabledIntegrations.map((i) => i.label).join(", ")}. Treat them as available for direct-source tasks; do not describe them as unavailable unless a tool call or connection state proves that.`
       : "Connected integrations: none.",
     promptContext.enabledMcpServers.length > 0
-      ? `Enabled MCP servers: ${promptContext.enabledMcpServers.length}. Use them when the task targets those external systems or when the integration is more direct than workspace or web tools.`
+      ? `Enabled MCP servers: ${promptContext.enabledMcpServers.length}. Treat them as available for direct-source tasks; do not describe them as unavailable unless a tool call or connection state proves that.`
       : "Enabled MCP servers: none.",
   ]);
 }
@@ -231,12 +234,16 @@ function buildMcpToolsSection(promptContext: ThreadPromptContext) {
   return lines(
     "## Enabled MCP Servers",
     "Prefer MCP integrations when the user is asking about a connected external system or when the integration can answer or perform the task more directly than workspace or web tools.",
+    "Treat enabled MCP servers as available capabilities for this conversation. Do not tell the user they are inactive or unavailable unless the connection state or a tool call proves that.",
     "How to use MCP servers: identify the relevant integration, prefer read-only tools first, and then choose namespaced tools that begin with the server namespace shown below.",
     visible
       .map((server) => {
         const toolCountLabel =
           server.toolCount > 0 ? `${server.toolCount} tools loaded` : "tools load on demand";
-        return `- ${server.name} [${server.transport}${server.catalogId ? `/${server.catalogId}` : ""}] via \`mcp_${server.namespace}__*\` (${toolCountLabel}): ${mcpServerUsageHint(server)}`;
+        const capabilitySuffix = server.capabilitySummary
+          ? ` Capability: ${server.capabilitySummary}`
+          : "";
+        return `- ${server.name} [${server.transport}${server.catalogId ? `/${server.catalogId}` : ""}] via \`mcp_${server.namespace}__*\` (${toolCountLabel}): ${mcpServerUsageHint(server)}${capabilitySuffix}`;
       })
       .join("\n"),
     remaining > 0 ? `- ... and ${remaining} more enabled MCP servers.` : "",
@@ -258,11 +265,12 @@ function buildIntegrationsSection(promptContext: ThreadPromptContext) {
 
   return lines(
     "## Connected Integrations",
-    "The following integrations are connected and their tools are available for use.",
+    "The following integrations are connected and available for targeted use in this conversation.",
+    "Use the connected integration as the direct source of truth when the request clearly targets that service, and do not describe it as unavailable unless the connection state or a tool call proves that.",
     promptContext.enabledIntegrations
       .map(
         (integration) =>
-          `- ${integration.label} (${integration.toolCount} tools): Use ${integration.provider.replace(/_/g, " ")} tools when the user asks about ${integration.provider === "gmail" ? "emails, inbox, or messages" : integration.provider === "google_calendar" ? "calendar, events, meetings, or scheduling" : integration.provider === "google_drive" ? "files, documents, drive, or uploads" : integration.provider === "github" ? "repos, issues, pull requests, code, branches, workflows, releases, or GitHub" : integration.provider === "linear" ? "issues, projects, cycles, teams, labels, sprints, or Linear" : integration.provider === "notion" ? "pages, databases, wiki, knowledge base, blocks, or Notion" : integration.provider === "slack" ? "channels, messages, threads, conversations, or Slack" : integration.provider === "airtable" ? "bases, tables, records, fields, or Airtable" : integration.provider.replace(/_/g, " ")}.`,
+          `- ${integration.label} (${integration.toolCount} tools): Use ${integration.provider.replace(/_/g, " ")} tools when the user asks about ${integration.provider === "gmail" ? "emails, inbox, or messages" : integration.provider === "google_calendar" ? "calendar, events, meetings, or scheduling" : integration.provider === "google_drive" ? "files, documents, drive, or uploads" : integration.provider === "github" ? "repos, issues, pull requests, code, branches, workflows, releases, or GitHub" : integration.provider === "linear" ? "issues, projects, cycles, teams, labels, sprints, or Linear" : integration.provider === "notion" ? "pages, databases, wiki, knowledge base, blocks, or Notion" : integration.provider === "slack" ? "channels, messages, threads, conversations, or Slack" : integration.provider === "airtable" ? "bases, tables, records, fields, or Airtable" : integration.provider.replace(/_/g, " ")}.${integration.capabilitySummary ? ` Capability: ${integration.capabilitySummary}` : ""}`,
       )
       .join("\n"),
   );
@@ -373,13 +381,13 @@ function buildDecisionHeuristics(
 
   if (promptContext.enabledIntegrations.length > 0) {
     heuristics.push(
-      `${step++}. Use integration tools when the user asks about connected services (e.g., gmail tools for email tasks, gcal tools for calendar tasks). Prefer read-only integration tools before mutating ones.`,
+      `${step++}. Use integration tools when the user asks about connected services or the request clearly targets that external system. Prefer the most direct connected integration over workspace or web tools, and prefer read-only integration tools before mutating ones.`,
     );
   }
 
   if (promptContext.enabledMcpServers.length > 0) {
     heuristics.push(
-      `${step++}. Reach for an MCP server when the user is asking about a connected external system or when that integration is the most direct source of truth.`,
+      `${step++}. Reach for an MCP server when the user is asking about a connected external system or when that server is the most direct source of truth, even if the user did not name the namespace literally.`,
     );
     heuristics.push(
       `${step++}. Prefer read-only MCP actions before mutating ones, especially when exploring browsers or external systems.`,

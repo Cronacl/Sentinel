@@ -57,6 +57,10 @@ import {
   getIntegrationLabel,
   countIntegrationTools,
 } from "@/lib/integrations/runtime";
+import {
+  getIntegrationRoutingProfile,
+  getMcpRoutingProfile,
+} from "../tool-targeting";
 import { loadIntegrationTools } from "@/lib/integrations/registry";
 import {
   getContextCompactionSettings,
@@ -375,16 +379,24 @@ function buildIntegrationPromptSummary(
   enabledIntegrations: { provider: string }[],
   integrationToolNames: string[],
 ): ThreadPromptIntegration[] {
-  return enabledIntegrations.map((integration) => ({
-    provider: integration.provider as Parameters<typeof getIntegrationLabel>[0],
-    label: getIntegrationLabel(
-      integration.provider as Parameters<typeof getIntegrationLabel>[0],
-    ),
-    toolCount: countIntegrationTools(
-      integration.provider as Parameters<typeof countIntegrationTools>[0],
-      integrationToolNames,
-    ),
-  }));
+  return enabledIntegrations.map((integration) => {
+    const provider = integration.provider as Parameters<
+      typeof getIntegrationLabel
+    >[0];
+    const label = getIntegrationLabel(provider);
+    const profile = getIntegrationRoutingProfile({
+      label,
+      provider,
+    });
+
+    return {
+      aliases: profile.aliases,
+      capabilitySummary: profile.capabilitySummary,
+      label,
+      provider,
+      toolCount: countIntegrationTools(provider, integrationToolNames),
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -828,8 +840,15 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
                 const namespace = createMcpPromptNamespace(
                   entry.catalogId ?? entry.name,
                 );
-                return {
+                const profile = getMcpRoutingProfile({
                   ...(entry.catalogId ? { catalogId: entry.catalogId } : {}),
+                  name: entry.name,
+                  namespace,
+                });
+                return {
+                  aliases: profile.aliases,
+                  ...(entry.catalogId ? { catalogId: entry.catalogId } : {}),
+                  capabilitySummary: profile.capabilitySummary,
                   id: entry.id,
                   name: entry.name,
                   namespace,
