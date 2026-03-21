@@ -273,7 +273,7 @@ export function ChatComposer({
 
   return (
     <>
-      <div className="pointer-events-auto w-full rounded-[28px] border border-border/50 bg-background shadow-[0_0_10px_rgba(0,0,0,0.05)] dark:border-border/80 dark:bg-surface">
+      <div className="pointer-events-auto w-full rounded-[28px] border border-border/50 bg-background shadow-[0_0_10px_rgba(0,0,0,0.05)] dark:border-border/20 dark:bg-surface">
         <div className="p-2.5">
           <AttachmentManager
             attachmentError={attachmentError}

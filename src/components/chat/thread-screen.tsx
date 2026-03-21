@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertDialog,
   Button,
   Dropdown,
   Form,
@@ -10,6 +11,7 @@ import {
   Label,
   Modal,
   ScrollShadow,
+  Spinner,
   TextField,
   useOverlayState,
 } from "@heroui/react";
@@ -489,6 +491,7 @@ export function ThreadScreen({
     [editMessage, editingMessage],
   );
 
+  const confirmArchiveState = useOverlayState({});
   const renameState = useOverlayState({});
   const renameInputRef = useRef<HTMLInputElement>(null);
 
@@ -522,6 +525,10 @@ export function ThreadScreen({
   }, [thread.id, thread.pinnedAt, togglePin, utils.threads.get]);
 
   const handleArchive = useCallback(() => {
+    confirmArchiveState.open();
+  }, [confirmArchiveState]);
+
+  const handleConfirmArchive = useCallback(() => {
     void archiveThread.mutate({ threadId: thread.id });
   }, [archiveThread, thread.id]);
 
@@ -830,6 +837,51 @@ export function ThreadScreen({
           </Modal.Container>
         </Modal.Backdrop>
       </Modal.Root>
+
+      <AlertDialog.Backdrop
+        isOpen={confirmArchiveState.isOpen}
+        onOpenChange={confirmArchiveState.setOpen}
+      >
+        <AlertDialog.Container placement="center" size="sm">
+          <AlertDialog.Dialog className="border-separator w-full border sm:max-w-[420px]">
+            <AlertDialog.CloseTrigger />
+            <AlertDialog.Header>
+              <AlertDialog.Icon status="warning" />
+              <AlertDialog.Heading>Archive thread</AlertDialog.Heading>
+            </AlertDialog.Header>
+            <AlertDialog.Body>
+              <p className="text-sm text-foreground">
+                Archive{" "}
+                <span className="font-medium">{threadTitle}</span>?
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                The thread will be removed from your active list. You can
+                restore it later from the archived threads view.
+              </p>
+            </AlertDialog.Body>
+            <AlertDialog.Footer>
+              <Button
+                onPress={() => confirmArchiveState.close()}
+                variant="tertiary"
+              >
+                Cancel
+              </Button>
+              <Button
+                isPending={archiveThread.isPending}
+                onPress={handleConfirmArchive}
+                variant="danger"
+              >
+                {({ isPending }) => (
+                  <>
+                    {isPending ? <Spinner color="current" size="sm" /> : null}
+                    Archive
+                  </>
+                )}
+              </Button>
+            </AlertDialog.Footer>
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
     </PageWrapper>
   );
 }

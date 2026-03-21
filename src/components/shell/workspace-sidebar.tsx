@@ -865,6 +865,14 @@ export function WorkspaceSidebar() {
       }
     },
   });
+  const [archiveThreadId, setArchiveThreadId] = useState<string | null>(null);
+  const archiveThreadState = useOverlayState({
+    onOpenChange: (isOpen) => {
+      if (!isOpen) {
+        setArchiveThreadId(null);
+      }
+    },
+  });
 
   const preferences = api.workspaces.getPreferences.useQuery();
   const currentWorkspace = api.workspaces.getCurrent.useQuery();
@@ -1032,10 +1040,29 @@ export function WorkspaceSidebar() {
 
   const handleArchiveThread = useCallback(
     (threadId: string) => {
-      void archiveThread.mutate({ threadId });
+      setArchiveThreadId(threadId);
+      archiveThreadState.open();
     },
-    [archiveThread],
+    [archiveThreadState],
   );
+
+  const archiveTargetTitle = useMemo(() => {
+    if (!archiveThreadId) return null;
+    for (const group of groups) {
+      const thread = group.threads.find((t) => t.id === archiveThreadId);
+      if (thread) return thread.title;
+    }
+    for (const item of items) {
+      if (item.id === archiveThreadId) return item.title;
+    }
+    return null;
+  }, [archiveThreadId, groups, items]);
+
+  const handleConfirmArchiveThread = useCallback(() => {
+    if (!archiveThreadId) return;
+    void archiveThread.mutate({ threadId: archiveThreadId });
+    archiveThreadState.close();
+  }, [archiveThread, archiveThreadId, archiveThreadState]);
 
   const createWorkspace = api.workspaces.create.useMutation({
     onSuccess: (workspace) => {
@@ -1700,6 +1727,54 @@ export function WorkspaceSidebar() {
                   <>
                     {isPending ? <Spinner color="current" size="sm" /> : null}
                     Delete
+                  </>
+                )}
+              </Button>
+            </AlertDialog.Footer>
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
+
+      <AlertDialog.Backdrop
+        isOpen={archiveThreadState.isOpen}
+        onOpenChange={archiveThreadState.setOpen}
+      >
+        <AlertDialog.Container placement="center" size="sm">
+          <AlertDialog.Dialog className="border-separator w-full border sm:max-w-[420px]">
+            <AlertDialog.CloseTrigger />
+            <AlertDialog.Header>
+              <AlertDialog.Icon status="warning" />
+              <AlertDialog.Heading>Archive thread</AlertDialog.Heading>
+            </AlertDialog.Header>
+            <AlertDialog.Body>
+              <p className="text-sm text-foreground">
+                Archive{" "}
+                <span className="font-medium">
+                  {archiveTargetTitle ?? "this thread"}
+                </span>
+                ?
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                The thread will be removed from your active list. You can
+                restore it later from the archived threads view.
+              </p>
+            </AlertDialog.Body>
+            <AlertDialog.Footer>
+              <Button
+                onPress={() => archiveThreadState.close()}
+                variant="tertiary"
+              >
+                Cancel
+              </Button>
+              <Button
+                isPending={archiveThread.isPending}
+                onPress={handleConfirmArchiveThread}
+                variant="danger"
+              >
+                {({ isPending }) => (
+                  <>
+                    {isPending ? <Spinner color="current" size="sm" /> : null}
+                    Archive
                   </>
                 )}
               </Button>

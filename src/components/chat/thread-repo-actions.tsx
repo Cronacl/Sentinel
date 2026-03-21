@@ -16,6 +16,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  AlertDialog,
   BUTTON_GROUP_CHILD,
   Button,
   ButtonGroup,
@@ -24,6 +25,7 @@ import {
   Label,
   Popover,
   Spinner,
+  useOverlayState,
 } from "@heroui/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { sileo } from "sileo";
@@ -75,6 +77,9 @@ export function ThreadRepoActions({
   >(null);
   const [promptValue, setPromptValue] = useState("");
   const [promptError, setPromptError] = useState("");
+
+  const confirmPushState = useOverlayState({});
+  const confirmPRState = useOverlayState({});
 
   const repoContextQuery = api.repo.getContext.useQuery(
     { workspaceId },
@@ -771,10 +776,14 @@ export function ThreadRepoActions({
                     setPrompt("commit");
                   }
                   if (key === "push" && canPush) {
-                    pushMutation.mutate({ workspaceId });
+                    confirmPushState.open();
                   }
                   if (key === "pull-request" && canCreatePullRequest) {
-                    void handleCreatePullRequest();
+                    if (repoContext?.isDefaultBranch) {
+                      handleCreatePullRequest();
+                    } else {
+                      confirmPRState.open();
+                    }
                   }
                   if (key === "branch" && canCreateBranch) {
                     setPrompt("branch");
@@ -834,6 +843,118 @@ export function ThreadRepoActions({
           </Dropdown>
         </div>
       </div>
+
+      <AlertDialog.Backdrop
+        isOpen={confirmPushState.isOpen}
+        onOpenChange={confirmPushState.setOpen}
+      >
+        <AlertDialog.Container placement="center" size="sm">
+          <AlertDialog.Dialog className="border-separator w-full border sm:max-w-[420px]">
+            <AlertDialog.CloseTrigger />
+            <AlertDialog.Header>
+              <AlertDialog.Icon status="warning" />
+              <AlertDialog.Heading>Push to GitHub</AlertDialog.Heading>
+            </AlertDialog.Header>
+            <AlertDialog.Body>
+              <p className="text-sm text-foreground">
+                Push{" "}
+                <span className="font-medium">
+                  {repoContext?.branch ?? "current branch"}
+                </span>{" "}
+                to{" "}
+                <span className="font-medium">
+                  {repoContext?.pushRemoteName ?? "remote"}
+                </span>
+                ?
+              </p>
+              {repoContext?.aheadCount ? (
+                <p className="mt-1 text-xs text-muted">
+                  This will push{" "}
+                  <span className="font-medium text-foreground">
+                    {repoContext.aheadCount}{" "}
+                    {repoContext.aheadCount === 1 ? "commit" : "commits"}
+                  </span>{" "}
+                  to the remote repository.
+                </p>
+              ) : null}
+            </AlertDialog.Body>
+            <AlertDialog.Footer>
+              <Button
+                onPress={() => confirmPushState.close()}
+                variant="tertiary"
+              >
+                Cancel
+              </Button>
+              <Button
+                isPending={pushMutation.isPending}
+                onPress={() => {
+                  pushMutation.mutate(
+                    { workspaceId },
+                    { onSettled: () => confirmPushState.close() },
+                  );
+                }}
+              >
+                {({ isPending }) => (
+                  <>
+                    {isPending ? <Spinner color="current" size="sm" /> : null}
+                    Push
+                  </>
+                )}
+              </Button>
+            </AlertDialog.Footer>
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
+
+      <AlertDialog.Backdrop
+        isOpen={confirmPRState.isOpen}
+        onOpenChange={confirmPRState.setOpen}
+      >
+        <AlertDialog.Container placement="center" size="sm">
+          <AlertDialog.Dialog className="border-separator w-full border sm:max-w-[420px]">
+            <AlertDialog.CloseTrigger />
+            <AlertDialog.Header>
+              <AlertDialog.Icon status="warning" />
+              <AlertDialog.Heading>Create pull request</AlertDialog.Heading>
+            </AlertDialog.Header>
+            <AlertDialog.Body>
+              <p className="text-sm text-foreground">
+                Create a pull request from{" "}
+                <span className="font-medium">
+                  {repoContext?.branch ?? "current branch"}
+                </span>
+                ?
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                This will push any unpushed commits and open a new pull request
+                on GitHub.
+              </p>
+            </AlertDialog.Body>
+            <AlertDialog.Footer>
+              <Button
+                onPress={() => confirmPRState.close()}
+                variant="tertiary"
+              >
+                Cancel
+              </Button>
+              <Button
+                isPending={createPullRequestMutation.isPending}
+                onPress={() => {
+                  confirmPRState.close();
+                  handleCreatePullRequest();
+                }}
+              >
+                {({ isPending }) => (
+                  <>
+                    {isPending ? <Spinner color="current" size="sm" /> : null}
+                    Create PR
+                  </>
+                )}
+              </Button>
+            </AlertDialog.Footer>
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
     </>
   );
 }
