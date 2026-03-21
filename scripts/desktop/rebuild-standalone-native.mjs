@@ -7,10 +7,40 @@ const projectRoot = process.cwd();
 const targetRoot = path.join(projectRoot, "desktop", "dist", "server");
 const targetPackagePath = path.join(targetRoot, "package.json");
 const electronGypDir = path.join(projectRoot, ".electron-gyp");
-const electronBin = path.join(
-  projectRoot,
-  "node_modules/electron/dist/Electron.app/Contents/MacOS/Electron",
-);
+
+function getElectronExecutablePath() {
+  switch (process.platform) {
+    case "darwin":
+      return path.join(
+        projectRoot,
+        "node_modules",
+        "electron",
+        "dist",
+        "Electron.app",
+        "Contents",
+        "MacOS",
+        "Electron",
+      );
+    case "win32":
+      return path.join(
+        projectRoot,
+        "node_modules",
+        "electron",
+        "dist",
+        "electron.exe",
+      );
+    default:
+      return path.join(
+        projectRoot,
+        "node_modules",
+        "electron",
+        "dist",
+        "electron",
+      );
+  }
+}
+
+const electronBin = getElectronExecutablePath();
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -129,25 +159,21 @@ await writeFile(
   `${JSON.stringify(runtimePackageJson, null, 2)}\n`,
 );
 
-await run(
-  "npm",
-  ["rebuild", "better-sqlite3"],
-  {
-    cwd: targetRoot,
-    env: {
-      ...process.env,
-      npm_config_arch: process.arch,
-      npm_config_build_from_source: "true",
-      npm_config_devdir: electronGypDir,
-      npm_config_disturl: "https://electronjs.org/headers",
-      npm_config_runtime: "electron",
-      npm_config_target: getInstalledVersion("electron"),
-      npm_config_target_arch: process.arch,
-      npm_config_target_platform: process.platform,
-      npm_config_update_binary: "true",
-    },
+await run("npm", ["rebuild", "better-sqlite3"], {
+  cwd: targetRoot,
+  env: {
+    ...process.env,
+    npm_config_arch: process.arch,
+    npm_config_build_from_source: "true",
+    npm_config_devdir: electronGypDir,
+    npm_config_disturl: "https://electronjs.org/headers",
+    npm_config_runtime: "electron",
+    npm_config_target: getInstalledVersion("electron"),
+    npm_config_target_arch: process.arch,
+    npm_config_target_platform: process.platform,
+    npm_config_update_binary: "true",
   },
-);
+});
 
 await run(
   electronBin,

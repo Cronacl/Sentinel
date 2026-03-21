@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
-import { access, readdir } from "node:fs/promises";
+import { access, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 const require = createRequire(import.meta.url);
@@ -16,6 +16,23 @@ const UNPACKED_DENYLIST = [
   "/node_modules/sharp/",
 ];
 
+function getArgValue(flag) {
+  const index = process.argv.indexOf(flag);
+  if (index === -1) return null;
+  return process.argv[index + 1] ?? null;
+}
+
+function inferPlatform() {
+  switch (process.platform) {
+    case "darwin":
+      return "mac";
+    case "win32":
+      return "win";
+    default:
+      return "linux";
+  }
+}
+
 async function pathExists(targetPath) {
   try {
     await access(targetPath);
@@ -26,8 +43,8 @@ async function pathExists(targetPath) {
 }
 
 async function findArtifacts(rootPath) {
-  const apps = [];
-  const dmgs = [];
+  const directories = [];
+  const files = [];
 
   async function visit(currentPath) {
     let entries;
@@ -41,17 +58,13 @@ async function findArtifacts(rootPath) {
       const fullPath = path.join(currentPath, entry.name);
 
       if (entry.isDirectory()) {
-        if (entry.name.endsWith(".app")) {
-          apps.push(fullPath);
-          continue;
-        }
-
+        directories.push(fullPath);
         await visit(fullPath);
         continue;
       }
 
-      if (entry.isFile() && entry.name.endsWith(".dmg")) {
-        dmgs.push(fullPath);
+      if (entry.isFile()) {
+        files.push(fullPath);
       }
     }
   }
@@ -59,18 +72,25 @@ async function findArtifacts(rootPath) {
   await visit(rootPath);
 
   return {
-    apps: apps.sort(),
-    dmgs: dmgs.sort(),
+    directories: directories.sort(),
+    files: files.sort(),
   };
 }
 
-function getSizeBytes(targetPath) {
-  const output = execFileSync("du", ["-sk", targetPath], {
-    cwd: projectRoot,
-    encoding: "utf8",
-  });
-  const kilobytes = Number.parseInt(output.trim().split(/\s+/)[0] ?? "0", 10);
-  return kilobytes * 1024;
+async function getSizeBytes(targetPath) {
+  const targetStats = await stat(targetPath);
+  if (!targetStats.isDirectory()) {
+    return targetStats.size;
+  }
+
+  let totalSize = 0;
+  const entries = await readdir(targetPath, { withFileTypes: true });
+
+  for (const entry of entries) {
+    totalSize += await getSizeBytes(path.join(targetPath, entry.name));
+  }
+
+  return totalSize;
 }
 
 function formatBytes(bytes) {
@@ -117,6 +137,10 @@ async function collectFiles(rootPath) {
   return files.sort();
 }
 
+function normalizePathForMatch(filePath) {
+  return filePath.replaceAll("\\", "/");
+}
+
 function getAsarTopLevelEntries(paths) {
   const entries = new Set();
 
@@ -131,19 +155,59 @@ function getAsarTopLevelEntries(paths) {
   return [...entries].sort();
 }
 
-const { apps, dmgs } = await findArtifacts(distRoot);
-const appPath = apps[0];
-const dmgPath = dmgs[0];
-
-if (!appPath) {
-  throw new Error("No packaged .app was found under dist/.");
+function findInstallerFile(files, extension) {
+  return files.find(
+    (filePath) =>
+      path.dirname(filePath) === distRoot && filePath.endsWith(extension),
+  );
 }
 
-if (!dmgPath) {
-  throw new Error("No packaged .dmg was found under dist/.");
+function findUnpackedApp(directories, platform) {
+  switch (platform) {
+    case "mac":
+      return directories.find((directoryPath) =>
+        directoryPath.endsWith(".app"),
+      );
+    case "win":
+      return directories.find((directoryPath) =>
+        path.basename(directoryPath).startsWith("win-unpacked"),
+      );
+    case "linux":
+      return directories.find((directoryPath) =>
+        path.basename(directoryPath).startsWith("linux-unpacked"),
+      );
+    default:
+      throw new Error(`Unsupported audit platform: ${platform}`);
+  }
 }
 
-const resourcesPath = path.join(appPath, "Contents", "Resources");
+const platform = getArgValue("--platform") ?? inferPlatform();
+const { directories, files } = await findArtifacts(distRoot);
+const unpackedAppPath = findUnpackedApp(directories, platform);
+
+if (!unpackedAppPath) {
+  throw new Error(
+    `No unpacked app bundle was found for platform "${platform}".`,
+  );
+}
+
+const installerPath =
+  platform === "mac"
+    ? findInstallerFile(files, ".dmg")
+    : platform === "win"
+      ? findInstallerFile(files, ".exe")
+      : findInstallerFile(files, ".AppImage");
+
+if (!installerPath) {
+  throw new Error(
+    `No installer artifact was found for platform "${platform}".`,
+  );
+}
+
+const resourcesPath =
+  platform === "mac"
+    ? path.join(unpackedAppPath, "Contents", "Resources")
+    : path.join(unpackedAppPath, "resources");
 const appAsarPath = path.join(resourcesPath, "app.asar");
 const appAsarUnpackedPath = path.join(resourcesPath, "app.asar.unpacked");
 const serverPath = path.join(resourcesPath, "server");
@@ -158,22 +222,24 @@ const unpackedFiles = (await pathExists(appAsarUnpackedPath))
   ? await collectFiles(appAsarUnpackedPath)
   : [];
 const denylistedUnpackedFiles = unpackedFiles.filter((filePath) =>
-  UNPACKED_DENYLIST.some((pattern) => filePath.includes(pattern)),
+  UNPACKED_DENYLIST.some((pattern) =>
+    normalizePathForMatch(filePath).includes(pattern),
+  ),
 );
 
 const reportRows = [
   ["app.asar", appAsarPath],
   ["app.asar.unpacked", appAsarUnpackedPath],
   ["server", serverPath],
-  ["app", appPath],
-  ["dmg", dmgPath],
+  ["unpacked app", unpackedAppPath],
+  ["installer", installerPath],
 ];
 
 console.log("[desktop] bundle size audit");
 for (const [label, targetPath] of reportRows) {
   const exists = await pathExists(targetPath);
   const formattedSize = exists
-    ? formatBytes(getSizeBytes(targetPath))
+    ? formatBytes(await getSizeBytes(targetPath))
     : "missing";
   console.log(`  ${label.padEnd(18)} ${formattedSize}`);
 }

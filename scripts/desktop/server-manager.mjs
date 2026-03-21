@@ -1,4 +1,4 @@
-import { execSync, spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import path from "node:path";
 
 import { APP_HOST, APP_PORT, APP_URL } from "./constants.mjs";
@@ -8,18 +8,28 @@ function wait(durationMs) {
   return new Promise((resolve) => setTimeout(resolve, durationMs));
 }
 
-function getPackagedServerRuntimePath() {
+function getPackagedServerRuntimeCommand() {
+  if (process.platform !== "darwin") {
+    return {
+      args: [],
+      command: process.execPath,
+    };
+  }
+
   const executableName = path.basename(process.execPath);
   const helperName = `${executableName} Helper (Plugin)`;
 
-  return path.join(
-    path.dirname(path.dirname(process.execPath)),
-    "Frameworks",
-    `${helperName}.app`,
-    "Contents",
-    "MacOS",
-    helperName,
-  );
+  return {
+    args: [],
+    command: path.join(
+      path.dirname(path.dirname(process.execPath)),
+      "Frameworks",
+      `${helperName}.app`,
+      "Contents",
+      "MacOS",
+      helperName,
+    ),
+  };
 }
 
 export async function waitForAppServer(
@@ -56,24 +66,65 @@ export async function getAppServerStatus(baseUrl) {
   }
 }
 
-export async function killProcessOnPort(port) {
+function getWindowsPidsOnPort(port) {
   try {
-    const pids = execSync(`lsof -ti :${port}`, { encoding: "utf-8" })
+    const output = execFileSync("netstat", ["-ano", "-p", "tcp"], {
+      encoding: "utf-8",
+    });
+
+    return Array.from(
+      new Set(
+        output
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => line.split(/\s+/))
+          .filter((parts) => parts.length >= 5)
+          .filter((parts) => parts[1]?.endsWith(`:${port}`))
+          .map((parts) => parts.at(-1))
+          .filter((pid) => Boolean(pid) && /^\d+$/.test(pid)),
+      ),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function getUnixPidsOnPort(port) {
+  try {
+    const output = execFileSync("lsof", ["-ti", `:${port}`], {
+      encoding: "utf-8",
+    });
+
+    return output
       .trim()
       .split("\n")
-      .filter(Boolean);
-
-    for (const pid of pids) {
-      try {
-        process.kill(Number(pid), "SIGKILL");
-      } catch {}
-    }
-
-    if (pids.length > 0) {
-      await wait(500);
-    }
+      .filter((pid) => /^\d+$/.test(pid));
   } catch {
-    // lsof exits with code 1 when no process is found
+    return [];
+  }
+}
+
+export async function killProcessOnPort(port) {
+  const pids =
+    process.platform === "win32"
+      ? getWindowsPidsOnPort(port)
+      : getUnixPidsOnPort(port);
+
+  for (const pid of pids) {
+    try {
+      if (process.platform === "win32") {
+        execFileSync("taskkill", ["/PID", pid, "/T", "/F"], {
+          stdio: "ignore",
+        });
+      } else {
+        process.kill(Number(pid), "SIGKILL");
+      }
+    } catch {}
+  }
+
+  if (pids.length > 0) {
+    await wait(500);
   }
 }
 
@@ -92,20 +143,25 @@ export async function startLocalServer(runtimePaths) {
   await killProcessOnPort(APP_PORT);
 
   const env = await loadRuntimeEnv(runtimePaths);
-  const child = spawn(getPackagedServerRuntimePath(), [runtimePaths.serverEntryPath], {
-    cwd: runtimePaths.isPackaged
-      ? path.dirname(runtimePaths.serverEntryPath)
-      : runtimePaths.appRoot,
-    env: {
-      ...process.env,
-      ...env,
-      ELECTRON_RUN_AS_NODE: "1",
-      HOSTNAME: APP_HOST,
-      NODE_ENV: "production",
-      PORT: String(APP_PORT),
+  const runtimeCommand = getPackagedServerRuntimeCommand();
+  const child = spawn(
+    runtimeCommand.command,
+    [...runtimeCommand.args, runtimePaths.serverEntryPath],
+    {
+      cwd: runtimePaths.isPackaged
+        ? path.dirname(runtimePaths.serverEntryPath)
+        : runtimePaths.appRoot,
+      env: {
+        ...process.env,
+        ...env,
+        ELECTRON_RUN_AS_NODE: "1",
+        HOSTNAME: APP_HOST,
+        NODE_ENV: "production",
+        PORT: String(APP_PORT),
+      },
+      stdio: "pipe",
     },
-    stdio: "pipe",
-  });
+  );
 
   let startupFailure = null;
 
