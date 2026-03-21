@@ -10,6 +10,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, Input, Popover, ScrollShadow, Spinner } from "@heroui/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { sileo } from "sileo";
 
 import { getErrorMessage } from "@/lib/errors";
 import {
@@ -29,11 +30,6 @@ type ComposerWorkspaceBarProps = {
   showBranchSwitcher: boolean;
 };
 
-type FeedbackState = {
-  text: string;
-  tone: "error" | "success";
-} | null;
-
 function getPermissionModeLabel(value: PermissionMode) {
   return (
     PERMISSION_MODE_OPTIONS.find((option) => option.value === value)?.label ??
@@ -46,7 +42,6 @@ export function ComposerWorkspaceBar({
   showBranchSwitcher,
 }: ComposerWorkspaceBarProps) {
   const utils = api.useUtils();
-  const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [permissionPopoverOpen, setPermissionPopoverOpen] = useState(false);
   const [permissionOverride, setPermissionOverride] =
     useState<PermissionMode | null>(
@@ -82,15 +77,6 @@ export function ComposerWorkspaceBar({
   useEffect(() => {
     setPermissionOverride(activeWorkspace.permissionModeOverride ?? null);
   }, [activeWorkspace.id, activeWorkspace.permissionModeOverride]);
-
-  useEffect(() => {
-    if (!feedback) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => setFeedback(null), 3500);
-    return () => window.clearTimeout(timeoutId);
-  }, [feedback]);
 
   const updatePermissionOverrideMutation =
     api.workspaces.updatePermissionOverride.useMutation({
@@ -134,21 +120,21 @@ export function ComposerWorkspaceBar({
           undefined,
           context?.previousWorkspaces ?? [],
         );
-        setFeedback({
-          text: getErrorMessage(
+        sileo.error({
+          description: getErrorMessage(
             error,
             "Unable to update workspace permissions.",
           ),
-          tone: "error",
+          title: "Workspace permissions failed",
         });
       },
       onSuccess: (result) => {
         setPermissionOverride(result.permissionModeOverride);
-        setFeedback({
-          text: result.permissionModeOverride
-            ? `Workspace permissions set to ${getPermissionModeLabel(result.permissionModeOverride)}`
-            : "Workspace now uses global permissions",
-          tone: "success",
+        sileo.success({
+          description: result.permissionModeOverride
+            ? `Workspace permissions set to ${getPermissionModeLabel(result.permissionModeOverride)}.`
+            : "Workspace now uses global permissions.",
+          title: "Permissions updated",
         });
       },
       onSettled: async () => {
@@ -162,9 +148,9 @@ export function ComposerWorkspaceBar({
       setBranchError("");
       setBranchPopoverOpen(false);
       setBranchSearch("");
-      setFeedback({
-        text: `Switched to ${result.branch}`,
-        tone: "success",
+      sileo.success({
+        description: `Switched to ${result.branch}.`,
+        title: "Branch updated",
       });
       await utils.repo.getContext.invalidate({
         workspaceId: activeWorkspace.id,
@@ -185,9 +171,9 @@ export function ComposerWorkspaceBar({
       setBranchSearch("");
       setBranchMode("list");
       setBranchPopoverOpen(false);
-      setFeedback({
-        text: `Switched to ${result.branch}`,
-        tone: "success",
+      sileo.success({
+        description: `Switched to ${result.branch}.`,
+        title: "Branch created",
       });
       await utils.repo.getContext.invalidate({
         workspaceId: activeWorkspace.id,
@@ -365,18 +351,6 @@ export function ComposerWorkspaceBar({
       </Popover.Root>
 
       <div className="flex min-w-0 items-center justify-end gap-2">
-        {feedback ? (
-          <p
-            className={
-              feedback.tone === "error"
-                ? "truncate text-xs text-danger"
-                : "truncate text-xs text-muted"
-            }
-          >
-            {feedback.text}
-          </p>
-        ) : null}
-
         {branchSwitcherVisible ? (
           <Popover.Root
             isOpen={branchPopoverOpen}

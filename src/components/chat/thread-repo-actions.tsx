@@ -26,6 +26,7 @@ import {
   Spinner,
 } from "@heroui/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { sileo } from "sileo";
 
 import { getDesktopApi, isDesktopRuntime } from "@/lib/desktop/client";
 import type { DesktopOpenTarget } from "@/lib/desktop/contracts";
@@ -41,11 +42,6 @@ type ThreadRepoActionsProps = {
   workspaceId: string;
   workspaceRootPath: string | null;
 };
-
-type FeedbackState = {
-  text: string;
-  tone: "error" | "success";
-} | null;
 
 function targetIcon(target: Pick<DesktopOpenTarget, "id" | "kind">) {
   if (target.kind === "terminal") {
@@ -66,7 +62,6 @@ export function ThreadRepoActions({
   const desktop = getDesktopApi();
   const isDesktop = isDesktopRuntime();
   const utils = api.useUtils();
-  const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [launchTargets, setLaunchTargets] = useState<DesktopOpenTarget[]>([]);
   const [isLoadingTargets, setIsLoadingTargets] = useState(false);
   const [launchingTargetId, setLaunchingTargetId] = useState<string | null>(
@@ -113,9 +108,9 @@ export function ThreadRepoActions({
       setPromptMode(null);
       setPromptValue("");
       setPromptError("");
-      setFeedback({
-        text: `Committed ${result.commit.slice(0, 7)}`,
-        tone: "success",
+      sileo.success({
+        description: `Committed ${result.commit.slice(0, 7)}.`,
+        title: "Commit created",
       });
       await utils.repo.getContext.invalidate({ workspaceId });
     },
@@ -129,9 +124,9 @@ export function ThreadRepoActions({
       setPromptMode(null);
       setPromptValue("");
       setPromptError("");
-      setFeedback({
-        text: `Switched to ${result.branch}`,
-        tone: "success",
+      sileo.success({
+        description: `Switched to ${result.branch}.`,
+        title: "Branch created",
       });
       await utils.repo.getContext.invalidate({ workspaceId });
     },
@@ -142,16 +137,18 @@ export function ThreadRepoActions({
 
   const pushMutation = api.repo.push.useMutation({
     onSuccess: async (result) => {
-      setFeedback({
-        text: result.branch ? `Pushed ${result.branch}` : "Pushed branch",
-        tone: "success",
+      sileo.success({
+        description: result.branch
+          ? `Pushed ${result.branch}.`
+          : "Pushed branch.",
+        title: "Push complete",
       });
       await utils.repo.getContext.invalidate({ workspaceId });
     },
     onError: (error) => {
-      setFeedback({
-        text: getErrorMessage(error, "Unable to push branch."),
-        tone: "error",
+      sileo.error({
+        description: getErrorMessage(error, "Unable to push branch."),
+        title: "Push failed",
       });
     },
   });
@@ -167,18 +164,18 @@ export function ThreadRepoActions({
           await desktop.openExternal(result.pullRequestUrl);
         }
 
-        setFeedback({
-          text: result.createdBranch
-            ? `Created PR from ${result.createdBranch}`
+        sileo.success({
+          description: result.createdBranch
+            ? `Created PR from ${result.createdBranch}.`
             : result.branch
-              ? `Created PR from ${result.branch}`
-              : "Created PR",
-          tone: "success",
+              ? `Created PR from ${result.branch}.`
+              : "Created PR.",
+          title: "Pull request ready",
         });
       } catch (error) {
-        setFeedback({
-          text: getErrorMessage(error, "Unable to open the PR page."),
-          tone: "error",
+        sileo.error({
+          description: getErrorMessage(error, "Unable to open the PR page."),
+          title: "PR page failed to open",
         });
       }
 
@@ -186,25 +183,25 @@ export function ThreadRepoActions({
     },
     onError: (error) => {
       setPromptError(getErrorMessage(error, "Unable to create PR."));
-      setFeedback({
-        text: getErrorMessage(error, "Unable to create PR."),
-        tone: "error",
+      sileo.error({
+        description: getErrorMessage(error, "Unable to create PR."),
+        title: "Create PR failed",
       });
     },
   });
 
   const initMutation = api.repo.init.useMutation({
     onSuccess: async () => {
-      setFeedback({
-        text: "Initialized git repository",
-        tone: "success",
+      sileo.success({
+        description: "Initialized git repository.",
+        title: "Repository ready",
       });
       await utils.repo.getContext.invalidate({ workspaceId });
     },
     onError: (error) => {
-      setFeedback({
-        text: getErrorMessage(error, "Unable to initialize repository."),
-        tone: "error",
+      sileo.error({
+        description: getErrorMessage(error, "Unable to initialize repository."),
+        title: "Repository init failed",
       });
     },
   });
@@ -224,15 +221,6 @@ export function ThreadRepoActions({
 
   const setPreferredOpenTargetMutation =
     api.repo.setPreferredOpenTarget.useMutation();
-
-  useEffect(() => {
-    if (!feedback) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => setFeedback(null), 3500);
-    return () => window.clearTimeout(timeoutId);
-  }, [feedback]);
 
   useEffect(() => {
     setPreferredLaunchTargetId(repoContext?.preferredOpenTargetId ?? null);
@@ -262,12 +250,12 @@ export function ThreadRepoActions({
         }
 
         setLaunchTargets([]);
-        setFeedback({
-          text: getErrorMessage(
+        sileo.error({
+          description: getErrorMessage(
             error,
             "Unable to load project launch targets.",
           ),
-          tone: "error",
+          title: "Project launch targets failed",
         });
       })
       .finally(() => {
@@ -286,7 +274,6 @@ export function ThreadRepoActions({
       setPromptMode(mode);
       setPromptValue("");
       setPromptError("");
-      setFeedback(null);
     },
     [],
   );
@@ -298,7 +285,6 @@ export function ThreadRepoActions({
       }
 
       setLaunchingTargetId(target.id);
-      setFeedback(null);
 
       try {
         if (target.kind === "file_manager") {
@@ -320,16 +306,21 @@ export function ThreadRepoActions({
           didPersistPreference = false;
         }
 
-        setFeedback({
-          text: didPersistPreference
-            ? `Opened in ${target.label}`
-            : `Opened in ${target.label}, but couldn't save it as default.`,
-          tone: didPersistPreference ? "success" : "error",
-        });
+        if (didPersistPreference) {
+          sileo.success({
+            description: `Opened in ${target.label}.`,
+            title: "Project opened",
+          });
+        } else {
+          sileo.warning({
+            description: `Opened in ${target.label}, but couldn't save it as the default app.`,
+            title: "Project opened",
+          });
+        }
       } catch (error) {
-        setFeedback({
-          text: getErrorMessage(error, `Unable to open ${target.label}.`),
-          tone: "error",
+        sileo.error({
+          description: getErrorMessage(error, `Unable to open ${target.label}.`),
+          title: "Open project failed",
         });
       } finally {
         setLaunchingTargetId(null);
@@ -390,7 +381,6 @@ export function ThreadRepoActions({
     }
 
     setPromptError("");
-    setFeedback(null);
 
     if (repoContext.isDefaultBranch) {
       setPrompt("pull-request-branch");

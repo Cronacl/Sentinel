@@ -32,6 +32,17 @@
   --hljs-attr: #116329;
   --hljs-tag: #116329;
   --hljs-literal: #0550ae;
+
+  --sileo-state-success: oklch(0.723 0.219 142.136);
+  --sileo-state-loading: oklch(0.556 0 0);
+  --sileo-state-error: oklch(0.637 0.237 25.331);
+  --sileo-state-warning: oklch(0.795 0.184 86.047);
+  --sileo-state-info: oklch(0.685 0.169 237.323);
+  --sileo-state-action: oklch(0.623 0.214 259.815);
+  --sileo-width: 350px;
+  --sileo-height: 40px;
+  --sileo-duration: 600ms;
+  --sileo-shadow: 0 18px 48px rgb(0 0 0 / 5%);
 }
 
 .dark,
@@ -56,6 +67,17 @@
   --hljs-attr: #7ee787;
   --hljs-tag: #7ee787;
   --hljs-literal: #79c0ff;
+
+  --sileo-state-success: oklch(0.723 0.219 142.136);
+  --sileo-state-loading: oklch(0.72 0 0);
+  --sileo-state-error: oklch(0.637 0.237 25.331);
+  --sileo-state-warning: oklch(0.795 0.184 86.047);
+  --sileo-state-info: oklch(0.685 0.169 237.323);
+  --sileo-state-action: oklch(0.623 0.214 259.815);
+  --sileo-width: 350px;
+  --sileo-height: 40px;
+  --sileo-duration: 600ms;
+  --sileo-shadow: 0 18px 48px rgb(0 0 0 / 5%);
 }
 
 html {
@@ -102,6 +124,10 @@ body {
 
 [data-slot="modal-dialog"] {
   background-color: var(--surface);
+}
+
+[data-sileo-toast] {
+  filter: drop-shadow(var(--sileo-shadow));
 }
 
 @layer components {
