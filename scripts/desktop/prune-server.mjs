@@ -3,20 +3,25 @@ import path from "node:path";
 
 const projectRoot = process.cwd();
 const serverRoot = path.join(projectRoot, "desktop", "dist", "server");
-const nodeModulesRoot = path.join(serverRoot, "node_modules");
 
 const PRUNE_DIRS = new Set([
   "__tests__",
+  "__mocks__",
   "test",
   "tests",
   "docs",
   "doc",
   "example",
   "examples",
+  "coverage",
+  "fixtures",
+  "fixture",
   ".github",
   ".vscode",
   ".idea",
 ]);
+
+const PRUNE_ROOT_ENTRIES = new Set([".env", "src"]);
 
 const PRUNE_FILES_EXACT = new Set([
   "tsconfig.json",
@@ -45,6 +50,7 @@ const PRUNE_FILES_EXACT = new Set([
   "appveyor.yml",
   ".coveralls.yml",
   ".babelrc",
+  "binding.gyp",
 ]);
 
 const PRUNE_FILE_PATTERNS = [
@@ -53,8 +59,11 @@ const PRUNE_FILE_PATTERNS = [
   /^HISTORY/i,
   /^CONTRIBUTING/i,
   /^AUTHORS/i,
+  /^THIRD_PARTY_NOTICES/i,
+  /\.(md|markdown)$/i,
   /\.map$/,
   /\.ts$/,
+  /\.tsx$/,
 ];
 
 function shouldPruneDir(name) {
@@ -79,15 +88,23 @@ async function pruneDirectory(dirPath) {
 
   for (const entry of entries) {
     const fullPath = path.join(dirPath, entry.name);
+    const isServerRootEntry = dirPath === serverRoot;
 
     if (entry.isDirectory()) {
-      if (shouldPruneDir(entry.name)) {
+      if (
+        (isServerRootEntry && PRUNE_ROOT_ENTRIES.has(entry.name)) ||
+        shouldPruneDir(entry.name)
+      ) {
         await rm(fullPath, { force: true, recursive: true });
         removedCount++;
       } else {
         await pruneDirectory(fullPath);
       }
-    } else if (entry.isFile() && shouldPruneFile(entry.name)) {
+    } else if (
+      entry.isFile() &&
+      ((isServerRootEntry && PRUNE_ROOT_ENTRIES.has(entry.name)) ||
+        shouldPruneFile(entry.name))
+    ) {
       await rm(fullPath, { force: true });
       removedCount++;
     }
@@ -95,12 +112,12 @@ async function pruneDirectory(dirPath) {
 }
 
 try {
-  await stat(nodeModulesRoot);
+  await stat(serverRoot);
 } catch {
-  console.warn("[desktop] server node_modules not found, skipping prune.");
+  console.warn("[desktop] packaged server not found, skipping prune.");
   process.exit(0);
 }
 
-console.log("[desktop] pruning server node_modules…");
-await pruneDirectory(nodeModulesRoot);
-console.log(`[desktop] pruned ${removedCount} entries from server node_modules.`);
+console.log("[desktop] pruning packaged server…");
+await pruneDirectory(serverRoot);
+console.log(`[desktop] pruned ${removedCount} entries from packaged server.`);

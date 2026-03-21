@@ -1,5 +1,5 @@
 module.exports = async function beforeBuild() {
-  // Returning true (or undefined) allows the build to proceed.
-  // Returning false would cancel the electron-builder build.
-  return true;
+  // The desktop shell is packaged from dist/desktop-app and does not need
+  // electron-builder to install or rebuild production dependencies.
+  return false;
 };

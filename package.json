@@ -14,7 +14,8 @@
   "scripts": {
     "preinstall": "node ./scripts/check-package-manager.mjs",
     "build": "node ./scripts/rebuild-node-native.mjs && next build",
-    "build:desktop": "bun run ./scripts/desktop/clean.mjs && bun run build && bun run ./scripts/desktop/prepare-production.mjs && bun run ./scripts/desktop/rebuild-standalone-native.mjs && bun run ./scripts/desktop/prune-server.mjs && bun run ./scripts/desktop/prepare-shell.mjs && bun x electron-builder --mac dmg",
+    "build:desktop": "bun run ./scripts/desktop/clean.mjs && bun run build && bun run ./scripts/desktop/prepare-production.mjs && bun run ./scripts/desktop/rebuild-standalone-native.mjs && bun run ./scripts/desktop/prune-server.mjs && bun run ./scripts/desktop/prepare-shell.mjs && bun x electron-builder --mac dmg && node ./scripts/desktop/audit-bundle.mjs",
+    "audit:desktop-bundle": "node ./scripts/desktop/audit-bundle.mjs",
     "dev:desktop": "concurrently -k \"bun run dev -- --port 3232\" \"bun run ./scripts/desktop/dev-launch.mjs\"",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -112,6 +113,7 @@
       "buildResources": "build"
     },
     "electronDist": "node_modules/electron/dist",
+    "npmRebuild": false,
     "extraResources": [
       {
         "from": "desktop/dist/server",
@@ -119,9 +121,6 @@
       }
     ],
     "asar": true,
-    "asarUnpack": [
-      "**/*.node"
-    ],
     "files": [
       "desktop/main/**/*",
       "desktop/preload/**/*",
@@ -132,6 +131,7 @@
       "scripts/desktop/state.mjs",
       "package.json",
       "!**/node_modules",
+      "!**/node_modules/**/*",
       "!**/*.test.*",
       "!**/*.spec.*",
       "!**/*.map"

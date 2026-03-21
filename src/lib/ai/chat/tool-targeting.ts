@@ -4,6 +4,7 @@ import type {
   IntegrationProvider,
   McpServerCatalogId,
 } from "@/server/db/enums";
+import { MCP_SERVER_CATALOG_IDS } from "@/server/db/enums";
 
 import type {
   ThreadPromptIntegration,
@@ -65,7 +66,14 @@ const INTEGRATION_ALIAS_MAP: Record<IntegrationProvider, string[]> = {
     "cycle",
     "cycles",
   ],
-  mongodb: ["mongodb", "mongo", "collection", "collections", "document", "documents"],
+  mongodb: [
+    "mongodb",
+    "mongo",
+    "collection",
+    "collections",
+    "document",
+    "documents",
+  ],
   mysql: ["mysql", "sql table", "sql tables", "mysql database"],
   notion: ["notion", "notion page", "notion pages", "wiki", "knowledge base"],
   postgresql: [
@@ -98,6 +106,15 @@ const MCP_ALIAS_MAP: Partial<Record<McpServerCatalogId, string[]>> = {
   ],
 };
 
+function isMcpServerCatalogId(
+  value: string | null | undefined,
+): value is McpServerCatalogId {
+  return (
+    typeof value === "string" &&
+    (MCP_SERVER_CATALOG_IDS as readonly string[]).includes(value)
+  );
+}
+
 function normalizeText(value: string | null | undefined) {
   return (value ?? "")
     .toLowerCase()
@@ -107,7 +124,9 @@ function normalizeText(value: string | null | undefined) {
 }
 
 function uniqueStrings(values: string[]) {
-  return Array.from(new Set(values.map((value) => normalizeText(value)).filter(Boolean)));
+  return Array.from(
+    new Set(values.map((value) => normalizeText(value)).filter(Boolean)),
+  );
 }
 
 export function getIntegrationRoutingProfile(
@@ -128,7 +147,9 @@ export function getIntegrationRoutingProfile(
   return {
     aliases,
     capabilitySummary:
-      integration.capabilitySummary?.trim() || metadata?.description || integration.label,
+      integration.capabilitySummary?.trim() ||
+      metadata?.description ||
+      integration.label,
   };
 }
 
@@ -138,10 +159,13 @@ export function getMcpRoutingProfile(
     "aliases" | "capabilitySummary" | "catalogId" | "name" | "namespace"
   >,
 ) {
-  const catalogEntry = server.catalogId ? getMcpCatalogEntry(server.catalogId) : null;
+  const catalogId = isMcpServerCatalogId(server.catalogId)
+    ? server.catalogId
+    : null;
+  const catalogEntry = catalogId ? getMcpCatalogEntry(catalogId) : null;
   const aliases = uniqueStrings([
     ...(server.aliases ?? []),
-    ...(server.catalogId ? (MCP_ALIAS_MAP[server.catalogId] ?? []) : []),
+    ...(catalogId ? (MCP_ALIAS_MAP[catalogId] ?? []) : []),
     server.name,
     server.namespace,
     server.namespace.replaceAll("_", " "),
