@@ -20,7 +20,7 @@ import {
   ArrowDown01Icon,
   Clock01Icon,
   FilterMailIcon,
-  Folder01Icon,
+  Folder03Icon,
   FolderAddIcon,
   MoreHorizontalIcon,
   PencilEdit02Icon,
@@ -576,7 +576,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
               <HugeiconsIcon
                 className="transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0"
                 color="currentColor"
-                icon={Folder01Icon}
+                icon={Folder03Icon}
                 size={18}
                 strokeWidth={1.5}
               />
@@ -621,7 +621,9 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
                 <>
                   <button
                     className="flex w-full items-center gap-1 px-2 py-1.5 text-left text-xs text-foreground/40 transition-colors hover:text-foreground/70"
-                    onClick={() => setShowOverflowThreads((current) => !current)}
+                    onClick={() =>
+                      setShowOverflowThreads((current) => !current)
+                    }
                     type="button"
                   >
                     <HugeiconsIcon
@@ -798,7 +800,7 @@ function PreferenceMenuItem({
   label,
   onPress,
 }: {
-  icon: typeof Folder01Icon;
+  icon: typeof Folder03Icon;
   isSelected: boolean;
   label: string;
   onPress: () => void;
@@ -1501,7 +1503,7 @@ export function WorkspaceSidebar() {
                   <p className="text-[11px] font-medium text-muted">Organize</p>
                 </div>
                 <PreferenceMenuItem
-                  icon={Folder01Icon}
+                  icon={Folder03Icon}
                   isSelected={organizeBy === "workspace"}
                   label="By project"
                   onPress={() =>
@@ -1547,7 +1549,10 @@ export function WorkspaceSidebar() {
       </div>
 
       <div className="min-h-0 flex-1">
-        <ScrollShadow className="sentinel-scroll-shell h-full" orientation="vertical">
+        <ScrollShadow
+          className="sentinel-scroll-shell h-full"
+          orientation="vertical"
+        >
           <div className="sentinel-scroll-area h-full">
             {showSidebarLoading ? <WorkspaceSidebarLoadingState /> : null}
 
