@@ -7,10 +7,12 @@ import { runCommand } from "@/lib/process/run-command";
 
 import {
   buildFallbackCommitMessage,
+  checkoutBranch,
   commitAllChanges,
   createAndCheckoutBranch,
   getCommitMessageContext,
   initializeRepository,
+  listBranches,
   pushCurrentBranch,
   resolveRepoContext,
 } from "./repo";
@@ -159,6 +161,32 @@ describe("repo actions", () => {
 
     expect(result.branch).toBe("feature/header-actions");
     expect(branch.trim()).toBe("feature/header-actions");
+  });
+
+  it("lists local branches and marks the current branch", async () => {
+    const repoRoot = await createRepo();
+    await createAndCheckoutBranch(repoRoot, "feature/list-branches");
+    await runGit(["checkout", "main"], repoRoot);
+
+    const result = await listBranches(repoRoot);
+
+    expect(result.branch).toBe("main");
+    expect(result.branches).toEqual(
+      expect.arrayContaining([
+        { current: true, name: "main" },
+        { current: false, name: "feature/list-branches" },
+      ]),
+    );
+  });
+
+  it("checks out an existing branch", async () => {
+    const repoRoot = await createRepo();
+    await createAndCheckoutBranch(repoRoot, "feature/switch-target");
+    await runGit(["checkout", "main"], repoRoot);
+
+    await expect(checkoutBranch(repoRoot, "feature/switch-target")).resolves.toEqual({
+      branch: "feature/switch-target",
+    });
   });
 
   it("pushes the current branch when upstream exists and commits are ahead", async () => {

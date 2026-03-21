@@ -63,6 +63,7 @@ type ThreadScreenProps = {
     description: string | null;
     id: string;
     name: string;
+    permissionModeOverride: "default" | "full" | null;
     rootPath: string | null;
     updatedAt: Date;
   };
@@ -136,6 +137,7 @@ export function ThreadScreen({
         isArchived: false,
         isExpanded: false,
         name: workspace.name,
+        permissionModeOverride: workspace.permissionModeOverride,
         rootPath: workspace.rootPath,
         updatedAt: workspace.updatedAt,
         userId: "",
@@ -771,6 +773,7 @@ export function ThreadScreen({
               promptSeed={editingPromptSeed}
               promptSeedKey={editingMessage?.id}
               queuedFollowUps={liveQueuedFollowUps}
+              showBranchSwitcher
               status={status}
               threadId={thread.id}
               threadSelection={{

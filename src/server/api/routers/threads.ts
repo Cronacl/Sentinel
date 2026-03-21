@@ -53,6 +53,7 @@ const workspaceSelect = {
   description: true,
   id: true,
   name: true,
+  permissionModeOverride: true,
   rootPath: true,
   updatedAt: true,
 } as const;
@@ -107,6 +108,7 @@ export const threadsRouter = createTRPCRouter({
               description: workspace.description,
               id: workspace.id,
               name: workspace.name,
+              permissionModeOverride: workspace.permissionModeOverride,
               rootPath: workspace.rootPath,
               updatedAt: workspace.updatedAt,
             },
@@ -224,6 +226,7 @@ export const threadsRouter = createTRPCRouter({
           description: thread.workspace.description,
           id: thread.workspace.id,
           name: thread.workspace.name,
+          permissionModeOverride: thread.workspace.permissionModeOverride,
           rootPath: thread.workspace.rootPath,
           updatedAt: thread.workspace.updatedAt,
         },

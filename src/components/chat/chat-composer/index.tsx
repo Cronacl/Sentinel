@@ -11,6 +11,7 @@ import { api } from "@/trpc/react";
 
 import { AttachmentManager } from "../attachment-manager";
 import { ComposerToolbar } from "../composer-toolbar";
+import { ComposerWorkspaceBar } from "../composer-workspace-bar";
 import { ModelSelector } from "../model-selector";
 import { QueuedMessages } from "../queued-messages";
 import { Button } from "@heroui/react";
@@ -40,6 +41,7 @@ export function ChatComposer({
   promptSeed,
   promptSeedKey,
   queuedFollowUps = [],
+  showBranchSwitcher = false,
   status = "ready",
   threadId,
   threadSelection = null,
@@ -271,113 +273,124 @@ export function ChatComposer({
 
   return (
     <>
-      <div className="pointer-events-auto w-full rounded-[20px] border border-border/50 dark:border-border/80 bg-background  dark:bg-surface p-2.5 shadow-[0_0_10px_rgba(0,0,0,0.05)]">
-        <AttachmentManager
-          attachmentError={attachmentError}
-          attachmentWarning={attachmentWarning}
-          attachments={attachments}
-          fileInputRef={fileInputRef}
-          onFileInputChange={handleFileInputChange}
-          onPreviewClose={() => setPreviewAttachment(null)}
-          onPreviewOpen={setPreviewAttachment}
-          onRemoveAttachment={removeAttachment}
-          previewAttachment={previewAttachment}
-        />
+      <div className="pointer-events-auto w-full rounded-[28px] border border-border/50 bg-background shadow-[0_0_10px_rgba(0,0,0,0.05)] dark:border-border/80 dark:bg-surface">
+        <div className="p-2.5">
+          <AttachmentManager
+            attachmentError={attachmentError}
+            attachmentWarning={attachmentWarning}
+            attachments={attachments}
+            fileInputRef={fileInputRef}
+            onFileInputChange={handleFileInputChange}
+            onPreviewClose={() => setPreviewAttachment(null)}
+            onPreviewOpen={setPreviewAttachment}
+            onRemoveAttachment={removeAttachment}
+            previewAttachment={previewAttachment}
+          />
 
-        {isEditing ? (
-          <Button
-            className="mb-1"
-            onClick={onCancelEdit}
-            size="sm"
-            variant="tertiary"
-          >
-            Cancel edit
-          </Button>
-        ) : null}
+          {isEditing ? (
+            <Button
+              className="mb-1"
+              onClick={onCancelEdit}
+              size="sm"
+              variant="tertiary"
+            >
+              Cancel edit
+            </Button>
+          ) : null}
 
-        <QueuedMessages
-          messages={queuedFollowUps}
-          onRemove={(id) => {
-            void onRemoveQueuedFollowUp?.(id);
-          }}
-          onSteer={(id) => {
-            void onSteerQueuedFollowUp?.(id);
-          }}
-        />
+          <QueuedMessages
+            messages={queuedFollowUps}
+            onRemove={(id) => {
+              void onRemoveQueuedFollowUp?.(id);
+            }}
+            onSteer={(id) => {
+              void onSteerQueuedFollowUp?.(id);
+            }}
+          />
 
-        <div className="px-2">
-          <div className="min-h-[28px]">
-            {!editor ? (
-              <div className="pointer-events-none py-1 text-[14px] text-muted/50">
-                {placeholderText}
-              </div>
-            ) : null}
-            <EditorContent editor={editor} />
+          <div className="px-2">
+            <div className="min-h-[28px]">
+              {!editor ? (
+                <div className="pointer-events-none py-1 text-[14px] text-muted/50">
+                  {placeholderText}
+                </div>
+              ) : null}
+              <EditorContent editor={editor} />
+            </div>
           </div>
+
+          {disabledMessage && (
+            <div className="px-3 pb-1">
+              <p className="text-xs text-muted">{disabledMessage}</p>
+            </div>
+          )}
+
+          <ComposerToolbar
+            composerMenuOpen={composerMenuOpen}
+            composerMenuRef={composerMenuRef}
+            hasWorkspace={hasWorkspace}
+            isBusy={isBusy}
+            isLocked={isLocked}
+            contextWindowIndicator={
+              contextWindowIndicator
+                ? {
+                    compactionEnabled:
+                      generalSettingsQuery.data?.contextCompactionEnabled ??
+                      false,
+                    contextWindowMode: generalSettingsQuery.data
+                      ?.contextCompactionUseFixedWindow
+                      ? ("fixed" as const)
+                      : ("model" as const),
+                    compactionWindowPercent:
+                      generalSettingsQuery.data
+                        ?.contextCompactionWindowPercent ?? 70,
+                    contextWindow: contextWindowIndicator.contextWindow,
+                    inputTokens: contextWindowIndicator.inputTokens,
+                    usedPercent: contextWindowIndicator.usedPercent,
+                  }
+                : null
+            }
+            modelSelector={
+              <ModelSelector
+                availableModels={availableModels}
+                isLoading={modelsQuery.isLoading}
+                modelMenuOpen={modelMenuOpen}
+                modelMenuRef={modelMenuRef}
+                onModelMenuOpenChange={setModelMenuOpen}
+                onReasoningMenuOpenChange={setReasoningMenuOpen}
+                onSelectModel={handleSelectModel}
+                onSelectReasoningEffort={handleSelectReasoningEffort}
+                reasoningLabel={reasoningLabel}
+                reasoningMenuOpen={reasoningMenuOpen}
+                reasoningMenuRef={reasoningMenuRef}
+                selectedModel={selectedModel}
+                selectedModelKey={selectedModelKey}
+                selectedReasoningEffort={selectedReasoningEffort}
+                supportedReasoningEfforts={supportedReasoningEfforts}
+              />
+            }
+            onComposerMenuOpenChange={setComposerMenuOpen}
+            onPickFiles={() => {
+              void handlePickFiles();
+            }}
+            onSend={() => {
+              void handleSend();
+            }}
+            onStop={onStop}
+            onTogglePlanMode={handleTogglePlanMode}
+            planMode={planMode}
+            selectedModelKey={selectedModelKey}
+          />
         </div>
 
-        {disabledMessage && (
-          <div className="px-3 pb-1">
-            <p className="text-xs text-muted">{disabledMessage}</p>
-          </div>
-        )}
-
-        <ComposerToolbar
-          composerMenuOpen={composerMenuOpen}
-          composerMenuRef={composerMenuRef}
-          hasWorkspace={hasWorkspace}
-          isBusy={isBusy}
-          isLocked={isLocked}
-          contextWindowIndicator={
-            contextWindowIndicator
-              ? {
-                  compactionEnabled:
-                    generalSettingsQuery.data?.contextCompactionEnabled ??
-                    false,
-                  contextWindowMode: generalSettingsQuery.data
-                    ?.contextCompactionUseFixedWindow
-                    ? ("fixed" as const)
-                    : ("model" as const),
-                  compactionWindowPercent:
-                    generalSettingsQuery.data?.contextCompactionWindowPercent ??
-                    70,
-                  contextWindow: contextWindowIndicator.contextWindow,
-                  inputTokens: contextWindowIndicator.inputTokens,
-                  usedPercent: contextWindowIndicator.usedPercent,
-                }
-              : null
-          }
-          modelSelector={
-            <ModelSelector
-              availableModels={availableModels}
-              isLoading={modelsQuery.isLoading}
-              modelMenuOpen={modelMenuOpen}
-              modelMenuRef={modelMenuRef}
-              onModelMenuOpenChange={setModelMenuOpen}
-              onReasoningMenuOpenChange={setReasoningMenuOpen}
-              onSelectModel={handleSelectModel}
-              onSelectReasoningEffort={handleSelectReasoningEffort}
-              reasoningLabel={reasoningLabel}
-              reasoningMenuOpen={reasoningMenuOpen}
-              reasoningMenuRef={reasoningMenuRef}
-              selectedModel={selectedModel}
-              selectedModelKey={selectedModelKey}
-              selectedReasoningEffort={selectedReasoningEffort}
-              supportedReasoningEfforts={supportedReasoningEfforts}
+        {activeWorkspace ? (
+          <div className="overflow-hidden rounded-b-[28px] border-t border-border/25">
+            <ComposerWorkspaceBar
+              activeWorkspace={activeWorkspace}
+              showBranchSwitcher={showBranchSwitcher}
             />
-          }
-          onComposerMenuOpenChange={setComposerMenuOpen}
-          onPickFiles={() => {
-            void handlePickFiles();
-          }}
-          onSend={() => {
-            void handleSend();
-          }}
-          onStop={onStop}
-          onTogglePlanMode={handleTogglePlanMode}
-          planMode={planMode}
-          selectedModelKey={selectedModelKey}
-        />
+          </div>
+        ) : null}
       </div>
     </>
   );

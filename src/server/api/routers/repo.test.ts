@@ -42,10 +42,20 @@ const commitAllChanges = mock(async () => ({
   commit: "1234567",
   summary: "[feature/test 1234567] Update file",
 }));
+const checkoutBranch = mock(async (_rootPath, branchName) => ({
+  branch: branchName,
+}));
 const createAndCheckoutBranch = mock(async (_rootPath, branchName) => ({
   branch: branchName,
 }));
 const initializeRepository = mock(async () => ({ repoRoot: "/tmp/workspace" }));
+const listBranches = mock(async () => ({
+  branch: "feature/test",
+  branches: [
+    { current: true, name: "feature/test" },
+    { current: false, name: "main" },
+  ],
+}));
 const pushCurrentBranch = mock(async () => ({ branch: "feature/test" }));
 const getEnabledModels = mock(async () => []);
 
@@ -72,10 +82,12 @@ mock.module("@/server/db/schema", () => ({
 
 mock.module("@/lib/git/repo", () => ({
   buildFallbackCommitMessage,
+  checkoutBranch,
   commitAllChanges,
   createAndCheckoutBranch,
   getCommitMessageContext,
   initializeRepository,
+  listBranches,
   pushCurrentBranch,
   resolveRepoContext,
 }));
@@ -103,9 +115,11 @@ beforeEach(() => {
   resolveRepoContext.mockClear();
   getCommitMessageContext.mockClear();
   buildFallbackCommitMessage.mockClear();
+  checkoutBranch.mockClear();
   commitAllChanges.mockClear();
   createAndCheckoutBranch.mockClear();
   initializeRepository.mockClear();
+  listBranches.mockClear();
   pushCurrentBranch.mockClear();
   getEnabledModels.mockClear();
   run.mockClear();
@@ -329,5 +343,38 @@ describe("repoRouter.setPreferredOpenTarget", () => {
     expect(result).toEqual({
       targetId: "cursor",
     });
+  });
+});
+
+describe("repoRouter.branch actions", () => {
+  it("lists branches for the workspace", async () => {
+    const result = await repoRouter.listBranches({
+      ctx: {
+        session: { user: { id: "user-1" } },
+        user: { id: "user-1" },
+      },
+      input: {
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(listBranches).toHaveBeenCalledWith("/tmp/workspace");
+    expect(result.branches).toHaveLength(2);
+  });
+
+  it("checks out an existing branch", async () => {
+    const result = await repoRouter.checkoutBranch({
+      ctx: {
+        session: { user: { id: "user-1" } },
+        user: { id: "user-1" },
+      },
+      input: {
+        branchName: "main",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(checkoutBranch).toHaveBeenCalledWith("/tmp/workspace", "main");
+    expect(result).toEqual({ branch: "main" });
   });
 });

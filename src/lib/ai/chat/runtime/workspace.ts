@@ -56,13 +56,26 @@ export async function getWorkspaceRootPath(
 
 export async function getToolPermissionMode(
   userId: string,
+  workspaceId?: string | null,
 ): Promise<PermissionMode> {
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-    columns: { permissionMode: true },
-  });
+  const [user, workspace] = await Promise.all([
+    db.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: { permissionMode: true },
+    }),
+    workspaceId
+      ? db.query.workspaces.findFirst({
+          where: and(
+            eq(workspaces.id, workspaceId),
+            eq(workspaces.userId, userId),
+            eq(workspaces.isArchived, false),
+          ),
+          columns: { permissionModeOverride: true },
+        })
+      : Promise.resolve(null),
+  ]);
 
-  return user?.permissionMode ?? "default";
+  return workspace?.permissionModeOverride ?? user?.permissionMode ?? "default";
 }
 
 export async function getWebFetchSettings(

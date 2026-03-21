@@ -679,7 +679,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
       enabledIntegrations,
     ] = await Promise.all([
       getWorkspaceRootPath(run.request.workspaceId, run.request.userId),
-      getToolPermissionMode(run.request.userId),
+      getToolPermissionMode(run.request.userId, run.request.workspaceId),
       getMemorySettings(run.request.userId),
       getContextCompactionSettings(run.request.userId),
       getMcpServerRuntime(run.request.userId),

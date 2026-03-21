@@ -84,6 +84,8 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
               isArchived: false,
               isExpanded: nextWorkspace.isExpanded,
               name: nextWorkspace.name,
+              permissionModeOverride:
+                nextWorkspace.permissionModeOverride ?? null,
               rootPath: nextWorkspace.rootPath,
               updatedAt: nextWorkspace.updatedAt,
               userId: "",
@@ -121,6 +123,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         isArchived: workspace.isArchived,
         isExpanded: workspace.isExpanded,
         name: workspace.name,
+        permissionModeOverride: workspace.permissionModeOverride,
         rootPath: workspace.rootPath,
         updatedAt: workspace.updatedAt,
         userId: workspace.userId,
@@ -139,6 +142,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             isSelected: true,
             latestThreadUpdatedAt: null,
             name: workspace.name,
+            permissionModeOverride: workspace.permissionModeOverride,
             rootPath: workspace.rootPath,
             threadCount: 0,
             updatedAt: workspace.updatedAt,
@@ -293,6 +297,8 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             description: selectedWorkspace.description,
             id: selectedWorkspace.id,
             name: selectedWorkspace.name,
+            permissionModeOverride:
+              selectedWorkspace.permissionModeOverride ?? null,
             rootPath: selectedWorkspace.rootPath,
             updatedAt: selectedWorkspace.updatedAt,
           },
@@ -633,6 +639,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                 }}
                 persistThreadSelection={Boolean(threadDetailsQuery.data)}
                 queuedFollowUps={queuedFollowUps}
+                showBranchSwitcher
                 status={status}
                 threadId={draftThreadId}
                 threadSelection={resolvedThreadSelection}
@@ -792,6 +799,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
               }}
               persistThreadSelection={false}
               queuedFollowUps={queuedFollowUps}
+              showBranchSwitcher
               status={status}
               threadId={draftThreadId}
               threadSelection={draftThreadSelection}

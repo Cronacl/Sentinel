@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { REASONING_EFFORTS } from "@/lib/ai/providers/models";
 import { THREAD_MODES } from "@/lib/plan";
+import { permissionModeSchema } from "@/schemas/security.schema";
 
 export const threadListOrganizeBySchema = z.enum([
   "workspace",
@@ -75,6 +76,11 @@ export const workspaceArchiveSchema = z.object({
 });
 
 export const workspaceSelectSchema = z.object({
+  workspaceId: z.string().min(1),
+});
+
+export const workspacePermissionOverrideSchema = z.object({
+  permissionModeOverride: permissionModeSchema.nullable(),
   workspaceId: z.string().min(1),
 });
 

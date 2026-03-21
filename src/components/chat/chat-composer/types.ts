@@ -17,6 +17,7 @@ export type ChatComposerProps = {
   activeWorkspace?: {
     id: string;
     name: string;
+    permissionModeOverride?: "default" | "full" | null;
     rootPath?: string | null;
   } | null;
   onQueueFollowUp?: (input: ComposerSendInput) => Promise<void> | void;
@@ -31,6 +32,7 @@ export type ChatComposerProps = {
   promptSeed?: string;
   promptSeedKey?: string | number;
   queuedFollowUps?: QueuedFollowUpSummary[];
+  showBranchSwitcher?: boolean;
   status?: "submitted" | "streaming" | "ready" | "error";
   draftMode?: "chat" | "plan" | null;
   persistThreadSelection?: boolean;

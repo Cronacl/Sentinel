@@ -27,6 +27,11 @@ export type RepoContext = {
   repoRoot: string | null;
 };
 
+export type RepoBranch = {
+  current: boolean;
+  name: string;
+};
+
 type RepoFileChange = {
   path: string;
   type: "added" | "deleted" | "modified" | "renamed" | "untracked";
@@ -498,6 +503,61 @@ export async function createAndCheckoutBranch(
   const createResult = await runGit(["checkout", "-b", trimmedName], repoRoot);
   if (createResult.code !== 0) {
     throw new Error(createResult.stderr || "Failed to create branch.");
+  }
+
+  return { branch: trimmedName };
+}
+
+export async function listBranches(
+  pathValue: string | null | undefined,
+): Promise<{ branch: string | null; branches: RepoBranch[] }> {
+  const repoRoot = await resolveRepoRootOrThrow(pathValue);
+  const context = await resolveRepoContext(repoRoot);
+
+  const result = await runGit(
+    ["branch", "--list", "--format=%(refname:short)"],
+    repoRoot,
+  );
+  if (result.code !== 0) {
+    throw new Error(result.stderr || "Failed to list branches.");
+  }
+
+  const branches = result.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((name) => ({
+      current: context.branch === name,
+      name,
+    }));
+
+  return {
+    branch: context.branch,
+    branches,
+  };
+}
+
+export async function checkoutBranch(
+  pathValue: string | null | undefined,
+  branchName: string,
+) {
+  const repoRoot = await resolveRepoRootOrThrow(pathValue);
+  const trimmedName = branchName.trim();
+  if (!trimmedName) {
+    throw new Error("Branch name is required.");
+  }
+
+  const validation = await runGit(
+    ["check-ref-format", "--branch", trimmedName],
+    repoRoot,
+  );
+  if (validation.code !== 0) {
+    throw new Error(validation.stderr || "Enter a valid branch name.");
+  }
+
+  const result = await runGit(["checkout", trimmedName], repoRoot);
+  if (result.code !== 0) {
+    throw new Error(result.stderr || "Failed to checkout branch.");
   }
 
   return { branch: trimmedName };

@@ -59,6 +59,7 @@ function toCurrentWorkspace(
         id: string;
         isExpanded?: boolean;
         name: string;
+        permissionModeOverride?: "default" | "full" | null;
         rootPath: string | null;
         updatedAt: Date;
       }
@@ -76,6 +77,7 @@ function toCurrentWorkspace(
     isArchived: false,
     isExpanded: workspace.isExpanded ?? false,
     name: workspace.name,
+    permissionModeOverride: workspace.permissionModeOverride ?? null,
     rootPath: workspace.rootPath,
     updatedAt: workspace.updatedAt,
     userId: "",
@@ -1044,6 +1046,7 @@ export function WorkspaceSidebar() {
         isArchived: workspace.isArchived,
         isExpanded: workspace.isExpanded,
         name: workspace.name,
+        permissionModeOverride: workspace.permissionModeOverride,
         rootPath: workspace.rootPath,
         updatedAt: workspace.updatedAt,
         userId: workspace.userId,
@@ -1062,6 +1065,7 @@ export function WorkspaceSidebar() {
             isSelected: true,
             latestThreadUpdatedAt: null,
             name: workspace.name,
+            permissionModeOverride: workspace.permissionModeOverride,
             rootPath: workspace.rootPath,
             threadCount: 0,
             updatedAt: workspace.updatedAt,

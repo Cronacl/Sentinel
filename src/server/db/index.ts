@@ -67,6 +67,7 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     "name" text NOT NULL,
     "root_path" text,
     "description" text,
+    "permission_mode_override" text,
     "is_archived" integer DEFAULT false NOT NULL,
     "created_at" integer NOT NULL,
     "updated_at" integer NOT NULL
@@ -164,6 +165,12 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
 
   try {
     db.run(sql`ALTER TABLE "user" ADD COLUMN "last_project_open_target_id" text`);
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(sql`ALTER TABLE "workspace" ADD COLUMN "permission_mode_override" text`);
   } catch {
     // column already exists
   }

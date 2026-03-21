@@ -145,6 +145,9 @@ export const workspaces = sqliteTable(
     name: text("name").notNull(),
     rootPath: text("root_path"),
     description: text("description"),
+    permissionModeOverride: text("permission_mode_override", {
+      enum: PERMISSION_MODES,
+    }),
     isArchived: integer("is_archived", { mode: "boolean" })
       .notNull()
       .default(false),

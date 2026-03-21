@@ -5,10 +5,12 @@ import { z } from "zod";
 
 import {
   buildFallbackCommitMessage,
+  checkoutBranch,
   commitAllChanges,
   createAndCheckoutBranch,
   getCommitMessageContext,
   initializeRepository,
+  listBranches,
   pushCurrentBranch,
   resolveRepoContext,
 } from "@/lib/git/repo";
@@ -185,6 +187,27 @@ export const repoRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       return await createAndCheckoutBranch(
+        assertWorkspaceRootPath(workspace.rootPath),
+        input.branchName,
+      );
+    }),
+
+  listBranches: protectedProcedure
+    .input(workspaceInputSchema)
+    .query(async ({ ctx, input }) => {
+      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      return await listBranches(assertWorkspaceRootPath(workspace.rootPath));
+    }),
+
+  checkoutBranch: protectedProcedure
+    .input(
+      workspaceInputSchema.extend({
+        branchName: z.string().trim().min(1).max(255),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      return await checkoutBranch(
         assertWorkspaceRootPath(workspace.rootPath),
         input.branchName,
       );

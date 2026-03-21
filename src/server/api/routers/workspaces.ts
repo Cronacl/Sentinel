@@ -9,6 +9,7 @@ import {
   threadListPreferencesSchema,
   workspaceArchiveSchema,
   workspaceCreateSchema,
+  workspacePermissionOverrideSchema,
   workspaceSelectSchema,
   workspaceUpdateSchema,
 } from "@/schemas/workspace-thread.schema";
@@ -112,6 +113,7 @@ export const workspacesRouter = createTRPCRouter({
         isSelected: ctx.user.selectedWorkspaceId === workspace.id,
         latestThreadUpdatedAt: stats?.latestThreadUpdatedAt ?? null,
         name: workspace.name,
+        permissionModeOverride: workspace.permissionModeOverride,
         rootPath: workspace.rootPath,
         threadCount: stats?.threadCount ?? 0,
         updatedAt: workspace.updatedAt,
@@ -312,6 +314,26 @@ export const workspacesRouter = createTRPCRouter({
       return {
         organizeBy: input.organizeBy,
         sortBy: input.sortBy,
+      };
+    }),
+
+  updatePermissionOverride: protectedProcedure
+    .input(workspacePermissionOverrideSchema)
+    .mutation(async ({ ctx, input }) => {
+      await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+
+      const [updated] = ctx.db
+        .update(workspaces)
+        .set({
+          permissionModeOverride: input.permissionModeOverride,
+        })
+        .where(eq(workspaces.id, input.workspaceId))
+        .returning()
+        .all();
+
+      return {
+        permissionModeOverride: updated?.permissionModeOverride ?? null,
+        workspaceId: input.workspaceId,
       };
     }),
 
