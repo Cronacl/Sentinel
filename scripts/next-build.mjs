@@ -50,9 +50,15 @@ const child = spawn(process.execPath, [nextBin, "build"], {
   stdio: "inherit",
 });
 
+child.on("error", (error) => {
+  console.error(error);
+  process.exit(1);
+});
+
 child.on("exit", (code, signal) => {
   if (signal) {
-    process.kill(process.pid, signal);
+    console.error(`next build exited with signal ${signal}`);
+    process.exit(1);
     return;
   }
 
