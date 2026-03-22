@@ -107,6 +107,10 @@ jobs:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
       SKIP_ENV_VALIDATION: "1"
       NODE_OPTIONS: "--max-old-space-size=4096"
+      SENTINEL_SKIP_STARTUP_TASKS: "1"
+      SENTINEL_DB_PATH: ${{ github.workspace }}/.sentinel-ci/sentinel.db
+      SENTINEL_STATE_PATH: ${{ github.workspace }}/.sentinel-ci/state.json
+      ENCRYPTION_KEY: "1111111111111111111111111111111111111111111111111111111111111111"
     steps:
       - uses: actions/checkout@v4
         with:

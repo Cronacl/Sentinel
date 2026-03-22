@@ -671,6 +671,10 @@ const globalForDb = globalThis as unknown as {
   vectorDb: Database.Database | null | undefined;
 };
 
+const shouldSkipStartupTasks =
+  process.env.SENTINEL_SKIP_STARTUP_TASKS === "1" ||
+  process.env.SKIP_ENV_VALIDATION === "1";
+
 export const db = globalForDb.db ?? createDatabase();
 export const vectorDb: Database.Database | null =
   globalForDb.vectorDb !== undefined ? globalForDb.vectorDb : initVectorDb();
@@ -680,7 +684,7 @@ if (process.env.NODE_ENV !== "production") {
   globalForDb.vectorDb = vectorDb;
 }
 
-if (!globalForDb.automationSchedulerInit) {
+if (!shouldSkipStartupTasks && !globalForDb.automationSchedulerInit) {
   globalForDb.automationSchedulerInit = Promise.resolve()
     .then(async () => {
       const { initAutomationScheduler } =
@@ -695,7 +699,7 @@ if (!globalForDb.automationSchedulerInit) {
     });
 }
 
-if (!globalForDb.startupBackupInit) {
+if (!shouldSkipStartupTasks && !globalForDb.startupBackupInit) {
   globalForDb.startupBackupInit = Promise.resolve()
     .then(async () => {
       const { createStartupBackup } = await import("@/server/db/backup");
