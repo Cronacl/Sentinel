@@ -1,6 +1,8 @@
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import type { NextRequest } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 import { env } from "@/env";
 import { createLogger } from "@/lib/logger";
 import { appRouter } from "@/server/api/root";

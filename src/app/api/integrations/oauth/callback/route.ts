@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 import { completeIntegrationOAuth } from "@/lib/integrations/oauth/flow";
 import type { IntegrationProvider } from "@/server/db/enums";
 import { getLocalSession } from "@/server/local-profile";
