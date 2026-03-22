@@ -213,10 +213,7 @@ function FileMatchGroup({
       className="overflow-hidden rounded-md border border-border/30"
     >
       <div className="flex items-center gap-1.5 border-b border-border/20 bg-foreground/2 px-2.5 py-1">
-        <Icon
-          className="h-3 w-3 shrink-0 text-foreground/40"
-          icon={fileIcon}
-        />
+        <Icon className="h-3 w-3 shrink-0 text-foreground/40" icon={fileIcon} />
         <span
           className="truncate font-mono text-[10px] text-foreground/50"
           title={file.path}
