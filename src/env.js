@@ -12,6 +12,9 @@ const LOCAL_STATE_DIRECTORY_MODE = 0o700;
 const LOCAL_RUNTIME_ENV_FILE_MODE = 0o600;
 const LEGACY_ENCRYPTION_KEY =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+const SHOULD_SKIP_LOCAL_RUNTIME_ENV =
+  process.env.SKIP_ENV_VALIDATION === "1" ||
+  process.env.SKIP_ENV_VALIDATION === "true";
 
 /**
  * @param {string} content
@@ -125,8 +128,13 @@ function ensureLocalEncryptionKey(localRuntimeEnv) {
   return nextKey;
 }
 
-const localRuntimeEnv = readLocalRuntimeEnvFile().values;
-ensureLocalEncryptionKey(localRuntimeEnv);
+const localRuntimeEnv = SHOULD_SKIP_LOCAL_RUNTIME_ENV
+  ? {}
+  : readLocalRuntimeEnvFile().values;
+
+if (!SHOULD_SKIP_LOCAL_RUNTIME_ENV) {
+  ensureLocalEncryptionKey(localRuntimeEnv);
+}
 
 export const env = createEnv({
   server: {
@@ -147,7 +155,9 @@ export const env = createEnv({
   client: {},
   runtimeEnv: {
     ENCRYPTION_KEY:
-      process.env.ENCRYPTION_KEY ?? localRuntimeEnv.ENCRYPTION_KEY,
+      process.env.ENCRYPTION_KEY ??
+      localRuntimeEnv.ENCRYPTION_KEY ??
+      LEGACY_ENCRYPTION_KEY,
     NODE_ENV: process.env.NODE_ENV,
     SENTINEL_DB_PATH: process.env.SENTINEL_DB_PATH,
     SENTINEL_STATE_PATH: process.env.SENTINEL_STATE_PATH,
