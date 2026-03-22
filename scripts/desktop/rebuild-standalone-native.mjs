@@ -7,6 +7,7 @@ const projectRoot = process.cwd();
 const targetRoot = path.join(projectRoot, "desktop", "dist", "server");
 const targetPackagePath = path.join(targetRoot, "package.json");
 const electronGypDir = path.join(projectRoot, ".electron-gyp");
+const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
 
 function getElectronExecutablePath() {
   switch (process.platform) {
@@ -159,7 +160,7 @@ await writeFile(
   `${JSON.stringify(runtimePackageJson, null, 2)}\n`,
 );
 
-await run("npm", ["rebuild", "better-sqlite3"], {
+await run(npmExecutable, ["rebuild", "better-sqlite3"], {
   cwd: targetRoot,
   env: {
     ...process.env,
