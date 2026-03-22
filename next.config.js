@@ -13,9 +13,6 @@ const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 const config = {
   output: "standalone",
   outputFileTracingRoot: projectRoot,
-  outputFileTracingExcludes: {
-    "*": ["**/Application Data/**", "**/AppData/**"],
-  },
   serverExternalPackages: ["better-sqlite3", "sqlite-vec"],
   turbopack: {
     root: projectRoot,
