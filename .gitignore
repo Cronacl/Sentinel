@@ -22,6 +22,7 @@
 /.next/
 /out/
 next-env.d.ts
+/.sentinel-build/
 
 # production
 /build
