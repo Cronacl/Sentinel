@@ -107,11 +107,10 @@ function FileEntry({ path }: { path: string }) {
 
   return (
     <div className="flex items-center gap-1.5 py-px">
-      {iconName ? (
-        <Icon className="h-3 w-3 shrink-0 text-foreground/40" icon={iconName} />
-      ) : (
-        <span className="h-3 w-3 shrink-0" />
-      )}
+      <Icon
+        className="h-3 w-3 shrink-0 text-foreground/40"
+        icon={iconName ?? "vscode-icons:default-file"}
+      />
       <span className="truncate font-mono text-[11px]" title={path}>
         {dirPrefix ? (
           <>

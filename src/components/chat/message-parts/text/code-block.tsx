@@ -64,7 +64,7 @@ export function CodeBlock({
     return truncateCodeByLines(trimmedCode, DEFAULT_MAX_LINES);
   }, [isCollapsed, isCollapsible, trimmedCode]);
   const languageIcon = actualLanguage
-    ? (languageToVSCodeIcon[actualLanguage] ?? null)
+    ? (languageToVSCodeIcon[actualLanguage] ?? "vscode-icons:default-file")
     : null;
 
   useEffect(() => {

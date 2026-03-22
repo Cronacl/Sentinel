@@ -487,7 +487,8 @@ export function DiffView({
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const language = languageOverride ?? detectLanguageFromPath(path);
-  const fileIcon = languageToVSCodeIcon[language] ?? null;
+  const fileIcon =
+    languageToVSCodeIcon[language] ?? "vscode-icons:default-file";
 
   const { additions, allLines, deletions, groups, wordDiffs } = useMemo(() => {
     const {
@@ -587,12 +588,10 @@ export function DiffView({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/30 bg-foreground/2 px-3 py-1.5">
         <div className="flex min-w-0 items-center gap-1.5">
-          {fileIcon ? (
-            <Icon
-              className="h-3.5 w-3.5 shrink-0 text-foreground/50"
-              icon={fileIcon}
-            />
-          ) : null}
+          <Icon
+            className="h-3.5 w-3.5 shrink-0 text-foreground/50"
+            icon={fileIcon}
+          />
           <span
             className="truncate font-mono text-[11px] text-foreground/50"
             title={path}

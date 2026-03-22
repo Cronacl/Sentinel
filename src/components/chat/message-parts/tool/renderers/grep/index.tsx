@@ -151,7 +151,8 @@ function FileMatchGroup({
   const ref = useRef<HTMLDivElement | null>(null);
 
   const language = detectLanguageFromPath(file.path);
-  const fileIcon = languageToVSCodeIcon[language] ?? null;
+  const fileIcon =
+    languageToVSCodeIcon[language] ?? "vscode-icons:default-file";
   const fileName = file.path.split("/").pop() ?? file.path;
 
   useEffect(() => {
@@ -212,12 +213,10 @@ function FileMatchGroup({
       className="overflow-hidden rounded-md border border-border/30"
     >
       <div className="flex items-center gap-1.5 border-b border-border/20 bg-foreground/2 px-2.5 py-1">
-        {fileIcon ? (
-          <Icon
-            className="h-3 w-3 shrink-0 text-foreground/40"
-            icon={fileIcon}
-          />
-        ) : null}
+        <Icon
+          className="h-3 w-3 shrink-0 text-foreground/40"
+          icon={fileIcon}
+        />
         <span
           className="truncate font-mono text-[10px] text-foreground/50"
           title={file.path}
