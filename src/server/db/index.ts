@@ -675,12 +675,25 @@ const shouldSkipStartupTasks =
   process.env.SENTINEL_SKIP_STARTUP_TASKS === "1" ||
   process.env.SKIP_ENV_VALIDATION === "1";
 
-export const db = globalForDb.db ?? createDatabase();
+function getDb() {
+  if (!globalForDb.db) {
+    globalForDb.db = createDatabase();
+  }
+
+  return globalForDb.db;
+}
+
+export const db = new Proxy({} as ReturnType<typeof createDatabase>, {
+  get(_target, prop, receiver) {
+    const realDb = getDb();
+    const value = Reflect.get(realDb, prop, receiver);
+    return typeof value === "function" ? value.bind(realDb) : value;
+  },
+});
 export const vectorDb: Database.Database | null =
   globalForDb.vectorDb !== undefined ? globalForDb.vectorDb : initVectorDb();
 
 if (process.env.NODE_ENV !== "production") {
-  globalForDb.db = db;
   globalForDb.vectorDb = vectorDb;
 }
 
@@ -718,4 +731,4 @@ if (!shouldSkipStartupTasks && !globalForDb.startupBackupInit) {
     });
 }
 
-export type Database = typeof db;
+export type Database = ReturnType<typeof createDatabase>;

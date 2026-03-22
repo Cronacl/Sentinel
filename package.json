@@ -13,7 +13,7 @@
   "main": "desktop/main/index.mjs",
   "scripts": {
     "preinstall": "node ./scripts/check-package-manager.mjs",
-    "build": "node ./scripts/rebuild-node-native.mjs && next build",
+    "build": "node ./scripts/rebuild-node-native.mjs && node ./scripts/next-build.mjs",
     "build:desktop": "bun run build:desktop:mac",
     "build:desktop:linux": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform linux --target AppImage",
     "build:desktop:mac": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform mac --target dmg",
@@ -27,7 +27,7 @@
     "db:generate": "bun x drizzle-kit generate",
     "db:studio": "bun x drizzle-kit studio",
     "dev": "node ./scripts/rebuild-node-native.mjs && next dev --turbo",
-    "preview": "node ./scripts/rebuild-node-native.mjs && next build && next start",
+    "preview": "node ./scripts/rebuild-node-native.mjs && node ./scripts/next-build.mjs && next start",
     "release:prepare": "node ./scripts/release/prepare-release.mjs",
     "release:sync-labels": "node ./scripts/release/sync-release-labels.mjs",
     "release:validate-pr-labels": "node ./scripts/release/validate-pr-labels.mjs",

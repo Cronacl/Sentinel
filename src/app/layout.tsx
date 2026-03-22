@@ -84,12 +84,10 @@ const millionaire = localFont({
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  let user = null;
-  try {
-    user = await getOrCreateLocalProfile();
-  } catch {
-    // Build-time pre-rendering may fail due to DB contention — fall back to defaults.
-  }
+  const shouldSkipLocalProfile =
+    process.env.SENTINEL_SKIP_STARTUP_TASKS === "1" ||
+    process.env.SKIP_ENV_VALIDATION === "1";
+  const user = shouldSkipLocalProfile ? null : await getOrCreateLocalProfile();
   const themePreference = user?.themePreference ?? DEFAULT_THEME_PREFERENCE;
 
   return (

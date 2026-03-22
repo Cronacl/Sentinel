@@ -474,9 +474,7 @@ async function syncWatchers(entry: SkillRegistryEntry) {
 
       entry.debounceTimer = setTimeout(() => {
         entry.debounceTimer = null;
-        void refreshEntry(entry).then(async () => {
-          await syncWatchers(entry);
-        });
+        void refreshWatchedEntry(entry);
       }, WATCH_DEBOUNCE_MS);
     });
 
@@ -487,6 +485,26 @@ async function syncWatchers(entry: SkillRegistryEntry) {
 
     entry.watchers.set(key, watcher);
   }
+}
+
+async function refreshWatchedEntry(entry: SkillRegistryEntry) {
+  const startingRevision = entry.snapshot?.revision ?? 0;
+
+  await syncWatchers(entry);
+  const snapshot = await refreshEntry(entry);
+  await syncWatchers(entry);
+
+  if (snapshot.revision > startingRevision) {
+    return;
+  }
+
+  // Parent directory notifications can arrive before a nested SKILL.md write
+  // lands, especially on Linux CI when a new skills container is created
+  // recursively. A short second pass keeps the watcher behavior deterministic.
+  await new Promise((resolve) => setTimeout(resolve, WATCH_DEBOUNCE_MS));
+  await syncWatchers(entry);
+  await refreshEntry(entry);
+  await syncWatchers(entry);
 }
 
 function getOrCreateEntry(
