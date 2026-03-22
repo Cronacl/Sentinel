@@ -1,0 +1,59 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: prepare-release-main
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 21.7.3
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - id: prepare
+        name: Compute next release and update metadata
+        env:
+          BASE_BRANCH: main
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node ./scripts/release/prepare-release.mjs
+
+      - name: Commit release metadata
+        if: steps.prepare.outputs.release_created == 'true'
+        run: |
+          git add CHANGELOG.md package-lock.json package.json
+          git commit -m "chore(release): ${{ steps.prepare.outputs.release_tag }}"
+
+      - name: Push release commit to main
+        if: steps.prepare.outputs.release_created == 'true'
+        run: git push origin HEAD:main
+
+      - name: Create and push release tag
+        if: steps.prepare.outputs.release_created == 'true'
+        run: |
+          git tag "${{ steps.prepare.outputs.release_tag }}"
+          git push origin "${{ steps.prepare.outputs.release_tag }}"
+
+      - name: No release needed
+        if: steps.prepare.outputs.release_created != 'true'
+        run: echo "No releasable pull requests were found since the latest tag."

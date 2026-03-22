@@ -11,7 +11,8 @@ on:
         required: true
         type: string
       git_ref:
-        description: Optional git ref to build from. Defaults to the release tag.
+        description: Optional git ref to build from. Defaults to main.
+        default: main
         required: false
         type: string
 
@@ -39,7 +40,7 @@ jobs:
         run: |
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             RELEASE_TAG="$INPUT_RELEASE_TAG"
-            GIT_REF="${INPUT_GIT_REF:-$RELEASE_TAG}"
+            GIT_REF="${INPUT_GIT_REF:-main}"
           else
             RELEASE_TAG="$REF_NAME"
             GIT_REF="$REF_NAME"

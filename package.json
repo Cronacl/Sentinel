@@ -28,6 +28,9 @@
     "db:studio": "bun x drizzle-kit studio",
     "dev": "node ./scripts/rebuild-node-native.mjs && next dev --turbo",
     "preview": "node ./scripts/rebuild-node-native.mjs && next build && next start",
+    "release:prepare": "node ./scripts/release/prepare-release.mjs",
+    "release:sync-labels": "node ./scripts/release/sync-release-labels.mjs",
+    "release:validate-pr-labels": "node ./scripts/release/validate-pr-labels.mjs",
     "start": "node ./scripts/rebuild-node-native.mjs && next start",
     "test": "node ./scripts/run-tests.mjs",
     "typecheck": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc --noEmit"

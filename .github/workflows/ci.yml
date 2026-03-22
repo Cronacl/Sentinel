@@ -25,6 +25,10 @@ jobs:
         with:
           node-version: 21.7.3
 
+      - name: Validate release-impact label
+        if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main'
+        run: node ./scripts/release/validate-pr-labels.mjs
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.6

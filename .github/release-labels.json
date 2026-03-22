@@ -1,0 +1,22 @@
+[
+  {
+    "color": "B60205",
+    "description": "Breaking change that should trigger a major alpha bump.",
+    "name": "release:major"
+  },
+  {
+    "color": "D93F0B",
+    "description": "Backward-compatible feature work that should trigger a minor alpha bump.",
+    "name": "release:minor"
+  },
+  {
+    "color": "FBCA04",
+    "description": "Fix or small change that should trigger a patch alpha bump.",
+    "name": "release:patch"
+  },
+  {
+    "color": "6A737D",
+    "description": "Change that should be excluded from the next release bump and changelog.",
+    "name": "release:skip"
+  }
+]
