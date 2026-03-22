@@ -1,6 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 import { completeMcpServerOAuth } from "@/lib/mcp/oauth";
 import {
   parseStoredMcpServer,

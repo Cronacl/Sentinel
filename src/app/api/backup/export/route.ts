@@ -5,6 +5,7 @@ import { getExportDbPath } from "@/server/db/backup";
 import { getLocalSession } from "@/server/local-profile";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   const session = await getLocalSession();
