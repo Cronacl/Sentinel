@@ -5,6 +5,11 @@ import path from "node:path";
 const projectRoot = process.cwd();
 const buildStateRoot = path.join(projectRoot, ".sentinel-build");
 const buildHome = path.join(buildStateRoot, "home");
+const windowsSignalGuard = path.join(
+  projectRoot,
+  "scripts",
+  "windows-signal-guard.cjs",
+);
 const nextBin = path.join(
   projectRoot,
   "node_modules",
@@ -38,6 +43,9 @@ if (!env.NODE_OPTIONS?.includes("--max-old-space-size=")) {
 }
 
 if (process.platform === "win32") {
+  env.NODE_OPTIONS = env.NODE_OPTIONS
+    ? `${env.NODE_OPTIONS} --require=${windowsSignalGuard}`
+    : `--require=${windowsSignalGuard}`;
   const homeRoot = path.parse(buildHome).root;
   env.HOMEDRIVE = homeRoot.endsWith(path.sep)
     ? homeRoot.slice(0, -1)
