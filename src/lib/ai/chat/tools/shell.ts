@@ -534,8 +534,8 @@ function isPathInsideAllowedRoots(
 function extractMissingCommand(text: string) {
   const patterns = [
     /(?:^|\n)\s*([a-z0-9._+-]+): command not found\b/i,
-    /(?:^|\n)(?:bash|zsh|sh):\s*(?:line\s+\d+:\s*)?([a-z0-9._+-]+):\s*command not found\b/i,
-    /(?:^|\n)(?:\/bin\/sh|\/bin\/bash|\/bin\/zsh):\s*(?:line\s+\d+:\s*)?([a-z0-9._+-]+):\s*(?:not found|command not found)\b/i,
+    /(?:^|\n)(?:bash|zsh|sh):\s*(?:(?:line\s+)?\d+:\s*)?([a-z0-9._+-]+):\s*(?:not found|command not found)\b/i,
+    /(?:^|\n)(?:\/bin\/sh|\/bin\/bash|\/bin\/zsh):\s*(?:(?:line\s+)?\d+:\s*)?([a-z0-9._+-]+):\s*(?:not found|command not found)\b/i,
   ];
 
   for (const pattern of patterns) {
