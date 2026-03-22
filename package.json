@@ -13,7 +13,7 @@
   "main": "desktop/main/index.mjs",
   "scripts": {
     "preinstall": "node ./scripts/check-package-manager.mjs",
-    "build": "node ./scripts/rebuild-node-native.mjs && next build",
+    "build": "node ./scripts/rebuild-node-native.mjs && NODE_OPTIONS='--max-old-space-size=4096' next build",
     "build:desktop": "bun run build:desktop:mac",
     "build:desktop:linux": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform linux --target AppImage",
     "build:desktop:mac": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform mac --target dmg",
