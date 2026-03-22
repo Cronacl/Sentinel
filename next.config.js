@@ -3,9 +3,11 @@ import { fileURLToPath } from "node:url";
 
 /**
  * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially useful
- * for Docker builds.
+ * for Docker builds and CI where the home directory may not be accessible.
  */
-import "./src/env.js";
+if (!process.env.SKIP_ENV_VALIDATION) {
+  await import("./src/env.js");
+}
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
