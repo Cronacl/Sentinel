@@ -57,6 +57,20 @@ const PROVIDER_TOOL_LOADERS: Partial<
     const { buildMongoDBTools } = await import("./providers/mongodb/tools");
     return buildMongoDBTools;
   },
+  yahoo_finance: async () => {
+    const { buildYahooFinanceTools } = await import(
+      "./providers/yahoo-finance/tools"
+    );
+    return buildYahooFinanceTools;
+  },
+  arxiv: async () => {
+    const { buildArxivTools } = await import("./providers/arxiv/tools");
+    return buildArxivTools;
+  },
+  pubmed: async () => {
+    const { buildPubMedTools } = await import("./providers/pubmed/tools");
+    return buildPubMedTools;
+  },
 };
 
 export async function loadIntegrationTools(

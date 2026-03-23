@@ -778,4 +778,49 @@ export const INTEGRATION_TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     category: "integration",
     label: "mongo_distinct",
   },
+
+  // Yahoo Finance
+  yfinance_get_quote: {
+    capability:
+      "to get real-time stock quotes with price, change, volume, and market cap",
+    category: "integration",
+    label: "yfinance_get_quote",
+  },
+  yfinance_search: {
+    capability:
+      "to search Yahoo Finance for stocks, ETFs, and other securities",
+    category: "integration",
+    label: "yfinance_search",
+  },
+  yfinance_get_chart: {
+    capability: "to get historical OHLCV price data for a stock",
+    category: "integration",
+    label: "yfinance_get_chart",
+  },
+
+  // ArXiv
+  arxiv_search: {
+    capability:
+      "to search arXiv for academic papers by keyword, author, or category",
+    category: "integration",
+    label: "arxiv_search",
+  },
+  arxiv_get_paper: {
+    capability: "to get full details of a specific arXiv paper by ID",
+    category: "integration",
+    label: "arxiv_get_paper",
+  },
+
+  // PubMed
+  pubmed_search: {
+    capability:
+      "to search PubMed for biomedical and life science articles",
+    category: "integration",
+    label: "pubmed_search",
+  },
+  pubmed_get_article: {
+    capability: "to get full details of a specific PubMed article by PMID",
+    category: "integration",
+    label: "pubmed_get_article",
+  },
 };

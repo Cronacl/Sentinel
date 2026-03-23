@@ -87,6 +87,9 @@ const PROVIDER_ICONS: Record<IntegrationProvider, ProviderIconDef> = {
   postgresql: { type: "iconify", icon: "logos:postgresql" },
   mysql: { type: "iconify", icon: "logos:mysql-icon" },
   mongodb: { type: "iconify", icon: "logos:mongodb-icon" },
+  yahoo_finance: { type: "iconify", icon: "logos:yahoo" },
+  arxiv: { type: "iconify", icon: "simple-icons:arxiv" },
+  pubmed: { type: "iconify", icon: "simple-icons:pubmed" },
 };
 
 type IntegrationProviderIconProps = {
