@@ -13,6 +13,10 @@ import {
   useState,
 } from "react";
 
+import { useMediaQuery } from "@/hooks/use-media-query";
+
+const RIGHT_SIDEBAR_DRAWER_BREAKPOINT = "(max-width: 1024px)";
+
 interface ShellContextValue {
   leftSidebarOpen: boolean;
   toggleLeftSidebar: () => void;
@@ -20,6 +24,7 @@ interface ShellContextValue {
 
   rightSidebarOpen: boolean;
   rightSidebarContent: ReactNode | null;
+  rightSidebarDrawerMode: boolean;
   toggleRightSidebar: () => void;
   openRightSidebar: (content: ReactNode) => void;
   closeRightSidebar: () => void;
@@ -36,6 +41,9 @@ export function ShellProvider({ children }: PropsWithChildren) {
   const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
   const [rightSidebarContent, setRightSidebarContent] =
     useState<ReactNode | null>(null);
+  const rightSidebarDrawerMode = useMediaQuery(
+    RIGHT_SIDEBAR_DRAWER_BREAKPOINT,
+  );
 
   useEffect(() => {
     if (pathname !== initialPathRef.current) {
@@ -74,6 +82,7 @@ export function ShellProvider({ children }: PropsWithChildren) {
       setLeftSidebarOpen,
       rightSidebarOpen,
       rightSidebarContent,
+      rightSidebarDrawerMode,
       toggleRightSidebar,
       openRightSidebar,
       closeRightSidebar,
@@ -85,6 +94,7 @@ export function ShellProvider({ children }: PropsWithChildren) {
       setLeftSidebarOpen,
       rightSidebarOpen,
       rightSidebarContent,
+      rightSidebarDrawerMode,
       toggleRightSidebar,
       openRightSidebar,
       closeRightSidebar,
@@ -109,6 +119,7 @@ export function useRightSidebar() {
     closeRightSidebar,
     setRightSidebarContent,
     rightSidebarOpen,
+    rightSidebarDrawerMode,
     toggleRightSidebar,
   } = useShell();
 
@@ -119,6 +130,7 @@ export function useRightSidebar() {
       toggle: toggleRightSidebar,
       setContent: setRightSidebarContent,
       isOpen: rightSidebarOpen,
+      isDrawerMode: rightSidebarDrawerMode,
     }),
     [
       openRightSidebar,
@@ -126,6 +138,7 @@ export function useRightSidebar() {
       toggleRightSidebar,
       setRightSidebarContent,
       rightSidebarOpen,
+      rightSidebarDrawerMode,
     ],
   );
 }
