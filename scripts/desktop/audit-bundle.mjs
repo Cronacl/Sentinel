@@ -145,7 +145,7 @@ function getAsarTopLevelEntries(paths) {
   const entries = new Set();
 
   for (const filePath of paths) {
-    const relativePath = filePath.replace(/^\/+/, "");
+    const relativePath = normalizePathForMatch(filePath).replace(/^\/+/, "");
     const [topLevel] = relativePath.split("/");
     if (topLevel) {
       entries.add(topLevel);
