@@ -274,11 +274,17 @@ function buildIntegrationsSection(promptContext: ThreadPromptContext) {
     "## Connected Integrations",
     "The following integrations are connected and available for targeted use in this conversation.",
     "Use the connected integration as the direct source of truth when the request clearly targets that service, and do not describe it as unavailable unless the connection state or a tool call proves that.",
+    "IMPORTANT: Integration tools are namespaced with a prefix. Always use the exact prefixed tool names shown below. Never fabricate tool names like 'integration_<provider>'.",
     promptContext.enabledIntegrations
-      .map(
-        (integration) =>
-          `- ${integration.label} (${integration.toolCount} tools): Use ${integration.provider.replace(/_/g, " ")} tools when the user asks about ${integration.provider === "gmail" ? "emails, inbox, or messages" : integration.provider === "google_calendar" ? "calendar, events, meetings, or scheduling" : integration.provider === "google_drive" ? "files, documents, drive, or uploads" : integration.provider === "github" ? "repos, issues, pull requests, code, branches, workflows, releases, or GitHub" : integration.provider === "linear" ? "issues, projects, cycles, teams, labels, sprints, or Linear" : integration.provider === "notion" ? "pages, databases, wiki, knowledge base, blocks, or Notion" : integration.provider === "slack" ? "channels, messages, threads, conversations, or Slack" : integration.provider === "airtable" ? "bases, tables, records, fields, or Airtable" : integration.provider === "yahoo_finance" ? "stocks, stock prices, tickers, market data, ETFs, financial quotes, or Yahoo Finance" : integration.provider === "arxiv" ? "research papers, preprints, academic papers, arXiv papers, or scientific literature" : integration.provider === "pubmed" ? "medical articles, biomedical research, clinical studies, PubMed papers, or PMID lookups" : integration.provider.replace(/_/g, " ")}.${integration.capabilitySummary ? ` Capability: ${integration.capabilitySummary}` : ""}`,
-      )
+      .map((integration) => {
+        const prefixHint = integration.toolPrefix
+          ? ` Tools are named \`${integration.toolPrefix}*\`.`
+          : "";
+        const capabilityHint = integration.capabilitySummary
+          ? ` ${integration.capabilitySummary}`
+          : "";
+        return `- ${integration.label} (${integration.toolCount} tools via \`${integration.provider}\` namespace):${prefixHint}${capabilityHint}`;
+      })
       .join("\n"),
   );
 }

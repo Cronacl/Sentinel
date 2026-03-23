@@ -5,30 +5,23 @@ import { z } from "zod";
 import type { AIProvider } from "@/server/db/enums";
 import { getReasoningProviderOptions } from "@/lib/ai/providers/models";
 import {
-  getEnabledModels,
-  getLanguageModel,
-} from "@/lib/ai/providers/resolver";
+  findIntegrationProviderByToolName,
+  getIntegrationToolPrefix,
+} from "@/lib/integrations/runtime";
 
 import type { ThreadPromptContext } from "./prompt-context";
 import {
-  INTEGRATION_TOOL_PREFIXES,
   hasWorkspaceInspectionContext,
   selectAlwaysOnChatTools,
   selectInitialActiveTools,
   selectStepActiveTools,
 } from "./tool-selection";
+import { resolveToolSelectionModel } from "./tool-selection-model";
 import {
   getActiveCategories,
   getToolsInCategory,
   type ToolCategory,
 } from "./tools/catalog";
-
-const ROUTER_MODEL_BY_PROVIDER = {
-  anthropic: "claude-haiku-4-5",
-  google: "gemini-2.5-flash",
-  google_vertex: "gemini-2.5-flash",
-  openai: "gpt-5-mini",
-} as const satisfies Record<AIProvider, string>;
 
 const toolCategoryValues = [
   "execution",
@@ -72,14 +65,12 @@ export type ToolRoutingManifest = {
   allowedMutationRoot: string | null;
   availableCategories: ToolCategory[];
   availableIntegrations: Array<{
-    aliases: string[];
     capabilitySummary: string;
     label: string;
     provider: string;
     toolCount: number;
   }>;
   availableMcpServers: Array<{
-    aliases: string[];
     capabilitySummary: string;
     catalogId?: string;
     name: string;
@@ -122,13 +113,6 @@ export type ValidatedToolRoutingDecision = {
   audit: ToolRoutingAudit;
 };
 
-type RouterModelResolution = {
-  languageModel: unknown;
-  providerOptions?: SharedV3ProviderOptions;
-  routerModelId: string | null;
-  usedFallbackModel: boolean;
-};
-
 type RouteToolExposureInput = {
   availableToolNames: string[];
   evidence?: ToolRoutingEvidence;
@@ -136,7 +120,6 @@ type RouteToolExposureInput = {
   mainLanguageModel: unknown;
   mainProviderOptions?: SharedV3ProviderOptions;
   promptContext: ThreadPromptContext;
-  resolvedModelId?: string | null;
   resolvedProviderId?: AIProvider | null;
   stage: "initial" | "step";
   steps?: ReadonlyArray<StepResult<ToolSet>>;
@@ -256,11 +239,11 @@ export function buildToolRoutingEvidence(
         inspectionPerformed = true;
       }
 
-      const integrationPrefix = Object.entries(INTEGRATION_TOOL_PREFIXES).find(
-        ([, prefix]) => prefix && toolCall.toolName.startsWith(prefix),
+      const integrationProvider = findIntegrationProviderByToolName(
+        toolCall.toolName,
       );
-      if (integrationPrefix) {
-        integrationNamespaces.add(integrationPrefix[0]);
+      if (integrationProvider) {
+        integrationNamespaces.add(integrationProvider);
       }
 
       const mcpMatch = /^mcp_([^_]+(?:_[^_]+)*)__/.exec(toolCall.toolName);
@@ -384,7 +367,6 @@ export function buildToolRoutingManifest({
     ).sort(),
     availableIntegrations: promptContext.enabledIntegrations.map(
       (integration) => ({
-        aliases: integration.aliases ?? [],
         capabilitySummary: integration.capabilitySummary ?? "",
         label: integration.label,
         provider: integration.provider,
@@ -392,7 +374,6 @@ export function buildToolRoutingManifest({
       }),
     ),
     availableMcpServers: promptContext.enabledMcpServers.map((server) => ({
-      aliases: server.aliases ?? [],
       capabilitySummary: server.capabilitySummary ?? "",
       ...(server.catalogId ? { catalogId: server.catalogId } : {}),
       name: server.name,
@@ -419,78 +400,6 @@ export function buildToolRoutingManifest({
     userRequest: promptContext.latestUserText?.trim() || "",
     workspaceRoot: promptContext.workspaceRoot,
   };
-}
-
-export async function resolveToolRouterModel({
-  mainLanguageModel,
-  mainProviderOptions,
-  resolvedModelId,
-  resolvedProviderId,
-  userId,
-}: {
-  mainLanguageModel: unknown;
-  mainProviderOptions?: SharedV3ProviderOptions;
-  resolvedModelId?: string | null;
-  resolvedProviderId?: AIProvider | null;
-  userId: string;
-}): Promise<RouterModelResolution> {
-  const fallbackModelId =
-    resolvedProviderId && resolvedModelId
-      ? `${resolvedProviderId}:${resolvedModelId}`
-      : null;
-  const fallbackProviderOptions =
-    resolvedProviderId && resolvedModelId
-      ? (getReasoningProviderOptions(
-          resolvedProviderId,
-          resolvedModelId,
-          "minimal",
-        ) ?? mainProviderOptions)
-      : mainProviderOptions;
-
-  if (!resolvedProviderId) {
-    return {
-      languageModel: mainLanguageModel,
-      providerOptions: fallbackProviderOptions,
-      routerModelId: fallbackModelId,
-      usedFallbackModel: true,
-    };
-  }
-
-  const routerModelId = ROUTER_MODEL_BY_PROVIDER[resolvedProviderId];
-  const compositeRouterModelId = `${resolvedProviderId}:${routerModelId}`;
-  const enabledModels = await getEnabledModels(userId);
-  const isEnabled = enabledModels.some(
-    (model) => model.compositeId === compositeRouterModelId,
-  );
-
-  if (!isEnabled) {
-    return {
-      languageModel: mainLanguageModel,
-      providerOptions: fallbackProviderOptions,
-      routerModelId: fallbackModelId,
-      usedFallbackModel: true,
-    };
-  }
-
-  try {
-    return {
-      languageModel: await getLanguageModel(userId, compositeRouterModelId),
-      providerOptions: getReasoningProviderOptions(
-        resolvedProviderId,
-        routerModelId,
-        "minimal",
-      ),
-      routerModelId: compositeRouterModelId,
-      usedFallbackModel: false,
-    };
-  } catch {
-    return {
-      languageModel: mainLanguageModel,
-      providerOptions: fallbackProviderOptions,
-      routerModelId: fallbackModelId,
-      usedFallbackModel: true,
-    };
-  }
 }
 
 export function buildToolRouterSystemPrompt() {
@@ -554,10 +463,9 @@ function expandIntegrationTools(
       continue;
     }
 
-    const prefix =
-      INTEGRATION_TOOL_PREFIXES[
-        namespace as keyof typeof INTEGRATION_TOOL_PREFIXES
-      ];
+    const prefix = getIntegrationToolPrefix(
+      namespace as Parameters<typeof getIntegrationToolPrefix>[0],
+    );
     if (!prefix) {
       rejectedSelections.push(`integration:${namespace}:no-prefix`);
       continue;
@@ -810,23 +718,38 @@ export async function routeToolExposure(
     promptContext: input.promptContext,
     stage: input.stage,
   });
-  const routerModel = await resolveToolRouterModel({
-    mainLanguageModel: input.mainLanguageModel,
-    mainProviderOptions: input.mainProviderOptions,
-    resolvedModelId: input.resolvedModelId,
-    resolvedProviderId: input.resolvedProviderId,
-    userId: input.userId,
-  });
+
+  if (!input.resolvedProviderId) {
+    return buildDeterministicFallbackResult(
+      input,
+      "no-provider-id",
+      evidence,
+    );
+  }
+
+  let routerModelId: string | null = null;
+  let usedFallbackModel = false;
 
   try {
+    const resolved = await resolveToolSelectionModel({
+      providerId: input.resolvedProviderId,
+      userId: input.userId,
+    });
+
+    routerModelId = resolved.requestedModelId;
+
+    const providerOptions = getReasoningProviderOptions(
+      resolved.providerId,
+      resolved.responseModelId,
+      "minimal",
+    );
+
     const { output } = await generateText({
-      model: routerModel.languageModel as Parameters<
+      model: resolved.languageModel as Parameters<
         typeof generateText
       >[0]["model"],
       output: Output.object({ schema: toolRoutingDecisionSchema }),
-      ...(routerModel.providerOptions
-        ? { providerOptions: routerModel.providerOptions }
-        : {}),
+      ...(providerOptions ? { providerOptions } : {}),
       prompt: buildToolRouterPrompt(manifest),
       system: buildToolRouterSystemPrompt(),
     });
@@ -836,11 +759,41 @@ export async function routeToolExposure(
       decision: output,
       evidence,
       promptContext: input.promptContext,
-      routerModelId: routerModel.routerModelId,
+      routerModelId,
       stage: input.stage,
-      usedFallbackModel: routerModel.usedFallbackModel,
+      usedFallbackModel,
     });
   } catch (error) {
+    usedFallbackModel = true;
+
+    if (input.mainLanguageModel) {
+      try {
+        const { output } = await generateText({
+          model: input.mainLanguageModel as Parameters<
+            typeof generateText
+          >[0]["model"],
+          output: Output.object({ schema: toolRoutingDecisionSchema }),
+          ...(input.mainProviderOptions
+            ? { providerOptions: input.mainProviderOptions }
+            : {}),
+          prompt: buildToolRouterPrompt(manifest),
+          system: buildToolRouterSystemPrompt(),
+        });
+
+        return validateToolRoutingDecision({
+          availableToolNames: input.availableToolNames,
+          decision: output,
+          evidence,
+          promptContext: input.promptContext,
+          routerModelId: null,
+          stage: input.stage,
+          usedFallbackModel: true,
+        });
+      } catch {
+        // Fall through to deterministic fallback
+      }
+    }
+
     return buildDeterministicFallbackResult(
       input,
       error instanceof Error ? `router-error:${error.message}` : "router-error",

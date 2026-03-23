@@ -17,34 +17,12 @@ mock.module("ai", () => ({
   generateText: generateTextMock,
 }));
 
-const getEnabledModelsMock = mock(async () => [
-  {
-    compositeId: "openai:gpt-5-mini",
-    displayName: "GPT-5 Mini",
-    isCustom: false,
-    modelId: "gpt-5-mini",
-    provider: "openai",
-  },
-  {
-    compositeId: "anthropic:claude-haiku-4-5",
-    displayName: "Claude Haiku 4.5",
-    isCustom: false,
-    modelId: "claude-haiku-4-5",
-    provider: "anthropic",
-  },
-  {
-    compositeId: "google:gemini-2.5-flash",
-    displayName: "Gemini 2.5 Flash",
-    isCustom: false,
-    modelId: "gemini-2.5-flash",
-    provider: "google",
-  },
-]);
-
-const getLanguageModelMock = mock(
-  async (_userId: string, compositeId: string) => ({
-    compositeId,
-    kind: "router-model",
+const resolveToolSelectionModelMock = mock(
+  async ({ providerId }: { providerId: string; userId: string }) => ({
+    languageModel: { kind: "router-model", providerId },
+    providerId,
+    requestedModelId: `${providerId}:gpt-4.1-nano`,
+    responseModelId: "gpt-4.1-nano",
   }),
 );
 
@@ -57,14 +35,44 @@ const getReasoningProviderOptionsMock = mock(
   }),
 );
 
-mock.module("@/lib/ai/providers/resolver", () => ({
-  getEnabledModels: getEnabledModelsMock,
-  getLanguageModel: getLanguageModelMock,
+mock.module("./tool-selection-model", () => ({
+  resolveToolSelectionModel: resolveToolSelectionModelMock,
 }));
 
 mock.module("@/lib/ai/providers/models", () => ({
   getReasoningProviderOptions: getReasoningProviderOptionsMock,
 }));
+
+mock.module("@/lib/integrations/runtime", () => {
+  const prefixes: Record<string, string> = {
+    github: "gh_",
+    gmail: "gmail_",
+    google_calendar: "gcal_",
+    google_drive: "gdrive_",
+    slack: "slack_",
+    linear: "linear_",
+    notion: "notion_",
+    airtable: "airtable_",
+    postgresql: "pg_",
+    mysql: "mysql_",
+    mongodb: "mongo_",
+    yahoo_finance: "yfinance_",
+    arxiv: "arxiv_",
+    pubmed: "pubmed_",
+  };
+
+  return {
+    getIntegrationToolPrefix: (provider: string) => prefixes[provider] ?? null,
+    findIntegrationProviderByToolName: (toolName: string) => {
+      for (const [provider, prefix] of Object.entries(prefixes)) {
+        if (toolName.startsWith(prefix)) return provider;
+      }
+      return null;
+    },
+    getIntegrationLabel: (provider: string) => provider,
+    countIntegrationTools: (_provider: string, _tools: string[]) => 0,
+  };
+});
 
 const { buildThreadPromptContext } = await import("./prompt-context");
 const { getDefaultToolApprovalPolicies } =
@@ -75,7 +83,6 @@ const {
   buildToolRouterPrompt,
   buildToolRouterSystemPrompt,
   routeToolExposure,
-  resolveToolRouterModel,
   validateToolRoutingDecision,
 } = await import("./tool-router");
 mock.restore();
@@ -90,6 +97,7 @@ function createPromptContext(overrides: Record<string, unknown> = {}) {
         label: "GitHub",
         provider: "github",
         toolCount: 4,
+        toolPrefix: "gh_",
       },
     ],
     enabledMcpServers: [
@@ -148,45 +156,40 @@ afterEach(() => {
 });
 
 describe("tool router", () => {
-  it("selects the fixed compact router model for the active provider", async () => {
-    const result = await resolveToolRouterModel({
+  it("resolves the tool selection model for routing", async () => {
+    const routed = await routeToolExposure({
+      availableToolNames: ["manage_task", "list", "read", "websearch"],
       mainLanguageModel: { kind: "main-model" },
-      resolvedModelId: "gpt-5.2",
+      promptContext: createPromptContext(),
       resolvedProviderId: "openai",
+      stage: "initial",
       userId: "user-1",
     });
 
-    expect(getEnabledModelsMock).toHaveBeenCalledWith("user-1");
-    expect(getLanguageModelMock).toHaveBeenCalledWith(
-      "user-1",
-      "openai:gpt-5-mini",
-    );
-    expect(result.routerModelId).toBe("openai:gpt-5-mini");
-    expect(result.usedFallbackModel).toBe(false);
+    expect(resolveToolSelectionModelMock).toHaveBeenCalledWith({
+      providerId: "openai",
+      userId: "user-1",
+    });
+    expect(routed.audit.mode).toBe("model-router");
   });
 
-  it("falls back to the main model when the fixed router model is unavailable", async () => {
-    getEnabledModelsMock.mockImplementationOnce(async () => [
-      {
-        compositeId: "openai:gpt-5.2",
-        displayName: "GPT-5.2",
-        isCustom: false,
-        modelId: "gpt-5.2",
-        provider: "openai",
-      },
-    ]);
-
-    const result = await resolveToolRouterModel({
+  it("falls back to deterministic baseline when no provider is set", async () => {
+    const routed = await routeToolExposure({
+      availableToolNames: [
+        "manage_task",
+        "list",
+        "read",
+        "websearch",
+        "webfetch",
+      ],
       mainLanguageModel: { kind: "main-model" },
-      mainProviderOptions: { openai: { reasoningEffort: "medium" } },
-      resolvedModelId: "gpt-5.2",
-      resolvedProviderId: "openai",
+      promptContext: createPromptContext(),
+      stage: "initial",
       userId: "user-1",
     });
 
-    expect(result.languageModel).toEqual({ kind: "main-model" });
-    expect(result.routerModelId).toBe("openai:gpt-5.2");
-    expect(result.usedFallbackModel).toBe(true);
+    expect(routed.audit.mode).toBe("deterministic-fallback");
+    expect(routed.audit.reason).toBe("no-provider-id");
   });
 
   it("strips mutation exposure when there is no mutation root", () => {
@@ -265,7 +268,6 @@ describe("tool router", () => {
       availableCategories: ["inspection", "execution", "mutation", "web"],
       availableIntegrations: [
         {
-          aliases: ["github", "pull request"],
           capabilitySummary: "Search repos, issues, and pull requests.",
           label: "GitHub",
           provider: "github",
@@ -274,7 +276,6 @@ describe("tool router", () => {
       ],
       availableMcpServers: [
         {
-          aliases: ["browser", "playwright"],
           capabilitySummary:
             "Integrate browser automation to implement design and test UI.",
           catalogId: "playwright",
@@ -353,7 +354,6 @@ describe("tool router", () => {
       ],
       mainLanguageModel: { kind: "main-model" },
       promptContext,
-      resolvedModelId: "gpt-5.2",
       resolvedProviderId: "openai",
       stage: "initial",
       userId: "user-1",
@@ -461,6 +461,7 @@ describe("tool router", () => {
           label: "Google Drive",
           provider: "google_drive",
           toolCount: 10,
+          toolPrefix: "gdrive_",
         },
       ],
       latestUserText: "list my drive files",
@@ -520,8 +521,10 @@ describe("tool router", () => {
     );
   });
 
-  it("falls back to baseline tools only when the model router errors", async () => {
-    generateTextMock.mockRejectedValueOnce(new Error("router failed"));
+  it("falls back to baseline tools only when all model routing attempts error", async () => {
+    generateTextMock
+      .mockRejectedValueOnce(new Error("router model failed"))
+      .mockRejectedValueOnce(new Error("main model failed"));
 
     const routed = await routeToolExposure({
       availableToolNames: [
@@ -538,7 +541,6 @@ describe("tool router", () => {
       promptContext: createPromptContext({
         latestUserText: "check my github issues",
       }),
-      resolvedModelId: "gpt-5.2",
       resolvedProviderId: "openai",
       stage: "initial",
       userId: "user-1",
@@ -557,5 +559,41 @@ describe("tool router", () => {
     );
     expect(routed.activeToolNames).not.toContain("gh_list_issues");
     expect(routed.audit.mode).toBe("deterministic-fallback");
+  });
+
+  it("falls back to the main model when the dedicated router model errors", async () => {
+    generateTextMock
+      .mockRejectedValueOnce(new Error("router model failed"))
+      .mockResolvedValueOnce({
+        output: {
+          categories: [],
+          confidence: "high",
+          integrationNamespaces: ["github"],
+          mcpNamespaces: [],
+          reasoning: "Fallback to main model succeeded.",
+        },
+      });
+
+    const routed = await routeToolExposure({
+      availableToolNames: [
+        "manage_task",
+        "list",
+        "read",
+        "websearch",
+        "webfetch",
+        "gh_list_issues",
+      ],
+      mainLanguageModel: { kind: "main-model" },
+      promptContext: createPromptContext({
+        latestUserText: "check my github issues",
+      }),
+      resolvedProviderId: "openai",
+      stage: "initial",
+      userId: "user-1",
+    });
+
+    expect(routed.activeToolNames).toContain("gh_list_issues");
+    expect(routed.audit.mode).toBe("model-router");
+    expect(routed.audit.usedFallbackModel).toBe(true);
   });
 });

@@ -68,6 +68,7 @@ describe("buildThreadAgentInstructions", () => {
           label: "Google Drive",
           provider: "google_drive",
           toolCount: 10,
+          toolPrefix: "gdrive_",
         },
       ],
       availableSkills: [
