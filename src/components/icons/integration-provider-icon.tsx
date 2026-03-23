@@ -39,6 +39,28 @@ const AirtableIcon = (props: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+const ArxivIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 17.732 24.269"
+    {...props}
+  >
+    <path
+      d="M6.565 9.368l2.266 2.738 6.674-7.84c.353-.47.52-.717.353-1.117a1.218 1.218 0 0 0-1.061-.748.953.953 0 0 0-.712.262Z"
+      fill="#bdb9b4"
+    />
+    <path
+      d="M12.541 10.677 1.935.503A1.413 1.413 0 0 0 1.101 0 1.09 1.09 0 0 0 .074.66c-.167.4-.047.681.319 1.206l8.44 10.242-6.282 7.716a1.336 1.336 0 0 0-.323 1.3 1.114 1.114 0 0 0 1.04.69.992.992 0 0 0 .748-.368l8.519-7.92a1.924 1.924 0 0 0 .006-2.849Z"
+      fill="#b31b1b"
+    />
+    <path
+      d="M17.336 22.364 8.811 12.089l-2.265 2.738-1.389 1.254a2.063 2.063 0 0 0 0 2.965l10.812 10.419a.925.925 0 0 0 .742.282 1.039 1.039 0 0 0 .953-.667 1.261 1.261 0 0 0-.328-1.24Z"
+      fill="#bdb9b4"
+      transform="translate(0 -5.448)"
+    />
+  </svg>
+);
+
 const GithubIcon = (props: SVGProps<SVGSVGElement>) => (
   <svg
     viewBox="0 0 16 16"
@@ -88,7 +110,7 @@ const PROVIDER_ICONS: Record<IntegrationProvider, ProviderIconDef> = {
   mysql: { type: "iconify", icon: "logos:mysql-icon" },
   mongodb: { type: "iconify", icon: "logos:mongodb-icon" },
   yahoo_finance: { type: "iconify", icon: "logos:yahoo" },
-  arxiv: { type: "iconify", icon: "simple-icons:arxiv" },
+  arxiv: { type: "svg", component: ArxivIcon },
   pubmed: { type: "iconify", icon: "simple-icons:pubmed" },
 };
 

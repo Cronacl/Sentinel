@@ -199,7 +199,6 @@ export function createThreadAgent({
   let cachedAllToolNames: string[] = [];
   let cachedPromptContext: ThreadPromptContext | null = null;
   let cachedInitialActiveTools: string[] = [];
-  let cachedResolvedModelId: string | undefined;
   let cachedResolvedProviderId:
     | "anthropic"
     | "google"
@@ -270,9 +269,6 @@ export function createThreadAgent({
             options.promptContext,
           ),
         },
-        ...(options.resolvedModelId
-          ? { resolvedModelId: options.resolvedModelId }
-          : {}),
         ...(options.resolvedProviderId
           ? { resolvedProviderId: options.resolvedProviderId }
           : {}),
@@ -299,7 +295,6 @@ export function createThreadAgent({
       cachedAllToolNames = allToolNames;
       cachedPromptContext = promptContext;
       cachedInitialActiveTools = initialActiveTools;
-      cachedResolvedModelId = options.resolvedModelId;
       cachedResolvedProviderId = options.resolvedProviderId;
       cachedRoutingAudit = initialRouting.audit;
       cachedRoutingEvidenceSignature = null;
@@ -345,9 +340,6 @@ export function createThreadAgent({
             mainLanguageModel: model,
             mainProviderOptions: providerOptions,
             promptContext,
-            ...(cachedResolvedModelId
-              ? { resolvedModelId: cachedResolvedModelId }
-              : {}),
             ...(cachedResolvedProviderId
               ? { resolvedProviderId: cachedResolvedProviderId }
               : {}),

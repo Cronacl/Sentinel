@@ -10,11 +10,11 @@ import type { WebFetchSettings } from "@/lib/webfetch";
 import type { ToolApprovalPolicyMap } from "./tool-approval-policy";
 
 export type ThreadPromptIntegration = {
-  aliases?: string[];
   capabilitySummary?: string;
   provider: IntegrationProvider;
   label: string;
   toolCount: number;
+  toolPrefix: string | null;
 };
 
 export type ThreadPromptPlanSummary = {
@@ -40,7 +40,6 @@ export type ThreadPromptLatentToolSummary = {
 };
 
 export type ThreadPromptMcpServer = {
-  aliases?: string[];
   capabilitySummary?: string;
   catalogId?: string;
   id: string;
@@ -105,7 +104,6 @@ export function buildThreadPromptContext(
     enabledIntegrations: [...(input.enabledIntegrations ?? [])]
       .map((integration) => ({
         ...integration,
-        aliases: uniqueStrings(integration.aliases ?? []),
         capabilitySummary: integration.capabilitySummary?.trim() ?? "",
       }))
       .sort((left, right) =>
@@ -116,7 +114,6 @@ export function buildThreadPromptContext(
     enabledMcpServers: [...(input.enabledMcpServers ?? [])]
       .map((server) => ({
         ...server,
-        aliases: uniqueStrings(server.aliases ?? []),
         capabilitySummary: server.capabilitySummary?.trim() ?? "",
       }))
       .sort((left, right) =>

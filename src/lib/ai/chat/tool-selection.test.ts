@@ -180,6 +180,7 @@ describe("tool selection baselines", () => {
           label: "Google Drive",
           provider: "google_drive",
           toolCount: 10,
+          toolPrefix: "gdrive_",
         },
       ],
       enabledMcpServers: [

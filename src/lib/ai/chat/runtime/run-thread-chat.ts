@@ -55,6 +55,7 @@ import {
   getEnabledIntegrations,
   buildIntegrationContext,
   getIntegrationLabel,
+  getIntegrationToolPrefix,
   countIntegrationTools,
 } from "@/lib/integrations/runtime";
 import {
@@ -390,11 +391,11 @@ function buildIntegrationPromptSummary(
     });
 
     return {
-      aliases: profile.aliases,
       capabilitySummary: profile.capabilitySummary,
       label,
       provider,
       toolCount: countIntegrationTools(provider, integrationToolNames),
+      toolPrefix: getIntegrationToolPrefix(provider),
     };
   });
 }
@@ -846,7 +847,6 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
                   namespace,
                 });
                 return {
-                  aliases: profile.aliases,
                   ...(entry.catalogId ? { catalogId: entry.catalogId } : {}),
                   capabilitySummary: profile.capabilitySummary,
                   id: entry.id,

@@ -1,8 +1,8 @@
 import "server-only";
 
-const YF_BASE = "https://query1.finance.yahoo.com/v8/finance";
-const YF_SEARCH = "https://query1.finance.yahoo.com/v1/finance/search";
-const YF_CHART = "https://query1.finance.yahoo.com/v8/finance/chart";
+const YF_BASE = "https://query2.finance.yahoo.com/v7/finance";
+const YF_SEARCH = "https://query2.finance.yahoo.com/v1/finance/search";
+const YF_CHART = "https://query2.finance.yahoo.com/v8/finance/chart";
 
 type QuoteResult = {
   symbol: string;
@@ -44,14 +44,20 @@ type ChartPoint = {
 async function yfFetch<T>(url: string): Promise<T> {
   const res = await fetch(url, {
     headers: {
-      "User-Agent": "Mozilla/5.0",
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       Accept: "application/json",
+      Origin: "https://finance.yahoo.com",
+      Referer: "https://finance.yahoo.com/",
     },
     signal: AbortSignal.timeout(15_000),
   });
 
   if (!res.ok) {
-    throw new Error(`Yahoo Finance API error: ${res.status} ${res.statusText}`);
+    const body = await res.text().catch(() => "");
+    throw new Error(
+      `Yahoo Finance API error: ${res.status} ${res.statusText}${body ? ` - ${body.slice(0, 200)}` : ""}`,
+    );
   }
 
   return res.json() as Promise<T>;

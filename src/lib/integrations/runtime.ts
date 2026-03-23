@@ -191,3 +191,14 @@ export function countIntegrationTools(
   if (!prefix) return 0;
   return allToolNames.filter((name) => name.startsWith(prefix)).length;
 }
+
+export function findIntegrationProviderByToolName(
+  toolName: string,
+): IntegrationProvider | null {
+  for (const [provider, prefix] of Object.entries(INTEGRATION_TOOL_PREFIXES)) {
+    if (prefix && toolName.startsWith(prefix)) {
+      return provider as IntegrationProvider;
+    }
+  }
+  return null;
+}

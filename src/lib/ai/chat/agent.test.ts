@@ -98,7 +98,40 @@ mock.module("@/lib/ai/providers/resolver", () => ({
 
 mock.module("@/lib/ai/providers/models", () => ({
   getReasoningProviderOptions: getReasoningProviderOptionsMock,
+  toCompositeModelId: (provider: string, model: string) =>
+    `${provider}:${model}`,
 }));
+
+mock.module("@/lib/integrations/runtime", () => {
+  const prefixes: Record<string, string> = {
+    github: "gh_",
+    gmail: "gmail_",
+    google_calendar: "gcal_",
+    google_drive: "gdrive_",
+    slack: "slack_",
+    linear: "linear_",
+    notion: "notion_",
+    airtable: "airtable_",
+    postgresql: "pg_",
+    mysql: "mysql_",
+    mongodb: "mongo_",
+    yahoo_finance: "yfinance_",
+    arxiv: "arxiv_",
+    pubmed: "pubmed_",
+  };
+
+  return {
+    getIntegrationToolPrefix: (provider: string) => prefixes[provider] ?? null,
+    findIntegrationProviderByToolName: (toolName: string) => {
+      for (const [provider, prefix] of Object.entries(prefixes)) {
+        if (toolName.startsWith(prefix)) return provider;
+      }
+      return null;
+    },
+    getIntegrationLabel: (provider: string) => provider,
+    countIntegrationTools: (_provider: string, _tools: string[]) => 0,
+  };
+});
 
 mock.module("./tools/search-memory", () => ({
   executeSearchMemory: mock(async () => ({
@@ -756,7 +789,7 @@ describe("createThreadAgent", () => {
     );
   });
 
-  it("uses the fixed compact router model for the active provider", async () => {
+  it("uses the dedicated tool selection model for the active provider", async () => {
     await prepareWith({
       defaultDirectory: "/tmp/workspace",
       memorySettings: defaultMemorySettings,
@@ -780,15 +813,10 @@ describe("createThreadAgent", () => {
       workspaceId: "workspace-1",
     });
 
-    expect(getEnabledModelsMock).toHaveBeenCalledWith("user-1");
     expect(getLanguageModelMock).toHaveBeenCalledWith(
       "user-1",
-      "openai:gpt-5-mini",
+      "openai:gpt-4.1-nano",
     );
-    expect(generateText.mock.calls[0]?.[0]?.model).toEqual({
-      compositeId: "openai:gpt-5-mini",
-      kind: "router-model",
-    });
   });
 
   it("falls back to deterministic exposure when the router is low confidence", async () => {

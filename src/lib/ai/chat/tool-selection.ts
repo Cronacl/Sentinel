@@ -7,23 +7,6 @@ import {
 } from "./tools/catalog";
 import type { ThreadPromptContext } from "./prompt-context";
 
-export const INTEGRATION_TOOL_PREFIXES: Partial<Record<string, string>> = {
-  airtable: "airtable_",
-  github: "gh_",
-  gmail: "gmail_",
-  google_calendar: "gcal_",
-  google_drive: "gdrive_",
-  linear: "linear_",
-  mongodb: "mongo_",
-  mysql: "mysql_",
-  notion: "notion_",
-  postgresql: "pg_",
-  slack: "slack_",
-  yahoo_finance: "yfinance_",
-  arxiv: "arxiv_",
-  pubmed: "pubmed_",
-};
-
 function uniqueToolNames(toolNames: string[]) {
   return Array.from(new Set(toolNames));
 }
