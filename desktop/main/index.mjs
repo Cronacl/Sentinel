@@ -148,6 +148,18 @@ function getWindowBackgroundColor(theme) {
   return theme === "light" ? "#f5f5f5" : "#090909";
 }
 
+function getBrowserWindowChromeOptions() {
+  if (process.platform === "darwin") {
+    return {
+      titleBarStyle: "hiddenInset",
+    };
+  }
+
+  return {
+    frame: false,
+  };
+}
+
 async function applyThemeToPopupGuest(guestContents, theme) {
   try {
     if (!guestContents.debugger.isAttached()) {
@@ -167,18 +179,58 @@ async function applyThemeToPopupGuest(guestContents, theme) {
   }
 }
 
-function getPopupHtml(targetUrl, appOrigin, theme) {
+function getPopupHtml(targetUrl, appOrigin, theme, platform) {
   const escapedUrl = escapeHtml(targetUrl);
   const escapedAppOrigin = escapeHtml(appOrigin);
   const escapedTheme = theme === "light" ? "light" : "dark";
+  const usesNativeMacChrome = platform === "darwin";
+  const isWindows = platform === "win32";
+  const edgeWidth = usesNativeMacChrome
+    ? 72
+    : isWindows
+      ? 132
+      : platform === "linux"
+        ? 112
+        : 0;
   const expandButtonTitle =
-    process.platform === "darwin" ? "Toggle Full Screen" : "Maximize";
+    platform === "darwin" ? "Toggle Full Screen" : "Maximize";
   let hostname;
   try {
     hostname = escapeHtml(new URL(targetUrl).hostname);
   } catch {
     hostname = escapedUrl;
   }
+
+  const leadingChrome = `<div class="ws" aria-hidden="true"></div>`;
+  const trailingChrome = isWindows
+    ? `
+      <div class="wcwr" aria-label="Window controls">
+        <button class="wc wb" id="bn" title="Minimize" aria-label="Minimize window">
+          <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 7.25h6"/></svg>
+        </button>
+        <button class="wc wb" id="bx" title="${expandButtonTitle}" aria-label="Maximize window">
+          <svg viewBox="0 0 10 10" aria-hidden="true"><rect x="2.25" y="2.25" width="5.5" height="5.5" rx=".2"/></svg>
+        </button>
+        <button class="wc wbc" id="bc" title="Close" aria-label="Close window">
+          <svg viewBox="0 0 10 10" aria-hidden="true"><path d="m2.5 2.5 5 5m0-5-5 5"/></svg>
+        </button>
+      </div>
+    `
+    : platform === "linux"
+      ? `
+        <div class="wcwr wcwr-linux" aria-label="Window controls">
+          <button class="wc wl" id="bn" title="Minimize" aria-label="Minimize window">
+            <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 7.25h6"/></svg>
+          </button>
+          <button class="wc wl" id="bx" title="${expandButtonTitle}" aria-label="Maximize window">
+            <svg viewBox="0 0 10 10" aria-hidden="true"><rect x="2.5" y="2.5" width="5" height="5" rx="1"/></svg>
+          </button>
+          <button class="wc wl" id="bc" title="Close" aria-label="Close window">
+            <svg viewBox="0 0 10 10" aria-hidden="true"><path d="m2.5 2.5 5 5m0-5-5 5"/></svg>
+          </button>
+        </div>
+      `
+      : `<div class="ws" aria-hidden="true"></div>`;
 
   return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
 <html lang="en" data-theme="${escapedTheme}">
@@ -193,6 +245,8 @@ html[data-theme="dark"]{
   --panel:#090909;
   --text:rgba(245,245,245,.4);
   --border:rgba(255,255,255,.06);
+  --control-hover:rgba(255,255,255,.08);
+  --control-hover-text:rgba(245,245,245,.78);
   --loader:rgba(255,255,255,.35);
 }
 html[data-theme="light"]{
@@ -201,17 +255,24 @@ html[data-theme="light"]{
   --panel:#fcfcfc;
   --text:rgba(24,24,27,.45);
   --border:rgba(24,24,27,.08);
+  --control-hover:rgba(24,24,27,.06);
+  --control-hover-text:rgba(24,24,27,.82);
   --loader:rgba(24,24,27,.24);
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;overflow:hidden;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-.tb{height:38px;display:flex;align-items:center;padding:0 14px;-webkit-app-region:drag;background:var(--panel);border-bottom:1px solid var(--border);gap:10px;user-select:none}
-.tl{display:flex;align-items:center;gap:6px;-webkit-app-region:no-drag}
-.tl button{width:10px;height:10px;min-width:10px;min-height:10px;border-radius:50%;border:none;cursor:pointer;padding:0;transition:transform .1s}
-.tl button:hover{transform:scale(1.08)}
-.tc{background:#ff5f57}.tn{background:#febc2e}.tx{background:#28c840}
-.url{flex:1;min-width:0;text-align:center;font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em}
-.sp{width:52px;flex-shrink:0}
+.tb{height:38px;display:grid;grid-template-columns:${edgeWidth}px 1fr ${edgeWidth}px;align-items:center;padding:0 14px;-webkit-app-region:drag;background:var(--panel);border-bottom:1px solid var(--border);gap:10px;user-select:none}
+.url{min-width:0;text-align:center;font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em}
+.ws{height:32px}
+.wcwr{display:flex;align-items:stretch;justify-content:flex-end;height:32px;-webkit-app-region:no-drag}
+.wcwr-linux{gap:4px;align-items:center}
+.wc{border:none;background:transparent;color:var(--text);cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s}
+.wc svg{width:10px;height:10px;fill:none;stroke:currentColor;stroke-width:1}
+.wb{width:44px;height:32px}
+.wbc:hover{background:#e81123;color:#fff}
+.wb:hover{background:var(--control-hover);color:var(--control-hover-text)}
+.wl{width:32px;height:32px;border-radius:8px}
+.wl:hover{background:var(--control-hover);color:var(--control-hover-text)}
 .lb{height:2px;background:linear-gradient(90deg,transparent,var(--loader),transparent);background-size:200% 100%;animation:lbs 1.2s linear infinite;opacity:0;transition:opacity .2s}
 .lb.on{opacity:1}
 @keyframes lbs{0%{background-position:200% 0}100%{background-position:-200% 0}}
@@ -220,21 +281,18 @@ webview{width:100%;height:calc(100% - 40px);border:none}
 </head>
 <body>
 <div class="tb">
-<div class="tl">
-<button class="tc" id="bc" title="Close"></button>
-<button class="tn" id="bn" title="Minimize"></button>
-<button class="tx" id="bx" title="${expandButtonTitle}"></button>
-</div>
+${leadingChrome}
 <div class="url" id="ud">${hostname}</div>
-<div class="sp"></div>
+${trailingChrome}
 </div>
 <div class="lb" id="lb"></div>
 <webview id="wv" src="${escapedUrl}"></webview>
 <script>
 var wv=document.getElementById('wv'),ud=document.getElementById('ud'),lb=document.getElementById('lb');
-document.getElementById('bc').onclick=function(){window.sentinelDesktop&&window.sentinelDesktop.window.close()};
-document.getElementById('bn').onclick=function(){window.sentinelDesktop&&window.sentinelDesktop.window.minimize()};
-document.getElementById('bx').onclick=function(){window.sentinelDesktop&&window.sentinelDesktop.window.toggleMaximize()};
+var bc=document.getElementById('bc'),bn=document.getElementById('bn'),bx=document.getElementById('bx');
+if(bc){bc.onclick=function(){window.sentinelDesktop&&window.sentinelDesktop.window.close()}}
+if(bn){bn.onclick=function(){window.sentinelDesktop&&window.sentinelDesktop.window.minimize()}}
+if(bx){bx.onclick=function(){window.sentinelDesktop&&window.sentinelDesktop.window.toggleMaximize()}}
 wv.addEventListener('did-start-loading',function(){lb.classList.add('on')});
 wv.addEventListener('did-stop-loading',function(){lb.classList.remove('on')});
 wv.addEventListener('did-navigate',function(e){
@@ -271,7 +329,6 @@ function createBrowserPopup(url) {
   const theme = resolvedTheme;
   const popup = new BrowserWindow({
     backgroundColor: getWindowBackgroundColor(theme),
-    frame: false,
     height: 720,
     minHeight: 400,
     minWidth: 500,
@@ -284,6 +341,7 @@ function createBrowserPopup(url) {
       webviewTag: true,
     },
     width: 1020,
+    ...getBrowserWindowChromeOptions(),
   });
 
   popup.webContents.on("did-attach-webview", (_event, guestContents) => {
@@ -297,6 +355,7 @@ function createBrowserPopup(url) {
         process.env.SENTINEL_APP_URL ??
         "http://localhost:3232",
       theme,
+      process.platform,
     ),
   );
   popup.once("ready-to-show", () => popup.show());
@@ -333,7 +392,6 @@ async function prepareDevSession() {
 function createWindow() {
   mainWindow = new BrowserWindow({
     backgroundColor: "#090909",
-    frame: false,
     height: 920,
     minHeight: 720,
     minWidth: 1180,
@@ -346,6 +404,7 @@ function createWindow() {
       sandbox: false,
     },
     width: 1440,
+    ...getBrowserWindowChromeOptions(),
   });
   let hasShownWindow = false;
   const showWindow = () => {

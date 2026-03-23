@@ -15,6 +15,7 @@ export type DesktopServicesStatus = {
 };
 
 export type DesktopResolvedTheme = "light" | "dark";
+export type DesktopPlatform = "darwin" | "linux" | "win32";
 
 export type DesktopOpenTarget = {
   icon?: string;
@@ -26,6 +27,7 @@ export type DesktopOpenTarget = {
 export type SentinelDesktopApi = {
   app: {
     getVersion: () => Promise<string>;
+    platform: DesktopPlatform;
   };
   openExternal: (url: string) => Promise<void>;
   pickFiles: () => Promise<DesktopFileSelection[]>;

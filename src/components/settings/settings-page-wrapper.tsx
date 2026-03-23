@@ -1,6 +1,9 @@
 "use client";
 
+import { getDesktopApi } from "@/lib/desktop/client";
 import type { PropsWithChildren, ReactNode } from "react";
+
+import { useShell } from "@/components/shell";
 
 interface SettingsPageWrapperProps extends PropsWithChildren {
   title: ReactNode;
@@ -16,10 +19,18 @@ export function SettingsPageWrapper({
   contentClassName,
   children,
 }: SettingsPageWrapperProps) {
+  const desktop = getDesktopApi();
+  const isMacDesktop = desktop?.app.platform === "darwin";
+  const { leftSidebarOpen } = useShell();
+  const leadingInset = isMacDesktop && !leftSidebarOpen ? 92 : undefined;
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-clip">
       <div className="sentinel-scroll-shell h-full w-full">
-        <div className="sentinel-scroll-area h-[calc(100vh-0.25rem)] w-full px-6 py-8 lg:px-8">
+        <div
+          className="sentinel-scroll-area h-[calc(100vh-0.25rem)] w-full px-6 py-8 lg:px-8"
+          style={{ paddingLeft: leadingInset }}
+        >
           <div className={`mx-auto w-full ${contentClassName ?? "max-w-2xl"}`}>
             <div className="mb-6 flex items-start justify-between gap-4">
               <div className="app-region-no-drag min-w-0">
