@@ -22,6 +22,9 @@ export const READY_INTEGRATION_PROVIDERS = new Set<IntegrationProvider>([
   "postgresql",
   "mysql",
   "mongodb",
+  "yahoo_finance",
+  "arxiv",
+  "pubmed",
 ]);
 
 export const INTEGRATION_METADATA: Record<
@@ -211,6 +214,46 @@ export const INTEGRATION_METADATA: Record<
     ],
     setupHint:
       "Provide host, port, database, username, and password, or a connection URL.",
+  },
+  yahoo_finance: {
+    availability: "ready",
+    description:
+      "Look up real-time stock quotes, search tickers, and pull historical price data from Yahoo Finance.",
+    highlights: [
+      "Get live quotes for any stock, ETF, or index",
+      "Search for securities by name or ticker",
+      "Retrieve historical OHLCV chart data",
+    ],
+    requiredAccess: [
+      "Public Yahoo Finance market data (read-only)",
+    ],
+    setupHint: "No setup required — just enable and start querying.",
+  },
+  arxiv: {
+    availability: "ready",
+    description:
+      "Search and read academic papers on arXiv across physics, math, computer science, and more.",
+    highlights: [
+      "Search papers by keyword, author, title, or category",
+      "Get full metadata, abstract, and PDF links for any paper",
+    ],
+    requiredAccess: [
+      "Public arXiv API (read-only)",
+    ],
+    setupHint: "No setup required — just enable and start searching.",
+  },
+  pubmed: {
+    availability: "ready",
+    description:
+      "Search and retrieve biomedical and life science articles from PubMed / NCBI.",
+    highlights: [
+      "Search 36M+ articles with PubMed query syntax and MeSH terms",
+      "Get full article details including abstract, authors, and DOI",
+    ],
+    requiredAccess: [
+      "Public NCBI E-Utilities API (read-only)",
+    ],
+    setupHint: "No setup required — just enable and start searching.",
   },
 };
 

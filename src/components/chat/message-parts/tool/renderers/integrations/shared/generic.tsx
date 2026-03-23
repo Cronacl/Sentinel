@@ -34,13 +34,19 @@ function getProviderFromToolName(toolName: string) {
     return { provider: "mysql", label: "MySQL" };
   if (toolName.startsWith("mongo_"))
     return { provider: "mongodb", label: "MongoDB" };
+  if (toolName.startsWith("yfinance_"))
+    return { provider: "yahoo_finance", label: "Yahoo Finance" };
+  if (toolName.startsWith("arxiv_"))
+    return { provider: "arxiv", label: "arXiv" };
+  if (toolName.startsWith("pubmed_"))
+    return { provider: "pubmed", label: "PubMed" };
   return { provider: "unknown", label: "Integration" };
 }
 
 function humanizeToolName(toolName: string): string {
   return toolName
     .replace(
-      /^(gmail_|gcal_|gdrive_|gh_|linear_|notion_|slack_|airtable_|pg_|mysql_|mongo_)/,
+      /^(gmail_|gcal_|gdrive_|gh_|linear_|notion_|slack_|airtable_|pg_|mysql_|mongo_|yfinance_|arxiv_|pubmed_)/,
       "",
     )
     .replace(/_/g, " ")

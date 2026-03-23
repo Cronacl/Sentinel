@@ -6,10 +6,14 @@ import { decrypt } from "@/lib/ai/providers/encrypt";
 import { db } from "@/server/db";
 import { integrationDatabaseConfigs, integrations } from "@/server/db/schema";
 import type {
+  AuthlessIntegrationProvider,
   DatabaseIntegrationProvider,
   IntegrationProvider,
 } from "@/server/db/enums";
-import { DATABASE_INTEGRATION_PROVIDERS } from "@/server/db/enums";
+import {
+  AUTHLESS_INTEGRATION_PROVIDERS,
+  DATABASE_INTEGRATION_PROVIDERS,
+} from "@/server/db/enums";
 import { getValidAccessToken } from "./oauth/token-manager";
 import type { DatabaseConnectionConfig, IntegrationContext } from "./types";
 
@@ -31,6 +35,9 @@ const INTEGRATION_LABELS: Partial<Record<IntegrationProvider, string>> = {
   postgresql: "PostgreSQL",
   mysql: "MySQL",
   mongodb: "MongoDB",
+  yahoo_finance: "Yahoo Finance",
+  arxiv: "arXiv",
+  pubmed: "PubMed",
 };
 
 const INTEGRATION_TOOL_PREFIXES: Partial<Record<IntegrationProvider, string>> =
@@ -46,6 +53,9 @@ const INTEGRATION_TOOL_PREFIXES: Partial<Record<IntegrationProvider, string>> =
     postgresql: "pg_",
     mysql: "mysql_",
     mongodb: "mongo_",
+    yahoo_finance: "yfinance_",
+    arxiv: "arxiv_",
+    pubmed: "pubmed_",
   };
 
 const INTEGRATION_TOOL_COUNTS: Partial<Record<IntegrationProvider, number>> = {
@@ -60,12 +70,23 @@ const INTEGRATION_TOOL_COUNTS: Partial<Record<IntegrationProvider, number>> = {
   postgresql: 6,
   mysql: 5,
   mongodb: 11,
+  yahoo_finance: 3,
+  arxiv: 2,
+  pubmed: 2,
 };
 
 function isDatabaseProvider(
   provider: string,
 ): provider is DatabaseIntegrationProvider {
   return (DATABASE_INTEGRATION_PROVIDERS as readonly string[]).includes(
+    provider,
+  );
+}
+
+function isAuthlessProvider(
+  provider: string,
+): provider is AuthlessIntegrationProvider {
+  return (AUTHLESS_INTEGRATION_PROVIDERS as readonly string[]).includes(
     provider,
   );
 }
@@ -123,7 +144,9 @@ export async function buildIntegrationContext(
 
   await Promise.all(
     enabledIntegrations.map(async (integration) => {
-      if (isDatabaseProvider(integration.provider)) {
+      if (isAuthlessProvider(integration.provider)) {
+        return;
+      } else if (isDatabaseProvider(integration.provider)) {
         try {
           const config = await loadDatabaseConfig(integration.id);
           if (config) {

@@ -75,6 +75,19 @@ import { AirtableRecordActionTool } from "./renderers/integrations/airtable/airt
 import { AirtableCommentTool } from "./renderers/integrations/airtable/airtable-comment";
 import { AirtableUserTool } from "./renderers/integrations/airtable/airtable-user";
 import { IntegrationGenericTool } from "./renderers/integrations/shared/generic";
+import {
+  YFinanceSearchTool,
+  YFinanceQuoteTool,
+  YFinanceChartTool,
+} from "./renderers/integrations/yahoo-finance/yfinance-tools";
+import {
+  ArxivSearchTool,
+  ArxivPaperTool,
+} from "./renderers/integrations/arxiv/arxiv-tools";
+import {
+  PubMedSearchTool,
+  PubMedArticleTool,
+} from "./renderers/integrations/pubmed/pubmed-tools";
 import { PgListTool } from "./renderers/integrations/database/postgresql/pg-list";
 import { PgDescribeTool } from "./renderers/integrations/database/postgresql/pg-describe";
 import { PgQueryTool } from "./renderers/integrations/database/postgresql/pg-query";
@@ -285,6 +298,19 @@ const renderers: Record<string, Renderer> = {
   mongo_aggregate: MongoAggregateTool,
   mongo_count: MongoCountTool,
   mongo_distinct: MongoCountTool,
+
+  // Yahoo Finance
+  yfinance_get_quote: YFinanceQuoteTool,
+  yfinance_search: YFinanceSearchTool,
+  yfinance_get_chart: YFinanceChartTool,
+
+  // ArXiv
+  arxiv_search: ArxivSearchTool,
+  arxiv_get_paper: ArxivPaperTool,
+
+  // PubMed
+  pubmed_search: PubMedSearchTool,
+  pubmed_get_article: PubMedArticleTool,
 };
 
 function isIntegrationToolName(name: string) {
@@ -299,7 +325,10 @@ function isIntegrationToolName(name: string) {
     name.startsWith("airtable_") ||
     name.startsWith("pg_") ||
     name.startsWith("mysql_") ||
-    name.startsWith("mongo_")
+    name.startsWith("mongo_") ||
+    name.startsWith("yfinance_") ||
+    name.startsWith("arxiv_") ||
+    name.startsWith("pubmed_")
   );
 }
 

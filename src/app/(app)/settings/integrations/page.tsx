@@ -21,7 +21,9 @@ import {
 } from "@/lib/integrations/metadata";
 import { openIntegrationOAuthPopup } from "@/lib/integrations/oauth/popup";
 import {
+  AUTHLESS_INTEGRATION_PROVIDERS,
   DATABASE_INTEGRATION_PROVIDERS,
+  type AuthlessIntegrationProvider,
   type DatabaseIntegrationProvider,
   type IntegrationProvider,
 } from "@/server/db/enums";
@@ -31,6 +33,14 @@ function isDatabaseProvider(
   provider: string,
 ): provider is DatabaseIntegrationProvider {
   return (DATABASE_INTEGRATION_PROVIDERS as readonly string[]).includes(
+    provider,
+  );
+}
+
+function isAuthlessProvider(
+  provider: string,
+): provider is AuthlessIntegrationProvider {
+  return (AUTHLESS_INTEGRATION_PROVIDERS as readonly string[]).includes(
     provider,
   );
 }
@@ -68,16 +78,20 @@ function IntegrationsSkeleton() {
 function IntegrationRow({
   connectingProvider,
   integration,
+  isAuthlessToggling,
   isSelected,
   isToggling,
+  onAuthlessToggle,
   onConnect,
   onManage,
   onToggle,
 }: {
   connectingProvider: IntegrationProvider | null;
   integration: IntegrationListItem;
+  isAuthlessToggling: boolean;
   isSelected: boolean;
   isToggling: boolean;
+  onAuthlessToggle: (provider: IntegrationProvider, enable: boolean) => void;
   onConnect: (provider: IntegrationProvider) => void;
   onManage: (provider: IntegrationProvider) => void;
   onToggle: (provider: IntegrationProvider, isEnabled: boolean) => void;
@@ -85,10 +99,12 @@ function IntegrationRow({
   const metadata = INTEGRATION_METADATA[integration.provider];
   const isSetupReady = isIntegrationSetupReady(integration.provider);
   const isDb = isDatabaseProvider(integration.provider);
-  const canManage = integration.isConnected || isSetupReady;
+  const isAuthless = isAuthlessProvider(integration.provider);
+  const canManage = !isAuthless && (integration.isConnected || isSetupReady);
   const isConnecting = connectingProvider === integration.provider;
   const showConnectButton =
     !isDb &&
+    !isAuthless &&
     !integration.isConnected &&
     isSetupReady &&
     integration.hasOAuthApp;
@@ -109,6 +125,10 @@ function IntegrationRow({
   ) : !isSetupReady ? (
     <Chip size="sm" variant="soft">
       Coming soon
+    </Chip>
+  ) : isAuthless ? (
+    <Chip size="sm" variant="soft">
+      No setup needed
     </Chip>
   ) : null;
 
@@ -138,46 +158,66 @@ function IntegrationRow({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        {integration.isConnected ? (
+        {isAuthless ? (
           <Switch
             aria-label={`Enable ${integration.label}`}
-            isDisabled={isToggling}
-            isSelected={integration.isEnabled}
+            isDisabled={isAuthlessToggling}
+            isSelected={integration.isConnected && integration.isEnabled}
             onChange={() =>
-              onToggle(integration.provider, !integration.isEnabled)
+              onAuthlessToggle(
+                integration.provider,
+                !(integration.isConnected && integration.isEnabled),
+              )
             }
           >
             <Switch.Control>
               <Switch.Thumb />
             </Switch.Control>
           </Switch>
-        ) : null}
+        ) : (
+          <>
+            {integration.isConnected ? (
+              <Switch
+                aria-label={`Enable ${integration.label}`}
+                isDisabled={isToggling}
+                isSelected={integration.isEnabled}
+                onChange={() =>
+                  onToggle(integration.provider, !integration.isEnabled)
+                }
+              >
+                <Switch.Control>
+                  <Switch.Thumb />
+                </Switch.Control>
+              </Switch>
+            ) : null}
 
-        {showConnectButton ? (
-          <Button
-            isPending={isConnecting}
-            onPress={() => onConnect(integration.provider)}
-            size="sm"
-            variant="primary"
-          >
-            Connect
-          </Button>
-        ) : null}
+            {showConnectButton ? (
+              <Button
+                isPending={isConnecting}
+                onPress={() => onConnect(integration.provider)}
+                size="sm"
+                variant="primary"
+              >
+                Connect
+              </Button>
+            ) : null}
 
-        <Button
-          isDisabled={!canManage}
-          onPress={() => onManage(integration.provider)}
-          size="sm"
-          variant={
-            isSelected
-              ? "primary"
-              : showConnectButton || integration.isConnected
-                ? "secondary"
-                : "primary"
-          }
-        >
-          {canManage ? detailLabel : "Coming soon"}
-        </Button>
+            <Button
+              isDisabled={!canManage}
+              onPress={() => onManage(integration.provider)}
+              size="sm"
+              variant={
+                isSelected
+                  ? "primary"
+                  : showConnectButton || integration.isConnected
+                    ? "secondary"
+                    : "primary"
+              }
+            >
+              {canManage ? detailLabel : "Coming soon"}
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -194,6 +234,18 @@ export default function IntegrationsSettingsPage() {
   const utils = api.useUtils();
   const connect = api.integrations.connect.useMutation();
   const { close, isOpen, open } = useRightSidebar();
+
+  const enableAuthless = api.integrations.enableAuthless.useMutation({
+    onSettled: async () => {
+      await utils.integrations.list.invalidate();
+    },
+  });
+
+  const disableAuthless = api.integrations.disableAuthless.useMutation({
+    onSettled: async () => {
+      await utils.integrations.list.invalidate();
+    },
+  });
 
   const toggle = api.integrations.toggle.useMutation({
     onMutate: async ({ isEnabled, provider }) => {
@@ -225,13 +277,21 @@ export default function IntegrationsSettingsPage() {
   });
 
   const integrations = integrationsQuery.data ?? [];
+
+  const authless = integrations.filter((integration) =>
+    isAuthlessProvider(integration.provider),
+  );
   const connected = integrations
-    .filter((integration) => integration.isConnected)
+    .filter(
+      (integration) =>
+        integration.isConnected && !isAuthlessProvider(integration.provider),
+    )
     .sort((left, right) => Number(right.isEnabled) - Number(left.isEnabled));
   const readyToSetup = integrations
     .filter(
       (integration) =>
         !integration.isConnected &&
+        !isAuthlessProvider(integration.provider) &&
         isIntegrationSetupReady(integration.provider),
     )
     .sort(
@@ -240,6 +300,7 @@ export default function IntegrationsSettingsPage() {
   const comingSoon = integrations.filter(
     (integration) =>
       !integration.isConnected &&
+      !isAuthlessProvider(integration.provider) &&
       !isIntegrationSetupReady(integration.provider),
   );
   const selectedIntegration =
@@ -356,14 +417,30 @@ export default function IntegrationsSettingsPage() {
     }
   };
 
+  const handleAuthlessToggle = (
+    provider: IntegrationProvider,
+    enable: boolean,
+  ) => {
+    if (!isAuthlessProvider(provider)) return;
+    if (enable) {
+      enableAuthless.mutate({ provider });
+    } else {
+      disableAuthless.mutate({ provider });
+    }
+  };
+
   const renderRows = (items: IntegrationListItem[], isToggling: boolean) =>
     items.map((integration) => (
       <IntegrationRow
         connectingProvider={connectingProvider}
         integration={integration}
+        isAuthlessToggling={
+          enableAuthless.isPending || disableAuthless.isPending
+        }
         isSelected={selectedProvider === integration.provider}
         isToggling={isToggling}
         key={integration.provider}
+        onAuthlessToggle={handleAuthlessToggle}
         onConnect={handleConnect}
         onManage={setSelectedProvider}
         onToggle={(provider, isEnabled) =>
@@ -388,6 +465,23 @@ export default function IntegrationsSettingsPage() {
               </h2>
               <div className="flex flex-col gap-2">
                 {renderRows(connected, toggle.isPending)}
+              </div>
+            </section>
+          ) : null}
+
+          {authless.length > 0 ? (
+            <section>
+              <div className="mb-2 px-1">
+                <h2 className="text-foreground text-sm font-medium">
+                  Public Data Sources
+                </h2>
+                <p className="text-muted mt-0.5 text-xs">
+                  These integrations use public APIs and require no credentials
+                  — just toggle them on.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2">
+                {renderRows(authless, false)}
               </div>
             </section>
           ) : null}

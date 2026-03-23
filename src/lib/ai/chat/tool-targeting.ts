@@ -84,6 +84,35 @@ const INTEGRATION_ALIAS_MAP: Record<IntegrationProvider, string[]> = {
     "sql query",
   ],
   slack: ["slack", "channel", "channels", "thread", "threads", "slack message"],
+  yahoo_finance: [
+    "yahoo finance",
+    "stock",
+    "stocks",
+    "stock price",
+    "stock quote",
+    "ticker",
+    "market",
+    "share price",
+    "etf",
+  ],
+  arxiv: [
+    "arxiv",
+    "paper",
+    "papers",
+    "preprint",
+    "preprints",
+    "research paper",
+    "academic paper",
+  ],
+  pubmed: [
+    "pubmed",
+    "medical paper",
+    "medical article",
+    "biomedical",
+    "clinical study",
+    "pmid",
+    "ncbi",
+  ],
 };
 
 const MCP_ALIAS_MAP: Partial<Record<McpServerCatalogId, string[]>> = {

@@ -19,6 +19,9 @@ export const INTEGRATION_TOOL_PREFIXES: Partial<Record<string, string>> = {
   notion: "notion_",
   postgresql: "pg_",
   slack: "slack_",
+  yahoo_finance: "yfinance_",
+  arxiv: "arxiv_",
+  pubmed: "pubmed_",
 };
 
 function uniqueToolNames(toolNames: string[]) {

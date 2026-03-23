@@ -6,8 +6,10 @@ import { buildIntegrationOAuthRedirectUri } from "@/lib/app-origin";
 import { beginIntegrationOAuth } from "@/lib/integrations/oauth/flow";
 import { revokeTokens } from "@/lib/integrations/oauth/token-manager";
 import {
+  AUTHLESS_INTEGRATION_PROVIDERS,
   DATABASE_INTEGRATION_PROVIDERS,
   INTEGRATION_PROVIDERS,
+  type AuthlessIntegrationProvider,
   type DatabaseIntegrationProvider,
   type IntegrationProvider,
 } from "@/server/db/enums";
@@ -25,11 +27,20 @@ import type { DatabaseConnectionConfig } from "@/lib/integrations/types";
 
 const providerSchema = z.enum(INTEGRATION_PROVIDERS);
 const dbProviderSchema = z.enum(DATABASE_INTEGRATION_PROVIDERS);
+const authlessProviderSchema = z.enum(AUTHLESS_INTEGRATION_PROVIDERS);
 
 function isDatabaseProvider(
   provider: string,
 ): provider is DatabaseIntegrationProvider {
   return (DATABASE_INTEGRATION_PROVIDERS as readonly string[]).includes(
+    provider,
+  );
+}
+
+function isAuthlessProvider(
+  provider: string,
+): provider is AuthlessIntegrationProvider {
+  return (AUTHLESS_INTEGRATION_PROVIDERS as readonly string[]).includes(
     provider,
   );
 }
@@ -46,6 +57,9 @@ const INTEGRATION_LABELS: Record<IntegrationProvider, string> = {
   postgresql: "PostgreSQL",
   mysql: "MySQL",
   mongodb: "MongoDB",
+  yahoo_finance: "Yahoo Finance",
+  arxiv: "arXiv",
+  pubmed: "PubMed",
 };
 
 export const integrationsRouter = createTRPCRouter({
@@ -76,9 +90,11 @@ export const integrationsRouter = createTRPCRouter({
       const hasOAuthApp = configuredProviders.has(provider);
       const hasDbConfig = row ? dbConfigIntegrationIds.has(row.id) : false;
 
-      const isConnected = isDatabaseProvider(provider)
-        ? Boolean(row && hasDbConfig)
-        : Boolean(row && hasTokens);
+      const isConnected = isAuthlessProvider(provider)
+        ? Boolean(row)
+        : isDatabaseProvider(provider)
+          ? Boolean(row && hasDbConfig)
+          : Boolean(row && hasTokens);
 
       return {
         id: row?.id ?? null,
@@ -90,7 +106,11 @@ export const integrationsRouter = createTRPCRouter({
         hasDbConfig,
         authType:
           row?.authType ??
-          (isDatabaseProvider(provider) ? "connection_config" : "oauth"),
+          (isAuthlessProvider(provider)
+            ? "none"
+            : isDatabaseProvider(provider)
+              ? "connection_config"
+              : "oauth"),
       };
     });
   }),
@@ -433,5 +453,55 @@ export const integrationsRouter = createTRPCRouter({
       }
 
       return { removed: true };
+    }),
+
+  enableAuthless: protectedProcedure
+    .input(z.object({ provider: authlessProviderSchema }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+
+      const existing = await ctx.db.query.integrations.findFirst({
+        where: and(
+          eq(integrations.userId, userId),
+          eq(integrations.provider, input.provider),
+        ),
+      });
+
+      if (existing) {
+        await ctx.db
+          .update(integrations)
+          .set({ isEnabled: true, updatedAt: new Date() })
+          .where(eq(integrations.id, existing.id));
+      } else {
+        await ctx.db.insert(integrations).values({
+          userId,
+          provider: input.provider,
+          authType: "none",
+          isEnabled: true,
+        });
+      }
+
+      return { enabled: true };
+    }),
+
+  disableAuthless: protectedProcedure
+    .input(z.object({ provider: authlessProviderSchema }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+
+      const existing = await ctx.db.query.integrations.findFirst({
+        where: and(
+          eq(integrations.userId, userId),
+          eq(integrations.provider, input.provider),
+        ),
+      });
+
+      if (existing) {
+        await ctx.db
+          .delete(integrations)
+          .where(eq(integrations.id, existing.id));
+      }
+
+      return { disabled: true };
     }),
 });

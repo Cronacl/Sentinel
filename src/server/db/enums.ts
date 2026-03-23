@@ -120,6 +120,9 @@ export const INTEGRATION_PROVIDERS = [
   "postgresql",
   "mysql",
   "mongodb",
+  "yahoo_finance",
+  "arxiv",
+  "pubmed",
 ] as const;
 export type IntegrationProvider = (typeof INTEGRATION_PROVIDERS)[number];
 
@@ -131,10 +134,19 @@ export const DATABASE_INTEGRATION_PROVIDERS = [
 export type DatabaseIntegrationProvider =
   (typeof DATABASE_INTEGRATION_PROVIDERS)[number];
 
+export const AUTHLESS_INTEGRATION_PROVIDERS = [
+  "yahoo_finance",
+  "arxiv",
+  "pubmed",
+] as const;
+export type AuthlessIntegrationProvider =
+  (typeof AUTHLESS_INTEGRATION_PROVIDERS)[number];
+
 export const INTEGRATION_AUTH_TYPES = [
   "oauth",
   "api_key",
   "bearer_token",
   "connection_config",
+  "none",
 ] as const;
 export type IntegrationAuthType = (typeof INTEGRATION_AUTH_TYPES)[number];
