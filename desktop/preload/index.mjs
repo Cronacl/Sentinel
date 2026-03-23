@@ -5,6 +5,7 @@ import { DESKTOP_CHANNELS } from "../shared/channels.mjs";
 contextBridge.exposeInMainWorld("sentinelDesktop", {
   app: {
     getVersion: () => ipcRenderer.invoke(DESKTOP_CHANNELS.APP_VERSION),
+    platform: process.platform,
   },
   openExternal: (url) =>
     ipcRenderer.invoke(DESKTOP_CHANNELS.OPEN_EXTERNAL, url),

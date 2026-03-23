@@ -1,60 +1,198 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import { getDesktopApi } from "@/lib/desktop/client";
 
 import { SidebarToggle } from "./sidebar-toggle";
 
-function TrafficLightButton({
+function WindowsMinimizeIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-2.5 w-2.5"
+      fill="none"
+      viewBox="0 0 10 10"
+    >
+      <path
+        d="M2 7.25h6"
+        stroke="currentColor"
+        strokeLinecap="square"
+        strokeWidth="1"
+      />
+    </svg>
+  );
+}
+
+function WindowsMaximizeIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-2.5 w-2.5"
+      fill="none"
+      viewBox="0 0 10 10"
+    >
+      <rect
+        height="5.5"
+        rx="0.2"
+        stroke="currentColor"
+        strokeWidth="1"
+        width="5.5"
+        x="2.25"
+        y="2.25"
+      />
+    </svg>
+  );
+}
+
+function LinuxMaximizeIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-2.5 w-2.5"
+      fill="none"
+      viewBox="0 0 10 10"
+    >
+      <rect
+        height="5"
+        rx="1"
+        stroke="currentColor"
+        strokeWidth="1"
+        width="5"
+        x="2.5"
+        y="2.5"
+      />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-2.5 w-2.5"
+      fill="none"
+      viewBox="0 0 10 10"
+    >
+      <path
+        d="m2.5 2.5 5 5m0-5-5 5"
+        stroke="currentColor"
+        strokeLinecap="square"
+        strokeWidth="1"
+      />
+    </svg>
+  );
+}
+
+function WindowControlButton({
   ariaLabel,
-  colorClassName,
+  children,
+  className,
   onPress,
 }: {
   ariaLabel: string;
-  colorClassName: string;
+  children: ReactNode;
+  className?: string;
   onPress: () => void;
 }) {
   return (
     <button
       aria-label={ariaLabel}
-      className={`app-region-no-drag h-2.5 w-2.5 min-w-2.5 min-h-2.5 rounded-full transition-transform hover:scale-105 ${colorClassName}`}
+      className={`app-region-no-drag flex items-center justify-center text-foreground/70 transition-colors ${className ?? ""}`}
       onClick={onPress}
       type="button"
-    />
+    >
+      {children}
+    </button>
+  );
+}
+
+function WindowsWindowControls() {
+  const desktop = getDesktopApi();
+
+  return (
+    <div className="flex h-8 items-stretch justify-end">
+      <WindowControlButton
+        ariaLabel="Minimize window"
+        className="h-8 w-11 hover:bg-black/6 dark:hover:bg-white/8"
+        onPress={() => void desktop?.window.minimize()}
+      >
+        <WindowsMinimizeIcon />
+      </WindowControlButton>
+      <WindowControlButton
+        ariaLabel="Maximize window"
+        className="h-8 w-11 hover:bg-black/6 dark:hover:bg-white/8"
+        onPress={() => void desktop?.window.toggleMaximize()}
+      >
+        <WindowsMaximizeIcon />
+      </WindowControlButton>
+      <WindowControlButton
+        ariaLabel="Close window"
+        className="h-8 w-11 hover:bg-[#e81123] hover:text-white"
+        onPress={() => void desktop?.window.close()}
+      >
+        <CloseIcon />
+      </WindowControlButton>
+    </div>
+  );
+}
+
+function LinuxWindowControls() {
+  const desktop = getDesktopApi();
+
+  return (
+    <div className="flex h-8 items-center justify-end gap-1">
+      <WindowControlButton
+        ariaLabel="Minimize window"
+        className="h-8 w-8 rounded-md hover:bg-black/6 dark:hover:bg-white/8"
+        onPress={() => void desktop?.window.minimize()}
+      >
+        <WindowsMinimizeIcon />
+      </WindowControlButton>
+      <WindowControlButton
+        ariaLabel="Maximize window"
+        className="h-8 w-8 rounded-md hover:bg-black/6 dark:hover:bg-white/8"
+        onPress={() => void desktop?.window.toggleMaximize()}
+      >
+        <LinuxMaximizeIcon />
+      </WindowControlButton>
+      <WindowControlButton
+        ariaLabel="Close window"
+        className="h-8 w-8 rounded-md hover:bg-black/10 dark:hover:bg-white/12 hover:text-foreground"
+        onPress={() => void desktop?.window.close()}
+      >
+        <CloseIcon />
+      </WindowControlButton>
+    </div>
   );
 }
 
 export function SidebarWindowChrome() {
   const desktop = getDesktopApi();
-  const expandButtonLabel =
-    typeof navigator !== "undefined" && navigator.userAgent.includes("Mac")
-      ? "Toggle full screen"
-      : "Maximize window";
+  const platform = desktop?.app.platform ?? null;
+  const isMac = platform === "darwin";
+  const chromeHeight = 56;
+  const edgeWidth =
+    isMac ? 72 : platform === "win32" ? 132 : platform === "linux" ? 112 : 52;
 
   return (
-    <div className="app-region-drag grid h-14 shrink-0 grid-cols-[52px_1fr_52px] items-center px-4">
-      <div className="flex items-center gap-1.5">
-        <TrafficLightButton
-          ariaLabel="Close window"
-          colorClassName="bg-[#ff5f57]"
-          onPress={() => void desktop?.window.close()}
-        />
-        <TrafficLightButton
-          ariaLabel="Minimize window"
-          colorClassName="bg-[#febc2e]"
-          onPress={() => void desktop?.window.minimize()}
-        />
-        <TrafficLightButton
-          ariaLabel={expandButtonLabel}
-          colorClassName="bg-[#28c840]"
-          onPress={() => void desktop?.window.toggleMaximize()}
-        />
-      </div>
+    <div
+      className="app-region-drag grid shrink-0 items-center px-3"
+      style={{
+        gridTemplateColumns: `${edgeWidth}px 1fr ${edgeWidth}px`,
+        minHeight: chromeHeight,
+      }}
+    >
+      <div aria-hidden />
 
       <div className="flex justify-center">
         <SidebarToggle className="app-region-no-drag" />
       </div>
 
-      <div aria-hidden className="w-[52px]" />
+      <div className="flex justify-end">
+        {platform === "win32" ? <WindowsWindowControls /> : null}
+        {platform === "linux" ? <LinuxWindowControls /> : null}
+      </div>
     </div>
   );
 }
