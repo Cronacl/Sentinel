@@ -23,6 +23,8 @@ import type { PropsWithChildren } from "react";
 
 import { api } from "@/trpc/react";
 
+import { TerminalPanel } from "@/components/terminal/terminal-panel";
+
 import { WorkspaceSidebar } from "./workspace-sidebar";
 import { LeftSidebar } from "./left-sidebar";
 import { RightSidebar } from "./right-sidebar";
@@ -138,6 +140,7 @@ export function AppShell({ children }: PropsWithChildren) {
 
         <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip">
           {children}
+          <TerminalPanel />
         </main>
 
         <RightSidebar />

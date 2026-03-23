@@ -7,10 +7,14 @@ import {
   session,
   shell,
 } from "electron";
+import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
+import { chmodSync, existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as nodePty from "node-pty";
 
 import { DESKTOP_CHANNELS } from "../shared/channels.mjs";
 import {
@@ -30,10 +34,12 @@ import {
 } from "../../scripts/desktop/server-manager.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 let mainWindow = null;
 let serverState = null;
 let isQuitting = false;
 let resolvedTheme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
+const terminalSessions = new Map();
 
 // GPU acceleration is required for smooth backdrop-blur, shadows, and animations.
 // Only disable if a specific driver issue is confirmed on a target platform.
@@ -146,6 +152,151 @@ function escapeHtml(text) {
 
 function getWindowBackgroundColor(theme) {
   return theme === "light" ? "#f5f5f5" : "#090909";
+}
+
+function getTerminalShell() {
+  if (process.platform === "win32") {
+    return process.env.COMSPEC || "powershell.exe";
+  }
+
+  return process.env.SHELL || "/bin/zsh";
+}
+
+function getTerminalShellCandidates() {
+  if (process.platform === "win32") {
+    return [getTerminalShell(), "powershell.exe", "cmd.exe"].filter(Boolean);
+  }
+
+  return Array.from(
+    new Set([getTerminalShell(), "/bin/zsh", "/bin/bash", "/bin/sh"]),
+  );
+}
+
+function getTerminalShellArgs(shellPath) {
+  if (process.platform === "win32") {
+    return [];
+  }
+
+  const shellName = path.basename(shellPath);
+  if (shellName === "zsh" || shellName === "bash" || shellName === "fish") {
+    return ["-l"];
+  }
+
+  return [];
+}
+
+function ensureNodePtySpawnHelperExecutable() {
+  if (process.platform === "win32") {
+    return;
+  }
+
+  const unixTerminalPath = require.resolve("node-pty/lib/unixTerminal.js");
+  const unixTerminalDir = path.dirname(unixTerminalPath);
+  const helperCandidates = [
+    path.resolve(unixTerminalDir, "../build/Release/spawn-helper"),
+    path.resolve(unixTerminalDir, "../build/Debug/spawn-helper"),
+    path.resolve(
+      unixTerminalDir,
+      `../prebuilds/${process.platform}-${process.arch}/spawn-helper`,
+    ),
+  ];
+
+  for (const helperPath of helperCandidates) {
+    if (!existsSync(helperPath)) {
+      continue;
+    }
+
+    try {
+      chmodSync(helperPath, 0o755);
+    } catch (error) {
+      console.warn(
+        `[electron] failed to update node-pty helper permissions for ${helperPath}`,
+        error,
+      );
+    }
+
+    return;
+  }
+}
+
+function sendTerminalEvent(channel, ...args) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  mainWindow.webContents.send(channel, ...args);
+}
+
+function cleanupTerminalSession(sessionId) {
+  terminalSessions.delete(sessionId);
+}
+
+function killAllTerminalSessions() {
+  for (const [sessionId, session] of terminalSessions.entries()) {
+    try {
+      session.pty.kill();
+    } catch (error) {
+      console.warn(`[electron] failed to kill terminal ${sessionId}`, error);
+      cleanupTerminalSession(sessionId);
+    }
+  }
+}
+
+function createTerminalSession(cwd) {
+  const sessionId = randomUUID();
+  ensureNodePtySpawnHelperExecutable();
+  const shellCandidates = getTerminalShellCandidates();
+  let ptyProcess = null;
+  let lastError = null;
+
+  for (const shellPath of shellCandidates) {
+    try {
+      ptyProcess = nodePty.spawn(shellPath, getTerminalShellArgs(shellPath), {
+        cols: 120,
+        cwd,
+        env: {
+          ...process.env,
+          COLORTERM: "truecolor",
+          TERM: "xterm-256color",
+        },
+        name: "xterm-256color",
+        rows: 32,
+      });
+      break;
+    } catch (error) {
+      lastError = error;
+      console.warn(`[electron] failed to spawn shell ${shellPath}`, error);
+    }
+  }
+
+  if (!ptyProcess) {
+    const reason =
+      lastError instanceof Error ? lastError.message : String(lastError);
+    throw new Error(
+      `Unable to start terminal shell. Tried: ${shellCandidates.join(", ")}. Last error: ${reason}`,
+    );
+  }
+
+  terminalSessions.set(sessionId, {
+    createdAt: Date.now(),
+    cwd,
+    pid: ptyProcess.pid,
+    pty: ptyProcess,
+  });
+
+  ptyProcess.onData((data) => {
+    sendTerminalEvent(DESKTOP_CHANNELS.TERMINAL_DATA, sessionId, data);
+  });
+
+  ptyProcess.onExit(({ exitCode }) => {
+    sendTerminalEvent(DESKTOP_CHANNELS.TERMINAL_EXIT, sessionId, exitCode ?? 0);
+    cleanupTerminalSession(sessionId);
+  });
+
+  return {
+    pid: ptyProcess.pid,
+    sessionId,
+  };
 }
 
 function getBrowserWindowChromeOptions() {
@@ -638,6 +789,47 @@ function registerIpc() {
     },
   );
 
+  ipcMain.handle(DESKTOP_CHANNELS.TERMINAL_CREATE, async (_event, cwd) => {
+    const normalizedPath = await assertProjectDirectory(cwd);
+    return createTerminalSession(normalizedPath);
+  });
+
+  ipcMain.on(DESKTOP_CHANNELS.TERMINAL_WRITE, (_event, sessionId, data) => {
+    if (typeof sessionId !== "string" || typeof data !== "string") {
+      return;
+    }
+
+    terminalSessions.get(sessionId)?.pty.write(data);
+  });
+
+  ipcMain.on(
+    DESKTOP_CHANNELS.TERMINAL_RESIZE,
+    (_event, sessionId, cols, rows) => {
+      const session = terminalSessions.get(sessionId);
+      const normalizedCols = Number.isFinite(cols)
+        ? Math.max(2, Math.floor(cols))
+        : null;
+      const normalizedRows = Number.isFinite(rows)
+        ? Math.max(1, Math.floor(rows))
+        : null;
+
+      if (!session || normalizedCols === null || normalizedRows === null) {
+        return;
+      }
+
+      session.pty.resize(normalizedCols, normalizedRows);
+    },
+  );
+
+  ipcMain.handle(DESKTOP_CHANNELS.TERMINAL_KILL, async (_event, sessionId) => {
+    const session = terminalSessions.get(sessionId);
+    if (!session) {
+      return;
+    }
+
+    session.pty.kill();
+  });
+
   ipcMain.handle(DESKTOP_CHANNELS.SERVICES_STATUS, async () => {
     const appServer = await getAppServerStatus(
       serverState?.url ??
@@ -731,6 +923,7 @@ app.on("before-quit", () => {
 
 app.on("window-all-closed", async () => {
   if (process.platform !== "darwin" || isQuitting) {
+    killAllTerminalSessions();
     await stopLocalServer(serverState);
     serverState = null;
     app.quit();
@@ -738,6 +931,8 @@ app.on("window-all-closed", async () => {
 });
 
 app.on("will-quit", async (event) => {
+  killAllTerminalSessions();
+
   if (serverState?.process && !serverState.process.killed) {
     event.preventDefault();
     await stopLocalServer(serverState);

@@ -1,21 +1,28 @@
 import { spawn } from "node:child_process";
+import { chmodSync, existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
 const projectRoot = process.cwd();
 const require = createRequire(import.meta.url);
 const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
+const NATIVE_MODULES = ["better-sqlite3", "node-pty"];
 
-function canLoadBetterSqlite3() {
+function canLoadNativeModule(moduleName) {
   try {
-    const Database = require("better-sqlite3");
-    const db = new Database(":memory:");
-    db.prepare("select 1 as value").get();
-    db.close();
+    if (moduleName === "better-sqlite3") {
+      const Database = require(moduleName);
+      const db = new Database(":memory:");
+      db.prepare("select 1 as value").get();
+      db.close();
+    } else {
+      require(moduleName);
+    }
+
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[native] repairing better-sqlite3: ${message}`);
+    console.warn(`[native] repairing ${moduleName}: ${message}`);
     return false;
   }
 }
@@ -45,12 +52,58 @@ function run(command, args) {
   });
 }
 
-if (!canLoadBetterSqlite3()) {
-  await run(npmExecutable, ["rebuild", "better-sqlite3"]);
+function ensureNodePtySpawnHelperExecutable() {
+  if (process.platform === "win32") {
+    return;
+  }
+
+  const helperCandidates = [
+    path.join(
+      projectRoot,
+      "node_modules",
+      "node-pty",
+      "build",
+      "Release",
+      "spawn-helper",
+    ),
+    path.join(
+      projectRoot,
+      "node_modules",
+      "node-pty",
+      "build",
+      "Debug",
+      "spawn-helper",
+    ),
+    path.join(
+      projectRoot,
+      "node_modules",
+      "node-pty",
+      "prebuilds",
+      `${process.platform}-${process.arch}`,
+      "spawn-helper",
+    ),
+  ];
+
+  for (const helperPath of helperCandidates) {
+    if (!existsSync(helperPath)) {
+      continue;
+    }
+
+    chmodSync(helperPath, 0o755);
+    return;
+  }
 }
 
-if (!canLoadBetterSqlite3()) {
-  throw new Error(
-    `better-sqlite3 is still not loadable for ${path.basename(process.execPath)}.`,
-  );
+for (const moduleName of NATIVE_MODULES) {
+  if (!canLoadNativeModule(moduleName)) {
+    await run(npmExecutable, ["rebuild", moduleName]);
+  }
+
+  if (!canLoadNativeModule(moduleName)) {
+    throw new Error(
+      `${moduleName} is still not loadable for ${path.basename(process.execPath)}.`,
+    );
+  }
 }
+
+ensureNodePtySpawnHelperExecutable();
