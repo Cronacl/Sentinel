@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@heroui/styles";
+@import "@xterm/xterm/css/xterm.css";
 
 @theme {
   --font-sans:
@@ -145,6 +146,20 @@ body {
 
 button[type="button"] {
   cursor: pointer;
+}
+
+.sentinel-terminal .xterm {
+  height: 100%;
+  padding: 14px 16px 16px;
+}
+
+.sentinel-terminal .xterm-viewport,
+.sentinel-terminal .xterm-screen {
+  border-radius: 12px;
+}
+
+.sentinel-terminal .xterm-viewport {
+  background: transparent !important;
 }
 
 .sentinel-composer-editor.ProseMirror p.is-editor-empty:first-child::before {

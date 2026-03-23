@@ -36,6 +36,7 @@ import {
   isCustomOpenTargetGlyph,
   OpenTargetGlyph,
 } from "@/components/icons/open-target-icons";
+import { TerminalToggleButton } from "@/components/terminal/terminal-toggle-button";
 import { getErrorMessage } from "@/lib/errors";
 import { api } from "@/trpc/react";
 import { GitIcon } from "../settings/mcp-catalog-icons";
@@ -414,6 +415,7 @@ export function ThreadRepoActions({
   if (!repoContextQuery.isLoading && repoContext && !repoContext.isGitRepo) {
     return (
       <div className="flex items-center gap-2">
+        <TerminalToggleButton cwd={launchPath} />
         <Button
           isDisabled={initMutation.isPending}
           isPending={initMutation.isPending}
@@ -465,6 +467,7 @@ export function ThreadRepoActions({
   return (
     <>
       <div className="flex items-center gap-2">
+        <TerminalToggleButton cwd={launchPath} />
         <ButtonGroup size="sm" variant="tertiary">
           <Button
             variant="tertiary"

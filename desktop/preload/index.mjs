@@ -40,6 +40,28 @@ contextBridge.exposeInMainWorld("sentinelDesktop", {
         projectPath,
       ),
   },
+  terminal: {
+    create: (cwd) => ipcRenderer.invoke(DESKTOP_CHANNELS.TERMINAL_CREATE, cwd),
+    write: (sessionId, data) =>
+      ipcRenderer.send(DESKTOP_CHANNELS.TERMINAL_WRITE, sessionId, data),
+    resize: (sessionId, cols, rows) =>
+      ipcRenderer.send(DESKTOP_CHANNELS.TERMINAL_RESIZE, sessionId, cols, rows),
+    kill: (sessionId) =>
+      ipcRenderer.invoke(DESKTOP_CHANNELS.TERMINAL_KILL, sessionId),
+    onData: (callback) => {
+      const handler = (_event, sessionId, data) => callback(sessionId, data);
+      ipcRenderer.on(DESKTOP_CHANNELS.TERMINAL_DATA, handler);
+      return () =>
+        ipcRenderer.removeListener(DESKTOP_CHANNELS.TERMINAL_DATA, handler);
+    },
+    onExit: (callback) => {
+      const handler = (_event, sessionId, exitCode) =>
+        callback(sessionId, exitCode);
+      ipcRenderer.on(DESKTOP_CHANNELS.TERMINAL_EXIT, handler);
+      return () =>
+        ipcRenderer.removeListener(DESKTOP_CHANNELS.TERMINAL_EXIT, handler);
+    },
+  },
   window: {
     close: () => ipcRenderer.invoke(DESKTOP_CHANNELS.WINDOW_CLOSE),
     minimize: () => ipcRenderer.invoke(DESKTOP_CHANNELS.WINDOW_MINIMIZE),

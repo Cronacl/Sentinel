@@ -24,6 +24,11 @@ export type DesktopOpenTarget = {
   label: string;
 };
 
+export type DesktopTerminalSession = {
+  pid: number;
+  sessionId: string;
+};
+
 export type SentinelDesktopApi = {
   app: {
     getVersion: () => Promise<string>;
@@ -45,6 +50,16 @@ export type SentinelDesktopApi = {
       terminalTargetId?: string,
     ) => Promise<void>;
     revealInFileManager: (projectPath: string) => Promise<void>;
+  };
+  terminal: {
+    create: (cwd: string) => Promise<DesktopTerminalSession>;
+    write: (sessionId: string, data: string) => void;
+    resize: (sessionId: string, cols: number, rows: number) => void;
+    kill: (sessionId: string) => Promise<void>;
+    onData: (callback: (sessionId: string, data: string) => void) => () => void;
+    onExit: (
+      callback: (sessionId: string, exitCode: number) => void,
+    ) => () => void;
   };
   window: {
     close: () => Promise<void>;
