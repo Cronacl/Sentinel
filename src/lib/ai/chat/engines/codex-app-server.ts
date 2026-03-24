@@ -1,10 +1,6 @@
 import "server-only";
 
-import {
-  execFile,
-  spawn,
-  type ChildProcessWithoutNullStreams,
-} from "node:child_process";
+import { type ChildProcessWithoutNullStreams } from "node:child_process";
 
 import { createLogger } from "@/lib/logger";
 import type {
@@ -12,6 +8,7 @@ import type {
   CodexSandboxMode,
 } from "@/lib/ai/chat/engines/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import { readCodexCliVersion, spawnCodexCli } from "./codex-cli";
 
 const log = createLogger("CodexAppServer");
 
@@ -311,19 +308,6 @@ function toCodexError(message: string, error?: unknown) {
   return new Error(message);
 }
 
-async function readCliVersion() {
-  return await new Promise<string>((resolve, reject) => {
-    execFile("codex", ["--version"], { env: process.env }, (error, stdout) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-
-      resolve(stdout.trim());
-    });
-  });
-}
-
 class CodexAppServerManager {
   private buffer = "";
 
@@ -539,7 +523,7 @@ class CodexAppServerManager {
   }
 
   async getStatus(): Promise<CodexEngineStatus> {
-    const cliVersion = await readCliVersion().catch(() => null);
+    const cliVersion = await readCodexCliVersion();
 
     if (!cliVersion) {
       return {
@@ -740,10 +724,7 @@ class CodexAppServerManager {
   }
 
   private async startProcess() {
-    const child = spawn("codex", ["app-server"], {
-      env: process.env,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    const child = await spawnCodexCli(["app-server"]);
     this.child = child;
     this.buffer = "";
     this.initialized = false;
