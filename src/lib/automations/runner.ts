@@ -6,6 +6,8 @@ import { createLogger } from "@/lib/logger";
 import { db } from "@/server/db";
 import { automationRuns, automations } from "@/server/db/schema";
 import { runThreadChat } from "@/lib/ai/chat";
+import type { ChatEngine } from "@/server/db/enums";
+import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import { computeNextRunAt } from "./schedule-utils";
 
 const log = createLogger("Automations");
@@ -78,6 +80,45 @@ function recordFailedAutomationRun(
     .set(buildAutomationFailurePatch(automation))
     .where(eq(automations.id, automation.id))
     .run();
+}
+
+async function executeAutomationChat(params: {
+  chatInput: {
+    id: string;
+    message: {
+      content: string;
+      createdAt: Date;
+      id: string;
+      parts: Array<{ text: string; type: "text" }>;
+      role: "user";
+    };
+    modelId?: string;
+    reasoningEffort?: ReasoningEffort;
+    trigger: "submit-user-message";
+    workspaceId: string;
+  };
+  engine: ChatEngine;
+  userId: string;
+}) {
+  switch (params.engine) {
+    case "codex":
+      return runThreadChat(
+        {
+          ...params.chatInput,
+          engine: "codex",
+        },
+        params.userId,
+      );
+    case "sentinel":
+    default:
+      return runThreadChat(
+        {
+          ...params.chatInput,
+          engine: "sentinel",
+        },
+        params.userId,
+      );
+  }
 }
 
 export async function executeAutomationRun(
@@ -181,8 +222,12 @@ export async function executeAutomationRun(
         ? { reasoningEffort: automation.reasoningEffort }
         : {}),
     };
-
-    const response = await runThreadChat(chatInput, automation.userId);
+    const engine = automation.chatEngine ?? "sentinel";
+    const response = await executeAutomationChat({
+      chatInput,
+      engine,
+      userId: automation.userId,
+    });
 
     if (response instanceof Response && response.body) {
       const reader = response.body.getReader();

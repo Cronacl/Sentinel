@@ -1,6 +1,13 @@
 "use client";
 
-import { Button, Chip, Input, Skeleton, Spinner } from "@heroui/react";
+import {
+  Button,
+  Chip,
+  Dropdown,
+  Input,
+  Skeleton,
+  Spinner,
+} from "@heroui/react";
 import {
   AiIdeaIcon,
   ArrowRight01Icon,
@@ -18,7 +25,6 @@ import {
   PaintBoardIcon,
   PlusSignIcon,
   QuillWrite01Icon,
-  RefreshIcon,
   ShareKnowledgeIcon,
   SparklesIcon,
   TestTube01Icon,
@@ -30,6 +36,7 @@ import type { ComponentType, SVGProps } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { sileo } from "sileo";
 
+import { type SelectOption } from "@/components/forms/controlled-fields";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { CustomSkillInstallSidebar } from "@/components/skills/custom-skill-install-sidebar";
 import {
@@ -44,18 +51,38 @@ import {
   VercelIcon,
   WordIcon,
 } from "@/components/skills/skill-icons";
-import { api, type RouterOutputs } from "@/trpc/react";
 import { SidebarToggle, useRightSidebar, useShell } from "@/components/shell";
+import { api, type RouterOutputs } from "@/trpc/react";
 
 type SkillListItem = RouterOutputs["skills"]["list"]["skills"][number];
 type RegistryItem = RouterOutputs["skills"]["registry"][number];
-type InstalledSkillAction = Pick<SkillListItem, "name" | "scope">;
+type SkillInstallTarget = "codex" | "sentinel";
+type InstalledSkillAction = Pick<SkillListItem, "name" | "scope" | "target">;
 
 const SOURCE_LABEL = {
   agents: "Agents",
   claude: "Claude",
+  codex: "Codex",
   sentinel: "Sentinel",
 } as const;
+
+const TARGET_LABEL = {
+  codex: "Codex",
+  sentinel: "Sentinel",
+} as const;
+
+const TARGET_OPTIONS: SelectOption[] = [
+  {
+    description: "Install into Sentinel's local skill directories.",
+    label: "Sentinel",
+    value: "sentinel",
+  },
+  {
+    description: "Install into the Codex home skills directory.",
+    label: "Codex",
+    value: "codex",
+  },
+] as const;
 
 function formatSkillTitle(name: string) {
   return name
@@ -66,7 +93,10 @@ function formatSkillTitle(name: string) {
 }
 
 function matchesSkill(
-  skill: Pick<SkillListItem, "description" | "name" | "scope" | "sourceKind">,
+  skill: Pick<
+    SkillListItem,
+    "description" | "name" | "scope" | "sourceKind" | "target"
+  >,
   query: string,
 ) {
   if (!query) {
@@ -74,7 +104,7 @@ function matchesSkill(
   }
 
   const haystack =
-    `${skill.name} ${skill.description} ${skill.scope} ${skill.sourceKind}`.toLowerCase();
+    `${skill.name} ${skill.description} ${skill.scope} ${skill.sourceKind} ${skill.target}`.toLowerCase();
   return haystack.includes(query.toLowerCase());
 }
 
@@ -131,7 +161,7 @@ function SkillIcon({ name, size = 24 }: { name: string; size?: number }) {
 
   if (entry?.type === "brand") {
     const BrandComponent = entry.component;
-    return <BrandComponent width={size} height={size} />;
+    return <BrandComponent height={size} width={size} />;
   }
 
   const hugeIcon =
@@ -152,6 +182,18 @@ function repoLabel(repoUrl: string) {
   } catch {
     return repoUrl;
   }
+}
+
+function getInstallStateKey(name: string, target: SkillInstallTarget) {
+  return `${name}:${target}`;
+}
+
+function getInstalledDetailHref(skill: SkillListItem) {
+  if (skill.target === "codex") {
+    return `/skills/${encodeURIComponent(skill.name)}?target=codex`;
+  }
+
+  return `/skills/${encodeURIComponent(skill.name)}`;
 }
 
 function SkillsSkeleton() {
@@ -186,8 +228,8 @@ function InstalledSkillRow({
   return (
     <div className="border-separator bg-surface group flex items-center gap-3 rounded-2xl border p-3 transition-colors">
       <Link
-        className="flex min-w-0 flex-1 items-center gap-3 hover:opacity-80 transition-opacity"
-        href={`/skills/${encodeURIComponent(skill.name)}`}
+        className="flex min-w-0 flex-1 items-center gap-3 transition-opacity hover:opacity-80"
+        href={getInstalledDetailHref(skill)}
         prefetch
       >
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/50 text-foreground/75">
@@ -199,13 +241,20 @@ function InstalledSkillRow({
             <span className="text-foreground truncate text-sm font-medium">
               {formatSkillTitle(skill.name)}
             </span>
-            <Chip
+            {/* <Chip
               className="hidden sm:inline-flex border border-border/50 bg-background/80 text-foreground/75"
               size="sm"
               variant="tertiary"
             >
               {SOURCE_LABEL[skill.sourceKind]}
             </Chip>
+            <Chip
+              className="hidden md:inline-flex border border-border/50 bg-background/80 text-foreground/75"
+              size="sm"
+              variant="tertiary"
+            >
+              {TARGET_LABEL[skill.target]}
+            </Chip> */}
           </div>
           <p className="text-muted mt-0.5 truncate text-xs">
             {skill.description}
@@ -213,13 +262,17 @@ function InstalledSkillRow({
         </div>
       </Link>
 
-      <div className="flex items-center gap-1.5 shrink-0">
+      <div className="flex shrink-0 items-center gap-1.5">
         {onUninstall ? (
           <Button
             isDisabled={isUninstalling}
             isPending={isUninstalling}
             onPress={() =>
-              onUninstall({ name: skill.name, scope: skill.scope })
+              onUninstall({
+                name: skill.name,
+                scope: skill.scope,
+                target: skill.target,
+              })
             }
             size="sm"
             variant="ghost"
@@ -238,7 +291,7 @@ function InstalledSkillRow({
             }
           </Button>
         ) : null}
-        <Link href={`/skills/${encodeURIComponent(skill.name)}`} prefetch>
+        <Link href={getInstalledDetailHref(skill)} prefetch>
           <div className="text-muted opacity-0 transition-opacity group-hover:opacity-100">
             <HugeiconsIcon
               color="currentColor"
@@ -254,19 +307,32 @@ function InstalledSkillRow({
 }
 
 function RegistrySkillRow({
+  codexAvailable,
   entry,
-  onInstall,
-  isInstalling,
   installError,
+  isInstalling,
+  onInstall,
 }: {
-  entry: RegistryItem & { installed: boolean };
-  onInstall: (entry: RegistryItem) => void;
-  isInstalling: boolean;
+  codexAvailable: boolean;
+  entry: RegistryItem;
   installError: string | null;
+  isInstalling: boolean;
+  onInstall: (entry: RegistryItem, target: SkillInstallTarget) => void;
 }) {
+  const installStatusLabel =
+    entry.installedTargets.codex && entry.installedTargets.sentinel
+      ? "Installed in Sentinel and Codex"
+      : entry.installedTargets.codex
+        ? "Installed in Codex"
+        : entry.installedTargets.sentinel
+          ? "Installed in Sentinel"
+          : null;
+  const allTargetsInstalled =
+    entry.installedTargets.codex && entry.installedTargets.sentinel;
+
   return (
-    <div className="border-separator bg-surface rounded-2xl border p-3 transition-colors">
-      <div className="flex items-center gap-3">
+    <div className="border-separator bg-surface rounded-2xl border p-4 transition-colors">
+      <div className="flex items-start gap-3">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/50 text-foreground/75">
           <SkillIcon name={entry.name} />
         </div>
@@ -277,11 +343,11 @@ function RegistrySkillRow({
               {entry.displayName}
             </span>
           </div>
-          <p className="text-muted mt-0.5 truncate text-xs">
+          <p className="text-muted mt-0.5 line-clamp-2 text-xs">
             {entry.description}
           </p>
           <a
-            className="text-muted hover:text-foreground mt-0.5 inline-flex items-center gap-1 text-[11px] transition-colors"
+            className="text-muted mt-0.5 inline-flex items-center gap-1 text-[11px] transition-colors hover:text-foreground"
             href={entry.repoUrl}
             rel="noopener noreferrer"
             target="_blank"
@@ -294,24 +360,70 @@ function RegistrySkillRow({
             />
             {repoLabel(entry.repoUrl)}
           </a>
+          {installStatusLabel ? (
+            <p className="text-muted mt-2 text-[11px]">{installStatusLabel}</p>
+          ) : null}
         </div>
+      </div>
 
-        <div className="shrink-0">
+      <div className="mt-3 flex justify-end">
+        <Dropdown>
           <Button
-            isDisabled={isInstalling}
+            isDisabled={isInstalling || allTargetsInstalled}
             isPending={isInstalling}
-            onPress={() => onInstall(entry)}
             size="sm"
             variant="secondary"
           >
             {({ isPending }) => (
               <>
                 {isPending ? <Spinner color="current" size="sm" /> : null}
-                {isPending ? "Installing..." : "Install"}
+                {isPending
+                  ? "Installing..."
+                  : allTargetsInstalled
+                    ? "Installed"
+                    : "Install"}
               </>
             )}
           </Button>
-        </div>
+          <Dropdown.Popover className="min-w-[240px]" placement="bottom end">
+            <Dropdown.Menu
+              onAction={(key) =>
+                onInstall(entry, String(key) as SkillInstallTarget)
+              }
+            >
+              {TARGET_OPTIONS.map((option) => {
+                const target = option.value as SkillInstallTarget;
+                const optionInstalled = entry.installedTargets[target];
+                const optionDisabled =
+                  optionInstalled ||
+                  (target === "codex" && !codexAvailable) ||
+                  isInstalling;
+
+                return (
+                  <Dropdown.Item
+                    id={target}
+                    isDisabled={optionDisabled}
+                    key={target}
+                    textValue={`Install in ${option.label}`}
+                  >
+                    <div className="flex min-w-0 flex-col">
+                      <span className="text-sm">
+                        {optionInstalled
+                          ? `${option.label} installed`
+                          : `Install in ${option.label}`}
+                      </span>
+                      <span className="text-muted text-xs">
+                        {target === "codex" && !codexAvailable
+                          ? "Codex is currently unavailable."
+                          : option.description}
+                      </span>
+                    </div>
+                  </Dropdown.Item>
+                );
+              })}
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown>
       </div>
 
       {installError ? (
@@ -342,14 +454,17 @@ export default function SkillsPage() {
   const skills = api.skills.list.useQuery(undefined, {
     refetchInterval: 2_000,
   });
-
   const registry = api.skills.registry.useQuery();
+  const engines = api.engines.list.useQuery();
 
   const installMutation = api.skills.install.useMutation();
   const uninstallMutation = api.skills.uninstall.useMutation();
 
   const allSkills = skills.data?.skills ?? [];
   const registryEntries = registry.data ?? [];
+  const codexAvailable = Boolean(
+    engines.data?.find((engine) => engine.engine === "codex")?.isAvailable,
+  );
 
   const registryByName = useMemo(
     () => new Map(registryEntries.map((e) => [e.name.trim().toLowerCase(), e])),
@@ -362,19 +477,18 @@ export default function SkillsPage() {
   );
 
   const availableRegistry = useMemo(
-    () =>
-      registryEntries
-        .filter((e) => !e.installed)
-        .filter((e) => matchesRegistrySkill(e, query)),
+    () => registryEntries.filter((e) => matchesRegistrySkill(e, query)),
     [registryEntries, query],
   );
 
   const handleInstall = useCallback(
-    async (entry: RegistryItem) => {
-      setInstallingSkills((prev) => new Set(prev).add(entry.name));
+    async (entry: RegistryItem, target: SkillInstallTarget) => {
+      const installKey = getInstallStateKey(entry.name, target);
+
+      setInstallingSkills((prev) => new Set(prev).add(installKey));
       setInstallErrors((prev) => {
         const next = { ...prev };
-        delete next[entry.name];
+        delete next[installKey];
         return next;
       });
 
@@ -382,6 +496,7 @@ export default function SkillsPage() {
         await installMutation.mutateAsync({
           name: entry.name,
           scope: "global",
+          target,
         });
         void utils.skills.list.invalidate();
         void utils.skills.registry.invalidate();
@@ -389,11 +504,11 @@ export default function SkillsPage() {
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Installation failed.";
-        setInstallErrors((prev) => ({ ...prev, [entry.name]: message }));
+        setInstallErrors((prev) => ({ ...prev, [installKey]: message }));
       } finally {
         setInstallingSkills((prev) => {
           const next = new Set(prev);
-          next.delete(entry.name);
+          next.delete(installKey);
           return next;
         });
       }
@@ -402,12 +517,12 @@ export default function SkillsPage() {
   );
 
   const handleUninstall = useCallback(
-    async ({ name, scope }: InstalledSkillAction) => {
-      const uninstallKey = `${scope}:${name}`;
+    async ({ name, scope, target }: InstalledSkillAction) => {
+      const uninstallKey = `${target}:${scope}:${name}`;
       setUninstallingSkills((prev) => new Set(prev).add(uninstallKey));
 
       try {
-        await uninstallMutation.mutateAsync({ name, scope });
+        await uninstallMutation.mutateAsync({ name, scope, target });
         void utils.skills.list.invalidate();
         void utils.skills.registry.invalidate();
         sileo.success({ description: "Skill uninstalled." });
@@ -437,59 +552,34 @@ export default function SkillsPage() {
 
   const handleOpenInstallSidebar = useCallback(() => {
     openRightSidebar(
-      <CustomSkillInstallSidebar createSkillHref={newSkillHref} />,
+      <CustomSkillInstallSidebar
+        codexAvailable={codexAvailable}
+        createSkillHref={newSkillHref}
+      />,
     );
-  }, [newSkillHref, openRightSidebar]);
+  }, [codexAvailable, newSkillHref, openRightSidebar]);
 
   return (
     <SettingsPageWrapper
       actions={
-        <>
-          {/* <Button
-            isDisabled={skills.isFetching}
-            onPress={() => {
-              void skills.refetch();
-              void registry.refetch();
-            }}
-            size="sm"
-            variant="tertiary"
-          >
-            {skills.isFetching ? (
-              <>
-                <Spinner color="current" size="sm" />
-                <span className="animate-pulse">Refreshing</span>
-              </>
-            ) : (
-              <>
-                <HugeiconsIcon
-                  color="currentColor"
-                  icon={RefreshIcon}
-                  size={16}
-                  strokeWidth={1.5}
-                />
-                Refresh
-              </>
-            )}
-          </Button> */}
-          <Button
-            onPress={handleOpenInstallSidebar}
-            size="sm"
-            variant="secondary"
-          >
-            <HugeiconsIcon
-              color="currentColor"
-              icon={PlusSignIcon}
-              size={16}
-              strokeWidth={1.5}
-            />
-            New skill
-          </Button>
-        </>
+        <Button
+          onPress={handleOpenInstallSidebar}
+          size="sm"
+          variant="secondary"
+        >
+          <HugeiconsIcon
+            color="currentColor"
+            icon={PlusSignIcon}
+            size={16}
+            strokeWidth={1.5}
+          />
+          New skill
+        </Button>
       }
       subtitle={
         <span className="max-w-sm">
-          Browse discovered skills and install recommended skills from the
-          registry.
+          Browse discovered skills across Sentinel and Codex, and install
+          recommended skills into either runtime.
         </span>
       }
       title={
@@ -528,9 +618,9 @@ export default function SkillsPage() {
                 return (
                   <InstalledSkillRow
                     isUninstalling={uninstallingSkills.has(
-                      `${skill.scope}:${skill.name}`,
+                      `${skill.target}:${skill.scope}:${skill.name}`,
                     )}
-                    key={`${skill.scope}:${skill.sourceKind}:${skill.skillFile}`}
+                    key={`${skill.target}:${skill.scope}:${skill.skillFile}`}
                     onUninstall={match ? handleUninstall : null}
                     skill={skill}
                   />
@@ -546,13 +636,15 @@ export default function SkillsPage() {
                 </p>
               </div>
             ) : (
-              <div className="border-separator bg-surface rounded-xl border p-5 col-span-full">
+              <div className="border-separator bg-surface col-span-full rounded-xl border p-5">
                 <h2 className="text-foreground text-sm font-medium">
                   No skills installed
                 </h2>
                 <p className="text-muted mt-1 text-sm">
                   Install a recommended skill below, or add one under{" "}
-                  <code className="text-foreground/80">.sentinel/skills</code>.
+                  <code className="text-foreground/80">.sentinel/skills</code>{" "}
+                  or <code className="text-foreground/80">~/.codex/skills</code>
+                  .
                 </p>
               </div>
             )}
@@ -567,27 +659,48 @@ export default function SkillsPage() {
             {registry.isPending && !registry.data ? (
               <SkillsSkeleton />
             ) : availableRegistry.length ? (
-              availableRegistry.map((entry) => (
-                <RegistrySkillRow
-                  entry={entry}
-                  installError={installErrors[entry.name] ?? null}
-                  isInstalling={installingSkills.has(entry.name)}
-                  key={entry.name}
-                  onInstall={handleInstall}
-                />
-              ))
+              availableRegistry.map((entry) => {
+                return (
+                  <RegistrySkillRow
+                    codexAvailable={codexAvailable}
+                    entry={entry}
+                    installError={
+                      installErrors[
+                        getInstallStateKey(entry.name, "sentinel")
+                      ] ??
+                      installErrors[getInstallStateKey(entry.name, "codex")] ??
+                      null
+                    }
+                    isInstalling={
+                      installingSkills.has(
+                        getInstallStateKey(entry.name, "sentinel"),
+                      ) ||
+                      installingSkills.has(
+                        getInstallStateKey(entry.name, "codex"),
+                      )
+                    }
+                    key={entry.name}
+                    onInstall={handleInstall}
+                  />
+                );
+              })
             ) : registryEntries.length &&
-              registryEntries.every((e) => e.installed) ? (
-              <div className="border-separator bg-surface rounded-xl border p-5 col-span-full">
+              registryEntries.every(
+                (entry) =>
+                  entry.installedTargets.codex &&
+                  entry.installedTargets.sentinel,
+              ) ? (
+              <div className="border-separator bg-surface col-span-full rounded-xl border p-5">
                 <h2 className="text-foreground text-sm font-medium">
                   All recommended skills installed
                 </h2>
                 <p className="text-muted mt-1 text-sm">
-                  You have installed every skill from the curated registry.
+                  You have installed every skill from the curated registry for
+                  both runtimes.
                 </p>
               </div>
             ) : (
-              <div className="border-separator bg-surface rounded-xl border p-5 col-span-full">
+              <div className="border-separator bg-surface col-span-full rounded-xl border p-5">
                 <h2 className="text-foreground text-sm font-medium">
                   No matching skills
                 </h2>

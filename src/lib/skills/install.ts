@@ -1,10 +1,12 @@
 import { execSync } from "node:child_process";
 import { readFile, rm, mkdir, stat } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 const DEST_PLACEHOLDER = "{{DEST}}";
 const SKILL_FILENAME = "SKILL.md";
 const SKILL_DIRECTORY_NAME_PATTERN = /^[a-z0-9][a-z0-9-_]*$/i;
+export type SkillInstallTarget = "sentinel" | "codex";
 
 async function pathExists(candidatePath: string) {
   return Boolean(await stat(candidatePath).catch(() => null));
@@ -35,7 +37,15 @@ function validateFrontmatter(content: string) {
   }
 }
 
-function resolveSkillDestination(destRoot: string, name: string) {
+export function resolveCodexHome() {
+  return process.env.CODEX_HOME?.trim() || path.join(os.homedir(), ".codex");
+}
+
+function resolveSkillDestination(
+  destRoot: string,
+  name: string,
+  target: SkillInstallTarget,
+) {
   const normalizedName = name.trim();
   if (!SKILL_DIRECTORY_NAME_PATTERN.test(normalizedName)) {
     throw new Error(
@@ -43,7 +53,10 @@ function resolveSkillDestination(destRoot: string, name: string) {
     );
   }
 
-  const skillsDir = path.resolve(destRoot, ".sentinel", "skills");
+  const skillsDir =
+    target === "codex"
+      ? path.resolve(destRoot, "skills")
+      : path.resolve(destRoot, ".sentinel", "skills");
   const dest = path.resolve(skillsDir, normalizedName);
 
   if (path.dirname(dest) !== skillsDir) {
@@ -57,12 +70,14 @@ export async function executeInstallSteps({
   name,
   installSteps,
   destRoot,
+  target = "sentinel",
 }: {
   name: string;
   installSteps: string[];
   destRoot: string;
+  target?: SkillInstallTarget;
 }) {
-  const { dest, skillsDir } = resolveSkillDestination(destRoot, name);
+  const { dest, skillsDir } = resolveSkillDestination(destRoot, name, target);
 
   if (await pathExists(dest)) {
     throw new Error(`Skill "${name}" is already installed at ${dest}.`);
@@ -108,11 +123,13 @@ export async function executeInstallSteps({
 export async function uninstallSkill({
   name,
   destRoot,
+  target = "sentinel",
 }: {
   name: string;
   destRoot: string;
+  target?: SkillInstallTarget;
 }) {
-  const { dest } = resolveSkillDestination(destRoot, name);
+  const { dest } = resolveSkillDestination(destRoot, name, target);
 
   if (!(await pathExists(dest))) {
     throw new Error(`Skill "${name}" is not installed at ${dest}.`);

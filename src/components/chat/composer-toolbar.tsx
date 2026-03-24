@@ -3,19 +3,20 @@
 import {
   Add01Icon,
   AiIdeaIcon,
+  ArrowRight01Icon,
   ArrowUp02Icon,
   Attachment01Icon,
+  DashboardSquare01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Switch } from "@heroui/react";
-import { AnimatePresence, motion } from "motion/react";
-import type { ReactNode, RefObject } from "react";
+import { Button, ListBox, Popover, Switch } from "@heroui/react";
+import { useState, type ReactNode } from "react";
+
+import type { ChatEngine } from "@/server/db/enums";
 
 import { ContextWindowIndicator } from "./chat-composer/context-window-indicator";
 
 type ComposerToolbarProps = {
-  composerMenuOpen: boolean;
-  composerMenuRef: RefObject<HTMLDivElement | null>;
   contextWindowIndicator?: {
     compactionEnabled: boolean;
     compactionWindowPercent: number;
@@ -24,73 +25,97 @@ type ComposerToolbarProps = {
     inputTokens: number;
     usedPercent: number;
   } | null;
+  engineOptions: Array<{
+    engine: ChatEngine;
+    error: string | null;
+    isAvailable: boolean;
+    label: string;
+  }>;
   hasWorkspace: boolean;
   isBusy: boolean;
   isLocked: boolean;
   modelSelector: ReactNode;
-  onComposerMenuOpenChange: (open: boolean) => void;
   onPickFiles: () => void;
+  onSelectEngine: (engine: ChatEngine) => void;
   onSend: () => void;
   onStop?: () => void;
   onTogglePlanMode: () => void;
+  planModeAvailable: boolean;
   planMode: boolean;
+  selectedEngine: ChatEngine;
   selectedModelKey: string | null;
+  showEngineSelector: boolean;
 };
 
 export function ComposerToolbar({
-  composerMenuOpen,
-  composerMenuRef,
   contextWindowIndicator,
+  engineOptions,
   hasWorkspace,
   isBusy,
   isLocked,
   modelSelector,
-  onComposerMenuOpenChange,
   onPickFiles,
+  onSelectEngine,
   onSend,
   onStop,
   onTogglePlanMode,
+  planModeAvailable,
   planMode,
+  selectedEngine,
   selectedModelKey,
+  showEngineSelector,
 }: ComposerToolbarProps) {
-  return (
-    <div className="flex h-10 items-center justify-between px-1.5">
-      <div className="flex items-center gap-2">
-        <div className="relative" ref={composerMenuRef}>
-          <button
-            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl border border-border/50 bg-surface text-muted transition-colors hover:text-foreground disabled:opacity-30 dark:bg-background"
-            disabled={!hasWorkspace}
-            onClick={() => onComposerMenuOpenChange(!composerMenuOpen)}
-            type="button"
-          >
-            <HugeiconsIcon
-              color="currentColor"
-              icon={Add01Icon}
-              size={18}
-              strokeWidth={1.5}
-            />
-          </button>
+  const [composerMenuOpen, setComposerMenuOpen] = useState(false);
+  const [engineSubOpen, setEngineSubOpen] = useState(false);
 
-          <AnimatePresence>
-            {composerMenuOpen ? (
-              <motion.div
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                className="absolute bottom-10 left-0 z-30 w-48 rounded-xl border border-border bg-overlay p-1 shadow-overlay"
-                exit={{ opacity: 0, scale: 0.97, y: 6 }}
-                initial={{ opacity: 0, scale: 0.97, y: 6 }}
-                transition={{
-                  duration: 0.15,
-                  ease: [0.22, 1, 0.36, 1],
+  return (
+    <div className="flex h-8 items-center justify-between px-1.5">
+      <div className="flex items-center gap-1">
+        <Popover.Root
+          isOpen={composerMenuOpen}
+          onOpenChange={(open) => {
+            setComposerMenuOpen(open);
+            if (!open) setEngineSubOpen(false);
+          }}
+        >
+          <Popover.Trigger>
+            <Button
+              className="h-8 w-8 min-w-0 rounded-xl border border-border/50 bg-surface p-0 text-muted transition-colors hover:text-foreground dark:bg-background"
+              isDisabled={!hasWorkspace}
+              size="sm"
+              variant="ghost"
+            >
+              <HugeiconsIcon
+                color="currentColor"
+                icon={Add01Icon}
+                size={18}
+                strokeWidth={1.5}
+              />
+            </Button>
+          </Popover.Trigger>
+
+          <Popover.Content
+            className="w-52 border border-border/20 bg-overlay p-0 shadow-overlay/5"
+            placement="top start"
+          >
+            <Popover.Dialog className="p-1">
+              <ListBox
+                aria-label="Composer actions"
+                disabledKeys={planModeAvailable ? [] : ["plan-mode"]}
+                selectionMode="none"
+                onAction={(key) => {
+                  if (key === "attach-files") {
+                    setComposerMenuOpen(false);
+                    onPickFiles();
+                  } else if (key === "plan-mode") {
+                    setComposerMenuOpen(false);
+                    onTogglePlanMode();
+                  } else if (key === "engine") {
+                    setEngineSubOpen((prev) => !prev);
+                  }
                 }}
               >
-                <button
-                  className="flex w-full items-center gap-2.5 rounded-xl px-2 py-1 text-left text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground"
-                  onClick={() => {
-                    onComposerMenuOpenChange(false);
-                    onPickFiles();
-                  }}
-                  type="button"
-                >
+                <ListBox.Item id="attach-files" textValue="Add photos & files">
                   <HugeiconsIcon
                     color="currentColor"
                     icon={Attachment01Icon}
@@ -98,42 +123,90 @@ export function ComposerToolbar({
                     strokeWidth={1.5}
                   />
                   <span>Add photos & files</span>
-                </button>
-
-                <div className="mx-2 my-0.5 h-px bg-separator" />
-
-                <button
-                  className="flex w-full items-center justify-between gap-2 rounded-xl px-2 py-1 text-left text-[13px] text-muted transition-colors hover:bg-default hover:text-foreground"
-                  onClick={onTogglePlanMode}
-                  type="button"
-                >
-                  <span className="flex items-center gap-2.5">
+                </ListBox.Item>
+                <ListBox.Item id="plan-mode" textValue="Plan mode">
+                  <HugeiconsIcon
+                    color="currentColor"
+                    icon={AiIdeaIcon}
+                    size={15}
+                    strokeWidth={1.5}
+                  />
+                  <span className="flex-1">Plan mode</span>
+                  <div className="pointer-events-none">
+                    <Switch
+                      size="sm"
+                      isDisabled={!planModeAvailable}
+                      isSelected={planMode}
+                    >
+                      <Switch.Control>
+                        <Switch.Thumb>
+                          <Switch.Icon />
+                        </Switch.Thumb>
+                      </Switch.Control>
+                    </Switch>
+                  </div>
+                </ListBox.Item>
+                {showEngineSelector ? (
+                  <ListBox.Item id="engine" textValue="Engine">
                     <HugeiconsIcon
                       color="currentColor"
-                      icon={AiIdeaIcon}
+                      icon={DashboardSquare01Icon}
                       size={15}
                       strokeWidth={1.5}
                     />
-                    <span>Plan mode</span>
-                  </span>
+                    <span className="flex-1">Engine</span>
+                    <span className="text-[12px] capitalize text-foreground/60">
+                      {selectedEngine}
+                    </span>
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={ArrowRight01Icon}
+                      size={12}
+                      strokeWidth={1.5}
+                    />
+                  </ListBox.Item>
+                ) : null}
+              </ListBox>
 
-                  <Switch
-                    size="sm"
-                    isSelected={planMode}
-                    // @ts-expect-error - onValueChange is not a valid prop for SwitchRootProps
-                    onValueChange={onTogglePlanMode as any}
+              {showEngineSelector && engineSubOpen ? (
+                <div className="mt-1 border-t border-separator pt-1">
+                  <ListBox
+                    aria-label="Engine"
+                    disabledKeys={engineOptions
+                      .filter((e) => !e.isAvailable && e.engine !== "sentinel")
+                      .map((e) => e.engine)}
+                    selectedKeys={[selectedEngine]}
+                    selectionMode="single"
+                    onSelectionChange={(keys) => {
+                      const key = [...keys][0];
+                      if (key != null) {
+                        onSelectEngine(String(key) as ChatEngine);
+                        setEngineSubOpen(false);
+                        setComposerMenuOpen(false);
+                      }
+                    }}
                   >
-                    <Switch.Control>
-                      <Switch.Thumb>
-                        <Switch.Icon />
-                      </Switch.Thumb>
-                    </Switch.Control>
-                  </Switch>
-                </button>
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
-        </div>
+                    {engineOptions.map((engine) => (
+                      <ListBox.Item
+                        key={engine.engine}
+                        id={engine.engine}
+                        textValue={engine.label}
+                      >
+                        <span className="capitalize">{engine.label}</span>
+                        {!engine.isAvailable && engine.engine !== "sentinel" ? (
+                          <span className="ml-auto text-[10px] text-warning">
+                            Unavailable
+                          </span>
+                        ) : null}
+                        <ListBox.ItemIndicator />
+                      </ListBox.Item>
+                    ))}
+                  </ListBox>
+                </div>
+              ) : null}
+            </Popover.Dialog>
+          </Popover.Content>
+        </Popover.Root>
 
         {modelSelector}
 

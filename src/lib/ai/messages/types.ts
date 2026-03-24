@@ -157,42 +157,70 @@ function hasDataUrlPayload(url: string) {
   return payload.trim().length > 0;
 }
 
+function fixOutputErrorPart(part: Record<string, unknown>) {
+  if (
+    part.state === "output-error" &&
+    part.output !== undefined &&
+    part.errorText === undefined
+  ) {
+    const output = part.output as Record<string, unknown> | undefined;
+    let errorText = "Tool execution failed";
+    if (output && typeof output === "object") {
+      if (typeof output.output === "string" && output.output.length > 0) {
+        errorText = output.output;
+      } else if (typeof output.error === "string" && output.error.length > 0) {
+        errorText = output.error;
+      } else if (
+        typeof output.status === "string" &&
+        output.status !== "completed"
+      ) {
+        errorText = `Tool execution ${output.status}`;
+      }
+    }
+    const { output: _removed, ...rest } = part;
+    return { ...rest, errorText };
+  }
+  return part;
+}
+
 function sanitizeThreadMessageParts(parts: unknown) {
   if (!Array.isArray(parts)) {
     return [];
   }
 
-  return parts.filter((part) => {
-    if (!part || typeof part !== "object") {
-      return false;
-    }
+  return parts
+    .filter((part) => {
+      if (!part || typeof part !== "object") {
+        return false;
+      }
 
-    const candidate = part as {
-      providerMetadata?: unknown;
-      text?: unknown;
-      type?: unknown;
-      url?: unknown;
-    };
+      const candidate = part as {
+        providerMetadata?: unknown;
+        text?: unknown;
+        type?: unknown;
+        url?: unknown;
+      };
 
-    if (typeof candidate.type !== "string") {
-      return false;
-    }
+      if (typeof candidate.type !== "string") {
+        return false;
+      }
 
-    if (candidate.type === "text" || candidate.type === "reasoning") {
-      return (
-        typeof candidate.text === "string" &&
-        (candidate.text.length > 0 || candidate.providerMetadata != null)
-      );
-    }
+      if (candidate.type === "text" || candidate.type === "reasoning") {
+        return (
+          typeof candidate.text === "string" &&
+          (candidate.text.length > 0 || candidate.providerMetadata != null)
+        );
+      }
 
-    if (candidate.type === "file") {
-      return (
-        typeof candidate.url === "string" && hasDataUrlPayload(candidate.url)
-      );
-    }
+      if (candidate.type === "file") {
+        return (
+          typeof candidate.url === "string" && hasDataUrlPayload(candidate.url)
+        );
+      }
 
-    return true;
-  });
+      return true;
+    })
+    .map((part) => fixOutputErrorPart(part as Record<string, unknown>));
 }
 
 export function normalizeThreadMessageMetadata(

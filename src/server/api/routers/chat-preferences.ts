@@ -9,13 +9,18 @@ import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 export const chatPreferencesRouter = createTRPCRouter({
   get: protectedProcedure.query(async ({ ctx }) => {
     const enabledModels = await getEnabledModels(ctx.user.id);
+    const engine = ctx.user.defaultChatEngine ?? "sentinel";
 
     return {
+      engine,
       mode: ctx.user.defaultChatMode ?? null,
-      modelId: normalizeSelectedModelId(
-        ctx.user.defaultChatModelId ?? null,
-        enabledModels,
-      ),
+      modelId:
+        engine === "sentinel"
+          ? normalizeSelectedModelId(
+              ctx.user.defaultChatModelId ?? null,
+              enabledModels,
+            )
+          : (ctx.user.defaultChatModelId ?? null),
       reasoningEffort: ctx.user.defaultChatReasoningEffort ?? null,
     };
   }),
@@ -24,17 +29,24 @@ export const chatPreferencesRouter = createTRPCRouter({
     .input(chatSelectionSchema)
     .mutation(async ({ ctx, input }) => {
       const enabledModels = await getEnabledModels(ctx.user.id);
+      const currentEngine = ctx.user.defaultChatEngine ?? "sentinel";
       const currentMode = ctx.user.defaultChatMode ?? null;
-      const currentModelId = normalizeSelectedModelId(
-        ctx.user.defaultChatModelId ?? null,
-        enabledModels,
-      );
+      const currentModelId =
+        currentEngine === "sentinel"
+          ? normalizeSelectedModelId(
+              ctx.user.defaultChatModelId ?? null,
+              enabledModels,
+            )
+          : (ctx.user.defaultChatModelId ?? null);
       const currentReasoningEffort =
         ctx.user.defaultChatReasoningEffort ?? null;
 
       ctx.db
         .update(users)
         .set({
+          ...(input.engine !== undefined
+            ? { defaultChatEngine: input.engine ?? null }
+            : {}),
           ...(input.mode !== undefined
             ? { defaultChatMode: input.mode ?? null }
             : {}),
@@ -49,10 +61,16 @@ export const chatPreferencesRouter = createTRPCRouter({
         .run();
 
       return {
+        engine:
+          input.engine !== undefined
+            ? (input.engine ?? "sentinel")
+            : currentEngine,
         mode: input.mode !== undefined ? (input.mode ?? null) : currentMode,
         modelId:
           input.modelId !== undefined
-            ? normalizeSelectedModelId(input.modelId, enabledModels)
+            ? (input.engine ?? currentEngine) === "sentinel"
+              ? normalizeSelectedModelId(input.modelId, enabledModels)
+              : input.modelId
             : currentModelId,
         reasoningEffort:
           input.reasoningEffort !== undefined

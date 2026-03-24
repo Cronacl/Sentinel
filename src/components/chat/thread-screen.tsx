@@ -17,10 +17,13 @@ import {
 } from "@heroui/react";
 import {
   Archive02Icon,
+  ArrowTurnBackwardIcon,
+  MinimizeScreenIcon,
   MoreHorizontalIcon,
   PencilEdit02Icon,
   PinIcon,
   PinOffIcon,
+  ViewIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
@@ -51,6 +54,7 @@ type ThreadScreenProps = {
   queuedFollowUps: QueuedFollowUpSummary[];
   thread: {
     activeRunId: string | null;
+    chatEngine: "sentinel" | "codex";
     chatModelId: string | null;
     chatReasoningEffort: string | null;
     id: string;
@@ -81,6 +85,7 @@ export function ThreadScreen({
   const utils = api.useUtils();
   const [threadTitle, setThreadTitle] = useState(thread.title);
   const [threadSelectionState, setThreadSelectionState] = useState({
+    engine: thread.chatEngine,
     modelId: thread.chatModelId,
     mode: thread.mode,
     reasoningEffort:
@@ -105,6 +110,7 @@ export function ThreadScreen({
       threadStatus: "idle" | "streaming" | "awaiting_approval";
       threadTitle: string;
     }) => {
+      setThreadTitle(snapshot.threadTitle);
       const current = utils.threads.get.getData({ threadId: thread.id });
       applyThreadSnapshotCacheUpdate({
         snapshot: {
@@ -245,6 +251,7 @@ export function ThreadScreen({
   const chat = useThreadChat({
     hydrateFromServer: true,
     initialActiveRunId: thread.activeRunId,
+    initialChatEngine: thread.chatEngine,
     threadId: thread.id,
     initialMessages,
     initialQueuedFollowUps: queuedFollowUps,
@@ -257,7 +264,9 @@ export function ThreadScreen({
   const {
     addToolApprovalResponse,
     answerPlanQuestions,
+    chatEngine,
     editMessage,
+    errorMessage,
     messages,
     queueFollowUp,
     queuedFollowUps: liveQueuedFollowUps,
@@ -270,6 +279,7 @@ export function ThreadScreen({
   } = chat;
 
   const isBusy = status === "submitted" || status === "streaming";
+  const visibleChatError = chatError ?? errorMessage;
 
   useEffect(() => {
     if (status === "streaming") {
@@ -284,16 +294,6 @@ export function ThreadScreen({
   }, [status, thread.id, utils, workspace.id]);
 
   useEffect(() => {
-    if (isBusy) return;
-    setThreadSelectionState({
-      modelId: thread.chatModelId,
-      mode: thread.mode,
-      reasoningEffort:
-        (thread.chatReasoningEffort as ReasoningEffort | null) ?? null,
-    });
-  }, [thread.chatModelId, thread.chatReasoningEffort, thread.mode, isBusy]);
-
-  useEffect(() => {
     if (!isBusy) {
       startPlanImplementationLockRef.current = false;
     }
@@ -302,12 +302,14 @@ export function ThreadScreen({
   const handleSend = useCallback(
     ({
       files,
+      engine,
       modelId,
       reasoningEffort,
       text,
       threadMode,
     }: {
       files?: FileUIPart[];
+      engine: "sentinel" | "codex";
       modelId: string;
       reasoningEffort?: ReasoningEffort | null;
       text: string;
@@ -315,12 +317,14 @@ export function ThreadScreen({
     }) => {
       setChatError(null);
       setThreadSelectionState({
+        engine,
         modelId,
         mode: threadMode ?? threadSelectionState.mode,
         reasoningEffort: reasoningEffort ?? null,
       });
       applyThreadSettingsCacheUpdate({
         patch: {
+          chatEngine: engine,
           chatModelId: modelId,
           chatReasoningEffort: reasoningEffort ?? null,
           mode: threadMode ?? threadSelectionState.mode,
@@ -330,6 +334,7 @@ export function ThreadScreen({
         workspaceId: workspace.id,
       });
       void sendMessage({
+        engine,
         files,
         modelId,
         reasoningEffort,
@@ -343,12 +348,14 @@ export function ThreadScreen({
   const handleQueueFollowUp = useCallback(
     async ({
       files,
+      engine,
       modelId,
       reasoningEffort,
       text,
       threadMode,
     }: {
       files?: FileUIPart[];
+      engine: "sentinel" | "codex";
       modelId: string;
       reasoningEffort?: ReasoningEffort | null;
       text: string;
@@ -356,6 +363,7 @@ export function ThreadScreen({
     }) => {
       setChatError(null);
       await queueFollowUp({
+        engine,
         files,
         modelId,
         reasoningEffort,
@@ -371,12 +379,14 @@ export function ThreadScreen({
   const handleSteerFollowUp = useCallback(
     async ({
       files,
+      engine,
       modelId,
       reasoningEffort,
       text,
       threadMode,
     }: {
       files?: FileUIPart[];
+      engine: "sentinel" | "codex";
       modelId: string;
       reasoningEffort?: ReasoningEffort | null;
       text: string;
@@ -384,6 +394,7 @@ export function ThreadScreen({
     }) => {
       setChatError(null);
       await steerFollowUp({
+        engine,
         files,
         modelId,
         reasoningEffort,
@@ -397,8 +408,23 @@ export function ThreadScreen({
   );
 
   const handleApproveTool = useCallback(
-    (approvalId: string) => {
-      void addToolApprovalResponse({ id: approvalId, approved: true });
+    (approvalId: string, response?: string) => {
+      void addToolApprovalResponse({
+        approved: true,
+        id: approvalId,
+        ...(response ? { response } : {}),
+      });
+    },
+    [addToolApprovalResponse],
+  );
+
+  const handleApproveToolWithDecision = useCallback(
+    (approvalId: string, decision: string) => {
+      void addToolApprovalResponse({
+        id: approvalId,
+        approved: decision !== "decline" && decision !== "cancel",
+        decision,
+      });
     },
     [addToolApprovalResponse],
   );
@@ -438,6 +464,35 @@ export function ThreadScreen({
     setEditingMessage(null);
   }, []);
 
+  const handleSelectionChange = useCallback(
+    ({
+      engine,
+      modelId,
+      mode,
+      reasoningEffort,
+    }: {
+      engine?: "sentinel" | "codex";
+      modelId?: string | null;
+      mode?: "chat" | "plan";
+      reasoningEffort?: ReasoningEffort | null;
+    }) => {
+      setThreadSelectionState((current) => ({
+        engine: engine ?? current.engine,
+        modelId: modelId !== undefined ? modelId : current.modelId,
+        mode: mode ?? current.mode,
+        reasoningEffort:
+          reasoningEffort !== undefined
+            ? reasoningEffort
+            : current.reasoningEffort,
+      }));
+
+      if (engine === "codex") {
+        setEditingMessage(null);
+      }
+    },
+    [],
+  );
+
   const editingAttachmentSeed = useMemo(
     () =>
       editingMessage?.parts.filter(
@@ -464,11 +519,13 @@ export function ThreadScreen({
 
   const handleEditSubmit = useCallback(
     ({
+      engine,
       files,
       modelId,
       reasoningEffort,
       text,
     }: {
+      engine: "sentinel" | "codex";
       files?: FileUIPart[];
       modelId: string;
       reasoningEffort?: ReasoningEffort | null;
@@ -480,6 +537,7 @@ export function ThreadScreen({
 
       setChatError(null);
       void editMessage({
+        engine,
         files,
         modelId,
         reasoningEffort,
@@ -528,6 +586,25 @@ export function ThreadScreen({
     confirmArchiveState.open();
   }, [confirmArchiveState]);
 
+  const codexReview = api.engines.codexReview.useMutation();
+  const codexRollback = api.engines.codexRollback.useMutation();
+  const codexCompact = api.engines.codexCompact.useMutation();
+
+  const handleStartCodexReview = useCallback(() => {
+    if (chatEngine !== "codex") return;
+    void codexReview.mutate({ threadId: thread.id });
+  }, [chatEngine, codexReview, thread.id]);
+
+  const handleCodexRollback = useCallback(() => {
+    if (chatEngine !== "codex") return;
+    void codexRollback.mutate({ count: 1, threadId: thread.id });
+  }, [chatEngine, codexRollback, thread.id]);
+
+  const handleCodexCompact = useCallback(() => {
+    if (chatEngine !== "codex") return;
+    void codexCompact.mutate({ threadId: thread.id });
+  }, [chatEngine, codexCompact, thread.id]);
+
   const handleConfirmArchive = useCallback(() => {
     void archiveThread.mutate({ threadId: thread.id });
   }, [archiveThread, thread.id]);
@@ -571,6 +648,11 @@ export function ThreadScreen({
       cachedThread?.chatModelId ??
       globalSelection?.modelId ??
       null;
+    const engine =
+      threadSelectionState.engine ??
+      cachedThread?.chatEngine ??
+      globalSelection?.engine ??
+      "sentinel";
     const reasoningEffort =
       threadSelectionState.reasoningEffort ??
       (cachedThread?.chatReasoningEffort as ReasoningEffort | null) ??
@@ -585,12 +667,14 @@ export function ThreadScreen({
 
     setChatError(null);
     setThreadSelectionState({
+      engine,
       modelId,
       mode: "chat",
       reasoningEffort,
     });
     applyThreadSettingsCacheUpdate({
       patch: {
+        chatEngine: engine,
         chatModelId: modelId,
         chatReasoningEffort: reasoningEffort,
         mode: "chat",
@@ -601,6 +685,7 @@ export function ThreadScreen({
     });
 
     void sendMessage({
+      engine,
       modelId,
       reasoningEffort,
       text: "Implement Plan",
@@ -614,6 +699,8 @@ export function ThreadScreen({
     utils,
     workspace.id,
   ]);
+
+  const supportsSentinelMessageActions = chatEngine === "sentinel";
 
   useEffect(() => {
     if (
@@ -677,6 +764,9 @@ export function ThreadScreen({
                 if (key === "pin") handleTogglePin();
                 if (key === "rename") handleOpenRename();
                 if (key === "archive") handleArchive();
+                if (key === "codex-review") void handleStartCodexReview();
+                if (key === "codex-rollback") void handleCodexRollback();
+                if (key === "codex-compact") void handleCodexCompact();
               }}
             >
               <Dropdown.Item
@@ -712,6 +802,37 @@ export function ThreadScreen({
                 <Label>Archive thread</Label>
                 <Kbd slot="keyboard">&#x21E7;&#x2318;A</Kbd>
               </Dropdown.Item>
+              {chatEngine === "codex" && (
+                <>
+                  <Dropdown.Item id="codex-review" textValue="Start review">
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={ViewIcon}
+                      size={16}
+                      strokeWidth={1.5}
+                    />
+                    <Label>Start review</Label>
+                  </Dropdown.Item>
+                  <Dropdown.Item id="codex-rollback" textValue="Undo last turn">
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={ArrowTurnBackwardIcon}
+                      size={16}
+                      strokeWidth={1.5}
+                    />
+                    <Label>Undo last turn</Label>
+                  </Dropdown.Item>
+                  <Dropdown.Item id="codex-compact" textValue="Compact context">
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={MinimizeScreenIcon}
+                      size={16}
+                      strokeWidth={1.5}
+                    />
+                    <Label>Compact context</Label>
+                  </Dropdown.Item>
+                </>
+              )}
             </Dropdown.Menu>
           </Dropdown.Popover>
         </Dropdown>
@@ -727,26 +848,40 @@ export function ThreadScreen({
             <div className="flex flex-col gap-4">
               {messages.map((message, idx) => (
                 <ChatMessage
+                  chatEngine={chatEngine}
                   key={message.id}
                   message={message}
                   isStreaming={
                     status === "streaming" && idx === messages.length - 1
                   }
                   onApproveTool={handleApproveTool}
+                  onApproveToolWithDecision={handleApproveToolWithDecision}
                   onAnswerPlanQuestions={handleAnswerPlanQuestions}
                   onDenyTool={handleDenyTool}
-                  onEdit={handleEdit}
-                  onStartPlanImplementation={handleStartPlanImplementation}
-                  onRegenerate={handleRegenerate}
-                  onRetry={handleRetry}
+                  onEdit={
+                    supportsSentinelMessageActions ? handleEdit : undefined
+                  }
+                  onStartPlanImplementation={
+                    idx === messages.length - 1 || idx === messages.length - 2
+                      ? handleStartPlanImplementation
+                      : undefined
+                  }
+                  onRegenerate={
+                    supportsSentinelMessageActions
+                      ? handleRegenerate
+                      : undefined
+                  }
+                  onRetry={
+                    supportsSentinelMessageActions ? handleRetry : undefined
+                  }
                   onSelectBranch={handleSelectBranch}
                 />
               ))}
 
-              {chatError && (
+              {visibleChatError && (
                 <div className="rounded-lg border border-danger-soft-hover bg-danger-soft px-3 py-2.5">
                   <p className="text-xs text-danger-soft-foreground">
-                    {chatError}
+                    {visibleChatError}
                   </p>
                 </div>
               )}
@@ -768,6 +903,7 @@ export function ThreadScreen({
                   threadId: thread.id,
                 });
               }}
+              onSelectionChange={handleSelectionChange}
               onSend={editingMessage ? handleEditSubmit : handleSend}
               onStop={stopStream}
               onSteerFollowUp={handleSteerFollowUp}
@@ -784,6 +920,7 @@ export function ThreadScreen({
               status={status}
               threadId={thread.id}
               threadSelection={{
+                engine: threadSelectionState.engine,
                 modelId: threadSelectionState.modelId,
                 mode: threadSelectionState.mode,
                 reasoningEffort: threadSelectionState.reasoningEffort,

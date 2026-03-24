@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Cancel01Icon, LinkSquare02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 
 import {
@@ -19,11 +19,13 @@ import { useRightSidebar } from "@/components/shell/shell-context";
 import { buildInstallSteps } from "@/lib/skills/registry";
 import {
   customSkillInstallFormSchema,
+  type CustomSkillInstallFormInputValues,
   type CustomSkillInstallFormValues,
 } from "@/schemas/skill-install.schema";
 import { api } from "@/trpc/react";
 
 type CustomSkillInstallSidebarProps = {
+  codexAvailable: boolean;
   createSkillHref: string;
 };
 
@@ -40,25 +42,44 @@ const SCOPE_OPTIONS = [
   },
 ] as const;
 
-function createDefaultValues(): CustomSkillInstallFormValues {
+const TARGET_OPTIONS = [
+  {
+    description: "Install under Sentinel's managed skills directories.",
+    label: "Sentinel",
+    value: "sentinel",
+  },
+  {
+    description: "Install under the Codex home skills directory.",
+    label: "Codex",
+    value: "codex",
+  },
+] as const;
+
+function createDefaultValues(): CustomSkillInstallFormInputValues {
   return {
     installInstructions: "",
     name: "",
     ref: "main",
     repoUrl: "",
     scope: "global",
+    target: "sentinel",
     skillPath: "",
   };
 }
 
 export function CustomSkillInstallSidebar({
+  codexAvailable,
   createSkillHref,
 }: CustomSkillInstallSidebarProps) {
   const { close } = useRightSidebar();
   const utils = api.useUtils();
   const [submitError, setSubmitError] = useState("");
   const installCustom = api.skills.installCustom.useMutation();
-  const form = useForm<CustomSkillInstallFormValues>({
+  const form = useForm<
+    CustomSkillInstallFormInputValues,
+    undefined,
+    CustomSkillInstallFormValues
+  >({
     defaultValues: createDefaultValues(),
     resolver: zodResolver(customSkillInstallFormSchema),
   });
@@ -67,6 +88,13 @@ export function CustomSkillInstallSidebar({
   const skillPath = form.watch("skillPath");
   const ref = form.watch("ref");
   const installInstructions = form.watch("installInstructions");
+  const target = form.watch("target");
+
+  useEffect(() => {
+    if (target === "codex" && form.getValues("scope") === "workspace") {
+      form.setValue("scope", "global");
+    }
+  }, [form, target]);
 
   const previewSteps = useMemo(() => {
     const manualSteps = installInstructions
@@ -157,7 +185,7 @@ export function CustomSkillInstallSidebar({
 
               <ControlledTextField
                 control={form.control}
-                description="Folder name that will be created under .sentinel/skills."
+                description="Folder name that will be created in the selected runtime's skills directory."
                 inputProps={{ placeholder: "my-skill" }}
                 label="Skill name"
                 name="name"
@@ -184,12 +212,28 @@ export function CustomSkillInstallSidebar({
 
                 <ControlledSelectField
                   control={form.control}
-                  description="Where this skill should be installed."
-                  label="Install scope"
-                  name="scope"
-                  options={SCOPE_OPTIONS}
+                  description="Which runtime should receive this skill."
+                  label="Install target"
+                  name="target"
+                  options={TARGET_OPTIONS.map((option) => ({
+                    ...option,
+                    isDisabled: option.value === "codex" && !codexAvailable,
+                  }))}
                 />
               </div>
+
+              <ControlledSelectField
+                control={form.control}
+                description={
+                  target === "codex"
+                    ? "Codex installs are global-only."
+                    : "Where this skill should be installed."
+                }
+                label="Install scope"
+                name="scope"
+                options={SCOPE_OPTIONS}
+                selectProps={{ isDisabled: target === "codex" }}
+              />
 
               <ControlledTextField
                 control={form.control}

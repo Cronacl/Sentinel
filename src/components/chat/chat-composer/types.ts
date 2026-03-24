@@ -2,10 +2,12 @@ import type { FileUIPart } from "ai";
 
 import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import type { ChatEngine } from "@/server/db/enums";
 
 export type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 
 export type ComposerSendInput = {
+  engine: ChatEngine;
   files?: FileUIPart[];
   modelId: string;
   reasoningEffort?: ReasoningEffort | null;
@@ -22,6 +24,12 @@ export type ChatComposerProps = {
   } | null;
   onQueueFollowUp?: (input: ComposerSendInput) => Promise<void> | void;
   onRemoveQueuedFollowUp?: (id: string) => Promise<void> | void;
+  onSelectionChange?: (input: {
+    engine?: ChatEngine;
+    modelId?: string | null;
+    mode?: "chat" | "plan";
+    reasoningEffort?: ReasoningEffort | null;
+  }) => void;
   onStop?: () => void;
   onSend?: (input: ComposerSendInput) => void;
   onSteerFollowUp?: (input: ComposerSendInput) => Promise<void> | void;
@@ -38,6 +46,7 @@ export type ChatComposerProps = {
   persistThreadSelection?: boolean;
   threadId?: string;
   threadSelection?: {
+    engine?: ChatEngine;
     modelId: string | null;
     mode?: "chat" | "plan";
     reasoningEffort?: ReasoningEffort | null;

@@ -135,8 +135,7 @@ export const YFinanceQuoteTool = memo(function YFinanceQuoteTool({
 
   const output =
     hasOutput && "output" in part ? (part.output as QuoteOutput) : null;
-  const input =
-    "input" in part ? (part.input as { symbols?: string[] }) : null;
+  const input = "input" in part ? (part.input as { symbols?: string[] }) : null;
 
   const canOpen = Boolean(output && output.quotes.length > 0);
 

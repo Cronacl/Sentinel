@@ -36,6 +36,7 @@ import {
 
 const threadSelect = {
   archivedAt: true,
+  chatEngine: true,
   chatModelId: true,
   chatReasoningEffort: true,
   createdAt: true,
@@ -169,6 +170,7 @@ export const threadsRouter = createTRPCRouter({
       const [thread] = ctx.db
         .insert(threads)
         .values({
+          chatEngine: input.engine,
           ...(input.threadId ? { id: input.threadId } : {}),
           mode: input.mode,
           summary: input.summary.trim() || null,
@@ -210,6 +212,7 @@ export const threadsRouter = createTRPCRouter({
         thread: {
           activeRunId: thread.activeStreamId,
           archivedAt: thread.archivedAt,
+          chatEngine: thread.chatEngine,
           chatModelId: thread.chatModelId,
           chatReasoningEffort: thread.chatReasoningEffort,
           createdAt: thread.createdAt,
@@ -322,6 +325,7 @@ export const threadsRouter = createTRPCRouter({
       const [updated] = ctx.db
         .update(threads)
         .set({
+          ...(input.engine === undefined ? {} : { chatEngine: input.engine }),
           ...(input.modelId === undefined
             ? {}
             : { chatModelId: input.modelId }),
@@ -332,6 +336,7 @@ export const threadsRouter = createTRPCRouter({
         })
         .where(eq(threads.id, input.threadId))
         .returning({
+          chatEngine: threads.chatEngine,
           chatModelId: threads.chatModelId,
           chatReasoningEffort: threads.chatReasoningEffort,
           id: threads.id,
@@ -340,6 +345,7 @@ export const threadsRouter = createTRPCRouter({
         .all();
 
       return {
+        engine: updated!.chatEngine,
         modelId: updated!.chatModelId,
         mode: updated!.mode,
         reasoningEffort: updated!.chatReasoningEffort,

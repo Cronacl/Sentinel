@@ -19,23 +19,22 @@ import { z } from "zod";
 
 import {
   ControlledSelectField,
-  type SelectOption,
   ControlledTextAreaField,
   ControlledTextField,
 } from "@/components/forms/controlled-fields";
 import { getErrorMessage } from "@/lib/errors";
 import { sileo } from "sileo";
-import { AUTOMATION_SCHEDULE_TYPES } from "@/server/db/enums";
-import {
-  getDefaultReasoningEffort,
-  getSupportedReasoningEfforts,
-  type ReasoningEffort,
-} from "@/lib/ai/providers/models";
-import {
-  getCompositeModelId,
-  normalizeSelectedModelId,
-} from "@/lib/ai/providers/model-selection";
+import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import { AUTOMATION_SCHEDULE_TYPES, type ChatEngine } from "@/server/db/enums";
 import type { AutomationTemplate } from "@/components/automations/automation-templates";
+import {
+  getAvailableAutomationModels,
+  getAutomationEngineOptions,
+  getAutomationModelOptions,
+  getAutomationModelsForEngine,
+  getAutomationReasoningOptions,
+  resolveAutomationSelection,
+} from "@/components/automations/automation-form-helpers";
 import {
   createAutomationSchema,
   type CreateAutomationInput,
@@ -56,6 +55,7 @@ const automationFormSchema = z
     scheduleDayOfWeek: z.string(),
     scheduleTime: z.string(),
     scheduleCron: z.string(),
+    chatEngine: z.enum(["sentinel", "codex"]),
     modelId: z.string().trim().min(1, "Model is required."),
     reasoningEffort: z.string(),
   })
@@ -145,10 +145,12 @@ const DAY_OPTIONS = [
 function createDefaultValues(
   template?: AutomationTemplate,
   globalDefaults?: {
+    chatEngine?: ChatEngine | null;
     modelId?: string | null;
     reasoningEffort?: ReasoningEffort | null;
   },
 ): AutomationFormValues {
+  const defaultChatEngine = globalDefaults?.chatEngine ?? "sentinel";
   const defaultModelId =
     globalDefaults?.modelId ?? template?.defaults.modelId ?? "__default__";
   const defaultReasoningEffort = globalDefaults?.reasoningEffort ?? "";
@@ -162,6 +164,7 @@ function createDefaultValues(
       scheduleDayOfWeek: String(template.defaults.scheduleDayOfWeek ?? 1),
       scheduleTime: template.defaults.scheduleTime ?? "09:00",
       scheduleCron: template.defaults.scheduleCron ?? "",
+      chatEngine: defaultChatEngine,
       modelId: defaultModelId,
       reasoningEffort: defaultReasoningEffort,
     };
@@ -175,6 +178,7 @@ function createDefaultValues(
     scheduleDayOfWeek: "1",
     scheduleTime: "09:00",
     scheduleCron: "",
+    chatEngine: defaultChatEngine,
     modelId: defaultModelId,
     reasoningEffort: defaultReasoningEffort,
   };
@@ -204,6 +208,7 @@ function normalizeCreateInput(
   return {
     title: values.title,
     prompt: values.prompt,
+    chatEngine: values.chatEngine,
     workspaceId:
       values.workspaceId === "__current__" ? null : values.workspaceId,
     scheduleType: values.scheduleType,
@@ -220,10 +225,6 @@ function parseTimeString(value: string | null | undefined): Time | null {
   const match = value.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) return null;
   return new Time(Number(match[1]), Number(match[2]));
-}
-
-function getReasoningEffortLabel(effort: ReasoningEffort) {
-  return effort.charAt(0).toUpperCase() + effort.slice(1);
 }
 
 interface NewAutomationModalProps {
@@ -243,36 +244,74 @@ export function NewAutomationModal({
   const [submitError, setSubmitError] = useState("");
 
   const workspacesQuery = api.workspaces.list.useQuery();
-  const modelsQuery = api.models.list.useQuery();
+  const enginesQuery = api.engines.list.useQuery();
+  const sentinelModelsQuery = api.engines.models.useQuery({
+    engine: "sentinel",
+  });
+  const codexModelsQuery = api.engines.models.useQuery({
+    engine: "codex",
+  });
   const chatPreferencesQuery = api.chatPreferences.get.useQuery();
   const createMutation = api.automations.create.useMutation();
 
-  const availableModels = useMemo(
-    () =>
-      (modelsQuery.data ?? []).filter(
-        (model) => model.isConnected && model.isEnabled,
-      ),
-    [modelsQuery.data],
+  const availableSentinelModels = useMemo(
+    () => getAvailableAutomationModels(sentinelModelsQuery.data ?? []),
+    [sentinelModelsQuery.data],
   );
-  const normalizedGlobalModelId = useMemo(
-    () =>
-      normalizeSelectedModelId(
-        chatPreferencesQuery.data?.modelId ?? null,
-        availableModels,
-      ),
-    [availableModels, chatPreferencesQuery.data?.modelId],
+  const availableCodexModels = useMemo(
+    () => getAvailableAutomationModels(codexModelsQuery.data ?? []),
+    [codexModelsQuery.data],
   );
+  const globalDefaults = useMemo(() => {
+    const preferredEngine = chatPreferencesQuery.data?.engine ?? "sentinel";
+    const preferredReasoningEffort =
+      (chatPreferencesQuery.data?.reasoningEffort as ReasoningEffort | null) ??
+      null;
+    const preferredModelId = chatPreferencesQuery.data?.modelId ?? null;
+
+    const preferredModels = getAutomationModelsForEngine(preferredEngine, {
+      codex: availableCodexModels,
+      sentinel: availableSentinelModels,
+    });
+
+    const fallbackEngine: ChatEngine = "sentinel";
+    const engine =
+      preferredModels.length > 0 || preferredEngine === fallbackEngine
+        ? preferredEngine
+        : fallbackEngine;
+    const models = getAutomationModelsForEngine(engine, {
+      codex: availableCodexModels,
+      sentinel: availableSentinelModels,
+    });
+    const selection = resolveAutomationSelection(
+      models,
+      engine === preferredEngine ? preferredModelId : null,
+      preferredReasoningEffort,
+    );
+
+    return {
+      chatEngine: engine,
+      modelId: selection.modelId,
+      reasoningEffort: selection.reasoningEffort,
+    };
+  }, [
+    availableCodexModels,
+    availableSentinelModels,
+    chatPreferencesQuery.data?.engine,
+    chatPreferencesQuery.data?.modelId,
+    chatPreferencesQuery.data?.reasoningEffort,
+  ]);
   const initialValues = useMemo(
     () =>
       createDefaultValues(template, {
-        modelId: normalizedGlobalModelId,
-        reasoningEffort:
-          (chatPreferencesQuery.data
-            ?.reasoningEffort as ReasoningEffort | null) ?? null,
+        chatEngine: globalDefaults.chatEngine,
+        modelId: globalDefaults.modelId,
+        reasoningEffort: globalDefaults.reasoningEffort,
       }),
     [
-      chatPreferencesQuery.data?.reasoningEffort,
-      normalizedGlobalModelId,
+      globalDefaults.chatEngine,
+      globalDefaults.modelId,
+      globalDefaults.reasoningEffort,
       template,
     ],
   );
@@ -285,6 +324,7 @@ export function NewAutomationModal({
   });
 
   const scheduleType = form.watch("scheduleType");
+  const selectedEngine = form.watch("chatEngine");
   const selectedModelKey = form.watch("modelId");
 
   useEffect(() => {
@@ -323,93 +363,96 @@ export function NewAutomationModal({
     ];
   }, [workspacesQuery.data]);
 
+  const engineOptions = useMemo(
+    () => getAutomationEngineOptions(enginesQuery.data ?? []),
+    [enginesQuery.data],
+  );
+  const availableModels = useMemo(
+    () =>
+      getAutomationModelsForEngine(selectedEngine, {
+        codex: availableCodexModels,
+        sentinel: availableSentinelModels,
+      }),
+    [availableCodexModels, availableSentinelModels, selectedEngine],
+  );
   const modelOptions = useMemo(() => {
-    const options: SelectOption[] = availableModels.map((model) => ({
-      description: model.provider,
-      label: model.displayName,
-      value: getCompositeModelId(model.provider, model.modelId),
-    }));
-
-    return [
-      {
-        description: "Use default model behavior.",
-        label: "Use default model",
-        value: "__default__",
-      },
-      ...options,
-    ];
-  }, [availableModels]);
+    return getAutomationModelOptions(availableModels, selectedModelKey);
+  }, [availableModels, selectedModelKey]);
 
   const selectedModel = useMemo(() => {
     if (!selectedModelKey || selectedModelKey === "__default__") return null;
     return (
-      availableModels.find(
-        (model) =>
-          getCompositeModelId(model.provider, model.modelId) ===
-          selectedModelKey,
-      ) ?? null
+      availableModels.find((model) => model.modelId === selectedModelKey) ??
+      null
     );
   }, [availableModels, selectedModelKey]);
 
   const supportedReasoningEfforts = useMemo(() => {
     if (!selectedModel) return [];
-    return getSupportedReasoningEfforts(
-      selectedModel.provider,
-      selectedModel.modelId,
-    );
+    return selectedModel.supportedReasoningEfforts;
   }, [selectedModel]);
 
   const reasoningOptions = useMemo(
-    () =>
-      supportedReasoningEfforts.map((effort) => ({
-        description: "Matches the selected model's supported reasoning levels.",
-        label: getReasoningEffortLabel(effort),
-        value: effort,
-      })),
+    () => getAutomationReasoningOptions(supportedReasoningEfforts),
     [supportedReasoningEfforts],
   );
 
   useEffect(() => {
+    const currentModelKey = form.getValues("modelId");
+    if (!currentModelKey || currentModelKey === "__default__") {
+      return;
+    }
+
+    const modelStillSelectable = modelOptions.some(
+      (option) => option.value === currentModelKey,
+    );
+    if (modelStillSelectable) {
+      return;
+    }
+
+    const nextSelection = resolveAutomationSelection(
+      availableModels,
+      null,
+      null,
+    );
+    form.setValue("modelId", nextSelection.modelId);
+    form.setValue("reasoningEffort", nextSelection.reasoningEffort ?? "");
+  }, [availableModels, form, modelOptions]);
+
+  useEffect(() => {
+    if (!selectedModelKey || selectedModelKey === "__default__") {
+      if (form.getValues("reasoningEffort")) {
+        form.setValue("reasoningEffort", "");
+      }
+      return;
+    }
+
     if (!selectedModel) {
-      form.setValue("reasoningEffort", "");
       return;
     }
 
     const currentEffort = form.getValues("reasoningEffort");
-    if (
-      currentEffort &&
-      supportedReasoningEfforts.includes(currentEffort as ReasoningEffort)
-    ) {
-      return;
-    }
-
-    if (!currentEffort && !form.formState.dirtyFields.modelId) {
-      return;
-    }
-
-    const defaultEffort = getDefaultReasoningEffort(
-      selectedModel.provider,
+    const nextReasoningEffort = resolveAutomationSelection(
+      [selectedModel],
       selectedModel.modelId,
-    );
-    if (defaultEffort && supportedReasoningEfforts.includes(defaultEffort)) {
-      form.setValue("reasoningEffort", defaultEffort);
+      (currentEffort as ReasoningEffort | null) ?? null,
+    ).reasoningEffort;
+
+    if ((currentEffort || "") === (nextReasoningEffort ?? "")) {
       return;
     }
 
-    form.setValue("reasoningEffort", supportedReasoningEfforts[0] ?? "");
-  }, [
-    form,
-    form.formState.dirtyFields.modelId,
-    selectedModel,
-    supportedReasoningEfforts,
-  ]);
+    form.setValue("reasoningEffort", nextReasoningEffort ?? "");
+  }, [form, selectedModel, selectedModelKey]);
 
   const isBusy =
     form.formState.isSubmitting ||
     createMutation.isPending ||
     chatPreferencesQuery.isPending ||
     workspacesQuery.isLoading ||
-    modelsQuery.isLoading;
+    enginesQuery.isLoading ||
+    sentinelModelsQuery.isLoading ||
+    codexModelsQuery.isLoading;
 
   const handleCreate = async (values: AutomationFormValues) => {
     setSubmitError("");
@@ -501,6 +544,14 @@ export function NewAutomationModal({
                     label="Schedule"
                     name="scheduleType"
                     options={SCHEDULE_OPTIONS}
+                  />
+
+                  <ControlledSelectField
+                    control={form.control}
+                    description="Choose whether this automation runs with Sentinel or Codex."
+                    label="Engine"
+                    name="chatEngine"
+                    options={engineOptions}
                   />
 
                   {scheduleType === "weekly" ? (

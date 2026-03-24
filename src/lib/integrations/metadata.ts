@@ -224,9 +224,7 @@ export const INTEGRATION_METADATA: Record<
       "Search for securities by name or ticker",
       "Retrieve historical OHLCV chart data",
     ],
-    requiredAccess: [
-      "Public Yahoo Finance market data (read-only)",
-    ],
+    requiredAccess: ["Public Yahoo Finance market data (read-only)"],
     setupHint: "No setup required — just enable and start querying.",
   },
   arxiv: {
@@ -237,9 +235,7 @@ export const INTEGRATION_METADATA: Record<
       "Search papers by keyword, author, title, or category",
       "Get full metadata, abstract, and PDF links for any paper",
     ],
-    requiredAccess: [
-      "Public arXiv API (read-only)",
-    ],
+    requiredAccess: ["Public arXiv API (read-only)"],
     setupHint: "No setup required — just enable and start searching.",
   },
   pubmed: {
@@ -250,9 +246,7 @@ export const INTEGRATION_METADATA: Record<
       "Search 36M+ articles with PubMed query syntax and MeSH terms",
       "Get full article details including abstract, authors, and DOI",
     ],
-    requiredAccess: [
-      "Public NCBI E-Utilities API (read-only)",
-    ],
+    requiredAccess: ["Public NCBI E-Utilities API (read-only)"],
     setupHint: "No setup required — just enable and start searching.",
   },
 };

@@ -91,16 +91,7 @@ export function buildYahooFinanceTools(
           .default("1mo")
           .describe("Time range for the chart data."),
         interval: z
-          .enum([
-            "1m",
-            "5m",
-            "15m",
-            "30m",
-            "1h",
-            "1d",
-            "1wk",
-            "1mo",
-          ])
+          .enum(["1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"])
           .default("1d")
           .describe("Data interval granularity."),
       }),

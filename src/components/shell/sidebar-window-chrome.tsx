@@ -172,8 +172,13 @@ export function SidebarWindowChrome() {
   const platform = desktop?.app.platform ?? null;
   const isMac = platform === "darwin";
   const chromeHeight = 56;
-  const edgeWidth =
-    isMac ? 72 : platform === "win32" ? 132 : platform === "linux" ? 112 : 52;
+  const edgeWidth = isMac
+    ? 72
+    : platform === "win32"
+      ? 132
+      : platform === "linux"
+        ? 112
+        : 52;
 
   return (
     <div
