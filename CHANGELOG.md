@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.3-alpha.1] - 2026-03-24
+
+### Patch
+
+- Fix desktop Codex runtime detection so Finder-launched macOS builds can resolve the local `codex` CLI through the user shell environment instead of relying only on the app process `PATH`.
+
 ## [0.2.2-alpha.1] - 2026-03-24
 
 ### Patch
