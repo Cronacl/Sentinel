@@ -2,6 +2,8 @@
 
 import { afterEach, describe, expect, it, mock } from "bun:test";
 
+mock.module("server-only", () => ({}));
+
 const getSkillSnapshot = mock(async ({ workspaceRoot, globalBase }) => ({
   revision: 2,
   skillRoots: workspaceRoot
@@ -26,6 +28,7 @@ const executeInstallSteps = mock(async ({ name, destRoot, installSteps }) => ({
   installSteps,
   name,
 }));
+const resolveCodexHome = mock(() => "/tmp/codex-home");
 const uninstallSkill = mock(async ({ name, destRoot }) => ({
   directory: `${destRoot}/.sentinel/skills/${name}`,
   name,
@@ -63,6 +66,7 @@ mock.module("@/lib/skills", () => ({
 
 mock.module("@/lib/skills/install", () => ({
   executeInstallSteps,
+  resolveCodexHome,
   uninstallSkill,
 }));
 
@@ -71,6 +75,13 @@ mock.module("@/lib/skills/registry", () => ({
   buildInstallSteps,
   findRegistrySkill: (name: string) =>
     name === registryEntry.name ? registryEntry : null,
+}));
+
+mock.module("@/lib/ai/chat/engines/codex-app-server", () => ({
+  getCodexAppServerManager: () => ({
+    listSkills: async () => ({ skills: [] }),
+    writeSkillConfig: async () => {},
+  }),
 }));
 
 const { skillsRouter } = await import("./skills");

@@ -1,0 +1,16 @@
+pre-commit:
+  commands:
+    lint-staged:
+      run: bun x lint-staged --allow-empty
+
+commit-msg:
+  commands:
+    commitlint:
+      run: bun x commitlint --edit {1}
+
+pre-push:
+  commands:
+    typecheck:
+      run: bun run typecheck
+    test:
+      run: bun run test

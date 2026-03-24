@@ -2,18 +2,10 @@
 
 - Describe the user-visible or developer-visible change.
 
-## Release Impact
+## PR Title
 
-- [ ] `release:major`
-- [ ] `release:minor`
-- [ ] `release:patch`
-- [ ] `release:skip`
-
-Add exactly one matching GitHub label before merge.
-
-## Release Notes
-
-- Write a single sentence or bullet to use in the automated changelog if the PR title is not good enough.
+- Use a Conventional Commits title, for example `feat(chat): add Codex runtime fallback`.
+- CI validates the PR title, and release PRs/changelog entries are generated from merged conventional commits.
 
 ## Validation
 

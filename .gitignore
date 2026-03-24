@@ -5,6 +5,7 @@
 /.pnp
 .pnp.js
 .claude
+docs/
 
 # testing
 /coverage
@@ -37,6 +38,7 @@ next-env.d.ts
 
 # debug
 npm-debug.log*
+package-lock.json
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
@@ -54,3 +56,6 @@ yarn-error.log*
 
 # idea files
 .idea
+
+# local tooling
+.lefthook-local.yml

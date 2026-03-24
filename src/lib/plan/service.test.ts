@@ -24,6 +24,8 @@ function createPlanTestDb() {
       "title" text NOT NULL,
       "summary" text,
       "mode" text DEFAULT 'chat' NOT NULL,
+      "chat_engine" text DEFAULT 'sentinel' NOT NULL,
+      "chat_engine_state" text,
       "chat_model_id" text,
       "chat_reasoning_effort" text,
       "created_at" integer NOT NULL,

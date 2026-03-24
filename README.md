@@ -48,3 +48,7 @@ bun run build:desktop:mac       # macOS (.dmg)
 bun run build:desktop:windows   # Windows (.exe)
 bun run build:desktop:linux     # Linux (.AppImage)
 ```
+
+## Contributing
+
+The repo uses Conventional Commits, local `lefthook` automation, and a `release-please` release PR workflow. See [docs/release-process.md](docs/release-process.md) for the contributor and release process.
