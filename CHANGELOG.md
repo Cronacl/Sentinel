@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.4-alpha.1] - 2026-03-24
+
+### Patch
+
+- Fix Codex CLI detection for fish shells and Finder-launched macOS apps by probing stable install locations such as Homebrew before falling back to shell startup logic.
+
 ## [0.2.3-alpha.1] - 2026-03-24
 
 ### Patch
