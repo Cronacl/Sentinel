@@ -89,17 +89,11 @@ async function findExecutableInPath(
   return null;
 }
 
-function buildInteractiveShellLookupArgs(shellPath: string, script: string) {
-  const shellName = path.basename(shellPath).toLowerCase();
-
-  if (shellName === "fish") {
-    return ["-i", "-c", script];
-  }
-
+function buildInteractiveShellLookupArgs(script: string) {
   return ["-i", "-c", script];
 }
 
-function buildShellLookupScript() {
+function buildPosixShellLookupScript() {
   return [
     "if ! command -v codex >/dev/null 2>&1; then",
     "  exit 1",
@@ -109,6 +103,20 @@ function buildShellLookupScript() {
     `printf '%s\\n' '${CODEX_PATH_END_MARKER}'`,
     `printf '%s\\n' '${SHELL_PATH_START_MARKER}'`,
     `printf '%s\\n' \"$PATH\"`,
+    `printf '%s\\n' '${SHELL_PATH_END_MARKER}'`,
+  ].join("\n");
+}
+
+function buildFishShellLookupScript() {
+  return [
+    "if not command -v codex >/dev/null 2>/dev/null",
+    "  exit 1",
+    "end",
+    `printf '%s\\n' '${CODEX_PATH_START_MARKER}'`,
+    "command -v codex",
+    `printf '%s\\n' '${CODEX_PATH_END_MARKER}'`,
+    `printf '%s\\n' '${SHELL_PATH_START_MARKER}'`,
+    "printf '%s\\n' (string join : -- $PATH)",
     `printf '%s\\n' '${SHELL_PATH_END_MARKER}'`,
   ].join("\n");
 }
@@ -147,17 +155,59 @@ export function parseShellLookupOutput(stdout: string): ShellLookupResult {
   };
 }
 
+async function resolveCodexCliFromWindowsWhere() {
+  if (process.platform !== "win32") {
+    return null;
+  }
+
+  const stdout = await new Promise<string>((resolve, reject) => {
+    execFile("where", ["codex"], { env: process.env }, (error, output) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve(output.trim());
+    });
+  }).catch(() => null);
+
+  if (!stdout) {
+    return null;
+  }
+
+  const candidates = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (const candidatePath of candidates) {
+    if (await isExecutable(candidatePath)) {
+      return {
+        command: candidatePath,
+        env: process.env,
+      } satisfies ResolvedCodexCli;
+    }
+  }
+
+  return null;
+}
+
 async function resolveCodexCliFromShell() {
   if (process.platform === "win32") {
     return null;
   }
 
   const shellPath = process.env.SHELL?.trim() || "/bin/zsh";
+  const shellName = path.basename(shellPath).toLowerCase();
+  const shellLookupScript =
+    shellName === "fish"
+      ? buildFishShellLookupScript()
+      : buildPosixShellLookupScript();
 
   const stdout = await new Promise<string>((resolve, reject) => {
     execFile(
       shellPath,
-      buildInteractiveShellLookupArgs(shellPath, buildShellLookupScript()),
+      buildInteractiveShellLookupArgs(shellLookupScript),
       {
         env: {
           ...process.env,
@@ -215,6 +265,11 @@ export async function resolveCodexCli(options?: { forceRefresh?: boolean }) {
         command: directCommand,
         env: process.env,
       } satisfies ResolvedCodexCli;
+    }
+
+    const windowsWhereCommand = await resolveCodexCliFromWindowsWhere();
+    if (windowsWhereCommand) {
+      return windowsWhereCommand;
     }
 
     return await resolveCodexCliFromShell();
