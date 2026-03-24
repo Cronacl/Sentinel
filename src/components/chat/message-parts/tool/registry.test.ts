@@ -70,7 +70,12 @@ describe("resolveRenderer", () => {
   it("uses the CodexShellTool renderer for codex_command_execution", () => {
     const renderer = resolveRenderer({
       input: { command: "npm test", cwd: "/workspace" },
-      output: { output: "ok", exitCode: 0, durationMs: 52, status: "completed" },
+      output: {
+        output: "ok",
+        exitCode: 0,
+        durationMs: 52,
+        status: "completed",
+      },
       state: "output-available",
       toolCallId: "tool-call-codex-1",
       toolName: "codex_command_execution",
@@ -109,7 +114,12 @@ describe("resolveRenderer", () => {
   it("uses the CodexMcpTool renderer for codex_mcp_tool_call", () => {
     const renderer = resolveRenderer({
       input: { arguments: {}, server: "test-server", tool: "list" },
-      output: { durationMs: 100, error: null, result: null, status: "completed" },
+      output: {
+        durationMs: 100,
+        error: null,
+        result: null,
+        status: "completed",
+      },
       state: "output-available",
       toolCallId: "tool-call-codex-mcp",
       toolName: "codex_mcp_tool_call",
@@ -186,7 +196,12 @@ describe("resolveRenderer", () => {
 
   it("uses the CodexCollabAgentTool renderer for codex_collab_agent", () => {
     const renderer = resolveRenderer({
-      input: { prompt: null, receiverThreadIds: ["t1"], senderThreadId: "t0", tool: "agent" },
+      input: {
+        prompt: null,
+        receiverThreadIds: ["t1"],
+        senderThreadId: "t0",
+        tool: "agent",
+      },
       output: { agentsStates: {}, status: "completed" },
       state: "output-available",
       toolCallId: "tool-call-codex-ca",

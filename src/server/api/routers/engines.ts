@@ -37,15 +37,15 @@ export const enginesRouter = createTRPCRouter({
 
     return [
       {
-        description: "Sentinel-managed runtime with plans, memory, and workspace tools.",
+        description:
+          "Sentinel-managed runtime with plans, memory, and workspace tools.",
         engine: "sentinel" as const,
         error: null,
         isAvailable: true,
         label: "Sentinel",
       },
       {
-        description:
-          "Use the Codex CLI already configured on this machine.",
+        description: "Use the Codex CLI already configured on this machine.",
         engine: "codex" as const,
         error: codex.error,
         isAvailable:
@@ -100,62 +100,67 @@ export const enginesRouter = createTRPCRouter({
         preferences.map((p) => [`${p.provider}:${p.modelId}`, p]),
       );
 
-      return (Object.keys(MODEL_CATALOG) as AIProvider[]).flatMap((provider) => {
-        const builtIn = getModelsForProvider(provider).map((model) => {
-          const compositeId = getCompositeModelId(provider, model.id);
-          const pref = prefMap.get(compositeId);
+      return (Object.keys(MODEL_CATALOG) as AIProvider[]).flatMap(
+        (provider) => {
+          const builtIn = getModelsForProvider(provider).map((model) => {
+            const compositeId = getCompositeModelId(provider, model.id);
+            const pref = prefMap.get(compositeId);
 
-          return {
-            contextWindow: model.contextWindow,
-            defaultReasoningEffort: getDefaultReasoningEffort(provider, model.id),
-            description: model.description,
-            displayName: model.displayName,
-            engine: "sentinel" as const,
-            inputModalities: model.capabilities.includes("vision")
-              ? ["text", "image"]
-              : ["text"],
-            isConnected: connectedSet.has(provider),
-            isEnabled: pref?.isEnabled ?? true,
-            modelId: compositeId,
-            provider,
-            rawModelId: model.id,
-            supportedReasoningEfforts: getSupportedReasoningEfforts(
+            return {
+              contextWindow: model.contextWindow,
+              defaultReasoningEffort: getDefaultReasoningEffort(
+                provider,
+                model.id,
+              ),
+              description: model.description,
+              displayName: model.displayName,
+              engine: "sentinel" as const,
+              inputModalities: model.capabilities.includes("vision")
+                ? ["text", "image"]
+                : ["text"],
+              isConnected: connectedSet.has(provider),
+              isEnabled: pref?.isEnabled ?? true,
+              modelId: compositeId,
               provider,
-              model.id,
-            ),
-          };
-        });
+              rawModelId: model.id,
+              supportedReasoningEfforts: getSupportedReasoningEfforts(
+                provider,
+                model.id,
+              ),
+            };
+          });
 
-        const customModels = preferences
-          .filter(
-            (preference) =>
-              preference.provider === provider &&
-              preference.isCustom &&
-              !isKnownModel(provider, preference.modelId),
-          )
-          .map((preference) => ({
-            contextWindow: undefined as number | undefined,
-            defaultReasoningEffort: getDefaultReasoningEffort(
+          const customModels = preferences
+            .filter(
+              (preference) =>
+                preference.provider === provider &&
+                preference.isCustom &&
+                !isKnownModel(provider, preference.modelId),
+            )
+            .map((preference) => ({
+              contextWindow: undefined as number | undefined,
+              defaultReasoningEffort: getDefaultReasoningEffort(
+                provider,
+                preference.modelId,
+              ),
+              description: "Custom model",
+              displayName: preference.modelId,
+              engine: "sentinel" as const,
+              inputModalities: ["text"] as string[],
+              isConnected: connectedSet.has(provider),
+              isEnabled: preference.isEnabled,
+              modelId: getCompositeModelId(provider, preference.modelId),
               provider,
-              preference.modelId,
-            ),
-            description: "Custom model",
-            displayName: preference.modelId,
-            engine: "sentinel" as const,
-            inputModalities: ["text"] as string[],
-            isConnected: connectedSet.has(provider),
-            isEnabled: preference.isEnabled,
-            modelId: getCompositeModelId(provider, preference.modelId),
-            provider,
-            rawModelId: preference.modelId,
-            supportedReasoningEfforts: getSupportedReasoningEfforts(
-              provider,
-              preference.modelId,
-            ),
-          }));
+              rawModelId: preference.modelId,
+              supportedReasoningEfforts: getSupportedReasoningEfforts(
+                provider,
+                preference.modelId,
+              ),
+            }));
 
-        return [...builtIn, ...customModels];
-      });
+          return [...builtIn, ...customModels];
+        },
+      );
     }),
 
   codexReview: protectedProcedure

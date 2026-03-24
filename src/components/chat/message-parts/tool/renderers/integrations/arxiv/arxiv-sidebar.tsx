@@ -3,12 +3,7 @@
 import { memo, useCallback, useState } from "react";
 import { ArrowLeft02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  Chip,
-  CloseButton,
-  ScrollShadow,
-  Separator,
-} from "@heroui/react";
+import { Chip, CloseButton, ScrollShadow, Separator } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
 import { IntegrationProviderIcon } from "@/components/icons/integration-provider-icon";

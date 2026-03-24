@@ -25,10 +25,7 @@ import {
 import { getErrorMessage } from "@/lib/errors";
 import { sileo } from "sileo";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
-import {
-  AUTOMATION_SCHEDULE_TYPES,
-  type ChatEngine,
-} from "@/server/db/enums";
+import { AUTOMATION_SCHEDULE_TYPES, type ChatEngine } from "@/server/db/enums";
 import type { AutomationTemplate } from "@/components/automations/automation-templates";
 import {
   getAvailableAutomationModels,
@@ -384,7 +381,10 @@ export function NewAutomationModal({
 
   const selectedModel = useMemo(() => {
     if (!selectedModelKey || selectedModelKey === "__default__") return null;
-    return availableModels.find((model) => model.modelId === selectedModelKey) ?? null;
+    return (
+      availableModels.find((model) => model.modelId === selectedModelKey) ??
+      null
+    );
   }, [availableModels, selectedModelKey]);
 
   const supportedReasoningEfforts = useMemo(() => {
@@ -417,11 +417,7 @@ export function NewAutomationModal({
     );
     form.setValue("modelId", nextSelection.modelId);
     form.setValue("reasoningEffort", nextSelection.reasoningEffort ?? "");
-  }, [
-    availableModels,
-    form,
-    modelOptions,
-  ]);
+  }, [availableModels, form, modelOptions]);
 
   useEffect(() => {
     if (!selectedModelKey || selectedModelKey === "__default__") {

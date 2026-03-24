@@ -173,9 +173,7 @@ export function ComposerToolbar({
                   <ListBox
                     aria-label="Engine"
                     disabledKeys={engineOptions
-                      .filter(
-                        (e) => !e.isAvailable && e.engine !== "sentinel",
-                      )
+                      .filter((e) => !e.isAvailable && e.engine !== "sentinel")
                       .map((e) => e.engine)}
                     selectedKeys={[selectedEngine]}
                     selectionMode="single"
@@ -195,8 +193,7 @@ export function ComposerToolbar({
                         textValue={engine.label}
                       >
                         <span className="capitalize">{engine.label}</span>
-                        {!engine.isAvailable &&
-                        engine.engine !== "sentinel" ? (
+                        {!engine.isAvailable && engine.engine !== "sentinel" ? (
                           <span className="ml-auto text-[10px] text-warning">
                             Unavailable
                           </span>

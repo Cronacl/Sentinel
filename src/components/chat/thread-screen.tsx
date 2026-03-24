@@ -813,10 +813,7 @@ export function ThreadScreen({
                     />
                     <Label>Start review</Label>
                   </Dropdown.Item>
-                  <Dropdown.Item
-                    id="codex-rollback"
-                    textValue="Undo last turn"
-                  >
+                  <Dropdown.Item id="codex-rollback" textValue="Undo last turn">
                     <HugeiconsIcon
                       color="currentColor"
                       icon={ArrowTurnBackwardIcon}
@@ -825,10 +822,7 @@ export function ThreadScreen({
                     />
                     <Label>Undo last turn</Label>
                   </Dropdown.Item>
-                  <Dropdown.Item
-                    id="codex-compact"
-                    textValue="Compact context"
-                  >
+                  <Dropdown.Item id="codex-compact" textValue="Compact context">
                     <HugeiconsIcon
                       color="currentColor"
                       icon={MinimizeScreenIcon}

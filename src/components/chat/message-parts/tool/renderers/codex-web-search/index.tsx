@@ -73,9 +73,7 @@ function ActionDetails({ action }: { action: WebSearchAction }) {
       return action.pattern ? (
         <p className="text-[12px] text-foreground/60">
           Searched page for{" "}
-          <span className="font-mono text-foreground/80">
-            {action.pattern}
-          </span>
+          <span className="font-mono text-foreground/80">{action.pattern}</span>
         </p>
       ) : null;
     case "other":
@@ -114,9 +112,7 @@ function buildSummary(
     return `Finding in page`;
   }
 
-  const queryLabel = input.query
-    ? `\u201c${input.query}\u201d`
-    : "the web";
+  const queryLabel = input.query ? `\u201c${input.query}\u201d` : "the web";
   if (flags.isDone) return `Searched for ${queryLabel}`;
   if (flags.isRunning) return `Searching for ${queryLabel}`;
   return `Searching for ${queryLabel}`;

@@ -13,9 +13,7 @@ import {
   languageToVSCodeIcon,
 } from "@/lib/syntax/highlighter";
 
-type FileChangeKind =
-  | string
-  | { type: string; move_path?: string | null };
+type FileChangeKind = string | { type: string; move_path?: string | null };
 
 type FileChange = {
   diff?: string;
@@ -313,9 +311,7 @@ function FileChangeList({ changes }: { changes: FileChange[] }) {
               icon={icon}
             />
             <span className="min-w-0 flex-1 truncate font-mono text-[11px]">
-              {dir ? (
-                <span className="text-foreground/30">{dir}</span>
-              ) : null}
+              {dir ? <span className="text-foreground/30">{dir}</span> : null}
               <span className="text-foreground/60">{name}</span>
               {getMovePath(change.kind) && (
                 <span className="text-foreground/30">
@@ -375,8 +371,7 @@ export const CodexFileChangeTool = memo(function CodexFileChangeTool({
   }, [isRunning, part.state, part.toolCallId]);
 
   const diffSections = useMemo(
-    () =>
-      fileInput ? buildDiffSections(fileInput.changes, fileOutput) : [],
+    () => (fileInput ? buildDiffSections(fileInput.changes, fileOutput) : []),
     [fileInput, fileOutput],
   );
 
@@ -455,8 +450,7 @@ export const CodexFileChangeTool = memo(function CodexFileChangeTool({
               <button
                 className="h-7 min-w-0 rounded-md px-3 text-[11px] text-danger/70 hover:bg-danger/5"
                 onClick={() =>
-                  approvalId &&
-                  onApproveWithDecision?.(approvalId, "cancel")
+                  approvalId && onApproveWithDecision?.(approvalId, "cancel")
                 }
                 type="button"
               >

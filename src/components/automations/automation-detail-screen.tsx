@@ -36,10 +36,7 @@ import {
 import { SidebarToggle, useShell } from "@/components/shell";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
-import {
-  AUTOMATION_SCHEDULE_TYPES,
-  type ChatEngine,
-} from "@/server/db/enums";
+import { AUTOMATION_SCHEDULE_TYPES, type ChatEngine } from "@/server/db/enums";
 import {
   getAvailableAutomationModels,
   getAutomationEngineOptions,
@@ -353,7 +350,10 @@ export function AutomationDetailScreen({
 
   const selectedModel = useMemo(() => {
     if (!selectedModelKey || selectedModelKey === "__default__") return null;
-    return availableModels.find((model) => model.modelId === selectedModelKey) ?? null;
+    return (
+      availableModels.find((model) => model.modelId === selectedModelKey) ??
+      null
+    );
   }, [availableModels, selectedModelKey]);
 
   const supportedReasoningEfforts = useMemo(() => {

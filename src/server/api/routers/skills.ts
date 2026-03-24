@@ -74,8 +74,9 @@ async function findCodexInstalledSkill(name: string) {
   const response = await codex.listSkills();
   const normalizedName = name.trim().toLowerCase();
   return (
-    response.skills.find((skill) => skill.name.trim().toLowerCase() === normalizedName) ??
-    null
+    response.skills.find(
+      (skill) => skill.name.trim().toLowerCase() === normalizedName,
+    ) ?? null
   );
 }
 
@@ -168,8 +169,9 @@ export const skillsRouter = createTRPCRouter({
       snapshot.skills.map((s) => s.name.trim().toLowerCase()),
     );
     const installedCodexNames = new Set(
-      (await buildCodexSkillList().catch(() => []))
-        .map((skill) => skill.name.trim().toLowerCase()),
+      (await buildCodexSkillList().catch(() => [])).map((skill) =>
+        skill.name.trim().toLowerCase(),
+      ),
     );
 
     return SKILL_REGISTRY.map((entry) => ({

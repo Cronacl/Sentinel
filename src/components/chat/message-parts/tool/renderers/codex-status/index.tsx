@@ -114,11 +114,7 @@ function isCollabOutput(value: unknown): value is CollabAgentOutput {
   return typeof v.status === "string";
 }
 
-function AgentStatesBadge({
-  states,
-}: {
-  states: Record<string, unknown>;
-}) {
+function AgentStatesBadge({ states }: { states: Record<string, unknown> }) {
   const entries = Object.entries(states);
   if (entries.length === 0) return null;
 

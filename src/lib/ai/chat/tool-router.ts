@@ -720,11 +720,7 @@ export async function routeToolExposure(
   });
 
   if (!input.resolvedProviderId) {
-    return buildDeterministicFallbackResult(
-      input,
-      "no-provider-id",
-      evidence,
-    );
+    return buildDeterministicFallbackResult(input, "no-provider-id", evidence);
   }
 
   let routerModelId: string | null = null;

@@ -106,11 +106,7 @@ function buildSummary(
   }
 
   if (part.state === "output-error" || output?.status === "failed") {
-    return (
-      <>
-        MCP call failed {toolLabel}
-      </>
-    );
+    return <>MCP call failed {toolLabel}</>;
   }
 
   if (output?.status === "completed" || part.state === "output-available") {
@@ -217,7 +213,8 @@ export const CodexMcpTool = memo(function CodexMcpTool({
     : [];
   const hasArgs =
     mcpInput.arguments !== undefined && mcpInput.arguments !== null;
-  const hasResult = mcpOutput?.result !== undefined && mcpOutput?.result !== null;
+  const hasResult =
+    mcpOutput?.result !== undefined && mcpOutput?.result !== null;
 
   return (
     <ToolLayout

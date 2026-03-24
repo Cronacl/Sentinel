@@ -131,5 +131,8 @@ export function usePlanMode({
     updateThreadSelection,
   ]);
 
-  return { handleTogglePlanMode, planMode: planModeAvailable ? planMode : false };
+  return {
+    handleTogglePlanMode,
+    planMode: planModeAvailable ? planMode : false,
+  };
 }

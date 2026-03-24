@@ -79,10 +79,7 @@ export const PubMedSearchTool = memo(function PubMedSearchTool({
             : "text-foreground/70"
       } ${canOpen ? "cursor-pointer hover:text-foreground transition-colors" : ""}`}
     >
-      <IntegrationProviderIcon
-        provider="pubmed"
-        className="h-4 w-4 shrink-0"
-      />
+      <IntegrationProviderIcon provider="pubmed" className="h-4 w-4 shrink-0" />
       <span className="min-w-0 flex-1">{label}</span>
       {canOpen ? (
         <span className="shrink-0 text-[11px] text-foreground/30 opacity-0 transition-opacity group-hover:opacity-100">
@@ -144,10 +141,7 @@ export const PubMedArticleTool = memo(function PubMedArticleTool({
             : "text-foreground/70"
       } ${canOpen ? "cursor-pointer hover:text-foreground transition-colors" : ""}`}
     >
-      <IntegrationProviderIcon
-        provider="pubmed"
-        className="h-4 w-4 shrink-0"
-      />
+      <IntegrationProviderIcon provider="pubmed" className="h-4 w-4 shrink-0" />
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {canOpen ? (
         <span className="shrink-0 text-[11px] text-foreground/30 opacity-0 transition-opacity group-hover:opacity-100">

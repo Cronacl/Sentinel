@@ -2,7 +2,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
-const startReview = mock(async () => ({ review: { id: "review-1", text: "ok" } }));
+const startReview = mock(async () => ({
+  review: { id: "review-1", text: "ok" },
+}));
 const getOwnedThreadOrThrow = mock(async () => ({
   chatEngineState: {
     codex: {
@@ -42,7 +44,8 @@ mock.module("@/lib/ai/providers/models", () => ({
 }));
 
 mock.module("@/lib/ai/providers/model-selection", () => ({
-  getCompositeModelId: (provider: string, modelId: string) => `${provider}:${modelId}`,
+  getCompositeModelId: (provider: string, modelId: string) =>
+    `${provider}:${modelId}`,
 }));
 
 mock.module("@/server/db/schema", () => ({
