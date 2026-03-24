@@ -69,6 +69,7 @@ describe("automationsRouter", () => {
         workspace: { id: "workspace-1" },
       },
       input: {
+        chatEngine: "codex",
         modelId: "openai:gpt-5.2",
         prompt: "Review the codebase.",
         reasoningEffort: "medium",
@@ -84,7 +85,10 @@ describe("automationsRouter", () => {
       "workspace-1",
     );
     expect(values).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: "workspace-1" }),
+      expect.objectContaining({
+        chatEngine: "codex",
+        workspaceId: "workspace-1",
+      }),
     );
     expect(result).toEqual({ id: "automation-1", workspaceId: "workspace-1" });
   });

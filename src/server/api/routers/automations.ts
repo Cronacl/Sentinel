@@ -143,6 +143,7 @@ export const automationsRouter = createTRPCRouter({
       const [row] = await ctx.db
         .insert(automations)
         .values({
+          chatEngine: input.chatEngine ?? "sentinel",
           userId: ctx.user.id,
           title: input.title,
           prompt: input.prompt,
@@ -187,6 +188,7 @@ export const automationsRouter = createTRPCRouter({
       const merged = {
         title: input.title ?? existing.title,
         prompt: input.prompt ?? existing.prompt,
+        chatEngine: input.chatEngine ?? existing.chatEngine ?? "sentinel",
         workspaceId:
           input.workspaceId !== undefined
             ? await resolveAutomationWorkspaceId(ctx, input.workspaceId)
@@ -240,6 +242,8 @@ export const automationsRouter = createTRPCRouter({
         updateData.title = updateFields.title;
       if (updateFields.prompt !== undefined)
         updateData.prompt = updateFields.prompt;
+      if (updateFields.chatEngine !== undefined)
+        updateData.chatEngine = updateFields.chatEngine;
       if (updateFields.workspaceId !== undefined)
         updateData.workspaceId = merged.workspaceId;
       if (updateFields.scheduleType !== undefined)
