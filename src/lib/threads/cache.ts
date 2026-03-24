@@ -7,6 +7,7 @@ type ThreadListData = RouterOutputs["threads"]["list"];
 type ThreadGetThread = ThreadGetData["thread"];
 type ThreadGetWorkspace = ThreadGetData["workspace"];
 type ThreadSettingsPatch = {
+  chatEngine?: "codex" | "sentinel";
   chatModelId?: string | null;
   chatReasoningEffort?: string | null;
   mode?: "chat" | "plan";
@@ -94,6 +95,7 @@ function applyThreadSettingsPatch<
 >(thread: T, patch: ThreadSettingsPatch) {
   return {
     ...thread,
+    ...(patch.chatEngine === undefined ? {} : { chatEngine: patch.chatEngine }),
     ...(patch.chatModelId === undefined
       ? {}
       : { chatModelId: patch.chatModelId }),
@@ -204,6 +206,7 @@ function buildThreadListItem(
   : never {
   return {
     archivedAt: thread.archivedAt,
+    chatEngine: thread.chatEngine,
     chatModelId: thread.chatModelId,
     chatReasoningEffort: thread.chatReasoningEffort,
     createdAt: thread.createdAt,

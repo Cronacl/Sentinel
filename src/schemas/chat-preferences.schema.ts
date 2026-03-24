@@ -2,25 +2,27 @@ import { z } from "zod";
 
 import { REASONING_EFFORTS } from "@/lib/ai/providers/models";
 import { THREAD_MODES } from "@/lib/plan";
+import { CHAT_ENGINES } from "@/server/db/enums";
 
 const reasoningEffortSchema = z.enum(REASONING_EFFORTS);
-const compositeModelIdSchema = z
-  .string()
-  .trim()
-  .regex(/^[a-z_]+:.+$/, 'Model must use the "provider:model" format.');
+const chatEngineSchema = z.enum(CHAT_ENGINES);
+const chatModelIdSchema = z.string().trim().min(1, "Model is required.");
 
 const chatSelectionFieldsSchema = z.object({
+  engine: chatEngineSchema.nullish(),
   mode: z.enum(THREAD_MODES).nullish(),
-  modelId: compositeModelIdSchema.optional(),
+  modelId: chatModelIdSchema.optional(),
   reasoningEffort: reasoningEffortSchema.nullish(),
 });
 
 function hasChatSelectionUpdate(value: {
+  engine?: (typeof CHAT_ENGINES)[number] | null;
   mode?: (typeof THREAD_MODES)[number] | null;
   modelId?: string;
   reasoningEffort?: (typeof REASONING_EFFORTS)[number] | null;
 }) {
   return (
+    value.engine !== undefined ||
     value.mode !== undefined ||
     value.modelId !== undefined ||
     value.reasoningEffort !== undefined

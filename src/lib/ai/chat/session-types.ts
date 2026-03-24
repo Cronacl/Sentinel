@@ -1,4 +1,4 @@
-import type { ThreadStatus } from "@/server/db/enums";
+import type { ChatEngine, ThreadStatus } from "@/server/db/enums";
 
 import type { ReasoningEffort } from "../providers/models";
 import type { ThreadUIMessage } from "../messages/types";
@@ -17,6 +17,7 @@ export type QueuedFollowUpSummary = {
 
 export type ThreadSessionSnapshot = {
   activeRunId: string | null;
+  chatEngine: ChatEngine;
   messages: ThreadUIMessage[];
   queuedFollowUps: QueuedFollowUpSummary[];
   threadId: string;

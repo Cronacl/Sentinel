@@ -56,6 +56,7 @@ describe("executeAutomationRun", () => {
     db.query = {
       automations: {
         findFirst: mock(async () => ({
+          chatEngine: "sentinel",
           id: "automation-1",
           prompt: "Review the codebase.",
           reasoningEffort: "medium",
@@ -101,6 +102,7 @@ describe("executeAutomationRun", () => {
     db.query = {
       automations: {
         findFirst: mock(async () => ({
+          chatEngine: "sentinel",
           id: "automation-1",
           prompt: "Review the codebase.",
           reasoningEffort: "medium",
@@ -143,6 +145,7 @@ describe("executeAutomationRun", () => {
     db.query = {
       automations: {
         findFirst: mock(async () => ({
+          chatEngine: "sentinel",
           id: "automation-1",
           prompt: "Review the codebase.",
           reasoningEffort: "medium",
@@ -196,5 +199,58 @@ describe("executeAutomationRun", () => {
         status: "paused",
       }),
     ]);
+  });
+
+  it("routes codex automations through the codex chat engine", async () => {
+    db.query = {
+      automations: {
+        findFirst: mock(async () => ({
+          chatEngine: "codex",
+          id: "automation-1",
+          modelId: "gpt-5.4",
+          prompt: "Review the codebase.",
+          reasoningEffort: "medium",
+          scheduleCron: null,
+          scheduleDayOfWeek: null,
+          scheduleTime: "09:00",
+          scheduleType: "daily",
+          status: "active",
+          title: "Daily review",
+          userId: "user-1",
+          workspace: {
+            id: "workspace-1",
+            isArchived: false,
+          },
+          workspaceId: "workspace-1",
+        })),
+      },
+    };
+
+    db.transaction = mock((callback: (tx: Record<string, any>) => unknown) =>
+      callback({
+        insert: () => ({
+          values: () => ({
+            run: () => undefined,
+          }),
+        }),
+        select: () => ({
+          from: () => ({
+            where: () => ({
+              get: () => null,
+            }),
+          }),
+        }),
+      }),
+    );
+
+    await executeAutomationRun("automation-1");
+
+    expect(runThreadChat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        engine: "codex",
+        modelId: "gpt-5.4",
+      }),
+      "user-1",
+    );
   });
 });

@@ -34,9 +34,7 @@ export function RightSidebar() {
           style={{
             width: SIDEBAR_WIDTH,
             maxWidth: "90vw",
-            transform: rightSidebarOpen
-              ? "translateX(0)"
-              : `translateX(100%)`,
+            transform: rightSidebarOpen ? "translateX(0)" : `translateX(100%)`,
           }}
         >
           <div className="flex h-full flex-col">

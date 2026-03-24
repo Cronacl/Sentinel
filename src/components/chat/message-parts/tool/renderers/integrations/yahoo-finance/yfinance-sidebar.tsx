@@ -8,12 +8,7 @@ import {
   ArrowDown01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  Chip,
-  CloseButton,
-  ScrollShadow,
-  Separator,
-} from "@heroui/react";
+import { Chip, CloseButton, ScrollShadow, Separator } from "@heroui/react";
 
 import { IntegrationProviderIcon } from "@/components/icons/integration-provider-icon";
 import { useRightSidebar } from "@/components/shell/shell-context";
@@ -193,7 +188,10 @@ function QuoteDetailView({ quote }: { quote: QuoteResult }) {
           />
           <MetaRow
             label="Previous Close"
-            value={formatPrice(quote.regularMarketPreviousClose, quote.currency)}
+            value={formatPrice(
+              quote.regularMarketPreviousClose,
+              quote.currency,
+            )}
           />
           <MetaRow
             label="Day Range"
@@ -361,7 +359,9 @@ export const YFinanceQuoteSidebar = memo(function YFinanceQuoteSidebar({
       <SidebarHeader
         title="Stock Quotes"
         subtitle={
-          !isSingle ? `${quotes.length} quote${quotes.length !== 1 ? "s" : ""}` : undefined
+          !isSingle
+            ? `${quotes.length} quote${quotes.length !== 1 ? "s" : ""}`
+            : undefined
         }
         selectedQuote={!isSingle ? selectedQuote : null}
         onBack={handleBack}

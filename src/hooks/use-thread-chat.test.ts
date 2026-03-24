@@ -7,6 +7,7 @@ import {
   fetchThreadSessionSnapshot,
   formatClientTimingLog,
   mergeThreadSessionStateFromSnapshot,
+  mergeThreadSessionStateWithError,
 } from "./use-thread-chat";
 
 function createMessage(
@@ -36,10 +37,11 @@ function createQueuedFollowUp(id: string, text: string) {
 }
 
 function createSnapshot(
-  partial: Omit<ThreadSessionSnapshot, "threadTitle"> &
-    Partial<Pick<ThreadSessionSnapshot, "threadTitle">>,
+  partial: Omit<ThreadSessionSnapshot, "chatEngine" | "threadTitle"> &
+    Partial<Pick<ThreadSessionSnapshot, "chatEngine" | "threadTitle">>,
 ): ThreadSessionSnapshot {
   return {
+    chatEngine: "sentinel",
     threadTitle: "Thread title",
     ...partial,
   };
@@ -54,6 +56,7 @@ describe("mergeThreadSessionStateFromSnapshot", () => {
     const queuedFollowUps = [createQueuedFollowUp("queued-1", "same queue")];
     const current = {
       activeRunId: "run-1",
+      chatEngine: "sentinel" as const,
       composerState: { pendingActionCount: 0 },
       connectionState: "connected" as const,
       errorMessage: null,
@@ -85,6 +88,7 @@ describe("mergeThreadSessionStateFromSnapshot", () => {
   it("preserves newer local messages while applying queue and status updates", () => {
     const current = {
       activeRunId: "run-1",
+      chatEngine: "sentinel" as const,
       composerState: { pendingActionCount: 0 },
       connectionState: "connected" as const,
       errorMessage: "stale error",
@@ -121,6 +125,7 @@ describe("mergeThreadSessionStateFromSnapshot", () => {
   it("replaces messages when the snapshot is newer", () => {
     const current = {
       activeRunId: "run-1",
+      chatEngine: "sentinel" as const,
       composerState: { pendingActionCount: 0 },
       connectionState: "connected" as const,
       errorMessage: null,
@@ -154,6 +159,7 @@ describe("mergeThreadSessionStateFromSnapshot", () => {
   it("replaces messages when branch selection changes message ids at the same revision", () => {
     const current = {
       activeRunId: null,
+      chatEngine: "sentinel" as const,
       composerState: { pendingActionCount: 0 },
       connectionState: "idle" as const,
       errorMessage: null,
@@ -186,6 +192,7 @@ describe("mergeThreadSessionStateFromSnapshot", () => {
   it("applies lower-revision snapshots when there is no active run", () => {
     const current = {
       activeRunId: null,
+      chatEngine: "sentinel" as const,
       composerState: { pendingActionCount: 0 },
       connectionState: "idle" as const,
       errorMessage: null,
@@ -214,6 +221,39 @@ describe("mergeThreadSessionStateFromSnapshot", () => {
     expect(result).not.toBe(current);
     expect(result.messages).toEqual(snapshot.messages);
     expect(result.lastAppliedRevision).toBe(5);
+  });
+
+  it("updates the stored chat engine from newer snapshots", () => {
+    const current = {
+      activeRunId: "run-1",
+      chatEngine: "sentinel" as const,
+      composerState: { pendingActionCount: 0 },
+      connectionState: "connected" as const,
+      errorMessage: null,
+      lastAppliedRevision: 1,
+      lastSyncedAt: null,
+      messages: [createMessage("assistant-1", "before switch", 1)],
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadTitle: "Thread title",
+      threadStatus: "streaming" as const,
+    };
+    const snapshot = createSnapshot({
+      activeRunId: "run-1",
+      chatEngine: "codex",
+      messages: [createMessage("assistant-2", "after switch", 2)],
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadStatus: "streaming",
+    });
+
+    const result = mergeThreadSessionStateFromSnapshot(
+      current,
+      snapshot,
+      "connected",
+    );
+
+    expect(result.chatEngine).toBe("codex");
   });
 });
 
@@ -247,6 +287,58 @@ describe("fetchThreadSessionSnapshot", () => {
       cache: "no-store",
       method: "GET",
     });
+  });
+});
+
+describe("mergeThreadSessionStateWithError", () => {
+  it("stores action errors as shared error state when the thread is idle", () => {
+    const current = {
+      activeRunId: null,
+      chatEngine: "sentinel" as const,
+      composerState: { pendingActionCount: 0 },
+      connectionState: "idle" as const,
+      errorMessage: null,
+      lastAppliedRevision: 0,
+      lastSyncedAt: null,
+      messages: [],
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadTitle: "Thread title",
+      threadStatus: "idle" as const,
+    };
+
+    const result = mergeThreadSessionStateWithError(
+      current,
+      "Unable to process the chat request.",
+    );
+
+    expect(result.connectionState).toBe("error");
+    expect(result.errorMessage).toBe("Unable to process the chat request.");
+  });
+
+  it("preserves the active streaming connection while storing action errors", () => {
+    const current = {
+      activeRunId: "run-1",
+      chatEngine: "sentinel" as const,
+      composerState: { pendingActionCount: 0 },
+      connectionState: "connected" as const,
+      errorMessage: null,
+      lastAppliedRevision: 2,
+      lastSyncedAt: null,
+      messages: [createMessage("assistant-1", "working", 2)],
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadTitle: "Thread title",
+      threadStatus: "streaming" as const,
+    };
+
+    const result = mergeThreadSessionStateWithError(
+      current,
+      "Unable to queue the follow-up.",
+    );
+
+    expect(result.connectionState).toBe("connected");
+    expect(result.errorMessage).toBe("Unable to queue the follow-up.");
   });
 });
 

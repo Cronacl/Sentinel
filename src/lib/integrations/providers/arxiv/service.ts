@@ -49,9 +49,7 @@ function parseEntry(entryXml: string): ArxivPaper {
   const published = extractText(entryXml, "published");
   const updated = extractText(entryXml, "updated");
 
-  const categoryMatches = entryXml.match(
-    /<category[^>]*term="([^"]*)"/g,
-  );
+  const categoryMatches = entryXml.match(/<category[^>]*term="([^"]*)"/g);
   const categories = (categoryMatches ?? []).map((m) => {
     const termMatch = m.match(/term="([^"]*)"/);
     return termMatch ? termMatch[1]! : "";
@@ -121,7 +119,9 @@ export class ArxivService {
   }
 
   async getPaper(arxivId: string): Promise<ArxivPaper> {
-    const cleanId = arxivId.replace(/^arxiv:/i, "").replace("https://arxiv.org/abs/", "");
+    const cleanId = arxivId
+      .replace(/^arxiv:/i, "")
+      .replace("https://arxiv.org/abs/", "");
     const params = new URLSearchParams({
       id_list: cleanId,
       max_results: "1",

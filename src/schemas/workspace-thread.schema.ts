@@ -2,6 +2,7 @@ import { z } from "zod";
 import { REASONING_EFFORTS } from "@/lib/ai/providers/models";
 import { THREAD_MODES } from "@/lib/plan";
 import { permissionModeSchema } from "@/schemas/security.schema";
+import { CHAT_ENGINES } from "@/server/db/enums";
 
 export const threadListOrganizeBySchema = z.enum([
   "workspace",
@@ -9,6 +10,7 @@ export const threadListOrganizeBySchema = z.enum([
 ]);
 
 export const threadListSortBySchema = z.enum(["created", "updated"]);
+export const chatEngineSchema = z.enum(CHAT_ENGINES);
 
 export const threadMessageRoleSchema = z.enum(["system", "user", "assistant"]);
 
@@ -98,6 +100,7 @@ export const threadListSchema = z
   .optional();
 
 export const threadCreateSchema = z.object({
+  engine: chatEngineSchema.optional().default("sentinel"),
   mode: z.enum(THREAD_MODES).optional().default("chat"),
   summary: optionalText(500).optional().default(""),
   threadId: z.string().uuid().optional(),
@@ -123,6 +126,7 @@ const reasoningEffortSchema = z.enum(REASONING_EFFORTS);
 
 export const threadSettingsSchema = z
   .object({
+    engine: chatEngineSchema.optional(),
     mode: z.enum(THREAD_MODES).optional(),
     modelId: z.string().trim().min(1).optional(),
     reasoningEffort: reasoningEffortSchema.nullish(),
@@ -130,6 +134,7 @@ export const threadSettingsSchema = z
   })
   .refine(
     (value) =>
+      value.engine !== undefined ||
       value.mode !== undefined ||
       value.modelId !== undefined ||
       value.reasoningEffort !== undefined,

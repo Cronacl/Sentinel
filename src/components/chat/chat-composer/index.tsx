@@ -3,8 +3,6 @@
 import { EditorContent } from "@tiptap/react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-
-import { useOutsideClick } from "@/hooks/use-outside-click";
 import { DEFAULT_FOLLOW_UP_BEHAVIOR } from "@/schemas/general-settings.schema";
 import { getExactContextWindowUsage } from "@/lib/ai/chat/context-window";
 import { api } from "@/trpc/react";
@@ -33,6 +31,7 @@ export function ChatComposer({
   onCancelEdit,
   onQueueFollowUp,
   onRemoveQueuedFollowUp,
+  onSelectionChange,
   onSend,
   onStop,
   onSteerFollowUp,
@@ -47,8 +46,6 @@ export function ChatComposer({
   threadSelection = null,
 }: ChatComposerProps) {
   const handleSendRef = useRef<() => void>(() => {});
-  const composerMenuRef = useRef<HTMLDivElement | null>(null);
-  const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const utils = api.useUtils();
 
   const hasWorkspace = Boolean(activeWorkspace);
@@ -64,6 +61,7 @@ export function ChatComposer({
 
   const {
     globalSelectionQuery,
+    persistEngineSelection,
     persistSelection,
     updateGlobalSelection,
     updateThreadSelection,
@@ -89,36 +87,37 @@ export function ChatComposer({
   } = useAttachments({ attachmentSeed, promptSeedKey });
 
   const {
-    attachmentWarning,
     availableModels,
+    enginesQuery,
+    handleSelectEngine,
     handleSelectModel,
     handleSelectReasoningEffort,
-    modelMenuOpen,
-    modelMenuRef,
     modelsQuery,
-    reasoningLabel,
-    reasoningMenuOpen,
-    reasoningMenuRef,
+    selectedEngine,
+    selectedEngineStatus,
     selectedModel,
     selectedModelKey,
     selectedReasoningEffort,
-    setModelMenuOpen,
-    setReasoningMenuOpen,
     supportedReasoningEfforts,
     threadPersistenceReadyRef,
   } = useModelSelection({
-    attachments,
     globalSelectionQuery,
+    onSelectionChange,
+    persistEngineSelection,
     persistSelection,
     selectionScopeKey,
     threadSelection,
   });
 
+  const planModeAvailable = true;
   const { handleTogglePlanMode, planMode } = usePlanMode({
     canPersistThreadSelection,
     draftMode,
     globalSelectionQuery,
+    onSelectionChange,
+    planModeAvailable,
     persistSelection,
+    selectedEngine,
     selectedModelKey,
     selectedReasoningEffort,
     selectionScopeKey,
@@ -134,6 +133,7 @@ export function ChatComposer({
   const { editor, placeholderText } = useComposerEditor({
     isBusy,
     isLocked,
+    isThread: threadId != null,
     onAddBrowserFiles: addBrowserFiles,
     onSendRef: handleSendRef,
     promptSeed,
@@ -157,18 +157,6 @@ export function ChatComposer({
         })
       : null;
 
-  useOutsideClick([
-    { onOutsideClick: () => setModelMenuOpen(false), ref: modelMenuRef },
-    {
-      onOutsideClick: () => setReasoningMenuOpen(false),
-      ref: reasoningMenuRef,
-    },
-    {
-      onOutsideClick: () => setComposerMenuOpen(false),
-      ref: composerMenuRef,
-    },
-  ]);
-
   useEffect(() => {
     if (!canPersistThreadSelection || !threadSelection) {
       threadPersistenceReadyRef.current = false;
@@ -181,6 +169,7 @@ export function ChatComposer({
     const persistedReasoningEffort = threadSelection.reasoningEffort ?? null;
     const selectedMode = planMode ? "plan" : "chat";
     if (
+      (threadSelection.engine ?? "sentinel") === selectedEngine &&
       threadSelection.modelId === selectedModelKey &&
       persistedReasoningEffort === selectedReasoningEffort &&
       threadSelection.mode === selectedMode
@@ -189,13 +178,16 @@ export function ChatComposer({
     }
 
     persistSelection(selectedModelKey, selectedReasoningEffort, {
+      engine: selectedEngine,
       mode: selectedMode,
       skipGlobal: true,
     });
   }, [
     canPersistThreadSelection,
     planMode,
+    planModeAvailable,
     persistSelection,
+    selectedEngine,
     selectedModelKey,
     selectedReasoningEffort,
     threadPersistenceReadyRef,
@@ -216,6 +208,7 @@ export function ChatComposer({
       }
 
       const messagePayload = {
+        engine: selectedEngine,
         ...(files.length > 0 ? { files } : {}),
         modelId: selectedModelKey,
         reasoningEffort: selectedReasoningEffort,
@@ -250,6 +243,8 @@ export function ChatComposer({
     onSend,
     onSteerFollowUp,
     planMode,
+    planModeAvailable,
+    selectedEngine,
     selectedModelKey,
     selectedReasoningEffort,
     setAttachmentError,
@@ -263,21 +258,113 @@ export function ChatComposer({
   const disabledMessage =
     !modelsQuery.isLoading && !hasModels ? (
       <>
-        Connect a provider in{" "}
-        <Link className="text-foreground underline" href="/settings/providers">
-          Settings
-        </Link>
-        .
+        {selectedEngine === "codex" ? (
+          (selectedEngineStatus?.error ??
+          "Codex is unavailable in this Sentinel runtime.")
+        ) : (
+          <>
+            Connect a provider in{" "}
+            <Link
+              className="text-foreground underline"
+              href="/settings/providers"
+            >
+              Settings
+            </Link>
+            .
+          </>
+        )}
       </>
     ) : null;
 
+  const engineOptions =
+    enginesQuery.data?.map((engine) => ({
+      engine: engine.engine,
+      error: engine.error,
+      isAvailable: engine.isAvailable,
+      label: engine.label,
+    })) ?? [];
+  const showEngineSelector = !canPersistThreadSelection;
+
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  useEffect(() => {
+    if (isLocked) return;
+
+    const handleDragEnter = (e: DragEvent) => {
+      if (!e.dataTransfer?.types.includes("Files")) return;
+      e.preventDefault();
+      dragCounterRef.current += 1;
+      if (dragCounterRef.current === 1) setIsDraggingOver(true);
+    };
+
+    const handleDragLeave = (e: DragEvent) => {
+      if (!e.dataTransfer?.types.includes("Files")) return;
+      e.preventDefault();
+      dragCounterRef.current -= 1;
+      if (dragCounterRef.current <= 0) {
+        dragCounterRef.current = 0;
+        setIsDraggingOver(false);
+      }
+    };
+
+    const handleDragOver = (e: DragEvent) => {
+      if (!e.dataTransfer?.types.includes("Files")) return;
+      e.preventDefault();
+    };
+
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounterRef.current = 0;
+      setIsDraggingOver(false);
+      const files = e.dataTransfer?.files;
+      if (files && files.length > 0) {
+        addBrowserFiles(Array.from(files));
+      }
+    };
+
+    window.addEventListener("dragenter", handleDragEnter);
+    window.addEventListener("dragleave", handleDragLeave);
+    window.addEventListener("dragover", handleDragOver);
+    window.addEventListener("drop", handleDrop);
+
+    return () => {
+      window.removeEventListener("dragenter", handleDragEnter);
+      window.removeEventListener("dragleave", handleDragLeave);
+      window.removeEventListener("dragover", handleDragOver);
+      window.removeEventListener("drop", handleDrop);
+    };
+  }, [addBrowserFiles, isLocked]);
+
   return (
     <>
-      <div className="pointer-events-auto w-full rounded-[28px] border border-border/50 bg-background shadow-[0_0_10px_rgba(0,0,0,0.05)] dark:border-border/20 dark:bg-surface">
-        <div className="p-2.5">
+      {isDraggingOver ? (
+        <div className="pointer-events-none fixed inset-0 z-100 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3 rounded-3xl border-2 border-dashed border-accent/50 bg-surface/80 px-12 py-10">
+            <svg
+              className="size-10 text-accent"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.5}
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M12 16V4m0 0-4 4m4-4 4 4M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <p className="text-sm font-medium text-foreground">
+              Drop files to attach
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="pointer-events-auto w-full rounded-[24px] border border-border/50 bg-background shadow-[0_0_10px_rgba(0,0,0,0.05)] dark:border-border/20 dark:bg-surface">
+        <div className="px-2.5 py-2">
           <AttachmentManager
             attachmentError={attachmentError}
-            attachmentWarning={attachmentWarning}
             attachments={attachments}
             fileInputRef={fileInputRef}
             onFileInputChange={handleFileInputChange}
@@ -289,7 +376,7 @@ export function ChatComposer({
 
           {isEditing ? (
             <Button
-              className="mb-1"
+              className="mb-1 h-7"
               onClick={onCancelEdit}
               size="sm"
               variant="tertiary"
@@ -309,7 +396,7 @@ export function ChatComposer({
           />
 
           <div className="px-2">
-            <div className="min-h-[28px]">
+            <div className="min-h-[20px]">
               {!editor ? (
                 <div className="pointer-events-none py-1 text-[14px] text-muted/50">
                   {placeholderText}
@@ -326,11 +413,13 @@ export function ChatComposer({
           )}
 
           <ComposerToolbar
-            composerMenuOpen={composerMenuOpen}
-            composerMenuRef={composerMenuRef}
+            engineOptions={engineOptions}
             hasWorkspace={hasWorkspace}
             isBusy={isBusy}
             isLocked={isLocked}
+            onSelectEngine={handleSelectEngine}
+            selectedEngine={selectedEngine}
+            showEngineSelector={showEngineSelector}
             contextWindowIndicator={
               contextWindowIndicator
                 ? {
@@ -354,22 +443,14 @@ export function ChatComposer({
               <ModelSelector
                 availableModels={availableModels}
                 isLoading={modelsQuery.isLoading}
-                modelMenuOpen={modelMenuOpen}
-                modelMenuRef={modelMenuRef}
-                onModelMenuOpenChange={setModelMenuOpen}
-                onReasoningMenuOpenChange={setReasoningMenuOpen}
                 onSelectModel={handleSelectModel}
                 onSelectReasoningEffort={handleSelectReasoningEffort}
-                reasoningLabel={reasoningLabel}
-                reasoningMenuOpen={reasoningMenuOpen}
-                reasoningMenuRef={reasoningMenuRef}
                 selectedModel={selectedModel}
                 selectedModelKey={selectedModelKey}
                 selectedReasoningEffort={selectedReasoningEffort}
                 supportedReasoningEfforts={supportedReasoningEfforts}
               />
             }
-            onComposerMenuOpenChange={setComposerMenuOpen}
             onPickFiles={() => {
               void handlePickFiles();
             }}
@@ -378,13 +459,14 @@ export function ChatComposer({
             }}
             onStop={onStop}
             onTogglePlanMode={handleTogglePlanMode}
+            planModeAvailable={planModeAvailable}
             planMode={planMode}
             selectedModelKey={selectedModelKey}
           />
         </div>
 
         {activeWorkspace ? (
-          <div className="overflow-hidden rounded-b-[28px] border-t border-border/25">
+          <div className="overflow-hidden rounded-b-[24px] border-t border-border/25">
             <ComposerWorkspaceBar
               activeWorkspace={activeWorkspace}
               showBranchSwitcher={showBranchSwitcher}

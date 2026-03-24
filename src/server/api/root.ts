@@ -6,6 +6,7 @@ import { automationsRouter } from "@/server/api/routers/automations";
 import { authRouter } from "@/server/api/routers/auth";
 import { chatPreferencesRouter } from "@/server/api/routers/chat-preferences";
 import { generalSettingsRouter } from "@/server/api/routers/general-settings";
+import { enginesRouter } from "@/server/api/routers/engines";
 import { healthRouter } from "@/server/api/routers/health";
 import { memoryRouter } from "@/server/api/routers/memory";
 import { memorySettingsRouter } from "@/server/api/routers/memory-settings";
@@ -36,6 +37,7 @@ export const appRouter = createTRPCRouter({
   auth: authRouter,
   automations: automationsRouter,
   chatPreferences: chatPreferencesRouter,
+  engines: enginesRouter,
   generalSettings: generalSettingsRouter,
   health: healthRouter,
   integrations: integrationsRouter,

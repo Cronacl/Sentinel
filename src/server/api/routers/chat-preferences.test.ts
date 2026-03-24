@@ -40,6 +40,7 @@ describe("chatPreferencesRouter.updateGlobal", () => {
         db: { update },
         session: { user: { id: "user-1" } },
         user: {
+          defaultChatEngine: "sentinel",
           defaultChatMode: "chat",
           defaultChatModelId: "openai:gpt-5.2",
           defaultChatReasoningEffort: "medium",
@@ -55,9 +56,42 @@ describe("chatPreferencesRouter.updateGlobal", () => {
       defaultChatMode: "plan",
     });
     expect(result).toEqual({
+      engine: "sentinel",
       mode: "plan",
       modelId: "openai:gpt-5.2",
       reasoningEffort: "medium",
+    });
+  });
+
+  it("persists codex engine selections with opaque model ids", async () => {
+    const result = await chatPreferencesRouter.updateGlobal({
+      ctx: {
+        db: { update },
+        session: { user: { id: "user-1" } },
+        user: {
+          defaultChatEngine: "sentinel",
+          defaultChatMode: "chat",
+          defaultChatModelId: "openai:gpt-5.2",
+          defaultChatReasoningEffort: "medium",
+        },
+      },
+      input: {
+        engine: "codex",
+        modelId: "gpt-5-codex",
+        reasoningEffort: "high",
+      },
+    });
+
+    expect(set).toHaveBeenCalledWith({
+      defaultChatEngine: "codex",
+      defaultChatModelId: "gpt-5-codex",
+      defaultChatReasoningEffort: "high",
+    });
+    expect(result).toEqual({
+      engine: "codex",
+      mode: "chat",
+      modelId: "gpt-5-codex",
+      reasoningEffort: "high",
     });
   });
 
@@ -65,6 +99,7 @@ describe("chatPreferencesRouter.updateGlobal", () => {
     const result = await chatPreferencesRouter.get({
       ctx: {
         user: {
+          defaultChatEngine: "sentinel",
           defaultChatMode: "chat",
           defaultChatModelId: "gpt-5.2",
           defaultChatReasoningEffort: "medium",
@@ -74,6 +109,7 @@ describe("chatPreferencesRouter.updateGlobal", () => {
     });
 
     expect(result).toEqual({
+      engine: "sentinel",
       mode: "chat",
       modelId: "openai:gpt-5.2",
       reasoningEffort: "medium",

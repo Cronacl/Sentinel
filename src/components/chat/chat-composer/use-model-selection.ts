@@ -1,70 +1,57 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  getModelAttachmentCapabilities,
-  type ReasoningEffort,
-  getSupportedReasoningEfforts,
-} from "@/lib/ai/providers/models";
-import {
-  getCompositeModelId,
-  normalizeSelectedModelId,
-} from "@/lib/ai/providers/model-selection";
+import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import type { ChatEngine } from "@/server/db/enums";
 import { api } from "@/trpc/react";
 
-import {
-  getAttachmentKindLabel,
-  getReasoningEffortLabel,
-  resolveReasoningEffort,
-  supportsAttachmentKind,
-} from "../chat-composer-helpers";
-import type { ComposerAttachment } from "../chat-attachments";
+import { resolveReasoningEffort } from "../chat-composer-helpers";
 
 import type { usePersistSelection } from "./use-persist-selection";
 
 type PersistSelectionReturn = ReturnType<typeof usePersistSelection>;
 
 export function useModelSelection({
-  attachments,
   globalSelectionQuery,
+  onSelectionChange,
+  persistEngineSelection,
   persistSelection,
   selectionScopeKey,
   threadSelection,
 }: {
-  attachments: ComposerAttachment[];
   globalSelectionQuery: PersistSelectionReturn["globalSelectionQuery"];
+  onSelectionChange?: (input: {
+    engine?: ChatEngine;
+    modelId?: string | null;
+    mode?: "chat" | "plan";
+    reasoningEffort?: ReasoningEffort | null;
+  }) => void;
+  persistEngineSelection: PersistSelectionReturn["persistEngineSelection"];
   persistSelection: PersistSelectionReturn["persistSelection"];
   selectionScopeKey: string;
   threadSelection?: {
+    engine?: ChatEngine;
     modelId: string | null;
     mode?: "chat" | "plan";
     reasoningEffort?: ReasoningEffort | null;
   } | null;
 }) {
-  const modelsQuery = api.models.list.useQuery();
+  const enginesQuery = api.engines.list.useQuery();
+  const sentinelModelsQuery = api.engines.models.useQuery({
+    engine: "sentinel",
+  });
+  const codexModelsQuery = api.engines.models.useQuery({
+    engine: "codex",
+  });
+  const [selectedEngine, setSelectedEngine] = useState<ChatEngine>("sentinel");
   const [selectedModelKey, setSelectedModelKey] = useState<string | null>(null);
   const [selectedReasoningEffort, setSelectedReasoningEffort] =
     useState<ReasoningEffort | null>(null);
-  const [modelMenuOpen, setModelMenuOpen] = useState(false);
-  const [reasoningMenuOpen, setReasoningMenuOpen] = useState(false);
-  const modelMenuRef = useRef<HTMLDivElement | null>(null);
-  const reasoningMenuRef = useRef<HTMLDivElement | null>(null);
   const initializedSelectionScopeRef = useRef<string | null>(null);
   const threadPersistenceReadyRef = useRef(false);
+  const manualEngineSelectionRef = useRef<ChatEngine | null>(null);
 
-  const availableModels = useMemo(
-    () =>
-      (modelsQuery.data ?? []).filter(
-        (model) => model.isConnected && model.isEnabled,
-      ),
-    [modelsQuery.data],
-  );
-
-  const selectedModel =
-    availableModels.find(
-      (model) =>
-        getCompositeModelId(model.provider, model.modelId) === selectedModelKey,
-    ) ?? null;
-
+  const preferredEngine =
+    threadSelection?.engine ?? globalSelectionQuery.data?.engine ?? "sentinel";
   const hasThreadSelection = Boolean(threadSelection?.modelId);
   const preferredModelId = hasThreadSelection
     ? (threadSelection?.modelId ?? null)
@@ -74,49 +61,33 @@ export function useModelSelection({
     : ((globalSelectionQuery.data?.reasoningEffort as ReasoningEffort | null) ??
       null);
   const preferencesReady =
-    hasThreadSelection || !globalSelectionQuery.isLoading;
+    Boolean(threadSelection?.engine) ||
+    hasThreadSelection ||
+    !globalSelectionQuery.isLoading;
 
-  const supportedReasoningEfforts = selectedModel
-    ? getSupportedReasoningEfforts(
-        selectedModel.provider,
-        selectedModel.modelId,
-      )
-    : [];
+  const engineOptions = enginesQuery.data ?? [];
+  const selectedEngineStatus =
+    engineOptions.find((engine) => engine.engine === selectedEngine) ?? null;
+  const selectedEngineModels =
+    selectedEngine === "codex"
+      ? (codexModelsQuery.data ?? [])
+      : (sentinelModelsQuery.data ?? []);
+  const modelsQuery =
+    selectedEngine === "codex" ? codexModelsQuery : sentinelModelsQuery;
 
-  const reasoningLabel = selectedReasoningEffort
-    ? getReasoningEffortLabel(selectedReasoningEffort)
-    : null;
-
-  const attachmentCapabilities = selectedModel
-    ? getModelAttachmentCapabilities(
-        selectedModel.provider,
-        selectedModel.modelId,
-      )
-    : {
-        supportsCodeTextFiles: false,
-        supportsDocuments: false,
-        supportsImages: false,
-      };
-
-  const unsupportedAttachmentKinds = useMemo(() => {
-    return Array.from(
-      new Set(
-        attachments
-          .map((a) => a.fileType.kind)
-          .filter(
-            (kind) => !supportsAttachmentKind(kind, attachmentCapabilities),
-          ),
+  const availableModels = useMemo(
+    () =>
+      selectedEngineModels.filter(
+        (model) => model.isConnected && model.isEnabled,
       ),
-    );
-  }, [attachmentCapabilities, attachments]);
+    [selectedEngineModels],
+  );
 
-  const attachmentWarning = useMemo(() => {
-    if (!selectedModel || unsupportedAttachmentKinds.length === 0) {
-      return "";
-    }
-    const labels = unsupportedAttachmentKinds.map(getAttachmentKindLabel);
-    return `${selectedModel.displayName} may not support ${labels.join(", ")} as chat attachments.`;
-  }, [selectedModel, unsupportedAttachmentKinds]);
+  const selectedModel =
+    availableModels.find((model) => model.modelId === selectedModelKey) ?? null;
+
+  const supportedReasoningEfforts =
+    selectedModel?.supportedReasoningEfforts ?? [];
 
   useEffect(() => {
     if (initializedSelectionScopeRef.current !== selectionScopeKey) {
@@ -126,60 +97,90 @@ export function useModelSelection({
   }, [selectionScopeKey]);
 
   useEffect(() => {
-    if (availableModels.length === 0) {
-      setSelectedModelKey(null);
-      setSelectedReasoningEffort(null);
-      initializedSelectionScopeRef.current = null;
+    if (!preferencesReady) {
       return;
     }
 
-    if (!preferencesReady) return;
-    if (initializedSelectionScopeRef.current === selectionScopeKey) return;
+    if (initializedSelectionScopeRef.current !== selectionScopeKey) {
+      setSelectedEngine(preferredEngine);
+    }
+  }, [preferredEngine, preferencesReady, selectionScopeKey]);
 
-    const normalizedPreferredModelId = normalizeSelectedModelId(
-      preferredModelId,
-      availableModels,
+  useEffect(() => {
+    if (
+      !preferencesReady ||
+      initializedSelectionScopeRef.current !== selectionScopeKey
+    ) {
+      return;
+    }
+    if (manualEngineSelectionRef.current) {
+      if (manualEngineSelectionRef.current === preferredEngine) {
+        manualEngineSelectionRef.current = null;
+      }
+      return;
+    }
+    setSelectedEngine(preferredEngine);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync only when preferredEngine changes, not selectedEngine
+  }, [preferredEngine]);
+
+  useEffect(() => {
+    if (!preferencesReady) {
+      return;
+    }
+
+    if (initializedSelectionScopeRef.current === selectionScopeKey) {
+      return;
+    }
+
+    if (selectedEngine !== preferredEngine) {
+      return;
+    }
+
+    if (modelsQuery.isLoading) {
+      return;
+    }
+
+    if (selectedEngineModels.length === 0) {
+      setSelectedModelKey(null);
+      setSelectedReasoningEffort(null);
+      initializedSelectionScopeRef.current = selectionScopeKey;
+      return;
+    }
+
+    const preferredModel = selectedEngineModels.find(
+      (model) => model.modelId === preferredModelId,
     );
+    const nextModel = preferredModel ?? selectedEngineModels[0] ?? null;
 
-    const preferredModel = normalizedPreferredModelId
-      ? (availableModels.find(
-          (model) =>
-            getCompositeModelId(model.provider, model.modelId) ===
-            normalizedPreferredModelId,
-        ) ?? null)
-      : null;
-    const nextModel = preferredModel ?? availableModels[0] ?? null;
-    const nextModelKey = nextModel
-      ? getCompositeModelId(nextModel.provider, nextModel.modelId)
-      : null;
-
-    setSelectedModelKey(nextModelKey);
+    setSelectedModelKey(nextModel?.modelId ?? null);
     setSelectedReasoningEffort(
       nextModel
-        ? resolveReasoningEffort(
-            nextModel.provider,
-            nextModel.modelId,
-            preferredModel ? preferredReasoningEffort : null,
-          )
+        ? resolveReasoningEffort(nextModel, preferredReasoningEffort)
         : null,
     );
     initializedSelectionScopeRef.current = selectionScopeKey;
   }, [
-    availableModels,
+    preferredEngine,
     preferredModelId,
     preferredReasoningEffort,
     preferencesReady,
+    modelsQuery.isLoading,
+    selectedEngine,
+    selectedEngineModels,
     selectionScopeKey,
   ]);
 
   useEffect(() => {
-    if (!selectedModelKey || availableModels.length === 0) return;
+    if (!selectedModelKey) {
+      return;
+    }
 
     const stillAvailable = availableModels.some(
-      (model) =>
-        getCompositeModelId(model.provider, model.modelId) === selectedModelKey,
+      (model) => model.modelId === selectedModelKey,
     );
-    if (stillAvailable) return;
+    if (stillAvailable) {
+      return;
+    }
 
     const fallbackModel = availableModels[0];
     if (!fallbackModel) {
@@ -188,20 +189,24 @@ export function useModelSelection({
       return;
     }
 
-    const fallbackModelKey = getCompositeModelId(
-      fallbackModel.provider,
-      fallbackModel.modelId,
-    );
-    const fallbackReasoningEffort = resolveReasoningEffort(
-      fallbackModel.provider,
-      fallbackModel.modelId,
-      null,
-    );
-
-    setSelectedModelKey(fallbackModelKey);
-    setSelectedReasoningEffort(fallbackReasoningEffort);
-    persistSelection(fallbackModelKey, fallbackReasoningEffort);
-  }, [availableModels, persistSelection, selectedModelKey]);
+    const fallbackEffort = resolveReasoningEffort(fallbackModel, null);
+    setSelectedModelKey(fallbackModel.modelId);
+    setSelectedReasoningEffort(fallbackEffort);
+    onSelectionChange?.({
+      engine: selectedEngine,
+      modelId: fallbackModel.modelId,
+      reasoningEffort: fallbackEffort,
+    });
+    persistSelection(fallbackModel.modelId, fallbackEffort, {
+      engine: selectedEngine,
+    });
+  }, [
+    availableModels,
+    onSelectionChange,
+    persistSelection,
+    selectedEngine,
+    selectedModelKey,
+  ]);
 
   useEffect(() => {
     if (!selectedModel) {
@@ -212,8 +217,7 @@ export function useModelSelection({
     }
 
     const nextReasoningEffort = resolveReasoningEffort(
-      selectedModel.provider,
-      selectedModel.modelId,
+      selectedModel,
       selectedReasoningEffort,
     );
 
@@ -222,54 +226,125 @@ export function useModelSelection({
     }
   }, [selectedModel, selectedReasoningEffort]);
 
+  const handleSelectEngine = useCallback(
+    (engine: ChatEngine) => {
+      manualEngineSelectionRef.current = engine;
+      setSelectedEngine(engine);
+      initializedSelectionScopeRef.current = null;
+
+      const nextModels =
+        engine === "codex"
+          ? (codexModelsQuery.data ?? [])
+          : (sentinelModelsQuery.data ?? []);
+      const nextModel = nextModels.find(
+        (model) => model.isConnected && model.isEnabled,
+      );
+      const nextMode = undefined;
+
+      if (!nextModel) {
+        setSelectedModelKey(null);
+        setSelectedReasoningEffort(null);
+        onSelectionChange?.({
+          engine,
+          modelId: null,
+          mode: nextMode,
+          reasoningEffort: null,
+        });
+        persistEngineSelection(
+          engine,
+          nextMode ? { mode: nextMode } : undefined,
+        );
+        return;
+      }
+
+      const nextReasoningEffort = resolveReasoningEffort(nextModel, null);
+      setSelectedModelKey(nextModel.modelId);
+      setSelectedReasoningEffort(nextReasoningEffort);
+      onSelectionChange?.({
+        engine,
+        modelId: nextModel.modelId,
+        mode: nextMode,
+        reasoningEffort: nextReasoningEffort,
+      });
+      persistSelection(nextModel.modelId, nextReasoningEffort, {
+        engine,
+        ...(nextMode ? { mode: nextMode } : {}),
+      });
+    },
+    [
+      codexModelsQuery.data,
+      onSelectionChange,
+      persistEngineSelection,
+      persistSelection,
+      sentinelModelsQuery.data,
+    ],
+  );
+
   const handleSelectModel = useCallback(
     (modelKey: string) => {
       const nextModel = availableModels.find(
-        (model) =>
-          getCompositeModelId(model.provider, model.modelId) === modelKey,
+        (model) => model.modelId === modelKey,
       );
-      if (!nextModel) return;
+      if (!nextModel) {
+        return;
+      }
 
       const nextReasoningEffort = resolveReasoningEffort(
-        nextModel.provider,
-        nextModel.modelId,
+        nextModel,
         selectedReasoningEffort,
       );
 
       setSelectedModelKey(modelKey);
       setSelectedReasoningEffort(nextReasoningEffort);
-      setModelMenuOpen(false);
-      persistSelection(modelKey, nextReasoningEffort);
+      onSelectionChange?.({
+        engine: selectedEngine,
+        modelId: modelKey,
+        reasoningEffort: nextReasoningEffort,
+      });
+      persistSelection(modelKey, nextReasoningEffort, {
+        engine: selectedEngine,
+      });
     },
-    [availableModels, persistSelection, selectedReasoningEffort],
+    [
+      availableModels,
+      onSelectionChange,
+      persistSelection,
+      selectedEngine,
+      selectedReasoningEffort,
+    ],
   );
 
   const handleSelectReasoningEffort = useCallback(
     (effort: ReasoningEffort) => {
-      if (!selectedModelKey) return;
+      if (!selectedModelKey) {
+        return;
+      }
+
       setSelectedReasoningEffort(effort);
-      setReasoningMenuOpen(false);
-      persistSelection(selectedModelKey, effort);
+      onSelectionChange?.({
+        engine: selectedEngine,
+        modelId: selectedModelKey,
+        reasoningEffort: effort,
+      });
+      persistSelection(selectedModelKey, effort, {
+        engine: selectedEngine,
+      });
     },
-    [persistSelection, selectedModelKey],
+    [onSelectionChange, persistSelection, selectedEngine, selectedModelKey],
   );
 
   return {
-    attachmentWarning,
     availableModels,
+    enginesQuery,
+    handleSelectEngine,
     handleSelectModel,
     handleSelectReasoningEffort,
-    modelMenuOpen,
-    modelMenuRef,
     modelsQuery,
-    reasoningLabel,
-    reasoningMenuOpen,
-    reasoningMenuRef,
+    selectedEngine,
+    selectedEngineStatus,
     selectedModel,
     selectedModelKey,
     selectedReasoningEffort,
-    setModelMenuOpen,
-    setReasoningMenuOpen,
     supportedReasoningEfforts,
     threadPersistenceReadyRef,
   };

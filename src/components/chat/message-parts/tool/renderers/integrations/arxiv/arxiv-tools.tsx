@@ -81,10 +81,7 @@ export const ArxivSearchTool = memo(function ArxivSearchTool({
             : "text-foreground/70"
       } ${canOpen ? "cursor-pointer hover:text-foreground transition-colors" : ""}`}
     >
-      <IntegrationProviderIcon
-        provider="arxiv"
-        className="h-4 w-4 shrink-0"
-      />
+      <IntegrationProviderIcon provider="arxiv" className="h-4 w-4 shrink-0" />
       <span className="min-w-0 flex-1">{label}</span>
       {canOpen ? (
         <span className="shrink-0 text-[11px] text-foreground/30 opacity-0 transition-opacity group-hover:opacity-100">
@@ -107,8 +104,7 @@ export const ArxivPaperTool = memo(function ArxivPaperTool({
 
   const output =
     hasOutput && "output" in part ? (part.output as ArxivPaper) : null;
-  const input =
-    "input" in part ? (part.input as { arxivId?: string }) : null;
+  const input = "input" in part ? (part.input as { arxivId?: string }) : null;
 
   const canOpen = Boolean(output);
 
@@ -147,10 +143,7 @@ export const ArxivPaperTool = memo(function ArxivPaperTool({
             : "text-foreground/70"
       } ${canOpen ? "cursor-pointer hover:text-foreground transition-colors" : ""}`}
     >
-      <IntegrationProviderIcon
-        provider="arxiv"
-        className="h-4 w-4 shrink-0"
-      />
+      <IntegrationProviderIcon provider="arxiv" className="h-4 w-4 shrink-0" />
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {canOpen ? (
         <span className="shrink-0 text-[11px] text-foreground/30 opacity-0 transition-opacity group-hover:opacity-100">

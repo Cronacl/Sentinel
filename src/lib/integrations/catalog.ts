@@ -813,8 +813,7 @@ export const INTEGRATION_TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
 
   // PubMed
   pubmed_search: {
-    capability:
-      "to search PubMed for biomedical and life science articles",
+    capability: "to search PubMed for biomedical and life science articles",
     category: "integration",
     label: "pubmed_search",
   },

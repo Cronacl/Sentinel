@@ -23,6 +23,16 @@ describe("createAutomationSchema", () => {
     expect(result.error?.issues[0]?.message).toContain("provider:model");
   });
 
+  it("allows raw codex model ids for codex automations", () => {
+    const result = createAutomationSchema.safeParse({
+      ...validAutomation,
+      chatEngine: "codex",
+      modelId: "gpt-5.4",
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it("requires both weekly day and time", () => {
     const result = createAutomationSchema.safeParse({
       ...validAutomation,

@@ -13,7 +13,7 @@ Add exactly one matching GitHub label before merge.
 
 ## Release Notes
 
-- Write the changelog line you want if the PR title is not good enough.
+- Write a single sentence or bullet to use in the automated changelog if the PR title is not good enough.
 
 ## Validation
 
