@@ -30,10 +30,12 @@ jobs:
       git_ref: ${{ steps.resolve.outputs.git_ref }}
       prerelease: ${{ steps.resolve.outputs.prerelease }}
       release_tag: ${{ steps.resolve.outputs.release_tag }}
+      target_commitish: ${{ steps.resolve.outputs.target_commitish }}
     steps:
       - id: resolve
         env:
           EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
           INPUT_GIT_REF: ${{ github.event.inputs.git_ref }}
           INPUT_RELEASE_TAG: ${{ github.event.inputs.release_tag }}
           REF_NAME: ${{ github.ref_name }}
@@ -41,9 +43,11 @@ jobs:
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             RELEASE_TAG="$INPUT_RELEASE_TAG"
             GIT_REF="${INPUT_GIT_REF:-main}"
+            TARGET_COMMITISH="$GIT_REF"
           else
             RELEASE_TAG="$REF_NAME"
             GIT_REF="$REF_NAME"
+            TARGET_COMMITISH="$EVENT_SHA"
           fi
 
           if [ -z "$RELEASE_TAG" ]; then
@@ -68,6 +72,7 @@ jobs:
           echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "git_ref=$GIT_REF" >> "$GITHUB_OUTPUT"
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "target_commitish=$TARGET_COMMITISH" >> "$GITHUB_OUTPUT"
 
   build:
     needs: prepare
@@ -164,4 +169,4 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ needs.prepare.outputs.prerelease == 'true' }}
           tag_name: ${{ needs.prepare.outputs.release_tag }}
-          target_commitish: ${{ needs.prepare.outputs.git_ref }}
+          target_commitish: ${{ needs.prepare.outputs.target_commitish }}
