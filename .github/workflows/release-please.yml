@@ -19,6 +19,10 @@ jobs:
   release-please:
     name: release-please
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      releases_created: ${{ steps.release.outputs.releases_created }}
+      release_tag: ${{ steps.release.outputs.tag_name }}
     steps:
       - id: release
         uses: googleapis/release-please-action@v4
@@ -27,3 +31,94 @@ jobs:
           manifest-file: .release-please-manifest.json
           skip-github-release: true
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    name: build-${{ matrix.platform }}
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' || needs.release-please.outputs.releases_created == 'true' }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - artifact_name: release-mac
+            artifact_paths: |
+              dist/*.dmg
+              dist/*.blockmap
+              dist/latest-mac.yml
+            os: macos-latest
+            platform: mac
+            script: build:desktop:mac
+          - artifact_name: release-windows
+            artifact_paths: |
+              dist/*.exe
+              dist/*.blockmap
+              dist/latest.yml
+            os: windows-latest
+            platform: windows
+            script: build:desktop:windows
+          - artifact_name: release-linux
+            artifact_paths: |
+              dist/*.AppImage
+              dist/*.blockmap
+              dist/latest-linux.yml
+            os: ubuntu-latest
+            platform: linux
+            script: build:desktop:linux
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      ENCRYPTION_KEY: "1111111111111111111111111111111111111111111111111111111111111111"
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      SENTINEL_DB_PATH: ${{ github.workspace }}/.sentinel-ci/sentinel.db
+      SENTINEL_SKIP_STARTUP_TASKS: "1"
+      SENTINEL_STATE_PATH: ${{ github.workspace }}/.sentinel-ci/state.json
+      SKIP_ENV_VALIDATION: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.release-please.outputs.release_tag }}
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Validate release tag against package version
+        run: bun run release:version:check "${{ needs.release-please.outputs.release_tag }}"
+
+      - name: Build ${{ matrix.platform }} desktop release
+        run: bun run ${{ matrix.script }}
+
+      - name: Upload ${{ matrix.platform }} artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          if-no-files-found: error
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_paths }}
+
+  publish:
+    name: publish
+    needs:
+      - release-please
+      - build
+    if: ${{ needs.release-please.outputs.release_created == 'true' || needs.release-please.outputs.releases_created == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: release-assets
+          pattern: release-*
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/**/*
+          generate_release_notes: true
+          prerelease: ${{ contains(needs.release-please.outputs.release_tag, '-') }}
+          tag_name: ${{ needs.release-please.outputs.release_tag }}
