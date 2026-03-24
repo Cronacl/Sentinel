@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.1-alpha.1] - 2026-03-24
+
+### Patch
+
+- Fix desktop release packaging so installed builds include the `node-pty` runtime required by the Electron main process terminal integration.
+
 ## [0.1.0-alpha.1] - 2026-03-22
 
 First alpha release of Sentinel.

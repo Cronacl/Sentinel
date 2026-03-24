@@ -21,7 +21,7 @@ async function pathExists(targetPath) {
  * }} context
  */
 module.exports = async function afterPack(context) {
-  const sourceNodeModulesPath = path.join(
+  const sourceServerNodeModulesPath = path.join(
     context.packager.projectDir,
     "desktop",
     "dist",
@@ -29,9 +29,21 @@ module.exports = async function afterPack(context) {
     "node_modules",
   );
 
-  if (!(await pathExists(sourceNodeModulesPath))) {
+  if (!(await pathExists(sourceServerNodeModulesPath))) {
     throw new Error(
-      `Expected packaged server dependencies at ${sourceNodeModulesPath}.`,
+      `Expected packaged server dependencies at ${sourceServerNodeModulesPath}.`,
+    );
+  }
+
+  const sourceShellNodePtyPath = path.join(
+    context.packager.projectDir,
+    "node_modules",
+    "node-pty",
+  );
+
+  if (!(await pathExists(sourceShellNodePtyPath))) {
+    throw new Error(
+      `Expected desktop shell dependency at ${sourceShellNodePtyPath}.`,
     );
   }
 
@@ -45,15 +57,28 @@ module.exports = async function afterPack(context) {
         )
       : path.join(context.appOutDir, "resources");
 
-  const targetNodeModulesPath = path.join(
+  const targetServerNodeModulesPath = path.join(
     resourcesPath,
     "server",
     "node_modules",
   );
+  const targetShellNodeModulesPath = path.join(resourcesPath, "node_modules");
+  const targetShellNodePtyPath = path.join(
+    targetShellNodeModulesPath,
+    "node-pty",
+  );
 
-  await fs.rm(targetNodeModulesPath, { force: true, recursive: true });
-  await fs.mkdir(path.dirname(targetNodeModulesPath), { recursive: true });
-  await fs.cp(sourceNodeModulesPath, targetNodeModulesPath, {
+  await fs.rm(targetServerNodeModulesPath, { force: true, recursive: true });
+  await fs.mkdir(path.dirname(targetServerNodeModulesPath), {
+    recursive: true,
+  });
+  await fs.cp(sourceServerNodeModulesPath, targetServerNodeModulesPath, {
+    recursive: true,
+  });
+
+  await fs.rm(targetShellNodePtyPath, { force: true, recursive: true });
+  await fs.mkdir(targetShellNodeModulesPath, { recursive: true });
+  await fs.cp(sourceShellNodePtyPath, targetShellNodePtyPath, {
     recursive: true,
   });
 };
