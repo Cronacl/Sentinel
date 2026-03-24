@@ -54,14 +54,10 @@ function extractDisplayCommand(input: CodexShellInput): string {
     return input.commandActions.map((a) => a.command).join(" && ");
   }
 
-  const shellExec = input.command.match(
-    /^\/bin\/(?:ba)?sh\s+-\w*c\s+'(.+)'$/s,
-  );
+  const shellExec = input.command.match(/^\/bin\/(?:ba)?sh\s+-\w*c\s+'(.+)'$/s);
   if (shellExec?.[1]) return shellExec[1];
 
-  const zshExec = input.command.match(
-    /^\/bin\/zsh\s+-\w*c\s+'(.+)'$/s,
-  );
+  const zshExec = input.command.match(/^\/bin\/zsh\s+-\w*c\s+'(.+)'$/s);
   if (zshExec?.[1]) return zshExec[1];
 
   return input.command;
@@ -282,8 +278,7 @@ export const CodexShellTool = memo(function CodexShellTool({
     part.state === "approval-responded" ||
     part.state === "input-available" ||
     part.state === "input-streaming" ||
-    (part.state === "output-available" &&
-      shellOutput?.status !== "completed");
+    (part.state === "output-available" && shellOutput?.status !== "completed");
   const isFinished =
     part.state === "output-denied" ||
     part.state === "output-error" ||
@@ -382,8 +377,7 @@ export const CodexShellTool = memo(function CodexShellTool({
               <button
                 className="h-7 min-w-0 rounded-md px-3 text-[11px] text-danger/70 hover:bg-danger/5"
                 onClick={() =>
-                  approvalId &&
-                  onApproveWithDecision?.(approvalId, "cancel")
+                  approvalId && onApproveWithDecision?.(approvalId, "cancel")
                 }
                 type="button"
               >

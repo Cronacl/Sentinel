@@ -325,9 +325,7 @@ export const threadsRouter = createTRPCRouter({
       const [updated] = ctx.db
         .update(threads)
         .set({
-          ...(input.engine === undefined
-            ? {}
-            : { chatEngine: input.engine }),
+          ...(input.engine === undefined ? {} : { chatEngine: input.engine }),
           ...(input.modelId === undefined
             ? {}
             : { chatModelId: input.modelId }),

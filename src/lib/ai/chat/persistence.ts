@@ -167,7 +167,10 @@ export function updateCodexThreadState(
   threadId: string,
   state: CodexThreadState | null,
 ) {
-  updateThreadChatEngineState(threadId, buildThreadChatEngineState("codex", state));
+  updateThreadChatEngineState(
+    threadId,
+    buildThreadChatEngineState("codex", state),
+  );
 }
 
 export async function loadThreadMessages(threadId: string) {

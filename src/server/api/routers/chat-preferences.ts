@@ -62,7 +62,9 @@ export const chatPreferencesRouter = createTRPCRouter({
 
       return {
         engine:
-          input.engine !== undefined ? (input.engine ?? "sentinel") : currentEngine,
+          input.engine !== undefined
+            ? (input.engine ?? "sentinel")
+            : currentEngine,
         mode: input.mode !== undefined ? (input.mode ?? null) : currentMode,
         modelId:
           input.modelId !== undefined

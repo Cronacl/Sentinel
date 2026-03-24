@@ -658,10 +658,10 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             <div className="mx-auto w-full max-w-2xl flex-1 px-6 pt-4">
               <div className="flex flex-col gap-4">
                 {messages.map((message, idx) => (
-                <ChatMessage
-                  chatEngine={chatEngine}
-                  key={message.id}
-                  message={message}
+                  <ChatMessage
+                    chatEngine={chatEngine}
+                    key={message.id}
+                    message={message}
                     isStreaming={
                       status === "streaming" && idx === messages.length - 1
                     }

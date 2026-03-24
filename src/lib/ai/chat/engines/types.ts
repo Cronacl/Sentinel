@@ -48,9 +48,7 @@ export function parseThreadChatEngineState(
   return parsed.success ? parsed.data : null;
 }
 
-export function getCodexThreadState(
-  value: unknown,
-): CodexThreadState | null {
+export function getCodexThreadState(value: unknown): CodexThreadState | null {
   return parseThreadChatEngineState(value)?.codex ?? null;
 }
 

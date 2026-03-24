@@ -58,9 +58,8 @@ const PROVIDER_TOOL_LOADERS: Partial<
     return buildMongoDBTools;
   },
   yahoo_finance: async () => {
-    const { buildYahooFinanceTools } = await import(
-      "./providers/yahoo-finance/tools"
-    );
+    const { buildYahooFinanceTools } =
+      await import("./providers/yahoo-finance/tools");
     return buildYahooFinanceTools;
   },
   arxiv: async () => {

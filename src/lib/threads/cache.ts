@@ -95,9 +95,7 @@ function applyThreadSettingsPatch<
 >(thread: T, patch: ThreadSettingsPatch) {
   return {
     ...thread,
-    ...(patch.chatEngine === undefined
-      ? {}
-      : { chatEngine: patch.chatEngine }),
+    ...(patch.chatEngine === undefined ? {} : { chatEngine: patch.chatEngine }),
     ...(patch.chatModelId === undefined
       ? {}
       : { chatModelId: patch.chatModelId }),

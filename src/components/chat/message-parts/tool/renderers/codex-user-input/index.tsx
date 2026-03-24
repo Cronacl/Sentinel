@@ -22,7 +22,8 @@ export const CodexUserInputTool = memo(function CodexUserInputTool({
   part,
 }: RendererProps) {
   const isWaiting = part.state === "approval-requested";
-  const isDone = part.state === "output-available" || part.state === "approval-responded";
+  const isDone =
+    part.state === "output-available" || part.state === "approval-responded";
 
   const input =
     "input" in part && isUserInputInput(part.input) ? part.input : null;

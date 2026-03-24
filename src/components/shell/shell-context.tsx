@@ -41,9 +41,7 @@ export function ShellProvider({ children }: PropsWithChildren) {
   const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
   const [rightSidebarContent, setRightSidebarContent] =
     useState<ReactNode | null>(null);
-  const rightSidebarDrawerMode = useMediaQuery(
-    RIGHT_SIDEBAR_DRAWER_BREAKPOINT,
-  );
+  const rightSidebarDrawerMode = useMediaQuery(RIGHT_SIDEBAR_DRAWER_BREAKPOINT);
 
   useEffect(() => {
     if (pathname !== initialPathRef.current) {

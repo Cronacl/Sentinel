@@ -845,7 +845,10 @@ function applyPromptResponseToMirror(
       return;
     }
 
-    if (item.type !== "userInputRequest" || item.requestId !== response.requestId) {
+    if (
+      item.type !== "userInputRequest" ||
+      item.requestId !== response.requestId
+    ) {
       continue;
     }
 
@@ -1067,14 +1070,10 @@ function buildMirrorParts(state: CodexMirrorState) {
         break;
       case "userInputRequest":
         parts.push({
-          ...(item.requestId
-            ? { approval: { id: item.requestId } }
-            : {}),
+          ...(item.requestId ? { approval: { id: item.requestId } } : {}),
           input: { prompt: item.prompt, requestId: item.requestId },
           output: { response: item.response },
-          state: item.isResolved
-            ? "output-available"
-            : "approval-requested",
+          state: item.isResolved ? "output-available" : "approval-requested",
           toolCallId: item.id,
           toolName: "codex_user_input",
           type: "dynamic-tool",
@@ -1594,7 +1593,11 @@ export async function runCodexThreadChat(
     const activeControl = findActiveCodexRunForThread(request.threadId);
     if (activeControl) {
       applyPromptResponseToMirror(activeControl.mirrorState, promptResponse);
-      emitAssistantMessageUpdate(activeControl.mirrorState, activeControl.runId, "streaming");
+      emitAssistantMessageUpdate(
+        activeControl.mirrorState,
+        activeControl.runId,
+        "streaming",
+      );
     }
 
     persist.setThreadStatus(request.threadId, "streaming");
@@ -1618,7 +1621,9 @@ export async function runCodexThreadChat(
   if (activeControl?.codexTurnId) {
     const codexInput = buildCodexUserInput(request.message);
     const steerRunId = generateId();
-    const existingCodexState = getCodexThreadState(existingThread?.chatEngineState);
+    const existingCodexState = getCodexThreadState(
+      existingThread?.chatEngineState,
+    );
     const persistedUser = buildUserMessage(
       request,
       userParentMessageId,

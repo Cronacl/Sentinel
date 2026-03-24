@@ -3,12 +3,7 @@
 import { memo, useCallback, useState } from "react";
 import { ArrowLeft02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  Chip,
-  CloseButton,
-  ScrollShadow,
-  Separator,
-} from "@heroui/react";
+import { Chip, CloseButton, ScrollShadow, Separator } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
 import { IntegrationProviderIcon } from "@/components/icons/integration-provider-icon";
@@ -250,10 +245,7 @@ export const PubMedSearchSidebar = memo(function PubMedSearchSidebar({
             <div className="flex flex-col">
               {articles.map((article, index) => (
                 <div key={article.pmid}>
-                  <ArticleRow
-                    article={article}
-                    onSelect={setSelectedArticle}
-                  />
+                  <ArticleRow article={article} onSelect={setSelectedArticle} />
                   {index < articles.length - 1 ? (
                     <Separator className="my-0.5 ml-3" variant="tertiary" />
                   ) : null}

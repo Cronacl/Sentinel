@@ -1,6 +1,10 @@
 import "server-only";
 
-import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import {
+  execFile,
+  spawn,
+  type ChildProcessWithoutNullStreams,
+} from "node:child_process";
 
 import { createLogger } from "@/lib/logger";
 import type {
@@ -260,19 +264,21 @@ function isJsonRpcResult(
 ): value is JsonRpcResultMessage | JsonRpcErrorMessage {
   return Boolean(
     value &&
-      typeof value === "object" &&
-      "id" in value &&
-      ("result" in value || "error" in value),
+    typeof value === "object" &&
+    "id" in value &&
+    ("result" in value || "error" in value),
   );
 }
 
-function isJsonRpcServerRequest(value: unknown): value is JsonRpcRequestMessage {
+function isJsonRpcServerRequest(
+  value: unknown,
+): value is JsonRpcRequestMessage {
   return Boolean(
     value &&
-      typeof value === "object" &&
-      "id" in value &&
-      "method" in value &&
-      typeof (value as { method?: unknown }).method === "string",
+    typeof value === "object" &&
+    "id" in value &&
+    "method" in value &&
+    typeof (value as { method?: unknown }).method === "string",
   );
 }
 
@@ -281,10 +287,10 @@ function isJsonRpcNotification(
 ): value is JsonRpcNotificationMessage {
   return Boolean(
     value &&
-      typeof value === "object" &&
-      !("id" in value) &&
-      "method" in value &&
-      typeof (value as { method?: unknown }).method === "string",
+    typeof value === "object" &&
+    !("id" in value) &&
+    "method" in value &&
+    typeof (value as { method?: unknown }).method === "string",
   );
 }
 
@@ -297,10 +303,7 @@ function isApprovalRequestMethod(
   );
 }
 
-function toCodexError(
-  message: string,
-  error?: unknown,
-) {
+function toCodexError(message: string, error?: unknown) {
   if (error instanceof Error) {
     return new Error(`${message}: ${error.message}`);
   }
@@ -420,8 +423,9 @@ class CodexAppServerManager {
           })
           .filter(
             (option, index, array) =>
-              array.findIndex((candidate) => candidate.effort === option.effort) ===
-              index,
+              array.findIndex(
+                (candidate) => candidate.effort === option.effort,
+              ) === index,
           ),
         supportsPersonality: Boolean(model.supportsPersonality),
       });
@@ -577,7 +581,8 @@ class CodexAppServerManager {
         cliDetected: true,
         cliVersion,
         engine: "codex",
-        error: error instanceof Error ? error.message : "Unable to reach Codex.",
+        error:
+          error instanceof Error ? error.message : "Unable to reach Codex.",
         isDesktopRuntime: true,
         requiresOpenaiAuth: false,
         serverReachable: false,
@@ -704,10 +709,7 @@ class CodexAppServerManager {
     await this.call("thread/unarchive", { threadId });
   }
 
-  async respondToApproval(
-    approvalId: string,
-    decision: CodexApprovalDecision,
-  ) {
+  async respondToApproval(approvalId: string, decision: CodexApprovalDecision) {
     await this.ensureStarted();
 
     const pending = this.pendingApprovals.get(approvalId);
@@ -764,7 +766,9 @@ class CodexAppServerManager {
       this.resetProcess(error);
     });
     child.on("error", (error) => {
-      this.resetProcess(toCodexError("Failed to start Codex app-server", error));
+      this.resetProcess(
+        toCodexError("Failed to start Codex app-server", error),
+      );
     });
 
     try {

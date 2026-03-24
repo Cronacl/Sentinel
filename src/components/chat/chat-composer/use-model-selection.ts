@@ -50,7 +50,8 @@ export function useModelSelection({
   const threadPersistenceReadyRef = useRef(false);
   const manualEngineSelectionRef = useRef<ChatEngine | null>(null);
 
-  const preferredEngine = threadSelection?.engine ?? globalSelectionQuery.data?.engine ?? "sentinel";
+  const preferredEngine =
+    threadSelection?.engine ?? globalSelectionQuery.data?.engine ?? "sentinel";
   const hasThreadSelection = Boolean(threadSelection?.modelId);
   const preferredModelId = hasThreadSelection
     ? (threadSelection?.modelId ?? null)
@@ -106,7 +107,10 @@ export function useModelSelection({
   }, [preferredEngine, preferencesReady, selectionScopeKey]);
 
   useEffect(() => {
-    if (!preferencesReady || initializedSelectionScopeRef.current !== selectionScopeKey) {
+    if (
+      !preferencesReady ||
+      initializedSelectionScopeRef.current !== selectionScopeKey
+    ) {
       return;
     }
     if (manualEngineSelectionRef.current) {
@@ -150,7 +154,9 @@ export function useModelSelection({
 
     setSelectedModelKey(nextModel?.modelId ?? null);
     setSelectedReasoningEffort(
-      nextModel ? resolveReasoningEffort(nextModel, preferredReasoningEffort) : null,
+      nextModel
+        ? resolveReasoningEffort(nextModel, preferredReasoningEffort)
+        : null,
     );
     initializedSelectionScopeRef.current = selectionScopeKey;
   }, [
@@ -244,7 +250,10 @@ export function useModelSelection({
           mode: nextMode,
           reasoningEffort: null,
         });
-        persistEngineSelection(engine, nextMode ? { mode: nextMode } : undefined);
+        persistEngineSelection(
+          engine,
+          nextMode ? { mode: nextMode } : undefined,
+        );
         return;
       }
 
@@ -273,7 +282,9 @@ export function useModelSelection({
 
   const handleSelectModel = useCallback(
     (modelKey: string) => {
-      const nextModel = availableModels.find((model) => model.modelId === modelKey);
+      const nextModel = availableModels.find(
+        (model) => model.modelId === modelKey,
+      );
       if (!nextModel) {
         return;
       }

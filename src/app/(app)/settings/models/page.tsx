@@ -89,7 +89,9 @@ export default function ModelsPage() {
   const { data: models, isPending } = api.models.list.useQuery();
   const enginesQuery = api.engines.list.useQuery();
   const utils = api.useUtils();
-  const codexEngine = enginesQuery.data?.find((engine) => engine.engine === "codex");
+  const codexEngine = enginesQuery.data?.find(
+    (engine) => engine.engine === "codex",
+  );
   const codexStatus =
     codexEngine?.engine === "codex" && "status" in codexEngine
       ? codexEngine.status

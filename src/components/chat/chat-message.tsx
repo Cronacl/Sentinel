@@ -268,10 +268,7 @@ function AssistantMessage({
 }: {
   chatEngine?: ChatEngine;
   onApproveTool?: (approvalId: string, response?: string) => void;
-  onApproveToolWithDecision?: (
-    approvalId: string,
-    decision: string,
-  ) => void;
+  onApproveToolWithDecision?: (approvalId: string, decision: string) => void;
   onAnswerPlanQuestions?: (input: {
     answers: Array<{
       answer: string;
@@ -551,10 +548,7 @@ function UserMessage({
 type ChatMessageProps = {
   chatEngine?: ChatEngine;
   onApproveTool?: (approvalId: string, response?: string) => void;
-  onApproveToolWithDecision?: (
-    approvalId: string,
-    decision: string,
-  ) => void;
+  onApproveToolWithDecision?: (approvalId: string, decision: string) => void;
   onAnswerPlanQuestions?: (input: {
     answers: Array<{
       answer: string;

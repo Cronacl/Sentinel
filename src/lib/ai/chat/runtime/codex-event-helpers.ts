@@ -11,7 +11,10 @@ type ApprovalLike = {
   response?: unknown;
 };
 
-type DynamicToolPart = Extract<ThreadUIMessage["parts"][number], { type: "dynamic-tool" }>;
+type DynamicToolPart = Extract<
+  ThreadUIMessage["parts"][number],
+  { type: "dynamic-tool" }
+>;
 
 export type CodexPromptResponse =
   | {
@@ -26,7 +29,11 @@ export type CodexPromptResponse =
     };
 
 function getApprovalFromPart(part: ThreadUIMessage["parts"][number]) {
-  if (!("approval" in part) || !part.approval || typeof part.approval !== "object") {
+  if (
+    !("approval" in part) ||
+    !part.approval ||
+    typeof part.approval !== "object"
+  ) {
     return null;
   }
 
@@ -54,7 +61,10 @@ export function extractCodexPromptResponse(
       }
 
       if (isCodexUserInputPart(part)) {
-        if (typeof approval.response !== "string" || approval.response.trim().length === 0) {
+        if (
+          typeof approval.response !== "string" ||
+          approval.response.trim().length === 0
+        ) {
           continue;
         }
 

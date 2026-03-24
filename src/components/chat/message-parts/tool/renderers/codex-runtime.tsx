@@ -32,7 +32,8 @@ export const CodexRuntimeTool = memo(function CodexRuntimeTool({
 
   const hasInput = part.input !== undefined;
   const hasOutput = part.output !== undefined;
-  const partErrorText = "errorText" in part ? (part.errorText as string) : undefined;
+  const partErrorText =
+    "errorText" in part ? (part.errorText as string) : undefined;
   const approvalId =
     part.approval &&
     typeof part.approval === "object" &&
