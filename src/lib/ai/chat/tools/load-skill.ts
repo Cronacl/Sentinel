@@ -13,7 +13,7 @@ export const loadSkillOutputSchema = z.object({
   preview: z.string(),
   scope: z.enum(["global", "workspace"]),
   skillFile: z.string(),
-  sourceKind: z.enum(["agents", "claude", "sentinel"]),
+  sourceKind: z.enum(["agents", "claude", "codex", "sentinel"]),
 });
 
 export type LoadSkillInput = z.infer<typeof loadSkillInputSchema>;

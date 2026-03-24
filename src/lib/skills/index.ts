@@ -7,6 +7,7 @@ const SKILL_FILENAME = "SKILL.md";
 const WATCH_DEBOUNCE_MS = 150;
 const FILE_SAMPLE_LIMIT = 24;
 const GLOBAL_WORKSPACE_KEY = "__global__";
+const CODEX_SOURCE_KIND = "codex" as const;
 
 const SOURCE_PRECEDENCE = [
   { container: ".sentinel/skills", scope: "workspace", sourceKind: "sentinel" },
@@ -18,7 +19,9 @@ const SOURCE_PRECEDENCE = [
 ] as const;
 
 export type SkillScope = (typeof SOURCE_PRECEDENCE)[number]["scope"];
-export type SkillSourceKind = (typeof SOURCE_PRECEDENCE)[number]["sourceKind"];
+export type SkillSourceKind =
+  | (typeof SOURCE_PRECEDENCE)[number]["sourceKind"]
+  | typeof CODEX_SOURCE_KIND;
 
 export type SkillMetadata = {
   description: string;
@@ -52,7 +55,7 @@ type ConventionalSkillRoot = {
   containerDirectory: string;
   precedence: number;
   scope: SkillScope;
-  sourceKind: SkillSourceKind;
+  sourceKind: (typeof SOURCE_PRECEDENCE)[number]["sourceKind"];
 };
 
 type SkillRegistryEntry = {
@@ -212,6 +215,37 @@ async function listSampleFiles(skillDirectory: string) {
 
   await walk(skillDirectory, "");
   return files;
+}
+
+async function loadSkillFromDirectory({
+  directory,
+  scope,
+  sourceKind,
+}: {
+  directory: string;
+  scope: SkillScope;
+  sourceKind: SkillSourceKind;
+}) {
+  const skillFile = path.join(directory, SKILL_FILENAME);
+  const content = await readFile(skillFile, "utf8").catch(() => null);
+
+  if (!content) {
+    return null;
+  }
+
+  const parsed = parseSkillFrontmatter(content);
+
+  return {
+    content: stripSkillFrontmatter(content),
+    description: parsed.description,
+    directory,
+    files: await listSampleFiles(directory),
+    name: parsed.name,
+    preview: stripSkillFrontmatter(content).slice(0, 400),
+    scope,
+    skillFile,
+    sourceKind,
+  } satisfies LoadedSkill;
 }
 
 async function discoverSkillsInRoot(root: ConventionalSkillRoot) {
@@ -602,11 +636,25 @@ export async function loadSkillByName({
   name,
   workspaceRoot,
   globalBase,
+  target = "sentinel",
 }: {
   name: string;
   workspaceRoot: string | null;
   globalBase?: string | null;
+  target?: "sentinel" | "codex";
 }) {
+  if (target === "codex") {
+    return await loadSkillFromDirectory({
+      directory: path.join(
+        globalBase?.trim() || path.join(os.homedir(), ".codex"),
+        "skills",
+        name,
+      ),
+      scope: "global",
+      sourceKind: CODEX_SOURCE_KIND,
+    }).catch(() => null);
+  }
+
   const normalizedName = normalizeSkillName(name);
   const roots = buildConventionalRoots(
     workspaceRoot ? path.resolve(workspaceRoot) : null,
@@ -654,6 +702,7 @@ export const __internal = {
     skillRegistry.clear();
   },
   GLOBAL_WORKSPACE_KEY,
+  loadSkillFromDirectory,
   normalizeSkillName,
   parseSkillFrontmatter,
   stripSkillFrontmatter,
