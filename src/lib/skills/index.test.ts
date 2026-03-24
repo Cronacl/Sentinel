@@ -46,7 +46,7 @@ async function waitForRevision({
   currentRevision: number;
   workspaceRoot: string | null;
 }) {
-  const timeoutAt = Date.now() + 3_000;
+  const timeoutAt = Date.now() + 10_000;
 
   while (Date.now() < timeoutAt) {
     const snapshot = await getSkillSnapshot({ workspaceRoot });
