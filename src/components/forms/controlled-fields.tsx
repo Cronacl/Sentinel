@@ -31,7 +31,7 @@ type BaseFieldProps<
   name: TName;
 };
 
-type SelectOption = {
+export type SelectOption = {
   description?: ReactNode;
   isDisabled?: boolean;
   label: ReactNode;
@@ -402,5 +402,3 @@ export function ControlledNumberField<
     />
   );
 }
-
-export type { SelectOption };

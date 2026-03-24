@@ -734,6 +734,9 @@ export const automations = sqliteTable(
     workspaceId: text("workspace_id"),
     title: text("title").notNull(),
     prompt: text("prompt").notNull(),
+    chatEngine: text("chat_engine", { enum: CHAT_ENGINES })
+      .notNull()
+      .default("sentinel"),
     status: text("status", { enum: AUTOMATION_STATUSES })
       .notNull()
       .default("paused"),
