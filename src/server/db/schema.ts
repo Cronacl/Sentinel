@@ -14,6 +14,7 @@ import {
   AUTOMATION_RUN_STATUSES,
   AUTOMATION_SCHEDULE_TYPES,
   AUTOMATION_STATUSES,
+  CHAT_ENGINES,
   FOLLOW_UP_BEHAVIORS,
   THREAD_FOLLOW_UP_STATUSES,
   INTEGRATION_AUTH_TYPES,
@@ -81,6 +82,7 @@ export const users = sqliteTable(
     themePreference: text("theme_preference", { enum: THEME_PREFERENCES })
       .notNull()
       .default("system"),
+    defaultChatEngine: text("default_chat_engine", { enum: CHAT_ENGINES }),
     defaultChatModelId: text("default_chat_model_id"),
     defaultChatMode: text("default_chat_mode", { enum: THREAD_MODES }),
     defaultChatReasoningEffort: text("default_chat_reasoning_effort"),
@@ -194,6 +196,10 @@ export const threads = sqliteTable(
     title: text("title").notNull(),
     summary: text("summary"),
     mode: text("mode", { enum: THREAD_MODES }).notNull().default("chat"),
+    chatEngine: text("chat_engine", { enum: CHAT_ENGINES })
+      .notNull()
+      .default("sentinel"),
+    chatEngineState: text("chat_engine_state", { mode: "json" }),
     chatModelId: text("chat_model_id"),
     chatReasoningEffort: text("chat_reasoning_effort"),
     createdAt: integer("created_at", { mode: "timestamp" })

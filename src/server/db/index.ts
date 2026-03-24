@@ -44,6 +44,7 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     "webfetch_batch_limit" integer DEFAULT 10 NOT NULL,
     "skills_base_path" text,
     "theme_preference" text DEFAULT 'system' NOT NULL,
+    "default_chat_engine" text,
     "default_chat_model_id" text,
     "default_chat_reasoning_effort" text,
     "selected_workspace_id" text,
@@ -87,6 +88,8 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     "title" text NOT NULL,
     "summary" text,
     "mode" text DEFAULT 'chat' NOT NULL,
+    "chat_engine" text DEFAULT 'sentinel' NOT NULL,
+    "chat_engine_state" text,
     "chat_model_id" text,
     "chat_reasoning_effort" text,
     "created_at" integer NOT NULL,
@@ -133,6 +136,12 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
 
   try {
     db.run(sql`ALTER TABLE "user" ADD COLUMN "skills_base_path" text`);
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(sql`ALTER TABLE "user" ADD COLUMN "default_chat_engine" text`);
   } catch {
     // column already exists
   }
@@ -189,6 +198,20 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
 
   try {
     db.run(sql`ALTER TABLE "thread" ADD COLUMN "pinned_at" integer`);
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(
+      sql`ALTER TABLE "thread" ADD COLUMN "chat_engine" text DEFAULT 'sentinel' NOT NULL`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(sql`ALTER TABLE "thread" ADD COLUMN "chat_engine_state" text`);
   } catch {
     // column already exists
   }

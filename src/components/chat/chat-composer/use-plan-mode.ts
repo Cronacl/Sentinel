@@ -1,3 +1,4 @@
+import type { ChatEngine } from "@/server/db/enums";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
@@ -10,7 +11,10 @@ export function usePlanMode({
   canPersistThreadSelection,
   draftMode,
   globalSelectionQuery,
+  onSelectionChange,
+  planModeAvailable,
   persistSelection,
+  selectedEngine,
   selectedModelKey,
   selectedReasoningEffort,
   selectionScopeKey,
@@ -22,7 +26,15 @@ export function usePlanMode({
   canPersistThreadSelection: boolean;
   draftMode?: "chat" | "plan" | null;
   globalSelectionQuery: PersistSelectionReturn["globalSelectionQuery"];
+  onSelectionChange?: (input: {
+    engine?: ChatEngine;
+    modelId?: string | null;
+    mode?: "chat" | "plan";
+    reasoningEffort?: ReasoningEffort | null;
+  }) => void;
+  planModeAvailable: boolean;
   persistSelection: PersistSelectionReturn["persistSelection"];
+  selectedEngine: ChatEngine;
   selectedModelKey: string | null;
   selectedReasoningEffort: ReasoningEffort | null;
   selectionScopeKey: string;
@@ -42,6 +54,11 @@ export function usePlanMode({
     Boolean(threadSelection?.modelId) || !globalSelectionQuery.isLoading;
 
   useEffect(() => {
+    if (!planModeAvailable) {
+      setPlanMode(false);
+      return;
+    }
+
     if (!preferencesReady) return;
 
     const currentThreadMode = threadSelection?.mode ?? null;
@@ -74,18 +91,26 @@ export function usePlanMode({
   ]);
 
   const handleTogglePlanMode = useCallback(() => {
+    if (!planModeAvailable) {
+      return;
+    }
+
     setPlanMode((prev) => {
       const next = !prev;
+      onSelectionChange?.({ mode: next ? "plan" : "chat" });
       if (selectedModelKey) {
         persistSelection(selectedModelKey, selectedReasoningEffort, {
+          engine: selectedEngine,
           mode: next ? "plan" : "chat",
         });
       } else {
         updateGlobalSelection.mutate({
+          engine: selectedEngine,
           mode: next ? "plan" : "chat",
         });
         if (canPersistThreadSelection && threadId) {
           updateThreadSelection.mutate({
+            engine: selectedEngine,
             mode: next ? "plan" : "chat",
             threadId,
           });
@@ -95,7 +120,10 @@ export function usePlanMode({
     });
   }, [
     canPersistThreadSelection,
+    onSelectionChange,
+    planModeAvailable,
     persistSelection,
+    selectedEngine,
     selectedModelKey,
     selectedReasoningEffort,
     threadId,
@@ -103,5 +131,5 @@ export function usePlanMode({
     updateThreadSelection,
   ]);
 
-  return { handleTogglePlanMode, planMode };
+  return { handleTogglePlanMode, planMode: planModeAvailable ? planMode : false };
 }

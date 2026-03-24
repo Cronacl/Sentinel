@@ -24,11 +24,12 @@ import {
   type ThreadUIMessage,
 } from "@/lib/ai/messages/types";
 import type { ThreadMode, ThreadPlanAnswer } from "@/lib/plan";
-import type { ThreadStatus } from "@/server/db/enums";
+import type { ChatEngine, ThreadStatus } from "@/server/db/enums";
 
 type UseThreadChatOptions = {
   hydrateFromServer?: boolean;
   initialActiveRunId?: string | null;
+  initialChatEngine?: ChatEngine;
   initialMessages?: ThreadUIMessage[];
   initialQueuedFollowUps?: QueuedFollowUpSummary[];
   initialThreadStatus?: ThreadStatus;
@@ -40,6 +41,7 @@ type UseThreadChatOptions = {
 };
 
 type SendThreadMessageInput = {
+  engine: ChatEngine;
   files?: FileUIPart[];
   modelId: string;
   reasoningEffort?: ReasoningEffort | null;
@@ -59,8 +61,10 @@ type AnswerPlanQuestionsInput = {
 
 type ToolApprovalResponseInput = {
   approved: boolean;
+  decision?: string;
   id: string;
   reason?: string;
+  response?: string;
 };
 
 type ThreadConnectionState =
@@ -79,6 +83,7 @@ type ClientTimingPhase =
 
 type ThreadSessionState = {
   activeRunId: string | null;
+  chatEngine: ChatEngine;
   composerState: {
     pendingActionCount: number;
   };
@@ -106,6 +111,7 @@ type SessionStore = {
   hydrate(snapshot: ThreadSessionSnapshot): void;
   markClientTiming(phase: ClientTimingPhase): void;
   refreshSnapshot(options?: { allowMissing?: boolean }): Promise<void>;
+  setRequestError(errorMessage: string): void;
   setConnectionState(
     connectionState: ThreadConnectionState,
     errorMessage?: string | null,
@@ -203,6 +209,7 @@ function areThreadSessionStatesEqual(
   return (
     current === next ||
     (current.activeRunId === next.activeRunId &&
+      current.chatEngine === next.chatEngine &&
       current.composerState.pendingActionCount ===
         next.composerState.pendingActionCount &&
       current.connectionState === next.connectionState &&
@@ -242,6 +249,7 @@ function normalizeSnapshot(
 ): ThreadSessionSnapshot {
   return {
     ...snapshot,
+    chatEngine: snapshot.chatEngine ?? "sentinel",
     messages: normalizeThreadUIMessages(snapshot.messages),
     queuedFollowUps: normalizeQueuedFollowUps(snapshot.queuedFollowUps),
   };
@@ -255,6 +263,7 @@ function createInitialState(
 
   return {
     activeRunId: normalizedSnapshot?.activeRunId ?? null,
+    chatEngine: normalizedSnapshot?.chatEngine ?? "sentinel",
     composerState: {
       pendingActionCount: 0,
     },
@@ -321,6 +330,7 @@ export function mergeThreadSessionStateFromSnapshot(
 
   if (
     current.activeRunId === normalizedSnapshot.activeRunId &&
+    current.chatEngine === normalizedSnapshot.chatEngine &&
     current.connectionState === nextConnectionState &&
     current.errorMessage == null &&
     current.lastAppliedRevision === nextLastAppliedRevision &&
@@ -338,6 +348,7 @@ export function mergeThreadSessionStateFromSnapshot(
   return {
     ...current,
     activeRunId: normalizedSnapshot.activeRunId,
+    chatEngine: normalizedSnapshot.chatEngine,
     connectionState: nextConnectionState,
     errorMessage: null,
     lastAppliedRevision: nextLastAppliedRevision,
@@ -346,6 +357,29 @@ export function mergeThreadSessionStateFromSnapshot(
     queuedFollowUps: normalizedSnapshot.queuedFollowUps,
     threadTitle: normalizedSnapshot.threadTitle,
     threadStatus: normalizedSnapshot.threadStatus,
+  };
+}
+
+export function mergeThreadSessionStateWithError(
+  current: ThreadSessionState,
+  errorMessage: string,
+): ThreadSessionState {
+  const nextConnectionState =
+    current.activeRunId != null && current.threadStatus === "streaming"
+      ? current.connectionState
+      : "error";
+
+  if (
+    current.connectionState === nextConnectionState &&
+    current.errorMessage === errorMessage
+  ) {
+    return current;
+  }
+
+  return {
+    ...current,
+    connectionState: nextConnectionState,
+    errorMessage,
   };
 }
 
@@ -397,7 +431,9 @@ function applyToolApprovalResponse(
         approval: {
           id: input.id,
           approved: input.approved,
+          ...(input.decision ? { decision: input.decision } : {}),
           ...(input.reason ? { reason: input.reason } : {}),
+          ...(input.response ? { response: input.response } : {}),
         },
         state: "approval-responded" as const,
       };
@@ -809,6 +845,7 @@ function createSessionStore(
         composerState: {
           pendingActionCount: current.composerState.pendingActionCount + 1,
         },
+        errorMessage: null,
       }));
     },
     disconnect,
@@ -847,6 +884,11 @@ function createSessionStore(
         return;
       }
       this.hydrate(snapshot);
+    },
+    setRequestError(errorMessage) {
+      setState((current) =>
+        mergeThreadSessionStateWithError(current, errorMessage),
+      );
     },
     setConnectionState(connectionState, errorMessage = null) {
       setState((current) => ({
@@ -908,6 +950,7 @@ function getLastAssistantMessage(messages: ThreadUIMessage[]) {
 export function useThreadChat({
   hydrateFromServer = false,
   initialActiveRunId = null,
+  initialChatEngine = "sentinel",
   initialMessages = [],
   initialQueuedFollowUps = [],
   initialThreadStatus = "idle",
@@ -921,6 +964,7 @@ export function useThreadChat({
     () =>
       getOrCreateSessionStore(threadId, {
         activeRunId: initialActiveRunId,
+        chatEngine: initialChatEngine,
         messages: initialMessages,
         queuedFollowUps: initialQueuedFollowUps,
         threadId,
@@ -941,6 +985,7 @@ export function useThreadChat({
   useEffect(() => {
     store.hydrate({
       activeRunId: initialActiveRunId,
+      chatEngine: initialChatEngine,
       messages: initialMessages,
       queuedFollowUps: initialQueuedFollowUps,
       threadId,
@@ -949,6 +994,7 @@ export function useThreadChat({
     });
   }, [
     initialActiveRunId,
+    initialChatEngine,
     initialMessages,
     initialQueuedFollowUps,
     initialThreadStatus,
@@ -1039,6 +1085,7 @@ export function useThreadChat({
           error instanceof Error
             ? error
             : new Error("Unable to process the chat request.");
+        store.setRequestError(nextError.message);
         onError?.(nextError);
         throw nextError;
       } finally {
@@ -1050,6 +1097,7 @@ export function useThreadChat({
 
   const sendMessage = useCallback(
     async ({
+      engine,
       files,
       modelId,
       reasoningEffort,
@@ -1057,6 +1105,7 @@ export function useThreadChat({
       threadMode,
     }: SendThreadMessageInput) => {
       return runAction({
+        engine,
         id: threadId,
         message: createUserThreadMessage({ files, text }),
         modelId,
@@ -1071,6 +1120,7 @@ export function useThreadChat({
 
   const editMessage = useCallback(
     async ({
+      engine,
       files,
       modelId,
       reasoningEffort,
@@ -1078,6 +1128,7 @@ export function useThreadChat({
       text,
     }: EditThreadMessageInput) => {
       await runAction({
+        engine,
         id: threadId,
         message: createUserThreadMessage({ files, text }),
         messageId: targetMessageId,
@@ -1092,6 +1143,7 @@ export function useThreadChat({
 
   const queueFollowUp = useCallback(
     async ({
+      engine,
       files,
       modelId,
       reasoningEffort,
@@ -1099,6 +1151,7 @@ export function useThreadChat({
       threadMode,
     }: SendThreadMessageInput) => {
       await runAction({
+        engine,
         id: threadId,
         message: createUserThreadMessage({ files, text }),
         modelId,
@@ -1113,6 +1166,7 @@ export function useThreadChat({
 
   const steerFollowUp = useCallback(
     async ({
+      engine,
       files,
       modelId,
       reasoningEffort,
@@ -1120,6 +1174,7 @@ export function useThreadChat({
       threadMode,
     }: SendThreadMessageInput) => {
       await runAction({
+        engine,
         id: threadId,
         message: createUserThreadMessage({ files, text }),
         modelId,
@@ -1221,6 +1276,7 @@ export function useThreadChat({
     activeRunId: state.activeRunId,
     addToolApprovalResponse,
     answerPlanQuestions,
+    chatEngine: state.chatEngine,
     connectionState: state.connectionState,
     editMessage,
     errorMessage: state.errorMessage,

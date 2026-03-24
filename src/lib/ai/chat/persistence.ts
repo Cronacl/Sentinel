@@ -4,6 +4,15 @@ import { db } from "@/server/db";
 import { threadFollowUps, threadMessages, threads } from "@/server/db/schema";
 import type { ThreadMode } from "@/lib/plan";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import type { ChatEngine } from "@/server/db/enums";
+import type {
+  CodexThreadState,
+  ThreadChatEngineState,
+} from "@/lib/ai/chat/engines/types";
+import {
+  buildThreadChatEngineState,
+  parseThreadChatEngineState,
+} from "@/lib/ai/chat/engines/types";
 
 import {
   buildActiveThreadMessages,
@@ -43,15 +52,23 @@ export async function ensureThread(
   workspaceId: string,
   title: string,
   mode: ThreadMode = "chat",
+  engine: ChatEngine = "sentinel",
 ) {
   const existing = await db.query.threads.findFirst({
     where: eq(threads.id, threadId),
-    columns: { id: true, mode: true },
+    columns: { chatEngine: true, id: true, mode: true },
   });
 
   if (!existing) {
     db.insert(threads)
-      .values({ id: threadId, mode, title, userId, workspaceId })
+      .values({
+        chatEngine: engine,
+        id: threadId,
+        mode,
+        title,
+        userId,
+        workspaceId,
+      })
       .onConflictDoNothing({ target: threads.id })
       .run();
   }
@@ -65,6 +82,8 @@ export async function loadThread(threadId: string) {
     columns: {
       activeStreamId: true,
       archivedAt: true,
+      chatEngine: true,
+      chatEngineState: true,
       id: true,
       mode: true,
       status: true,
@@ -80,6 +99,7 @@ export async function loadThread(threadId: string) {
   return {
     ...thread,
     activeRunId: thread.activeStreamId,
+    chatEngineState: parseThreadChatEngineState(thread.chatEngineState),
   };
 }
 
@@ -106,6 +126,7 @@ export async function getThreadContextCompactionCheckpoint(
 export function updateThreadChatSettings(
   threadId: string,
   settings: {
+    engine?: ChatEngine | null;
     mode?: ThreadMode | null;
     modelId?: string | null;
     reasoningEffort?: string | null;
@@ -113,6 +134,9 @@ export function updateThreadChatSettings(
 ) {
   db.update(threads)
     .set({
+      ...(settings.engine === undefined
+        ? {}
+        : { chatEngine: settings.engine ?? "sentinel" }),
       ...(settings.modelId === undefined
         ? {}
         : { chatModelId: settings.modelId ?? null }),
@@ -124,6 +148,26 @@ export function updateThreadChatSettings(
     })
     .where(eq(threads.id, threadId))
     .run();
+}
+
+export function updateThreadChatEngineState(
+  threadId: string,
+  engineState: ThreadChatEngineState | null,
+) {
+  db.update(threads)
+    .set({
+      chatEngineState: engineState,
+      updatedAt: new Date(),
+    })
+    .where(eq(threads.id, threadId))
+    .run();
+}
+
+export function updateCodexThreadState(
+  threadId: string,
+  state: CodexThreadState | null,
+) {
+  updateThreadChatEngineState(threadId, buildThreadChatEngineState("codex", state));
 }
 
 export async function loadThreadMessages(threadId: string) {

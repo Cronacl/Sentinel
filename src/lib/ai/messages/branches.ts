@@ -131,8 +131,26 @@ function materializeNodes(records: PersistedThreadMessageRecord[]) {
     nodes.map((node) => [node.message.id, node]),
   );
 
-  return nodes.map((node) => {
+  return nodes.map((node, index) => {
     const editedFromMessageId = node.metadata.editedFromMessageId;
+    const previous = nodes[index - 1];
+
+    // Compatibility repair for Codex-backed turns that were previously stored
+    // with the assistant attached to the user's parent instead of the user.
+    if (
+      node.message.role === "assistant" &&
+      previous?.message.role === "user" &&
+      node.parentMessageId === previous.parentMessageId &&
+      node.parentMessageId !== previous.message.id &&
+      node.metadata.runId &&
+      node.metadata.runId === previous.metadata.runId
+    ) {
+      return {
+        ...node,
+        parentMessageId: previous.message.id,
+      };
+    }
+
     if (
       node.message.role !== "user" ||
       !editedFromMessageId ||

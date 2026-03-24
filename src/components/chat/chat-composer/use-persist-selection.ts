@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import type { ChatEngine } from "@/server/db/enums";
 import { applyThreadSettingsCacheUpdate } from "@/lib/threads/cache";
 import { api } from "@/trpc/react";
 
@@ -21,6 +22,10 @@ export function usePersistSelection({
     onMutate: (input) => {
       const previous = utils.chatPreferences.get.getData();
       utils.chatPreferences.get.setData(undefined, (current) => ({
+        engine:
+          input.engine !== undefined
+            ? (input.engine ?? "sentinel")
+            : (current?.engine ?? "sentinel"),
         mode:
           input.mode !== undefined
             ? (input.mode ?? null)
@@ -50,6 +55,7 @@ export function usePersistSelection({
     onMutate: (input) => {
       applyThreadSettingsCacheUpdate({
         patch: {
+          ...(input.engine === undefined ? {} : { chatEngine: input.engine }),
           ...(input.modelId === undefined
             ? {}
             : { chatModelId: input.modelId }),
@@ -70,6 +76,7 @@ export function usePersistSelection({
     onSuccess: (data) => {
       applyThreadSettingsCacheUpdate({
         patch: {
+          chatEngine: data.engine,
           chatModelId: data.modelId,
           chatReasoningEffort: data.reasoningEffort ?? null,
           mode: data.mode,
@@ -86,6 +93,7 @@ export function usePersistSelection({
       modelId: string,
       reasoningEffort: ReasoningEffort | null,
       options?: {
+        engine?: ChatEngine;
         mode?: "chat" | "plan";
         skipGlobal?: boolean;
         skipThread?: boolean;
@@ -93,6 +101,7 @@ export function usePersistSelection({
     ) => {
       if (!options?.skipGlobal) {
         updateGlobalSelection.mutate({
+          engine: options?.engine,
           mode: options?.mode,
           modelId,
           reasoningEffort,
@@ -101,6 +110,7 @@ export function usePersistSelection({
 
       if (!options?.skipThread && canPersistThreadSelection && threadId) {
         updateThreadSelection.mutate({
+          ...(options?.engine === undefined ? {} : { engine: options.engine }),
           ...(options?.mode === undefined ? {} : { mode: options.mode }),
           modelId,
           reasoningEffort,
@@ -116,8 +126,38 @@ export function usePersistSelection({
     ],
   );
 
+  const persistEngineSelection = useCallback(
+    (
+      engine: ChatEngine,
+      options?: {
+        mode?: "chat" | "plan";
+        skipThread?: boolean;
+      },
+    ) => {
+      updateGlobalSelection.mutate({
+        engine,
+        ...(options?.mode === undefined ? {} : { mode: options.mode }),
+      });
+
+      if (!options?.skipThread && canPersistThreadSelection && threadId) {
+        updateThreadSelection.mutate({
+          engine,
+          ...(options?.mode === undefined ? {} : { mode: options.mode }),
+          threadId,
+        });
+      }
+    },
+    [
+      canPersistThreadSelection,
+      threadId,
+      updateGlobalSelection,
+      updateThreadSelection,
+    ],
+  );
+
   return {
     globalSelectionQuery,
+    persistEngineSelection,
     persistSelection,
     updateGlobalSelection,
     updateThreadSelection,

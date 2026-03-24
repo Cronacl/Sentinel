@@ -1,4 +1,5 @@
 import type { AIProvider } from "@/server/db/enums";
+import type { ChatEngine } from "@/server/db/enums";
 import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
 
 import type { ReasoningEffort } from "../providers/models";
@@ -17,6 +18,7 @@ export type ThreadChatTrigger =
   | "stop-stream";
 
 export type ThreadChatRequest = {
+  engine?: ChatEngine;
   message?: ThreadUIMessage;
   messages?: ThreadUIMessage[];
   messageId?: string;

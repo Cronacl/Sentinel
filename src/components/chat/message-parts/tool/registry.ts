@@ -101,6 +101,19 @@ import { MongoFindTool } from "./renderers/integrations/database/mongodb/mongo-f
 import { MongoMutationTool } from "./renderers/integrations/database/mongodb/mongo-mutation";
 import { MongoAggregateTool } from "./renderers/integrations/database/mongodb/mongo-aggregate";
 import { MongoCountTool } from "./renderers/integrations/database/mongodb/mongo-count";
+import { CodexRuntimeTool } from "./renderers/codex-runtime";
+import { CodexFileChangeTool } from "./renderers/codex-file-change";
+import { CodexImageViewTool } from "./renderers/codex-image-view";
+import { CodexMcpTool } from "./renderers/codex-mcp";
+import { CodexPlanTool } from "./renderers/codex-plan";
+import { CodexShellTool } from "./renderers/codex-shell";
+import {
+  CodexCollabAgentTool,
+  CodexContextCompactionTool,
+  CodexReviewModeTool,
+} from "./renderers/codex-status";
+import { CodexUserInputTool } from "./renderers/codex-user-input";
+import { CodexWebSearchTool } from "./renderers/codex-web-search";
 
 const renderers: Record<string, Renderer> = {
   apply_patch: WorkspaceTool,
@@ -313,6 +326,19 @@ const renderers: Record<string, Renderer> = {
   pubmed_get_article: PubMedArticleTool,
 };
 
+const codexRenderers: Record<string, Renderer> = {
+  codex_collab_agent: CodexCollabAgentTool,
+  codex_command_execution: CodexShellTool,
+  codex_context_compaction: CodexContextCompactionTool,
+  codex_file_change: CodexFileChangeTool,
+  codex_image_view: CodexImageViewTool,
+  codex_mcp_tool_call: CodexMcpTool,
+  codex_plan: CodexPlanTool,
+  codex_review_mode: CodexReviewModeTool,
+  codex_user_input: CodexUserInputTool,
+  codex_web_search: CodexWebSearchTool,
+};
+
 function isIntegrationToolName(name: string) {
   return (
     name.startsWith("gmail_") ||
@@ -355,6 +381,10 @@ export function resolveRenderer(part: ToolPart): Renderer | undefined {
   }
 
   if (part.type === "dynamic-tool") {
+    if (part.toolName.startsWith("codex_")) {
+      return codexRenderers[part.toolName] ?? CodexRuntimeTool;
+    }
+
     return (
       renderers[part.toolName] ?? resolveIntegrationFallback(part.toolName)
     );
