@@ -615,6 +615,7 @@ mock.module("@/lib/integrations/runtime", () => ({
   countIntegrationTools,
   getEnabledIntegrations,
   getIntegrationLabel,
+  getIntegrationToolPrefix: mock(() => null),
 }));
 
 mock.module("@/lib/integrations/registry", () => ({
@@ -1003,6 +1004,7 @@ describe("runThreadChat title generation", () => {
       model: resolvedTitleModel,
     });
     expect(updateThreadChatSettings).toHaveBeenCalledWith("thread-1", {
+      engine: "sentinel",
       mode: "chat",
       modelId: "openai:gpt-5.2",
       reasoningEffort: "high",
@@ -1094,6 +1096,7 @@ describe("runThreadChat title generation", () => {
       "workspace-1",
       "   ",
       "chat",
+      "sentinel",
     );
     expect(resolveThreadTitleModel).not.toHaveBeenCalled();
     expect(generateThreadTitle).not.toHaveBeenCalled();
@@ -2114,6 +2117,7 @@ describe("runThreadChat approvals and lifecycle", () => {
       "workspace-1",
       "Summarize the refactor",
       "plan",
+      "sentinel",
     );
   });
 
@@ -2144,6 +2148,7 @@ describe("runThreadChat approvals and lifecycle", () => {
       "ask_question",
     ]);
     expect(updateThreadChatSettings).toHaveBeenCalledWith("thread-1", {
+      engine: "sentinel",
       mode: "plan",
       modelId: "openai:gpt-5.2",
       reasoningEffort: "high",

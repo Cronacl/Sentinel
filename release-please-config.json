@@ -1,0 +1,13 @@
+{
+  "packages": {
+    ".": {
+      "changelog-path": "CHANGELOG.md",
+      "include-component-in-tag": false,
+      "include-v-in-tag": true,
+      "package-name": "Sentinel",
+      "prerelease": true,
+      "prerelease-type": "alpha",
+      "release-type": "node"
+    }
+  }
+}

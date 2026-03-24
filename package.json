@@ -13,6 +13,7 @@
   "main": "desktop/main/index.mjs",
   "scripts": {
     "preinstall": "node ./scripts/check-package-manager.mjs",
+    "prepare": "lefthook install",
     "build": "node ./scripts/rebuild-node-native.mjs && node ./scripts/next-build.mjs",
     "build:desktop": "bun run build:desktop:mac",
     "build:desktop:linux": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform linux --target AppImage",
@@ -28,9 +29,7 @@
     "db:studio": "bun x drizzle-kit studio",
     "dev": "node ./scripts/rebuild-node-native.mjs && next dev --turbo",
     "preview": "node ./scripts/rebuild-node-native.mjs && node ./scripts/next-build.mjs && next start",
-    "release:prepare": "node ./scripts/release/prepare-release.mjs",
-    "release:sync-labels": "node ./scripts/release/sync-release-labels.mjs",
-    "release:validate-pr-labels": "node ./scripts/release/validate-pr-labels.mjs",
+    "release:version:check": "node ./scripts/release/validate-release-version.mjs",
     "start": "node ./scripts/rebuild-node-native.mjs && next start",
     "test": "node ./scripts/run-tests.mjs",
     "typecheck": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc --noEmit"
@@ -96,6 +95,8 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.5.0",
+    "@commitlint/config-conventional": "^20.5.0",
     "@tailwindcss/postcss": "^4.0.15",
     "@trivago/prettier-plugin-sort-imports": "^6.0.2",
     "@types/better-sqlite3": "^7.6.13",
@@ -107,6 +108,8 @@
     "drizzle-kit": "^0.31.9",
     "electron": "40.8.0",
     "electron-builder": "26.8.1",
+    "lefthook": "^2.1.4",
+    "lint-staged": "^16.4.0",
     "postcss": "^8.5.3",
     "prettier": "^3.8.1",
     "prettier-plugin-tailwindcss": "^0.7.2",
