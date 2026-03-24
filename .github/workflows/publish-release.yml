@@ -86,7 +86,7 @@ jobs:
   build:
     name: build-${{ matrix.platform }}
     needs: prepare
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     permissions:
       contents: read
@@ -99,24 +99,24 @@ jobs:
               dist/*.dmg
               dist/*.blockmap
               dist/latest-mac.yml
-            os: macos-latest
             platform: mac
+            runner: macos-latest
             script: build:desktop:mac
           - artifact_name: release-windows
             artifact_paths: |
               dist/*.exe
               dist/*.blockmap
               dist/latest.yml
-            os: windows-latest
             platform: windows
+            runner: blacksmith-4vcpu-windows-2025
             script: build:desktop:windows
           - artifact_name: release-linux
             artifact_paths: |
               dist/*.AppImage
               dist/*.blockmap
               dist/latest-linux.yml
-            os: ubuntu-latest
             platform: linux
+            runner: blacksmith-4vcpu-ubuntu-2404
             script: build:desktop:linux
     steps:
       - uses: actions/checkout@v4
