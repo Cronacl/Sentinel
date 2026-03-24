@@ -210,6 +210,7 @@ const resourcesPath =
     : path.join(unpackedAppPath, "resources");
 const appAsarPath = path.join(resourcesPath, "app.asar");
 const appAsarUnpackedPath = path.join(resourcesPath, "app.asar.unpacked");
+const shellNodePtyPath = path.join(resourcesPath, "node_modules", "node-pty");
 const serverPath = path.join(resourcesPath, "server");
 
 const appAsarEntries = listPackage(appAsarPath);
@@ -226,10 +227,26 @@ const denylistedUnpackedFiles = unpackedFiles.filter((filePath) =>
     normalizePathForMatch(filePath).includes(pattern),
   ),
 );
+const shellNodePtyFiles = (await pathExists(shellNodePtyPath))
+  ? await collectFiles(shellNodePtyPath)
+  : [];
+const hasShellNodePtyEntrypoint = shellNodePtyFiles.some((filePath) =>
+  normalizePathForMatch(filePath).endsWith("/lib/index.js"),
+);
+const hasShellNodePtyBinary = shellNodePtyFiles.some((filePath) =>
+  normalizePathForMatch(filePath).endsWith("/pty.node"),
+);
+const requiresSpawnHelper = platform === "mac" || platform === "linux";
+const hasShellNodePtySpawnHelper =
+  !requiresSpawnHelper ||
+  shellNodePtyFiles.some((filePath) =>
+    normalizePathForMatch(filePath).endsWith("/spawn-helper"),
+  );
 
 const reportRows = [
   ["app.asar", appAsarPath],
   ["app.asar.unpacked", appAsarUnpackedPath],
+  ["shell node-pty", shellNodePtyPath],
   ["server", serverPath],
   ["unpacked app", unpackedAppPath],
   ["installer", installerPath],
@@ -258,6 +275,24 @@ if (unexpectedAsarEntries.length > 0) {
 if (denylistedUnpackedFiles.length > 0) {
   failures.push(
     `Unexpected shell-native payload in app.asar.unpacked:\n${denylistedUnpackedFiles.join("\n")}`,
+  );
+}
+
+if (!hasShellNodePtyEntrypoint) {
+  failures.push(
+    `Desktop shell dependency is missing node-pty/lib/index.js at ${shellNodePtyPath}.`,
+  );
+}
+
+if (!hasShellNodePtyBinary) {
+  failures.push(
+    `Desktop shell dependency is missing a packaged node-pty native binary at ${shellNodePtyPath}.`,
+  );
+}
+
+if (!hasShellNodePtySpawnHelper) {
+  failures.push(
+    `Desktop shell dependency is missing spawn-helper at ${shellNodePtyPath}.`,
   );
 }
 
