@@ -3,11 +3,10 @@ import StarterKit from "@tiptap/starter-kit";
 import { useEditor } from "@tiptap/react";
 import { useEffect, useRef } from "react";
 
-const PLACEHOLDER_TEXT = "Ask follow-up changes";
-
 export function useComposerEditor({
   isBusy,
   isLocked,
+  isThread,
   onAddBrowserFiles,
   onSendRef,
   promptSeed,
@@ -15,11 +14,13 @@ export function useComposerEditor({
 }: {
   isBusy: boolean;
   isLocked: boolean;
+  isThread: boolean;
   onAddBrowserFiles: (files: File[]) => void;
   onSendRef: React.RefObject<() => void>;
   promptSeed?: string;
   promptSeedKey?: string | number;
 }) {
+  const placeholderText = isThread ? "Ask follow-up changes" : "Ask anything";
   const addBrowserFilesRef = useRef(onAddBrowserFiles);
   addBrowserFilesRef.current = onAddBrowserFiles;
 
@@ -71,7 +72,7 @@ export function useComposerEditor({
         heading: false,
         horizontalRule: false,
       }),
-      Placeholder.configure({ placeholder: PLACEHOLDER_TEXT }),
+      Placeholder.configure({ placeholder: placeholderText }),
     ],
     immediatelyRender: false,
   });
@@ -85,10 +86,10 @@ export function useComposerEditor({
     if (placeholderExt) {
       placeholderExt.options.placeholder = isBusy
         ? "Generating..."
-        : PLACEHOLDER_TEXT;
+        : placeholderText;
       editor.view.dispatch(editor.state.tr);
     }
-  }, [editor, isLocked, isBusy]);
+  }, [editor, isLocked, isBusy, placeholderText]);
 
   useEffect(() => {
     if (!editor || promptSeedKey === undefined) return;
@@ -111,5 +112,5 @@ export function useComposerEditor({
     editor.commands.focus("end");
   }, [editor, promptSeed, promptSeedKey]);
 
-  return { editor, placeholderText: PLACEHOLDER_TEXT };
+  return { editor, placeholderText };
 }

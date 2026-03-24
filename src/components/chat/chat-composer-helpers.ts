@@ -1,16 +1,19 @@
-import type { AIProvider } from "@/server/db/enums";
-import {
-  getModelAttachmentCapabilities,
-  getDefaultReasoningEffort,
-  getSupportedReasoningEfforts,
-  type ReasoningEffort,
-} from "@/lib/ai/providers/models";
-import type { AttachmentKind } from "@/lib/files/chat-attachment-types";
+import type { AIProvider, ChatEngine } from "@/server/db/enums";
+import type { ReasoningEffort } from "@/lib/ai/providers/models";
 
 export type ChatComposerModel = {
+  contextWindow?: number;
+  defaultReasoningEffort: ReasoningEffort | null;
+  description: string;
   displayName: string;
   modelId: string;
-  provider: AIProvider;
+  engine: ChatEngine;
+  inputModalities: string[];
+  isConnected: boolean;
+  isEnabled: boolean;
+  provider: AIProvider | null;
+  rawModelId: string;
+  supportedReasoningEfforts: ReasoningEffort[];
 };
 
 export function getReasoningEffortLabel(effort: ReasoningEffort) {
@@ -18,11 +21,10 @@ export function getReasoningEffortLabel(effort: ReasoningEffort) {
 }
 
 export function resolveReasoningEffort(
-  provider: AIProvider,
-  modelId: string,
+  model: ChatComposerModel,
   preferredEffort?: ReasoningEffort | null,
 ) {
-  const supportedEfforts = getSupportedReasoningEfforts(provider, modelId);
+  const supportedEfforts = model.supportedReasoningEfforts;
   if (supportedEfforts.length === 0) {
     return null;
   }
@@ -31,40 +33,5 @@ export function resolveReasoningEffort(
     return preferredEffort;
   }
 
-  return getDefaultReasoningEffort(provider, modelId);
-}
-
-export function getAttachmentKindLabel(kind: AttachmentKind) {
-  switch (kind) {
-    case "image":
-      return "images";
-    case "document":
-      return "documents";
-    case "code-text":
-      return "text/code files";
-    case "archive":
-      return "archives";
-    case "audio":
-      return "audio files";
-    case "video":
-      return "video files";
-    default:
-      return "files";
-  }
-}
-
-export function supportsAttachmentKind(
-  kind: AttachmentKind,
-  capabilities: ReturnType<typeof getModelAttachmentCapabilities>,
-) {
-  switch (kind) {
-    case "image":
-      return capabilities.supportsImages;
-    case "document":
-      return capabilities.supportsDocuments;
-    case "code-text":
-      return capabilities.supportsCodeTextFiles;
-    default:
-      return false;
-  }
+  return model.defaultReasoningEffort;
 }

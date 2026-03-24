@@ -45,6 +45,7 @@ import { getSkillSnapshot } from "@/lib/skills";
 import { resolveThreadTitleModel } from "../title/model";
 import { generateThreadTitle } from "../title/generate";
 import { parseRequest } from "./parse-request";
+import { runCodexThreadChat, stopCodexThreadRun } from "./codex";
 import {
   buildActiveThreadMessages,
   buildModelTranscript,
@@ -203,6 +204,7 @@ async function handleFollowUpAction(
     request.workspaceId,
     fallbackTitle,
     threadMode,
+    existingThread?.chatEngine ?? request.engine ?? "sentinel",
   );
 
   const payload = {
@@ -1187,9 +1189,12 @@ async function runParsedThreadChat(
     workspaceId: request.workspaceId,
   });
   const existingThread = await persist.loadThread(request.threadId);
+  const engine = existingThread?.chatEngine ?? request.engine ?? "sentinel";
 
   if (request.trigger === "stop-stream") {
-    return handleStopStream(request);
+    return engine === "codex"
+      ? stopCodexThreadRun(request, existingThread)
+      : handleStopStream(request);
   }
 
   if (request.trigger === "queue-follow-up") {
@@ -1198,6 +1203,10 @@ async function runParsedThreadChat(
 
   if (request.trigger === "steer-follow-up") {
     return handleFollowUpAction(request, existingThread, "front");
+  }
+
+  if (engine === "codex") {
+    return runCodexThreadChat(request, existingThread);
   }
 
   const allRecords = await persist.loadThreadMessages(request.threadId);
@@ -1226,6 +1235,7 @@ async function runParsedThreadChat(
     request.workspaceId,
     fallbackTitle,
     threadMode,
+    engine,
   );
   let activeRunId: string | null = null;
 
@@ -1239,6 +1249,7 @@ async function runParsedThreadChat(
     }
 
     await persist.updateThreadChatSettings(request.threadId, {
+      engine,
       ...(request.modelId ? { modelId: request.modelId } : {}),
       ...(request.reasoningEffort !== undefined
         ? { reasoningEffort: request.reasoningEffort ?? null }

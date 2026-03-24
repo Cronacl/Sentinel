@@ -251,7 +251,7 @@ export function ComposerWorkspaceBar({
     checkoutBranchMutation.isPending || createBranchMutation.isPending;
 
   return (
-    <div className="flex min-h-9 items-center justify-between gap-2 bg-transparent px-2.5 py-2">
+    <div className="flex min-h-9 items-center justify-between gap-2 bg-transparent px-2.5 py-1">
       <Popover.Root
         isOpen={permissionPopoverOpen}
         onOpenChange={setPermissionPopoverOpen}

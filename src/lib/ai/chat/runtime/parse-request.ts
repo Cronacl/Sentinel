@@ -5,6 +5,7 @@ import {
 } from "@/lib/ai/messages/types";
 import { validateThreadUIMessage } from "@/lib/ai/messages/ui";
 import { type ThreadPlanAnswer } from "@/lib/plan";
+import { CHAT_ENGINES, type ChatEngine } from "@/server/db/enums";
 
 import { InvalidThreadChatRequestError } from "../errors";
 import type { ThreadChatRequest, ThreadChatTrigger } from "../types";
@@ -48,6 +49,9 @@ export async function parseRequest(
 
   const messageId = str(input.messageId);
   const modelId = str(input.modelId);
+  const engine = CHAT_ENGINES.includes(input.engine as ChatEngine)
+    ? (input.engine as ChatEngine)
+    : undefined;
   const planQuestionSetId = str(input.planQuestionSetId);
   const rawPlanAnswers = Array.isArray(input.planAnswers)
     ? (input.planAnswers as ThreadPlanAnswer[])
@@ -106,6 +110,7 @@ export async function parseRequest(
   return {
     ...(message ? { message } : {}),
     ...(messages ? { messages } : {}),
+    ...(engine ? { engine } : {}),
     ...(messageId ? { messageId } : {}),
     ...(modelId ? { modelId } : {}),
     ...(rawPlanAnswers ? { planAnswers: rawPlanAnswers } : {}),

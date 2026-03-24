@@ -31,6 +31,7 @@ import {
   type MessagePart,
 } from "./message-parts/types";
 import { Button } from "@heroui/react";
+import type { ChatEngine } from "@/server/db/enums";
 
 const PRE_RESPONSE_STATUS_LABELS = [
   "Working...",
@@ -253,7 +254,9 @@ function getAttachmentGridColumns(count: number) {
 }
 
 function AssistantMessage({
+  chatEngine,
   onApproveTool,
+  onApproveToolWithDecision,
   onAnswerPlanQuestions,
   onDenyTool,
   onStartPlanImplementation,
@@ -263,7 +266,12 @@ function AssistantMessage({
   isStreaming,
   message,
 }: {
-  onApproveTool?: (approvalId: string) => void;
+  chatEngine?: ChatEngine;
+  onApproveTool?: (approvalId: string, response?: string) => void;
+  onApproveToolWithDecision?: (
+    approvalId: string,
+    decision: string,
+  ) => void;
   onAnswerPlanQuestions?: (input: {
     answers: Array<{
       answer: string;
@@ -281,6 +289,7 @@ function AssistantMessage({
   isStreaming: boolean;
   message: ThreadUIMessage;
 }) {
+  const supportsSentinelMessageActions = chatEngine !== "codex";
   const assistantText = useMemo(() => getAssistantText(message), [message]);
   const groups = useMemo(
     () => groupMessageParts(message.parts),
@@ -409,6 +418,7 @@ function AssistantMessage({
                   <ToolPart
                     key={key}
                     onApprove={onApproveTool}
+                    onApproveWithDecision={onApproveToolWithDecision}
                     onAnswerPlanQuestions={stableOnAnswerPlanQuestions}
                     onDeny={onDenyTool}
                     onStartPlanImplementation={onStartPlanImplementation}
@@ -433,6 +443,7 @@ function AssistantMessage({
               <CopyButton text={assistantText} title="Copy answer" />
             ) : null}
             {!isStreaming &&
+            supportsSentinelMessageActions &&
             onRetry &&
             (status === "error" || status === "cancelled") ? (
               <MessageActionButton
@@ -441,7 +452,10 @@ function AssistantMessage({
                 onClick={() => onRetry?.(message.id)}
               />
             ) : null}
-            {!isStreaming && onRegenerate && status === "completed" ? (
+            {!isStreaming &&
+            supportsSentinelMessageActions &&
+            onRegenerate &&
+            status === "completed" ? (
               <MessageActionButton
                 icon={ArrowReloadHorizontalIcon}
                 label="Regenerate"
@@ -462,14 +476,17 @@ function AssistantMessage({
 }
 
 function UserMessage({
+  chatEngine,
   message,
   onEdit,
   onSelectBranch,
 }: {
+  chatEngine?: ChatEngine;
   message: ThreadUIMessage;
   onEdit?: (message: ThreadUIMessage) => void;
   onSelectBranch?: (messageId: string) => void;
 }) {
+  const supportsSentinelMessageActions = chatEngine !== "codex";
   const fileParts = message.parts.filter(
     (part): part is Extract<MessagePart, { type: "file" }> =>
       part.type === "file",
@@ -517,7 +534,7 @@ function UserMessage({
             text={textParts.map((part) => part.text).join("\n\n")}
             title="Copy prompt"
           />
-          {onEdit ? (
+          {supportsSentinelMessageActions && onEdit ? (
             <MessageActionButton
               icon={PencilEdit02Icon}
               label="Edit"
@@ -532,7 +549,12 @@ function UserMessage({
 }
 
 type ChatMessageProps = {
-  onApproveTool?: (approvalId: string) => void;
+  chatEngine?: ChatEngine;
+  onApproveTool?: (approvalId: string, response?: string) => void;
+  onApproveToolWithDecision?: (
+    approvalId: string,
+    decision: string,
+  ) => void;
   onAnswerPlanQuestions?: (input: {
     answers: Array<{
       answer: string;
@@ -553,9 +575,11 @@ type ChatMessageProps = {
 };
 
 export const ChatMessage = memo(function ChatMessage({
+  chatEngine,
   message,
   isStreaming = false,
   onApproveTool,
+  onApproveToolWithDecision,
   onAnswerPlanQuestions,
   onDenyTool,
   onStartPlanImplementation,
@@ -567,6 +591,7 @@ export const ChatMessage = memo(function ChatMessage({
   if (message.role === "user") {
     return (
       <UserMessage
+        chatEngine={chatEngine}
         message={message}
         onEdit={onEdit}
         onSelectBranch={onSelectBranch}
@@ -576,9 +601,11 @@ export const ChatMessage = memo(function ChatMessage({
 
   return (
     <AssistantMessage
+      chatEngine={chatEngine}
       isStreaming={isStreaming}
       message={message}
       onApproveTool={onApproveTool}
+      onApproveToolWithDecision={onApproveToolWithDecision}
       onAnswerPlanQuestions={onAnswerPlanQuestions}
       onDenyTool={onDenyTool}
       onStartPlanImplementation={onStartPlanImplementation}

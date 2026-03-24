@@ -74,4 +74,30 @@ describe("parseRequest", () => {
       type: "tool-ask_question",
     });
   });
+
+  it("parses engine-scoped submit requests for Codex-backed threads", async () => {
+    const result = await parseRequest(
+      {
+        engine: "codex",
+        id: "thread-codex-1",
+        message: {
+          id: "user-1",
+          metadata: {},
+          parts: [{ text: "Use my local Codex runtime", type: "text" }],
+          role: "user",
+        },
+        modelId: "gpt-5-codex",
+        trigger: "submit-user-message",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+
+    expect(result.engine).toBe("codex");
+    expect(result.modelId).toBe("gpt-5-codex");
+    expect(result.message?.parts[0]).toMatchObject({
+      text: "Use my local Codex runtime",
+      type: "text",
+    });
+  });
 });

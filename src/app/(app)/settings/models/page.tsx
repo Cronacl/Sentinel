@@ -87,7 +87,13 @@ function ModelsSkeleton() {
 
 export default function ModelsPage() {
   const { data: models, isPending } = api.models.list.useQuery();
+  const enginesQuery = api.engines.list.useQuery();
   const utils = api.useUtils();
+  const codexEngine = enginesQuery.data?.find((engine) => engine.engine === "codex");
+  const codexStatus =
+    codexEngine?.engine === "codex" && "status" in codexEngine
+      ? codexEngine.status
+      : null;
 
   const enable = api.models.enable.useMutation({
     onMutate: async ({ modelId, provider }) => {
@@ -276,6 +282,140 @@ export default function ModelsPage() {
       ) : null}
 
       <div className="flex flex-col gap-8">
+        <section className="border-separator bg-surface rounded-xl border p-5">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-foreground text-sm font-medium">
+                Codex Runtime
+              </h2>
+              <p className="text-muted mt-1 text-xs">
+                Sentinel reads the local Codex CLI state from this machine. No
+                Codex credentials are stored here.
+              </p>
+            </div>
+            <Chip
+              color={codexEngine?.isAvailable ? "success" : "warning"}
+              size="sm"
+              variant="soft"
+            >
+              {codexEngine?.isAvailable ? "Ready" : "Setup needed"}
+            </Chip>
+          </div>
+
+          <div className="grid gap-3 text-xs text-muted sm:grid-cols-2">
+            <div className="rounded-xl border border-border/50 bg-background/60 px-3 py-2">
+              <span className="block text-[11px] uppercase tracking-wide text-foreground/50">
+                CLI
+              </span>
+              <span className="mt-1 block text-foreground">
+                {codexStatus?.cliDetected
+                  ? (codexStatus.cliVersion ?? "Detected")
+                  : "Not detected"}
+              </span>
+            </div>
+            <div className="rounded-xl border border-border/50 bg-background/60 px-3 py-2">
+              <span className="block text-[11px] uppercase tracking-wide text-foreground/50">
+                Auth
+              </span>
+              <span className="mt-1 block text-foreground">
+                {codexStatus?.authReady
+                  ? "Ready"
+                  : codexStatus?.requiresOpenaiAuth
+                    ? "Run Codex login outside Sentinel"
+                    : "Unavailable"}
+              </span>
+            </div>
+            <div className="rounded-xl border border-border/50 bg-background/60 px-3 py-2">
+              <span className="block text-[11px] uppercase tracking-wide text-foreground/50">
+                Models
+              </span>
+              <span className="mt-1 block text-foreground">
+                {codexStatus?.availableModels.length ?? 0} available
+              </span>
+            </div>
+            <div className="rounded-xl border border-border/50 bg-background/60 px-3 py-2">
+              <span className="block text-[11px] uppercase tracking-wide text-foreground/50">
+                Account
+              </span>
+              <span className="mt-1 block text-foreground">
+                {codexStatus?.account?.type === "chatgpt"
+                  ? codexStatus.account.email
+                  : codexStatus?.account?.type === "apiKey"
+                    ? "API key"
+                    : "Not authenticated"}
+              </span>
+            </div>
+          </div>
+
+          {!codexEngine?.isAvailable && codexEngine?.error ? (
+            <p className="border-warning/20 bg-warning-soft text-warning-foreground mt-4 rounded-xl border px-3 py-2.5 text-xs">
+              {codexEngine.error}
+            </p>
+          ) : null}
+        </section>
+
+        {codexStatus?.availableModels &&
+          codexStatus.availableModels.length > 0 && (
+            <section>
+              <div className="mb-3 flex items-center gap-2">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/80">
+                  <ProviderIcon
+                    className="h-[18px] w-[18px]"
+                    provider="openai"
+                  />
+                </div>
+                <h2 className="text-foreground text-sm font-medium">
+                  Codex Models
+                </h2>
+              </div>
+
+              <div className="border-separator bg-surface divide-separator divide-y rounded-xl border">
+                {codexStatus.availableModels.map((model) => (
+                  <div
+                    key={model.id}
+                    className="flex items-center gap-3 px-4 py-2.5"
+                  >
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/80">
+                        <ProviderIcon
+                          className="h-[18px] w-[18px]"
+                          provider="openai"
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-foreground text-sm font-medium">
+                            {model.displayName}
+                          </span>
+                          {model.isDefault && (
+                            <Chip color="accent" size="sm" variant="soft">
+                              Default
+                            </Chip>
+                          )}
+                        </div>
+                        <p className="text-muted mt-0.5 text-xs leading-relaxed">
+                          {model.description}
+                        </p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {model.inputModalities.map((modality) => (
+                            <Chip key={modality} size="sm" variant="soft">
+                              {modality}
+                            </Chip>
+                          ))}
+                          {model.supportsPersonality && (
+                            <Chip size="sm" variant="soft">
+                              Personality
+                            </Chip>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
         {grouped.map(([provider, providerModels]) => (
           <section key={provider}>
             <div className="mb-3 flex items-center gap-2">

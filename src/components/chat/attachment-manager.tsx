@@ -10,7 +10,6 @@ import { ImagePreviewModal } from "./image-preview-modal";
 
 type AttachmentManagerProps = {
   attachmentError: string;
-  attachmentWarning: string;
   attachments: ComposerAttachment[];
   fileInputRef: RefObject<HTMLInputElement | null>;
   onFileInputChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -22,7 +21,6 @@ type AttachmentManagerProps = {
 
 export function AttachmentManager({
   attachmentError,
-  attachmentWarning,
   attachments,
   fileInputRef,
   onFileInputChange,
@@ -60,12 +58,6 @@ export function AttachmentManager({
           <p className="text-danger-soft-foreground text-xs">
             {attachmentError}
           </p>
-        </div>
-      ) : null}
-
-      {attachmentWarning && !attachmentError ? (
-        <div className="px-3 pb-1">
-          <p className="text-[11px] text-amber-200/75">{attachmentWarning}</p>
         </div>
       ) : null}
 

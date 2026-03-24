@@ -13,6 +13,8 @@ import type {
   ThreadSessionSnapshot,
   ThreadStreamEvent,
 } from "./session-types";
+import { buildCodexBootstrapTitle } from "./runtime/codex-helpers";
+import { getFirstUserText } from "./runtime/transcript";
 
 function summarizeQueuedFollowUp(
   followUp: Awaited<ReturnType<typeof listThreadFollowUps>>[number],
@@ -47,6 +49,7 @@ export async function loadThreadSessionSnapshot(
     where: eq(threads.id, threadId),
     columns: {
       activeStreamId: true,
+      chatEngine: true,
       id: true,
       title: true,
       status: true,
@@ -62,15 +65,36 @@ export async function loadThreadSessionSnapshot(
     orderBy: (records, { asc }) => [asc(records.createdAt)],
   });
   const queuedFollowUps = await listThreadFollowUps(thread.id);
+  const uiMessages = await mapThreadMessagesToUIMessages(messages as any[]);
+  const rawFirstUserTitle =
+    getFirstUserText(uiMessages)?.slice(0, 100) ?? "New thread";
+  const normalizedCodexTitle =
+    thread.chatEngine === "codex"
+      ? buildCodexBootstrapTitle(getFirstUserText(uiMessages))
+      : thread.title;
+  const shouldNormalizeCodexTitle =
+    thread.chatEngine === "codex" &&
+    thread.title === rawFirstUserTitle &&
+    normalizedCodexTitle !== thread.title;
+
+  if (shouldNormalizeCodexTitle) {
+    db.update(threads)
+      .set({ title: normalizedCodexTitle, updatedAt: new Date() })
+      .where(eq(threads.id, thread.id))
+      .run();
+  }
 
   return {
     activeRunId: thread.activeStreamId,
-    messages: await mapThreadMessagesToUIMessages(messages as any[]),
+    chatEngine: thread.chatEngine,
+    messages: uiMessages,
     queuedFollowUps: queuedFollowUps
       .filter((followUp) => followUp.status === "queued")
       .map(summarizeQueuedFollowUp),
     threadId: thread.id,
-    threadTitle: thread.title,
+    threadTitle: shouldNormalizeCodexTitle
+      ? normalizedCodexTitle
+      : thread.title,
     threadStatus: thread.status,
   };
 }
