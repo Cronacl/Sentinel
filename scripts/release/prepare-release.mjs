@@ -117,6 +117,37 @@ function groupPullRequestsByLabel(pullRequests) {
   return groups;
 }
 
+function extractReleaseNotesOverride(body) {
+  if (typeof body !== "string" || !body.trim()) {
+    return null;
+  }
+
+  const match = body.match(
+    /(^|\n)##\s+Release Notes\s*\n([\s\S]*?)(?=\n##\s+|\n#\s+|$)/i,
+  );
+
+  if (!match?.[2]) {
+    return null;
+  }
+
+  const lines = match[2]
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^[-*]\s+/, "").trim())
+    .filter(
+      (line) =>
+        line &&
+        line !== "Write the changelog line you want if the PR title is not good enough.",
+    );
+
+  if (lines.length === 0) {
+    return null;
+  }
+
+  return lines.join(" ");
+}
+
 function formatChangelogSection({ pullRequests, repositoryUrl, version }) {
   const date = new Date().toISOString().slice(0, 10);
   const groups = groupPullRequestsByLabel(pullRequests);
@@ -138,7 +169,7 @@ function formatChangelogSection({ pullRequests, repositoryUrl, version }) {
 
     for (const pullRequest of entries) {
       sections.push(
-        `- ${pullRequest.title} ([#${pullRequest.number}](${repositoryUrl}/pull/${pullRequest.number}))`,
+        `- ${pullRequest.changelogLine ?? pullRequest.title} ([#${pullRequest.number}](${repositoryUrl}/pull/${pullRequest.number}))`,
       );
     }
 
@@ -295,6 +326,8 @@ for (const pullRequest of uniquePullRequests) {
   }
 
   pullRequest.releaseLabel = releaseLabels[0];
+  pullRequest.changelogLine =
+    extractReleaseNotesOverride(pullRequest.body) ?? pullRequest.title;
 }
 
 if (invalidPullRequests.length > 0) {
