@@ -33,6 +33,7 @@ function isGitHubRepoUrl(value: string) {
 }
 
 export const skillScopeSchema = z.enum(["global", "workspace"]);
+export const skillInstallTargetSchema = z.enum(["sentinel", "codex"]);
 
 export const skillNameSchema = z
   .string()
@@ -53,6 +54,7 @@ export const customSkillInstallFormSchema = z.object({
     .min(1, "Repository URL is required.")
     .refine(isGitHubRepoUrl, "Enter a valid GitHub repository URL."),
   scope: skillScopeSchema,
+  target: skillInstallTargetSchema.default("sentinel"),
   skillPath: z
     .string()
     .trim()
@@ -61,8 +63,19 @@ export const customSkillInstallFormSchema = z.object({
       isValidSkillPath,
       "Use a repo-relative path without leading slashes or '..' segments.",
     ),
+}).superRefine((data, ctx) => {
+  if (data.target === "codex" && data.scope === "workspace") {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Codex skills can only be installed globally.",
+      path: ["scope"],
+    });
+  }
 });
 
 export type CustomSkillInstallFormValues = z.infer<
+  typeof customSkillInstallFormSchema
+>;
+export type CustomSkillInstallFormInputValues = z.input<
   typeof customSkillInstallFormSchema
 >;

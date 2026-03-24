@@ -45,6 +45,7 @@ import { SidebarToggle, useShell } from "../shell";
 const SOURCE_LABEL = {
   agents: "Agents",
   claude: "Claude",
+  codex: "Codex",
   sentinel: "Sentinel",
 } as const;
 
@@ -154,12 +155,18 @@ function DetailSkeleton() {
   );
 }
 
-export function SkillDetailScreen({ skillName }: { skillName: string }) {
+export function SkillDetailScreen({
+  skillName,
+  target = "sentinel",
+}: {
+  skillName: string;
+  target?: "codex" | "sentinel";
+}) {
   const { leftSidebarOpen } = useShell();
   const [copiedLabel, setCopiedLabel] = useState<"name" | "path" | null>(null);
 
   const skill = api.skills.get.useQuery(
-    { name: skillName },
+    { name: skillName, target },
     { refetchInterval: 2_000 },
   );
 
@@ -241,6 +248,13 @@ export function SkillDetailScreen({ skillName }: { skillName: string }) {
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2 border-t border-border/30 pt-4">
+              <Chip
+                className="border border-border/50 bg-background/80 text-foreground/75"
+                size="sm"
+                variant="tertiary"
+              >
+                {SOURCE_LABEL[loadedSkill.sourceKind]}
+              </Chip>
               <Button
                 onPress={() => void handleCopy(loadedSkill.name, "name")}
                 size="sm"
