@@ -19,15 +19,19 @@ function createPromptContext(overrides: Record<string, unknown> = {}) {
     },
     mcpToolNames: [],
     memoryPromptLines: [],
-    memorySettings: {
-      autoSaveEnabled: true,
-      autoSavePerTurnLimit: 3,
-      defaultScope: "global",
-      enabled: false,
-      memoryDimensions: 1536,
-      memoryModel: "text-embedding-3-small",
-      memoryProvider: "openai",
-      retrievalLimit: 6,
+    memoryRuntime: {
+      available: false,
+      reason: "disabled",
+      settings: {
+        autoSaveEnabled: true,
+        autoSavePerTurnLimit: 3,
+        defaultScope: "global",
+        enabled: false,
+        memoryDimensions: 1536,
+        memoryModel: "text-embedding-3-small",
+        memoryProvider: "openai",
+        retrievalLimit: 6,
+      },
     },
     permissionMode: "default",
     planSummary: null,
@@ -94,15 +98,18 @@ describe("buildThreadAgentInstructions", () => {
       ],
       mcpToolNames: ["mcp_server__list_files"],
       memoryPromptLines: ["[Global] preference: Prefers concise answers."],
-      memorySettings: {
-        autoSaveEnabled: true,
-        autoSavePerTurnLimit: 3,
-        defaultScope: "global",
-        enabled: true,
-        memoryDimensions: 1536,
-        memoryModel: "text-embedding-3-small",
-        memoryProvider: "openai",
-        retrievalLimit: 6,
+      memoryRuntime: {
+        available: true,
+        settings: {
+          autoSaveEnabled: true,
+          autoSavePerTurnLimit: 3,
+          defaultScope: "global",
+          enabled: true,
+          memoryDimensions: 1536,
+          memoryModel: "text-embedding-3-small",
+          memoryProvider: "openai",
+          retrievalLimit: 6,
+        },
       },
       skillRoots: ["/tmp/workspace/.sentinel/skills/helpful-skill"],
     });
@@ -111,6 +118,7 @@ describe("buildThreadAgentInstructions", () => {
       activeToolNames: [
         "list",
         "read",
+        "load_document",
         "diff",
         "batch_read",
         "edit",
@@ -129,6 +137,7 @@ describe("buildThreadAgentInstructions", () => {
       allToolNames: [
         "list",
         "read",
+        "load_document",
         "diff",
         "batch_read",
         "edit",
@@ -181,6 +190,12 @@ describe("buildThreadAgentInstructions", () => {
     );
     expect(instructions).toContain("server -> list files");
     expect(instructions).toContain("## Decision Heuristics");
+    expect(instructions).toContain(
+      "Treat read and load_document as separate tools with different jobs.",
+    );
+    expect(instructions).toContain(
+      "Do not use read for attachments or binary documents",
+    );
     expect(instructions).toContain("Prefer run_task for standard scripts");
     expect(instructions).toContain("Use diff to preview or compare changes");
     expect(instructions).toContain(

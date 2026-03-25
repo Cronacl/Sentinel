@@ -29,9 +29,14 @@ export const TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     label: "the glob tool",
   },
   read: {
-    capability: "to read file contents",
+    capability: "to read text file contents",
     category: "inspection",
     label: "the read tool",
+  },
+  load_document: {
+    capability: "to load attachments and normalize documents into markdown",
+    category: "inspection",
+    label: "the load_document tool",
   },
   grep: {
     capability: "to search file contents by pattern",

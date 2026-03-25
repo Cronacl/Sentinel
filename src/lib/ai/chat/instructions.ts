@@ -85,9 +85,11 @@ function buildRuntimeSnapshot(
     promptContext.planSummary
       ? `Current plan: present (${promptContext.planSummary.taskCount} tasks${promptContext.planSummary.hasPendingQuestions ? "; pending clarification questions" : ""}).`
       : "Current plan: none.",
-    promptContext.memorySettings.enabled
-      ? `Long-term memory: enabled (${promptContext.memorySettings.memoryProvider}:${promptContext.memorySettings.memoryModel}; retrieval limit ${promptContext.memorySettings.retrievalLimit}).`
-      : "Long-term memory: disabled.",
+    promptContext.memoryRuntime.available
+      ? `Long-term memory: enabled (${promptContext.memoryRuntime.settings.memoryProvider}:${promptContext.memoryRuntime.settings.memoryModel}; retrieval limit ${promptContext.memoryRuntime.settings.retrievalLimit}).`
+      : promptContext.memoryRuntime.reason === "disabled"
+        ? "Long-term memory: disabled."
+        : `Long-term memory: unavailable (${promptContext.memoryRuntime.reason ?? "unknown"}).`,
     configuredSearchProviders.length > 0
       ? `Web search: enabled via ${configuredSearchProviders.join(", ")}. Default provider: ${promptContext.searchSettings.defaultProvider}.`
       : "Web search: configured with no enabled providers.",
@@ -304,6 +306,14 @@ function buildDecisionHeuristics(
     heuristics.push(
       `${step++}. When repository or file state matters, inspect first. Prefer list for directory overview, glob for filename patterns, read for concrete file contents, and grep for content search.`,
     );
+    if (activeToolNames.includes("load_document")) {
+      heuristics.push(
+        `${step++}. Treat read and load_document as separate tools with different jobs. Use read only for coding-oriented workspace text/code inspection, and use load_document for message attachments and for PDFs, office documents, spreadsheets, presentations, or other document-style files.`,
+      );
+      heuristics.push(
+        `${step++}. Do not use read for attachments or binary documents, and do not reply with a plain-text refusal such as saying you cannot read PDFs directly. If the user refers to an attached file by filename, hash-like name, or the current source message, resolve it with load_document first.`,
+      );
+    }
     heuristics.push(
       `${step++}. Before asking the user about repo layout, entrypoints, or file locations, inspect the workspace root and likely project candidates first. If one likely project root is discovered, inspect it before asking clarification questions.`,
     );

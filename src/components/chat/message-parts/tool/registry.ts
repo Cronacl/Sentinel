@@ -7,6 +7,7 @@ import { ListTool } from "./renderers/list";
 import { MemoryTool } from "./renderers/memory";
 import { PlanTool } from "./renderers/plan";
 import { ReadTool } from "./renderers/read";
+import { LoadDocumentTool } from "./renderers/load-document";
 import { RunTaskTool } from "./renderers/run-task";
 import { ShellTool } from "./renderers/shell";
 import { SkillTool } from "./renderers/skill";
@@ -133,6 +134,7 @@ const renderers: Record<string, Renderer> = {
   forget_memory: MemoryTool,
   manage_task: PlanTool,
   read: ReadTool,
+  load_document: LoadDocumentTool,
   run_task: RunTaskTool,
   save_memory: MemoryTool,
   search_memory: MemoryTool,

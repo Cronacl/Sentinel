@@ -316,15 +316,18 @@ const { buildThreadPromptContext } = await import("./prompt-context");
 const { createThreadAgent } = await import("./agent.ts");
 mock.restore();
 
-const defaultMemorySettings = {
-  autoSaveEnabled: true,
-  autoSavePerTurnLimit: 3,
-  defaultScope: "global",
-  enabled: false,
-  memoryDimensions: 1536,
-  memoryModel: "text-embedding-3-small",
-  memoryProvider: "openai",
-  retrievalLimit: 6,
+const defaultMemoryRuntime = {
+  available: true,
+  settings: {
+    autoSaveEnabled: true,
+    autoSavePerTurnLimit: 3,
+    defaultScope: "global",
+    enabled: true,
+    memoryDimensions: 1536,
+    memoryModel: "text-embedding-3-small",
+    memoryProvider: "openai",
+    retrievalLimit: 6,
+  },
 };
 
 async function prepareWith(options) {
@@ -347,7 +350,7 @@ async function prepareWith(options) {
     },
     mcpToolNames: Object.keys(options.mcpTools ?? {}),
     memoryPromptLines: options.memoryPromptLines ?? [],
-    memorySettings: options.memorySettings,
+    memoryRuntime: options.memoryRuntime ?? defaultMemoryRuntime,
     permissionMode: options.permissionMode,
     planSummary: options.planSummary ?? null,
     preferredProjectRoot:
@@ -392,7 +395,7 @@ describe("createThreadAgent", () => {
           needsApproval: () => true,
         },
       },
-      memorySettings: defaultMemorySettings,
+      memoryRuntime: defaultMemoryRuntime,
       permissionMode: "default",
       searchProviders: {},
       searchSettings: {
@@ -505,7 +508,7 @@ describe("createThreadAgent", () => {
   it("keeps webfetch available without a workspace root", async () => {
     const prepared = await prepareWith({
       languageModel: { kind: "model" },
-      memorySettings: defaultMemorySettings,
+      memoryRuntime: defaultMemoryRuntime,
       permissionMode: "default",
       searchProviders: {},
       searchSettings: {
@@ -548,6 +551,43 @@ describe("createThreadAgent", () => {
     ]);
   });
 
+  it("hides memory tools when memory runtime is unavailable", async () => {
+    const prepared = await prepareWith({
+      defaultDirectory: "/tmp/workspace",
+      memoryRuntime: {
+        available: false,
+        reason: "missing_credentials",
+        settings: {
+          ...defaultMemoryRuntime.settings,
+        },
+      },
+      permissionMode: "default",
+      searchProviders: {},
+      searchSettings: {
+        defaultProvider: "exa",
+        defaultResultCount: 5,
+        maxResultCount: 10,
+      },
+      sourceMessageId: "user-message-no-memory",
+      systemPrompt: "System prompt",
+      threadId: "thread-no-memory",
+      threadMode: "chat",
+      userId: "user-1",
+      toolApprovalPolicies: getDefaultToolApprovalPolicies(),
+      toolsEnabled: true,
+      webFetchSettings: { batchEnabled: false, batchLimit: 10 },
+      workspaceId: "workspace-1",
+    });
+
+    const toolNames = Object.keys(prepared.tools);
+    expect(toolNames).not.toContain("search_memory");
+    expect(toolNames).not.toContain("save_memory");
+    expect(toolNames).not.toContain("forget_memory");
+    expect(prepared.instructions).toContain(
+      "Long-term memory: unavailable (missing_credentials).",
+    );
+  });
+
   it("keeps load_skill and filesystem inspection available when only skill roots exist", async () => {
     const prepared = await prepareWith({
       availableSkills: [
@@ -561,7 +601,7 @@ describe("createThreadAgent", () => {
           sourceKind: "agents",
         },
       ],
-      memorySettings: defaultMemorySettings,
+      memoryRuntime: defaultMemoryRuntime,
       permissionMode: "default",
       searchProviders: {},
       searchSettings: {
@@ -607,7 +647,7 @@ describe("createThreadAgent", () => {
         },
       ],
       globalSkillsBasePath: "/Users/test",
-      memorySettings: defaultMemorySettings,
+      memoryRuntime: defaultMemoryRuntime,
       permissionMode: "default",
       searchProviders: {},
       searchSettings: {
@@ -655,7 +695,7 @@ describe("createThreadAgent", () => {
         },
       ],
       skillRoots: ["/tmp/workspace/.sentinel/skills/helpful-skill"],
-      memorySettings: defaultMemorySettings,
+      memoryRuntime: defaultMemoryRuntime,
       permissionMode: "default",
       searchProviders: {},
       searchSettings: {
@@ -699,7 +739,7 @@ describe("createThreadAgent", () => {
         },
       ],
       skillRoots: ["/tmp/workspace/.sentinel/skills/helpful-skill"],
-      memorySettings: defaultMemorySettings,
+      memoryRuntime: defaultMemoryRuntime,
       permissionMode: "default",
       searchProviders: {},
       searchSettings: {
@@ -723,6 +763,7 @@ describe("createThreadAgent", () => {
       "list",
       "glob",
       "read",
+      "load_document",
       "grep",
       "create_plan",
       "update_plan",
@@ -736,7 +777,7 @@ describe("createThreadAgent", () => {
       "Inspect the linked workspace or skill directories before asking clarification questions",
     );
     expect(prepared.instructions).toContain(
-      "the read tool: to read file contents without approval.",
+      "the read tool: to read text file contents without approval.",
     );
     expect(await prepared.tools.read.needsApproval({}, {})).toBe(false);
     expect(aiTestState.agentConfig.stopWhen).toHaveLength(3);
@@ -753,7 +794,7 @@ describe("createThreadAgent", () => {
   it("keeps manage_task available in chat mode when a thread already has a plan", async () => {
     const prepared = await prepareWith({
       defaultDirectory: "/tmp/workspace",
-      memorySettings: defaultMemorySettings,
+      memoryRuntime: defaultMemoryRuntime,
       permissionMode: "default",
       planSummary: {
         audience: "technical",
@@ -792,7 +833,7 @@ describe("createThreadAgent", () => {
   it("uses the dedicated tool selection model for the active provider", async () => {
     await prepareWith({
       defaultDirectory: "/tmp/workspace",
-      memorySettings: defaultMemorySettings,
+      memoryRuntime: defaultMemoryRuntime,
       permissionMode: "default",
       resolvedModelId: "gpt-5.2",
       resolvedProviderId: "openai",
@@ -833,7 +874,7 @@ describe("createThreadAgent", () => {
 
     const prepared = await prepareWith({
       defaultDirectory: "/tmp/workspace",
-      memorySettings: defaultMemorySettings,
+      memoryRuntime: defaultMemoryRuntime,
       permissionMode: "default",
       searchProviders: {},
       searchSettings: {
@@ -882,7 +923,7 @@ describe("createThreadAgent", () => {
     await prepareWith({
       defaultDirectory: "/tmp/workspace",
       latestUserText: "Implement the fix in the workspace.",
-      memorySettings: defaultMemorySettings,
+      memoryRuntime: defaultMemoryRuntime,
       permissionMode: "default",
       searchProviders: {},
       searchSettings: {

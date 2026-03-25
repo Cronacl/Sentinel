@@ -28,14 +28,31 @@ export const globDescription = lines(
 export const readDescription = lines(
   "Read file contents or a bounded slice of a directory listing.",
   [
-    "- Reads text files with line numbers for precise referencing.",
+    "- Reads plain text and source-code files with line numbers for precise referencing.",
     "- Supports pagination via offset and limit parameters for large files.",
     "- Directories are returned as entry listings instead of raw content.",
     "- Binary files are rejected with a clear error.",
+    "- Use this tool only for workspace or skill-root text/code inspection during coding tasks.",
+    "- Never use this tool for message attachments, PDFs, office documents, spreadsheets, or presentations; use load_document instead.",
     "- Default read limit is 200 lines; maximum is 400 lines per call.",
     "- Long lines are truncated to 400 characters.",
     "- Use this tool when you need actual file contents or a bounded slice.",
     "- Prefer list or glob for directory discovery instead of reading directories.",
+  ].join("\n"),
+);
+
+export const loadDocumentDescription = lines(
+  "Load and normalize a document into markdown for model use.",
+  [
+    "- Supports workspace files and message attachments.",
+    "- Normalizes office documents, spreadsheets, presentations, PDFs, and text/code files into markdown.",
+    "- Returns extracted content plus metadata such as format, warnings, sheet names, and slide count when available.",
+    "- Attachment lookup defaults to the current source message unless messageId is provided.",
+    "- Duplicate attachment filenames require attachmentIndex to disambiguate.",
+    "- Use this tool for attached files and for any PDF, office document, spreadsheet, presentation, or other document-style file.",
+    "- Prefer this tool over read whenever the user refers to an attachment or the file might be binary.",
+    "- Do not claim that you cannot read an attached document when this tool is available; call load_document first.",
+    "- Do not use this tool for normal source-code or plain-text workspace inspection; use read for coding-oriented file reads.",
   ].join("\n"),
 );
 

@@ -48,6 +48,20 @@ export type MemorySettings = {
   autoSavePerTurnLimit: number;
 };
 
+export type MemoryRuntimeUnavailableReason =
+  | "disabled"
+  | "embedding_temporarily_unavailable"
+  | "missing_credentials"
+  | "provider_disabled"
+  | "unsupported_profile";
+
+export type MemoryRuntimeState = {
+  available: boolean;
+  reason?: MemoryRuntimeUnavailableReason;
+  retryAt?: number;
+  settings: MemorySettings;
+};
+
 export type MemoryItem = {
   content: string;
   createdAt: number;

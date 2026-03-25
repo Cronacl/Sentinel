@@ -291,6 +291,20 @@ export default function MemorySettingsPage() {
     [providerStatuses.data],
   );
 
+  const availableProfileOptions = useMemo(
+    () =>
+      MEMORY_EMBEDDING_PROFILES.filter((profile) =>
+        activeProviderIds.has(profile.provider),
+      ).map((profile) => ({
+        description: `${profile.provider} • ${profile.dimensions} dims`,
+        label: profile.displayName,
+        value: profile.id,
+      })),
+    [activeProviderIds],
+  );
+
+  const hasEligibleMemoryProvider = availableProfileOptions.length > 0;
+
   const profileOptions = useMemo(() => {
     const currentProfile = memorySettings.data
       ? getMemoryEmbeddingProfile(
@@ -299,13 +313,7 @@ export default function MemorySettingsPage() {
         )
       : null;
 
-    const options: MemoryProfileOption[] = MEMORY_EMBEDDING_PROFILES.filter(
-      (profile) => activeProviderIds.has(profile.provider),
-    ).map((profile) => ({
-      description: `${profile.provider} • ${profile.dimensions} dims`,
-      label: profile.displayName,
-      value: profile.id,
-    }));
+    const options: MemoryProfileOption[] = [...availableProfileOptions];
 
     if (
       currentProfile &&
@@ -320,7 +328,7 @@ export default function MemorySettingsPage() {
     }
 
     return options;
-  }, [activeProviderIds, memorySettings.data]);
+  }, [availableProfileOptions, memorySettings.data]);
 
   useEffect(() => {
     if (!memorySettings.data) {
@@ -337,11 +345,23 @@ export default function MemorySettingsPage() {
       autoSaveEnabled: memorySettings.data.autoSaveEnabled,
       autoSavePerTurnLimit: memorySettings.data.autoSavePerTurnLimit,
       defaultScope: memorySettings.data.defaultScope,
-      enabled: memorySettings.data.enabled,
+      enabled: memorySettings.data.enabled && hasEligibleMemoryProvider,
       memoryProfileId: profile.id,
       retrievalLimit: memorySettings.data.retrievalLimit,
     });
-  }, [form, memorySettings.data]);
+  }, [form, hasEligibleMemoryProvider, memorySettings.data]);
+
+  useEffect(() => {
+    if (hasEligibleMemoryProvider || !form.getValues("enabled")) {
+      return;
+    }
+
+    form.setValue("enabled", false, {
+      shouldDirty: false,
+      shouldTouch: false,
+      shouldValidate: true,
+    });
+  }, [form, hasEligibleMemoryProvider]);
 
   const updateSettings = api.memorySettings.update.useMutation({
     onSuccess: (data) => {
@@ -423,7 +443,14 @@ export default function MemorySettingsPage() {
 
   const handleSubmit = async (values: MemorySettingsFormValues) => {
     setActionError("");
-    await updateSettings.mutateAsync(values);
+    await updateSettings.mutateAsync({
+      ...values,
+      enabled:
+        values.enabled &&
+        availableProfileOptions.some(
+          (option) => option.value === values.memoryProfileId,
+        ),
+    });
   };
 
   const totalMemories = memories.data?.total ?? 0;
@@ -472,6 +499,8 @@ export default function MemorySettingsPage() {
     MEMORY_EMBEDDING_PROFILES.find(
       (profile) => profile.id === form.watch("memoryProfileId"),
     ) ?? null;
+  const memoryEnabled = form.watch("enabled") && hasEligibleMemoryProvider;
+  const canSubmitSettings = hasEligibleMemoryProvider || !form.watch("enabled");
   const currentProfile = memorySettings.data
     ? getMemoryEmbeddingProfile(
         memorySettings.data.memoryProvider,
@@ -525,10 +554,17 @@ export default function MemorySettingsPage() {
               <div className="space-y-5">
                 <ControlledSwitchField
                   control={form.control}
-                  description="Allow Sentinel to retrieve and use long-term memory during chat."
+                  description={
+                    hasEligibleMemoryProvider
+                      ? "Allow Sentinel to retrieve and use long-term memory during chat."
+                      : "Configure and enable a provider with a supported embedding profile before turning memory on."
+                  }
                   label="Enable memory"
                   name="enabled"
-                  switchProps={{ isDisabled: isBusy, size: "sm" }}
+                  switchProps={{
+                    isDisabled: isBusy || !hasEligibleMemoryProvider,
+                    size: "sm",
+                  }}
                 />
 
                 <ControlledSwitchField
@@ -537,7 +573,7 @@ export default function MemorySettingsPage() {
                   label="Automatic memory saving"
                   name="autoSaveEnabled"
                   switchProps={{
-                    isDisabled: isBusy || !form.watch("enabled"),
+                    isDisabled: isBusy || !memoryEnabled,
                     size: "sm",
                   }}
                 />
@@ -585,7 +621,7 @@ export default function MemorySettingsPage() {
                 <ControlledSelectField
                   control={form.control}
                   description={
-                    profileOptions.length > 0
+                    hasEligibleMemoryProvider
                       ? "Embedding profiles come from your configured AI providers."
                       : "No supported embedding providers are active yet. Configure OpenAI in Settings > Providers."
                   }
@@ -593,7 +629,7 @@ export default function MemorySettingsPage() {
                   name="memoryProfileId"
                   options={profileOptions}
                   selectProps={{
-                    isDisabled: isBusy || profileOptions.length === 0,
+                    isDisabled: isBusy || !hasEligibleMemoryProvider,
                   }}
                 />
 
@@ -639,9 +675,7 @@ export default function MemorySettingsPage() {
 
                 <Button
                   isDisabled={
-                    isBusy ||
-                    !form.formState.isDirty ||
-                    profileOptions.length === 0
+                    isBusy || !form.formState.isDirty || !canSubmitSettings
                   }
                   isPending={updateSettings.isPending}
                   size="sm"

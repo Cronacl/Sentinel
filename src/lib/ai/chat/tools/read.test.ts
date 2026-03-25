@@ -69,7 +69,23 @@ describe("executeRead", () => {
         input: { path: "data.bin" },
         permissionMode: "default",
       }),
-    ).rejects.toThrow(/binary file/i);
+    ).rejects.toThrow(/use load_document/i);
+  });
+
+  it("rejects document-style workspace files even when they are text-backed", async () => {
+    const defaultDirectory = await createDirectory();
+    await writeFile(
+      path.join(defaultDirectory, "report.csv"),
+      "name,value\nalpha,1\n",
+    );
+
+    await expect(
+      executeRead({
+        defaultDirectory,
+        input: { path: "report.csv" },
+        permissionMode: "default",
+      }),
+    ).rejects.toThrow(/cannot read document file with read/i);
   });
 
   it("allows absolute paths in full mode", async () => {
