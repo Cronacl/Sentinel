@@ -90,7 +90,7 @@ export function McpServerForm({ mode, serverId }: McpServerFormProps) {
       setSubmitError("");
       await utils.mcpServers.list.invalidate();
       sileo.success({ description: "MCP server saved." });
-      router.push("/settings/mcp");
+      router.replace("/settings/mcp");
     },
     onError: (error) => {
       setSubmitError(error.message);
@@ -101,7 +101,7 @@ export function McpServerForm({ mode, serverId }: McpServerFormProps) {
     onSuccess: async () => {
       await utils.mcpServers.list.invalidate();
       sileo.success({ description: "MCP server removed." });
-      router.push("/settings/mcp");
+      router.replace("/settings/mcp");
     },
     onError: (error) => {
       setSubmitError(error.message);
@@ -195,7 +195,11 @@ export function McpServerForm({ mode, serverId }: McpServerFormProps) {
           {query.error.message}
         </p>
         <div className="mt-5 flex items-center justify-between gap-3">
-          <Link className="text-muted text-sm underline" href="/settings/mcp">
+          <Link
+            className="text-muted text-sm underline"
+            href="/settings/mcp"
+            replace
+          >
             Back to MCP servers
           </Link>
           <Button
@@ -328,6 +332,7 @@ export function McpServerForm({ mode, serverId }: McpServerFormProps) {
               <Link
                 className="text-muted text-sm underline"
                 href="/settings/mcp"
+                replace
               >
                 Back to MCP servers
               </Link>
