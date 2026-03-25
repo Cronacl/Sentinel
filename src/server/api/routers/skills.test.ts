@@ -22,6 +22,7 @@ const getSkillSnapshot = mock(async ({ workspaceRoot, globalBase }) => ({
   ],
   updatedAt: 123,
 }));
+const discoverCodexSkills = mock(async () => []);
 const loadSkillByName = mock(async () => null);
 const executeInstallSteps = mock(async ({ name, destRoot, installSteps }) => ({
   directory: `${destRoot}/.sentinel/skills/${name}`,
@@ -33,6 +34,8 @@ const uninstallSkill = mock(async ({ name, destRoot }) => ({
   directory: `${destRoot}/.sentinel/skills/${name}`,
   name,
 }));
+const listCodexSkills = mock(async () => ({ skills: [] }));
+const writeSkillConfig = mock(async () => {});
 const buildInstallSteps = mock((repoUrl, skillPath, ref) => [
   `fetch ${repoUrl}`,
   `copy ${skillPath}@${ref} {{DEST}}`,
@@ -60,6 +63,7 @@ mock.module("@/server/api/trpc", () => ({
 }));
 
 mock.module("@/lib/skills", () => ({
+  discoverCodexSkills,
   getSkillSnapshot,
   loadSkillByName,
 }));
@@ -79,8 +83,8 @@ mock.module("@/lib/skills/registry", () => ({
 
 mock.module("@/lib/ai/chat/engines/codex-app-server", () => ({
   getCodexAppServerManager: () => ({
-    listSkills: async () => ({ skills: [] }),
-    writeSkillConfig: async () => {},
+    listSkills: listCodexSkills,
+    writeSkillConfig,
   }),
 }));
 
@@ -111,6 +115,39 @@ describe("skillsRouter", () => {
     expect(result.skills[0]?.name).toBe("example");
   });
 
+  it("marks curated skills as installed in codex when present in the codex skills directory", async () => {
+    discoverCodexSkills.mockImplementationOnce(async () => [
+      {
+        description: "Helpful skill",
+        directory: "/tmp/codex-home/skills/example",
+        name: "example",
+        preview: "# Example",
+        scope: "global",
+        skillFile: "/tmp/codex-home/skills/example/SKILL.md",
+        sourceKind: "codex",
+      },
+    ]);
+
+    const result = await skillsRouter.registry({
+      ctx: {
+        user: {
+          skillsBasePath: "/tmp/custom-home",
+        },
+        workspace: null,
+      },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        installedTargets: {
+          codex: true,
+          sentinel: true,
+        },
+        name: "example",
+      }),
+    ]);
+  });
+
   it("installs curated skills using the server registry steps", async () => {
     const result = await skillsRouter.install({
       ctx: {
@@ -131,6 +168,32 @@ describe("skillsRouter", () => {
       name: "example",
     });
     expect(result.directory).toBe("/tmp/custom-home/.sentinel/skills/example");
+  });
+
+  it("does not fail codex installs when the codex skill inventory is unavailable", async () => {
+    listCodexSkills.mockImplementationOnce(async () => ({}));
+
+    await expect(
+      skillsRouter.install({
+        ctx: {
+          user: {
+            skillsBasePath: "/tmp/custom-home",
+          },
+          workspace: null,
+        },
+        input: {
+          name: "example",
+          scope: "global",
+          target: "codex",
+        },
+      }),
+    ).resolves.toEqual({
+      directory: "/tmp/codex-home/.sentinel/skills/example",
+      installSteps: registryEntry.installSteps,
+      name: "example",
+    });
+
+    expect(writeSkillConfig).not.toHaveBeenCalled();
   });
 
   it("builds default steps for custom skill installs when no override is provided", async () => {

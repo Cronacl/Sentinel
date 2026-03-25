@@ -1,10 +1,12 @@
 import os from "node:os";
 import { TRPCError } from "@trpc/server";
-import { stat } from "node:fs/promises";
-import path from "node:path";
 import { z } from "zod";
 
-import { getSkillSnapshot, loadSkillByName } from "@/lib/skills";
+import {
+  discoverCodexSkills,
+  getSkillSnapshot,
+  loadSkillByName,
+} from "@/lib/skills";
 import { getCodexAppServerManager } from "@/lib/ai/chat/engines/codex-app-server";
 import {
   executeInstallSteps,
@@ -65,16 +67,13 @@ function parseInstallInstructions(value: string) {
     .filter(Boolean);
 }
 
-async function pathExists(candidatePath: string) {
-  return Boolean(await stat(candidatePath).catch(() => null));
-}
-
 async function findCodexInstalledSkill(name: string) {
   const codex = getCodexAppServerManager();
-  const response = await codex.listSkills();
+  const response = await codex.listSkills().catch(() => null);
+  const skills = Array.isArray(response?.skills) ? response.skills : [];
   const normalizedName = name.trim().toLowerCase();
   return (
-    response.skills.find(
+    skills.find(
       (skill) => skill.name.trim().toLowerCase() === normalizedName,
     ) ?? null
   );
@@ -82,31 +81,14 @@ async function findCodexInstalledSkill(name: string) {
 
 async function buildCodexSkillList() {
   const codexHome = resolveCodexHome();
-  const codex = getCodexAppServerManager();
-  const response = await codex.listSkills();
+  const skills = await discoverCodexSkills({
+    globalBase: codexHome,
+  });
 
-  return await Promise.all(
-    response.skills.map(async (skill) => {
-      const directory = path.join(codexHome, "skills", skill.name);
-      const loaded = await loadSkillByName({
-        globalBase: codexHome,
-        name: skill.name,
-        target: "codex",
-        workspaceRoot: null,
-      });
-
-      return {
-        description: loaded?.description ?? skill.description,
-        directory,
-        name: skill.name,
-        preview: loaded?.preview ?? "",
-        scope: "global" as const,
-        skillFile: path.join(directory, "SKILL.md"),
-        sourceKind: "codex" as const,
-        target: "codex" as const,
-      };
-    }),
-  );
+  return skills.map((skill) => ({
+    ...skill,
+    target: "codex" as const,
+  }));
 }
 
 export const skillsRouter = createTRPCRouter({
@@ -219,13 +201,12 @@ export const skillsRouter = createTRPCRouter({
 
       if (input.target === "codex") {
         const codexSkill = await findCodexInstalledSkill(registrySkill.name);
-        if (!codexSkill) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: `Installed Codex skill "${registrySkill.name}" could not be discovered.`,
-          });
+        if (codexSkill) {
+          await getCodexAppServerManager().writeSkillConfig(
+            codexSkill.id,
+            true,
+          );
         }
-        await getCodexAppServerManager().writeSkillConfig(codexSkill.id, true);
       }
 
       return result;
@@ -255,13 +236,12 @@ export const skillsRouter = createTRPCRouter({
 
       if (input.target === "codex") {
         const codexSkill = await findCodexInstalledSkill(input.name);
-        if (!codexSkill) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: `Installed Codex skill "${input.name}" could not be discovered.`,
-          });
+        if (codexSkill) {
+          await getCodexAppServerManager().writeSkillConfig(
+            codexSkill.id,
+            true,
+          );
         }
-        await getCodexAppServerManager().writeSkillConfig(codexSkill.id, true);
       }
 
       return result;
