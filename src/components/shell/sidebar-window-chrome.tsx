@@ -3,8 +3,27 @@
 import type { ReactNode } from "react";
 
 import { getDesktopApi } from "@/lib/desktop/client";
+import type { DesktopPlatform } from "@/lib/desktop/contracts";
 
 import { SidebarToggle } from "./sidebar-toggle";
+
+const DESKTOP_WINDOW_CONTROLS_WIDTH: Record<
+  Exclude<DesktopPlatform, "darwin">,
+  number
+> = {
+  linux: 112,
+  win32: 132,
+};
+
+export function getDesktopWindowControlsInset(
+  platform: DesktopPlatform | null,
+) {
+  if (platform === "win32" || platform === "linux") {
+    return DESKTOP_WINDOW_CONTROLS_WIDTH[platform];
+  }
+
+  return 0;
+}
 
 function WindowsMinimizeIcon() {
   return (
@@ -107,11 +126,13 @@ function WindowControlButton({
   );
 }
 
-function WindowsWindowControls() {
+function WindowsWindowControls({ className }: { className?: string }) {
   const desktop = getDesktopApi();
 
   return (
-    <div className="flex h-8 items-stretch justify-end">
+    <div
+      className={`flex h-8 items-stretch justify-end ${className ?? ""}`.trim()}
+    >
       <WindowControlButton
         ariaLabel="Minimize window"
         className="h-8 w-11 hover:bg-black/6 dark:hover:bg-white/8"
@@ -137,11 +158,13 @@ function WindowsWindowControls() {
   );
 }
 
-function LinuxWindowControls() {
+function LinuxWindowControls({ className }: { className?: string }) {
   const desktop = getDesktopApi();
 
   return (
-    <div className="flex h-8 items-center justify-end gap-1">
+    <div
+      className={`flex h-8 items-center justify-end gap-1 ${className ?? ""}`.trim()}
+    >
       <WindowControlButton
         ariaLabel="Minimize window"
         className="h-8 w-8 rounded-md hover:bg-black/6 dark:hover:bg-white/8"
@@ -167,18 +190,28 @@ function LinuxWindowControls() {
   );
 }
 
+export function DesktopWindowControls({
+  platform,
+}: {
+  platform: DesktopPlatform | null;
+}) {
+  if (platform === "win32") {
+    return <WindowsWindowControls />;
+  }
+
+  if (platform === "linux") {
+    return <LinuxWindowControls />;
+  }
+
+  return null;
+}
+
 export function SidebarWindowChrome() {
   const desktop = getDesktopApi();
   const platform = desktop?.app.platform ?? null;
   const isMac = platform === "darwin";
   const chromeHeight = 56;
-  const edgeWidth = isMac
-    ? 72
-    : platform === "win32"
-      ? 132
-      : platform === "linux"
-        ? 112
-        : 52;
+  const edgeWidth = isMac ? 72 : 52;
 
   return (
     <div
@@ -194,10 +227,7 @@ export function SidebarWindowChrome() {
         <SidebarToggle className="app-region-no-drag" />
       </div>
 
-      <div className="flex justify-end">
-        {platform === "win32" ? <WindowsWindowControls /> : null}
-        {platform === "linux" ? <LinuxWindowControls /> : null}
-      </div>
+      <div aria-hidden />
     </div>
   );
 }

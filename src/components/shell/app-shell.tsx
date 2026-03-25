@@ -21,6 +21,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { PropsWithChildren } from "react";
 
+import { getDesktopApi } from "@/lib/desktop/client";
 import { api } from "@/trpc/react";
 
 import { TerminalPanel } from "@/components/terminal/terminal-panel";
@@ -29,7 +30,10 @@ import { WorkspaceSidebar } from "./workspace-sidebar";
 import { LeftSidebar } from "./left-sidebar";
 import { RightSidebar } from "./right-sidebar";
 import { ShellProvider } from "./shell-context";
-import { SidebarWindowChrome } from "./sidebar-window-chrome";
+import {
+  DesktopWindowControls,
+  SidebarWindowChrome,
+} from "./sidebar-window-chrome";
 
 const SETTINGS_NAV = [
   { href: "/settings", label: "General", icon: Settings05Icon },
@@ -125,10 +129,15 @@ function SidebarContent() {
 }
 
 export function AppShell({ children }: PropsWithChildren) {
+  const desktop = getDesktopApi();
+  const platform = desktop?.app.platform ?? null;
+  const showDesktopWindowControls =
+    platform === "win32" || platform === "linux";
+
   return (
     <ShellProvider>
       <ShellWarmCache />
-      <div className="flex h-dvh overflow-clip">
+      <div className="relative flex h-dvh overflow-clip">
         <LeftSidebar>
           <div className="flex h-full flex-col">
             <SidebarWindowChrome />
@@ -144,6 +153,14 @@ export function AppShell({ children }: PropsWithChildren) {
         </main>
 
         <RightSidebar />
+
+        {showDesktopWindowControls ? (
+          <div className="pointer-events-none absolute top-0 right-0 z-30 flex h-14 items-start">
+            <div className="pointer-events-auto app-region-no-drag">
+              <DesktopWindowControls platform={platform} />
+            </div>
+          </div>
+        ) : null}
       </div>
     </ShellProvider>
   );
