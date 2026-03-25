@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.3.0-alpha.1...v0.4.0-alpha.1) (2026-03-25)
+
+
+### Features
+
+* add Windows application icon and enhance database schema ([67cd19b](https://github.com/Cronacl/Sentinel/commit/67cd19b590a8a0f1b56ba97e2dabe1224bac106f))
+* add Windows application icon and enhance database schema ([816c1e0](https://github.com/Cronacl/Sentinel/commit/816c1e05505e49989462595ab675847d6b7621f3))
+
 ## [0.3.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.2.4-alpha.1...v0.3.0-alpha.1) (2026-03-24)
 
 
