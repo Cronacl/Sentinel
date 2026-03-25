@@ -42,11 +42,17 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     "permission_mode" text DEFAULT 'default' NOT NULL,
     "webfetch_batch_enabled" integer DEFAULT false NOT NULL,
     "webfetch_batch_limit" integer DEFAULT 10 NOT NULL,
+    "context_compaction_enabled" integer,
+    "context_compaction_use_fixed_window" integer,
+    "context_compaction_fixed_window_size" integer,
+    "context_compaction_window_percent" integer,
     "skills_base_path" text,
     "theme_preference" text DEFAULT 'system' NOT NULL,
     "default_chat_engine" text,
     "default_chat_model_id" text,
+    "default_chat_mode" text,
     "default_chat_reasoning_effort" text,
+    "follow_up_behavior" text DEFAULT 'queue' NOT NULL,
     "selected_workspace_id" text,
     "last_project_open_target_id" text,
     "thread_list_organize_by" text DEFAULT 'workspace' NOT NULL,
@@ -70,6 +76,7 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     "description" text,
     "permission_mode_override" text,
     "is_archived" integer DEFAULT false NOT NULL,
+    "is_expanded" integer DEFAULT false NOT NULL,
     "created_at" integer NOT NULL,
     "updated_at" integer NOT NULL
   )`);
@@ -94,7 +101,13 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
     "chat_reasoning_effort" text,
     "created_at" integer NOT NULL,
     "updated_at" integer NOT NULL,
-    "archived_at" integer
+    "archived_at" integer,
+    "pinned_at" integer,
+    "active_stream_id" text,
+    "context_compaction_summary" text,
+    "context_compaction_covered_through_message_id" text,
+    "context_compaction_updated_at" integer,
+    "status" text DEFAULT 'idle' NOT NULL
   )`);
 
   db.run(
@@ -129,6 +142,38 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
   try {
     db.run(
       sql`ALTER TABLE "user" ADD COLUMN "webfetch_batch_limit" integer DEFAULT 10 NOT NULL`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(
+      sql`ALTER TABLE "user" ADD COLUMN "context_compaction_enabled" integer`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(
+      sql`ALTER TABLE "user" ADD COLUMN "context_compaction_use_fixed_window" integer`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(
+      sql`ALTER TABLE "user" ADD COLUMN "context_compaction_fixed_window_size" integer`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(
+      sql`ALTER TABLE "user" ADD COLUMN "context_compaction_window_percent" integer`,
     );
   } catch {
     // column already exists
@@ -190,6 +235,14 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
 
   try {
     db.run(
+      sql`ALTER TABLE "workspace" ADD COLUMN "is_expanded" integer DEFAULT false NOT NULL`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(
       sql`ALTER TABLE "thread" ADD COLUMN "mode" text DEFAULT 'chat' NOT NULL`,
     );
   } catch {
@@ -230,6 +283,38 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
 
   try {
     db.run(sql`ALTER TABLE "thread" ADD COLUMN "active_stream_id" text`);
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(
+      sql`ALTER TABLE "thread" ADD COLUMN "context_compaction_summary" text`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(
+      sql`ALTER TABLE "thread" ADD COLUMN "context_compaction_covered_through_message_id" text`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(
+      sql`ALTER TABLE "thread" ADD COLUMN "context_compaction_updated_at" integer`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(
+      sql`ALTER TABLE "thread" ADD COLUMN "status" text DEFAULT 'idle' NOT NULL`,
+    );
   } catch {
     // column already exists
   }
