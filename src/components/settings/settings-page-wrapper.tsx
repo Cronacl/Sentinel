@@ -4,6 +4,7 @@ import { getDesktopApi } from "@/lib/desktop/client";
 import type { PropsWithChildren, ReactNode } from "react";
 
 import { useShell } from "@/components/shell";
+import { getDesktopWindowControlsInset } from "@/components/shell/sidebar-window-chrome";
 
 interface SettingsPageWrapperProps extends PropsWithChildren {
   title: ReactNode;
@@ -20,9 +21,11 @@ export function SettingsPageWrapper({
   children,
 }: SettingsPageWrapperProps) {
   const desktop = getDesktopApi();
-  const isMacDesktop = desktop?.app.platform === "darwin";
+  const platform = desktop?.app.platform ?? null;
+  const isMacDesktop = platform === "darwin";
   const { leftSidebarOpen } = useShell();
   const leadingInset = isMacDesktop && !leftSidebarOpen ? 92 : undefined;
+  const trailingInset = getDesktopWindowControlsInset(platform) || undefined;
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-clip">
@@ -32,7 +35,10 @@ export function SettingsPageWrapper({
           style={{ paddingLeft: leadingInset }}
         >
           <div className={`mx-auto w-full ${contentClassName ?? "max-w-2xl"}`}>
-            <div className="mb-6 flex items-start justify-between gap-4">
+            <div
+              className="mb-6 flex items-start justify-between gap-4"
+              style={{ paddingRight: trailingInset }}
+            >
               <div className="app-region-no-drag min-w-0">
                 <div className="flex items-center gap-3">
                   <h1 className="text-foreground text-xl font-medium">

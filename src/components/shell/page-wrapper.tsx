@@ -4,6 +4,7 @@ import type { CSSProperties, PropsWithChildren, ReactNode } from "react";
 
 import { getDesktopApi } from "@/lib/desktop/client";
 
+import { getDesktopWindowControlsInset } from "./sidebar-window-chrome";
 import { useShell } from "./shell-context";
 import { SidebarToggle } from "./sidebar-toggle";
 
@@ -41,14 +42,17 @@ export function PageWrapper({
   children,
 }: PageWrapperProps) {
   const desktop = getDesktopApi();
-  const isMacDesktop = desktop?.app.platform === "darwin";
+  const platform = desktop?.app.platform ?? null;
+  const isMacDesktop = platform === "darwin";
   const { leftSidebarOpen } = useShell();
   const showToggle = !leftSidebarOpen;
   const headerHeight = 44;
   const leadingInset = isMacDesktop && showToggle ? 92 : undefined;
+  const trailingInset = getDesktopWindowControlsInset(platform) || undefined;
   const headerStyle = {
     minHeight: headerHeight,
     paddingLeft: leadingInset,
+    paddingRight: trailingInset,
   } as CSSProperties;
 
   const hasHeader = title || showToggle || titleActions || actions;
