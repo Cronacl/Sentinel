@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.7.0-alpha.1...v0.8.0-alpha.1) (2026-03-25)
+
+
+### Features
+
+* add functionality to discover and manage Codex skills, enhancing skills integration ([d61bd28](https://github.com/Cronacl/Sentinel/commit/d61bd288cca83031548924aa463dd36ea23618d7))
+* enhance app layout with settings support and introduce settings navigation ([3bf88e1](https://github.com/Cronacl/Sentinel/commit/3bf88e1edd2674ec16dadc0fce1c84cf9acd8670))
+* introduce load_document tool for enhanced document handling and memory management ([866e4b1](https://github.com/Cronacl/Sentinel/commit/866e4b1f4b1dd18a09e401599c4a6bfe79fb074c))
+
+
+### Bug Fixes
+
+* blur active element on workspace toggle to improve user experience ([333fc31](https://github.com/Cronacl/Sentinel/commit/333fc317ae381b0ce9f59b7f878a2d9bf866ba31))
+
 ## [0.7.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.6.0-alpha.1...v0.7.0-alpha.1) (2026-03-25)
 
 
