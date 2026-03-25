@@ -567,6 +567,9 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
           onPress={() => {
             onPressWorkspace(group.workspace.id);
             onToggleWorkspace(group.workspace.id);
+            if (document.activeElement instanceof HTMLElement) {
+              document.activeElement.blur();
+            }
           }}
           size="sm"
           variant="ghost"
