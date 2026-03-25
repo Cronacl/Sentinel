@@ -3,6 +3,7 @@ import path from "node:path";
 
 import type { ThreadPromptProjectCandidate } from "../prompt-context";
 
+const PROJECT_AWARENESS_CACHE_TTL_MS = 15_000;
 const ROOT_MARKER_SCORES = [
   { name: ".git", score: 5 },
   { name: "package.json", score: 6 },
@@ -29,6 +30,17 @@ const APP_DIRECTORY_MARKERS = ["src", "app", "pages", "components", "lib"];
 type ScoredCandidate = ThreadPromptProjectCandidate & {
   score: number;
 };
+
+type ProjectAwarenessResult = {
+  preferredProjectRoot: string | null;
+  projectCandidates: ThreadPromptProjectCandidate[];
+  shellStartDirectory: string | null;
+};
+
+const projectAwarenessCache = new Map<
+  string,
+  { expiresAt: number; promise: Promise<ProjectAwarenessResult> }
+>();
 
 function normalizeCandidatePath(rootPath: string, candidatePath: string) {
   const relativePath = path.relative(rootPath, candidatePath);
@@ -104,11 +116,13 @@ async function listImmediateDirectories(rootPath: string) {
     .map((entry) => path.join(rootPath, entry.name));
 }
 
-export async function discoverProjectAwareness(rootPath: string | null) {
+async function computeProjectAwareness(
+  rootPath: string | null,
+): Promise<ProjectAwarenessResult> {
   if (!rootPath) {
     return {
       preferredProjectRoot: null,
-      projectCandidates: [] as ThreadPromptProjectCandidate[],
+      projectCandidates: [],
       shellStartDirectory: null,
     };
   }
@@ -117,7 +131,7 @@ export async function discoverProjectAwareness(rootPath: string | null) {
   if (!rootStats?.isDirectory()) {
     return {
       preferredProjectRoot: null,
-      projectCandidates: [] as ThreadPromptProjectCandidate[],
+      projectCandidates: [],
       shellStartDirectory: null,
     };
   }
@@ -160,4 +174,28 @@ export async function discoverProjectAwareness(rootPath: string | null) {
     ),
     shellStartDirectory: preferredProjectRoot,
   };
+}
+
+export async function discoverProjectAwareness(rootPath: string | null) {
+  const cacheKey = rootPath ?? "__null__";
+  const cached = projectAwarenessCache.get(cacheKey);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    return await cached.promise;
+  }
+
+  const pending = computeProjectAwareness(rootPath).catch((error) => {
+    const current = projectAwarenessCache.get(cacheKey);
+    if (current?.promise === pending) {
+      projectAwarenessCache.delete(cacheKey);
+    }
+    throw error;
+  });
+
+  projectAwarenessCache.set(cacheKey, {
+    expiresAt: Date.now() + PROJECT_AWARENESS_CACHE_TTL_MS,
+    promise: pending,
+  });
+
+  return await pending;
 }

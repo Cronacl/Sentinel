@@ -65,18 +65,14 @@ import {
 } from "../tool-targeting";
 import { loadIntegrationTools } from "@/lib/integrations/registry";
 import {
-  getContextCompactionSettings,
-  getSearchProviderRuntime,
-  getSearchSettings,
   getMemorySettings,
   getMcpServerRuntime,
-  getSkillsBasePath,
+  getSearchProviderRuntime,
+  getSearchSettings,
+  getThreadRuntimeBootstrap,
   getToolApprovalPolicies,
-  getToolPermissionMode,
-  getWebFetchSettings,
-  getWorkspaceRootPath,
 } from "./workspace";
-import { applyContextCompaction } from "./context-compaction";
+import { refreshThreadContextCompactionCheckpoint } from "./context-compaction-refresh";
 import type { ThreadChatRequest } from "../types";
 import type { PersistedThreadMessageRecord } from "@/lib/ai/messages/branches";
 import {
@@ -100,6 +96,8 @@ const EMPTY_INTEGRATION_CONTEXT = {
   databases: {},
   tokens: {},
 } as const;
+const OPTIONAL_PREFLIGHT_TIMEOUT_MS =
+  process.env.NODE_ENV === "test" ? 25 : 1_200;
 
 function logRuntimeTiming(
   phase:
@@ -294,6 +292,60 @@ async function drainFollowUpQueue(
   }
 }
 
+function describeStartupError(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function fallbackProjectAwareness(workspaceRoot: string | null) {
+  return {
+    preferredProjectRoot: workspaceRoot,
+    projectCandidates: [],
+    shellStartDirectory: workspaceRoot,
+  } satisfies Awaited<ReturnType<typeof discoverProjectAwareness>>;
+}
+
+function withOptionalPreflightBudget<T>({
+  fallback,
+  label,
+  promise,
+}: {
+  fallback: T;
+  label: string;
+  promise: Promise<T>;
+}) {
+  let settled = false;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+
+  return new Promise<T>((resolve) => {
+    const finish = (value: T) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      if (timeout) {
+        clearTimeout(timeout);
+        timeout = null;
+      }
+      resolve(value);
+    };
+
+    timeout = setTimeout(() => {
+      log.warn(
+        `Skipping ${label} during startup after ${OPTIONAL_PREFLIGHT_TIMEOUT_MS}ms.`,
+      );
+      finish(fallback);
+    }, OPTIONAL_PREFLIGHT_TIMEOUT_MS);
+
+    promise.then(finish).catch((error) => {
+      log.warn(
+        `Skipping ${label} during startup: ${describeStartupError(error)}`,
+      );
+      finish(fallback);
+    });
+  });
+}
+
 async function streamStillOwnsThread(
   threadId: string,
   streamId: string | null,
@@ -400,6 +452,50 @@ function buildIntegrationPromptSummary(
       toolPrefix: getIntegrationToolPrefix(provider),
     };
   });
+}
+
+function launchBackgroundContextCompactionWarmup(input: {
+  contextCompactionSettings: {
+    enabled: boolean;
+    fixedWindowSize?: number | null;
+    useFixedWindow?: boolean;
+    windowPercent: number;
+  };
+  model: Pick<
+    ResolvedModel,
+    "contextWindow" | "languageModel" | "providerOptions"
+  >;
+  threadId: string;
+  transcript: ThreadUIMessage[];
+}) {
+  if (!input.contextCompactionSettings.enabled) {
+    return;
+  }
+
+  void (async () => {
+    try {
+      await refreshThreadContextCompactionCheckpoint({
+        contextWindow: input.model.contextWindow,
+        enabled: input.contextCompactionSettings.enabled,
+        fixedWindowSize: input.contextCompactionSettings.fixedWindowSize,
+        languageModel: input.model.languageModel,
+        ...(input.model.providerOptions
+          ? { providerOptions: input.model.providerOptions }
+          : {}),
+        staleWriteProtection: true,
+        threadId: input.threadId,
+        transcript: input.transcript,
+        useFixedWindow: input.contextCompactionSettings.useFixedWindow,
+        windowPercent: input.contextCompactionSettings.windowPercent,
+      });
+    } catch (error) {
+      log.warn(
+        `Skipping background context compaction: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  })();
 }
 
 // ---------------------------------------------------------------------------
@@ -671,45 +767,49 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
   let latestInputTokens: number | undefined;
 
   try {
-    const resolvedModel = await resolveThreadChatModel(
+    const resolvedModelPromise = resolveThreadChatModel(
       run.request,
       run.targetMessage,
     );
-
-    const titleUpdatePromise = launchTitleGeneration(run, resolvedModel);
+    const runtimeBootstrapPromise = getThreadRuntimeBootstrap(
+      run.request.userId,
+      run.request.workspaceId,
+    );
 
     const [
-      workspaceRoot,
-      permissionMode,
+      resolvedModel,
+      runtimeBootstrap,
       memorySettings,
-      contextCompactionSettings,
       mcpServers,
       searchSettings,
       searchProviders,
       toolApprovalPolicies,
-      webFetchSettings,
       planState,
-      contextCompactionCheckpoint,
-      skillsBasePath,
       enabledIntegrations,
     ] = await Promise.all([
-      getWorkspaceRootPath(run.request.workspaceId, run.request.userId),
-      getToolPermissionMode(run.request.userId, run.request.workspaceId),
+      resolvedModelPromise,
+      runtimeBootstrapPromise,
       getMemorySettings(run.request.userId),
-      getContextCompactionSettings(run.request.userId),
       getMcpServerRuntime(run.request.userId),
       getSearchSettings(run.request.userId),
       getSearchProviderRuntime(run.request.userId),
       getToolApprovalPolicies(run.request.userId),
-      getWebFetchSettings(run.request.userId),
       getThreadPlanState({ threadId: run.request.threadId }).catch(() => ({
         pendingQuestionSet: null,
         plan: null,
       })),
-      persist.getThreadContextCompactionCheckpoint(run.request.threadId),
-      getSkillsBasePath(run.request.userId),
       getEnabledIntegrations(run.request.userId).catch(() => []),
     ]);
+    const {
+      contextCompactionSettings,
+      permissionMode,
+      personalizationPrompt,
+      skillsBasePath,
+      webFetchSettings,
+      workspaceRoot,
+    } = runtimeBootstrap;
+
+    const titleUpdatePromise = launchTitleGeneration(run, resolvedModel);
 
     const latestUserText = extractLatestUserText(run.baseMessages);
     const toolsEnabled = Boolean(workspaceRoot);
@@ -717,64 +817,65 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
       run.threadMode === "chat" && enabledIntegrations.length > 0;
     const integrationApprovalFn = (toolName: string) =>
       (toolApprovalPolicies as Record<string, boolean>)[toolName] ?? true;
-    const projectAwarenessPromise = discoverProjectAwareness(workspaceRoot);
-    const skillSnapshotPromise = getSkillSnapshot({
-      workspaceRoot,
-      globalBase: skillsBasePath,
-    }).catch(() => ({
-      revision: 0,
-      skillRoots: [],
-      skills: [],
-      updatedAt: Date.now(),
-    }));
+    const projectAwarenessPromise = withOptionalPreflightBudget({
+      fallback: fallbackProjectAwareness(workspaceRoot),
+      label: "project discovery",
+      promise: discoverProjectAwareness(workspaceRoot),
+    });
+    const skillSnapshotPromise = withOptionalPreflightBudget({
+      fallback: {
+        revision: 0,
+        skillRoots: [],
+        skills: [],
+        updatedAt: Date.now(),
+      },
+      label: "skills snapshot",
+      promise: getSkillSnapshot({
+        workspaceRoot,
+        globalBase: skillsBasePath,
+      }),
+    });
     const mcpRuntimePromise =
       run.threadMode === "chat"
-        ? loadMcpTools({
-            entries: mcpServers,
-            userId: run.request.userId,
-            workspaceRoot,
-          }).catch((error) => {
-            log.warn(
-              `Skipping MCP tools during startup: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
-            );
-            return EMPTY_MCP_RUNTIME;
+        ? withOptionalPreflightBudget({
+            fallback: EMPTY_MCP_RUNTIME,
+            label: "MCP tools",
+            promise: loadMcpTools({
+              entries: mcpServers,
+              userId: run.request.userId,
+              workspaceRoot,
+            }),
           })
         : Promise.resolve(EMPTY_MCP_RUNTIME);
-    const retrievedMemoriesPromise = retrieveRelevantMemories({
-      query: latestUserText,
-      settings: memorySettings,
-      userId: run.request.userId,
-      workspaceId: run.request.workspaceId,
-    }).catch(() => []);
+    const retrievedMemoriesPromise = withOptionalPreflightBudget({
+      fallback: [],
+      label: "memory retrieval",
+      promise: retrieveRelevantMemories({
+        query: latestUserText,
+        settings: memorySettings,
+        userId: run.request.userId,
+        workspaceId: run.request.workspaceId,
+      }),
+    });
     const integrationContextPromise = hasIntegrations
-      ? buildIntegrationContext(enabledIntegrations).catch((error) => {
-          log.warn(
-            `Skipping integration context during startup: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          );
-          return EMPTY_INTEGRATION_CONTEXT;
+      ? withOptionalPreflightBudget({
+          fallback: EMPTY_INTEGRATION_CONTEXT,
+          label: "integration context",
+          promise: buildIntegrationContext(enabledIntegrations),
         })
       : Promise.resolve(EMPTY_INTEGRATION_CONTEXT);
     const integrationToolsPromise = hasIntegrations
-      ? integrationContextPromise
-          .then((integrationContext) =>
+      ? withOptionalPreflightBudget({
+          fallback: {},
+          label: "integration tools",
+          promise: integrationContextPromise.then((integrationContext) =>
             loadIntegrationTools(
               enabledIntegrations.map((integration) => integration.provider),
               integrationContext,
               integrationApprovalFn,
             ),
-          )
-          .catch((error) => {
-            log.warn(
-              `Skipping integration tools during startup: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
-            );
-            return {};
-          })
+          ),
+        })
       : Promise.resolve({});
 
     const agent = createThreadAgent({
@@ -899,67 +1000,65 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
             workspaceRoot,
           });
 
-          const baseSystemPrompt = await getSystemPrompt(
-            run.request.userId,
-            promptContext,
-          );
           const planPromptLines = buildPlanPromptLines(planState.plan);
+          const baseSystemPromptPromise = Promise.resolve(
+            getSystemPrompt({
+              personalization: personalizationPrompt,
+              promptContext,
+            }),
+          );
+          const compactionResultPromise =
+            refreshThreadContextCompactionCheckpoint({
+              contextWindow: resolvedModel.contextWindow,
+              enabled: contextCompactionSettings.enabled,
+              fixedWindowSize: contextCompactionSettings.fixedWindowSize,
+              languageModel: resolvedModel.languageModel,
+              onCompactionStart: async () => {
+                const compactingMessage = updatePendingAssistantStatusLabel(
+                  run.request.threadId,
+                  run.placeholderMessage,
+                  "Compacting context...",
+                );
+                run.placeholderMessage = compactingMessage;
+                eventChannel.emit({
+                  message: compactingMessage,
+                  runId: run.runId,
+                  type: "message.upsert",
+                });
+              },
+              ...(resolvedModel.providerOptions
+                ? { providerOptions: resolvedModel.providerOptions }
+                : {}),
+              threadId: run.request.threadId,
+              transcript: modelTranscript,
+              useFixedWindow: contextCompactionSettings.useFixedWindow,
+              windowPercent: contextCompactionSettings.windowPercent,
+            }).catch((error) => {
+              log.warn(
+                `Skipping context compaction: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              );
+              return {
+                checkpointWasInvalid: false,
+                didCompact: false,
+                inputTokens: null,
+                thresholdTokens: 0,
+                transcript: prepareMessagesForModel(modelTranscript),
+                updatedCheckpoint: null,
+              };
+            });
+          const [baseSystemPrompt, compactionResult] = await Promise.all([
+            baseSystemPromptPromise,
+            compactionResultPromise,
+          ]);
           const systemPrompt =
             planPromptLines.length > 0
               ? [baseSystemPrompt, ...planPromptLines]
                   .filter(Boolean)
                   .join("\n\n")
               : baseSystemPrompt;
-          const compactionResult = await applyContextCompaction({
-            checkpoint: contextCompactionCheckpoint,
-            contextWindow: resolvedModel.contextWindow,
-            enabled: contextCompactionSettings.enabled,
-            fixedWindowSize: contextCompactionSettings.fixedWindowSize,
-            languageModel: resolvedModel.languageModel,
-            onCompactionStart: async () => {
-              const compactingMessage = updatePendingAssistantStatusLabel(
-                run.request.threadId,
-                run.placeholderMessage,
-                "Compacting context...",
-              );
-              run.placeholderMessage = compactingMessage;
-              eventChannel.emit({
-                message: compactingMessage,
-                runId: run.runId,
-                type: "message.upsert",
-              });
-            },
-            providerOptions: resolvedModel.providerOptions,
-            transcript: modelTranscript,
-            useFixedWindow: contextCompactionSettings.useFixedWindow,
-            windowPercent: contextCompactionSettings.windowPercent,
-          }).catch((error) => {
-            log.warn(
-              `Skipping context compaction: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
-            );
-            return {
-              checkpointWasInvalid: false,
-              didCompact: false,
-              inputTokens: null,
-              thresholdTokens: 0,
-              transcript: prepareMessagesForModel(modelTranscript),
-              updatedCheckpoint: null,
-            };
-          });
           const agentMessages = compactionResult.transcript;
-
-          if (compactionResult.updatedCheckpoint) {
-            persist.updateThreadContextCompactionCheckpoint(
-              run.request.threadId,
-              {
-                coveredThroughMessageId:
-                  compactionResult.updatedCheckpoint.coveredThroughMessageId,
-                summary: compactionResult.updatedCheckpoint.summary,
-              },
-            );
-          }
 
           const result = await createAgentUIStream({
             agent,
@@ -1032,8 +1131,8 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           [...modelTranscript, responseMessage as ThreadUIMessage],
           responseMessage as ThreadUIMessage,
         );
-        const [finalAssistantBase] =
-          normalizeThreadUIMessages(finalized).slice(-1);
+        const normalizedFinalized = normalizeThreadUIMessages(finalized);
+        const [finalAssistantBase] = normalizedFinalized.slice(-1);
         const finalAssistant =
           finalAssistantBase && latestInputTokens !== undefined
             ? {
@@ -1048,6 +1147,10 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
                 ),
               }
             : finalAssistantBase;
+        const finalizedTranscript =
+          finalAssistantBase && finalAssistant
+            ? [...normalizedFinalized.slice(0, -1), finalAssistant]
+            : normalizedFinalized;
         const persistedAssistant = persist.upsertMessage(
           run.request.threadId,
           buildPersistedAssistantMessage({
@@ -1071,7 +1174,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
 
         if (!streamErrorMessage) {
           void autosaveConversationMemories({
-            messages: [...modelTranscript, responseMessage as ThreadUIMessage],
+            messages: finalizedTranscript,
             model: resolvedModel.languageModel,
             providerOptions: resolvedModel.providerOptions,
             settings: memorySettings,
@@ -1093,6 +1196,14 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           run.request.threadId,
           hasApprovalPending ? "awaiting_approval" : "idle",
         );
+        if (!streamErrorMessage && !hasApprovalPending) {
+          launchBackgroundContextCompactionWarmup({
+            contextCompactionSettings,
+            model: resolvedModel,
+            threadId: run.request.threadId,
+            transcript: finalizedTranscript,
+          });
+        }
         await emitLatestThreadSnapshot(
           run.request.threadId,
           eventChannel,
