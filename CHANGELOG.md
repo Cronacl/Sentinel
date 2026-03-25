@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.6.0-alpha.1...v0.7.0-alpha.1) (2026-03-25)
+
+
+### Features
+
+* implement desktop window controls for different platforms ([6ae6137](https://github.com/Cronacl/Sentinel/commit/6ae6137ca45bf97f91308fd884d4c8c003f868fd))
+
 ## [0.6.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.5.0-alpha.1...v0.6.0-alpha.1) (2026-03-25)
 
 
