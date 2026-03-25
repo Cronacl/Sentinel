@@ -29,7 +29,6 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-          skip-github-release: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
   build:
