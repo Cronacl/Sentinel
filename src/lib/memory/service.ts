@@ -8,10 +8,10 @@ import {
   resolveMemoryScope,
   type MemoryItem,
   type MemoryKind,
+  type MemoryRuntimeState,
   type MemoryScope,
   type MemorySearchResult,
   type MemorySearchScope,
-  type MemorySettings,
 } from "@/lib/memory";
 import {
   DEFAULT_MEMORY_EMBEDDING_PROFILE,
@@ -34,6 +34,7 @@ import {
   embedTextForMemory,
   embedTextsForMemory,
 } from "../ai/providers/embeddings";
+import { assertMemoryRuntimeAvailable } from "./runtime";
 
 const AUTO_SAVE_EXTRACTION_SCHEMA = z.object({
   memories: z.array(
@@ -103,7 +104,7 @@ function redactable(value: string) {
   return SECRET_PATTERNS.some((pattern) => pattern.test(value));
 }
 
-function resolveProfile(settings: MemorySettings) {
+function resolveProfile(settings: MemoryRuntimeState["settings"]) {
   return (
     getMemoryEmbeddingProfile(settings.memoryProvider, settings.memoryModel) ??
     DEFAULT_MEMORY_EMBEDDING_PROFILE
@@ -115,7 +116,7 @@ export async function retrieveRelevantMemories({
   limit,
   query,
   requestedScope,
-  settings,
+  memoryRuntime,
   userId,
   workspaceId,
 }: {
@@ -123,15 +124,17 @@ export async function retrieveRelevantMemories({
   limit?: number;
   query: string;
   requestedScope?: MemorySearchScope | null;
-  settings: MemorySettings;
+  memoryRuntime: MemoryRuntimeState;
   userId: string;
   workspaceId?: string | null;
 }) {
-  if (!settings.enabled || !query.trim()) {
+  if (!query.trim()) {
     return [] satisfies MemorySearchResult[];
   }
 
-  const profile = resolveProfile(settings);
+  assertMemoryRuntimeAvailable(memoryRuntime);
+
+  const profile = resolveProfile(memoryRuntime.settings);
   const embedding = await embedTextForMemory({
     abortSignal,
     profile,
@@ -142,9 +145,12 @@ export async function retrieveRelevantMemories({
     embeddingDimensions: profile.dimensions,
     embeddingModel: profile.model,
     embeddingProvider: profile.provider,
-    limit: limit ?? settings.retrievalLimit,
+    limit: limit ?? memoryRuntime.settings.retrievalLimit,
     queryEmbedding: embedding,
-    scope: resolveMemoryScope(requestedScope, settings.defaultScope),
+    scope: resolveMemoryScope(
+      requestedScope,
+      memoryRuntime.settings.defaultScope,
+    ),
     userId,
     workspaceId,
   });
@@ -157,9 +163,9 @@ export async function saveMemoryRecord({
   abortSignal,
   content,
   kind,
+  memoryRuntime,
   salience,
   scope,
-  settings,
   sourceMessageId,
   sourceThreadId,
   summary,
@@ -169,24 +175,22 @@ export async function saveMemoryRecord({
   abortSignal?: AbortSignal;
   content: string;
   kind: MemoryKind;
+  memoryRuntime: MemoryRuntimeState;
   salience?: number;
   scope: MemoryScope;
-  settings: MemorySettings;
   sourceMessageId?: string | null;
   sourceThreadId?: string | null;
   summary?: string | null;
   userId: string;
   workspaceId?: string | null;
 }) {
-  if (!settings.enabled) {
-    throw new Error("Memory is disabled. Enable it in Settings > Memory.");
-  }
+  assertMemoryRuntimeAvailable(memoryRuntime);
 
   if (redactable(content) || (summary && redactable(summary))) {
     throw new Error("Refusing to save sensitive information to memory.");
   }
 
-  const profile = resolveProfile(settings);
+  const profile = resolveProfile(memoryRuntime.settings);
   const embedding = await embedTextForMemory({
     abortSignal,
     profile,
@@ -239,24 +243,24 @@ function buildAutosaveTranscript(messages: ThreadUIMessage[]) {
 
 export async function autosaveConversationMemories({
   messages,
+  memoryRuntime,
   model,
   providerOptions,
-  settings,
   sourceMessageId,
   threadId,
   userId,
   workspaceId,
 }: {
   messages: ThreadUIMessage[];
+  memoryRuntime: MemoryRuntimeState;
   model: unknown;
   providerOptions?: SharedV3ProviderOptions;
-  settings: MemorySettings;
   sourceMessageId: string;
   threadId: string;
   userId: string;
   workspaceId?: string | null;
 }) {
-  if (!settings.enabled || !settings.autoSaveEnabled) {
+  if (!memoryRuntime.available || !memoryRuntime.settings.autoSaveEnabled) {
     return [] as MemoryItem[];
   }
 
@@ -275,7 +279,7 @@ export async function autosaveConversationMemories({
         "Allowed memory kinds: preference, profile, workflow, project, fact.",
         "Allowed scope values: global or workspace.",
         "Ignore transient requests, one-off tasks, temporary status updates, secrets, API keys, tokens, copied credentials, and sensitive data.",
-        `Return at most ${settings.autoSavePerTurnLimit} memories.`,
+        `Return at most ${memoryRuntime.settings.autoSavePerTurnLimit} memories.`,
         "",
         transcript,
       ].join("\n"),
@@ -284,7 +288,7 @@ export async function autosaveConversationMemories({
     });
 
     const candidates = result.object.memories
-      .slice(0, settings.autoSavePerTurnLimit)
+      .slice(0, memoryRuntime.settings.autoSavePerTurnLimit)
       .filter(
         (memory) =>
           !redactable(memory.content) && !redactable(memory.summary ?? ""),
@@ -294,7 +298,7 @@ export async function autosaveConversationMemories({
       return [] as MemoryItem[];
     }
 
-    const profile = resolveProfile(settings);
+    const profile = resolveProfile(memoryRuntime.settings);
     const embeddings = await embedTextsForMemory({
       profile,
       texts: candidates.map(

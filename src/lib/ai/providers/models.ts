@@ -8,12 +8,13 @@ export type ModelCapability =
   | "object_generation";
 
 export type ModelAttachmentCapabilities = {
-  supportsCodeTextFiles: boolean;
-  supportsDocuments: boolean;
   supportsImages: boolean;
+  supportsPdf: boolean;
+  supportsTextFiles: boolean;
 };
 
 export type ModelMeta = {
+  attachmentCapabilities?: ModelAttachmentCapabilities;
   id: string;
   displayName: string;
   description: string;
@@ -755,20 +756,88 @@ export function getModelAttachmentCapabilities(
   provider: AIProvider,
   modelId: string,
 ): ModelAttachmentCapabilities {
-  const capabilities = findModel(provider, modelId)?.capabilities ?? [];
-  const supportsImages = capabilities.includes("vision");
-
-  if (!supportsImages) {
-    return {
-      supportsCodeTextFiles: false,
-      supportsDocuments: false,
-      supportsImages: false,
-    };
+  const explicit = findModel(provider, modelId)?.attachmentCapabilities;
+  if (explicit) {
+    return explicit;
   }
 
-  return {
-    supportsCodeTextFiles: true,
-    supportsDocuments: true,
+  const FULL_NATIVE_ATTACHMENT_SUPPORT: ModelAttachmentCapabilities = {
     supportsImages: true,
+    supportsPdf: true,
+    supportsTextFiles: true,
   };
+  const NO_NATIVE_ATTACHMENT_SUPPORT: ModelAttachmentCapabilities = {
+    supportsImages: false,
+    supportsPdf: false,
+    supportsTextFiles: false,
+  };
+
+  const builtInNativeInputs: Partial<Record<AIProvider, Set<string>>> = {
+    anthropic: new Set([
+      "claude-opus-4-6",
+      "claude-sonnet-4-6",
+      "claude-opus-4-5",
+      "claude-haiku-4-5",
+      "claude-sonnet-4-5",
+      "claude-sonnet-4-5-20250929",
+      "claude-opus-4-1",
+      "claude-opus-4-0",
+      "claude-sonnet-4-0",
+      "claude-4-sonnet-20250514",
+      "claude-3-7-sonnet-latest",
+      "claude-3-7-sonnet-20250219",
+      "claude-3-5-sonnet-20241022",
+    ]),
+    google: new Set([
+      "gemini-3-pro-preview",
+      "gemini-2.5-pro",
+      "gemini-2.5-flash",
+      "gemini-2.5-flash-lite",
+      "gemini-2.0-flash",
+      "gemini-2.0-flash-001",
+      "gemini-2.0-flash-lite",
+      "gemini-1.5-pro",
+      "gemini-1.5-flash",
+    ]),
+    google_vertex: new Set([
+      "gemini-3-pro-preview",
+      "gemini-2.5-pro",
+      "gemini-2.5-flash",
+      "gemini-2.5-flash-lite",
+      "gemini-2.0-flash",
+      "gemini-2.0-flash-001",
+      "gemini-2.0-flash-exp",
+      "gemini-2.0-flash-lite",
+      "gemini-1.5-pro",
+      "gemini-1.5-flash",
+    ]),
+    openai: new Set([
+      "gpt-5.2-pro",
+      "gpt-5.2",
+      "gpt-5.1",
+      "gpt-5.1-codex",
+      "gpt-5.1-codex-mini",
+      "gpt-5-pro",
+      "gpt-5",
+      "gpt-5-mini",
+      "gpt-5-nano",
+      "gpt-5-codex",
+      "gpt-5-chat-latest",
+      "gpt-5.1-chat-latest",
+      "gpt-4.1",
+      "gpt-4.1-mini",
+      "gpt-4.1-nano",
+      "gpt-4o",
+      "gpt-4o-mini",
+      "o4",
+      "o4-mini",
+      "o3",
+      "o1",
+    ]),
+  };
+
+  const supportedModels = builtInNativeInputs[provider];
+  return supportedModels?.has(modelId)
+    ? FULL_NATIVE_ATTACHMENT_SUPPORT
+    : NO_NATIVE_ATTACHMENT_SUPPORT;
 }

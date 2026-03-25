@@ -190,6 +190,41 @@ describe("memorySettingsRouter", () => {
     });
   });
 
+  it("rejects enabling memory when the selected embedding provider is unavailable", async () => {
+    resolveConfiguredMemoryProfileFromId.mockImplementation(async () => {
+      throw new Error(
+        "Configure and enable that provider before using it for memory.",
+      );
+    });
+
+    await expect(
+      memorySettingsRouter.update({
+        ctx: {
+          db: {
+            insert,
+            query: {
+              memorySettings: {
+                findFirst,
+              },
+            },
+            update,
+          },
+          session: { user: { id: "user-1" } },
+        },
+        input: {
+          autoSaveEnabled: true,
+          autoSavePerTurnLimit: 2,
+          defaultScope: "workspace",
+          enabled: true,
+          memoryProfileId: "openai:text-embedding-3-small",
+          retrievalLimit: 4,
+        },
+      }),
+    ).rejects.toThrow(
+      "Configure and enable that provider before using it for memory.",
+    );
+  });
+
   it("blocks embedding profile switches until memory is cleared or reindexed", async () => {
     findFirst.mockImplementationOnce(async () => ({
       autoSaveEnabled: true,

@@ -2,6 +2,7 @@ export const TOOL_APPROVAL_TOOL_NAMES = [
   "list",
   "glob",
   "read",
+  "load_document",
   "grep",
   "diff",
   "batch_read",
@@ -416,6 +417,13 @@ export const TOOL_APPROVAL_METADATA: Record<
     label: "Read",
     riskSummary:
       "Sentinel can inspect file contents in the selected project or discovered skill directories without stopping for confirmation.",
+  },
+  load_document: {
+    defaultRequireApproval: false,
+    description: "Load and normalize documents or attachments into markdown.",
+    label: "Load document",
+    riskSummary:
+      "Sentinel can inspect and normalize local documents or current-thread attachments without stopping for confirmation.",
   },
   grep: {
     defaultRequireApproval: false,

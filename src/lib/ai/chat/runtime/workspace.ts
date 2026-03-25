@@ -14,7 +14,12 @@ import {
   type SearchProviderRuntimeMap,
 } from "@/lib/search/providers/runtime";
 import { normalizeSearchSettings, type SearchSettings } from "@/lib/search";
-import { normalizeMemorySettings, type MemorySettings } from "@/lib/memory";
+import {
+  normalizeMemorySettings,
+  type MemoryRuntimeState,
+  type MemorySettings,
+} from "@/lib/memory";
+import { resolveMemoryRuntimeState } from "@/lib/memory/runtime";
 import { buildPersonalizationPrompt } from "@/lib/personalization";
 import {
   normalizeWebFetchSettings,
@@ -333,4 +338,11 @@ export async function getMemorySettings(
   });
 
   return normalizeMemorySettings(row ?? null);
+}
+
+export async function getMemoryRuntimeState(
+  userId: string,
+): Promise<MemoryRuntimeState> {
+  const settings = await getMemorySettings(userId);
+  return await resolveMemoryRuntimeState({ settings, userId });
 }

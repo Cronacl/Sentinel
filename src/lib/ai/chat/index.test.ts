@@ -306,15 +306,18 @@ const getThreadRuntimeBootstrap = mock(async () =>
   createDefaultThreadRuntimeBootstrap(),
 );
 const getToolPermissionMode = mock(async () => "default");
-const getMemorySettings = mock(async () => ({
-  autoSaveEnabled: true,
-  autoSavePerTurnLimit: 3,
-  defaultScope: "global",
-  enabled: false,
-  memoryDimensions: 1536,
-  memoryModel: "text-embedding-3-small",
-  memoryProvider: "openai",
-  retrievalLimit: 6,
+const getMemoryRuntimeState = mock(async () => ({
+  available: true,
+  settings: {
+    autoSaveEnabled: true,
+    autoSavePerTurnLimit: 3,
+    defaultScope: "global",
+    enabled: true,
+    memoryDimensions: 1536,
+    memoryModel: "text-embedding-3-small",
+    memoryProvider: "openai",
+    retrievalLimit: 6,
+  },
 }));
 const getToolApprovalPolicies = mock(async () => ({
   list: false,
@@ -611,13 +614,51 @@ mock.module("../messages/branches", () => ({
   getMessageRecordById,
 }));
 
+mock.module("@/lib/ai/messages/branches", () => ({
+  buildActiveThreadMessages,
+  getLatestVisibleMessageId,
+  getMessageRecordById,
+}));
+
 mock.module("../messages/ui", () => ({
   mapThreadMessagesToUIMessages,
   validateThreadUIMessage,
   validateThreadUIMessages,
 }));
 
+mock.module("@/lib/ai/messages/ui", () => ({
+  mapThreadMessagesToUIMessages,
+  validateThreadUIMessage,
+  validateThreadUIMessages,
+}));
+
 mock.module("./persistence", () => ({
+  claimNextThreadFollowUp,
+  clearActiveStream,
+  deleteThreadFollowUp,
+  enqueueThreadFollowUp,
+  enqueueThreadFollowUpAtFront,
+  ensureThread,
+  getLatestAssistantMessageId,
+  getThreadContextCompactionCheckpoint,
+  loadThread,
+  listThreadFollowUps,
+  loadThreadMessages,
+  moveThreadFollowUpToFront,
+  removeThreadFollowUp,
+  requeueThreadFollowUp,
+  resetProcessingThreadFollowUps,
+  setActiveMessage,
+  setActiveStream,
+  setThreadStatus,
+  updateMessageMetadata,
+  updateThreadChatSettings,
+  updateThreadContextCompactionCheckpoint,
+  updateThreadTitle,
+  upsertMessage,
+}));
+
+mock.module("@/lib/ai/chat/persistence", () => ({
   claimNextThreadFollowUp,
   clearActiveStream,
   deleteThreadFollowUp,
@@ -671,7 +712,7 @@ mock.module("@/lib/plan/service", () => ({
 
 mock.module("./runtime/workspace", () => ({
   getContextCompactionSettings,
-  getMemorySettings,
+  getMemoryRuntimeState,
   getMcpServerRuntime,
   getSearchProviderRuntime,
   getSearchSettings,
@@ -746,8 +787,7 @@ mock.module("@/lib/skills", () => ({
   loadSkillByName,
 }));
 
-const { runThreadChat } = await import("./index");
-mock.restore();
+let runThreadChat: typeof import("./index").runThreadChat;
 
 async function flushAsyncWork() {
   await Promise.resolve();
@@ -938,7 +978,57 @@ function createRetryRequest(
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  mock.module("./persistence", () => ({
+    claimNextThreadFollowUp,
+    clearActiveStream,
+    deleteThreadFollowUp,
+    enqueueThreadFollowUp,
+    enqueueThreadFollowUpAtFront,
+    ensureThread,
+    getLatestAssistantMessageId,
+    getThreadContextCompactionCheckpoint,
+    loadThread,
+    listThreadFollowUps,
+    loadThreadMessages,
+    moveThreadFollowUpToFront,
+    removeThreadFollowUp,
+    requeueThreadFollowUp,
+    resetProcessingThreadFollowUps,
+    setActiveMessage,
+    setActiveStream,
+    setThreadStatus,
+    updateMessageMetadata,
+    updateThreadChatSettings,
+    updateThreadContextCompactionCheckpoint,
+    updateThreadTitle,
+    upsertMessage,
+  }));
+  mock.module("@/lib/ai/chat/persistence", () => ({
+    claimNextThreadFollowUp,
+    clearActiveStream,
+    deleteThreadFollowUp,
+    enqueueThreadFollowUp,
+    enqueueThreadFollowUpAtFront,
+    ensureThread,
+    getLatestAssistantMessageId,
+    getThreadContextCompactionCheckpoint,
+    loadThread,
+    listThreadFollowUps,
+    loadThreadMessages,
+    moveThreadFollowUpToFront,
+    removeThreadFollowUp,
+    requeueThreadFollowUp,
+    resetProcessingThreadFollowUps,
+    setActiveMessage,
+    setActiveStream,
+    setThreadStatus,
+    updateMessageMetadata,
+    updateThreadChatSettings,
+    updateThreadContextCompactionCheckpoint,
+    updateThreadTitle,
+    upsertMessage,
+  }));
   aiTestState.agentConfig = null;
   aiTestState.prepared = null;
   aiState.latestInputTokens = null;
@@ -973,20 +1063,24 @@ beforeEach(() => {
   buildMemoryPromptLines.mockImplementation(() => []);
   autosaveConversationMemories.mockImplementation(async () => []);
   getToolPermissionMode.mockImplementation(async () => "default");
-  getMemorySettings.mockImplementation(async () => ({
-    autoSaveEnabled: true,
-    autoSavePerTurnLimit: 3,
-    defaultScope: "global",
-    enabled: false,
-    memoryDimensions: 1536,
-    memoryModel: "text-embedding-3-small",
-    memoryProvider: "openai",
-    retrievalLimit: 6,
+  getMemoryRuntimeState.mockImplementation(async () => ({
+    available: true,
+    settings: {
+      autoSaveEnabled: true,
+      autoSavePerTurnLimit: 3,
+      defaultScope: "global",
+      enabled: true,
+      memoryDimensions: 1536,
+      memoryModel: "text-embedding-3-small",
+      memoryProvider: "openai",
+      retrievalLimit: 6,
+    },
   }));
   getToolApprovalPolicies.mockImplementation(async () => ({
     list: false,
     glob: false,
     read: false,
+    load_document: false,
     grep: false,
     diff: false,
     batch_read: false,
@@ -1063,6 +1157,7 @@ beforeEach(() => {
       ? await getWorkspaceRootPath(workspaceId, userId)
       : null,
   }));
+  ({ runThreadChat } = await import("./index"));
 });
 
 afterEach(() => {
@@ -1478,7 +1573,7 @@ describe("runThreadChat context compaction", () => {
             filename: "exports.csv",
             mediaType: "text/csv",
             type: "file",
-            url: "https://example.com/exports.csv",
+            url: "data:text/csv;base64,bmFtZQphbHBoYQo=",
           },
           { text: "Compare this file too.", type: "text" },
         ],
@@ -1577,10 +1672,8 @@ describe("runThreadChat context compaction", () => {
     ]);
     expect(strippedTail[2].parts).toEqual([
       {
-        filename: "exports.csv",
-        mediaType: "text/csv",
-        type: "file",
-        url: "https://example.com/exports.csv",
+        text: expect.stringContaining("Attached document: exports.csv"),
+        type: "text",
       },
       { text: "Compare this file too.", type: "text" },
     ]);
@@ -1596,6 +1689,54 @@ describe("runThreadChat context compaction", () => {
         id: expect.stringContaining("context-compaction-stripped:"),
       }),
     );
+  });
+
+  it("keeps persisted user attachments intact while normalizing the model transcript", async () => {
+    await runThreadChat(
+      createSubmitRequest({
+        message: {
+          id: "message-1",
+          metadata: {},
+          parts: [
+            {
+              filename: "table.csv",
+              mediaType: "text/csv",
+              type: "file",
+              url: "data:text/csv;base64,bmFtZQphbHBoYQo=",
+            },
+          ],
+          role: "user",
+        },
+      }),
+      "user-1",
+    );
+    await flushAsyncWork();
+
+    expect(upsertMessage).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        id: "message-1",
+        parts: [
+          expect.objectContaining({
+            filename: "table.csv",
+            type: "file",
+          }),
+        ],
+      }),
+    );
+    expect(
+      createUIMessageStream.mock.calls.at(-1)?.[0]?.originalMessages,
+    ).toEqual([
+      expect.objectContaining({
+        id: "message-1",
+        parts: [
+          expect.objectContaining({
+            text: expect.stringContaining("Attached document: table.csv"),
+            type: "text",
+          }),
+        ],
+      }),
+    ]);
   });
 
   it("removes provider metadata from stripped assistant copies", async () => {
@@ -2423,6 +2564,7 @@ describe("runThreadChat approvals and lifecycle", () => {
       "list",
       "glob",
       "read",
+      "load_document",
       "grep",
       "create_plan",
       "update_plan",
@@ -2465,6 +2607,7 @@ describe("runThreadChat approvals and lifecycle", () => {
       "list",
       "glob",
       "read",
+      "load_document",
       "grep",
       "create_plan",
       "update_plan",
@@ -2587,15 +2730,18 @@ describe("runThreadChat approvals and lifecycle", () => {
   });
 
   it("retrieves memory for the system prompt and autosaves after success", async () => {
-    getMemorySettings.mockImplementation(async () => ({
-      autoSaveEnabled: true,
-      autoSavePerTurnLimit: 3,
-      defaultScope: "global",
-      enabled: true,
-      memoryDimensions: 1536,
-      memoryModel: "text-embedding-3-small",
-      memoryProvider: "openai",
-      retrievalLimit: 6,
+    getMemoryRuntimeState.mockImplementation(async () => ({
+      available: true,
+      settings: {
+        autoSaveEnabled: true,
+        autoSavePerTurnLimit: 3,
+        defaultScope: "global",
+        enabled: true,
+        memoryDimensions: 1536,
+        memoryModel: "text-embedding-3-small",
+        memoryProvider: "openai",
+        retrievalLimit: 6,
+      },
     }));
     retrieveRelevantMemories.mockImplementation(async () => [
       {
@@ -2617,8 +2763,11 @@ describe("runThreadChat approvals and lifecycle", () => {
 
     expect(retrieveRelevantMemories).toHaveBeenCalledWith(
       expect.objectContaining({
+        memoryRuntime: expect.objectContaining({
+          available: true,
+          settings: expect.objectContaining({ enabled: true }),
+        }),
         query: "Summarize the refactor",
-        settings: expect.objectContaining({ enabled: true }),
         userId: "user-1",
         workspaceId: "workspace-1",
       }),
@@ -2635,11 +2784,43 @@ describe("runThreadChat approvals and lifecycle", () => {
     );
     expect(autosaveConversationMemories).toHaveBeenCalledWith(
       expect.objectContaining({
-        settings: expect.objectContaining({ enabled: true }),
+        memoryRuntime: expect.objectContaining({
+          available: true,
+          settings: expect.objectContaining({ enabled: true }),
+        }),
         threadId: "thread-1",
         userId: "user-1",
         workspaceId: "workspace-1",
       }),
+    );
+  });
+
+  it("skips bootstrap recall, autosave, and memory tools when memory is unavailable", async () => {
+    getMemoryRuntimeState.mockImplementation(async () => ({
+      available: false,
+      reason: "missing_credentials",
+      settings: {
+        autoSaveEnabled: true,
+        autoSavePerTurnLimit: 3,
+        defaultScope: "global",
+        enabled: true,
+        memoryDimensions: 1536,
+        memoryModel: "text-embedding-3-small",
+        memoryProvider: "openai",
+        retrievalLimit: 6,
+      },
+    }));
+
+    await runThreadChat(createSubmitRequest(), "user-1");
+    await flushAsyncWork();
+
+    expect(retrieveRelevantMemories).not.toHaveBeenCalled();
+    expect(autosaveConversationMemories).not.toHaveBeenCalled();
+    expect(aiTestState.prepared?.tools).not.toHaveProperty("search_memory");
+    expect(aiTestState.prepared?.tools).not.toHaveProperty("save_memory");
+    expect(aiTestState.prepared?.tools).not.toHaveProperty("forget_memory");
+    expect(aiTestState.prepared?.instructions).toContain(
+      "Long-term memory: unavailable (missing_credentials).",
     );
   });
 
@@ -2825,15 +3006,18 @@ describe("runThreadChat approvals and lifecycle", () => {
   });
 
   it("keeps startup fallback behavior non-fatal when optional preflight work fails", async () => {
-    getMemorySettings.mockImplementation(async () => ({
-      autoSaveEnabled: true,
-      autoSavePerTurnLimit: 3,
-      defaultScope: "global",
-      enabled: true,
-      memoryDimensions: 1536,
-      memoryModel: "text-embedding-3-small",
-      memoryProvider: "openai",
-      retrievalLimit: 6,
+    getMemoryRuntimeState.mockImplementation(async () => ({
+      available: true,
+      settings: {
+        autoSaveEnabled: true,
+        autoSavePerTurnLimit: 3,
+        defaultScope: "global",
+        enabled: true,
+        memoryDimensions: 1536,
+        memoryModel: "text-embedding-3-small",
+        memoryProvider: "openai",
+        retrievalLimit: 6,
+      },
     }));
     getEnabledIntegrations.mockImplementation(async () => [
       {

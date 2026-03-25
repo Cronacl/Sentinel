@@ -4,9 +4,10 @@ import {
   clampMemoryRetrievalLimit,
   MEMORY_KIND_VALUES,
   MEMORY_SEARCH_SCOPE_VALUES,
-  type MemorySettings,
+  type MemoryRuntimeState,
 } from "@/lib/memory";
 import { retrieveRelevantMemories } from "@/lib/memory/service";
+import { assertMemoryRuntimeAvailable } from "@/lib/memory/runtime";
 
 export const searchMemoryInputSchema = z.object({
   limit: z
@@ -51,19 +52,21 @@ export async function executeSearchMemory({
   abortSignal?: AbortSignal;
   input: SearchMemoryInput;
   runtime: {
-    settings: MemorySettings;
+    memoryRuntime: MemoryRuntimeState;
     userId: string;
     workspaceId?: string | null;
   };
 }): Promise<SearchMemoryOutput> {
+  assertMemoryRuntimeAvailable(runtime.memoryRuntime);
+
   const results = await retrieveRelevantMemories({
     abortSignal,
     limit: clampMemoryRetrievalLimit(
-      input.limit ?? runtime.settings.retrievalLimit,
+      input.limit ?? runtime.memoryRuntime.settings.retrievalLimit,
     ),
+    memoryRuntime: runtime.memoryRuntime,
     query: input.query,
     requestedScope: input.scope ?? "auto",
-    settings: runtime.settings,
     userId: runtime.userId,
     workspaceId: runtime.workspaceId,
   });
@@ -72,7 +75,7 @@ export async function executeSearchMemory({
     input.scope === "workspace" ||
     input.scope === "both"
       ? input.scope
-      : runtime.settings.defaultScope === "workspace"
+      : runtime.memoryRuntime.settings.defaultScope === "workspace"
         ? "both"
         : "global";
 

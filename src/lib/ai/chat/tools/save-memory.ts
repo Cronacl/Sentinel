@@ -3,9 +3,10 @@ import { z } from "zod";
 import {
   MEMORY_KIND_VALUES,
   MEMORY_SCOPE_VALUES,
-  type MemorySettings,
+  type MemoryRuntimeState,
 } from "@/lib/memory";
 import { saveMemoryRecord } from "@/lib/memory/service";
+import { assertMemoryRuntimeAvailable } from "@/lib/memory/runtime";
 
 export const saveMemoryInputSchema = z.object({
   content: z
@@ -50,25 +51,27 @@ export async function executeSaveMemory({
   abortSignal?: AbortSignal;
   input: SaveMemoryInput;
   runtime: {
-    settings: MemorySettings;
+    memoryRuntime: MemoryRuntimeState;
     sourceMessageId?: string | null;
     threadId: string;
     userId: string;
     workspaceId?: string | null;
   };
 }): Promise<SaveMemoryOutput> {
+  assertMemoryRuntimeAvailable(runtime.memoryRuntime);
+
   const scope =
     input.scope && input.scope !== "auto"
       ? input.scope
-      : runtime.settings.defaultScope;
+      : runtime.memoryRuntime.settings.defaultScope;
 
   const result = await saveMemoryRecord({
     abortSignal,
     content: input.content,
     kind: input.kind,
+    memoryRuntime: runtime.memoryRuntime,
     salience: input.salience,
     scope,
-    settings: runtime.settings,
     sourceMessageId: runtime.sourceMessageId,
     sourceThreadId: runtime.threadId,
     summary: input.summary ?? null,

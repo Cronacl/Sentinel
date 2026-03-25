@@ -61,6 +61,7 @@ function selectInspectionTools(
     "list",
     "glob",
     "read",
+    "load_document",
     "grep",
   ]);
 }

@@ -11,7 +11,7 @@ import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
 import type { PermissionMode } from "@/lib/security";
 import type { SearchProviderRuntimeMap } from "@/lib/search/providers/runtime";
 import type { SearchSettings } from "@/lib/search";
-import type { MemorySettings } from "@/lib/memory";
+import type { MemoryRuntimeState } from "@/lib/memory";
 import type { SkillMetadata } from "@/lib/skills";
 import type { WebFetchSettings } from "@/lib/webfetch";
 import type { ThreadMode } from "@/lib/plan";
@@ -32,7 +32,7 @@ const threadAgentCallOptionsSchema = z.object({
   defaultDirectory: z.string().optional(),
   globalSkillsBasePath: z.string().nullable().optional(),
   integrationTools: z.custom<ToolSet>().optional(),
-  memorySettings: z.custom<MemorySettings>(),
+  memoryRuntime: z.custom<MemoryRuntimeState>(),
   mcpTools: z.custom<ToolSet>().optional(),
   permissionMode: z.custom<PermissionMode>(),
   preferredProjectRoot: z.string().nullable().optional(),

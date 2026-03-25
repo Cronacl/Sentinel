@@ -36,6 +36,8 @@ import {
   extractLatestUserText,
   retrieveRelevantMemories,
 } from "@/lib/memory/service";
+import { describeMemoryRuntimeUnavailability } from "@/lib/memory/runtime";
+import { normalizeTranscriptDocumentsForModel } from "@/lib/documents/bootstrap";
 import {
   getThreadPlanState,
   answerThreadPlanQuestionSet,
@@ -65,7 +67,7 @@ import {
 } from "../tool-targeting";
 import { loadIntegrationTools } from "@/lib/integrations/registry";
 import {
-  getMemorySettings,
+  getMemoryRuntimeState,
   getMcpServerRuntime,
   getSearchProviderRuntime,
   getSearchSettings,
@@ -756,13 +758,7 @@ function launchTitleGeneration(
 }
 
 async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
-  const {
-    abortController,
-    assistantId,
-    eventChannel,
-    modelTranscript,
-    parentId,
-  } = run;
+  const { abortController, assistantId, eventChannel, parentId } = run;
   let firstMessageUpsertLogged = false;
   let latestInputTokens: number | undefined;
 
@@ -779,7 +775,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
     const [
       resolvedModel,
       runtimeBootstrap,
-      memorySettings,
+      memoryRuntime,
       mcpServers,
       searchSettings,
       searchProviders,
@@ -789,7 +785,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
     ] = await Promise.all([
       resolvedModelPromise,
       runtimeBootstrapPromise,
-      getMemorySettings(run.request.userId),
+      getMemoryRuntimeState(run.request.userId),
       getMcpServerRuntime(run.request.userId),
       getSearchSettings(run.request.userId),
       getSearchProviderRuntime(run.request.userId),
@@ -810,6 +806,12 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
     } = runtimeBootstrap;
 
     const titleUpdatePromise = launchTitleGeneration(run, resolvedModel);
+    const normalizedModelTranscript =
+      await normalizeTranscriptDocumentsForModel({
+        messages: run.modelTranscript,
+        providerId: resolvedModel.providerId,
+        responseModelId: resolvedModel.responseModelId,
+      });
 
     const latestUserText = extractLatestUserText(run.baseMessages);
     const toolsEnabled = Boolean(workspaceRoot);
@@ -847,16 +849,23 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
             }),
           })
         : Promise.resolve(EMPTY_MCP_RUNTIME);
-    const retrievedMemoriesPromise = withOptionalPreflightBudget({
-      fallback: [],
-      label: "memory retrieval",
-      promise: retrieveRelevantMemories({
-        query: latestUserText,
-        settings: memorySettings,
-        userId: run.request.userId,
-        workspaceId: run.request.workspaceId,
-      }),
-    });
+    if (!memoryRuntime.available && memoryRuntime.reason !== "disabled") {
+      log.warn(
+        `Skipping memory retrieval during startup: ${describeMemoryRuntimeUnavailability(memoryRuntime)}`,
+      );
+    }
+    const retrievedMemoriesPromise = memoryRuntime.available
+      ? withOptionalPreflightBudget({
+          fallback: [],
+          label: "memory retrieval",
+          promise: retrieveRelevantMemories({
+            memoryRuntime,
+            query: latestUserText,
+            userId: run.request.userId,
+            workspaceId: run.request.workspaceId,
+          }),
+        })
+      : Promise.resolve([]);
     const integrationContextPromise = hasIntegrations
       ? withOptionalPreflightBudget({
           fallback: EMPTY_INTEGRATION_CONTEXT,
@@ -893,7 +902,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
     let closeMcpTools = async () => {};
 
     const stream = createUIMessageStream({
-      originalMessages: modelTranscript,
+      originalMessages: normalizedModelTranscript,
       execute: async ({ writer }) => {
         try {
           logRuntimeTiming("stream_execute_started", run.timingStartedAt, {
@@ -975,7 +984,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
             },
             mcpToolNames,
             memoryPromptLines: buildMemoryPromptLines(retrievedMemories),
-            memorySettings,
+            memoryRuntime,
             permissionMode,
             planSummary: planState.plan
               ? {
@@ -1030,7 +1039,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
                 ? { providerOptions: resolvedModel.providerOptions }
                 : {}),
               threadId: run.request.threadId,
-              transcript: modelTranscript,
+              transcript: normalizedModelTranscript,
               useFixedWindow: contextCompactionSettings.useFixedWindow,
               windowPercent: contextCompactionSettings.windowPercent,
             }).catch((error) => {
@@ -1044,7 +1053,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
                 didCompact: false,
                 inputTokens: null,
                 thresholdTokens: 0,
-                transcript: prepareMessagesForModel(modelTranscript),
+                transcript: prepareMessagesForModel(normalizedModelTranscript),
                 updatedCheckpoint: null,
               };
             });
@@ -1082,7 +1091,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
               globalSkillsBasePath: skillsBasePath,
               integrationTools,
               mcpTools: mcpRuntime.tools,
-              memorySettings,
+              memoryRuntime,
               permissionMode,
               promptContext,
               preferredProjectRoot: projectAwareness.preferredProjectRoot,
@@ -1128,7 +1137,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           return;
         }
         const finalized = tracker.finalize(
-          [...modelTranscript, responseMessage as ThreadUIMessage],
+          [...normalizedModelTranscript, responseMessage as ThreadUIMessage],
           responseMessage as ThreadUIMessage,
         );
         const normalizedFinalized = normalizeThreadUIMessages(finalized);
@@ -1172,12 +1181,12 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           type: "message.status",
         });
 
-        if (!streamErrorMessage) {
+        if (!streamErrorMessage && memoryRuntime.available) {
           void autosaveConversationMemories({
             messages: finalizedTranscript,
             model: resolvedModel.languageModel,
             providerOptions: resolvedModel.providerOptions,
-            settings: memorySettings,
+            memoryRuntime,
             sourceMessageId: assistantId,
             threadId: run.request.threadId,
             userId: run.request.userId,

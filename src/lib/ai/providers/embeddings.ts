@@ -1,6 +1,12 @@
 import { embed, embedMany } from "ai";
 
 import type { MemoryEmbeddingProfile } from "@/lib/memory/profiles";
+import {
+  clearMemoryEmbeddingTemporaryUnavailable,
+  describeMemoryProfileRuntimeUnavailability,
+  markMemoryEmbeddingTemporarilyUnavailable,
+  resolveMemoryProfileRuntimeState,
+} from "@/lib/memory/runtime";
 
 import { createProviderInstance } from "./factory";
 import { getProviderConfig } from "./resolver";
@@ -25,14 +31,34 @@ export async function embedTextForMemory({
   text: string;
   userId: string;
 }) {
-  const model = await getEmbeddingModel(userId, profile);
-  const { embedding } = await embed({
-    abortSignal,
-    model,
-    value: text,
+  const runtimeState = await resolveMemoryProfileRuntimeState({
+    profile,
+    userId,
   });
+  if (!runtimeState.available) {
+    throw new Error(
+      describeMemoryProfileRuntimeUnavailability({
+        profile,
+        reason: runtimeState.reason,
+        ...(runtimeState.retryAt ? { retryAt: runtimeState.retryAt } : {}),
+      }),
+    );
+  }
 
-  return embedding;
+  const model = await getEmbeddingModel(userId, profile);
+  try {
+    const { embedding } = await embed({
+      abortSignal,
+      model,
+      value: text,
+    });
+
+    clearMemoryEmbeddingTemporaryUnavailable({ profile, userId });
+    return embedding;
+  } catch (error) {
+    markMemoryEmbeddingTemporarilyUnavailable({ error, profile, userId });
+    throw error;
+  }
 }
 
 export async function embedTextsForMemory({
@@ -46,12 +72,32 @@ export async function embedTextsForMemory({
   texts: string[];
   userId: string;
 }) {
-  const model = await getEmbeddingModel(userId, profile);
-  const { embeddings } = await embedMany({
-    abortSignal,
-    model,
-    values: texts,
+  const runtimeState = await resolveMemoryProfileRuntimeState({
+    profile,
+    userId,
   });
+  if (!runtimeState.available) {
+    throw new Error(
+      describeMemoryProfileRuntimeUnavailability({
+        profile,
+        reason: runtimeState.reason,
+        ...(runtimeState.retryAt ? { retryAt: runtimeState.retryAt } : {}),
+      }),
+    );
+  }
 
-  return embeddings;
+  const model = await getEmbeddingModel(userId, profile);
+  try {
+    const { embeddings } = await embedMany({
+      abortSignal,
+      model,
+      values: texts,
+    });
+
+    clearMemoryEmbeddingTemporaryUnavailable({ profile, userId });
+    return embeddings;
+  } catch (error) {
+    markMemoryEmbeddingTemporarilyUnavailable({ error, profile, userId });
+    throw error;
+  }
 }

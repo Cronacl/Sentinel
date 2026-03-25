@@ -1,4 +1,4 @@
-import type { MemorySettings } from "@/lib/memory";
+import type { MemoryRuntimeState } from "@/lib/memory";
 import type { IntegrationProvider, MCPTransportId } from "@/server/db/enums";
 import type { ThreadMode, ThreadPlanAudience } from "@/lib/plan";
 import type { PermissionMode } from "@/lib/security";
@@ -59,7 +59,7 @@ export type ThreadPromptContext = {
   latentToolSummary: ThreadPromptLatentToolSummary;
   mcpToolNames: string[];
   memoryPromptLines: string[];
-  memorySettings: MemorySettings;
+  memoryRuntime: MemoryRuntimeState;
   permissionMode: PermissionMode;
   planSummary: ThreadPromptPlanSummary | null;
   preferredProjectRoot: string | null;

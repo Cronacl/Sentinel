@@ -16,6 +16,7 @@ import {
   gitDescription,
   globDescription,
   grepDescription,
+  loadDocumentDescription,
   loadSkillDescription,
   listDescription,
   manageTaskDescription,
@@ -76,6 +77,12 @@ import { executeGit, gitInputSchema, gitOutputSchema } from "./git";
 import { executeGlob, globInputSchema, globOutputSchema } from "./glob";
 import { executeGrep, grepInputSchema, grepOutputSchema } from "./grep";
 import { executeList, listInputSchema, listOutputSchema } from "./list";
+import {
+  executeLoadDocument,
+  loadDocumentInputSchema,
+  loadDocumentOutputSchema,
+  toLoadDocumentModelOutput,
+} from "./load-document";
 import {
   executeLoadSkill,
   loadSkillInputSchema,
@@ -245,6 +252,22 @@ function buildInspectionTools(
           ...(skillRoots.length > 0 ? { extraAllowedRoots: skillRoots } : {}),
           input,
           permissionMode,
+        }),
+    }),
+    load_document: tool({
+      description: loadDocumentDescription,
+      inputSchema: loadDocumentInputSchema,
+      needsApproval: () => toolApprovalPolicies.load_document,
+      outputSchema: loadDocumentOutputSchema,
+      toModelOutput: ({ output }) => toLoadDocumentModelOutput(output),
+      execute: async (input) =>
+        executeLoadDocument({
+          defaultDirectory: filesystemRoot!,
+          ...(skillRoots.length > 0 ? { extraAllowedRoots: skillRoots } : {}),
+          input,
+          permissionMode,
+          sourceMessageId: options.sourceMessageId,
+          threadId: options.threadId,
         }),
     }),
     grep: tool({
@@ -532,13 +555,17 @@ function buildSkillTools(options: ThreadAgentCallOptions) {
 
 function buildMemoryTools(options: ThreadAgentCallOptions) {
   const {
-    memorySettings,
+    memoryRuntime,
     sourceMessageId,
     threadId,
     toolApprovalPolicies,
     userId,
     workspaceId,
   } = options;
+
+  if (!memoryRuntime.available) {
+    return {};
+  }
 
   return {
     search_memory: tool({
@@ -550,7 +577,7 @@ function buildMemoryTools(options: ThreadAgentCallOptions) {
         executeSearchMemory({
           abortSignal,
           input,
-          runtime: { settings: memorySettings, userId, workspaceId },
+          runtime: { memoryRuntime, userId, workspaceId },
         }),
     }),
     save_memory: tool({
@@ -563,7 +590,7 @@ function buildMemoryTools(options: ThreadAgentCallOptions) {
           abortSignal,
           input,
           runtime: {
-            settings: memorySettings,
+            memoryRuntime,
             sourceMessageId,
             threadId,
             userId,

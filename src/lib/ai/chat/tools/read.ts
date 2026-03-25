@@ -4,6 +4,7 @@ import path from "node:path";
 import readline from "node:readline";
 import { z } from "zod";
 
+import { isDocumentLoaderOnlyPath } from "@/lib/documents/formats";
 import type { PermissionMode } from "@/lib/security";
 
 import { resolveToolPath } from "./paths";
@@ -155,8 +156,16 @@ export async function executeRead({
     throw new Error(`Path is not a regular file: ${label}`);
   }
 
+  if (isDocumentLoaderOnlyPath(resolvedPath)) {
+    throw new Error(
+      `Cannot read document file with read: ${label}. Use load_document for PDFs, office documents, spreadsheets, presentations, or other document formats.`,
+    );
+  }
+
   if (await isBinaryFile(resolvedPath)) {
-    throw new Error(`Cannot read binary file: ${label}`);
+    throw new Error(
+      `Cannot read binary file: ${label}. Use load_document for PDFs, office documents, spreadsheets, presentations, or attachments.`,
+    );
   }
 
   const offset = input.offset ?? 1;
