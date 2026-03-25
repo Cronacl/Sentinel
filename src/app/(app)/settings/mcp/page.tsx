@@ -205,7 +205,7 @@ export default function McpSettingsPage() {
       setMutationError("");
       await utils.mcpServers.list.invalidate();
       sileo.success({ description: "MCP server installed." });
-      router.push(`/settings/mcp/${server.id}`);
+      router.replace(`/settings/mcp/${server.id}`);
     },
     onError: (error) => {
       setMutationError(error.message);
@@ -330,7 +330,7 @@ export default function McpSettingsPage() {
               </h2>
               {customServers.length ? (
                 <Button
-                  onPress={() => router.push("/settings/mcp/new")}
+                  onPress={() => router.replace("/settings/mcp/new")}
                   size="sm"
                   variant="secondary"
                 >
@@ -390,7 +390,7 @@ export default function McpSettingsPage() {
                       ) : null}
                       <Button
                         onPress={() =>
-                          router.push(`/settings/mcp/${server.id}`)
+                          router.replace(`/settings/mcp/${server.id}`)
                         }
                         size="sm"
                         variant={
@@ -416,7 +416,7 @@ export default function McpSettingsPage() {
                     </p>
                   </div>
                   <Button
-                    onPress={() => router.push("/settings/mcp/new")}
+                    onPress={() => router.replace("/settings/mcp/new")}
                     size="sm"
                   >
                     Add server
@@ -442,7 +442,7 @@ export default function McpSettingsPage() {
                   }
                   onInstall={(catalogId) => void handleInstall(catalogId)}
                   onOpenSettings={(serverId) =>
-                    router.push(`/settings/mcp/${serverId}`)
+                    router.replace(`/settings/mcp/${serverId}`)
                   }
                   onToggle={(serverId, isEnabled) =>
                     toggle.mutate({ id: serverId, isEnabled })

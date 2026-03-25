@@ -1,21 +1,7 @@
 "use client";
 
 import { Button } from "@heroui/react";
-import {
-  AiIdeaIcon,
-  ArrowLeft02Icon,
-  Brain02Icon,
-  Database01Icon,
-  GlobalSearchIcon,
-  GridIcon,
-  IceCubesIcon,
-  McpServerIcon,
-  Settings05Icon,
-  ShieldUserIcon,
-  TestTubeIcon,
-  UserCircleIcon,
-  ValidationApprovalIcon,
-} from "@hugeicons/core-free-icons";
+import { ArrowLeft02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -24,6 +10,7 @@ import type { PropsWithChildren } from "react";
 import { getDesktopApi } from "@/lib/desktop/client";
 import { api } from "@/trpc/react";
 
+import { SETTINGS_NAV } from "@/components/settings/settings-nav";
 import { TerminalPanel } from "@/components/terminal/terminal-panel";
 
 import { WorkspaceSidebar } from "./workspace-sidebar";
@@ -34,36 +21,6 @@ import {
   DesktopWindowControls,
   SidebarWindowChrome,
 } from "./sidebar-window-chrome";
-
-const SETTINGS_NAV = [
-  { href: "/settings", label: "General", icon: Settings05Icon },
-  {
-    href: "/settings/personalization",
-    label: "Personalization",
-    icon: UserCircleIcon,
-  },
-  {
-    href: "/settings/approvals",
-    label: "Approvals",
-    icon: ValidationApprovalIcon,
-  },
-  {
-    href: "/settings/search",
-    label: "Search",
-    icon: GlobalSearchIcon,
-  },
-  { href: "/settings/integrations", label: "Integrations", icon: IceCubesIcon },
-  { href: "/settings/mcp", label: "MCP Servers", icon: McpServerIcon },
-  {
-    href: "/settings/memory",
-    label: "Memory",
-    icon: AiIdeaIcon,
-  },
-  { href: "/settings/security", label: "Security", icon: ShieldUserIcon },
-  { href: "/settings/providers", label: "Providers", icon: TestTubeIcon },
-  { href: "/settings/models", label: "Models", icon: Brain02Icon },
-  { href: "/settings/data", label: "Data", icon: Database01Icon },
-] as const;
 
 function ShellWarmCache() {
   api.workspaces.getCurrent.useQuery();
