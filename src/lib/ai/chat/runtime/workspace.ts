@@ -15,6 +15,7 @@ import {
 } from "@/lib/search/providers/runtime";
 import { normalizeSearchSettings, type SearchSettings } from "@/lib/search";
 import { normalizeMemorySettings, type MemorySettings } from "@/lib/memory";
+import { buildPersonalizationPrompt } from "@/lib/personalization";
 import {
   normalizeWebFetchSettings,
   type WebFetchSettings,
@@ -38,30 +39,72 @@ import {
 } from "@/server/db/schema";
 import { resolveAvailableWorkspaceRootPath } from "./workspace-path";
 
-export async function getWorkspaceRootPath(
-  workspaceId: string,
-  userId: string,
-) {
-  const workspace = await db.query.workspaces.findFirst({
-    where: and(
-      eq(workspaces.id, workspaceId),
-      eq(workspaces.userId, userId),
-      eq(workspaces.isArchived, false),
-    ),
-    columns: { rootPath: true },
-  });
+type BootstrapUserRecord = {
+  aboutUser: string | null;
+  contextCompactionEnabled: boolean | null;
+  contextCompactionFixedWindowSize: number | null;
+  contextCompactionUseFixedWindow: boolean | null;
+  contextCompactionWindowPercent: number | null;
+  customInstructions: string | null;
+  nickname: string | null;
+  occupation: string | null;
+  personalityPreset: (typeof users.$inferSelect)["personalityPreset"] | null;
+  permissionMode: PermissionMode | null;
+  skillsBasePath: string | null;
+  webFetchBatchEnabled: boolean | null;
+  webFetchBatchLimit: number | null;
+};
 
-  return resolveAvailableWorkspaceRootPath(workspace?.rootPath);
-}
+type BootstrapWorkspaceRecord = {
+  permissionModeOverride: PermissionMode | null;
+  rootPath: string | null;
+};
 
-export async function getToolPermissionMode(
+const THREAD_RUNTIME_BOOTSTRAP_CACHE_TTL_MS = 5_000;
+const threadRuntimeBootstrapCache = new Map<
+  string,
+  { expiresAt: number; promise: Promise<ThreadRuntimeBootstrap> }
+>();
+
+export type ThreadRuntimeBootstrap = {
+  contextCompactionSettings: {
+    enabled: boolean;
+    fixedWindowSize: number;
+    useFixedWindow: boolean;
+    windowPercent: number;
+  };
+  permissionMode: PermissionMode;
+  personalizationPrompt: string;
+  skillsBasePath: string | null;
+  webFetchSettings: WebFetchSettings;
+  workspaceRoot: string | null;
+};
+
+async function loadThreadRuntimeBootstrapRows(
   userId: string,
   workspaceId?: string | null,
-): Promise<PermissionMode> {
+): Promise<{
+  user: BootstrapUserRecord | null;
+  workspace: BootstrapWorkspaceRecord | null;
+}> {
   const [user, workspace] = await Promise.all([
     db.query.users.findFirst({
       where: eq(users.id, userId),
-      columns: { permissionMode: true },
+      columns: {
+        aboutUser: true,
+        contextCompactionEnabled: true,
+        contextCompactionFixedWindowSize: true,
+        contextCompactionUseFixedWindow: true,
+        contextCompactionWindowPercent: true,
+        customInstructions: true,
+        nickname: true,
+        occupation: true,
+        personalityPreset: true,
+        permissionMode: true,
+        skillsBasePath: true,
+        webFetchBatchEnabled: true,
+        webFetchBatchLimit: true,
+      },
     }),
     workspaceId
       ? db.query.workspaces.findFirst({
@@ -70,10 +113,102 @@ export async function getToolPermissionMode(
             eq(workspaces.userId, userId),
             eq(workspaces.isArchived, false),
           ),
-          columns: { permissionModeOverride: true },
+          columns: {
+            permissionModeOverride: true,
+            rootPath: true,
+          },
         })
       : Promise.resolve(null),
   ]);
+
+  return {
+    user: user ?? null,
+    workspace: workspace ?? null,
+  };
+}
+
+export async function getThreadRuntimeBootstrap(
+  userId: string,
+  workspaceId?: string | null,
+): Promise<ThreadRuntimeBootstrap> {
+  const cacheKey = `${userId}:${workspaceId ?? "__none__"}`;
+  const cached = threadRuntimeBootstrapCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return await cached.promise;
+  }
+
+  const pending = (async () => {
+    const { user, workspace } = await loadThreadRuntimeBootstrapRows(
+      userId,
+      workspaceId,
+    );
+
+    return {
+      contextCompactionSettings: {
+        enabled:
+          user?.contextCompactionEnabled ?? DEFAULT_CONTEXT_COMPACTION_ENABLED,
+        fixedWindowSize:
+          user?.contextCompactionFixedWindowSize ??
+          DEFAULT_FIXED_CONTEXT_WINDOW_SIZE,
+        useFixedWindow:
+          user?.contextCompactionUseFixedWindow ??
+          DEFAULT_CONTEXT_COMPACTION_USE_FIXED_WINDOW,
+        windowPercent:
+          user?.contextCompactionWindowPercent ??
+          DEFAULT_CONTEXT_COMPACTION_WINDOW_PERCENT,
+      },
+      permissionMode:
+        workspace?.permissionModeOverride ?? user?.permissionMode ?? "default",
+      personalizationPrompt: user
+        ? buildPersonalizationPrompt({
+            aboutUser: user.aboutUser,
+            customInstructions: user.customInstructions,
+            nickname: user.nickname,
+            occupation: user.occupation,
+            personality: user.personalityPreset,
+          })
+        : "",
+      skillsBasePath: user?.skillsBasePath ?? null,
+      webFetchSettings: normalizeWebFetchSettings(user),
+      workspaceRoot: await resolveAvailableWorkspaceRootPath(
+        workspace?.rootPath,
+      ),
+    } satisfies ThreadRuntimeBootstrap;
+  })().catch((error) => {
+    const current = threadRuntimeBootstrapCache.get(cacheKey);
+    if (current?.promise === pending) {
+      threadRuntimeBootstrapCache.delete(cacheKey);
+    }
+    throw error;
+  });
+
+  threadRuntimeBootstrapCache.set(cacheKey, {
+    expiresAt: Date.now() + THREAD_RUNTIME_BOOTSTRAP_CACHE_TTL_MS,
+    promise: pending,
+  });
+
+  return await pending;
+}
+
+export async function getWorkspaceRootPath(
+  workspaceId: string,
+  userId: string,
+) {
+  const { workspace } = await loadThreadRuntimeBootstrapRows(
+    userId,
+    workspaceId,
+  );
+  return await resolveAvailableWorkspaceRootPath(workspace?.rootPath);
+}
+
+export async function getToolPermissionMode(
+  userId: string,
+  workspaceId?: string | null,
+): Promise<PermissionMode> {
+  const { user, workspace } = await loadThreadRuntimeBootstrapRows(
+    userId,
+    workspaceId,
+  );
 
   return workspace?.permissionModeOverride ?? user?.permissionMode ?? "default";
 }
@@ -81,13 +216,7 @@ export async function getToolPermissionMode(
 export async function getWebFetchSettings(
   userId: string,
 ): Promise<WebFetchSettings> {
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-    columns: {
-      webFetchBatchEnabled: true,
-      webFetchBatchLimit: true,
-    },
-  });
+  const { user } = await loadThreadRuntimeBootstrapRows(userId);
 
   return normalizeWebFetchSettings(user);
 }
@@ -98,15 +227,7 @@ export async function getContextCompactionSettings(userId: string): Promise<{
   useFixedWindow: boolean;
   windowPercent: number;
 }> {
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-    columns: {
-      contextCompactionEnabled: true,
-      contextCompactionFixedWindowSize: true,
-      contextCompactionUseFixedWindow: true,
-      contextCompactionWindowPercent: true,
-    },
-  });
+  const { user } = await loadThreadRuntimeBootstrapRows(userId);
 
   return {
     enabled:
@@ -189,10 +310,7 @@ export async function getMcpServerRuntime(
 export async function getSkillsBasePath(
   userId: string,
 ): Promise<string | null> {
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-    columns: { skillsBasePath: true },
-  });
+  const { user } = await loadThreadRuntimeBootstrapRows(userId);
 
   return user?.skillsBasePath ?? null;
 }

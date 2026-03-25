@@ -14,7 +14,9 @@ const aiState = {
     parts: [{ text: "Assistant response", type: "text" }],
     role: "assistant",
   },
+  latestInputTokens: null as number | null,
   streamChunks: [],
+  streamErrorMessage: null as string | null,
 };
 
 const createAgentUIStream = mock(async (args) => {
@@ -22,6 +24,14 @@ const createAgentUIStream = mock(async (args) => {
     aiTestState.prepared = await aiTestState.agentConfig.prepareCall({
       options: args.options,
     });
+  }
+  if (aiState.latestInputTokens != null) {
+    await args.onStepFinish?.({
+      usage: { inputTokens: aiState.latestInputTokens },
+    });
+  }
+  if (aiState.streamErrorMessage) {
+    args.onError?.(new Error(aiState.streamErrorMessage));
   }
   return { kind: "agent-ui-stream" };
 });
@@ -108,7 +118,7 @@ const buildPersistedAssistantMessage = mock(
 );
 
 const tracker = {
-  finalize: mock((messages, responseMessage) => [...messages, responseMessage]),
+  finalize: mock((messages) => messages),
   getMessageMetadata: mock(() => ({})),
 };
 const createReasoningMetadataTracker = mock(() => tracker);
@@ -154,11 +164,39 @@ const mapThreadMessagesToUIMessages = mock(async (messages) => messages);
 
 const loadThreadMessages = mock(async () => []);
 const loadThread = mock(async () => null);
-const getThreadContextCompactionCheckpoint = mock(async () => ({
-  coveredThroughMessageId: null,
-  summary: null,
-  updatedAt: null,
-}));
+const contextCompactionCheckpointState = {
+  coveredThroughMessageId: null as string | null,
+  summary: null as string | null,
+  updatedAt: null as Date | null,
+};
+let contextCompactionCheckpointVersion = 0;
+
+function cloneContextCompactionCheckpointState() {
+  return {
+    coveredThroughMessageId:
+      contextCompactionCheckpointState.coveredThroughMessageId,
+    summary: contextCompactionCheckpointState.summary,
+    updatedAt: contextCompactionCheckpointState.updatedAt
+      ? new Date(contextCompactionCheckpointState.updatedAt.getTime())
+      : null,
+  };
+}
+
+function setContextCompactionCheckpointState(input: {
+  coveredThroughMessageId: string | null;
+  summary: string | null;
+  updatedAt?: Date | null;
+}) {
+  contextCompactionCheckpointState.coveredThroughMessageId =
+    input.coveredThroughMessageId;
+  contextCompactionCheckpointState.summary = input.summary;
+  contextCompactionCheckpointState.updatedAt =
+    input.updatedAt === undefined ? null : input.updatedAt;
+}
+
+const getThreadContextCompactionCheckpoint = mock(async () =>
+  cloneContextCompactionCheckpointState(),
+);
 const ensureThread = mock(async () => ({ created: true }));
 const enqueueThreadFollowUp = mock(() => {});
 const enqueueThreadFollowUpAtFront = mock(() => {});
@@ -181,7 +219,20 @@ const setThreadStatus = mock(
   },
 );
 const updateThreadChatSettings = mock(() => {});
-const updateThreadContextCompactionCheckpoint = mock(() => {});
+const updateThreadContextCompactionCheckpoint = mock(
+  (_threadId, checkpoint) => {
+    contextCompactionCheckpointVersion += 1;
+    contextCompactionCheckpointState.coveredThroughMessageId =
+      checkpoint.coveredThroughMessageId;
+    contextCompactionCheckpointState.summary = checkpoint.summary;
+    contextCompactionCheckpointState.updatedAt = checkpoint.summary
+      ? new Date(
+          Date.parse("2026-03-10T10:00:00.000Z") +
+            contextCompactionCheckpointVersion,
+        )
+      : null;
+  },
+);
 const upsertMessage = mock((_threadId, message) => message);
 const setActiveMessage = mock(async () => {});
 const clearActiveStream = mock(() => {
@@ -233,6 +284,27 @@ const getEnabledIntegrations = mock(async () => []);
 const getIntegrationLabel = mock((provider) => provider);
 const loadIntegrationTools = mock(async () => ({}));
 const getMcpServerRuntime = mock(async () => []);
+function createDefaultThreadRuntimeBootstrap() {
+  return {
+    contextCompactionSettings: {
+      enabled: false,
+      fixedWindowSize: 128_000,
+      useFixedWindow: false,
+      windowPercent: 70,
+    },
+    permissionMode: "default",
+    personalizationPrompt: "",
+    skillsBasePath: null,
+    webFetchSettings: {
+      batchEnabled: false,
+      batchLimit: 10,
+    },
+    workspaceRoot: "/tmp/workspace-1",
+  };
+}
+const getThreadRuntimeBootstrap = mock(async () =>
+  createDefaultThreadRuntimeBootstrap(),
+);
 const getToolPermissionMode = mock(async () => "default");
 const getMemorySettings = mock(async () => ({
   autoSaveEnabled: true,
@@ -604,6 +676,7 @@ mock.module("./runtime/workspace", () => ({
   getSearchProviderRuntime,
   getSearchSettings,
   getSkillsBasePath,
+  getThreadRuntimeBootstrap,
   getToolApprovalPolicies,
   getToolPermissionMode,
   getWebFetchSettings,
@@ -868,10 +941,18 @@ function createRetryRequest(
 beforeEach(() => {
   aiTestState.agentConfig = null;
   aiTestState.prepared = null;
+  aiState.latestInputTokens = null;
   aiState.streamChunks = [];
+  aiState.streamErrorMessage = null;
   sessionSnapshotState.activeRunId = null;
   sessionSnapshotState.threadStatus = "idle";
   sessionSnapshotState.threadTitle = "New thread";
+  contextCompactionCheckpointVersion = 0;
+  setContextCompactionCheckpointState({
+    coveredThroughMessageId: null,
+    summary: null,
+    updatedAt: null,
+  });
   aiState.assistantResponseMessage = {
     id: "assistant-response",
     metadata: {},
@@ -879,6 +960,9 @@ beforeEach(() => {
     role: "assistant",
   };
   resolvedChatModel.contextWindow = 128_000;
+  resolveThreadChatModel.mockImplementation(async () => resolvedChatModel);
+  getSystemPrompt.mockImplementation(async () => "System prompt");
+  generateText.mockImplementation(async () => ({ text: "{}" }));
 
   loadThreadMessages.mockImplementation(async () => []);
   loadThread.mockImplementation(async () => null);
@@ -957,11 +1041,9 @@ beforeEach(() => {
     closeAll: async () => {},
     tools: {},
   }));
-  getThreadContextCompactionCheckpoint.mockImplementation(async () => ({
-    coveredThroughMessageId: null,
-    summary: null,
-    updatedAt: null,
-  }));
+  getThreadContextCompactionCheckpoint.mockImplementation(async () =>
+    cloneContextCompactionCheckpointState(),
+  );
   buildIntegrationContext.mockImplementation(async () => ({
     databases: {},
     tokens: {},
@@ -971,6 +1053,16 @@ beforeEach(() => {
   getIntegrationLabel.mockImplementation((provider) => provider);
   loadIntegrationTools.mockImplementation(async () => ({}));
   getLatestAssistantMessageId.mockImplementation(async () => "assistant-1");
+  getThreadRuntimeBootstrap.mockImplementation(async (userId, workspaceId) => ({
+    contextCompactionSettings: await getContextCompactionSettings(userId),
+    permissionMode: await getToolPermissionMode(userId, workspaceId),
+    personalizationPrompt: "",
+    skillsBasePath: await getSkillsBasePath(userId),
+    webFetchSettings: await getWebFetchSettings(userId),
+    workspaceRoot: workspaceId
+      ? await getWorkspaceRootPath(workspaceId, userId)
+      : null,
+  }));
 });
 
 afterEach(() => {
@@ -1184,18 +1276,18 @@ describe("runThreadChat context compaction", () => {
     const compactedMessages =
       createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
 
-    expect(generateText).toHaveBeenCalledTimes(1);
+    expect(generateText).toHaveBeenCalled();
     expect(generateText.mock.calls[0]?.[0]).toMatchObject({
       model: resolvedChatModel.languageModel,
       providerOptions: resolvedChatModel.providerOptions,
     });
-    expect(updateThreadContextCompactionCheckpoint).toHaveBeenCalledWith(
+    expect(updateThreadContextCompactionCheckpoint.mock.calls[0]).toEqual([
       "thread-1",
       {
         coveredThroughMessageId: "message-12",
         summary: "Compacted thread state",
       },
-    );
+    ]);
     expect(upsertMessage).toHaveBeenCalledWith(
       "thread-1",
       expect.objectContaining({
@@ -1285,14 +1377,14 @@ describe("runThreadChat context compaction", () => {
     const compactedMessages =
       createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
 
-    expect(generateText).toHaveBeenCalledTimes(1);
-    expect(updateThreadContextCompactionCheckpoint).toHaveBeenCalledWith(
+    expect(generateText).toHaveBeenCalled();
+    expect(updateThreadContextCompactionCheckpoint.mock.calls[0]).toEqual([
       "thread-1",
       {
         coveredThroughMessageId: "message-12",
         summary: "Fixed window summary",
       },
-    );
+    ]);
     expect(compactedMessages[0]).toMatchObject({
       id: "context-compaction-summary:message-12",
       role: "system",
@@ -1330,14 +1422,14 @@ describe("runThreadChat context compaction", () => {
     const compactedMessages =
       createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
 
-    expect(generateText).toHaveBeenCalledTimes(1);
-    expect(updateThreadContextCompactionCheckpoint).toHaveBeenCalledWith(
+    expect(generateText).toHaveBeenCalled();
+    expect(updateThreadContextCompactionCheckpoint.mock.calls[0]).toEqual([
       "thread-1",
       {
         coveredThroughMessageId: "message-3",
         summary: "Short branch summary",
       },
-    );
+    ]);
     expect(compactedMessages.map((message: any) => message.id)).toEqual([
       "context-compaction-summary:message-3",
       "context-compaction-stripped:message-1",
@@ -1778,6 +1870,238 @@ describe("runThreadChat context compaction", () => {
     expect(compactedMessages.map((message: any) => message.id)).toEqual(
       messages.map((message) => message.id),
     );
+  });
+
+  it("warms the next checkpoint in the background after a successful turn", async () => {
+    const messages = createLongConversation(14, {
+      assistantInputTokens: 240,
+    });
+    resolvedChatModel.contextWindow = 400;
+    aiState.latestInputTokens = 240;
+    setContextCompactionCheckpointState({
+      coveredThroughMessageId: "message-12",
+      summary: "Existing summary",
+      updatedAt: new Date("2026-03-10T10:00:00.000Z"),
+    });
+    getContextCompactionSettings.mockImplementation(async () => ({
+      enabled: true,
+      fixedWindowSize: 128_000,
+      useFixedWindow: false,
+      windowPercent: 50,
+    }));
+    generateText.mockImplementationOnce(async () => ({
+      text: "<summary>Warmed summary</summary>",
+    }));
+
+    const response = await runThreadChat(
+      {
+        id: "thread-1",
+        messages,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+
+    expect(response.status).toBe(202);
+    expect(generateText).not.toHaveBeenCalled();
+
+    await flushAsyncWork();
+
+    expect(generateText).toHaveBeenCalledTimes(1);
+    expect(updateThreadContextCompactionCheckpoint).toHaveBeenCalledWith(
+      "thread-1",
+      {
+        coveredThroughMessageId: "message-13",
+        summary: "Warmed summary",
+      },
+    );
+    expect(contextCompactionCheckpointState.coveredThroughMessageId).toBe(
+      "message-13",
+    );
+    expect(contextCompactionCheckpointState.summary).toBe("Warmed summary");
+    expect(upsertMessage).not.toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          statusLabel: "Compacting context...",
+        }),
+      }),
+    );
+  });
+
+  it("does not warm the checkpoint in the background when the stream errors", async () => {
+    const messages = createLongConversation(14, {
+      assistantInputTokens: 240,
+    });
+    resolvedChatModel.contextWindow = 400;
+    aiState.latestInputTokens = 240;
+    aiState.streamErrorMessage = "stream failed";
+    setContextCompactionCheckpointState({
+      coveredThroughMessageId: "message-12",
+      summary: "Existing summary",
+      updatedAt: new Date("2026-03-10T10:00:00.000Z"),
+    });
+    getContextCompactionSettings.mockImplementation(async () => ({
+      enabled: true,
+      fixedWindowSize: 128_000,
+      useFixedWindow: false,
+      windowPercent: 50,
+    }));
+
+    await runThreadChat(
+      {
+        id: "thread-1",
+        messages,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+    await flushAsyncWork();
+
+    expect(generateText).not.toHaveBeenCalled();
+    expect(updateThreadContextCompactionCheckpoint).not.toHaveBeenCalled();
+    expect(contextCompactionCheckpointState.coveredThroughMessageId).toBe(
+      "message-12",
+    );
+  });
+
+  it("does not warm the checkpoint in the background when approval is pending", async () => {
+    const messages = createLongConversation(14, {
+      assistantInputTokens: 240,
+    });
+    resolvedChatModel.contextWindow = 400;
+    aiState.latestInputTokens = 240;
+    aiState.assistantResponseMessage = {
+      id: "assistant-response",
+      metadata: {},
+      parts: [
+        {
+          approval: { id: "approval-1" },
+          input: { command: "pwd" },
+          state: "approval-requested",
+          toolCallId: "tool-call-1",
+          type: "tool-shell_command",
+        },
+      ],
+      role: "assistant",
+    };
+    setContextCompactionCheckpointState({
+      coveredThroughMessageId: "message-12",
+      summary: "Existing summary",
+      updatedAt: new Date("2026-03-10T10:00:00.000Z"),
+    });
+    getContextCompactionSettings.mockImplementation(async () => ({
+      enabled: true,
+      fixedWindowSize: 128_000,
+      useFixedWindow: false,
+      windowPercent: 50,
+    }));
+
+    await runThreadChat(
+      {
+        id: "thread-1",
+        messages,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+    await flushAsyncWork();
+
+    expect(generateText).not.toHaveBeenCalled();
+    expect(updateThreadContextCompactionCheckpoint).not.toHaveBeenCalled();
+    expect(sessionSnapshotState.threadStatus).toBe("awaiting_approval");
+    expect(contextCompactionCheckpointState.coveredThroughMessageId).toBe(
+      "message-12",
+    );
+  });
+
+  it("reuses the warmed checkpoint on the next turn", async () => {
+    const messages = createLongConversation(14, {
+      assistantInputTokens: 240,
+    });
+    const firstTurnTranscript = [
+      ...messages,
+      createTextMessage({
+        id: "assistant-response",
+        metadata: {
+          status: "completed",
+          usage: {
+            inputTokens: 240,
+          },
+        },
+        role: "assistant",
+        text: "Assistant response",
+      }),
+    ];
+    resolvedChatModel.contextWindow = 400;
+    aiState.latestInputTokens = 240;
+    setContextCompactionCheckpointState({
+      coveredThroughMessageId: "message-12",
+      summary: "Existing summary",
+      updatedAt: new Date("2026-03-10T10:00:00.000Z"),
+    });
+    getContextCompactionSettings.mockImplementation(async () => ({
+      enabled: true,
+      fixedWindowSize: 128_000,
+      useFixedWindow: false,
+      windowPercent: 50,
+    }));
+    generateText.mockImplementationOnce(async () => ({
+      text: "<summary>Warmed summary</summary>",
+    }));
+
+    await runThreadChat(
+      {
+        id: "thread-1",
+        messages,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+    await flushAsyncWork();
+
+    expect(contextCompactionCheckpointState.coveredThroughMessageId).toBe(
+      "message-13",
+    );
+
+    generateText.mockClear();
+    updateThreadContextCompactionCheckpoint.mockClear();
+    aiState.streamErrorMessage = "stream failed";
+
+    const response = await runThreadChat(
+      {
+        id: "thread-1",
+        messages: firstTurnTranscript,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+
+    expect(response.status).toBe(202);
+    await flushAsyncWork();
+    expect(generateText).not.toHaveBeenCalled();
+    expect(updateThreadContextCompactionCheckpoint).not.toHaveBeenCalled();
+    expect(
+      createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages[0],
+    ).toMatchObject({
+      id: "context-compaction-summary:message-13",
+      role: "system",
+    });
   });
 });
 
@@ -2300,11 +2624,13 @@ describe("runThreadChat approvals and lifecycle", () => {
       }),
     );
     expect(getSystemPrompt).toHaveBeenCalledWith(
-      "user-1",
       expect.objectContaining({
-        memoryPromptLines: ["[Global] preference: Prefers concise answers."],
-        threadMode: "chat",
-        workspaceRoot: "/tmp/workspace-1",
+        personalization: "",
+        promptContext: expect.objectContaining({
+          memoryPromptLines: ["[Global] preference: Prefers concise answers."],
+          threadMode: "chat",
+          workspaceRoot: "/tmp/workspace-1",
+        }),
       }),
     );
     expect(autosaveConversationMemories).toHaveBeenCalledWith(
@@ -2387,6 +2713,117 @@ describe("runThreadChat approvals and lifecycle", () => {
     await flushAsyncWork();
   });
 
+  it("falls back when optional preflight stalls instead of blocking the stream", async () => {
+    const projectDiscovery = createDeferred();
+
+    discoverProjectAwareness.mockImplementation(() => projectDiscovery.promise);
+
+    const response = await runThreadChat(createSubmitRequest(), "user-1");
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    await flushAsyncWork();
+
+    expect(response.status).toBe(202);
+    expect(createAgentUIStream).toHaveBeenCalled();
+    expect(getSystemPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promptContext: expect.objectContaining({
+          projectCandidates: [],
+          workspaceRoot: "/tmp/workspace-1",
+        }),
+      }),
+    );
+  });
+
+  it("starts runtime bootstrap without waiting for model resolution", async () => {
+    const modelResolution = createDeferred<typeof resolvedChatModel>();
+    const started: string[] = [];
+
+    resolveThreadChatModel.mockImplementation(() => {
+      started.push("model");
+      return modelResolution.promise;
+    });
+    getThreadRuntimeBootstrap.mockImplementation(async () => {
+      started.push("bootstrap");
+      return createDefaultThreadRuntimeBootstrap();
+    });
+
+    const response = await runThreadChat(createSubmitRequest(), "user-1");
+    await flushAsyncWork();
+
+    expect(response.status).toBe(202);
+    expect(started).toEqual(expect.arrayContaining(["model", "bootstrap"]));
+    expect(getThreadRuntimeBootstrap).toHaveBeenCalledWith(
+      "user-1",
+      "workspace-1",
+    );
+
+    modelResolution.resolve(resolvedChatModel);
+    await flushAsyncWork();
+  });
+
+  it("starts system prompt assembly in parallel with context compaction", async () => {
+    const started: string[] = [];
+    const promptResolution = createDeferred<string>();
+    const compactionResolution = createDeferred<{ text: string }>();
+    const messages = Array.from({ length: 14 }, (_, index) =>
+      createTextMessage({
+        id: `message-${index + 1}`,
+        metadata:
+          index % 2 === 1
+            ? {
+                status: "completed",
+                usage: {
+                  inputTokens: 240,
+                },
+              }
+            : { status: "completed" },
+        role: index % 2 === 0 ? "user" : "assistant",
+        text: `Message ${index + 1}: ${"refactor-details ".repeat(60)}`,
+      }),
+    );
+    resolvedChatModel.contextWindow = 400;
+    getThreadRuntimeBootstrap.mockImplementation(async () => ({
+      ...createDefaultThreadRuntimeBootstrap(),
+      contextCompactionSettings: {
+        enabled: true,
+        fixedWindowSize: 128_000,
+        useFixedWindow: false,
+        windowPercent: 50,
+      },
+    }));
+    getSystemPrompt.mockImplementation(() => {
+      started.push("prompt");
+      return promptResolution.promise;
+    });
+    generateText.mockImplementation(() => {
+      started.push("compaction");
+      return compactionResolution.promise;
+    });
+
+    const response = await runThreadChat(
+      {
+        id: "thread-1",
+        messages,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+    await flushAsyncWork();
+
+    expect(response.status).toBe(202);
+    expect(started).toEqual(expect.arrayContaining(["prompt", "compaction"]));
+    expect(createAgentUIStream).not.toHaveBeenCalled();
+
+    promptResolution.resolve("System prompt");
+    compactionResolution.resolve({
+      text: "<summary>Compacted thread state</summary>",
+    });
+    await flushAsyncWork();
+  });
+
   it("keeps startup fallback behavior non-fatal when optional preflight work fails", async () => {
     getMemorySettings.mockImplementation(async () => ({
       autoSaveEnabled: true,
@@ -2424,17 +2861,19 @@ describe("runThreadChat approvals and lifecycle", () => {
     expect(response.status).toBe(202);
     expect(createAgentUIStream).toHaveBeenCalled();
     expect(getSystemPrompt).toHaveBeenCalledWith(
-      "user-1",
       expect.objectContaining({
-        availableSkills: [],
-        enabledIntegrations: [
-          expect.objectContaining({
-            provider: "github",
-            toolCount: 0,
-          }),
-        ],
-        memoryPromptLines: [],
-        workspaceRoot: "/tmp/workspace-1",
+        personalization: "",
+        promptContext: expect.objectContaining({
+          availableSkills: [],
+          enabledIntegrations: [
+            expect.objectContaining({
+              provider: "github",
+              toolCount: 0,
+            }),
+          ],
+          memoryPromptLines: [],
+          workspaceRoot: "/tmp/workspace-1",
+        }),
       }),
     );
   });

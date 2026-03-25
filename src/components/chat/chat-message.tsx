@@ -1,5 +1,5 @@
 "use client";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import {
   ArrowLeft01Icon,
   ArrowReloadHorizontalIcon,
@@ -33,12 +33,6 @@ import {
 import { Button } from "@heroui/react";
 import type { ChatEngine } from "@/server/db/enums";
 
-const PRE_RESPONSE_STATUS_LABELS = [
-  "Working...",
-  "Planning next steps...",
-  "Preparing response...",
-] as const;
-
 export function isVisibleAssistantPart(part: MessagePart) {
   if (part.type === "text") {
     return part.text.trim().length > 0;
@@ -52,13 +46,11 @@ export function getPendingAssistantStatusLabel({
   statusLabel,
   reasoningMetadata,
   reasoningText,
-  rotationIndex,
 }: {
   messageStatus?: ThreadMessageMetadata["status"];
   statusLabel?: string | null;
   reasoningMetadata?: ThreadMessageMetadata["reasoning"];
   reasoningText?: string;
-  rotationIndex?: number;
 }) {
   if (statusLabel?.trim()) {
     return statusLabel.trim();
@@ -74,9 +66,7 @@ export function getPendingAssistantStatusLabel({
   }
 
   if (messageStatus === "pending" || messageStatus === "streaming") {
-    const index =
-      Math.abs(rotationIndex ?? 0) % PRE_RESPONSE_STATUS_LABELS.length;
-    return PRE_RESPONSE_STATUS_LABELS[index]!;
+    return "Working...";
   }
 
   return "Thinking...";
@@ -93,34 +83,11 @@ function PendingAssistantStatus({
   reasoningMetadata?: ThreadMessageMetadata["reasoning"];
   reasoningText?: string;
 }) {
-  const shouldRotate =
-    !statusLabel?.trim() &&
-    !extractLastTitle(reasoningText ?? "") &&
-    !(
-      reasoningMetadata?.isActive || reasoningMetadata?.activeSinceMs != null
-    ) &&
-    (messageStatus === "pending" || messageStatus === "streaming");
-  const [rotationIndex, setRotationIndex] = useState(0);
-
-  useEffect(() => {
-    if (!shouldRotate) {
-      setRotationIndex(0);
-      return;
-    }
-
-    const interval = window.setInterval(() => {
-      setRotationIndex((current) => current + 1);
-    }, 2000);
-
-    return () => window.clearInterval(interval);
-  }, [shouldRotate]);
-
   const resolvedStatusLabel = getPendingAssistantStatusLabel({
     messageStatus,
     statusLabel,
     reasoningMetadata,
     reasoningText,
-    rotationIndex,
   });
 
   return (

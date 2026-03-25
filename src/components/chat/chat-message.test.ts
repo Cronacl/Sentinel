@@ -75,24 +75,16 @@ describe("chat-message helpers", () => {
     ).toBe("Planning next steps...");
   });
 
-  it("rotates generic pending labels while waiting for visible output", () => {
+  it("uses a single generic pending label while waiting for visible output", () => {
     expect(
       getPendingAssistantStatusLabel({
         messageStatus: "pending",
-        rotationIndex: 0,
       }),
     ).toBe("Working...");
     expect(
       getPendingAssistantStatusLabel({
         messageStatus: "pending",
-        rotationIndex: 1,
       }),
-    ).toBe("Planning next steps...");
-    expect(
-      getPendingAssistantStatusLabel({
-        messageStatus: "pending",
-        rotationIndex: 2,
-      }),
-    ).toBe("Preparing response...");
+    ).toBe("Working...");
   });
 });
