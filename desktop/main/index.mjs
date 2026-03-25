@@ -154,6 +154,18 @@ function getWindowBackgroundColor(theme) {
   return theme === "light" ? "#f5f5f5" : "#090909";
 }
 
+function resolveWindowIconPath() {
+  if (process.platform !== "win32") {
+    return undefined;
+  }
+
+  const candidates = app.isPackaged
+    ? [path.join(process.resourcesPath, "server", "public", "favicon.ico")]
+    : [path.resolve(__dirname, "..", "..", "public", "favicon.ico")];
+
+  return candidates.find((candidate) => existsSync(candidate));
+}
+
 function getTerminalShell() {
   if (process.platform === "win32") {
     return process.env.COMSPEC || "powershell.exe";
@@ -541,9 +553,12 @@ async function prepareDevSession() {
 }
 
 function createWindow() {
+  const windowIcon = resolveWindowIconPath();
+
   mainWindow = new BrowserWindow({
     backgroundColor: "#090909",
     height: 920,
+    icon: windowIcon,
     minHeight: 720,
     minWidth: 1180,
     show: false,
@@ -906,6 +921,10 @@ function registerIpc() {
 }
 
 app.whenReady().then(async () => {
+  if (process.platform === "win32") {
+    app.setAppUserModelId("app.sentinel.desktop");
+  }
+
   await prepareDevSession();
   createWindow();
   registerIpc();
