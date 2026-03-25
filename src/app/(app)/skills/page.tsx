@@ -121,6 +121,12 @@ function matchesRegistrySkill(
   return haystack.includes(query.toLowerCase());
 }
 
+function isRegistrySkillFullyInstalled(
+  skill: Pick<RegistryItem, "installedTargets">,
+) {
+  return skill.installedTargets.codex && skill.installedTargets.sentinel;
+}
+
 type BrandIconEntry = {
   type: "brand";
   component: ComponentType<SVGProps<SVGSVGElement>>;
@@ -477,7 +483,12 @@ export default function SkillsPage() {
   );
 
   const availableRegistry = useMemo(
-    () => registryEntries.filter((e) => matchesRegistrySkill(e, query)),
+    () =>
+      registryEntries.filter(
+        (entry) =>
+          !isRegistrySkillFullyInstalled(entry) &&
+          matchesRegistrySkill(entry, query),
+      ),
     [registryEntries, query],
   );
 
@@ -685,10 +696,8 @@ export default function SkillsPage() {
                 );
               })
             ) : registryEntries.length &&
-              registryEntries.every(
-                (entry) =>
-                  entry.installedTargets.codex &&
-                  entry.installedTargets.sentinel,
+              registryEntries.every((entry) =>
+                isRegistrySkillFullyInstalled(entry),
               ) ? (
               <div className="border-separator bg-surface col-span-full rounded-xl border p-5">
                 <h2 className="text-foreground text-sm font-medium">

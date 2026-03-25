@@ -593,6 +593,54 @@ export async function discoverSkills({
   }));
 }
 
+export async function discoverCodexSkills({
+  globalBase,
+}: {
+  globalBase?: string | null;
+}) {
+  const codexHome = globalBase?.trim() || path.join(os.homedir(), ".codex");
+  const skillsDirectory = path.join(codexHome, "skills");
+  const entries = await readdir(skillsDirectory, {
+    withFileTypes: true,
+  }).catch(() => []);
+  const skills: SkillMetadata[] = [];
+
+  entries.sort((left, right) =>
+    left.name.localeCompare(right.name, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    }),
+  );
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const loaded = await loadSkillFromDirectory({
+      directory: path.join(skillsDirectory, entry.name),
+      scope: "global",
+      sourceKind: CODEX_SOURCE_KIND,
+    }).catch(() => null);
+
+    if (!loaded) {
+      continue;
+    }
+
+    skills.push({
+      description: loaded.description,
+      directory: loaded.directory,
+      name: loaded.name,
+      preview: loaded.preview,
+      scope: loaded.scope,
+      skillFile: loaded.skillFile,
+      sourceKind: loaded.sourceKind,
+    });
+  }
+
+  return skills;
+}
+
 export async function watchSkillRoots({
   workspaceRoot,
   globalBase,
