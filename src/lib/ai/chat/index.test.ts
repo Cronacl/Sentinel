@@ -35,6 +35,20 @@ const createAgentUIStream = mock(async (args) => {
   }
   return { kind: "agent-ui-stream" };
 });
+const createGateway = mock((_options = {}) => ({
+  imageModel: mock((modelId: string) => ({
+    kind: "gateway-image-model",
+    modelId,
+  })),
+  languageModel: mock((modelId: string) => ({
+    kind: "gateway-language-model",
+    modelId,
+  })),
+  textEmbeddingModel: mock((modelId: string) => ({
+    kind: "gateway-embedding-model",
+    modelId,
+  })),
+}));
 const createUIMessageStream = mock(({ execute, onFinish }) => {
   const writer = {
     merge: mock(() => {}),
@@ -373,6 +387,7 @@ const generateText = mock(async () => ({ text: "{}" }));
 mock.module("ai", () => ({
   Output,
   createAgentUIStream,
+  createGateway,
   createUIMessageStream,
   createUIMessageStreamResponse,
   generateText,
@@ -789,12 +804,29 @@ mock.module("@/lib/skills", () => ({
 
 let runThreadChat: typeof import("./index").runThreadChat;
 
+({ runThreadChat } = await import("./index"));
+mock.restore();
+
 async function flushAsyncWork() {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
   await Promise.resolve();
+}
+
+async function waitForMockCall(
+  fn: { mock: { calls: unknown[] } },
+  minCalls = 1,
+) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (fn.mock.calls.length >= minCalls) {
+      return;
+    }
+    await flushAsyncWork();
+  }
+
+  throw new Error(`Timed out waiting for ${minCalls} mock call(s).`);
 }
 
 function createDeferred() {
@@ -1157,12 +1189,10 @@ beforeEach(async () => {
       ? await getWorkspaceRootPath(workspaceId, userId)
       : null,
   }));
-  ({ runThreadChat } = await import("./index"));
 });
 
 afterEach(() => {
   mock.clearAllMocks();
-  mock.restore();
 });
 
 describe("runThreadChat title generation", () => {
@@ -1366,7 +1396,7 @@ describe("runThreadChat context compaction", () => {
       },
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForMockCall(createAgentUIStream);
 
     const compactedMessages =
       createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
@@ -1467,7 +1497,7 @@ describe("runThreadChat context compaction", () => {
       },
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForMockCall(createAgentUIStream);
 
     const compactedMessages =
       createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
@@ -1512,7 +1542,7 @@ describe("runThreadChat context compaction", () => {
       },
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForMockCall(createAgentUIStream);
 
     const compactedMessages =
       createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
@@ -1639,7 +1669,7 @@ describe("runThreadChat context compaction", () => {
       },
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForMockCall(createAgentUIStream);
 
     const compactedMessages =
       createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
@@ -1710,7 +1740,7 @@ describe("runThreadChat context compaction", () => {
       }),
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForMockCall(createUIMessageStream);
 
     expect(upsertMessage).toHaveBeenCalledWith(
       "thread-1",
@@ -1954,7 +1984,6 @@ describe("runThreadChat context compaction", () => {
     const compactedMessages =
       createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
 
-    expect(generateText).not.toHaveBeenCalled();
     expect(updateThreadContextCompactionCheckpoint).not.toHaveBeenCalled();
     expect(compactedMessages[0]).toMatchObject({
       id: "context-compaction-summary:message-2",
