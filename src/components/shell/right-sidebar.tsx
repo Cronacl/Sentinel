@@ -30,7 +30,7 @@ export function RightSidebar() {
 
         {/* drawer panel */}
         <aside
-          className="bg-surface border-separator ease-out-quart fixed top-0 right-0 z-50 flex h-dvh flex-col border-l shadow-xl transition-transform duration-300"
+          className="bg-surface border-separator/70 ease-out-quart fixed top-0 right-0 z-50 flex h-dvh flex-col border-l shadow-xl transition-transform duration-300"
           style={{
             width: SIDEBAR_WIDTH,
             maxWidth: "90vw",
