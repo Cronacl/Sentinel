@@ -78,7 +78,7 @@ export default function SettingsModalLayout({ children }: PropsWithChildren) {
         </nav>
       </aside>
 
-      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip">
+      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip bg-background">
         {children}
       </main>
     </div>

@@ -370,10 +370,10 @@ function PinnedThreadsList({
           const isActive = selectedThreadId === thread.id;
           return (
             <div
-              className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-sm transition-colors ${
+              className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-xs transition-colors ${
                 isActive
-                  ? "font-medium bg-default text-foreground"
-                  : "text-foreground/60 hover:text-foreground"
+                  ? "bg-default text-foreground"
+                  : "text-foreground/90 hover:text-foreground"
               }`}
               key={thread.id}
               onClick={() => onPressThread(thread.workspace.id, thread.id)}
@@ -478,10 +478,10 @@ function ThreadRow({
 
   return (
     <div
-      className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-sm transition-colors ${
+      className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-xs transition-colors ${
         isActive
-          ? "font-medium bg-default text-foreground"
-          : "text-foreground/60 hover:text-foreground"
+          ? "bg-default text-foreground"
+          : "text-foreground/90 hover:text-foreground"
       }`}
       onClick={() => onPressThread(workspaceId, thread.id)}
       role="button"
@@ -593,7 +593,9 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
                 strokeWidth={1.8}
               />
             </span>
-            <span className="truncate">{group.workspace.name}</span>
+            <span className="truncate text-sm font-normal">
+              {group.workspace.name}
+            </span>
           </div>
         </Button>
         <WorkspaceItemActions
@@ -623,7 +625,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
               {overflowThreads.length > 0 ? (
                 <>
                   <button
-                    className="flex w-full items-center gap-1 px-2 py-1.5 text-left text-xs text-foreground/40 transition-colors hover:text-foreground/70"
+                    className="flex w-full items-center gap-1 px-2 py-1.5 text-left text-xs text-foreground/40 transition-colors hover:text-foreground/90"
                     onClick={() =>
                       setShowOverflowThreads((current) => !current)
                     }
@@ -698,7 +700,7 @@ const ThreadList = memo(function ThreadList({
   onToggleWorkspace: (workspaceId: string) => void;
 }) {
   return (
-    <ScrollShadow className="max-h-full px-3 py-1" orientation="vertical">
+    <ScrollShadow className="max-h-full px-3 py-1 pb-4" orientation="vertical">
       <div className="flex flex-col gap-1">
         {groups.map((group) => (
           <WorkspaceThreadSection
@@ -755,7 +757,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
         {overflowItems.length > 0 ? (
           <>
             <button
-              className="flex w-full items-center gap-1 px-3 py-1.5 text-left text-xs text-foreground/40 transition-colors hover:text-foreground/70"
+              className="flex w-full items-center gap-1 px-3 py-1.5 text-left text-xs text-foreground/40 transition-colors hover:text-foreground/90"
               onClick={() => setShowOverflowThreads((current) => !current)}
               type="button"
             >
@@ -1425,7 +1427,7 @@ export function WorkspaceSidebar() {
                 className={`justify-start rounded-lg ${
                   isActive
                     ? "text-foreground"
-                    : "text-foreground/60 hover:text-foreground"
+                    : "text-foreground/90 hover:text-foreground"
                 }`}
                 fullWidth
                 key={item.href}
@@ -1626,7 +1628,7 @@ export function WorkspaceSidebar() {
 
       <div className="shrink-0 px-3 pb-3">
         <Button
-          className="text-foreground/60 hover:text-foreground justify-start rounded-lg"
+          className="text-foreground/90 hover:text-foreground justify-start rounded-lg"
           fullWidth
           onPress={() => router.push("/settings")}
           size="sm"

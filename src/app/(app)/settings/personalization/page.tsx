@@ -26,7 +26,7 @@ import { api } from "@/trpc/react";
 function PersonalizationSkeleton() {
   return (
     <div className="flex flex-col gap-6">
-      <div className="border-separator bg-surface rounded-xl border p-5">
+      <div className="border-separator/20 bg-surface rounded-2xl border p-5">
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_280px]">
           <div className="space-y-2">
             <Skeleton className="h-5 w-28 rounded-md" />
@@ -35,7 +35,7 @@ function PersonalizationSkeleton() {
         </div>
       </div>
 
-      <div className="border-separator bg-surface rounded-xl border p-5">
+      <div className="border-separator/20 bg-surface rounded-2xl border p-5">
         <div className="space-y-5">
           {Array.from({ length: 2 }).map((_, index) => (
             <div className="space-y-2" key={index}>
@@ -50,7 +50,7 @@ function PersonalizationSkeleton() {
         </div>
       </div>
 
-      <div className="border-separator bg-surface rounded-xl border p-5">
+      <div className="border-separator/20 bg-surface rounded-2xl border p-5">
         <div className="space-y-2">
           <Skeleton className="h-4 w-36 rounded-md" />
           <Skeleton className="h-48 w-full rounded-xl" />
@@ -150,7 +150,7 @@ export default function PersonalizationPage() {
           className="flex flex-col gap-6"
           onSubmit={form.handleSubmit(handleSubmit)}
         >
-          <section className="border-separator bg-surface rounded-xl border p-5">
+          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
             <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_280px] md:items-start">
               <div className="space-y-1">
                 <h2 className="text-foreground text-base font-medium">
@@ -175,7 +175,7 @@ export default function PersonalizationPage() {
             </div>
           </section>
 
-          <section className="border-separator bg-surface rounded-xl border p-5">
+          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
             <div className="mb-5">
               <h2 className="text-foreground text-base font-medium">
                 About You
@@ -214,7 +214,7 @@ export default function PersonalizationPage() {
             </div>
           </section>
 
-          <section className="border-separator bg-surface rounded-xl border p-5">
+          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
             <div className="mb-5">
               <h2 className="text-foreground text-base font-medium">
                 Custom Instructions

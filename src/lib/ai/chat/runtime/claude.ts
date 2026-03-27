@@ -162,6 +162,7 @@ type ClaudeMirrorState = {
   responseModelId: string | null;
   sessionId: string;
   text: string;
+  textOrder: number;
   reasoningText: string;
   threadId: string;
   tools: Map<string, ClaudeMirrorTool>;
@@ -375,10 +376,17 @@ function createClaudeMirrorState(input: {
     responseModelId: input.responseModelId,
     sessionId: input.sessionId,
     text: "",
+    textOrder: -1,
     threadId: input.threadId,
     tools: new Map(),
     usage: null,
   };
+}
+
+function getNextOrder(state: ClaudeMirrorState) {
+  const order = state.nextOrder;
+  state.nextOrder += 1;
+  return order;
 }
 
 function getToolOrder(state: ClaudeMirrorState, toolId: string) {
@@ -387,9 +395,7 @@ function getToolOrder(state: ClaudeMirrorState, toolId: string) {
     return existing.order;
   }
 
-  const order = state.nextOrder;
-  state.nextOrder += 1;
-  return order;
+  return getNextOrder(state);
 }
 
 function normalizeClaudeToolName(toolName: string) {
@@ -687,28 +693,45 @@ function buildAssistantParts(state: ClaudeMirrorState) {
     });
   }
 
-  if (state.text.trim()) {
-    parts.push({
-      text: state.text.trim(),
-      type: "text",
-    });
-  }
-
+  const hasText = state.text.trim().length > 0;
   const orderedTools = [...state.tools.values()].sort(
     (left, right) => left.order - right.order,
   );
 
-  for (const tool of orderedTools) {
-    parts.push({
-      ...(tool.approval ? { approval: tool.approval } : {}),
-      ...(tool.errorText ? { errorText: tool.errorText } : {}),
-      ...(tool.input === undefined ? {} : { input: tool.input }),
-      ...(tool.output === undefined ? {} : { output: tool.output }),
-      state: tool.state,
-      toolCallId: tool.id,
-      toolName: tool.name,
-      type: "dynamic-tool",
-    } as ThreadUIMessage["parts"][number]);
+  type OrderedItem =
+    | { kind: "text"; order: number }
+    | { kind: "tool"; order: number; tool: ClaudeMirrorTool };
+
+  const items: OrderedItem[] = orderedTools.map((tool) => ({
+    kind: "tool" as const,
+    order: tool.order,
+    tool,
+  }));
+
+  if (hasText) {
+    items.push({ kind: "text", order: state.textOrder });
+  }
+
+  items.sort((a, b) => a.order - b.order);
+
+  for (const item of items) {
+    if (item.kind === "text") {
+      parts.push({
+        text: state.text.trim(),
+        type: "text",
+      });
+    } else {
+      parts.push({
+        ...(item.tool.approval ? { approval: item.tool.approval } : {}),
+        ...(item.tool.errorText ? { errorText: item.tool.errorText } : {}),
+        ...(item.tool.input === undefined ? {} : { input: item.tool.input }),
+        ...(item.tool.output === undefined ? {} : { output: item.tool.output }),
+        state: item.tool.state,
+        toolCallId: item.tool.id,
+        toolName: item.tool.name,
+        type: "dynamic-tool",
+      } as ThreadUIMessage["parts"][number]);
+    }
   }
 
   return parts.length > 0 ? parts : [{ text: " ", type: "text" as const }];
@@ -935,6 +958,7 @@ function updateClaudeMirrorFromAssistantMessage(
     const candidate = block as Record<string, unknown>;
     if (candidate.type === "text") {
       state.text = extractTextContent(candidate);
+      state.textOrder = getNextOrder(state);
       continue;
     }
 
@@ -1186,6 +1210,7 @@ async function consumeClaudeQuery(control: ActiveClaudeRunControl) {
             message.result.trim()
           ) {
             control.state.text = message.result.trim();
+            control.state.textOrder = getNextOrder(control.state);
           }
 
           await finishClaudeRun(control, {

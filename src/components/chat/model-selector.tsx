@@ -1,6 +1,6 @@
 "use client";
 
-import type { SVGProps } from "react";
+import { type SVGProps, useState } from "react";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, ListBox, Popover, ScrollShadow, Spinner } from "@heroui/react";
@@ -59,10 +59,12 @@ export function ModelSelector({
   supportedReasoningEfforts,
 }: ModelSelectorProps) {
   const supportsReasoning = supportedReasoningEfforts.length > 0;
+  const [modelOpen, setModelOpen] = useState(false);
+  const [reasoningOpen, setReasoningOpen] = useState(false);
 
   return (
     <>
-      <Popover.Root>
+      <Popover.Root isOpen={modelOpen} onOpenChange={setModelOpen}>
         <Popover.Trigger>
           <Button
             className="h-8 gap-1 rounded-xl border border-border/50 bg-background px-2.5 text-[13px] text-muted shadow-none hover:bg-default hover:text-foreground disabled:opacity-30"
@@ -107,7 +109,10 @@ export function ModelSelector({
                 selectionMode="single"
                 onSelectionChange={(keys) => {
                   const key = [...keys][0];
-                  if (key != null) onSelectModel(String(key));
+                  if (key != null) {
+                    onSelectModel(String(key));
+                    setModelOpen(false);
+                  }
                 }}
               >
                 {availableModels.map((model) => (
@@ -120,7 +125,7 @@ export function ModelSelector({
       </Popover.Root>
 
       {supportsReasoning ? (
-        <Popover.Root>
+        <Popover.Root isOpen={reasoningOpen} onOpenChange={setReasoningOpen}>
           <Popover.Trigger>
             <Button
               className="h-8 gap-1 rounded-xl border border-border/50 bg-background px-2.5 text-[13px] text-muted shadow-none hover:bg-default hover:text-foreground"
@@ -153,8 +158,10 @@ export function ModelSelector({
                 selectionMode="single"
                 onSelectionChange={(keys) => {
                   const key = [...keys][0];
-                  if (key != null)
+                  if (key != null) {
                     onSelectReasoningEffort(String(key) as ReasoningEffort);
+                    setReasoningOpen(false);
+                  }
                 }}
               >
                 {supportedReasoningEfforts.map((effort) => (

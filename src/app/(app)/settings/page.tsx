@@ -52,7 +52,7 @@ const THEME_ICON = {
 function GeneralSettingsSkeleton() {
   return (
     <div className="flex flex-col gap-6">
-      <section className="border-separator bg-surface rounded-xl border p-5">
+      <section className="border-separator/20 bg-surface rounded-2xl border p-5">
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-2">
             <Skeleton className="h-5 w-28 rounded-md" />
@@ -61,7 +61,7 @@ function GeneralSettingsSkeleton() {
         </div>
       </section>
 
-      <section className="border-separator bg-surface rounded-xl border p-5">
+      <section className="border-separator/20 bg-surface rounded-2xl border p-5">
         <div className="mb-5 space-y-2">
           <Skeleton className="h-5 w-36 rounded-md" />
           <Skeleton className="h-4 w-80 rounded-md" />
@@ -262,7 +262,7 @@ export default function GeneralSettingsPage() {
         <GeneralSettingsSkeleton />
       ) : (
         <div className="flex flex-col gap-6">
-          <section className="border-separator bg-surface rounded-xl border p-5">
+          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="space-y-1">
                 <h2 className="text-foreground text-base font-medium">
@@ -305,7 +305,7 @@ export default function GeneralSettingsPage() {
             </div>
           </section>
 
-          <section className="border-separator bg-surface rounded-xl border p-5">
+          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="space-y-1">
                 <h2 className="text-foreground text-base font-medium">
@@ -361,8 +361,9 @@ export default function GeneralSettingsPage() {
             onSubmit={generalSettingsForm.handleSubmit(
               handleGeneralSettingsSubmit,
             )}
+            className="flex flex-col gap-6"
           >
-            <section className="border-separator bg-surface rounded-xl border p-5">
+            <section className="border-separator/20 bg-surface rounded-2xl border p-5">
               <div className="mb-5 space-y-1">
                 <h2 className="text-foreground text-base font-medium">
                   Context compaction
@@ -449,7 +450,7 @@ export default function GeneralSettingsPage() {
               </div>
             </section>
 
-            <section className="border-separator mt-5 bg-surface rounded-xl border p-5">
+            <section className="border-separator/20 bg-surface rounded-2xl border p-5">
               <div className="mb-5 space-y-1">
                 <h2 className="text-foreground text-base font-medium">
                   Web fetch
@@ -510,7 +511,7 @@ export default function GeneralSettingsPage() {
               </div>
             </section>
 
-            <section className="border-separator mt-5 bg-surface rounded-xl border p-5">
+            <section className="border-separator/20 bg-surface rounded-2xl border p-5">
               <div className="mb-5 space-y-1">
                 <h2 className="text-foreground text-base font-medium">
                   Skills directory
