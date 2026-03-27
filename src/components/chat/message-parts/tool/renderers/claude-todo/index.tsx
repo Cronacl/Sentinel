@@ -11,6 +11,7 @@ import {
   extractTextFromContent,
   isClaudeToolErrorState,
   isClaudeToolRunningState,
+  tryParseClaudeOutput,
   useClaudeExpansionState,
   unwrapClaudeInput,
 } from "../claude-helpers";
@@ -40,6 +41,61 @@ function isTodoOutput(value: unknown): value is ClaudeTodoOutput {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
   return Array.isArray(v.newTodos);
+}
+
+function parseTodosFromText(text: string | null): TodoItem[] | null {
+  if (!text) return null;
+
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        const items = parsed.filter(
+          (v): v is TodoItem =>
+            v &&
+            typeof v === "object" &&
+            typeof (v as Record<string, unknown>).content === "string" &&
+            typeof (v as Record<string, unknown>).status === "string",
+        );
+        if (items.length > 0) return items;
+      }
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        Array.isArray((parsed as Record<string, unknown>).newTodos)
+      ) {
+        return (parsed as ClaudeTodoOutput).newTodos;
+      }
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        Array.isArray((parsed as Record<string, unknown>).todos)
+      ) {
+        return (parsed as ClaudeTodoInput).todos;
+      }
+    } catch {
+      /* not JSON */
+    }
+  }
+
+  const lines = trimmed.split("\n").filter(Boolean);
+  const items: TodoItem[] = [];
+  for (const line of lines) {
+    const cleaned = line.replace(/^[-•*\d.)\]]+\s*/, "").trim();
+    if (!cleaned) continue;
+
+    let status: TodoItem["status"] = "pending";
+    if (/\[x\]/i.test(line) || /✅|completed|done/i.test(line)) {
+      status = "completed";
+    } else if (/🔄|in.?progress|working/i.test(line)) {
+      status = "in_progress";
+    }
+
+    items.push({ activeForm: "", content: cleaned, status });
+  }
+
+  return items.length > 0 ? items : null;
 }
 
 const STATUS_ICON: Record<TodoItem["status"], string> = {
@@ -119,15 +175,20 @@ export const ClaudeTodoWriteTool = memo(function ClaudeTodoWriteTool({
     hasInput ? part.input : undefined,
   );
   const todoInput = unwrapped && isTodoInput(unwrapped) ? unwrapped : null;
-  const todoOutput =
-    hasOutput && isTodoOutput(part.output) ? part.output : null;
+  const todoOutput = hasOutput
+    ? tryParseClaudeOutput(part.output, isTodoOutput)
+    : null;
   const fallbackOutputText =
     hasOutput && !todoOutput ? extractTextFromContent(part.output) : null;
+  const parsedFromText = !todoOutput
+    ? parseTodosFromText(fallbackOutputText)
+    : null;
 
   const isRunning = isClaudeToolRunningState(part.state);
   const isError = isClaudeToolErrorState(part.state);
 
-  const items = todoOutput?.newTodos ?? todoInput?.todos ?? [];
+  const items =
+    todoOutput?.newTodos ?? parsedFromText ?? todoInput?.todos ?? [];
   if (items.length === 0 && !fallbackOutputText?.trim()) return null;
   const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,

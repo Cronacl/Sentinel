@@ -766,6 +766,7 @@ describe("resolveRenderer", () => {
           .replace(/[^a-z0-9]+/g, "_")}`,
     );
     const localAliases = [
+      "claude_dispatchagent",
       "claude_dispatch_agent",
       "claude_listdir",
       "claude_ls",

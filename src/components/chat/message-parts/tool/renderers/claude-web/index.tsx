@@ -13,6 +13,7 @@ import {
   formatDuration,
   isClaudeToolErrorState,
   isClaudeToolRunningState,
+  tryParseClaudeOutput,
   useClaudeExpansionState,
   unwrapClaudeInput,
 } from "../claude-helpers";
@@ -88,6 +89,59 @@ function extractSearchLinks(
   return links;
 }
 
+function isLinkItem(v: unknown): v is { title: string; url: string } {
+  if (!v || typeof v !== "object") return false;
+  const o = v as Record<string, unknown>;
+  return typeof o.title === "string" && typeof o.url === "string";
+}
+
+function parseLinksFromText(
+  text: string | null,
+): Array<{ title: string; url: string }> {
+  if (!text) return [];
+
+  // Try extracting a JSON array after "Links:" or "Results:"
+  const jsonMatch = /(?:Links|Results|Sources)\s*:\s*(\[[\s\S]*\])/i.exec(text);
+  if (jsonMatch?.[1]) {
+    try {
+      const parsed: unknown = JSON.parse(jsonMatch[1]);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(isLinkItem);
+      }
+    } catch {
+      /* not valid JSON */
+    }
+  }
+
+  // Try parsing the entire text as a JSON array of links
+  const trimmed = text.trim();
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(isLinkItem);
+      }
+    } catch {
+      /* not valid JSON */
+    }
+  }
+
+  // Extract URLs with surrounding context as title fallback
+  const urlRegex = /https?:\/\/[^\s"',)\]]+/g;
+  const links: Array<{ title: string; url: string }> = [];
+  let match: RegExpExecArray | null;
+  while ((match = urlRegex.exec(text)) !== null) {
+    const url = match[0];
+    try {
+      const hostname = new URL(url).hostname;
+      links.push({ title: hostname, url });
+    } catch {
+      links.push({ title: url, url });
+    }
+  }
+  return links;
+}
+
 function getHostname(url: string): string {
   try {
     return new URL(url).hostname;
@@ -145,8 +199,9 @@ export const ClaudeWebSearchTool = memo(function ClaudeWebSearchTool({
   );
   const searchInput =
     unwrapped && isWebSearchInput(unwrapped) ? unwrapped : null;
-  const searchOutput =
-    hasOutput && isWebSearchOutput(part.output) ? part.output : null;
+  const searchOutput = hasOutput
+    ? tryParseClaudeOutput(part.output, isWebSearchOutput)
+    : null;
   const fallbackOutputText =
     hasOutput && !searchOutput ? extractTextFromContent(part.output) : null;
 
@@ -155,7 +210,9 @@ export const ClaudeWebSearchTool = memo(function ClaudeWebSearchTool({
 
   if (!searchInput) return null;
 
-  const links = searchOutput ? extractSearchLinks(searchOutput.results) : [];
+  const links = searchOutput
+    ? extractSearchLinks(searchOutput.results)
+    : parseLinksFromText(fallbackOutputText);
   const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,
     part.state === "approval-requested" || isRunning,
@@ -178,7 +235,10 @@ export const ClaudeWebSearchTool = memo(function ClaudeWebSearchTool({
       summary={summary}
       isRunning={isRunning}
       isError={isError}
-      isExpandable={links.length > 0 || Boolean(fallbackOutputText?.trim())}
+      isExpandable={
+        links.length > 0 ||
+        Boolean(fallbackOutputText?.trim() && links.length === 0)
+      }
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
     >
@@ -278,8 +338,9 @@ export const ClaudeWebFetchTool = memo(function ClaudeWebFetchTool({
     hasInput ? part.input : undefined,
   );
   const fetchInput = unwrapped && isWebFetchInput(unwrapped) ? unwrapped : null;
-  const fetchOutput =
-    hasOutput && isWebFetchOutput(part.output) ? part.output : null;
+  const fetchOutput = hasOutput
+    ? tryParseClaudeOutput(part.output, isWebFetchOutput)
+    : null;
   const fallbackOutputText =
     hasOutput && !fetchOutput ? extractTextFromContent(part.output) : null;
 

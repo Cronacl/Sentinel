@@ -14,6 +14,7 @@ import {
   formatDuration,
   isClaudeToolErrorState,
   isClaudeToolRunningState,
+  tryParseClaudeOutput,
   useClaudeExpansionState,
   unwrapClaudeInput,
 } from "../claude-helpers";
@@ -136,8 +137,9 @@ export const ClaudeAgentTool = memo(function ClaudeAgentTool({
     hasInput ? part.input : undefined,
   );
   const agentInput = unwrapped && isAgentInput(unwrapped) ? unwrapped : null;
-  const agentOutput =
-    hasOutput && isAgentOutput(part.output) ? part.output : null;
+  const agentOutput = hasOutput
+    ? tryParseClaudeOutput(part.output, isAgentOutput)
+    : null;
   const fallbackOutputText =
     hasOutput && !agentOutput ? extractTextFromContent(part.output) : null;
 

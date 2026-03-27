@@ -16,6 +16,7 @@ import {
   extractTextFromContent,
   isClaudeToolErrorState,
   isClaudeToolRunningState,
+  tryParseClaudeOutput,
   useClaudeExpansionState,
   unwrapClaudeInput,
 } from "../claude-helpers";
@@ -234,8 +235,8 @@ export const ClaudeMcpResourceTool = memo(function ClaudeMcpResourceTool({
 
   const input = unwrapClaudeInput<Record<string, unknown>>(part.input);
   const output = part.output;
-  const resources = isListMcpResourcesOutput(output) ? output : null;
-  const readOutput = isReadMcpResourceOutput(output) ? output : null;
+  const resources = tryParseClaudeOutput(output, isListMcpResourcesOutput);
+  const readOutput = tryParseClaudeOutput(output, isReadMcpResourceOutput);
   const outputText =
     readOutput?.contents
       .map((item) => item.text)

@@ -368,6 +368,7 @@ const claudeRenderers: Record<string, Renderer> = {
   claude_bash: ClaudeShellTool,
   claude_config: ClaudeSessionUtilityTool,
   claude_dispatch_agent: ClaudeAgentTool,
+  claude_dispatchagent: ClaudeAgentTool,
   claude_edit: ClaudeFileEditTool,
   claude_enterworktree: ClaudeSessionUtilityTool,
   claude_exitplanmode: ClaudePlanTool,

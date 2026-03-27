@@ -17,6 +17,7 @@ import {
   extractTextFromContent,
   isClaudeToolErrorState,
   isClaudeToolRunningState,
+  tryParseClaudeOutput,
   useClaudeExpansionState,
   unwrapClaudeInput,
 } from "../claude-helpers";
@@ -202,6 +203,9 @@ function buildSummary(
   return formatClaudeToolName(toolName);
 }
 
+const isStructuredOutput = (v: unknown): v is Record<string, unknown> =>
+  Boolean(v) && typeof v === "object" && !Array.isArray(v);
+
 function buildFooter(toolName: string, rawInput: unknown, rawOutput: unknown) {
   if (toolName === "claude_enterworktree" && isEnterWorktreeOutput(rawOutput)) {
     return (
@@ -263,13 +267,15 @@ export const ClaudeSessionUtilityTool = memo(function ClaudeSessionUtilityTool({
 
   const rawInput = unwrapClaudeInput<Record<string, unknown>>(part.input);
   const rawOutput = part.output;
+  const parsedOutput =
+    tryParseClaudeOutput(rawOutput, isStructuredOutput) ?? rawOutput;
   const outputText = extractTextFromContent(rawOutput);
   const errorText = "errorText" in part ? part.errorText : undefined;
   const actions = renderClaudeApprovalActions({ onApprove, onDeny, part });
   const isRunning = isClaudeToolRunningState(part.state);
   const isError = isClaudeToolErrorState(part.state);
 
-  const footer = buildFooter(part.toolName, rawInput, rawOutput);
+  const footer = buildFooter(part.toolName, rawInput, parsedOutput);
   const hasOutput = rawOutput !== undefined;
   const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,
