@@ -101,6 +101,14 @@ async function executeAutomationChat(params: {
   userId: string;
 }) {
   switch (params.engine) {
+    case "claude":
+      return runThreadChat(
+        {
+          ...params.chatInput,
+          engine: "claude",
+        },
+        params.userId,
+      );
     case "codex":
       return runThreadChat(
         {

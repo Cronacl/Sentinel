@@ -2,8 +2,12 @@ import "server-only";
 
 import { eq } from "drizzle-orm";
 
-import { mapThreadMessagesToUIMessages } from "@/lib/ai/messages/ui";
+import {
+  mapThreadMessagesToUIMessages,
+  mapThreadMessagesToUIMessagesBestEffort,
+} from "@/lib/ai/messages/ui";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
+import { createLogger } from "@/lib/logger";
 import { db } from "@/server/db";
 import { threadMessages, threads } from "@/server/db/schema";
 
@@ -15,6 +19,8 @@ import type {
 } from "./session-types";
 import { buildCodexBootstrapTitle } from "./runtime/codex-helpers";
 import { getFirstUserText } from "./runtime/transcript";
+
+const log = createLogger("ThreadSession");
 
 function summarizeQueuedFollowUp(
   followUp: Awaited<ReturnType<typeof listThreadFollowUps>>[number],
@@ -51,6 +57,7 @@ export async function loadThreadSessionSnapshot(
       activeStreamId: true,
       chatEngine: true,
       id: true,
+      mode: true,
       title: true,
       status: true,
     },
@@ -65,7 +72,16 @@ export async function loadThreadSessionSnapshot(
     orderBy: (records, { asc }) => [asc(records.createdAt)],
   });
   const queuedFollowUps = await listThreadFollowUps(thread.id);
-  const uiMessages = await mapThreadMessagesToUIMessages(messages as any[]);
+  const uiMessages = await mapThreadMessagesToUIMessages(
+    messages as any[],
+  ).catch((error) => {
+    log.error("thread_snapshot_validation_failed", {
+      error,
+      messageCount: messages.length,
+      threadId: thread.id,
+    });
+    return mapThreadMessagesToUIMessagesBestEffort(messages as any[]);
+  });
   const rawFirstUserTitle =
     getFirstUserText(uiMessages)?.slice(0, 100) ?? "New thread";
   const normalizedCodexTitle =
@@ -88,6 +104,7 @@ export async function loadThreadSessionSnapshot(
     activeRunId: thread.activeStreamId,
     chatEngine: thread.chatEngine,
     messages: uiMessages,
+    mode: thread.mode,
     queuedFollowUps: queuedFollowUps
       .filter((followUp) => followUp.status === "queued")
       .map(summarizeQueuedFollowUp),

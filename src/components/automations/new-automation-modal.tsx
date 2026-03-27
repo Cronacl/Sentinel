@@ -25,7 +25,11 @@ import {
 import { getErrorMessage } from "@/lib/errors";
 import { sileo } from "sileo";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
-import { AUTOMATION_SCHEDULE_TYPES, type ChatEngine } from "@/server/db/enums";
+import {
+  AUTOMATION_SCHEDULE_TYPES,
+  CHAT_ENGINES,
+  type ChatEngine,
+} from "@/server/db/enums";
 import type { AutomationTemplate } from "@/components/automations/automation-templates";
 import {
   getAvailableAutomationModels,
@@ -55,7 +59,7 @@ const automationFormSchema = z
     scheduleDayOfWeek: z.string(),
     scheduleTime: z.string(),
     scheduleCron: z.string(),
-    chatEngine: z.enum(["sentinel", "codex"]),
+    chatEngine: z.enum(CHAT_ENGINES),
     modelId: z.string().trim().min(1, "Model is required."),
     reasoningEffort: z.string(),
   })
@@ -251,6 +255,9 @@ export function NewAutomationModal({
   const codexModelsQuery = api.engines.models.useQuery({
     engine: "codex",
   });
+  const claudeModelsQuery = api.engines.models.useQuery({
+    engine: "claude",
+  });
   const chatPreferencesQuery = api.chatPreferences.get.useQuery();
   const createMutation = api.automations.create.useMutation();
 
@@ -262,6 +269,10 @@ export function NewAutomationModal({
     () => getAvailableAutomationModels(codexModelsQuery.data ?? []),
     [codexModelsQuery.data],
   );
+  const availableClaudeModels = useMemo(
+    () => getAvailableAutomationModels(claudeModelsQuery.data ?? []),
+    [claudeModelsQuery.data],
+  );
   const globalDefaults = useMemo(() => {
     const preferredEngine = chatPreferencesQuery.data?.engine ?? "sentinel";
     const preferredReasoningEffort =
@@ -270,6 +281,7 @@ export function NewAutomationModal({
     const preferredModelId = chatPreferencesQuery.data?.modelId ?? null;
 
     const preferredModels = getAutomationModelsForEngine(preferredEngine, {
+      claude: availableClaudeModels,
       codex: availableCodexModels,
       sentinel: availableSentinelModels,
     });
@@ -280,6 +292,7 @@ export function NewAutomationModal({
         ? preferredEngine
         : fallbackEngine;
     const models = getAutomationModelsForEngine(engine, {
+      claude: availableClaudeModels,
       codex: availableCodexModels,
       sentinel: availableSentinelModels,
     });
@@ -295,6 +308,7 @@ export function NewAutomationModal({
       reasoningEffort: selection.reasoningEffort,
     };
   }, [
+    availableClaudeModels,
     availableCodexModels,
     availableSentinelModels,
     chatPreferencesQuery.data?.engine,
@@ -370,10 +384,16 @@ export function NewAutomationModal({
   const availableModels = useMemo(
     () =>
       getAutomationModelsForEngine(selectedEngine, {
+        claude: availableClaudeModels,
         codex: availableCodexModels,
         sentinel: availableSentinelModels,
       }),
-    [availableCodexModels, availableSentinelModels, selectedEngine],
+    [
+      availableClaudeModels,
+      availableCodexModels,
+      availableSentinelModels,
+      selectedEngine,
+    ],
   );
   const modelOptions = useMemo(() => {
     return getAutomationModelOptions(availableModels, selectedModelKey);
@@ -452,7 +472,8 @@ export function NewAutomationModal({
     workspacesQuery.isLoading ||
     enginesQuery.isLoading ||
     sentinelModelsQuery.isLoading ||
-    codexModelsQuery.isLoading;
+    codexModelsQuery.isLoading ||
+    claudeModelsQuery.isLoading;
 
   const handleCreate = async (values: AutomationFormValues) => {
     setSubmitError("");

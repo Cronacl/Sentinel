@@ -8,7 +8,11 @@ import { type ThreadPlanAnswer } from "@/lib/plan";
 import { CHAT_ENGINES, type ChatEngine } from "@/server/db/enums";
 
 import { InvalidThreadChatRequestError } from "../errors";
-import type { ThreadChatRequest, ThreadChatTrigger } from "../types";
+import type {
+  ThreadChatRequest,
+  ThreadChatTrigger,
+  ThreadToolApprovalResponse,
+} from "../types";
 
 export const VALID_TRIGGERS = new Set<ThreadChatTrigger>([
   "submit-user-message",
@@ -24,6 +28,31 @@ export const VALID_TRIGGERS = new Set<ThreadChatTrigger>([
 
 export function str(v: unknown): string | undefined {
   return typeof v === "string" && v.trim() ? v.trim() : undefined;
+}
+
+function parseToolApprovalResponse(
+  value: unknown,
+): ThreadToolApprovalResponse | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const input = value as Record<string, unknown>;
+  const id = str(input.id);
+  const approved =
+    typeof input.approved === "boolean" ? input.approved : undefined;
+
+  if (!id || approved === undefined) {
+    return undefined;
+  }
+
+  return {
+    approved,
+    ...(str(input.decision) ? { decision: str(input.decision) } : {}),
+    id,
+    ...(str(input.reason) ? { reason: str(input.reason) } : {}),
+    ...(str(input.response) ? { response: str(input.response) } : {}),
+  };
 }
 
 export async function parseRequest(
@@ -56,6 +85,9 @@ export async function parseRequest(
   const rawPlanAnswers = Array.isArray(input.planAnswers)
     ? (input.planAnswers as ThreadPlanAnswer[])
     : undefined;
+  const toolApprovalResponse = parseToolApprovalResponse(
+    input.toolApprovalResponse,
+  );
   const reasoningEffort = str(input.reasoningEffort) as
     | ThreadChatRequest["reasoningEffort"]
     | undefined;
@@ -118,6 +150,7 @@ export async function parseRequest(
     ...(reasoningEffort ? { reasoningEffort } : {}),
     threadId,
     ...(threadMode ? { threadMode } : {}),
+    ...(toolApprovalResponse ? { toolApprovalResponse } : {}),
     trigger,
     userId,
     workspaceId,

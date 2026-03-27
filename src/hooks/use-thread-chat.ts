@@ -15,6 +15,7 @@ import type {
   ThreadSessionSnapshot,
   ThreadStreamEvent,
 } from "@/lib/ai/chat/session-types";
+import type { ThreadToolApprovalResponse } from "@/lib/ai/chat/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import {
   getThreadMessageSyncToken,
@@ -59,13 +60,7 @@ type AnswerPlanQuestionsInput = {
   questionSetId: string;
 };
 
-type ToolApprovalResponseInput = {
-  approved: boolean;
-  decision?: string;
-  id: string;
-  reason?: string;
-  response?: string;
-};
+type ToolApprovalResponseInput = ThreadToolApprovalResponse;
 
 type ThreadConnectionState =
   | "connected"
@@ -299,10 +294,39 @@ export async function fetchThreadSessionSnapshot(
   }
 
   if (!response.ok) {
-    throw new Error("Unable to refresh the chat session.");
+    throw new Error(
+      await readThreadChatErrorMessage(
+        response,
+        "Unable to refresh the chat session.",
+      ),
+    );
   }
 
   return normalizeSnapshot((await response.json()) as ThreadSessionSnapshot);
+}
+
+export async function readThreadChatErrorMessage(
+  response: Response,
+  fallback: string,
+) {
+  const raw = await response.text();
+  const trimmed = raw.trim();
+
+  if (!trimmed) {
+    return fallback;
+  }
+
+  try {
+    const payload = JSON.parse(trimmed) as {
+      error?: string | { message?: string };
+      message?: string;
+    };
+
+    if (typeof payload.error === "string") return payload.error;
+    return payload.error?.message ?? payload.message ?? trimmed;
+  } catch {
+    return trimmed;
+  }
 }
 
 export function mergeThreadSessionStateFromSnapshot(
@@ -318,7 +342,8 @@ export function mergeThreadSessionStateFromSnapshot(
     current.activeRunId === normalizedSnapshot.activeRunId;
   const nextConnectionState =
     normalizedSnapshot.activeRunId &&
-    normalizedSnapshot.threadStatus === "streaming"
+    (normalizedSnapshot.threadStatus === "streaming" ||
+      normalizedSnapshot.threadStatus === "awaiting_approval")
       ? streamingConnectionState
       : "idle";
   const nextLastAppliedRevision = preserveCurrentMessages
@@ -365,7 +390,9 @@ export function mergeThreadSessionStateWithError(
   errorMessage: string,
 ): ThreadSessionState {
   const nextConnectionState =
-    current.activeRunId != null && current.threadStatus === "streaming"
+    current.activeRunId != null &&
+    (current.threadStatus === "streaming" ||
+      current.threadStatus === "awaiting_approval")
       ? current.connectionState
       : "error";
 
@@ -409,36 +436,40 @@ function applyToolApprovalResponse(
   messages: ThreadUIMessage[],
   input: ToolApprovalResponseInput,
 ) {
-  return messages.map((message) => ({
-    ...message,
-    parts: message.parts.map((part) => {
-      const approval =
-        "approval" in part && part.approval && typeof part.approval === "object"
-          ? part.approval
-          : undefined;
+  return normalizeThreadUIMessages(
+    messages.map((message) => ({
+      ...message,
+      parts: message.parts.map((part) => {
+        const approval =
+          "approval" in part &&
+          part.approval &&
+          typeof part.approval === "object"
+            ? part.approval
+            : undefined;
 
-      if (
-        !approval ||
-        approval.id !== input.id ||
-        !("state" in part) ||
-        part.state !== "approval-requested"
-      ) {
-        return part;
-      }
+        if (
+          !approval ||
+          approval.id !== input.id ||
+          !("state" in part) ||
+          part.state !== "approval-requested"
+        ) {
+          return part;
+        }
 
-      return {
-        ...part,
-        approval: {
-          id: input.id,
-          approved: input.approved,
-          ...(input.decision ? { decision: input.decision } : {}),
-          ...(input.reason ? { reason: input.reason } : {}),
-          ...(input.response ? { response: input.response } : {}),
-        },
-        state: "approval-responded" as const,
-      };
-    }),
-  }));
+        return {
+          ...part,
+          approval: {
+            id: input.id,
+            approved: input.approved,
+            ...(input.decision ? { decision: input.decision } : {}),
+            ...(input.reason ? { reason: input.reason } : {}),
+            ...(input.response ? { response: input.response } : {}),
+          },
+          state: "approval-responded" as const,
+        };
+      }),
+    })),
+  );
 }
 
 function applyPlanAnswers(
@@ -606,7 +637,9 @@ function createSessionStore(
     setState((current) => ({
       ...current,
       connectionState:
-        current.activeRunId && current.threadStatus === "streaming"
+        current.activeRunId &&
+        (current.threadStatus === "streaming" ||
+          current.threadStatus === "awaiting_approval")
           ? "disconnected"
           : "idle",
     }));
@@ -732,7 +765,11 @@ function createSessionStore(
       return;
     }
 
-    if (!state.activeRunId || state.threadStatus !== "streaming") {
+    const isActiveRun =
+      state.activeRunId &&
+      (state.threadStatus === "streaming" ||
+        state.threadStatus === "awaiting_approval");
+    if (!isActiveRun) {
       if (streamAbortController) {
         disconnect();
       }
@@ -1034,18 +1071,12 @@ export function useThreadChat({
       });
 
       if (!response.ok) {
-        let message = "Unable to process the chat request.";
-
-        try {
-          const payload = (await response.json()) as {
-            error?: { message?: string };
-          };
-          message = payload.error?.message ?? message;
-        } catch {
-          // keep the fallback message when the response is not JSON
-        }
-
-        throw new Error(message);
+        throw new Error(
+          await readThreadChatErrorMessage(
+            response,
+            "Unable to process the chat request.",
+          ),
+        );
       }
 
       const contentType = response.headers.get("content-type") ?? "";
@@ -1086,6 +1117,7 @@ export function useThreadChat({
             ? error
             : new Error("Unable to process the chat request.");
         store.setRequestError(nextError.message);
+        void store.refreshSnapshot({ allowMissing: true }).catch(() => {});
         onError?.(nextError);
         throw nextError;
       } finally {
@@ -1254,6 +1286,7 @@ export function useThreadChat({
         {
           id: threadId,
           messages: nextMessages,
+          toolApprovalResponse: input,
           trigger: "submit-tool-approval",
           workspaceId: workspaceIdRef.current,
         },

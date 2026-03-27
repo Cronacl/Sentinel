@@ -17,6 +17,14 @@ export type ThreadChatTrigger =
   | "edit-user-message"
   | "stop-stream";
 
+export type ThreadToolApprovalResponse = {
+  approved: boolean;
+  decision?: string;
+  id: string;
+  reason?: string;
+  response?: string;
+};
+
 export type ThreadChatRequest = {
   engine?: ChatEngine;
   message?: ThreadUIMessage;
@@ -28,6 +36,7 @@ export type ThreadChatRequest = {
   reasoningEffort?: ReasoningEffort;
   threadId: string;
   threadMode?: ThreadMode;
+  toolApprovalResponse?: ThreadToolApprovalResponse;
   trigger: ThreadChatTrigger;
   userId: string;
   workspaceId: string;

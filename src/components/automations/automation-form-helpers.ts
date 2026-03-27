@@ -33,12 +33,9 @@ export function getAvailableAutomationModels(
 
 export function getAutomationModelsForEngine(
   engine: ChatEngine,
-  queries: {
-    codex: AutomationEngineModel[];
-    sentinel: AutomationEngineModel[];
-  },
+  queries: Record<ChatEngine, AutomationEngineModel[]>,
 ) {
-  return engine === "codex" ? queries.codex : queries.sentinel;
+  return queries[engine];
 }
 
 export function getAutomationModelOptions(
@@ -52,9 +49,7 @@ export function getAutomationModelOptions(
       value: "__default__",
     },
     ...models.map((model) => ({
-      description:
-        model.provider ??
-        (model.engine === "codex" ? "Codex runtime" : "Built-in model"),
+      description: model.provider ?? getEngineModelDescription(model.engine),
       label: model.displayName,
       value: model.modelId,
     })),
@@ -74,6 +69,17 @@ export function getAutomationModelOptions(
   }
 
   return options;
+}
+
+function getEngineModelDescription(engine: ChatEngine) {
+  switch (engine) {
+    case "sentinel":
+      return "Built-in model";
+    case "codex":
+      return "Codex runtime";
+    case "claude":
+      return "Claude runtime";
+  }
 }
 
 export function getAutomationReasoningOptions(

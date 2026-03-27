@@ -253,4 +253,57 @@ describe("executeAutomationRun", () => {
       "user-1",
     );
   });
+
+  it("routes Claude automations through the Claude chat engine", async () => {
+    db.query = {
+      automations: {
+        findFirst: mock(async () => ({
+          chatEngine: "claude",
+          id: "automation-1",
+          modelId: "claude-sonnet-4-5-20250929",
+          prompt: "Review the codebase.",
+          reasoningEffort: "high",
+          scheduleCron: null,
+          scheduleDayOfWeek: null,
+          scheduleTime: "09:00",
+          scheduleType: "daily",
+          status: "active",
+          title: "Daily review",
+          userId: "user-1",
+          workspace: {
+            id: "workspace-1",
+            isArchived: false,
+          },
+          workspaceId: "workspace-1",
+        })),
+      },
+    };
+
+    db.transaction = mock((callback: (tx: Record<string, any>) => unknown) =>
+      callback({
+        insert: () => ({
+          values: () => ({
+            run: () => undefined,
+          }),
+        }),
+        select: () => ({
+          from: () => ({
+            where: () => ({
+              get: () => null,
+            }),
+          }),
+        }),
+      }),
+    );
+
+    await executeAutomationRun("automation-1");
+
+    expect(runThreadChat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        engine: "claude",
+        modelId: "claude-sonnet-4-5-20250929",
+      }),
+      "user-1",
+    );
+  });
 });

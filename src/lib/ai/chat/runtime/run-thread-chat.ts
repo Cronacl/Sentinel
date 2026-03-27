@@ -48,6 +48,7 @@ import { resolveThreadTitleModel } from "../title/model";
 import { generateThreadTitle } from "../title/generate";
 import { parseRequest } from "./parse-request";
 import { runCodexThreadChat, stopCodexThreadRun } from "./codex";
+import { runClaudeThreadChat, stopClaudeThreadRun } from "./claude";
 import {
   buildActiveThreadMessages,
   buildModelTranscript,
@@ -1312,9 +1313,15 @@ async function runParsedThreadChat(
   const engine = existingThread?.chatEngine ?? request.engine ?? "sentinel";
 
   if (request.trigger === "stop-stream") {
-    return engine === "codex"
-      ? stopCodexThreadRun(request, existingThread)
-      : handleStopStream(request);
+    if (engine === "codex") {
+      return stopCodexThreadRun(request, existingThread);
+    }
+
+    if (engine === "claude") {
+      return stopClaudeThreadRun(request, existingThread);
+    }
+
+    return handleStopStream(request);
   }
 
   if (request.trigger === "queue-follow-up") {
@@ -1327,6 +1334,10 @@ async function runParsedThreadChat(
 
   if (engine === "codex") {
     return runCodexThreadChat(request, existingThread);
+  }
+
+  if (engine === "claude") {
+    return runClaudeThreadChat(request, existingThread);
   }
 
   const allRecords = await persist.loadThreadMessages(request.threadId);
