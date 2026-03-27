@@ -15,6 +15,16 @@ const VALID_PROVIDERS = new Set<string>([
   "anthropic",
   "google",
   "google_vertex",
+  "vercel",
+  "xai",
+  "azure",
+  "amazon_bedrock",
+  "groq",
+  "cohere",
+  "moonshotai",
+  "mistral",
+  "ollama",
+  "openrouter",
 ]);
 const PROVIDER_CONFIG_CACHE_TTL_MS = 15_000;
 const ENABLED_MODELS_CACHE_TTL_MS = 15_000;

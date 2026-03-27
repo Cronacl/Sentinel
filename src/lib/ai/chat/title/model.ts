@@ -10,6 +10,16 @@ const THREAD_TITLE_MODEL_IDS = {
   google: "gemini-2.5-flash-lite",
   google_vertex: "gemini-2.5-flash-lite",
   openai: "gpt-4.1-nano",
+  vercel: "openai/gpt-4.1-nano",
+  xai: "grok-3-mini",
+  azure: "gpt-4.1-mini",
+  amazon_bedrock: "anthropic.claude-3-haiku-20240307-v1:0",
+  groq: "llama-3.1-8b-instant",
+  cohere: "command-r",
+  moonshotai: "moonshot-v1-8k",
+  mistral: "mistral-small-latest",
+  ollama: "llama3",
+  openrouter: "openai/gpt-4.1-nano",
 } as const satisfies Record<AIProvider, string>;
 
 export function getThreadTitleModelId(providerId: AIProvider): string {
