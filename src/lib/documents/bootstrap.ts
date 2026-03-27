@@ -11,6 +11,21 @@ import {
 import { loadInlineAttachmentDocument } from "./loader";
 
 const DEFAULT_BOOTSTRAP_DOCUMENT_MAX_CHARS = 20_000;
+const FORCE_NORMALIZED_DOCUMENT_MEDIA_TYPES = new Set([
+  "application/msword",
+  "application/vnd.ms-excel",
+  "application/vnd.ms-excel.sheet.macroenabled.12",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.ms-powerpoint.presentation.macroenabled.12",
+  "application/vnd.oasis.opendocument.presentation",
+  "application/vnd.oasis.opendocument.spreadsheet",
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/rtf",
+  "text/csv",
+]);
 
 function shouldPassthroughFile(input: {
   capabilities: ModelAttachmentCapabilities;
@@ -19,23 +34,27 @@ function shouldPassthroughFile(input: {
   providerId: Parameters<typeof getModelAttachmentCapabilities>[0];
 }) {
   const extension = getLowercaseExtension(input.filename);
+  const normalizedMediaType = input.mediaType.trim().toLowerCase();
 
-  if (FORCE_NORMALIZED_DOCUMENT_EXTENSIONS.has(extension)) {
+  if (
+    FORCE_NORMALIZED_DOCUMENT_EXTENSIONS.has(extension) ||
+    FORCE_NORMALIZED_DOCUMENT_MEDIA_TYPES.has(normalizedMediaType)
+  ) {
     return false;
   }
 
   if (
     (input.providerId === "google" || input.providerId === "google_vertex") &&
-    (extension === "json" || input.mediaType === "application/json")
+    (extension === "json" || normalizedMediaType === "application/json")
   ) {
     return false;
   }
 
-  if (input.mediaType.startsWith("image/")) {
+  if (normalizedMediaType.startsWith("image/")) {
     return input.capabilities.supportsImages;
   }
 
-  if (extension === "pdf" || input.mediaType === "application/pdf") {
+  if (extension === "pdf" || normalizedMediaType === "application/pdf") {
     return input.capabilities.supportsPdf;
   }
 
@@ -64,7 +83,10 @@ function shouldPassthroughFile(input: {
     "sh",
   ]);
 
-  if (textExtensions.has(extension) || input.mediaType.startsWith("text/")) {
+  if (
+    textExtensions.has(extension) ||
+    normalizedMediaType.startsWith("text/")
+  ) {
     return input.capabilities.supportsTextFiles;
   }
 
