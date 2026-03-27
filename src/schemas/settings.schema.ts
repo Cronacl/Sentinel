@@ -5,6 +5,16 @@ export const aiProviderSchema = z.enum([
   "anthropic",
   "google",
   "google_vertex",
+  "vercel",
+  "xai",
+  "azure",
+  "amazon_bedrock",
+  "groq",
+  "cohere",
+  "moonshotai",
+  "mistral",
+  "ollama",
+  "openrouter",
 ]);
 
 const optionalUrlString = z
@@ -29,11 +39,30 @@ export const googleVertexProviderConfigFormSchema = z.object({
   project: z.string().trim().min(1, "Project ID is required."),
 });
 
+export const bedrockProviderConfigFormSchema = z.object({
+  accessKeyId: z.string().trim().min(1, "Access key ID is required."),
+  secretAccessKey: z.string().trim().min(1, "Secret access key is required."),
+  region: z.string().trim().min(1, "AWS region is required."),
+  isEnabled: z.boolean(),
+});
+
+export const ollamaProviderConfigFormSchema = z.object({
+  baseURL: z
+    .string()
+    .trim()
+    .min(1, "Base URL is required.")
+    .default("http://localhost:11434/v1"),
+  isEnabled: z.boolean(),
+});
+
 export const providerConfigFormSchema = apiKeyProviderConfigFormSchema.extend({
+  accessKeyId: z.string().trim().optional().default(""),
   clientEmail: z.string().trim().optional().default(""),
   location: z.string().trim().optional().default(""),
   privateKey: z.string().optional().default(""),
   project: z.string().trim().optional().default(""),
+  region: z.string().trim().optional().default(""),
+  secretAccessKey: z.string().trim().optional().default(""),
 });
 
 export const customModelFormSchema = z.object({
@@ -46,6 +75,12 @@ export type APIKeyProviderConfigFormValues = z.infer<
 >;
 export type GoogleVertexProviderConfigFormValues = z.infer<
   typeof googleVertexProviderConfigFormSchema
+>;
+export type BedrockProviderConfigFormValues = z.infer<
+  typeof bedrockProviderConfigFormSchema
+>;
+export type OllamaProviderConfigFormValues = z.infer<
+  typeof ollamaProviderConfigFormSchema
 >;
 export type ProviderConfigFormValues = z.infer<typeof providerConfigFormSchema>;
 export type CustomModelFormValues = z.infer<typeof customModelFormSchema>;

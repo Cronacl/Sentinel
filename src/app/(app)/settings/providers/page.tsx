@@ -10,7 +10,9 @@ import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper
 import { getErrorMessage } from "@/lib/errors";
 import { api } from "@/trpc/react";
 
-type ProviderKey = "openai" | "anthropic" | "google" | "google_vertex";
+import type { AIProvider } from "@/server/db/enums";
+
+type ProviderKey = AIProvider;
 
 const STATUS_COLOR = {
   active: "success",

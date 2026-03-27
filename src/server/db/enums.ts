@@ -3,6 +3,16 @@ export const AI_PROVIDERS = [
   "anthropic",
   "google",
   "google_vertex",
+  "vercel",
+  "xai",
+  "azure",
+  "amazon_bedrock",
+  "groq",
+  "cohere",
+  "moonshotai",
+  "mistral",
+  "ollama",
+  "openrouter",
 ] as const;
 export type AIProvider = (typeof AI_PROVIDERS)[number];
 
