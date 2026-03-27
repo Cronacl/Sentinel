@@ -78,6 +78,37 @@ export function getFileName(path: string) {
   return path.split("/").pop() ?? path;
 }
 
+/**
+ * Attempts to resolve a Claude tool output into a typed structure.
+ * Claude SDK often returns tool outputs as text content blocks which get
+ * normalized to `{ stdout: text }`. This helper tries the type guard first,
+ * then tries JSON-parsing the text extracted from the output.
+ */
+export function tryParseClaudeOutput<T>(
+  output: unknown,
+  guard: (v: unknown) => v is T,
+): T | null {
+  if (guard(output)) return output;
+
+  const text = extractTextFromContent(output);
+  if (!text) return null;
+
+  const trimmed = text.trim();
+  if (
+    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+    (trimmed.startsWith("[") && trimmed.endsWith("]"))
+  ) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (guard(parsed)) return parsed;
+    } catch {
+      /* not pure JSON */
+    }
+  }
+
+  return null;
+}
+
 export function isClaudeToolRunningState(
   state: RendererProps["part"]["state"],
 ) {

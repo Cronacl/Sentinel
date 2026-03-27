@@ -14,6 +14,7 @@ import {
   getFileName,
   isClaudeToolErrorState,
   isClaudeToolRunningState,
+  tryParseClaudeOutput,
   useClaudeExpansionState,
   unwrapClaudeInput,
 } from "../claude-helpers";
@@ -77,6 +78,49 @@ function isGrepOutput(value: unknown): value is ClaudeGrepOutput {
   if (!value || typeof value !== "object") return false;
   const v = value as Record<string, unknown>;
   return typeof v.numFiles === "number" && Array.isArray(v.filenames);
+}
+
+function parseGlobFromText(text: string | null): ClaudeGlobOutput | null {
+  if (!text) return null;
+
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const filenames = lines.filter((l) => l.includes(".") || l.includes("/"));
+  if (filenames.length === 0) return null;
+  return {
+    durationMs: 0,
+    filenames,
+    numFiles: filenames.length,
+    truncated: false,
+  };
+}
+
+function parseGrepFromText(text: string | null): ClaudeGrepOutput | null {
+  if (!text) return null;
+
+  const lines = text.split("\n");
+  const fileSet = new Set<string>();
+  let matchCount = 0;
+
+  for (const line of lines) {
+    const colonIdx = line.indexOf(":");
+    if (colonIdx > 0) {
+      const candidate = line.slice(0, colonIdx);
+      if (candidate.includes(".") || candidate.includes("/")) {
+        fileSet.add(candidate);
+        matchCount++;
+      }
+    }
+  }
+
+  return {
+    content: text,
+    filenames: [...fileSet],
+    numFiles: fileSet.size,
+    numMatches: matchCount > 0 ? matchCount : undefined,
+  };
 }
 
 function FileList({ filenames }: { filenames: string[] }) {
@@ -167,10 +211,12 @@ export const ClaudeGlobTool = memo(function ClaudeGlobTool({
     hasInput ? part.input : undefined,
   );
   const globInput = unwrapped && isGlobInput(unwrapped) ? unwrapped : null;
-  const globOutput =
-    hasOutput && isGlobOutput(part.output) ? part.output : null;
+  const globOutputDirect = hasOutput
+    ? tryParseClaudeOutput(part.output, isGlobOutput)
+    : null;
   const fallbackOutputText =
-    hasOutput && !globOutput ? extractTextFromContent(part.output) : null;
+    hasOutput && !globOutputDirect ? extractTextFromContent(part.output) : null;
+  const globOutput = globOutputDirect ?? parseGlobFromText(fallbackOutputText);
 
   const isRunning = isClaudeToolRunningState(part.state);
   const isError = isClaudeToolErrorState(part.state);
@@ -200,7 +246,9 @@ export const ClaudeGlobTool = memo(function ClaudeGlobTool({
       summary={summary}
       isRunning={isRunning}
       isError={isError}
-      isExpandable={Boolean(hasFiles) || Boolean(fallbackOutputText?.trim())}
+      isExpandable={
+        Boolean(hasFiles) || Boolean(!hasFiles && fallbackOutputText?.trim())
+      }
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
       footer={
@@ -282,10 +330,12 @@ export const ClaudeGrepTool = memo(function ClaudeGrepTool({
     hasInput ? part.input : undefined,
   );
   const grepInput = unwrapped && isGrepInput(unwrapped) ? unwrapped : null;
-  const grepOutput =
-    hasOutput && isGrepOutput(part.output) ? part.output : null;
+  const grepOutputDirect = hasOutput
+    ? tryParseClaudeOutput(part.output, isGrepOutput)
+    : null;
   const fallbackOutputText =
-    hasOutput && !grepOutput ? extractTextFromContent(part.output) : null;
+    hasOutput && !grepOutputDirect ? extractTextFromContent(part.output) : null;
+  const grepOutput = grepOutputDirect ?? parseGrepFromText(fallbackOutputText);
 
   const isRunning = isClaudeToolRunningState(part.state);
   const isError = isClaudeToolErrorState(part.state);

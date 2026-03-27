@@ -2,17 +2,21 @@
 
 import type { ReactNode } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button, ScrollShadow } from "@heroui/react";
+import { ScrollShadow } from "@heroui/react";
 import { Copy01Icon, Tick01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Icon } from "@iconify/react";
 
 import type { RendererProps } from "../../renderer";
 import { ToolLayout } from "../shared/tool-layout";
+import { renderClaudeApprovalActions } from "../claude-approval-actions";
 import {
   unwrapClaudeInput,
-  getApprovalReason,
   extractTextFromContent,
   formatDuration,
+  isClaudeToolErrorState,
+  isClaudeToolRunningState,
+  useClaudeExpansionState,
 } from "../claude-helpers";
 import { highlightToTokens, type ThemedToken } from "@/lib/syntax/highlighter";
 import { useResolvedTheme } from "@/lib/syntax/use-resolved-theme";
@@ -267,7 +271,6 @@ export const ClaudeShellTool = memo(function ClaudeShellTool({
   onDeny,
   part,
 }: RendererProps) {
-  const approval = "approval" in part ? part.approval : undefined;
   const hasInput = "input" in part && part.input !== undefined;
   const hasOutput = "output" in part && part.output !== undefined;
   const rawInput = hasInput ? part.input : undefined;
@@ -282,37 +285,31 @@ export const ClaudeShellTool = memo(function ClaudeShellTool({
       ? extractTextFromContent(rawOutput)
       : null;
   const partErrorText = "errorText" in part ? part.errorText : undefined;
-  const approvalId = approval?.id;
-  const showApprovalActions =
-    part.state === "approval-requested" && approvalId && onApprove && onDeny;
 
-  const isRunning =
-    part.state === "approval-responded" ||
-    part.state === "input-available" ||
-    part.state === "input-streaming";
+  const isRunning = isClaudeToolRunningState(part.state);
   const isFinished =
     part.state === "output-denied" ||
     part.state === "output-error" ||
     part.state === "output-available";
   const isError =
-    part.state === "output-denied" ||
-    part.state === "output-error" ||
+    isClaudeToolErrorState(part.state) ||
     (bashOutput != null && bashOutput.interrupted === true);
-  const [isExpanded, setIsExpanded] = useState(
-    part.state === "approval-requested" || isRunning,
-  );
-
-  useEffect(() => {
-    setIsExpanded(part.state === "approval-requested" || isRunning);
-  }, [isRunning, part.state, part.toolCallId]);
 
   if (!bashInput) return null;
 
-  const summary = buildSummary(
+  const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,
-    bashInput,
-    bashOutput,
-    rawOutput !== undefined,
+    part.state === "approval-requested" || isRunning,
+  );
+
+  const summary = (
+    <>
+      <Icon
+        icon="solar:terminal-linear"
+        className="mr-1 inline-block h-3.5 w-3.5 shrink-0 align-text-bottom text-foreground/50"
+      />
+      {buildSummary(part, bashInput, bashOutput, rawOutput !== undefined)}
+    </>
   );
   const terminalText = getTerminalText(
     bashInput,
@@ -322,7 +319,7 @@ export const ClaudeShellTool = memo(function ClaudeShellTool({
     rawOutput !== undefined,
     fallbackOutputText,
   );
-  const reason = bashInput.description ?? getApprovalReason(approval);
+  const actions = renderClaudeApprovalActions({ onApprove, onDeny, part });
 
   const hasStructuredOutput =
     bashOutput &&
@@ -343,14 +340,15 @@ export const ClaudeShellTool = memo(function ClaudeShellTool({
       </div>
     ) : null;
 
-  const isApproval = part.state === "approval-requested";
-
   return (
     <ToolLayout
+      actions={actions}
       summary={summary}
       isRunning={isRunning}
       isError={isError}
-      isExpandable={isFinished || isRunning || isApproval}
+      isExpandable={
+        isFinished || isRunning || part.state === "approval-requested"
+      }
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
       errorText={
@@ -359,31 +357,6 @@ export const ClaudeShellTool = memo(function ClaudeShellTool({
           : undefined
       }
       footer={footer}
-      actions={
-        showApprovalActions ? (
-          <div className="flex flex-col gap-2">
-            {reason && (
-              <p className="text-[11px] text-muted line-clamp-2">{reason}</p>
-            )}
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => approvalId && onApprove?.(approvalId)}
-              >
-                Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => approvalId && onDeny?.(approvalId)}
-              >
-                Deny
-              </Button>
-            </div>
-          </div>
-        ) : undefined
-      }
     >
       <TerminalOutput text={terminalText} />
     </ToolLayout>

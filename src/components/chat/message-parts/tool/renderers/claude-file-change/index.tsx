@@ -1,17 +1,21 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { memo, useEffect, useMemo, useState } from "react";
-import { Button, ScrollShadow } from "@heroui/react";
+import { memo, useMemo } from "react";
+import { ScrollShadow } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
 import type { RendererProps } from "../../renderer";
 import { DiffView } from "../shared/diff-view";
 import { ToolLayout } from "../shared/tool-layout";
+import { renderClaudeApprovalActions } from "../claude-approval-actions";
 import {
   extractTextFromContent,
-  getApprovalReason,
   getFileName,
+  isClaudeToolErrorState,
+  isClaudeToolRunningState,
+  tryParseClaudeOutput,
+  useClaudeExpansionState,
   unwrapClaudeInput,
 } from "../claude-helpers";
 import {
@@ -130,14 +134,30 @@ function buildSummary(
 ): ReactNode {
   const name = getFileName(filePath);
   const action = getFileAction(isEdit, output);
+  const icon =
+    languageToVSCodeIcon[detectLanguageFromPath(filePath)] ??
+    "vscode-icons:default-file";
+
+  const prefix = (
+    <Icon
+      className="mr-1 inline-block h-3.5 w-3.5 shrink-0 align-text-bottom text-foreground/50"
+      icon={icon}
+    />
+  );
 
   if (part.state === "output-denied") {
-    return <>File change denied</>;
+    return (
+      <>
+        {prefix}
+        File change denied
+      </>
+    );
   }
 
   if (part.state === "output-error") {
     return (
       <>
+        {prefix}
         Failed to modify <span className="font-mono text-[12px]">{name}</span>
       </>
     );
@@ -146,6 +166,7 @@ function buildSummary(
   if (part.state === "output-available") {
     return (
       <>
+        {prefix}
         {action} <span className="font-mono text-[12px]">{name}</span>
         {output?.gitDiff && (
           <span className="ml-1.5 text-[11px] text-foreground/40">
@@ -160,6 +181,7 @@ function buildSummary(
   if (part.state === "approval-requested") {
     return (
       <>
+        {prefix}
         {isEdit ? "Edit" : "Write"}{" "}
         <span className="font-mono text-[12px]">{name}</span>
       </>
@@ -168,6 +190,7 @@ function buildSummary(
 
   return (
     <>
+      {prefix}
       {isEdit ? "Editing" : "Writing"}{" "}
       <span className="font-mono text-[12px]">{name}</span>
     </>
@@ -209,39 +232,24 @@ export const ClaudeFileEditTool = memo(function ClaudeFileEditTool({
   onDeny,
   part,
 }: RendererProps) {
-  const approval = "approval" in part ? part.approval : undefined;
   const hasInput = "input" in part && part.input !== undefined;
   const hasOutput = "output" in part && part.output !== undefined;
   const rawInput = hasInput ? part.input : undefined;
   const unwrapped = unwrapClaudeInput<ClaudeEditInput>(rawInput);
   const editInput = unwrapped && isEditInput(unwrapped) ? unwrapped : null;
-  const fileOutput =
-    hasOutput && isFileOutput(part.output) ? part.output : null;
+  const fileOutput = hasOutput
+    ? tryParseClaudeOutput(part.output, isFileOutput)
+    : null;
   const fallbackOutputText =
     hasOutput && !fileOutput ? extractTextFromContent(part.output) : null;
   const partErrorText = "errorText" in part ? part.errorText : undefined;
-  const approvalReason = getApprovalReason(approval);
-  const approvalId = approval?.id;
-  const showApprovalActions =
-    part.state === "approval-requested" && approvalId && onApprove && onDeny;
 
-  const isRunning =
-    part.state === "approval-responded" ||
-    part.state === "input-available" ||
-    part.state === "input-streaming";
+  const isRunning = isClaudeToolRunningState(part.state);
   const isFinished =
     part.state === "output-denied" ||
     part.state === "output-error" ||
     part.state === "output-available";
-  const isError =
-    part.state === "output-denied" || part.state === "output-error";
-  const [isExpanded, setIsExpanded] = useState(
-    part.state === "approval-requested" || isRunning,
-  );
-
-  useEffect(() => {
-    setIsExpanded(part.state === "approval-requested" || isRunning);
-  }, [isRunning, part.state, part.toolCallId]);
+  const isError = isClaudeToolErrorState(part.state);
 
   const diffText = useMemo(() => {
     if (fileOutput?.gitDiff?.patch) return fileOutput.gitDiff.patch;
@@ -257,9 +265,15 @@ export const ClaudeFileEditTool = memo(function ClaudeFileEditTool({
   const filePath = fileOutput?.filePath ?? editInput.file_path;
   const action = getFileAction(true, fileOutput);
   const summary = buildSummary(part, filePath, true, fileOutput);
+  const actions = renderClaudeApprovalActions({ onApprove, onDeny, part });
+  const [isExpanded, setIsExpanded] = useClaudeExpansionState(
+    part,
+    part.state === "approval-requested" || isRunning,
+  );
 
   return (
     <ToolLayout
+      actions={actions}
       summary={summary}
       isRunning={isRunning}
       isError={isError}
@@ -284,35 +298,6 @@ export const ClaudeFileEditTool = memo(function ClaudeFileEditTool({
             </span>
           </div>
         ) : null
-      }
-      actions={
-        showApprovalActions ? (
-          <div className="flex flex-col gap-2">
-            {approvalReason && (
-              <p className="line-clamp-2 text-[11px] text-muted">
-                {approvalReason}
-              </p>
-            )}
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => approvalId && onApprove?.(approvalId)}
-                type="button"
-              >
-                Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => approvalId && onDeny?.(approvalId)}
-                type="button"
-              >
-                Deny
-              </Button>
-            </div>
-          </div>
-        ) : undefined
       }
     >
       <div className="flex flex-col gap-2">
@@ -339,39 +324,24 @@ export const ClaudeFileWriteTool = memo(function ClaudeFileWriteTool({
   onDeny,
   part,
 }: RendererProps) {
-  const approval = "approval" in part ? part.approval : undefined;
   const hasInput = "input" in part && part.input !== undefined;
   const hasOutput = "output" in part && part.output !== undefined;
   const rawInput = hasInput ? part.input : undefined;
   const unwrapped = unwrapClaudeInput<ClaudeWriteInput>(rawInput);
   const writeInput = unwrapped && isWriteInput(unwrapped) ? unwrapped : null;
-  const fileOutput =
-    hasOutput && isFileOutput(part.output) ? part.output : null;
+  const fileOutput = hasOutput
+    ? tryParseClaudeOutput(part.output, isFileOutput)
+    : null;
   const fallbackOutputText =
     hasOutput && !fileOutput ? extractTextFromContent(part.output) : null;
   const partErrorText = "errorText" in part ? part.errorText : undefined;
-  const approvalReason = getApprovalReason(approval);
-  const approvalId = approval?.id;
-  const showApprovalActions =
-    part.state === "approval-requested" && approvalId && onApprove && onDeny;
 
-  const isRunning =
-    part.state === "approval-responded" ||
-    part.state === "input-available" ||
-    part.state === "input-streaming";
+  const isRunning = isClaudeToolRunningState(part.state);
   const isFinished =
     part.state === "output-denied" ||
     part.state === "output-error" ||
     part.state === "output-available";
-  const isError =
-    part.state === "output-denied" || part.state === "output-error";
-  const [isExpanded, setIsExpanded] = useState(
-    part.state === "approval-requested" || isRunning,
-  );
-
-  useEffect(() => {
-    setIsExpanded(part.state === "approval-requested" || isRunning);
-  }, [isRunning, part.state, part.toolCallId]);
+  const isError = isClaudeToolErrorState(part.state);
 
   const diffText = useMemo(() => {
     if (fileOutput?.gitDiff?.patch) return fileOutput.gitDiff.patch;
@@ -386,10 +356,16 @@ export const ClaudeFileWriteTool = memo(function ClaudeFileWriteTool({
   const filePath = fileOutput?.filePath ?? writeInput.file_path;
   const action = getFileAction(false, fileOutput);
   const summary = buildSummary(part, filePath, false, fileOutput);
+  const actions = renderClaudeApprovalActions({ onApprove, onDeny, part });
   const contentLineCount = writeInput.content.split("\n").length;
+  const [isExpanded, setIsExpanded] = useClaudeExpansionState(
+    part,
+    part.state === "approval-requested" || isRunning,
+  );
 
   return (
     <ToolLayout
+      actions={actions}
       summary={summary}
       isRunning={isRunning}
       isError={isError}
@@ -418,33 +394,6 @@ export const ClaudeFileWriteTool = memo(function ClaudeFileWriteTool({
             </span>
           </div>
         ) : null
-      }
-      actions={
-        showApprovalActions ? (
-          <div className="flex flex-col gap-2">
-            {approvalReason && (
-              <p className="line-clamp-2 text-[11px] text-muted">
-                {approvalReason}
-              </p>
-            )}
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => approvalId && onApprove?.(approvalId)}
-              >
-                Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => approvalId && onDeny?.(approvalId)}
-              >
-                Deny
-              </Button>
-            </div>
-          </div>
-        ) : undefined
       }
     >
       <div className="flex flex-col gap-2">

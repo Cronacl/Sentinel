@@ -432,7 +432,7 @@ export function ChatComposer({
                         ?.contextCompactionWindowPercent ?? 70,
                     contextWindow: contextWindowIndicator.contextWindow,
                     inputTokens: contextWindowIndicator.inputTokens,
-                    modelContextWindow: selectedModel.contextWindow,
+                    modelContextWindow: selectedModel?.contextWindow,
                     usedPercent: contextWindowIndicator.usedPercent,
                   }
                 : null

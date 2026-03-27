@@ -15,6 +15,7 @@ import {
   getFileName,
   isClaudeToolErrorState,
   isClaudeToolRunningState,
+  tryParseClaudeOutput,
   useClaudeExpansionState,
   unwrapClaudeInput,
 } from "../claude-helpers";
@@ -338,12 +339,22 @@ export const ClaudeFileReadTool = memo(function ClaudeFileReadTool({
   );
   const readInput = unwrapped && isReadInput(unwrapped) ? unwrapped : null;
   const rawOutput = hasOutput ? part.output : undefined;
-  const readOutput =
-    hasOutput && isReadOutput(part.output)
-      ? part.output
-      : typeof rawOutput === "string" && readInput
-        ? parseClaudeReadTextOutput(rawOutput, readInput.file_path)
-        : null;
+  const readOutputDirect = hasOutput
+    ? tryParseClaudeOutput(part.output, isReadOutput)
+    : null;
+  const readOutputFromText =
+    !readOutputDirect && readInput
+      ? (() => {
+          const text =
+            typeof rawOutput === "string"
+              ? rawOutput
+              : extractTextFromContent(rawOutput);
+          return text
+            ? parseClaudeReadTextOutput(text, readInput.file_path)
+            : null;
+        })()
+      : null;
+  const readOutput = readOutputDirect ?? readOutputFromText;
   const fallbackOutputText =
     rawOutput !== undefined && readOutput === null
       ? extractTextFromContent(rawOutput)
