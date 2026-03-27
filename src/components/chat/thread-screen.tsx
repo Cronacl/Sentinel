@@ -743,7 +743,7 @@ export function ThreadScreen({
         />
       }
       title={
-        <span className="flex min-w-0 max-w-[min(52vw,36rem)] items-center gap-1.5">
+        <span className="flex min-w-0 max-w-[min(36vw,22rem)] items-center gap-1.5">
           {isPinned && (
             <HugeiconsIcon
               className="shrink-0 text-muted"

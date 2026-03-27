@@ -87,12 +87,22 @@ function parseGlobFromText(text: string | null): ClaudeGlobOutput | null {
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);
-  const filenames = lines.filter((l) => l.includes(".") || l.includes("/"));
-  if (filenames.length === 0) return null;
+
+  const filenames = lines.filter(
+    (l) =>
+      (l.includes(".") || l.includes("/")) &&
+      !l.startsWith("Found ") &&
+      !l.startsWith("No "),
+  );
+
+  const foundMatch = text.match(/Found\s+(\d+)\s+files?/i);
+  const reportedCount = foundMatch ? parseInt(foundMatch[1]!, 10) : 0;
+
+  if (filenames.length === 0 && reportedCount === 0) return null;
   return {
     durationMs: 0,
     filenames,
-    numFiles: filenames.length,
+    numFiles: reportedCount || filenames.length,
     truncated: false,
   };
 }
@@ -105,13 +115,55 @@ function parseGrepFromText(text: string | null): ClaudeGrepOutput | null {
   let matchCount = 0;
 
   for (const line of lines) {
-    const colonIdx = line.indexOf(":");
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const colonIdx = trimmed.indexOf(":");
     if (colonIdx > 0) {
-      const candidate = line.slice(0, colonIdx);
+      const candidate = trimmed.slice(0, colonIdx);
       if (candidate.includes(".") || candidate.includes("/")) {
         fileSet.add(candidate);
         matchCount++;
       }
+    }
+
+    if (
+      fileSet.size === 0 &&
+      (trimmed.includes("/") || trimmed.includes("."))
+    ) {
+      const isFilePath =
+        /^[\w./@-]/.test(trimmed) &&
+        !trimmed.startsWith("Found ") &&
+        !trimmed.startsWith("No ") &&
+        trimmed.length < 500;
+      if (
+        isFilePath &&
+        (trimmed.includes("/") || /\.\w{1,10}$/.test(trimmed))
+      ) {
+        fileSet.add(trimmed);
+      }
+    }
+  }
+
+  if (fileSet.size === 0) {
+    const foundMatch = text.match(/Found\s+(\d+)\s+files?/i);
+    if (foundMatch) {
+      const count = parseInt(foundMatch[1]!, 10);
+      const pathLines = lines
+        .map((l) => l.trim())
+        .filter(
+          (l) =>
+            l &&
+            !l.startsWith("Found ") &&
+            (l.includes("/") || /\.\w{1,10}$/.test(l)),
+        );
+
+      return {
+        content: text,
+        filenames: pathLines,
+        numFiles: count || pathLines.length,
+        numMatches: matchCount > 0 ? matchCount : undefined,
+      };
     }
   }
 
