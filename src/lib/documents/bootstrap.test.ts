@@ -36,6 +36,34 @@ describe("document bootstrap normalization", () => {
     ).toContain("Attached document: table.csv");
   });
 
+  it("normalizes csv attachments by media type even when the filename is missing", async () => {
+    const messages = await normalizeTranscriptDocumentsForModel({
+      messages: [
+        {
+          id: "message-1",
+          metadata: {},
+          parts: [
+            {
+              mediaType: "text/csv",
+              type: "file",
+              url: toDataUrl(Buffer.from("name,value\nalpha,1\n"), "text/csv"),
+            },
+          ],
+          role: "user",
+        },
+      ],
+      providerId: "openai",
+      responseModelId: "gpt-5.2",
+    });
+
+    expect(messages[0]?.parts[0]?.type).toBe("text");
+    expect(
+      messages[0]?.parts[0] && "text" in messages[0].parts[0]
+        ? messages[0].parts[0].text
+        : "",
+    ).toContain("Attached document: attachment");
+  });
+
   it("passes through native text files only for models with text-file support", async () => {
     const passthrough = await normalizeTranscriptDocumentsForModel({
       messages: [
