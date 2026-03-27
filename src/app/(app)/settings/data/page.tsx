@@ -30,7 +30,7 @@ function formatDate(iso: string): string {
 function DataSettingsSkeleton() {
   return (
     <div className="flex flex-col gap-6">
-      <section className="border-separator bg-surface rounded-xl border p-5">
+      <section className="border-separator/20 bg-surface rounded-2xl border p-5">
         <div className="mb-5 space-y-2">
           <Skeleton className="h-5 w-36 rounded-md" />
           <Skeleton className="h-4 w-80 rounded-md" />
@@ -40,7 +40,7 @@ function DataSettingsSkeleton() {
           <Skeleton className="h-9 w-36 rounded-xl" />
         </div>
       </section>
-      <section className="border-separator bg-surface rounded-xl border p-5">
+      <section className="border-separator/20 bg-surface rounded-2xl border p-5">
         <div className="mb-5 space-y-2">
           <Skeleton className="h-5 w-28 rounded-md" />
           <Skeleton className="h-4 w-64 rounded-md" />
@@ -109,7 +109,7 @@ export default function DataSettingsPage() {
         <DataSettingsSkeleton />
       ) : (
         <div className="flex flex-col gap-6">
-          <section className="border-separator bg-surface rounded-xl border p-5">
+          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
             <div className="mb-5 space-y-1">
               <div className="flex items-center gap-2">
                 <HugeiconsIcon
@@ -176,7 +176,7 @@ export default function DataSettingsPage() {
             </div>
           </section>
 
-          <section className="border-separator bg-surface rounded-xl border p-5">
+          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
             <div className="mb-4 space-y-1">
               <h2 className="text-foreground text-base font-medium">Backups</h2>
               <p className="text-muted text-sm">

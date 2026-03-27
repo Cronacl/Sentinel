@@ -6,6 +6,7 @@ import type { ThreadMode } from "@/lib/plan";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ChatEngine } from "@/server/db/enums";
 import type {
+  ClaudeThreadState,
   CodexThreadState,
   ThreadChatEngineState,
 } from "@/lib/ai/chat/engines/types";
@@ -170,6 +171,16 @@ export function updateCodexThreadState(
   updateThreadChatEngineState(
     threadId,
     buildThreadChatEngineState("codex", state),
+  );
+}
+
+export function updateClaudeThreadState(
+  threadId: string,
+  state: ClaudeThreadState | null,
+) {
+  updateThreadChatEngineState(
+    threadId,
+    buildThreadChatEngineState("claude", state),
   );
 }
 

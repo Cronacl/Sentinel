@@ -16,12 +16,9 @@ import { PROVIDER_LIST } from "@/lib/ai/providers/registry";
 import { modelPreferences, providerCredentials } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
-const aiProviderEnum = z.enum([
-  "openai",
-  "anthropic",
-  "google",
-  "google_vertex",
-]);
+import { AI_PROVIDERS } from "@/server/db/enums";
+
+const aiProviderEnum = z.enum(AI_PROVIDERS);
 
 export const providersRouter = createTRPCRouter({
   list: protectedProcedure.query(async ({ ctx }) => {

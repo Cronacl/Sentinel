@@ -22,9 +22,13 @@ import {
 } from "@/components/forms/controlled-fields";
 import {
   apiKeyProviderConfigFormSchema,
+  bedrockProviderConfigFormSchema,
   googleVertexProviderConfigFormSchema,
+  ollamaProviderConfigFormSchema,
+  type BedrockProviderConfigFormValues,
   type GoogleVertexProviderConfigFormValues,
   type APIKeyProviderConfigFormValues,
+  type OllamaProviderConfigFormValues,
   type ProviderConfigFormValues,
 } from "@/schemas/settings.schema";
 import { api } from "@/trpc/react";
@@ -38,6 +42,7 @@ interface ProviderConfigModalProps {
 
 function createDefaultValues(): ProviderConfigFormValues {
   return {
+    accessKeyId: "",
     apiKey: "",
     baseURL: "",
     clientEmail: "",
@@ -45,6 +50,8 @@ function createDefaultValues(): ProviderConfigFormValues {
     location: "",
     privateKey: "",
     project: "",
+    region: "",
+    secretAccessKey: "",
   };
 }
 
@@ -58,9 +65,15 @@ export function ProviderConfigModal({
   const utils = api.useUtils();
   const [submitError, setSubmitError] = useState("");
   const isVertexProvider = provider === "google_vertex";
+  const isBedrockProvider = provider === "amazon_bedrock";
+  const isOllamaProvider = provider === "ollama";
   const formResolver: any = isVertexProvider
     ? zodResolver(googleVertexProviderConfigFormSchema)
-    : zodResolver(apiKeyProviderConfigFormSchema);
+    : isBedrockProvider
+      ? zodResolver(bedrockProviderConfigFormSchema)
+      : isOllamaProvider
+        ? zodResolver(ollamaProviderConfigFormSchema)
+        : zodResolver(apiKeyProviderConfigFormSchema);
   const form = useForm<ProviderConfigFormValues>({
     defaultValues: createDefaultValues(),
     resolver: formResolver,
@@ -96,11 +109,14 @@ export function ProviderConfigModal({
       return;
     }
 
-    const config = existing.config as {
+    const config = existing.config as Record<string, unknown> & {
       apiKey?: string;
       baseURL?: string;
       location?: string;
       project?: string;
+      accessKeyId?: string;
+      secretAccessKey?: string;
+      region?: string;
       googleAuthOptions?: {
         credentials?: {
           client_email?: string;
@@ -109,8 +125,13 @@ export function ProviderConfigModal({
       };
     };
     form.reset({
-      apiKey: !isVertexProvider ? (config.apiKey ?? "") : "",
-      baseURL: !isVertexProvider ? (config.baseURL ?? "") : "",
+      accessKeyId: isBedrockProvider ? (config.accessKeyId ?? "") : "",
+      apiKey:
+        !isVertexProvider && !isBedrockProvider && !isOllamaProvider
+          ? (config.apiKey ?? "")
+          : "",
+      baseURL:
+        !isVertexProvider && !isBedrockProvider ? (config.baseURL ?? "") : "",
       clientEmail: isVertexProvider
         ? (config.googleAuthOptions?.credentials?.client_email ?? "")
         : "",
@@ -120,8 +141,18 @@ export function ProviderConfigModal({
         ? (config.googleAuthOptions?.credentials?.private_key ?? "")
         : "",
       project: isVertexProvider ? (config.project ?? "") : "",
+      region: isBedrockProvider ? (config.region ?? "") : "",
+      secretAccessKey: isBedrockProvider ? (config.secretAccessKey ?? "") : "",
     });
-  }, [existing, form, isOpen, isSuccess, isVertexProvider]);
+  }, [
+    existing,
+    form,
+    isOpen,
+    isSuccess,
+    isVertexProvider,
+    isBedrockProvider,
+    isOllamaProvider,
+  ]);
 
   const handleSave = async (values: ProviderConfigFormValues) => {
     setSubmitError("");
@@ -145,16 +176,35 @@ export function ProviderConfigModal({
               values as GoogleVertexProviderConfigFormValues
             ).project.trim(),
           }
-        : {
-            apiKey: (values as APIKeyProviderConfigFormValues).apiKey.trim(),
-            ...((values as APIKeyProviderConfigFormValues).baseURL.trim()
-              ? {
-                  baseURL: (
-                    values as APIKeyProviderConfigFormValues
-                  ).baseURL.trim(),
-                }
-              : {}),
-          };
+        : isBedrockProvider
+          ? {
+              accessKeyId: (
+                values as BedrockProviderConfigFormValues
+              ).accessKeyId.trim(),
+              secretAccessKey: (
+                values as BedrockProviderConfigFormValues
+              ).secretAccessKey.trim(),
+              region: (values as BedrockProviderConfigFormValues).region.trim(),
+            }
+          : isOllamaProvider
+            ? {
+                baseURL: (
+                  (values as OllamaProviderConfigFormValues).baseURL ||
+                  "http://localhost:11434/v1"
+                ).trim(),
+              }
+            : {
+                apiKey: (
+                  values as APIKeyProviderConfigFormValues
+                ).apiKey.trim(),
+                ...((values as APIKeyProviderConfigFormValues).baseURL.trim()
+                  ? {
+                      baseURL: (
+                        values as APIKeyProviderConfigFormValues
+                      ).baseURL.trim(),
+                    }
+                  : {}),
+              };
 
       await upsert.mutateAsync({
         config,
@@ -311,7 +361,60 @@ export function ProviderConfigModal({
                       switchProps={{ isDisabled: isBusy, size: "sm" }}
                     />
 
-                    {!isVertexProvider ? (
+                    {isBedrockProvider ? (
+                      <>
+                        <ControlledTextField
+                          control={form.control}
+                          description="AWS access key ID for Bedrock API calls."
+                          inputProps={{
+                            autoComplete: "off",
+                            placeholder: "AKIAIOSFODNN7EXAMPLE",
+                            type: "password",
+                          }}
+                          label="Access Key ID"
+                          name="accessKeyId"
+                          textFieldProps={{ isRequired: true }}
+                        />
+
+                        <ControlledTextField
+                          control={form.control}
+                          description="AWS secret access key for Bedrock API calls."
+                          inputProps={{
+                            autoComplete: "off",
+                            placeholder: "Enter your AWS secret access key",
+                            type: "password",
+                          }}
+                          label="Secret Access Key"
+                          name="secretAccessKey"
+                          textFieldProps={{ isRequired: true }}
+                        />
+
+                        <ControlledTextField
+                          control={form.control}
+                          description="AWS region for Bedrock (e.g., us-east-1)."
+                          inputProps={{
+                            autoComplete: "off",
+                            placeholder: "us-east-1",
+                          }}
+                          label="Region"
+                          name="region"
+                          textFieldProps={{ isRequired: true }}
+                        />
+                      </>
+                    ) : isOllamaProvider ? (
+                      <ControlledTextField
+                        control={form.control}
+                        description="URL of your Ollama instance. Defaults to http://localhost:11434/v1."
+                        inputProps={{
+                          autoComplete: "off",
+                          placeholder: "http://localhost:11434/v1",
+                          type: "url",
+                        }}
+                        label="Base URL"
+                        name="baseURL"
+                        textFieldProps={{ isRequired: true }}
+                      />
+                    ) : !isVertexProvider ? (
                       <>
                         <ControlledTextField
                           control={form.control}

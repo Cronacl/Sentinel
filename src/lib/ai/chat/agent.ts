@@ -16,6 +16,7 @@ import type { SkillMetadata } from "@/lib/skills";
 import type { WebFetchSettings } from "@/lib/webfetch";
 import type { ThreadMode } from "@/lib/plan";
 import { z } from "zod";
+import { AI_PROVIDERS, type AIProvider } from "@/server/db/enums";
 
 import type { ToolApprovalPolicyMap } from "./tool-approval-policy";
 import type { ThreadPromptContext } from "./prompt-context";
@@ -38,9 +39,7 @@ const threadAgentCallOptionsSchema = z.object({
   preferredProjectRoot: z.string().nullable().optional(),
   promptContext: z.custom<ThreadPromptContext>(),
   resolvedModelId: z.string().optional(),
-  resolvedProviderId: z
-    .enum(["openai", "anthropic", "google", "google_vertex"])
-    .optional(),
+  resolvedProviderId: z.enum(AI_PROVIDERS).optional(),
   searchProviders: z.custom<SearchProviderRuntimeMap>(),
   searchSettings: z.custom<SearchSettings>(),
   shellStartDirectory: z.string().nullable().optional(),
@@ -199,12 +198,7 @@ export function createThreadAgent({
   let cachedAllToolNames: string[] = [];
   let cachedPromptContext: ThreadPromptContext | null = null;
   let cachedInitialActiveTools: string[] = [];
-  let cachedResolvedProviderId:
-    | "anthropic"
-    | "google"
-    | "google_vertex"
-    | "openai"
-    | undefined;
+  let cachedResolvedProviderId: AIProvider | undefined;
   let cachedRoutingAudit: unknown = null;
   let cachedRoutingEvidenceSignature: string | null = null;
   let cachedSystemPrompt = "";

@@ -100,4 +100,53 @@ describe("parseRequest", () => {
       type: "text",
     });
   });
+
+  it("parses engine-scoped submit requests for Claude-backed threads", async () => {
+    const result = await parseRequest(
+      {
+        engine: "claude",
+        id: "thread-claude-1",
+        message: {
+          id: "user-1",
+          metadata: {},
+          parts: [{ text: "Use my local Claude runtime", type: "text" }],
+          role: "user",
+        },
+        modelId: "claude-sonnet-4-5-20250929",
+        trigger: "submit-user-message",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+
+    expect(result.engine).toBe("claude");
+    expect(result.modelId).toBe("claude-sonnet-4-5-20250929");
+    expect(result.message?.parts[0]).toMatchObject({
+      text: "Use my local Claude runtime",
+      type: "text",
+    });
+  });
+
+  it("parses explicit tool approval responses additively", async () => {
+    const result = await parseRequest(
+      {
+        id: "thread-claude-approval-1",
+        toolApprovalResponse: {
+          approved: false,
+          id: "approval-1",
+          reason: "User denied command",
+        },
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+
+    expect(result.trigger).toBe("submit-tool-approval");
+    expect(result.toolApprovalResponse).toEqual({
+      approved: false,
+      id: "approval-1",
+      reason: "User denied command",
+    });
+  });
 });

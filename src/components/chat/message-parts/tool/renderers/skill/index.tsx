@@ -1,15 +1,17 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
+import { memo, useState } from "react";
 
 import type { RendererProps } from "../../renderer";
 import { ToolLayout } from "../shared/tool-layout";
 
 type LoadSkillInput = {
-  name: string;
+  commandName?: string;
+  name?: string;
+  skill?: string;
 };
 
-type LoadSkillOutput = {
+type LoadSkillStructuredOutput = {
   description: string;
   directory: string;
   files: string[];
@@ -20,28 +22,68 @@ type LoadSkillOutput = {
   sourceKind: "agents" | "claude" | "sentinel";
 };
 
+type LoadSkillOutput = LoadSkillStructuredOutput | string;
+
+function isStructuredOutput(
+  value: LoadSkillOutput | undefined,
+): value is LoadSkillStructuredOutput {
+  return Boolean(value) && typeof value === "object" && "name" in value;
+}
+
+function getSkillName(part: RendererProps["part"]) {
+  const input =
+    "input" in part ? (part.input as LoadSkillInput | undefined) : undefined;
+
+  if (typeof input?.name === "string" && input.name.length > 0) {
+    return input.name;
+  }
+
+  if (typeof input?.skill === "string" && input.skill.length > 0) {
+    return input.skill;
+  }
+
+  if (typeof input?.commandName === "string" && input.commandName.length > 0) {
+    return input.commandName;
+  }
+
+  if ("output" in part && typeof part.output === "string") {
+    const match = /^Launching skill:\s*(.+)$/i.exec(part.output);
+    return match?.[1]?.trim() || null;
+  }
+
+  return null;
+}
+
 function getSummary(part: RendererProps["part"]) {
+  const skillName = getSkillName(part);
+
   if (part.state === "output-error") {
-    return "Failed to load skill";
+    return skillName
+      ? `Failed to load skill ${skillName}`
+      : "Failed to load skill";
   }
 
   if (part.state === "output-denied") {
-    return "Skill load denied";
+    return skillName ? `Skill ${skillName} denied` : "Skill load denied";
   }
 
   if (part.state === "output-available" && "output" in part) {
     const output = part.output as LoadSkillOutput | undefined;
-    return output ? `Loaded skill ${output.name}` : "Loaded skill";
+    if (isStructuredOutput(output)) {
+      return `Loaded skill ${output.name}`;
+    }
+
+    return skillName ? `Loaded skill ${skillName}` : "Loaded skill";
   }
 
-  const input =
-    "input" in part ? (part.input as LoadSkillInput | undefined) : undefined;
-  return `Loading skill ${input?.name ?? "..."}`;
+  return `Loading skill ${skillName ?? "..."}`;
 }
 
 export const SkillTool = memo(function SkillTool({ part }: RendererProps) {
   const output =
     "output" in part ? (part.output as LoadSkillOutput | undefined) : undefined;
+  const structuredOutput = isStructuredOutput(output) ? output : null;
+  const textOutput = typeof output === "string" ? output : null;
   const errorText = "errorText" in part ? part.errorText : undefined;
   const isError =
     part.state === "output-error" || part.state === "output-denied";
@@ -50,49 +92,49 @@ export const SkillTool = memo(function SkillTool({ part }: RendererProps) {
     part.state === "input-available" ||
     part.state === "approval-responded";
   const [isExpanded, setIsExpanded] = useState(
-    part.state === "output-available" || part.state === "output-error",
+    part.state === "approval-requested",
   );
-
-  useEffect(() => {
-    setIsExpanded(part.state === "output-error");
-  }, [part.state, part.toolCallId]);
 
   return (
     <ToolLayout
       errorText={isError ? errorText : undefined}
       footer={
-        output ? (
+        structuredOutput ? (
           <div className="flex flex-wrap items-center gap-2">
-            <span>{output.scope}</span>
+            <span>{structuredOutput.scope}</span>
             <span>·</span>
-            <span>{output.sourceKind}</span>
+            <span>{structuredOutput.sourceKind}</span>
             <span>·</span>
-            <span>{output.files.length} bundled files sampled</span>
+            <span>{structuredOutput.files.length} bundled files sampled</span>
           </div>
         ) : undefined
       }
       isError={isError}
-      isExpandable={Boolean(output)}
+      isExpandable={Boolean(structuredOutput || textOutput)}
       isExpanded={isExpanded}
       isRunning={isRunning}
       onExpandedChange={setIsExpanded}
       summary={getSummary(part)}
     >
-      {output ? (
+      {structuredOutput ? (
         <div className="space-y-3 text-[12px]">
           <div>
-            <p className="text-foreground/75">{output.description}</p>
+            <p className="text-foreground/75">{structuredOutput.description}</p>
             <p className="mt-1 font-mono text-[11px] text-foreground/45">
-              {output.directory}
+              {structuredOutput.directory}
             </p>
           </div>
 
-          {output.preview ? (
+          {structuredOutput.preview ? (
             <pre className="overflow-x-auto rounded-xl border border-border/60 bg-background/70 p-3 font-mono text-[11px] text-foreground/70 whitespace-pre-wrap break-words">
-              {output.preview}
+              {structuredOutput.preview}
             </pre>
           ) : null}
         </div>
+      ) : textOutput ? (
+        <pre className="overflow-x-auto rounded-xl border border-border/60 bg-background/70 p-3 font-mono text-[11px] text-foreground/70 whitespace-pre-wrap break-words">
+          {textOutput}
+        </pre>
       ) : null}
     </ToolLayout>
   );

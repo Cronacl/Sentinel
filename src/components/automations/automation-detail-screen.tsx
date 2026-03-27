@@ -36,7 +36,11 @@ import {
 import { SidebarToggle, useShell } from "@/components/shell";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
-import { AUTOMATION_SCHEDULE_TYPES, type ChatEngine } from "@/server/db/enums";
+import {
+  AUTOMATION_SCHEDULE_TYPES,
+  CHAT_ENGINES,
+  type ChatEngine,
+} from "@/server/db/enums";
 import {
   getAvailableAutomationModels,
   getAutomationEngineOptions,
@@ -115,7 +119,7 @@ const editFormSchema = z
     scheduleDayOfWeek: z.string(),
     scheduleTime: z.string(),
     scheduleCron: z.string(),
-    chatEngine: z.enum(["sentinel", "codex"]),
+    chatEngine: z.enum(CHAT_ENGINES),
     modelId: z.string().trim().min(1, "Model is required."),
     reasoningEffort: z.string(),
   })
@@ -243,6 +247,9 @@ export function AutomationDetailScreen({
   const codexModelsQuery = api.engines.models.useQuery({
     engine: "codex",
   });
+  const claudeModelsQuery = api.engines.models.useQuery({
+    engine: "claude",
+  });
 
   const automation = automationQuery.data ?? null;
   const statusTone = automation?.status === "active" ? "success" : "warning";
@@ -257,12 +264,17 @@ export function AutomationDetailScreen({
     () => getAvailableAutomationModels(codexModelsQuery.data ?? []),
     [codexModelsQuery.data],
   );
+  const availableClaudeModels = useMemo(
+    () => getAvailableAutomationModels(claudeModelsQuery.data ?? []),
+    [claudeModelsQuery.data],
+  );
 
   const formDefaults = useMemo<EditFormValues | null>(() => {
     if (!automation) return null;
     const engine = (automation.chatEngine ?? "sentinel") as ChatEngine;
     const selection = resolveAutomationSelection(
       getAutomationModelsForEngine(engine, {
+        claude: availableClaudeModels,
         codex: availableCodexModels,
         sentinel: availableSentinelModels,
       }),
@@ -285,7 +297,12 @@ export function AutomationDetailScreen({
         selection.reasoningEffort ??
         "",
     };
-  }, [automation, availableCodexModels, availableSentinelModels]);
+  }, [
+    automation,
+    availableClaudeModels,
+    availableCodexModels,
+    availableSentinelModels,
+  ]);
 
   const form = useForm<EditFormValues>({
     defaultValues: formDefaults ?? undefined,
@@ -339,10 +356,16 @@ export function AutomationDetailScreen({
   const availableModels = useMemo(
     () =>
       getAutomationModelsForEngine(selectedEngine, {
+        claude: availableClaudeModels,
         codex: availableCodexModels,
         sentinel: availableSentinelModels,
       }),
-    [availableCodexModels, availableSentinelModels, selectedEngine],
+    [
+      availableClaudeModels,
+      availableCodexModels,
+      availableSentinelModels,
+      selectedEngine,
+    ],
   );
   const modelOptions = useMemo(() => {
     return getAutomationModelOptions(availableModels, selectedModelKey);
@@ -719,7 +742,7 @@ export function AutomationDetailScreen({
       {automationQuery.isPending && !automation ? (
         <DetailSkeleton />
       ) : !automation ? (
-        <section className="border-separator bg-surface rounded-xl border p-5">
+        <section className="border-separator/20 bg-surface rounded-2xl border p-5">
           <h2 className="text-foreground text-sm font-medium">
             Automation not found
           </h2>

@@ -1,8 +1,17 @@
 "use client";
 
-import { Button, Chip, Form, Skeleton, Spinner, Switch } from "@heroui/react";
+import {
+  Button,
+  Chip,
+  Disclosure,
+  DisclosureGroup,
+  Form,
+  Skeleton,
+  Spinner,
+  Switch,
+} from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { sileo } from "sileo";
 
@@ -20,7 +29,7 @@ import {
 } from "@/schemas/settings.schema";
 import { api } from "@/trpc/react";
 
-type ProviderKey = "openai" | "anthropic" | "google" | "google_vertex";
+type ProviderKey = AIProvider;
 
 const CAPABILITY_LABEL: Record<string, string> = {
   object_generation: "Structured",
@@ -31,56 +40,39 @@ const CAPABILITY_LABEL: Record<string, string> = {
 
 function ModelsSkeleton() {
   return (
-    <div className="flex flex-col gap-6">
-      {Array.from({ length: 2 }).map((_, sectionIndex) => (
-        <section key={sectionIndex}>
-          <div className="mb-3 flex items-center gap-2">
-            <Skeleton className="h-5 w-32 rounded-md" />
-            <Skeleton className="h-5 w-24 rounded-full" />
-          </div>
-
-          <div className="border-separator bg-surface rounded-xl border p-2">
-            <div className="flex flex-col gap-2">
-              {Array.from({ length: 3 }).map((__, rowIndex) => (
-                <div
-                  className="bg-background border-separator flex items-center gap-4 rounded-xl border px-4 py-3"
-                  key={rowIndex}
-                >
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <Skeleton className="h-4 w-40 rounded-md" />
-                    <Skeleton className="h-3 w-72 max-w-full rounded-md" />
-                    <div className="flex gap-1">
-                      <Skeleton className="h-5 w-16 rounded-full" />
-                      <Skeleton className="h-5 w-20 rounded-full" />
-                    </div>
-                  </div>
-
-                  <Skeleton className="h-6 w-10 rounded-full" />
+    <div className="flex flex-col gap-4">
+      <div className="grid gap-4 lg:grid-cols-2">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div
+            className="border-separator/20 bg-surface rounded-2xl border px-4 py-3"
+            key={i}
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <Skeleton className="h-4 w-28 rounded-md" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </div>
+            <div className="space-y-1.5">
+              {Array.from({ length: 4 }).map((__, j) => (
+                <div className="flex items-center justify-between" key={j}>
+                  <Skeleton className="h-3 w-12 rounded-md" />
+                  <Skeleton className="h-3 w-20 rounded-md" />
                 </div>
               ))}
             </div>
           </div>
-        </section>
-      ))}
+        ))}
+      </div>
 
-      <section className="border-separator bg-surface rounded-xl border p-5">
-        <div className="mb-5 space-y-2">
-          <Skeleton className="h-5 w-36 rounded-md" />
-          <Skeleton className="h-4 w-80 max-w-full rounded-md" />
-        </div>
-
-        <div className="flex items-end gap-3">
-          <div className="w-44 space-y-2">
-            <Skeleton className="h-4 w-20 rounded-md" />
-            <Skeleton className="h-10 w-full rounded-xl" />
+      <div className="border-separator/20 bg-surface divide-separator/20 divide-y rounded-2xl border">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div className="flex items-center gap-3 px-4 py-2.5" key={i}>
+            <Skeleton className="h-7 w-7 shrink-0 rounded-lg" />
+            <Skeleton className="h-4 w-28 rounded-md" />
+            <Skeleton className="ml-auto h-5 w-14 rounded-full" />
+            <Skeleton className="h-4 w-4 rounded" />
           </div>
-          <div className="min-w-0 flex-1 space-y-2">
-            <Skeleton className="h-4 w-20 rounded-md" />
-            <Skeleton className="h-10 w-full rounded-xl" />
-          </div>
-          <Skeleton className="h-10 w-16 rounded-xl" />
-        </div>
-      </section>
+        ))}
+      </div>
     </div>
   );
 }
@@ -95,6 +87,13 @@ export default function ModelsPage() {
   const codexStatus =
     codexEngine?.engine === "codex" && "status" in codexEngine
       ? codexEngine.status
+      : null;
+  const claudeEngine = enginesQuery.data?.find(
+    (engine) => engine.engine === "claude",
+  );
+  const claudeStatus =
+    claudeEngine?.engine === "claude" && "status" in claudeEngine
+      ? claudeEngine.status
       : null;
 
   const enable = api.models.enable.useMutation({
@@ -194,6 +193,11 @@ export default function ModelsPage() {
   const [actionError, setActionError] = useState("");
   const [customError, setCustomError] = useState("");
   const [pendingToggleKey, setPendingToggleKey] = useState<string | null>(null);
+  const [expandedProviders, setExpandedProviders] = useState<
+    Set<string | number>
+  >(new Set());
+  const [showCodexAccount, setShowCodexAccount] = useState(false);
+  const [showClaudeAccount, setShowClaudeAccount] = useState(false);
 
   const grouped = models
     ? (Object.entries(
@@ -223,35 +227,36 @@ export default function ModelsPage() {
 
   const selectedProvider = customModelForm.watch("provider");
 
-  const handleToggle = async (
-    provider: AIProvider,
-    modelId: string,
-    currentEnabled: boolean,
-  ) => {
-    if (pendingToggleKey) {
-      return;
-    }
-
-    setActionError("");
-    const toggleKey = `${provider}:${modelId}`;
-    setPendingToggleKey(toggleKey);
-
-    try {
-      if (currentEnabled) {
-        await disable.mutateAsync({ modelId, provider });
-      } else {
-        await enable.mutateAsync({ modelId, provider });
+  const handleToggle = useCallback(
+    async (provider: AIProvider, modelId: string, currentEnabled: boolean) => {
+      if (pendingToggleKey) {
+        return;
       }
-    } catch (error) {
-      setActionError(
-        error instanceof Error ? error.message : "Unable to update that model.",
-      );
-    } finally {
-      setPendingToggleKey((current) =>
-        current === toggleKey ? null : current,
-      );
-    }
-  };
+
+      setActionError("");
+      const toggleKey = `${provider}:${modelId}`;
+      setPendingToggleKey(toggleKey);
+
+      try {
+        if (currentEnabled) {
+          await disable.mutateAsync({ modelId, provider });
+        } else {
+          await enable.mutateAsync({ modelId, provider });
+        }
+      } catch (error) {
+        setActionError(
+          error instanceof Error
+            ? error.message
+            : "Unable to update that model.",
+        );
+      } finally {
+        setPendingToggleKey((current) =>
+          current === toggleKey ? null : current,
+        );
+      }
+    },
+    [pendingToggleKey, disable, enable],
+  );
 
   const handleAddCustom = async (values: CustomModelFormValues) => {
     setCustomError("");
@@ -270,330 +275,595 @@ export default function ModelsPage() {
     }
   };
 
+  const hasCodexModels =
+    codexStatus?.availableModels && codexStatus.availableModels.length > 0;
+  const hasClaudeModels =
+    claudeStatus?.availableModels && claudeStatus.availableModels.length > 0;
+
   return (
     <SettingsPageWrapper
       subtitle="Enable or disable models and add custom ones"
       title="Models"
     >
-      {!models && isPending ? <ModelsSkeleton /> : null}
-
-      {actionError ? (
-        <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
-          {actionError}
-        </p>
-      ) : null}
-
-      <div className="flex flex-col gap-8">
-        <section className="border-separator bg-surface rounded-xl border p-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-foreground text-sm font-medium">
-                Codex Runtime
-              </h2>
-              <p className="text-muted mt-1 text-xs">
-                Sentinel reads the local Codex CLI state from this machine. No
-                Codex credentials are stored here.
-              </p>
-            </div>
-            <Chip
-              color={codexEngine?.isAvailable ? "success" : "warning"}
-              size="sm"
-              variant="soft"
-            >
-              {codexEngine?.isAvailable ? "Ready" : "Setup needed"}
-            </Chip>
-          </div>
-
-          <div className="grid gap-3 text-xs text-muted sm:grid-cols-2">
-            <div className="rounded-xl border border-border/50 bg-background/60 px-3 py-2">
-              <span className="block text-[11px] uppercase tracking-wide text-foreground/50">
-                CLI
-              </span>
-              <span className="mt-1 block text-foreground">
-                {codexStatus?.cliDetected
-                  ? (codexStatus.cliVersion ?? "Detected")
-                  : "Not detected"}
-              </span>
-            </div>
-            <div className="rounded-xl border border-border/50 bg-background/60 px-3 py-2">
-              <span className="block text-[11px] uppercase tracking-wide text-foreground/50">
-                Auth
-              </span>
-              <span className="mt-1 block text-foreground">
-                {codexStatus?.authReady
-                  ? "Ready"
-                  : codexStatus?.requiresOpenaiAuth
-                    ? "Run Codex login outside Sentinel"
-                    : "Unavailable"}
-              </span>
-            </div>
-            <div className="rounded-xl border border-border/50 bg-background/60 px-3 py-2">
-              <span className="block text-[11px] uppercase tracking-wide text-foreground/50">
-                Models
-              </span>
-              <span className="mt-1 block text-foreground">
-                {codexStatus?.availableModels.length ?? 0} available
-              </span>
-            </div>
-            <div className="rounded-xl border border-border/50 bg-background/60 px-3 py-2">
-              <span className="block text-[11px] uppercase tracking-wide text-foreground/50">
-                Account
-              </span>
-              <span className="mt-1 block text-foreground">
-                {codexStatus?.account?.type === "chatgpt"
-                  ? codexStatus.account.email
-                  : codexStatus?.account?.type === "apiKey"
-                    ? "API key"
-                    : "Not authenticated"}
-              </span>
-            </div>
-          </div>
-
-          {!codexEngine?.isAvailable && codexEngine?.error ? (
-            <p className="border-warning/20 bg-warning-soft text-warning-foreground mt-4 rounded-xl border px-3 py-2.5 text-xs">
-              {codexEngine.error}
+      {isPending && !models ? (
+        <ModelsSkeleton />
+      ) : (
+        <>
+          {actionError ? (
+            <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
+              {actionError}
             </p>
           ) : null}
-        </section>
 
-        {codexStatus?.availableModels &&
-          codexStatus.availableModels.length > 0 && (
-            <section>
-              <div className="mb-3 flex items-center gap-2">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/80">
-                  <ProviderIcon
-                    className="h-[18px] w-[18px]"
-                    provider="openai"
-                  />
-                </div>
-                <h2 className="text-foreground text-sm font-medium">
-                  Codex Models
-                </h2>
-              </div>
-
-              <div className="border-separator bg-surface divide-separator divide-y rounded-xl border">
-                {codexStatus.availableModels.map((model) => (
-                  <div
-                    key={model.id}
-                    className="flex items-center gap-3 px-4 py-2.5"
+          <div className="flex flex-col gap-6">
+            {/* ── Runtime status cards: side-by-side on large screens ── */}
+            <div className="grid gap-4 lg:grid-cols-2">
+              <section className="border-separator/20 bg-surface rounded-2xl border px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-foreground text-sm font-medium">
+                    Codex Runtime
+                  </h2>
+                  <Chip
+                    color={codexEngine?.isAvailable ? "success" : "warning"}
+                    size="sm"
+                    variant="soft"
                   >
-                    <div className="flex min-w-0 flex-1 items-start gap-3">
-                      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/80">
-                        <ProviderIcon
-                          className="h-[18px] w-[18px]"
-                          provider="openai"
-                        />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-foreground text-sm font-medium">
-                            {model.displayName}
-                          </span>
-                          {model.isDefault && (
-                            <Chip color="accent" size="sm" variant="soft">
-                              Default
-                            </Chip>
-                          )}
-                        </div>
-                        <p className="text-muted mt-0.5 text-xs leading-relaxed">
-                          {model.description}
-                        </p>
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {model.inputModalities.map((modality) => (
-                            <Chip key={modality} size="sm" variant="soft">
-                              {modality}
-                            </Chip>
-                          ))}
-                          {model.supportsPersonality && (
-                            <Chip size="sm" variant="soft">
-                              Personality
-                            </Chip>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
+                    {codexEngine?.isAvailable ? "Ready" : "Setup needed"}
+                  </Chip>
+                </div>
 
-        {grouped.map(([provider, providerModels]) => (
-          <section key={provider}>
-            <div className="mb-3 flex items-center gap-2">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/80">
-                <ProviderIcon
-                  className="h-[18px] w-[18px]"
-                  provider={provider}
-                />
-              </div>
-              <h2 className="text-foreground text-sm font-medium">
-                {PROVIDERS[provider]?.displayName ?? provider}
-              </h2>
-              {providerModels[0] && !providerModels[0].isConnected ? (
-                <Chip color="warning" size="sm" variant="soft">
-                  Not connected
-                </Chip>
-              ) : null}
+                <div className="mt-2 space-y-1 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted">CLI</span>
+                    <span className="text-foreground">
+                      {codexStatus?.cliDetected
+                        ? (codexStatus.cliVersion ?? "Detected")
+                        : "Not detected"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted">Auth</span>
+                    <span className="text-foreground">
+                      {codexStatus?.authReady
+                        ? "Ready"
+                        : codexStatus?.requiresOpenaiAuth
+                          ? "Login needed"
+                          : "Unavailable"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted">Models</span>
+                    <span className="text-foreground">
+                      {codexStatus?.availableModels.length ?? 0} available
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-muted">Account</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="min-w-0 truncate text-foreground">
+                        {(() => {
+                          const raw =
+                            codexStatus?.account?.type === "chatgpt"
+                              ? codexStatus.account.email
+                              : codexStatus?.account?.type === "apiKey"
+                                ? "API key"
+                                : null;
+                          if (!raw) return "Not authenticated";
+                          if (raw === "API key") return raw;
+                          return showCodexAccount
+                            ? raw
+                            : "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
+                        })()}
+                      </span>
+                      {codexStatus?.account?.type === "chatgpt" && (
+                        <button
+                          className="text-muted hover:text-foreground shrink-0 transition-colors"
+                          onClick={() => setShowCodexAccount((v) => !v)}
+                          type="button"
+                        >
+                          {showCodexAccount ? (
+                            <svg
+                              className="h-3.5 w-3.5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={1.5}
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12c1.292 4.338 5.31 7.5 10.066 7.5.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          ) : (
+                            <svg
+                              className="h-3.5 w-3.5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={1.5}
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                              <path
+                                d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          )}
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                {!codexEngine?.isAvailable && codexEngine?.error ? (
+                  <p className="border-warning/20 bg-warning-soft text-warning-foreground mt-2 rounded-lg border px-2.5 py-1.5 text-xs">
+                    {codexEngine.error}
+                  </p>
+                ) : null}
+              </section>
+
+              <section className="border-separator/20 bg-surface rounded-2xl border px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-foreground text-sm font-medium">
+                    Claude Code Runtime
+                  </h2>
+                  <Chip
+                    color={claudeEngine?.isAvailable ? "success" : "warning"}
+                    size="sm"
+                    variant="soft"
+                  >
+                    {claudeEngine?.isAvailable ? "Ready" : "Setup needed"}
+                  </Chip>
+                </div>
+
+                <div className="mt-2 space-y-1 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted">SDK</span>
+                    <span className="text-foreground">
+                      {claudeStatus?.sdkDetected ? "Detected" : "Not detected"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted">Auth</span>
+                    <span className="text-foreground">
+                      {claudeStatus?.authReady ? "Ready" : "Unavailable"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted">Models</span>
+                    <span className="text-foreground">
+                      {claudeStatus?.availableModels.length ?? 0} available
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-muted">Account</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="min-w-0 truncate text-foreground">
+                        {(() => {
+                          const raw = claudeStatus?.account?.email ?? null;
+                          if (!raw) return "Not authenticated";
+                          return showClaudeAccount
+                            ? raw
+                            : "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
+                        })()}
+                      </span>
+                      {claudeStatus?.account?.email && (
+                        <button
+                          className="text-muted hover:text-foreground shrink-0 transition-colors"
+                          onClick={() => setShowClaudeAccount((v) => !v)}
+                          type="button"
+                        >
+                          {showClaudeAccount ? (
+                            <svg
+                              className="h-3.5 w-3.5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={1.5}
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12c1.292 4.338 5.31 7.5 10.066 7.5.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          ) : (
+                            <svg
+                              className="h-3.5 w-3.5"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={1.5}
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                              <path
+                                d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          )}
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                {!claudeEngine?.isAvailable && claudeEngine?.error ? (
+                  <p className="border-warning/20 bg-warning-soft text-warning-foreground mt-2 rounded-lg border px-2.5 py-1.5 text-xs">
+                    {claudeEngine.error}
+                  </p>
+                ) : null}
+              </section>
             </div>
 
-            <div className="border-separator bg-surface divide-separator divide-y rounded-xl border">
-              {providerModels.map((model) => (
-                <div
-                  key={model.modelId}
-                  className="flex items-center gap-3 px-4 py-2.5"
-                >
-                  <div className="flex min-w-0 flex-1 items-start gap-3">
-                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/80">
-                      <ProviderIcon
-                        className="h-[18px] w-[18px]"
-                        provider={model.provider as ProviderKey}
-                      />
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-foreground text-sm font-medium">
-                          {model.displayName}
-                        </span>
-                        {model.isCustom ? (
+            {/* ── Runtime model lists + Provider model groups (all collapsible) ── */}
+            {(hasCodexModels || hasClaudeModels || grouped.length > 0) && (
+              <DisclosureGroup
+                allowsMultipleExpanded
+                expandedKeys={expandedProviders}
+                onExpandedChange={setExpandedProviders}
+              >
+                <div className="border-separator/20 bg-surface divide-separator/20 divide-y rounded-2xl border">
+                  {/* Codex runtime models */}
+                  {hasCodexModels && (
+                    <Disclosure id="runtime-codex">
+                      <Disclosure.Heading>
+                        <Disclosure.Trigger className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-background/80">
+                            <ProviderIcon
+                              className="h-4 w-4"
+                              provider="openai"
+                            />
+                          </div>
+                          <span className="text-foreground text-sm font-medium">
+                            Codex Models
+                          </span>
                           <Chip size="sm" variant="soft">
-                            Custom
+                            {codexStatus!.availableModels.length}
                           </Chip>
-                        ) : null}
-                      </div>
-                      <p className="text-muted mt-0.5 text-xs">
-                        {model.description}
-                      </p>
-                      {model.capabilities.length > 0 ? (
-                        <div className="mt-1.5 flex flex-wrap gap-1">
-                          {model.capabilities.map((capability) => (
-                            <Chip
-                              color="default"
-                              key={capability}
-                              size="sm"
-                              variant="soft"
-                            >
-                              {CAPABILITY_LABEL[capability] ?? capability}
-                            </Chip>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
+                          <Disclosure.Indicator className="ml-auto" />
+                        </Disclosure.Trigger>
+                      </Disclosure.Heading>
+                      <Disclosure.Content>
+                        <Disclosure.Body>
+                          <div className="divide-separator/10 divide-y px-4 pb-2">
+                            {codexStatus!.availableModels.map((model) => (
+                              <div
+                                className="flex items-center gap-3 py-2 pl-10"
+                                key={model.id}
+                              >
+                                <span className="text-foreground min-w-0 shrink-0 text-sm">
+                                  {model.displayName}
+                                </span>
+                                {model.isDefault && (
+                                  <Chip color="accent" size="sm" variant="soft">
+                                    Default
+                                  </Chip>
+                                )}
+                                <span className="text-muted min-w-0 flex-1 truncate text-xs">
+                                  {model.description}
+                                </span>
+                                <div className="flex shrink-0 gap-1">
+                                  {model.inputModalities.map((modality) => (
+                                    <Chip
+                                      key={modality}
+                                      size="sm"
+                                      variant="soft"
+                                    >
+                                      {modality}
+                                    </Chip>
+                                  ))}
+                                  {model.supportsPersonality && (
+                                    <Chip size="sm" variant="soft">
+                                      Personality
+                                    </Chip>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </Disclosure.Body>
+                      </Disclosure.Content>
+                    </Disclosure>
+                  )}
 
-                  <div className="flex shrink-0 items-center gap-2">
-                    {model.isCustom ? (
+                  {/* Claude Code runtime models */}
+                  {hasClaudeModels && (
+                    <Disclosure id="runtime-claude">
+                      <Disclosure.Heading>
+                        <Disclosure.Trigger className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-background/80">
+                            <ProviderIcon
+                              className="h-4 w-4"
+                              provider="anthropic"
+                            />
+                          </div>
+                          <span className="text-foreground text-sm font-medium">
+                            Claude Code Models
+                          </span>
+                          <Chip size="sm" variant="soft">
+                            {claudeStatus!.availableModels.length}
+                          </Chip>
+                          <Disclosure.Indicator className="ml-auto" />
+                        </Disclosure.Trigger>
+                      </Disclosure.Heading>
+                      <Disclosure.Content>
+                        <Disclosure.Body>
+                          <div className="divide-separator/10 divide-y px-4 pb-2">
+                            {claudeStatus!.availableModels.map((model) => (
+                              <div
+                                className="flex items-center gap-3 py-2 pl-10"
+                                key={model.id}
+                              >
+                                <span className="text-foreground min-w-0 shrink-0 text-sm">
+                                  {model.displayName}
+                                </span>
+                                {model.isDefault && (
+                                  <Chip color="accent" size="sm" variant="soft">
+                                    Default
+                                  </Chip>
+                                )}
+                                <span className="text-muted min-w-0 flex-1 truncate text-xs">
+                                  {model.description}
+                                </span>
+                                <div className="flex shrink-0 gap-1">
+                                  {model.inputModalities.map((modality) => (
+                                    <Chip
+                                      key={modality}
+                                      size="sm"
+                                      variant="soft"
+                                    >
+                                      {modality}
+                                    </Chip>
+                                  ))}
+                                  {model.contextWindow && (
+                                    <Chip size="sm" variant="soft">
+                                      {(model.contextWindow / 1000).toFixed(0)}k
+                                      ctx
+                                    </Chip>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </Disclosure.Body>
+                      </Disclosure.Content>
+                    </Disclosure>
+                  )}
+
+                  {/* Provider model groups */}
+                  {grouped.map(([provider, providerModels]) => (
+                    <Disclosure id={provider} key={provider}>
+                      <Disclosure.Heading>
+                        <Disclosure.Trigger className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-background/80">
+                            <ProviderIcon
+                              className="h-4 w-4"
+                              provider={provider}
+                            />
+                          </div>
+                          <span className="text-foreground text-sm font-medium">
+                            {PROVIDERS[provider]?.displayName ?? provider}
+                          </span>
+                          {providerModels[0] &&
+                          !providerModels[0].isConnected ? (
+                            <Chip color="warning" size="sm" variant="soft">
+                              Not connected
+                            </Chip>
+                          ) : null}
+                          <div className="ml-auto flex items-center gap-2">
+                            <span className="text-muted text-xs tabular-nums">
+                              {providerModels.filter((m) => m.isEnabled).length}
+                              /{providerModels.length} enabled
+                            </span>
+                            <Disclosure.Indicator />
+                          </div>
+                        </Disclosure.Trigger>
+                      </Disclosure.Heading>
+                      <Disclosure.Content>
+                        <Disclosure.Body>
+                          <div className="divide-separator/10 divide-y px-4 pb-2">
+                            {providerModels.map((model) => (
+                              <div
+                                className="flex items-center gap-3 py-2 pl-10"
+                                key={model.modelId}
+                              >
+                                <div className="flex min-w-0 flex-1 items-center gap-2">
+                                  <span className="text-foreground shrink-0 text-sm">
+                                    {model.displayName}
+                                  </span>
+                                  {model.isCustom ? (
+                                    <Chip size="sm" variant="soft">
+                                      Custom
+                                    </Chip>
+                                  ) : null}
+                                  <span className="text-muted hidden min-w-0 truncate text-xs sm:inline">
+                                    {model.description}
+                                  </span>
+                                </div>
+
+                                <div className="flex shrink-0 items-center gap-1.5">
+                                  {model.capabilities.length > 0 && (
+                                    <div className="hidden gap-1 sm:flex">
+                                      {model.capabilities.map((capability) => (
+                                        <Chip
+                                          color="default"
+                                          key={capability}
+                                          size="sm"
+                                          variant="soft"
+                                        >
+                                          {CAPABILITY_LABEL[capability] ??
+                                            capability}
+                                        </Chip>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {model.isCustom ? (
+                                    <Button
+                                      isDisabled={removeCustom.isPending}
+                                      isPending={removeCustom.isPending}
+                                      onPress={() =>
+                                        removeCustom.mutate({
+                                          modelId: model.modelId,
+                                          provider:
+                                            model.provider as ProviderKey,
+                                        })
+                                      }
+                                      size="sm"
+                                      variant="danger"
+                                    >
+                                      {({ isPending }) => (
+                                        <>
+                                          {isPending ? (
+                                            <Spinner
+                                              color="current"
+                                              size="sm"
+                                            />
+                                          ) : null}
+                                          Remove
+                                        </>
+                                      )}
+                                    </Button>
+                                  ) : null}
+                                  <Switch.Root
+                                    aria-label={
+                                      model.isEnabled
+                                        ? "Disable model"
+                                        : "Enable model"
+                                    }
+                                    className={
+                                      pendingToggleKey ===
+                                      `${model.provider}:${model.modelId}`
+                                        ? "opacity-60"
+                                        : undefined
+                                    }
+                                    isSelected={model.isEnabled}
+                                    onChange={() =>
+                                      handleToggle(
+                                        model.provider as ProviderKey,
+                                        model.modelId,
+                                        model.isEnabled,
+                                      )
+                                    }
+                                  >
+                                    <Switch.Control>
+                                      <Switch.Thumb />
+                                    </Switch.Control>
+                                  </Switch.Root>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </Disclosure.Body>
+                      </Disclosure.Content>
+                    </Disclosure>
+                  ))}
+                </div>
+              </DisclosureGroup>
+            )}
+
+            {/* ── Add custom model (collapsible) ── */}
+            <div className="border-separator/20 bg-surface overflow-hidden rounded-2xl border">
+              <Disclosure>
+                <Disclosure.Heading>
+                  <Disclosure.Trigger className="flex w-full cursor-pointer items-center gap-2 px-4 py-2.5 text-left">
+                    <svg
+                      className="h-4 w-4 shrink-0 text-muted"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        d="M12 5v14m-7-7h14"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    <span className="text-foreground text-sm font-medium">
+                      Add Custom Model
+                    </span>
+                    <Disclosure.Indicator className="ml-auto" />
+                  </Disclosure.Trigger>
+                </Disclosure.Heading>
+                <Disclosure.Content>
+                  <Disclosure.Body className="border-separator/20 border-t px-4 pb-3 pt-3">
+                    <Form
+                      className="flex items-end gap-3"
+                      onSubmit={customModelForm.handleSubmit(handleAddCustom)}
+                    >
+                      <ControlledSelectField
+                        control={customModelForm.control}
+                        label="Provider"
+                        name="provider"
+                        options={Object.entries(PROVIDERS).map(
+                          ([key, provider]) => ({
+                            label: provider.displayName,
+                            value: key,
+                          }),
+                        )}
+                        selectProps={{ className: "w-44" }}
+                      />
+
+                      <ControlledTextField
+                        control={customModelForm.control}
+                        inputProps={{ placeholder: "e.g. gpt-5-turbo" }}
+                        label="Model ID"
+                        name="modelId"
+                        textFieldProps={{
+                          className: "flex-1",
+                          isRequired: true,
+                        }}
+                      />
+
                       <Button
-                        isDisabled={removeCustom.isPending}
-                        isPending={removeCustom.isPending}
-                        onPress={() =>
-                          removeCustom.mutate({
-                            modelId: model.modelId,
-                            provider: model.provider as ProviderKey,
-                          })
+                        isDisabled={
+                          addCustom.isPending ||
+                          !connectedProviders.has(selectedProvider)
                         }
+                        isPending={addCustom.isPending}
                         size="sm"
-                        variant="danger"
+                        type="submit"
                       >
                         {({ isPending }) => (
                           <>
                             {isPending ? (
                               <Spinner color="current" size="sm" />
                             ) : null}
-                            Remove
+                            Add
                           </>
                         )}
                       </Button>
+                    </Form>
+
+                    {!connectedProviders.has(selectedProvider) ? (
+                      <p className="text-muted mt-2 text-xs">
+                        Connect and enable this provider before adding a custom
+                        model.
+                      </p>
                     ) : null}
-                    <Switch.Root
-                      aria-label={
-                        model.isEnabled ? "Disable model" : "Enable model"
-                      }
-                      className={
-                        pendingToggleKey ===
-                        `${model.provider}:${model.modelId}`
-                          ? "opacity-60"
-                          : undefined
-                      }
-                      isSelected={model.isEnabled}
-                      onChange={() =>
-                        handleToggle(
-                          model.provider as ProviderKey,
-                          model.modelId,
-                          model.isEnabled,
-                        )
-                      }
-                    >
-                      <Switch.Control>
-                        <Switch.Thumb />
-                      </Switch.Control>
-                    </Switch.Root>
-                  </div>
-                </div>
-              ))}
+
+                    {customError ? (
+                      <p className="text-danger mt-2 text-xs">{customError}</p>
+                    ) : null}
+                  </Disclosure.Body>
+                </Disclosure.Content>
+              </Disclosure>
             </div>
-          </section>
-        ))}
-
-        <section>
-          <h2 className="text-foreground mb-2 text-sm font-medium">
-            Add Custom Model
-          </h2>
-          <div className="border-separator bg-surface rounded-xl border px-4 py-2.5">
-            <Form
-              className="flex items-end gap-3"
-              onSubmit={customModelForm.handleSubmit(handleAddCustom)}
-            >
-              <ControlledSelectField
-                control={customModelForm.control}
-                label="Provider"
-                name="provider"
-                options={Object.entries(PROVIDERS).map(([key, provider]) => ({
-                  label: provider.displayName,
-                  value: key,
-                }))}
-                selectProps={{ className: "w-44" }}
-              />
-
-              <ControlledTextField
-                control={customModelForm.control}
-                inputProps={{ placeholder: "e.g. gpt-5-turbo" }}
-                label="Model ID"
-                name="modelId"
-                textFieldProps={{ className: "flex-1", isRequired: true }}
-              />
-
-              <Button
-                isDisabled={
-                  addCustom.isPending ||
-                  !connectedProviders.has(selectedProvider)
-                }
-                isPending={addCustom.isPending}
-                size="sm"
-                type="submit"
-              >
-                {({ isPending }) => (
-                  <>
-                    {isPending ? <Spinner color="current" size="sm" /> : null}
-                    Add
-                  </>
-                )}
-              </Button>
-            </Form>
-
-            {!connectedProviders.has(selectedProvider) ? (
-              <p className="text-muted mt-2 text-xs">
-                Connect and enable this provider before adding a custom model.
-              </p>
-            ) : null}
-
-            {customError ? (
-              <p className="text-danger mt-2 text-xs">{customError}</p>
-            ) : null}
           </div>
-        </section>
-      </div>
+        </>
+      )}
     </SettingsPageWrapper>
   );
 }

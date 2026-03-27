@@ -40,13 +40,13 @@ type ListedServer = RouterOutputs["mcpServers"]["list"][number];
 function McpSettingsSkeleton() {
   return (
     <div className="flex flex-col gap-6">
-      <section className="border-separator bg-surface rounded-xl border p-5">
+      <section className="border-separator/20 bg-surface rounded-2xl border p-5">
         <div className="space-y-3">
           <Skeleton className="h-4 w-40 rounded-md" />
           <Skeleton className="h-3 w-64 rounded-md" />
         </div>
       </section>
-      <section className="border-separator bg-surface rounded-xl border p-5">
+      <section className="border-separator/20 bg-surface rounded-2xl border p-5">
         <div className="space-y-3">
           <Skeleton className="h-4 w-48 rounded-md" />
           {Array.from({ length: 4 }).map((_, index) => (
@@ -404,7 +404,7 @@ export default function McpSettingsPage() {
                 ))}
               </div>
             ) : (
-              <section className="border-separator bg-surface rounded-xl border p-5">
+              <section className="border-separator/20 bg-surface rounded-2xl border p-5">
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                   <div className="space-y-1">
                     <h3 className="text-foreground text-base font-medium">

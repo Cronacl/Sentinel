@@ -21,11 +21,34 @@ const googleVertexAIProvider = z.object({
   }),
 });
 
+const bedrockProvider = z.object({
+  accessKeyId: z.string().min(1, "Access key ID is required"),
+  secretAccessKey: z.string().min(1, "Secret access key is required"),
+  region: z.string().min(1, "AWS region is required"),
+});
+
+const ollamaProvider = z.object({
+  baseURL: z
+    .string()
+    .url("Base URL is required")
+    .default("http://localhost:11434/v1"),
+});
+
 export const PROVIDER_CONFIG_SCHEMAS: Record<AIProvider, z.ZodType> = {
   openai: apiKeyProvider,
   anthropic: apiKeyProvider,
   google: apiKeyProvider,
   google_vertex: googleVertexAIProvider,
+  vercel: apiKeyProvider,
+  xai: apiKeyProvider,
+  azure: apiKeyProvider,
+  amazon_bedrock: bedrockProvider,
+  groq: apiKeyProvider,
+  cohere: apiKeyProvider,
+  moonshotai: apiKeyProvider,
+  mistral: apiKeyProvider,
+  ollama: ollamaProvider,
+  openrouter: apiKeyProvider,
 };
 
 export function validateProviderConfig(provider: AIProvider, config: unknown) {
@@ -51,6 +74,13 @@ export function validateProviderConfig(provider: AIProvider, config: unknown) {
             ) ?? "",
         },
       },
+    };
+  }
+
+  if (provider === "ollama") {
+    const ollamaConfig = parsed as z.infer<typeof ollamaProvider>;
+    return {
+      baseURL: ollamaConfig.baseURL || "http://localhost:11434/v1",
     };
   }
 

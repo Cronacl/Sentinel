@@ -46,7 +46,7 @@ const STATUS_LABEL = {
 function SearchSettingsSkeleton() {
   return (
     <div className="flex flex-col gap-6">
-      <section className="border-separator bg-surface rounded-xl border p-5">
+      <section className="border-separator/20 bg-surface rounded-2xl border p-5">
         <div className="mb-5 space-y-2">
           <Skeleton className="h-5 w-32 rounded-md" />
           <Skeleton className="h-4 w-72 rounded-md" />
@@ -202,7 +202,7 @@ export default function SearchSettingsPage() {
       ) : (
         <div className="flex flex-col gap-6">
           <Form onSubmit={form.handleSubmit(handleSubmit)}>
-            <section className="border-separator bg-surface rounded-xl border p-5">
+            <section className="border-separator/20 bg-surface rounded-2xl border p-5">
               <div className="mb-5 space-y-1">
                 <h2 className="text-foreground text-base font-medium">
                   Search defaults

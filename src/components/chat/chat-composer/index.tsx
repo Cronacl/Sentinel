@@ -146,7 +146,7 @@ export function ChatComposer({
       : [];
 
   const contextWindowIndicator =
-    selectedModelKey && selectedModel
+    selectedEngine === "sentinel" && selectedModelKey && selectedModel
       ? getExactContextWindowUsage({
           contextWindow: selectedModel.contextWindow,
           fixedWindowSize:
@@ -258,9 +258,9 @@ export function ChatComposer({
   const disabledMessage =
     !modelsQuery.isLoading && !hasModels ? (
       <>
-        {selectedEngine === "codex" ? (
+        {selectedEngine !== "sentinel" ? (
           (selectedEngineStatus?.error ??
-          "Codex is unavailable in this Sentinel runtime.")
+          `${selectedEngineStatus?.label ?? "This engine"} is unavailable in this Sentinel runtime.`)
         ) : (
           <>
             Connect a provider in{" "}
@@ -426,15 +426,13 @@ export function ChatComposer({
                     compactionEnabled:
                       generalSettingsQuery.data?.contextCompactionEnabled ??
                       false,
-                    contextWindowMode: generalSettingsQuery.data
-                      ?.contextCompactionUseFixedWindow
-                      ? ("fixed" as const)
-                      : ("model" as const),
+                    contextWindowMode: contextWindowIndicator.source,
                     compactionWindowPercent:
                       generalSettingsQuery.data
                         ?.contextCompactionWindowPercent ?? 70,
                     contextWindow: contextWindowIndicator.contextWindow,
                     inputTokens: contextWindowIndicator.inputTokens,
+                    modelContextWindow: selectedModel?.contextWindow,
                     usedPercent: contextWindowIndicator.usedPercent,
                   }
                 : null

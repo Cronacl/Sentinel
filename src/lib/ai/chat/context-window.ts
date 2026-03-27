@@ -45,6 +45,27 @@ export function getLatestCompletedAssistantInputTokens(
   return null;
 }
 
+export function getLatestCompletedAssistantContextWindow(
+  messages: ThreadUIMessage[],
+) {
+  for (const message of [...messages].reverse()) {
+    if (message.role !== "assistant") {
+      continue;
+    }
+
+    if (message.metadata?.status !== "completed") {
+      continue;
+    }
+
+    const contextWindow = message.metadata?.usage?.contextWindow;
+    if (typeof contextWindow === "number" && Number.isFinite(contextWindow)) {
+      return contextWindow;
+    }
+  }
+
+  return null;
+}
+
 export function getExactContextWindowUsage(input: {
   contextWindow?: number | null;
   fixedWindowSize?: number | null;
@@ -56,16 +77,27 @@ export function getExactContextWindowUsage(input: {
     return null;
   }
 
+  const providerReportedContextWindow =
+    getLatestCompletedAssistantContextWindow(input.messages);
+  const useFixedWindow =
+    input.useFixedWindow &&
+    input.fixedWindowSize != null &&
+    input.fixedWindowSize > 0;
   const contextWindow = resolveConfiguredContextWindow({
-    contextWindow: input.contextWindow,
+    contextWindow: providerReportedContextWindow ?? input.contextWindow,
     fixedWindowSize: input.fixedWindowSize,
-    useFixedWindow: input.useFixedWindow,
+    useFixedWindow,
   });
   const usedRatio = contextWindow > 0 ? inputTokens / contextWindow : 0;
 
   return {
     contextWindow,
     inputTokens,
+    source: useFixedWindow
+      ? ("fixed" as const)
+      : providerReportedContextWindow != null
+        ? ("provider" as const)
+        : ("model" as const),
     usedPercent: Math.max(0, Math.min(100, Math.round(usedRatio * 100))),
     usedRatio: Math.max(0, usedRatio),
   };

@@ -115,6 +115,28 @@ import {
 } from "./renderers/codex-status";
 import { CodexUserInputTool } from "./renderers/codex-user-input";
 import { CodexWebSearchTool } from "./renderers/codex-web-search";
+import { ClaudeAgentTool } from "./renderers/claude-agent";
+import {
+  ClaudeFileEditTool,
+  ClaudeFileWriteTool,
+} from "./renderers/claude-file-change";
+import { ClaudeFileReadTool } from "./renderers/claude-file-read";
+import { ClaudeMcpResourceTool } from "./renderers/claude-mcp";
+import { ClaudePlanTool } from "./renderers/claude-plan";
+import { ClaudeRuntimeTool } from "./renderers/claude-runtime";
+import { ClaudeGlobTool, ClaudeGrepTool } from "./renderers/claude-search";
+import { ClaudeSessionUtilityTool } from "./renderers/claude-session";
+import { ClaudeShellTool } from "./renderers/claude-shell";
+import { ClaudeTodoWriteTool } from "./renderers/claude-todo";
+import { ClaudeUserInputTool } from "./renderers/claude-user-input";
+import {
+  ClaudeListDirTool,
+  ClaudeToolSearchTool,
+} from "./renderers/claude-utility";
+import {
+  ClaudeWebFetchTool,
+  ClaudeWebSearchTool,
+} from "./renderers/claude-web";
 
 const renderers: Record<string, Renderer> = {
   apply_patch: WorkspaceTool,
@@ -341,6 +363,45 @@ const codexRenderers: Record<string, Renderer> = {
   codex_web_search: CodexWebSearchTool,
 };
 
+const claudeRenderers: Record<string, Renderer> = {
+  claude_agent: ClaudeAgentTool,
+  claude_bash: ClaudeShellTool,
+  claude_config: ClaudeSessionUtilityTool,
+  claude_dispatch_agent: ClaudeAgentTool,
+  claude_dispatchagent: ClaudeAgentTool,
+  claude_edit: ClaudeFileEditTool,
+  claude_enterworktree: ClaudeSessionUtilityTool,
+  claude_exitplanmode: ClaudePlanTool,
+  claude_glob: ClaudeGlobTool,
+  claude_grep: ClaudeGrepTool,
+  claude_listmcpresources: ClaudeMcpResourceTool,
+  claude_listdir: ClaudeListDirTool,
+  claude_ls: ClaudeListDirTool,
+  claude_multiedit: ClaudeFileEditTool,
+  claude_notebookedit: ClaudeFileEditTool,
+  claude_notebookread: ClaudeFileReadTool,
+  claude_read: ClaudeFileReadTool,
+  claude_readmcpresource: ClaudeMcpResourceTool,
+  claude_skill: SkillTool,
+  claude_subscribemcpresource: ClaudeMcpResourceTool,
+  claude_subscribepolling: ClaudeMcpResourceTool,
+  claude_task: ClaudeAgentTool,
+  claude_taskoutput: ClaudeSessionUtilityTool,
+  claude_taskstop: ClaudeSessionUtilityTool,
+  claude_todoread: ClaudeTodoWriteTool,
+  claude_todowrite: ClaudeTodoWriteTool,
+  claude_toolsearch: ClaudeToolSearchTool,
+  claude_unsubscribemcpresource: ClaudeMcpResourceTool,
+  claude_unsubscribepolling: ClaudeMcpResourceTool,
+  claude_user_input: ClaudeUserInputTool,
+  claude_webfetch: ClaudeWebFetchTool,
+  claude_websearch: ClaudeWebSearchTool,
+  claude_write: ClaudeFileWriteTool,
+};
+export const KNOWN_CLAUDE_RENDERER_TOOL_NAMES = Object.freeze(
+  Object.keys(claudeRenderers).sort(),
+);
+
 function isIntegrationToolName(name: string) {
   return (
     name.startsWith("gmail_") ||
@@ -385,6 +446,10 @@ export function resolveRenderer(part: ToolPart): Renderer | undefined {
   if (part.type === "dynamic-tool") {
     if (part.toolName.startsWith("codex_")) {
       return codexRenderers[part.toolName] ?? CodexRuntimeTool;
+    }
+
+    if (part.toolName.startsWith("claude_")) {
+      return claudeRenderers[part.toolName] ?? ClaudeRuntimeTool;
     }
 
     return (

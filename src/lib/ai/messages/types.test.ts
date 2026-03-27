@@ -274,4 +274,193 @@ describe("thread message normalization", () => {
       getThreadMessageSyncToken(updated),
     );
   });
+
+  it("updates the sync token when context window usage changes", () => {
+    const base = normalizeThreadUIMessage({
+      id: "assistant-1",
+      metadata: {
+        status: "completed",
+        usage: {
+          contextWindow: 200_000,
+          inputTokens: 400,
+        },
+      },
+      parts: [{ text: "Answer", type: "text" }],
+      role: "assistant",
+    });
+
+    const updated = normalizeThreadUIMessage({
+      ...base,
+      metadata: {
+        ...base.metadata,
+        usage: {
+          ...base.metadata.usage,
+          contextWindow: 1_000_000,
+        },
+      },
+    });
+
+    expect(getThreadMessageSyncToken(base)).not.toBe(
+      getThreadMessageSyncToken(updated),
+    );
+  });
+
+  it("updates the sync token when dynamic tool output changes", () => {
+    const base = normalizeThreadUIMessage({
+      id: "assistant-1",
+      metadata: {
+        status: "streaming",
+      },
+      parts: [
+        {
+          input: { command: "ls -la" },
+          state: "input-streaming",
+          toolCallId: "tool-1",
+          toolName: "claude_bash",
+          type: "dynamic-tool",
+        },
+      ],
+      role: "assistant",
+    });
+
+    const updated = normalizeThreadUIMessage({
+      ...base,
+      parts: [
+        {
+          ...base.parts[0],
+          state: "output-available",
+          output: { elapsedTimeSeconds: 1 },
+        },
+      ],
+    });
+
+    expect(getThreadMessageSyncToken(base)).not.toBe(
+      getThreadMessageSyncToken(updated),
+    );
+  });
+
+  it("updates the sync token when dynamic tool approval metadata changes", () => {
+    const base = normalizeThreadUIMessage({
+      id: "assistant-1",
+      metadata: {
+        status: "streaming",
+      },
+      parts: [
+        {
+          approval: { id: "tool-1", reason: "Need permission" },
+          input: { command: "ls -la" },
+          state: "approval-requested",
+          toolCallId: "tool-1",
+          toolName: "claude_bash",
+          type: "dynamic-tool",
+        },
+      ],
+      role: "assistant",
+    });
+
+    const updated = normalizeThreadUIMessage({
+      ...base,
+      parts: [
+        {
+          ...base.parts[0],
+          approval: { id: "tool-1", reason: "Need a different permission" },
+        },
+      ],
+    });
+
+    expect(getThreadMessageSyncToken(base)).not.toBe(
+      getThreadMessageSyncToken(updated),
+    );
+  });
+
+  it("sanitizes stale Claude dynamic-tool fields across state transitions", () => {
+    const message = normalizeThreadUIMessage({
+      id: "assistant-1",
+      metadata: {},
+      parts: [
+        {
+          approval: { approved: true, id: "tool-1", reason: "approved once" },
+          errorText: "old error",
+          input: { command: "ls -la" },
+          output: "done",
+          state: "output-available",
+          toolCallId: "tool-1",
+          toolName: "claude_bash",
+          type: "dynamic-tool",
+        },
+        {
+          approval: {
+            approved: true,
+            decision: "accept",
+            id: "tool-2",
+            reason: "Need permission",
+            response: "run it",
+          },
+          errorText: "old error",
+          input: { command: "cat file.txt" },
+          output: "partial",
+          state: "approval-responded",
+          toolCallId: "tool-2",
+          toolName: "claude_read",
+          type: "dynamic-tool",
+        },
+        {
+          approval: {
+            approved: true,
+            decision: "decline",
+            id: "tool-3",
+            reason: "unsafe",
+            response: "No",
+          },
+          errorText: "denied",
+          input: { command: "rm test.txt" },
+          output: "should be removed",
+          state: "output-denied",
+          toolCallId: "tool-3",
+          toolName: "claude_bash",
+          type: "dynamic-tool",
+        },
+      ],
+      role: "assistant",
+    });
+
+    expect(message.parts[0]).toEqual({
+      input: { command: "ls -la" },
+      output: "done",
+      state: "output-available",
+      toolCallId: "tool-1",
+      toolName: "claude_bash",
+      type: "dynamic-tool",
+    });
+
+    expect(message.parts[1]).toEqual({
+      approval: {
+        approved: true,
+        decision: "accept",
+        id: "tool-2",
+        reason: "Need permission",
+        response: "run it",
+      },
+      input: { command: "cat file.txt" },
+      state: "approval-responded",
+      toolCallId: "tool-2",
+      toolName: "claude_read",
+      type: "dynamic-tool",
+    });
+
+    expect(message.parts[2]).toEqual({
+      approval: {
+        approved: false,
+        decision: "decline",
+        id: "tool-3",
+        reason: "unsafe",
+        response: "No",
+      },
+      input: { command: "rm test.txt" },
+      state: "output-denied",
+      toolCallId: "tool-3",
+      toolName: "claude_bash",
+      type: "dynamic-tool",
+    });
+  });
 });

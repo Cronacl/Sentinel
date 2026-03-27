@@ -1,8 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ScrollShadow } from "@heroui/react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { Button, ScrollShadow } from "@heroui/react";
 import { Copy01Icon, Tick01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
@@ -196,12 +196,8 @@ export const CodexMcpTool = memo(function CodexMcpTool({
     part.state === "output-error" ||
     mcpOutput?.status === "failed";
   const [isExpanded, setIsExpanded] = useState(
-    part.state === "approval-requested" || isRunning,
+    part.state === "approval-requested",
   );
-
-  useEffect(() => {
-    setIsExpanded(part.state === "approval-requested" || isRunning);
-  }, [isRunning, part.state, part.toolCallId]);
 
   if (!mcpInput) return null;
 
@@ -256,20 +252,20 @@ export const CodexMcpTool = memo(function CodexMcpTool({
       actions={
         showApprovalActions ? (
           <div className="flex flex-wrap gap-2">
-            <button
-              className="h-7 min-w-0 rounded-md bg-primary px-3 text-[11px] text-primary-foreground"
+            <Button
+              size="sm"
+              variant="primary"
               onClick={() => approvalId && onApprove?.(approvalId)}
-              type="button"
             >
               Approve
-            </button>
-            <button
-              className="h-7 min-w-0 rounded-md px-3 text-[11px] text-foreground/70 hover:bg-foreground/5"
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
               onClick={() => approvalId && onDeny?.(approvalId)}
-              type="button"
             >
               Deny
-            </button>
+            </Button>
           </div>
         ) : undefined
       }

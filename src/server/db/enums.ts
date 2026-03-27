@@ -3,10 +3,20 @@ export const AI_PROVIDERS = [
   "anthropic",
   "google",
   "google_vertex",
+  "vercel",
+  "xai",
+  "azure",
+  "amazon_bedrock",
+  "groq",
+  "cohere",
+  "moonshotai",
+  "mistral",
+  "ollama",
+  "openrouter",
 ] as const;
 export type AIProvider = (typeof AI_PROVIDERS)[number];
 
-export const CHAT_ENGINES = ["sentinel", "codex"] as const;
+export const CHAT_ENGINES = ["sentinel", "codex", "claude"] as const;
 export type ChatEngine = (typeof CHAT_ENGINES)[number];
 
 export const SEARCH_PROVIDERS = ["exa", "searxng"] as const;

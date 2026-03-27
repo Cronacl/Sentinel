@@ -69,7 +69,7 @@ type BrowseChipOption<TValue extends string> = {
 function MemorySettingsSkeleton() {
   return (
     <div className="flex flex-col gap-6">
-      <section className="border-separator bg-surface rounded-xl border p-5">
+      <section className="border-separator/20 bg-surface rounded-2xl border p-5">
         <div className="space-y-4">
           <Skeleton className="h-16 w-full rounded-xl" />
           <Skeleton className="h-16 w-full rounded-xl" />
@@ -77,7 +77,7 @@ function MemorySettingsSkeleton() {
           <Skeleton className="h-16 w-full rounded-xl" />
         </div>
       </section>
-      <section className="border-separator bg-surface rounded-xl border p-5">
+      <section className="border-separator/20 bg-surface rounded-2xl border p-5">
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, index) => (
             <Skeleton className="h-24 w-full rounded-xl" key={index} />
@@ -540,7 +540,7 @@ export default function MemorySettingsPage() {
       ) : (
         <div className="flex flex-col gap-6">
           <Form onSubmit={form.handleSubmit(handleSubmit)}>
-            <section className="border-separator bg-surface rounded-xl border p-5">
+            <section className="border-separator/20 bg-surface rounded-2xl border p-5">
               <div className="mb-5 space-y-1">
                 <h2 className="text-foreground text-base font-medium">
                   Memory settings
@@ -687,7 +687,7 @@ export default function MemorySettingsPage() {
             </section>
           </Form>
 
-          <section className="border-separator bg-surface rounded-xl border p-5">
+          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-1">
                 <h2 className="text-foreground text-base font-medium">

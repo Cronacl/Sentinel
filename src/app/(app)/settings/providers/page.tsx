@@ -10,7 +10,9 @@ import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper
 import { getErrorMessage } from "@/lib/errors";
 import { api } from "@/trpc/react";
 
-type ProviderKey = "openai" | "anthropic" | "google" | "google_vertex";
+import type { AIProvider } from "@/server/db/enums";
+
+type ProviderKey = AIProvider;
 
 const STATUS_COLOR = {
   active: "success",
@@ -29,7 +31,7 @@ function ProvidersSkeleton() {
     <div className="flex flex-col gap-2">
       {Array.from({ length: 3 }).map((_, index) => (
         <section
-          className="border-separator bg-surface rounded-xl border p-5"
+          className="border-separator/20 bg-surface rounded-2xl border p-5"
           key={index}
         >
           <div className="flex items-start justify-between gap-4">
@@ -102,7 +104,7 @@ export default function ProvidersPage() {
         {providers?.map((p) => (
           <div
             key={p.id}
-            className="border-separator bg-surface flex items-center gap-4 rounded-xl border px-4 py-2.5"
+            className="border-separator/20 bg-surface flex items-center gap-4 rounded-2xl border px-4 py-2.5"
           >
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/80">
               <ProviderIcon className="h-5 w-5" provider={p.id} />
