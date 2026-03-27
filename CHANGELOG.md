@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.10.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.9.0-alpha.1...v0.10.0-alpha.1) (2026-03-27)
+
+
+### Features
+
+* add new AI SDK dependencies to enhance integration capabilities ([4a5fac3](https://github.com/Cronacl/Sentinel/commit/4a5fac39610a73d74b4e1ad359bbded99773e830))
+
 ## [0.9.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.8.0-alpha.1...v0.9.0-alpha.1) (2026-03-27)
 
 
