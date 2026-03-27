@@ -268,7 +268,7 @@ export const ClaudeFileEditTool = memo(function ClaudeFileEditTool({
   const actions = renderClaudeApprovalActions({ onApprove, onDeny, part });
   const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,
-    part.state === "approval-requested" || isRunning,
+    part.state === "approval-requested",
   );
 
   return (
@@ -360,7 +360,7 @@ export const ClaudeFileWriteTool = memo(function ClaudeFileWriteTool({
   const contentLineCount = writeInput.content.split("\n").length;
   const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,
-    part.state === "approval-requested" || isRunning,
+    part.state === "approval-requested",
   );
 
   return (

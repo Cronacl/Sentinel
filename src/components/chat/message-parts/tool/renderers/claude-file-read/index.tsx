@@ -380,7 +380,7 @@ export const ClaudeFileReadTool = memo(function ClaudeFileReadTool({
     Boolean(fallbackOutputText?.trim());
   const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,
-    part.state === "approval-requested" || isRunning,
+    part.state === "approval-requested",
   );
 
   return (

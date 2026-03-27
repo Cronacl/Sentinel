@@ -40,7 +40,7 @@ export const ClaudeRuntimeTool = memo(function ClaudeRuntimeTool({
   const isError = isClaudeToolErrorState(part.state);
   const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,
-    part.state === "approval-requested" || part.state === "output-error",
+    part.state === "approval-requested",
   );
 
   const elapsedTime =

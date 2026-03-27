@@ -155,7 +155,7 @@ export const ClaudeAgentTool = memo(function ClaudeAgentTool({
   const hasContent = Boolean(resultText?.trim());
   const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,
-    part.state === "approval-requested" || isRunning,
+    part.state === "approval-requested",
   );
 
   const summary = (

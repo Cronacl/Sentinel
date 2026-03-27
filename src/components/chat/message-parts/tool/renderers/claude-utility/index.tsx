@@ -104,7 +104,7 @@ export const ClaudeToolSearchTool = memo(function ClaudeToolSearchTool({
   const actions = renderClaudeApprovalActions({ onApprove, onDeny, part });
   const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,
-    part.state === "approval-requested" || isRunning,
+    part.state === "approval-requested",
   );
 
   return (
@@ -238,7 +238,7 @@ export const ClaudeListDirTool = memo(function ClaudeListDirTool({
   const actions = renderClaudeApprovalActions({ onApprove, onDeny, part });
   const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,
-    part.state === "approval-requested" || isRunning,
+    part.state === "approval-requested",
   );
 
   return (

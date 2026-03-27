@@ -192,7 +192,7 @@ export const ClaudeTodoWriteTool = memo(function ClaudeTodoWriteTool({
   if (items.length === 0 && !fallbackOutputText?.trim()) return null;
   const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,
-    part.state === "approval-requested" || isRunning,
+    part.state === "approval-requested",
   );
 
   const summary = (

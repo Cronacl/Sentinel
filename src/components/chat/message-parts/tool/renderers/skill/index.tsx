@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
+import { memo, useState } from "react";
 
 import type { RendererProps } from "../../renderer";
 import { ToolLayout } from "../shared/tool-layout";
@@ -92,12 +92,8 @@ export const SkillTool = memo(function SkillTool({ part }: RendererProps) {
     part.state === "input-available" ||
     part.state === "approval-responded";
   const [isExpanded, setIsExpanded] = useState(
-    part.state === "output-available" || part.state === "output-error",
+    part.state === "approval-requested",
   );
-
-  useEffect(() => {
-    setIsExpanded(part.state === "output-error");
-  }, [part.state, part.toolCallId]);
 
   return (
     <ToolLayout

@@ -215,7 +215,7 @@ export const ClaudeWebSearchTool = memo(function ClaudeWebSearchTool({
     : parseLinksFromText(fallbackOutputText);
   const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,
-    part.state === "approval-requested" || isRunning,
+    part.state === "approval-requested",
   );
 
   const summary = (
@@ -352,7 +352,7 @@ export const ClaudeWebFetchTool = memo(function ClaudeWebFetchTool({
   const hasResult = fetchOutput?.result?.trim() ?? fallbackOutputText?.trim();
   const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,
-    part.state === "approval-requested" || isRunning,
+    part.state === "approval-requested",
   );
   const summary = (
     <>

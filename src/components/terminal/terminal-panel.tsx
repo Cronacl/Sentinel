@@ -107,15 +107,15 @@ export function TerminalPanel() {
   );
 
   return (
-    <AnimatePresence initial={false}>
+    <AnimatePresence initial={false} mode="wait">
       {isOpen ? (
         <motion.section
           animate={{ opacity: 1, y: 0 }}
-          className="pointer-events-auto absolute inset-x-0 bottom-0 z-40 flex flex-col overflow-hidden border-t border-border/60 bg-background/96 shadow-[0_-24px_80px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:bg-surface/92"
-          exit={{ opacity: 0 }}
-          initial={{ opacity: 0, y: 24 }}
+          className="pointer-events-auto absolute inset-x-0 bottom-0 z-40 flex flex-col overflow-hidden border-t border-separator/50 bg-background/96 shadow-[0_-24px_80px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:bg-surface/92"
+          exit={{ y: 24 }}
+          initial={{ y: 24 }}
           style={{ height: panelHeight }}
-          transition={{ duration: 0.1, ease: "easeOut" }}
+          transition={{ duration: 0.12, ease: "easeOut" }}
         >
           <div
             className="absolute inset-x-0 top-0 z-10 flex h-4 cursor-row-resize items-center justify-center"
@@ -125,7 +125,7 @@ export function TerminalPanel() {
             <div className="h-1 w-16 rounded-full bg-foreground/12 transition-colors hover:bg-foreground/22" />
           </div>
 
-          <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2">
+          <div className="flex items-center gap-2 border-b border-separator/50 px-3 py-2">
             <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
               {sessions.map((session) => {
                 const isActive = session.id === activeSession?.id;
@@ -135,8 +135,8 @@ export function TerminalPanel() {
                     key={session.id}
                     className={`group flex min-w-0 items-center gap-1 rounded-full border px-2 py-1 transition-colors ${
                       isActive
-                        ? "border-border bg-background text-foreground"
-                        : "border-transparent bg-transparent text-muted hover:border-border/50 hover:bg-foreground/[0.03] hover:text-foreground"
+                        ? "border-separator/50 bg-background text-foreground"
+                        : "border-transparent bg-transparent text-muted hover:border-separator/50 hover:bg-foreground/[0.03] hover:text-foreground"
                     }`}
                   >
                     <button
