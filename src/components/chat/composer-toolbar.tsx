@@ -21,8 +21,9 @@ type ComposerToolbarProps = {
     compactionEnabled: boolean;
     compactionWindowPercent: number;
     contextWindow: number;
-    contextWindowMode: "fixed" | "model";
+    contextWindowMode: "fixed" | "model" | "provider";
     inputTokens: number;
+    modelContextWindow?: number | null;
     usedPercent: number;
   } | null;
   engineOptions: Array<{

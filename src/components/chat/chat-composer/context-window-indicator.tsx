@@ -42,14 +42,16 @@ export function ContextWindowIndicator({
   contextWindow,
   inputTokens,
   isDisabled = false,
+  modelContextWindow,
   usedPercent,
 }: {
   compactionEnabled: boolean;
   compactionWindowPercent: number;
   contextWindow: number;
-  contextWindowMode: "fixed" | "model";
+  contextWindowMode: "fixed" | "model" | "provider";
   inputTokens: number;
   isDisabled?: boolean;
+  modelContextWindow?: number | null;
   usedPercent: number;
 }) {
   const ringSize = 16;
@@ -112,19 +114,23 @@ export function ContextWindowIndicator({
       >
         <div className="space-y-2">
           <div>
-            <p className="text-xs font-medium text-muted">Context window</p>
+            <p className="text-xs font-medium text-muted">
+              {contextWindowMode === "fixed"
+                ? "Compaction window"
+                : "Context window"}
+            </p>
             <p className="mt-1 text-lg font-medium text-foreground">
               {clampedPercent}% full
             </p>
             <p className="text-sm text-muted">
               {formatCompactTokenCount(inputTokens)} /{" "}
-              {formatCompactTokenCount(contextWindow)} tokens used
+              {formatCompactTokenCount(contextWindow)} tokens tracked
             </p>
           </div>
 
           <div className="rounded-xl border border-border/50 bg-background/70 px-3 py-2">
             <p className="text-xs text-muted">
-              Provider-reported usage from the latest completed response.
+              Token usage comes from the latest completed response.
             </p>
             <p className="mt-1 text-xs text-muted">
               {formatDetailedTokenCount(inputTokens)} /{" "}
@@ -134,8 +140,18 @@ export function ContextWindowIndicator({
               Window source:{" "}
               {contextWindowMode === "fixed"
                 ? "fixed size from settings"
-                : "active model metadata"}
+                : contextWindowMode === "provider"
+                  ? "latest completed Claude response"
+                  : "active model metadata"}
             </p>
+            {contextWindowMode === "fixed" &&
+            modelContextWindow != null &&
+            modelContextWindow !== contextWindow ? (
+              <p className="mt-1 text-xs text-muted">
+                Active model window:{" "}
+                {formatDetailedTokenCount(modelContextWindow)} tokens
+              </p>
+            ) : null}
           </div>
 
           <p className="text-xs text-muted">

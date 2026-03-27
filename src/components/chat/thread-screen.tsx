@@ -34,6 +34,7 @@ import { useThreadChat } from "@/hooks/use-thread-chat";
 import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
+import type { ChatEngine } from "@/server/db/enums";
 import {
   applyThreadSnapshotCacheUpdate,
   applyThreadSettingsCacheUpdate,
@@ -54,7 +55,7 @@ type ThreadScreenProps = {
   queuedFollowUps: QueuedFollowUpSummary[];
   thread: {
     activeRunId: string | null;
-    chatEngine: "sentinel" | "codex";
+    chatEngine: ChatEngine;
     chatModelId: string | null;
     chatReasoningEffort: string | null;
     id: string;
@@ -91,6 +92,8 @@ export function ThreadScreen({
     reasoningEffort:
       (thread.chatReasoningEffort as ReasoningEffort | null) ?? null,
   });
+  const threadSelectionStateRef = useRef(threadSelectionState);
+  threadSelectionStateRef.current = threadSelectionState;
   const [editingMessage, setEditingMessage] = useState<ThreadUIMessage | null>(
     null,
   );
@@ -106,11 +109,21 @@ export function ThreadScreen({
     (snapshot: {
       activeRunId: string | null;
       messages: ThreadUIMessage[];
+      mode?: "chat" | "plan" | null;
       queuedFollowUps: QueuedFollowUpSummary[];
       threadStatus: "idle" | "streaming" | "awaiting_approval";
       threadTitle: string;
     }) => {
       setThreadTitle(snapshot.threadTitle);
+      if (
+        snapshot.mode &&
+        snapshot.mode !== threadSelectionStateRef.current.mode
+      ) {
+        setThreadSelectionState((prev) => ({
+          ...prev,
+          mode: snapshot.mode!,
+        }));
+      }
       const current = utils.threads.get.getData({ threadId: thread.id });
       applyThreadSnapshotCacheUpdate({
         snapshot: {
@@ -118,6 +131,7 @@ export function ThreadScreen({
           queuedFollowUps: snapshot.queuedFollowUps,
           thread: {
             activeRunId: snapshot.activeRunId,
+            mode: snapshot.mode ?? undefined,
             status: snapshot.threadStatus,
             title: snapshot.threadTitle,
           },
@@ -309,7 +323,7 @@ export function ThreadScreen({
       threadMode,
     }: {
       files?: FileUIPart[];
-      engine: "sentinel" | "codex";
+      engine: ChatEngine;
       modelId: string;
       reasoningEffort?: ReasoningEffort | null;
       text: string;
@@ -355,7 +369,7 @@ export function ThreadScreen({
       threadMode,
     }: {
       files?: FileUIPart[];
-      engine: "sentinel" | "codex";
+      engine: ChatEngine;
       modelId: string;
       reasoningEffort?: ReasoningEffort | null;
       text: string;
@@ -386,7 +400,7 @@ export function ThreadScreen({
       threadMode,
     }: {
       files?: FileUIPart[];
-      engine: "sentinel" | "codex";
+      engine: ChatEngine;
       modelId: string;
       reasoningEffort?: ReasoningEffort | null;
       text: string;
@@ -471,7 +485,7 @@ export function ThreadScreen({
       mode,
       reasoningEffort,
     }: {
-      engine?: "sentinel" | "codex";
+      engine?: ChatEngine;
       modelId?: string | null;
       mode?: "chat" | "plan";
       reasoningEffort?: ReasoningEffort | null;
@@ -525,7 +539,7 @@ export function ThreadScreen({
       reasoningEffort,
       text,
     }: {
-      engine: "sentinel" | "codex";
+      engine: ChatEngine;
       files?: FileUIPart[];
       modelId: string;
       reasoningEffort?: ReasoningEffort | null;
@@ -862,7 +876,8 @@ export function ThreadScreen({
                     supportsSentinelMessageActions ? handleEdit : undefined
                   }
                   onStartPlanImplementation={
-                    idx === messages.length - 1 || idx === messages.length - 2
+                    !isBusy &&
+                    (idx === messages.length - 1 || idx === messages.length - 2)
                       ? handleStartPlanImplementation
                       : undefined
                   }

@@ -1,8 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { memo, useEffect, useMemo, useState } from "react";
-import { ScrollShadow } from "@heroui/react";
+import { memo, useMemo, useState } from "react";
+import { Button, ScrollShadow } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
 import type { RendererProps } from "../../renderer";
@@ -363,12 +363,8 @@ export const CodexFileChangeTool = memo(function CodexFileChangeTool({
     part.state === "output-error" ||
     (fileOutput != null && fileOutput.status === "failed");
   const [isExpanded, setIsExpanded] = useState(
-    part.state === "approval-requested" || isRunning,
+    part.state === "approval-requested",
   );
-
-  useEffect(() => {
-    setIsExpanded(part.state === "approval-requested" || isRunning);
-  }, [isRunning, part.state, part.toolCallId]);
 
   const diffSections = useMemo(
     () => (fileInput ? buildDiffSections(fileInput.changes, fileOutput) : []),
@@ -423,39 +419,39 @@ export const CodexFileChangeTool = memo(function CodexFileChangeTool({
               </p>
             ) : null}
             <div className="flex flex-wrap gap-2">
-              <button
-                className="h-7 min-w-0 rounded-md bg-primary px-3 text-[11px] text-primary-foreground"
+              <Button
+                size="sm"
+                variant="primary"
                 onClick={() => approvalId && onApprove?.(approvalId)}
-                type="button"
               >
                 Approve
-              </button>
-              <button
-                className="h-7 min-w-0 rounded-md bg-primary/10 px-3 text-[11px] text-primary"
+              </Button>
+              <Button
+                size="sm"
+                variant="primary"
                 onClick={() =>
                   approvalId &&
                   onApproveWithDecision?.(approvalId, "acceptForSession")
                 }
-                type="button"
               >
                 Approve for session
-              </button>
-              <button
-                className="h-7 min-w-0 rounded-md px-3 text-[11px] text-foreground/70 hover:bg-foreground/5"
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
                 onClick={() => approvalId && onDeny?.(approvalId)}
-                type="button"
               >
                 Deny
-              </button>
-              <button
-                className="h-7 min-w-0 rounded-md px-3 text-[11px] text-danger/70 hover:bg-danger/5"
+              </Button>
+              <Button
+                size="sm"
+                variant="danger-soft"
                 onClick={() =>
                   approvalId && onApproveWithDecision?.(approvalId, "cancel")
                 }
-                type="button"
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         ) : undefined

@@ -139,6 +139,30 @@ const GEMINI_2_5_PRO_REASONING_CONFIG: ReasoningConfig = {
 export const MODEL_CATALOG: Record<AIProvider, ModelMeta[]> = {
   openai: [
     {
+      id: "gpt-5.4",
+      displayName: "GPT-5.4",
+      description: "Latest frontier agentic coding model.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+      reasoning: OPENAI_GPT_5_REASONING_CONFIG,
+    },
+    {
+      id: "gpt-5.4-mini",
+      displayName: "GPT-5.4 Mini",
+      description: "Smaller frontier agentic coding model.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+      reasoning: OPENAI_GPT_5_REASONING_CONFIG,
+    },
+    {
+      id: "gpt-5.3-codex",
+      displayName: "GPT-5.3 Codex",
+      description: "Frontier Codex-optimized agentic coding model.",
+      capabilities: ["tool_use", "object_generation"],
+      contextWindow: 128_000,
+      reasoning: OPENAI_REASONING_CONFIG,
+    },
+    {
       id: "gpt-5.2-pro",
       displayName: "GPT-5.2 Pro",
       description: "Most capable GPT-5.2 variant.",
@@ -567,6 +591,464 @@ export const MODEL_CATALOG: Record<AIProvider, ModelMeta[]> = {
       contextWindow: 1_000_000,
     },
   ],
+  vercel: [
+    {
+      id: "openai/gpt-5",
+      displayName: "GPT-5 (via Gateway)",
+      description: "OpenAI GPT-5 through Vercel AI Gateway.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "openai/gpt-5-mini",
+      displayName: "GPT-5 Mini (via Gateway)",
+      description: "Compact GPT-5 through Vercel AI Gateway.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "anthropic/claude-sonnet-4-5",
+      displayName: "Claude Sonnet 4.5 (via Gateway)",
+      description: "Anthropic Claude Sonnet through Vercel AI Gateway.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 200_000,
+    },
+    {
+      id: "anthropic/claude-haiku-4-5",
+      displayName: "Claude Haiku 4.5 (via Gateway)",
+      description: "Fast Claude model through Vercel AI Gateway.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 200_000,
+    },
+    {
+      id: "google/gemini-2.5-flash",
+      displayName: "Gemini 2.5 Flash (via Gateway)",
+      description: "Google Gemini through Vercel AI Gateway.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 1_048_576,
+    },
+  ],
+  xai: [
+    {
+      id: "grok-4",
+      displayName: "Grok 4",
+      description: "Most capable Grok model.",
+      capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "grok-4-fast-reasoning",
+      displayName: "Grok 4 Fast (Reasoning)",
+      description: "Fast Grok 4 with reasoning.",
+      capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "grok-4-fast-non-reasoning",
+      displayName: "Grok 4 Fast",
+      description: "Fast Grok 4 without reasoning.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "grok-3",
+      displayName: "Grok 3",
+      description: "Advanced Grok model.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "grok-3-mini",
+      displayName: "Grok 3 Mini",
+      description: "Compact Grok model with reasoning.",
+      capabilities: ["reasoning", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+  ],
+  azure: [
+    {
+      id: "gpt-5",
+      displayName: "GPT-5 (Azure)",
+      description: "OpenAI GPT-5 via Azure deployment.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "gpt-4.1",
+      displayName: "GPT-4.1 (Azure)",
+      description: "GPT-4.1 via Azure deployment.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 1_047_576,
+    },
+    {
+      id: "gpt-4.1-mini",
+      displayName: "GPT-4.1 Mini (Azure)",
+      description: "Compact GPT-4.1 via Azure deployment.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 1_047_576,
+    },
+    {
+      id: "gpt-4o",
+      displayName: "GPT-4o (Azure)",
+      description: "Fast multimodal model via Azure.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+  ],
+  amazon_bedrock: [
+    {
+      id: "anthropic.claude-sonnet-4-5-20250929-v1:0",
+      displayName: "Claude Sonnet 4.5 (Bedrock)",
+      description: "Anthropic Claude via Amazon Bedrock.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 200_000,
+    },
+    {
+      id: "anthropic.claude-3-5-sonnet-20241022-v2:0",
+      displayName: "Claude 3.5 Sonnet v2 (Bedrock)",
+      description: "Claude 3.5 Sonnet via Bedrock.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 200_000,
+    },
+    {
+      id: "anthropic.claude-3-haiku-20240307-v1:0",
+      displayName: "Claude 3 Haiku (Bedrock)",
+      description: "Fast Claude via Bedrock.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 200_000,
+    },
+    {
+      id: "us.amazon.nova-pro-v1:0",
+      displayName: "Amazon Nova Pro",
+      description: "Amazon's capable Nova model.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 300_000,
+    },
+    {
+      id: "us.amazon.nova-lite-v1:0",
+      displayName: "Amazon Nova Lite",
+      description: "Fast and cost-effective Nova model.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 300_000,
+    },
+    {
+      id: "meta.llama3-70b-instruct-v1:0",
+      displayName: "Llama 3 70B (Bedrock)",
+      description: "Meta Llama 3 via Bedrock.",
+      capabilities: ["tool_use", "object_generation"],
+      contextWindow: 8_192,
+    },
+  ],
+  groq: [
+    {
+      id: "llama-3.3-70b-versatile",
+      displayName: "Llama 3.3 70B",
+      description: "Versatile Llama 3.3 on Groq.",
+      capabilities: ["tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "llama-3.1-8b-instant",
+      displayName: "Llama 3.1 8B Instant",
+      description: "Ultra-fast small Llama model.",
+      capabilities: ["tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "gemma2-9b-it",
+      displayName: "Gemma 2 9B",
+      description: "Google Gemma 2 on Groq.",
+      capabilities: ["tool_use", "object_generation"],
+      contextWindow: 8_192,
+    },
+    {
+      id: "mixtral-8x7b-32768",
+      displayName: "Mixtral 8x7B",
+      description: "Mistral's mixture-of-experts model.",
+      capabilities: ["tool_use", "object_generation"],
+      contextWindow: 32_768,
+    },
+    {
+      id: "qwen-qwq-32b",
+      displayName: "Qwen QWQ 32B",
+      description: "Reasoning model from Alibaba.",
+      capabilities: ["reasoning", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+  ],
+  cohere: [
+    {
+      id: "command-a-03-2025",
+      displayName: "Command A",
+      description: "Latest Cohere flagship model.",
+      capabilities: ["tool_use", "object_generation"],
+      contextWindow: 256_000,
+    },
+    {
+      id: "command-r-plus",
+      displayName: "Command R+",
+      description: "Capable Cohere model.",
+      capabilities: ["tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "command-r",
+      displayName: "Command R",
+      description: "Balanced Cohere model.",
+      capabilities: ["tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "command-r7b-12-2024",
+      displayName: "Command R 7B",
+      description: "Compact Cohere model.",
+      capabilities: ["tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+  ],
+  moonshotai: [
+    {
+      id: "kimi-k2.5",
+      displayName: "Kimi K2.5",
+      description: "Latest Kimi model.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "kimi-k2",
+      displayName: "Kimi K2",
+      description: "Capable Kimi model.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "kimi-k2-thinking",
+      displayName: "Kimi K2 Thinking",
+      description: "Kimi reasoning model.",
+      capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "moonshot-v1-128k",
+      displayName: "Moonshot V1 128K",
+      description: "Long-context Moonshot model.",
+      capabilities: ["tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "moonshot-v1-8k",
+      displayName: "Moonshot V1 8K",
+      description: "Fast Moonshot model.",
+      capabilities: ["tool_use", "object_generation"],
+      contextWindow: 8_192,
+    },
+  ],
+  mistral: [
+    {
+      id: "mistral-large-latest",
+      displayName: "Mistral Large",
+      description: "Flagship model for complex reasoning and generation.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "mistral-medium-latest",
+      displayName: "Mistral Medium",
+      description: "Balanced model for general-purpose tasks.",
+      capabilities: ["tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "mistral-small-latest",
+      displayName: "Mistral Small",
+      description: "Cost-efficient model for lightweight tasks.",
+      capabilities: ["tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "pixtral-large-latest",
+      displayName: "Pixtral Large",
+      description: "Multimodal model with strong vision capabilities.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "magistral-medium-2507",
+      displayName: "Magistral Medium",
+      description: "Reasoning model with step-by-step thinking.",
+      capabilities: ["reasoning", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+      reasoning: {
+        strategy: "openai-reasoning-effort",
+        supportedEfforts: ["high"],
+        defaultEffort: "high",
+      },
+    },
+    {
+      id: "magistral-small-2507",
+      displayName: "Magistral Small",
+      description:
+        "Smaller reasoning model for efficient step-by-step thinking.",
+      capabilities: ["reasoning", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+      reasoning: {
+        strategy: "openai-reasoning-effort",
+        supportedEfforts: ["high"],
+        defaultEffort: "high",
+      },
+    },
+  ],
+  ollama: [
+    {
+      id: "llama3.2",
+      displayName: "Llama 3.2 (3B)",
+      description: "Meta's compact model for fast local inference.",
+      capabilities: ["tool_use"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "llama3.2:1b",
+      displayName: "Llama 3.2 (1B)",
+      description: "Ultra-light model for resource-constrained environments.",
+      capabilities: [],
+      contextWindow: 128_000,
+    },
+    {
+      id: "llama3.3",
+      displayName: "Llama 3.3 (70B)",
+      description: "Meta's large multilingual model with strong reasoning.",
+      capabilities: ["tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "qwen3:8b",
+      displayName: "Qwen 3 (8B)",
+      description: "Alibaba's hybrid reasoning model with thinking toggles.",
+      capabilities: ["reasoning", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "qwen3:4b",
+      displayName: "Qwen 3 (4B)",
+      description: "Compact Qwen 3 variant for efficient local use.",
+      capabilities: ["reasoning", "tool_use"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "gemma3",
+      displayName: "Gemma 3 (4B)",
+      description: "Google's lightweight open model.",
+      capabilities: ["vision"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "gemma3:12b",
+      displayName: "Gemma 3 (12B)",
+      description: "Google's mid-size multimodal open model.",
+      capabilities: ["vision", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "mistral",
+      displayName: "Mistral (7B)",
+      description: "Mistral AI's efficient open-weight model.",
+      capabilities: ["tool_use"],
+      contextWindow: 32_768,
+    },
+    {
+      id: "deepseek-r1:8b",
+      displayName: "DeepSeek R1 (8B)",
+      description: "DeepSeek reasoning model distilled for local use.",
+      capabilities: ["reasoning"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "phi4",
+      displayName: "Phi-4 (14B)",
+      description: "Microsoft's compact reasoning model.",
+      capabilities: ["reasoning", "tool_use", "object_generation"],
+      contextWindow: 16_384,
+    },
+    {
+      id: "codellama",
+      displayName: "Code Llama (7B)",
+      description: "Meta's code-specialized Llama variant.",
+      capabilities: [],
+      contextWindow: 16_384,
+    },
+  ],
+  openrouter: [
+    {
+      id: "openai/gpt-5.2",
+      displayName: "OpenAI GPT-5.2",
+      description: "OpenAI flagship model via OpenRouter.",
+      capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
+      contextWindow: 256_000,
+    },
+    {
+      id: "openai/gpt-4.1",
+      displayName: "OpenAI GPT-4.1",
+      description: "Fast and capable OpenAI model via OpenRouter.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 1_047_576,
+    },
+    {
+      id: "anthropic/claude-sonnet-4",
+      displayName: "Anthropic Claude Sonnet 4",
+      description: "Anthropic's balanced model via OpenRouter.",
+      capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
+      contextWindow: 200_000,
+    },
+    {
+      id: "anthropic/claude-haiku-3.5",
+      displayName: "Anthropic Claude 3.5 Haiku",
+      description: "Fast and affordable Anthropic model via OpenRouter.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 200_000,
+    },
+    {
+      id: "google/gemini-2.5-pro",
+      displayName: "Google Gemini 2.5 Pro",
+      description: "Google's flagship reasoning model via OpenRouter.",
+      capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
+      contextWindow: 1_048_576,
+    },
+    {
+      id: "google/gemini-2.5-flash",
+      displayName: "Google Gemini 2.5 Flash",
+      description: "Google's fast model via OpenRouter.",
+      capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
+      contextWindow: 1_048_576,
+    },
+    {
+      id: "meta-llama/llama-4-maverick",
+      displayName: "Meta Llama 4 Maverick",
+      description: "Meta's latest open model via OpenRouter.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 1_048_576,
+    },
+    {
+      id: "mistralai/mistral-large",
+      displayName: "Mistral Large",
+      description: "Mistral's flagship model via OpenRouter.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+    {
+      id: "deepseek/deepseek-r1",
+      displayName: "DeepSeek R1",
+      description: "DeepSeek's reasoning model via OpenRouter.",
+      capabilities: ["reasoning"],
+      contextWindow: 163_840,
+    },
+    {
+      id: "qwen/qwen3-235b-a22b",
+      displayName: "Qwen 3 235B",
+      description: "Alibaba's large MoE model via OpenRouter.",
+      capabilities: ["reasoning", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+    },
+  ],
 };
 
 export function getModelsForProvider(provider: AIProvider): ModelMeta[] {
@@ -632,6 +1114,26 @@ function getProviderOptionsKey(provider: AIProvider) {
       return "google";
     case "google_vertex":
       return "google";
+    case "vercel":
+      return "gateway";
+    case "xai":
+      return "xai";
+    case "azure":
+      return "openai";
+    case "amazon_bedrock":
+      return "bedrock";
+    case "groq":
+      return "groq";
+    case "cohere":
+      return "cohere";
+    case "moonshotai":
+      return "moonshotai";
+    case "mistral":
+      return "mistral";
+    case "ollama":
+      return "openai";
+    case "openrouter":
+      return "openai";
   }
 }
 
@@ -812,6 +1314,9 @@ export function getModelAttachmentCapabilities(
       "gemini-1.5-flash",
     ]),
     openai: new Set([
+      "gpt-5.4",
+      "gpt-5.4-mini",
+      "gpt-5.3-codex",
       "gpt-5.2-pro",
       "gpt-5.2",
       "gpt-5.1",

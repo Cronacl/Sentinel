@@ -1,5 +1,6 @@
 import type { ThreadListInput } from "@/schemas/workspace-thread.schema";
 import { api, type RouterOutputs } from "@/trpc/react";
+import type { ChatEngine } from "@/server/db/enums";
 
 type TrpcUtils = ReturnType<typeof api.useUtils>;
 type ThreadGetData = RouterOutputs["threads"]["get"];
@@ -7,7 +8,7 @@ type ThreadListData = RouterOutputs["threads"]["list"];
 type ThreadGetThread = ThreadGetData["thread"];
 type ThreadGetWorkspace = ThreadGetData["workspace"];
 type ThreadSettingsPatch = {
-  chatEngine?: "codex" | "sentinel";
+  chatEngine?: ChatEngine;
   chatModelId?: string | null;
   chatReasoningEffort?: string | null;
   mode?: "chat" | "plan";
@@ -354,7 +355,9 @@ export function applyThreadSnapshotCacheUpdate({
   workspaceId,
 }: {
   snapshot: Pick<ThreadGetData, "messages" | "queuedFollowUps"> & {
-    thread: Pick<ThreadGetThread, "activeRunId" | "status" | "title">;
+    thread: Pick<ThreadGetThread, "activeRunId" | "status" | "title"> & {
+      mode?: "chat" | "plan";
+    };
   };
   thread?: ThreadGetThread;
   threadId: string;
@@ -371,6 +374,7 @@ export function applyThreadSnapshotCacheUpdate({
         thread: {
           ...current.thread,
           activeRunId: snapshot.thread.activeRunId,
+          ...(snapshot.thread.mode ? { mode: snapshot.thread.mode } : {}),
           status: snapshot.thread.status,
           title: snapshot.thread.title,
         },
@@ -387,6 +391,7 @@ export function applyThreadSnapshotCacheUpdate({
       thread: {
         ...thread,
         activeRunId: snapshot.thread.activeRunId,
+        ...(snapshot.thread.mode ? { mode: snapshot.thread.mode } : {}),
         status: snapshot.thread.status,
         title: snapshot.thread.title,
       },

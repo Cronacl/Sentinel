@@ -19,6 +19,7 @@ export type ThreadSessionSnapshot = {
   activeRunId: string | null;
   chatEngine: ChatEngine;
   messages: ThreadUIMessage[];
+  mode?: "chat" | "plan" | null;
   queuedFollowUps: QueuedFollowUpSummary[];
   threadId: string;
   threadTitle: string;

@@ -5,12 +5,22 @@ import { getLanguageModel } from "../providers/resolver";
 
 import type { ResolvedThreadTitleModel } from "./types";
 
-const TOOL_SELECTION_MODEL_IDS = {
+const TOOL_SELECTION_MODEL_IDS: Record<AIProvider, string> = {
   anthropic: "claude-haiku-4-5",
   google: "gemini-2.5-flash-lite",
   google_vertex: "gemini-2.5-flash-lite",
   openai: "gpt-4.1-nano",
-} as const satisfies Record<AIProvider, string>;
+  vercel: "gpt-4.1-nano",
+  xai: "grok-3-mini",
+  azure: "gpt-4.1-nano",
+  amazon_bedrock: "anthropic.claude-haiku-4-5-v1",
+  groq: "llama-3.3-70b-versatile",
+  cohere: "command-a-03-2025",
+  moonshotai: "moonshot-v1-8k",
+  mistral: "mistral-small-latest",
+  ollama: "llama3.2",
+  openrouter: "openai/gpt-4.1-nano",
+};
 
 export type ResolvedToolSelectionModel = ResolvedThreadTitleModel;
 

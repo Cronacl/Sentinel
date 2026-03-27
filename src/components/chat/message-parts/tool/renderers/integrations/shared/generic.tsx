@@ -139,8 +139,8 @@ export const IntegrationGenericTool = memo(function IntegrationGenericTool({
   const [isExpanded, setIsExpanded] = useState(state.needsApproval);
 
   useEffect(() => {
-    setIsExpanded(state.needsApproval || state.isRunning);
-  }, [part.toolCallId, state.isRunning, state.needsApproval]);
+    if (state.needsApproval) setIsExpanded(true);
+  }, [part.toolCallId, state.needsApproval]);
 
   const input = state.hasInput && "input" in part ? part.input : null;
   const output = state.hasOutput && "output" in part ? part.output : null;

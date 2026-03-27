@@ -32,8 +32,8 @@ export const GmailManageLabelsTool = memo(function GmailManageLabelsTool({
   const [isExpanded, setIsExpanded] = useState(state.needsApproval);
 
   useEffect(() => {
-    setIsExpanded(state.needsApproval || state.isRunning);
-  }, [part.toolCallId, state.isRunning, state.needsApproval]);
+    if (state.needsApproval) setIsExpanded(true);
+  }, [part.toolCallId, state.needsApproval]);
 
   const input = "input" in part ? (part.input as ManageLabelsInput) : null;
   const output =

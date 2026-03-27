@@ -60,7 +60,7 @@ function IntegrationsSkeleton() {
     <div className="flex flex-col gap-2">
       {Array.from({ length: 4 }).map((_, index) => (
         <section
-          className="border-separator bg-surface rounded-xl border p-5"
+          className="border-separator/20 bg-surface rounded-2xl border p-5"
           key={index}
         >
           <div className="flex items-start justify-between gap-4">

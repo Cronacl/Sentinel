@@ -31,7 +31,7 @@ export const ToolLayout = memo(function ToolLayout({
   const hasContent = Boolean(children);
   const canToggle = isExpandable && hasContent;
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
-  const effectiveExpanded = canToggle ? (userExpanded ?? false) : false;
+  const effectiveExpanded = canToggle ? (userExpanded ?? _isExpanded) : false;
   const prefersReducedMotion = useReducedMotion();
   const [shouldRenderContent, setShouldRenderContent] =
     useState(effectiveExpanded);
@@ -86,8 +86,6 @@ export const ToolLayout = memo(function ToolLayout({
         <div className="flex items-center gap-2">{headerContent}</div>
       )}
 
-      {actions ? <div className="mt-1 ml-5">{actions}</div> : null}
-
       {canToggle ? (
         <div
           aria-hidden={!effectiveExpanded}
@@ -119,6 +117,8 @@ export const ToolLayout = memo(function ToolLayout({
           </div>
         </div>
       ) : null}
+
+      {actions ? <div className="mt-2 ml-5">{actions}</div> : null}
 
       {errorText ? (
         <div className="mt-1 rounded-lg border border-danger/20 bg-danger-soft px-3 py-1.5 text-[11px] text-danger-soft-foreground">
