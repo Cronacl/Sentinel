@@ -5,13 +5,45 @@ export class InvalidThreadChatRequestError extends Error {
   }
 }
 
-export function createThreadChatErrorResponse(error: unknown) {
-  if (error instanceof InvalidThreadChatRequestError) {
-    return new Response(error.message, { status: 400 });
+export class ThreadChatConflictError extends Error {
+  constructor(message = "This action is no longer available.") {
+    super(message);
+    this.name = "ThreadChatConflictError";
   }
+}
 
+export function createThreadChatErrorResponse(error: unknown) {
   const message =
     error instanceof Error ? error.message : "An unexpected error occurred";
 
-  return new Response(message, { status: 500 });
+  if (error instanceof InvalidThreadChatRequestError) {
+    return Response.json(
+      {
+        error: {
+          message,
+        },
+      },
+      { status: 400 },
+    );
+  }
+
+  if (error instanceof ThreadChatConflictError) {
+    return Response.json(
+      {
+        error: {
+          message,
+        },
+      },
+      { status: 409 },
+    );
+  }
+
+  return Response.json(
+    {
+      error: {
+        message,
+      },
+    },
+    { status: 500 },
+  );
 }

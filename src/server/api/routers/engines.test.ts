@@ -5,6 +5,40 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 const startReview = mock(async () => ({
   review: { id: "review-1", text: "ok" },
 }));
+const getStatus = mock(async () => ({
+  authReady: true,
+  availableModels: [
+    {
+      defaultReasoningEffort: "medium",
+      description: "Codex model",
+      displayName: "GPT-5 Codex",
+      id: "gpt-5-codex",
+      inputModalities: ["text"],
+      model: "gpt-5-codex",
+      supportedReasoningEfforts: [{ effort: "medium" }],
+    },
+  ],
+  cliDetected: true,
+  error: null,
+  serverReachable: true,
+}));
+const getClaudeEngineStatus = mock(async () => ({
+  authReady: true,
+  availableModels: [
+    {
+      contextWindow: 200_000,
+      defaultReasoningEffort: "high",
+      description: "Claude model",
+      displayName: "Claude Sonnet 4.5",
+      id: "claude-sonnet-4-5",
+      inputModalities: ["text", "image"],
+      model: "claude-sonnet-4-5-20250929",
+      supportedReasoningEfforts: [{ effort: "high" }],
+    },
+  ],
+  error: null,
+  sdkDetected: true,
+}));
 const getOwnedThreadOrThrow = mock(async () => ({
   chatEngineState: {
     codex: {
@@ -27,8 +61,13 @@ mock.module("@/server/api/trpc", () => ({
 
 mock.module("@/lib/ai/chat/engines/codex-app-server", () => ({
   getCodexAppServerManager: () => ({
+    getStatus,
     startReview,
   }),
+}));
+
+mock.module("@/lib/ai/chat/engines/claude-sdk", () => ({
+  getClaudeEngineStatus,
 }));
 
 mock.module("@/lib/ai/chat/engines/types", () => ({
@@ -66,10 +105,46 @@ const { enginesRouter } = await import("./engines");
 
 beforeEach(() => {
   startReview.mockReset();
+  getStatus.mockReset();
+  getClaudeEngineStatus.mockReset();
   getOwnedThreadOrThrow.mockReset();
 
   startReview.mockImplementation(async () => ({
     review: { id: "review-1", text: "ok" },
+  }));
+  getStatus.mockImplementation(async () => ({
+    authReady: true,
+    availableModels: [
+      {
+        defaultReasoningEffort: "medium",
+        description: "Codex model",
+        displayName: "GPT-5 Codex",
+        id: "gpt-5-codex",
+        inputModalities: ["text"],
+        model: "gpt-5-codex",
+        supportedReasoningEfforts: [{ effort: "medium" }],
+      },
+    ],
+    cliDetected: true,
+    error: null,
+    serverReachable: true,
+  }));
+  getClaudeEngineStatus.mockImplementation(async () => ({
+    authReady: true,
+    availableModels: [
+      {
+        contextWindow: 200_000,
+        defaultReasoningEffort: "high",
+        description: "Claude model",
+        displayName: "Claude Sonnet 4.5",
+        id: "claude-sonnet-4-5",
+        inputModalities: ["text", "image"],
+        model: "claude-sonnet-4-5-20250929",
+        supportedReasoningEfforts: [{ effort: "high" }],
+      },
+    ],
+    error: null,
+    sdkDetected: true,
   }));
   getOwnedThreadOrThrow.mockImplementation(async () => ({
     chatEngineState: {
@@ -101,5 +176,72 @@ describe("enginesRouter.codexReview", () => {
     expect(result).toEqual({
       review: { id: "review-1", text: "ok" },
     });
+  });
+});
+
+describe("enginesRouter.list", () => {
+  it("includes Claude with normalized availability state", async () => {
+    const result = await enginesRouter.list({});
+
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          description: "Use the locally configured Claude Code SDK runtime.",
+          engine: "claude",
+          isAvailable: true,
+          label: "Claude",
+          status: expect.objectContaining({
+            authReady: true,
+            sdkDetected: true,
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("marks Claude unavailable when the SDK is missing or unauthenticated", async () => {
+    getClaudeEngineStatus.mockImplementationOnce(async () => ({
+      authReady: false,
+      availableModels: [],
+      error: "Claude Code is not authenticated.",
+      sdkDetected: false,
+    }));
+
+    const result = await enginesRouter.list({});
+
+    expect(result.find((engine: any) => engine.engine === "claude")).toEqual(
+      expect.objectContaining({
+        error: "Claude Code is not authenticated.",
+        isAvailable: false,
+      }),
+    );
+  });
+});
+
+describe("enginesRouter.models", () => {
+  it("returns raw Claude model ids for the Claude engine", async () => {
+    const result = await enginesRouter.models({
+      ctx: {
+        db: {},
+        session: { user: { id: "user-1" } },
+      },
+      input: { engine: "claude" },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        contextWindow: 200_000,
+        defaultReasoningEffort: "high",
+        displayName: "Claude Sonnet 4.5",
+        engine: "claude",
+        inputModalities: ["text", "image"],
+        isConnected: true,
+        isEnabled: true,
+        modelId: "claude-sonnet-4-5",
+        provider: null,
+        rawModelId: "claude-sonnet-4-5-20250929",
+        supportedReasoningEfforts: ["high"],
+      }),
+    ]);
   });
 });

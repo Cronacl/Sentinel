@@ -42,6 +42,9 @@ export function useModelSelection({
   const codexModelsQuery = api.engines.models.useQuery({
     engine: "codex",
   });
+  const claudeModelsQuery = api.engines.models.useQuery({
+    engine: "claude",
+  });
   const [selectedEngine, setSelectedEngine] = useState<ChatEngine>("sentinel");
   const [selectedModelKey, setSelectedModelKey] = useState<string | null>(null);
   const [selectedReasoningEffort, setSelectedReasoningEffort] =
@@ -68,12 +71,18 @@ export function useModelSelection({
   const engineOptions = enginesQuery.data ?? [];
   const selectedEngineStatus =
     engineOptions.find((engine) => engine.engine === selectedEngine) ?? null;
-  const selectedEngineModels =
-    selectedEngine === "codex"
-      ? (codexModelsQuery.data ?? [])
-      : (sentinelModelsQuery.data ?? []);
-  const modelsQuery =
-    selectedEngine === "codex" ? codexModelsQuery : sentinelModelsQuery;
+  const modelsByEngine = {
+    claude: claudeModelsQuery.data ?? [],
+    codex: codexModelsQuery.data ?? [],
+    sentinel: sentinelModelsQuery.data ?? [],
+  };
+  const modelsQueryByEngine = {
+    claude: claudeModelsQuery,
+    codex: codexModelsQuery,
+    sentinel: sentinelModelsQuery,
+  };
+  const selectedEngineModels = modelsByEngine[selectedEngine];
+  const modelsQuery = modelsQueryByEngine[selectedEngine];
 
   const availableModels = useMemo(
     () =>
@@ -232,10 +241,7 @@ export function useModelSelection({
       setSelectedEngine(engine);
       initializedSelectionScopeRef.current = null;
 
-      const nextModels =
-        engine === "codex"
-          ? (codexModelsQuery.data ?? [])
-          : (sentinelModelsQuery.data ?? []);
+      const nextModels = modelsByEngine[engine];
       const nextModel = nextModels.find(
         (model) => model.isConnected && model.isEnabled,
       );
@@ -272,11 +278,10 @@ export function useModelSelection({
       });
     },
     [
-      codexModelsQuery.data,
+      modelsByEngine,
       onSelectionChange,
       persistEngineSelection,
       persistSelection,
-      sentinelModelsQuery.data,
     ],
   );
 

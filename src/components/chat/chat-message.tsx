@@ -253,7 +253,7 @@ function AssistantMessage({
   isStreaming: boolean;
   message: ThreadUIMessage;
 }) {
-  const supportsSentinelMessageActions = chatEngine !== "codex";
+  const supportsSentinelMessageActions = chatEngine === "sentinel";
   const assistantText = useMemo(() => getAssistantText(message), [message]);
   const groups = useMemo(
     () => groupMessageParts(message.parts),
@@ -450,7 +450,7 @@ function UserMessage({
   onEdit?: (message: ThreadUIMessage) => void;
   onSelectBranch?: (messageId: string) => void;
 }) {
-  const supportsSentinelMessageActions = chatEngine !== "codex";
+  const supportsSentinelMessageActions = chatEngine === "sentinel";
   const fileParts = message.parts.filter(
     (part): part is Extract<MessagePart, { type: "file" }> =>
       part.type === "file",

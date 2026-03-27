@@ -33,6 +33,16 @@ describe("createAutomationSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("allows raw Claude model ids for Claude automations", () => {
+    const result = createAutomationSchema.safeParse({
+      ...validAutomation,
+      chatEngine: "claude",
+      modelId: "claude-sonnet-4-5-20250929",
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it("requires both weekly day and time", () => {
     const result = createAutomationSchema.safeParse({
       ...validAutomation,

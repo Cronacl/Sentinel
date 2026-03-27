@@ -8,6 +8,7 @@ import {
   formatClientTimingLog,
   mergeThreadSessionStateFromSnapshot,
   mergeThreadSessionStateWithError,
+  readThreadChatErrorMessage,
 } from "./use-thread-chat";
 
 function createMessage(
@@ -255,6 +256,73 @@ describe("mergeThreadSessionStateFromSnapshot", () => {
 
     expect(result.chatEngine).toBe("codex");
   });
+
+  it("accepts Claude snapshots as first-class engine state", () => {
+    const current = {
+      activeRunId: "run-1",
+      chatEngine: "sentinel" as const,
+      composerState: { pendingActionCount: 0 },
+      connectionState: "connected" as const,
+      errorMessage: null,
+      lastAppliedRevision: 1,
+      lastSyncedAt: null,
+      messages: [createMessage("assistant-1", "before switch", 1)],
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadTitle: "Thread title",
+      threadStatus: "streaming" as const,
+    };
+    const snapshot = createSnapshot({
+      activeRunId: "run-1",
+      chatEngine: "claude",
+      messages: [createMessage("assistant-2", "after switch", 2)],
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadStatus: "streaming",
+    });
+
+    const result = mergeThreadSessionStateFromSnapshot(
+      current,
+      snapshot,
+      "connected",
+    );
+
+    expect(result.chatEngine).toBe("claude");
+  });
+
+  it("keeps the stream connection active while a run is awaiting approval", () => {
+    const current = {
+      activeRunId: "run-1",
+      chatEngine: "claude" as const,
+      composerState: { pendingActionCount: 0 },
+      connectionState: "connected" as const,
+      errorMessage: null,
+      lastAppliedRevision: 1,
+      lastSyncedAt: null,
+      messages: [createMessage("assistant-1", "waiting", 1)],
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadTitle: "Thread title",
+      threadStatus: "awaiting_approval" as const,
+    };
+    const snapshot = createSnapshot({
+      activeRunId: "run-1",
+      chatEngine: "claude",
+      messages: current.messages,
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadStatus: "awaiting_approval",
+    });
+
+    const result = mergeThreadSessionStateFromSnapshot(
+      current,
+      snapshot,
+      "connected",
+    );
+
+    expect(result.connectionState).toBe("connected");
+    expect(result.threadStatus).toBe("awaiting_approval");
+  });
 });
 
 describe("fetchThreadSessionSnapshot", () => {
@@ -287,6 +355,86 @@ describe("fetchThreadSessionSnapshot", () => {
       cache: "no-store",
       method: "GET",
     });
+  });
+
+  it("surfaces JSON error messages from failed snapshot requests", async () => {
+    globalThis.fetch = mock(async () =>
+      Response.json(
+        {
+          error: {
+            message: "That Claude approval request is no longer active.",
+          },
+        },
+        { status: 409 },
+      ),
+    ) as typeof fetch;
+
+    await expect(fetchThreadSessionSnapshot("thread-1")).rejects.toThrow(
+      "That Claude approval request is no longer active.",
+    );
+  });
+});
+
+describe("readThreadChatErrorMessage", () => {
+  it("extracts nested JSON error messages", async () => {
+    const response = Response.json(
+      {
+        error: {
+          message: "Something went wrong.",
+        },
+      },
+      { status: 500 },
+    );
+
+    await expect(
+      readThreadChatErrorMessage(
+        response,
+        "Unable to process the chat request.",
+      ),
+    ).resolves.toBe("Something went wrong.");
+  });
+
+  it("extracts top-level string error field", async () => {
+    const response = Response.json(
+      {
+        error:
+          "This action is no longer available because the session has moved on. The page will refresh automatically.",
+      },
+      { status: 409 },
+    );
+
+    await expect(
+      readThreadChatErrorMessage(
+        response,
+        "Unable to process the chat request.",
+      ),
+    ).resolves.toBe(
+      "This action is no longer available because the session has moved on. The page will refresh automatically.",
+    );
+  });
+
+  it("falls back to plain-text response bodies", async () => {
+    const response = new Response("Tool permission request failed.", {
+      status: 500,
+    });
+
+    await expect(
+      readThreadChatErrorMessage(
+        response,
+        "Unable to process the chat request.",
+      ),
+    ).resolves.toBe("Tool permission request failed.");
+  });
+
+  it("uses the fallback when the error response body is empty", async () => {
+    const response = new Response(null, { status: 500 });
+
+    await expect(
+      readThreadChatErrorMessage(
+        response,
+        "Unable to process the chat request.",
+      ),
+    ).resolves.toBe("Unable to process the chat request.");
   });
 });
 
@@ -339,6 +487,33 @@ describe("mergeThreadSessionStateWithError", () => {
 
     expect(result.connectionState).toBe("connected");
     expect(result.errorMessage).toBe("Unable to queue the follow-up.");
+  });
+
+  it("preserves the active approval connection while storing action errors", () => {
+    const current = {
+      activeRunId: "run-1",
+      chatEngine: "claude" as const,
+      composerState: { pendingActionCount: 0 },
+      connectionState: "connected" as const,
+      errorMessage: null,
+      lastAppliedRevision: 2,
+      lastSyncedAt: null,
+      messages: [createMessage("assistant-1", "waiting", 2)],
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadTitle: "Thread title",
+      threadStatus: "awaiting_approval" as const,
+    };
+
+    const result = mergeThreadSessionStateWithError(
+      current,
+      "This action is no longer available because the session has moved on.",
+    );
+
+    expect(result.connectionState).toBe("connected");
+    expect(result.errorMessage).toBe(
+      "This action is no longer available because the session has moved on.",
+    );
   });
 });
 

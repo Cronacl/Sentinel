@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { getClaudeEngineStatus } from "@/lib/ai/chat/engines/claude-sdk";
 import { getCodexAppServerManager } from "@/lib/ai/chat/engines/codex-app-server";
 import { getCodexThreadState } from "@/lib/ai/chat/engines/types";
 import {
@@ -33,7 +34,10 @@ async function resolveCodexThreadId(
 
 export const enginesRouter = createTRPCRouter({
   list: protectedProcedure.query(async () => {
-    const codex = await getCodexAppServerManager().getStatus();
+    const [codex, claude] = await Promise.all([
+      getCodexAppServerManager().getStatus(),
+      getClaudeEngineStatus(),
+    ]);
 
     return [
       {
@@ -53,6 +57,14 @@ export const enginesRouter = createTRPCRouter({
         label: "Codex",
         status: codex,
       },
+      {
+        description: "Use the locally configured Claude Code SDK runtime.",
+        engine: "claude" as const,
+        error: claude.error,
+        isAvailable: claude.sdkDetected && claude.authReady,
+        label: "Claude",
+        status: claude,
+      },
     ];
   }),
 
@@ -70,6 +82,28 @@ export const enginesRouter = createTRPCRouter({
           description: model.description,
           displayName: model.displayName,
           engine: "codex" as const,
+          inputModalities: model.inputModalities,
+          isConnected: isAvailable,
+          isEnabled: true,
+          modelId: model.id,
+          provider: null,
+          rawModelId: model.model,
+          supportedReasoningEfforts: model.supportedReasoningEfforts.map(
+            (option) => option.effort,
+          ),
+        }));
+      }
+
+      if (input.engine === "claude") {
+        const status = await getClaudeEngineStatus();
+        const isAvailable = status.sdkDetected && status.authReady;
+
+        return status.availableModels.map((model) => ({
+          contextWindow: model.contextWindow,
+          defaultReasoningEffort: model.defaultReasoningEffort,
+          description: model.description,
+          displayName: model.displayName,
+          engine: "claude" as const,
           inputModalities: model.inputModalities,
           isConnected: isAvailable,
           isEnabled: true,

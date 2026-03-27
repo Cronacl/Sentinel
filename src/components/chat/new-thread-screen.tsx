@@ -19,6 +19,7 @@ import { useThreadChat } from "@/hooks/use-thread-chat";
 import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import type { ChatEngine } from "@/server/db/enums";
 import {
   applyThreadSnapshotCacheUpdate,
   applyThreadSettingsCacheUpdate,
@@ -48,7 +49,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     "chat" | "plan" | null
   >(null);
   const [draftThreadSelection, setDraftThreadSelection] = useState<{
-    engine: "sentinel" | "codex";
+    engine: ChatEngine;
     modelId: string | null;
     mode: "chat" | "plan";
     reasoningEffort: ReasoningEffort | null;
@@ -166,6 +167,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     (snapshot: {
       activeRunId: string | null;
       messages: ThreadUIMessage[];
+      mode?: "chat" | "plan" | null;
       queuedFollowUps: QueuedFollowUpSummary[];
       threadStatus: "idle" | "streaming" | "awaiting_approval";
       threadTitle: string;
@@ -177,6 +179,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
           queuedFollowUps: snapshot.queuedFollowUps,
           thread: {
             activeRunId: snapshot.activeRunId,
+            mode: snapshot.mode ?? undefined,
             status: snapshot.threadStatus,
             title: snapshot.threadTitle,
           },
@@ -265,7 +268,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       text,
       threadMode = "chat",
     }: {
-      engine: "sentinel" | "codex";
+      engine: ChatEngine;
       files?: FileUIPart[];
       modelId: string;
       reasoningEffort?: ReasoningEffort | null;
@@ -408,7 +411,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       text,
       threadMode = "chat",
     }: {
-      engine: "sentinel" | "codex";
+      engine: ChatEngine;
       files?: FileUIPart[];
       modelId: string;
       reasoningEffort?: ReasoningEffort | null;
@@ -439,7 +442,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       text,
       threadMode = "chat",
     }: {
-      engine: "sentinel" | "codex";
+      engine: ChatEngine;
       files?: FileUIPart[];
       modelId: string;
       reasoningEffort?: ReasoningEffort | null;
@@ -558,7 +561,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       mode,
       reasoningEffort,
     }: {
-      engine?: "sentinel" | "codex";
+      engine?: ChatEngine;
       modelId?: string | null;
       mode?: "chat" | "plan";
       reasoningEffort?: ReasoningEffort | null;
@@ -669,7 +672,9 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                     onAnswerPlanQuestions={handleAnswerPlanQuestions}
                     onDenyTool={handleDenyTool}
                     onStartPlanImplementation={
-                      idx === messages.length - 1 || idx === messages.length - 2
+                      !isBusy &&
+                      (idx === messages.length - 1 ||
+                        idx === messages.length - 2)
                         ? handleStartPlanImplementation
                         : undefined
                     }

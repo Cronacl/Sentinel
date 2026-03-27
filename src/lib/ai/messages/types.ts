@@ -57,7 +57,9 @@ export const threadMessageMetadataSchema = z
       .optional(),
     usage: z
       .object({
+        contextWindow: z.number().optional(),
         inputTokens: z.number().optional(),
+        maxOutputTokens: z.number().optional(),
         outputTokens: z.number().optional(),
         reasoningTokens: z.number().optional(),
         totalTokens: z.number().optional(),
@@ -127,6 +129,10 @@ function getPartSyncToken(part: ThreadUIMessage["parts"][number]) {
         part.toolCallId,
         part.toolName,
         part.state,
+        getValueFingerprint("approval" in part ? part.approval : undefined),
+        getValueFingerprint("input" in part ? part.input : undefined),
+        getValueFingerprint("output" in part ? part.output : undefined),
+        "errorText" in part ? String(part.errorText ?? "") : "",
         getValueFingerprint(
           "providerMetadata" in part ? part.providerMetadata : undefined,
         ),
@@ -183,6 +189,105 @@ function fixOutputErrorPart(part: Record<string, unknown>) {
   return part;
 }
 
+function sanitizeDynamicToolPart(part: Record<string, unknown>) {
+  if (part.type !== "dynamic-tool") {
+    return part;
+  }
+
+  const next = { ...part };
+  const toolCallId =
+    typeof next.toolCallId === "string" ? next.toolCallId : undefined;
+  const approval =
+    next.approval && typeof next.approval === "object"
+      ? (next.approval as Record<string, unknown>)
+      : null;
+  const approvalId =
+    typeof approval?.id === "string" ? approval.id : toolCallId;
+
+  switch (next.state) {
+    case "approval-requested":
+      delete next.output;
+      delete next.errorText;
+      if (approvalId) {
+        next.approval = {
+          ...(typeof approval?.decision === "string"
+            ? { decision: approval.decision }
+            : {}),
+          id: approvalId,
+          ...(typeof approval?.reason === "string"
+            ? { reason: approval.reason }
+            : {}),
+          ...(typeof approval?.response === "string"
+            ? { response: approval.response }
+            : {}),
+        };
+      } else {
+        delete next.approval;
+      }
+      return next;
+    case "approval-responded":
+      delete next.output;
+      delete next.errorText;
+      if (approvalId) {
+        next.approval = {
+          ...(typeof approval?.approved === "boolean"
+            ? { approved: approval.approved }
+            : {}),
+          ...(typeof approval?.decision === "string"
+            ? { decision: approval.decision }
+            : {}),
+          ...(typeof approval?.response === "string"
+            ? { response: approval.response }
+            : {}),
+          ...(typeof approval?.reason === "string"
+            ? { reason: approval.reason }
+            : {}),
+          id: approvalId,
+        };
+      } else {
+        delete next.approval;
+      }
+      return next;
+    case "input-available":
+    case "input-streaming":
+      delete next.output;
+      delete next.errorText;
+      delete next.approval;
+      return next;
+    case "output-available":
+      delete next.errorText;
+      delete next.approval;
+      return next;
+    case "output-error":
+      delete next.output;
+      delete next.approval;
+      return next;
+    case "output-denied":
+      delete next.output;
+      delete next.errorText;
+      if (approvalId) {
+        next.approval = {
+          approved: false,
+          ...(typeof approval?.decision === "string"
+            ? { decision: approval.decision }
+            : {}),
+          id: approvalId,
+          ...(typeof approval?.reason === "string"
+            ? { reason: approval.reason }
+            : {}),
+          ...(typeof approval?.response === "string"
+            ? { response: approval.response }
+            : {}),
+        };
+      } else {
+        delete next.approval;
+      }
+      return next;
+    default:
+      return next;
+  }
+}
+
 function sanitizeThreadMessageParts(parts: unknown) {
   if (!Array.isArray(parts)) {
     return [];
@@ -220,7 +325,11 @@ function sanitizeThreadMessageParts(parts: unknown) {
 
       return true;
     })
-    .map((part) => fixOutputErrorPart(part as Record<string, unknown>));
+    .map((part) =>
+      sanitizeDynamicToolPart(
+        fixOutputErrorPart(part as Record<string, unknown>),
+      ),
+    );
 }
 
 export function normalizeThreadMessageMetadata(
@@ -316,7 +425,9 @@ export function getThreadMessageSyncToken(message: ThreadUIMessage) {
     metadata?.finishReason ?? "",
     metadata?.revision ?? "",
     metadata?.runId ?? "",
+    metadata?.usage?.contextWindow ?? "",
     metadata?.usage?.inputTokens ?? "",
+    metadata?.usage?.maxOutputTokens ?? "",
     metadata?.usage?.totalTokens ?? "",
     metadata?.usage?.reasoningTokens ?? "",
     metadata?.reasoning?.durationMs ?? "",

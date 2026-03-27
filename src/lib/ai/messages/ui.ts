@@ -79,6 +79,18 @@ export async function mapThreadMessagesToUIMessages(
   return validateThreadUIMessages(buildActiveThreadMessages(messages));
 }
 
+export function mapThreadMessagesToUIMessagesBestEffort(
+  messages: PersistedThreadMessageRecord[],
+) {
+  return normalizeThreadUIMessages(
+    buildActiveThreadMessages(messages) as Array<
+      Omit<ThreadUIMessage, "metadata"> & {
+        metadata?: ThreadMessageMetadata | null;
+      }
+    >,
+  );
+}
+
 export function serializeThreadUIMessage(message: ThreadUIMessage) {
   const normalizedMessage = normalizeThreadUIMessage(message);
   const metadata = toJsonValue(normalizedMessage.metadata);

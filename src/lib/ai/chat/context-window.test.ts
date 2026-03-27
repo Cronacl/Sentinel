@@ -4,6 +4,7 @@ import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 
 import {
   getExactContextWindowUsage,
+  getLatestCompletedAssistantContextWindow,
   getLatestCompletedAssistantInputTokens,
 } from "./context-window";
 
@@ -53,6 +54,7 @@ describe("context-window helpers", () => {
     ];
 
     expect(getLatestCompletedAssistantInputTokens(messages)).toBe(600);
+    expect(getLatestCompletedAssistantContextWindow(messages)).toBeNull();
     expect(
       getExactContextWindowUsage({
         contextWindow: 1_200,
@@ -61,8 +63,37 @@ describe("context-window helpers", () => {
     ).toEqual({
       contextWindow: 1_200,
       inputTokens: 600,
+      source: "model",
       usedPercent: 50,
       usedRatio: 0.5,
+    });
+  });
+
+  it("prefers the provider-reported context window from the latest completed assistant", () => {
+    const messages: ThreadUIMessage[] = [
+      {
+        id: "assistant-1",
+        metadata: {
+          status: "completed",
+          usage: { contextWindow: 1_000_000, inputTokens: 600 },
+        },
+        parts: [{ text: "latest", type: "text" }],
+        role: "assistant" as const,
+      },
+    ];
+
+    expect(getLatestCompletedAssistantContextWindow(messages)).toBe(1_000_000);
+    expect(
+      getExactContextWindowUsage({
+        contextWindow: 200_000,
+        messages,
+      }),
+    ).toEqual({
+      contextWindow: 1_000_000,
+      inputTokens: 600,
+      source: "provider",
+      usedPercent: 0,
+      usedRatio: 0.0006,
     });
   });
 
@@ -84,6 +115,7 @@ describe("context-window helpers", () => {
     ).toEqual({
       contextWindow: 400,
       inputTokens: 300,
+      source: "fixed",
       usedPercent: 75,
       usedRatio: 0.75,
     });
