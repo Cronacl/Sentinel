@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.8.0-alpha.1...v0.9.0-alpha.1) (2026-03-27)
+
+
+### Features
+
+* add createGateway mock and waitForMockCall utility for improved testing ([598fd74](https://github.com/Cronacl/Sentinel/commit/598fd748d9c52f6041291d88474f037edff20de3))
+* add support for Claude AI integration and enhance automation model handling ([5c66d10](https://github.com/Cronacl/Sentinel/commit/5c66d108d0ca8a1c76e77e396c65808d676f2d4c))
+* enhance Claude tool integration with output parsing and new utility functions ([ad8c4a9](https://github.com/Cronacl/Sentinel/commit/ad8c4a98e6a6dcd0025e68ea905f38dfc1ba89f1))
+* enhance document normalization for CSV attachments and media type handling ([3d0a3bf](https://github.com/Cronacl/Sentinel/commit/3d0a3bf8b26aa774f9b547719f8db6e280ea0a43))
+* integrate new AI providers and enhance configuration options ([6f1cc7c](https://github.com/Cronacl/Sentinel/commit/6f1cc7c3ecac3e911916d32b205b4417b118e4d0))
+
 ## [0.8.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.7.0-alpha.1...v0.8.0-alpha.1) (2026-03-25)
 
 
