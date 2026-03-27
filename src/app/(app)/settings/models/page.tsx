@@ -39,11 +39,11 @@ function ModelsSkeleton() {
             <Skeleton className="h-5 w-24 rounded-full" />
           </div>
 
-          <div className="border-separator bg-surface rounded-xl border p-2">
+          <div className="border-separator/20 bg-surface rounded-2xl border p-2">
             <div className="flex flex-col gap-2">
               {Array.from({ length: 3 }).map((__, rowIndex) => (
                 <div
-                  className="bg-background border-separator flex items-center gap-4 rounded-xl border px-4 py-3"
+                  className="bg-background border-separator/20 flex items-center gap-4 rounded-2xl border px-4 py-3"
                   key={rowIndex}
                 >
                   <div className="min-w-0 flex-1 space-y-2">
@@ -63,7 +63,7 @@ function ModelsSkeleton() {
         </section>
       ))}
 
-      <section className="border-separator bg-surface rounded-xl border p-5">
+      <section className="border-separator/20 bg-surface rounded-2xl border p-5 mt-6">
         <div className="mb-5 space-y-2">
           <Skeleton className="h-5 w-36 rounded-md" />
           <Skeleton className="h-4 w-80 max-w-full rounded-md" />
@@ -284,7 +284,7 @@ export default function ModelsPage() {
       ) : null}
 
       <div className="flex flex-col gap-8">
-        <section className="border-separator bg-surface rounded-xl border p-5">
+        <section className="border-separator/20 bg-surface rounded-2xl border p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <h2 className="text-foreground text-sm font-medium">
@@ -371,7 +371,7 @@ export default function ModelsPage() {
                 </h2>
               </div>
 
-              <div className="border-separator bg-surface divide-separator divide-y rounded-xl border">
+              <div className="border-separator/20 bg-surface divide-separator/50 divide-y rounded-xl border">
                 {codexStatus.availableModels.map((model) => (
                   <div
                     key={model.id}
@@ -437,7 +437,7 @@ export default function ModelsPage() {
               ) : null}
             </div>
 
-            <div className="border-separator bg-surface divide-separator divide-y rounded-xl border">
+            <div className="border-separator/20 bg-surface divide-separator/50 divide-y rounded-xl border">
               {providerModels.map((model) => (
                 <div
                   key={model.modelId}
@@ -540,7 +540,7 @@ export default function ModelsPage() {
           <h2 className="text-foreground mb-2 text-sm font-medium">
             Add Custom Model
           </h2>
-          <div className="border-separator bg-surface rounded-xl border px-4 py-2.5">
+          <div className="border-separator/20 bg-surface rounded-2xl border px-4 py-2.5">
             <Form
               className="flex items-end gap-3"
               onSubmit={customModelForm.handleSubmit(handleAddCustom)}

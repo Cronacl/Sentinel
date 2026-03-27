@@ -320,7 +320,7 @@ export default function AutomationsPage() {
                 />
               ))
             ) : active.length ? (
-              <div className="border-separator bg-surface rounded-xl border p-5 col-span-full">
+              <div className="border-separator/20 bg-surface rounded-2xl border p-5 col-span-full">
                 <h2 className="text-foreground text-sm font-medium">
                   No matching automations
                 </h2>
@@ -329,7 +329,7 @@ export default function AutomationsPage() {
                 </p>
               </div>
             ) : (
-              <div className="border-separator bg-surface rounded-xl border p-5 col-span-full">
+              <div className="border-separator/20 bg-surface rounded-2xl border p-5 col-span-full">
                 <h2 className="text-foreground text-sm font-medium">
                   No active automations
                 </h2>
@@ -359,7 +359,7 @@ export default function AutomationsPage() {
                 />
               ))
             ) : paused.length ? (
-              <div className="border-separator bg-surface rounded-xl border p-5 col-span-full">
+              <div className="border-separator/20 bg-surface rounded-2xl border p-5 col-span-full">
                 <h2 className="text-foreground text-sm font-medium">
                   No matching automations
                 </h2>
@@ -368,7 +368,7 @@ export default function AutomationsPage() {
                 </p>
               </div>
             ) : (
-              <div className="border-separator bg-surface rounded-xl border p-5 col-span-full">
+              <div className="border-separator/20 bg-surface rounded-2xl border p-5 col-span-full">
                 <h2 className="text-foreground text-sm font-medium">
                   No paused automations
                 </h2>

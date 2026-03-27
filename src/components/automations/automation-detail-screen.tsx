@@ -742,7 +742,7 @@ export function AutomationDetailScreen({
       {automationQuery.isPending && !automation ? (
         <DetailSkeleton />
       ) : !automation ? (
-        <section className="border-separator bg-surface rounded-xl border p-5">
+        <section className="border-separator/20 bg-surface rounded-2xl border p-5">
           <h2 className="text-foreground text-sm font-medium">
             Automation not found
           </h2>

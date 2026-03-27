@@ -236,7 +236,7 @@ export default function ApprovalsSettingsPage() {
         <ApprovalsSkeleton />
       ) : (
         <div className="flex flex-col gap-4">
-          <section className="border-separator bg-surface rounded-xl border p-5">
+          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
             <p className="text-muted text-sm">
               Approval rules apply per tool. Disabling approval skips the pause
               step only; workspace boundaries, permission mode restrictions, and
