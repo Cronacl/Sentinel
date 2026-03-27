@@ -1,5 +1,7 @@
 import "server-only";
 
+import { spawn, type ChildProcessByStdio } from "node:child_process";
+import type { Readable, Writable } from "node:stream";
 import {
   query,
   type AccountInfo,
@@ -121,6 +123,14 @@ function toClaudeModelInfo(model: ModelInfo): ClaudeModelInfo {
   };
 }
 
+export function resolveClaudeSdkExecutable(command: string) {
+  if (command === "node" || command === "bun") {
+    return process.execPath;
+  }
+
+  return command;
+}
+
 export function buildClaudeSdkBaseOptions(options?: Partial<Options>): Options {
   return {
     cwd: process.cwd(),
@@ -128,6 +138,37 @@ export function buildClaudeSdkBaseOptions(options?: Partial<Options>): Options {
       ...process.env,
       CLAUDE_AGENT_SDK_CLIENT_APP:
         process.env.CLAUDE_AGENT_SDK_CLIENT_APP ?? "sentinel",
+    },
+    spawnClaudeCodeProcess: (spawnOptions) => {
+      const child: ChildProcessByStdio<Writable, Readable, null> = spawn(
+        resolveClaudeSdkExecutable(spawnOptions.command),
+        spawnOptions.args,
+        {
+          cwd: spawnOptions.cwd,
+          env: {
+            ...spawnOptions.env,
+            NODE_ENV: spawnOptions.env.NODE_ENV ?? process.env.NODE_ENV,
+          } as NodeJS.ProcessEnv,
+          signal: spawnOptions.signal,
+          stdio: ["pipe", "pipe", "ignore"],
+          windowsHide: true,
+        },
+      );
+
+      return {
+        stdin: child.stdin,
+        stdout: child.stdout,
+        get killed() {
+          return child.killed;
+        },
+        get exitCode() {
+          return child.exitCode;
+        },
+        kill: child.kill.bind(child),
+        on: child.on.bind(child),
+        once: child.once.bind(child),
+        off: child.off.bind(child),
+      };
     },
     persistSession: true,
     settingSources: [...CLAUDE_SETTING_SOURCES],
