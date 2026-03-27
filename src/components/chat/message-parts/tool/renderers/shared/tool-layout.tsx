@@ -37,10 +37,6 @@ export const ToolLayout = memo(function ToolLayout({
     useState(effectiveExpanded);
 
   useEffect(() => {
-    setUserExpanded(null);
-  }, [_isExpanded]);
-
-  useEffect(() => {
     if (effectiveExpanded) {
       setShouldRenderContent(true);
       return;

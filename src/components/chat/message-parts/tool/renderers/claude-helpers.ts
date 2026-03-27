@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import type { RendererProps } from "../renderer";
 
@@ -124,14 +124,10 @@ export function isClaudeToolErrorState(state: RendererProps["part"]["state"]) {
 }
 
 export function useClaudeExpansionState(
-  part: RendererProps["part"],
+  _part: RendererProps["part"],
   defaultExpanded: boolean,
 ) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-
-  useEffect(() => {
-    setIsExpanded(defaultExpanded);
-  }, [defaultExpanded, part.state, part.toolCallId]);
 
   return [isExpanded, setIsExpanded] as const;
 }

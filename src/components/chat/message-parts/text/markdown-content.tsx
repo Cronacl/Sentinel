@@ -85,21 +85,23 @@ export const MarkdownContent = memo(function MarkdownContent({
       },
       table({ children }) {
         return (
-          <div className="my-3 overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-sm">{children}</table>
+          <div className="my-3 overflow-x-auto rounded-2xl border border-separator/50">
+            <table className="w-full text-sm border-separator/50">
+              {children}
+            </table>
           </div>
         );
       },
       th({ children }) {
         return (
-          <th className="border-b border-border bg-default/30 px-3 py-2 text-left text-xs font-medium text-muted">
+          <th className="border-b border-separator/50 bg-background/50 dark:bg-surface/50 px-3 py-2 text-left text-xs font-medium text-muted">
             {children}
           </th>
         );
       },
       td({ children }) {
         return (
-          <td className="border-b border-border/40 px-3 py-2 text-foreground">
+          <td className="border-b border-separator/50 bg-background/20 dark:bg-surface/20 px-3 py-2 text-foreground">
             {children}
           </td>
         );

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { Button, ScrollShadow } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
@@ -363,12 +363,8 @@ export const CodexFileChangeTool = memo(function CodexFileChangeTool({
     part.state === "output-error" ||
     (fileOutput != null && fileOutput.status === "failed");
   const [isExpanded, setIsExpanded] = useState(
-    part.state === "approval-requested" || isRunning,
+    part.state === "approval-requested",
   );
-
-  useEffect(() => {
-    setIsExpanded(part.state === "approval-requested" || isRunning);
-  }, [isRunning, part.state, part.toolCallId]);
 
   const diffSections = useMemo(
     () => (fileInput ? buildDiffSections(fileInput.changes, fileOutput) : []),

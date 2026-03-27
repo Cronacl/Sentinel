@@ -249,7 +249,7 @@ export const ClaudeMcpResourceTool = memo(function ClaudeMcpResourceTool({
   const isError = isClaudeToolErrorState(part.state);
   const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,
-    part.state === "approval-requested" || isRunning,
+    part.state === "approval-requested",
   );
 
   return (

@@ -279,7 +279,7 @@ export const ClaudeSessionUtilityTool = memo(function ClaudeSessionUtilityTool({
   const hasOutput = rawOutput !== undefined;
   const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,
-    part.state === "approval-requested" || isRunning,
+    part.state === "approval-requested",
   );
 
   return (

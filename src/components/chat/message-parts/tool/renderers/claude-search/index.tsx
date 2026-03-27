@@ -224,7 +224,7 @@ export const ClaudeGlobTool = memo(function ClaudeGlobTool({
   if (!globInput) return null;
   const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,
-    part.state === "approval-requested" || isRunning,
+    part.state === "approval-requested",
   );
 
   const summary = (
@@ -343,7 +343,7 @@ export const ClaudeGrepTool = memo(function ClaudeGrepTool({
   if (!grepInput) return null;
   const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,
-    part.state === "approval-requested" || isRunning,
+    part.state === "approval-requested",
   );
 
   const summary = (
