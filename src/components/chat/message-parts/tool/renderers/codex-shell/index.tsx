@@ -288,11 +288,11 @@ export const CodexShellTool = memo(function CodexShellTool({
     part.state === "output-error" ||
     (shellOutput != null && shellOutput.exitCode !== 0);
   const [isExpanded, setIsExpanded] = useState(
-    part.state === "approval-requested" || isRunning,
+    part.state === "approval-requested",
   );
 
   useEffect(() => {
-    setIsExpanded(part.state === "approval-requested" || isRunning);
+    setIsExpanded(part.state === "approval-requested");
   }, [isRunning, part.state, part.toolCallId]);
 
   if (!shellInput) return null;

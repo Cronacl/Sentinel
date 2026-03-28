@@ -299,7 +299,7 @@ export const ClaudeShellTool = memo(function ClaudeShellTool({
 
   const [isExpanded, setIsExpanded] = useClaudeExpansionState(
     part,
-    part.state === "approval-requested" || isRunning,
+    part.state === "approval-requested",
   );
 
   const summary = (
