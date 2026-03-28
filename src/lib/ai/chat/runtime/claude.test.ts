@@ -35,10 +35,20 @@ mock.module("../session-server", () => ({
   ),
 }));
 
-mock.module("@/lib/ai/chat/engines/claude-sdk", () => ({
-  buildClaudeSdkBaseOptions: mock((options: unknown) => options),
-  buildClaudeThreadState: mock((input: unknown) => input),
-}));
+mock.module("@/lib/ai/chat/engines/claude-sdk", async () => {
+  // @ts-expect-error Bun test-only cache-busting import for module isolation.
+  const actual = await import("../engines/claude-sdk.ts?runtime-test-actual");
+
+  return {
+    ...actual,
+    buildClaudeSdkBaseOptions: mock((options: unknown) => options),
+    buildClaudeThreadState: mock((input: unknown) => input),
+    resolveClaudeCodeRuntime: mock(async () => ({
+      env: process.env,
+      executablePath: null,
+    })),
+  };
+});
 
 mock.module("@/lib/streams", () => ({
   streamContext: {

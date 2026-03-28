@@ -1,6 +1,10 @@
 import "server-only";
 
-import { spawn, type ChildProcessByStdio } from "node:child_process";
+import { execFile, spawn, type ChildProcessByStdio } from "node:child_process";
+import { constants as fsConstants } from "node:fs";
+import { access } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import type { Readable, Writable } from "node:stream";
 import {
   query,
@@ -19,8 +23,22 @@ import type { ReasoningEffort } from "@/lib/ai/providers/models";
 const log = createLogger("ClaudeSdk");
 const CLAUDE_STATUS_CACHE_TTL_MS = 15_000;
 const CLAUDE_SETTING_SOURCES = ["user", "project", "local"] as const;
+const CLAUDE_CODE_PATH_START_MARKER = "__SENTINEL_CLAUDE_PATH_START__";
+const CLAUDE_CODE_PATH_END_MARKER = "__SENTINEL_CLAUDE_PATH_END__";
+const CLAUDE_SHELL_PATH_START_MARKER = "__SENTINEL_CLAUDE_SHELL_PATH_START__";
+const CLAUDE_SHELL_PATH_END_MARKER = "__SENTINEL_CLAUDE_SHELL_PATH_END__";
+const CLAUDE_RUNTIME_CACHE_TTL_MS = 15_000;
 
 type ClaudeSdkEffort = "low" | "medium" | "high" | "max";
+type ClaudeShellLookupResult = {
+  claudePath: string | null;
+  pathValue: string | null;
+};
+
+export type ResolvedClaudeCodeRuntime = {
+  env: NodeJS.ProcessEnv;
+  executablePath: string | null;
+};
 
 export type ClaudeModelInfo = {
   contextWindow?: number;
@@ -50,6 +68,10 @@ export type ClaudeEngineStatus = {
 let cachedStatus: {
   expiresAt: number;
   promise: Promise<ClaudeEngineStatus>;
+} | null = null;
+let cachedRuntime: {
+  expiresAt: number;
+  promise: Promise<ResolvedClaudeCodeRuntime>;
 } | null = null;
 
 function normalizeClaudeEffort(effort: ClaudeSdkEffort): ReasoningEffort {
@@ -131,14 +153,299 @@ export function resolveClaudeSdkExecutable(command: string) {
   return command;
 }
 
-export function buildClaudeSdkBaseOptions(options?: Partial<Options>): Options {
+function getExecutableNames(command: string) {
+  if (process.platform !== "win32") {
+    return [command];
+  }
+
+  const pathExt = (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM")
+    .split(";")
+    .map((extension) => extension.trim())
+    .filter(Boolean);
+
+  const names = new Set<string>([command]);
+  const lowerCommand = command.toLowerCase();
+  for (const extension of pathExt) {
+    if (lowerCommand.endsWith(extension.toLowerCase())) {
+      continue;
+    }
+
+    names.add(`${command}${extension}`);
+  }
+
+  return [...names];
+}
+
+async function isExecutable(candidatePath: string) {
+  try {
+    await access(
+      candidatePath,
+      process.platform === "win32" ? fsConstants.F_OK : fsConstants.X_OK,
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function findExecutableInPath(
+  command: string,
+  pathValue?: string | null,
+) {
+  if (!pathValue) {
+    return null;
+  }
+
+  const searchPaths = pathValue
+    .split(path.delimiter)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  for (const directory of searchPaths) {
+    for (const executableName of getExecutableNames(command)) {
+      const candidatePath = path.join(directory, executableName);
+      if (await isExecutable(candidatePath)) {
+        return candidatePath;
+      }
+    }
+  }
+
+  return null;
+}
+
+function buildInteractiveShellLookupArgs(script: string) {
+  return ["-i", "-c", script];
+}
+
+function buildPosixShellLookupScript() {
+  return [
+    "if command -v claude >/dev/null 2>&1; then",
+    `  printf '%s\\n' '${CLAUDE_CODE_PATH_START_MARKER}'`,
+    "  command -v claude",
+    `  printf '%s\\n' '${CLAUDE_CODE_PATH_END_MARKER}'`,
+    "fi",
+    `printf '%s\\n' '${CLAUDE_SHELL_PATH_START_MARKER}'`,
+    `printf '%s\\n' "$PATH"`,
+    `printf '%s\\n' '${CLAUDE_SHELL_PATH_END_MARKER}'`,
+  ].join("\n");
+}
+
+function buildFishShellLookupScript() {
+  return [
+    "if command -v claude >/dev/null 2>/dev/null",
+    `  printf '%s\\n' '${CLAUDE_CODE_PATH_START_MARKER}'`,
+    "  command -v claude",
+    `  printf '%s\\n' '${CLAUDE_CODE_PATH_END_MARKER}'`,
+    "end",
+    `printf '%s\\n' '${CLAUDE_SHELL_PATH_START_MARKER}'`,
+    "printf '%s\\n' (string join : -- $PATH)",
+    `printf '%s\\n' '${CLAUDE_SHELL_PATH_END_MARKER}'`,
+  ].join("\n");
+}
+
+export function parseClaudeShellLookupOutput(
+  stdout: string,
+): ClaudeShellLookupResult {
+  const lines = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const readBlock = (startMarker: string, endMarker: string) => {
+    const startIndex = lines.indexOf(startMarker);
+    const endIndex = lines.indexOf(endMarker);
+
+    if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
+      return [];
+    }
+
+    return lines.slice(startIndex + 1, endIndex);
+  };
+
+  const claudePathBlock = readBlock(
+    CLAUDE_CODE_PATH_START_MARKER,
+    CLAUDE_CODE_PATH_END_MARKER,
+  );
+  const pathBlock = readBlock(
+    CLAUDE_SHELL_PATH_START_MARKER,
+    CLAUDE_SHELL_PATH_END_MARKER,
+  );
+
+  const claudePath =
+    claudePathBlock.find((line) => path.basename(line).startsWith("claude")) ??
+    null;
+  const pathValue = pathBlock.find(Boolean) ?? null;
+
   return {
-    cwd: process.cwd(),
+    claudePath,
+    pathValue,
+  };
+}
+
+async function resolveClaudeCodeRuntimeFromWindowsWhere() {
+  if (process.platform !== "win32") {
+    return null;
+  }
+
+  const stdout = await new Promise<string>((resolve, reject) => {
+    execFile("where", ["claude"], { env: process.env }, (error, output) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve(output.trim());
+    });
+  }).catch(() => null);
+
+  if (!stdout) {
+    return null;
+  }
+
+  const candidates = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (const candidatePath of candidates) {
+    if (await isExecutable(candidatePath)) {
+      return {
+        env: {
+          ...process.env,
+          HOME: process.env.HOME ?? os.homedir(),
+        },
+        executablePath: candidatePath,
+      } satisfies ResolvedClaudeCodeRuntime;
+    }
+  }
+
+  return null;
+}
+
+async function resolveClaudeCodeRuntimeFromShell() {
+  if (process.platform === "win32") {
+    return null;
+  }
+
+  const shellPath = process.env.SHELL?.trim() || "/bin/zsh";
+  const shellName = path.basename(shellPath).toLowerCase();
+  const shellLookupScript =
+    shellName === "fish"
+      ? buildFishShellLookupScript()
+      : buildPosixShellLookupScript();
+
+  const stdout = await new Promise<string>((resolve, reject) => {
+    execFile(
+      shellPath,
+      buildInteractiveShellLookupArgs(shellLookupScript),
+      {
+        env: {
+          ...process.env,
+          HOME: process.env.HOME ?? os.homedir(),
+          TERM: process.env.TERM ?? "dumb",
+        },
+      },
+      (error, shellStdout) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve(shellStdout.trim());
+      },
+    );
+  }).catch(() => null);
+
+  if (!stdout) {
+    return null;
+  }
+
+  const { claudePath, pathValue } = parseClaudeShellLookupOutput(stdout);
+  const resolvedCommand =
+    (claudePath && (await isExecutable(claudePath)) ? claudePath : null) ??
+    (await findExecutableInPath("claude", pathValue));
+
+  return {
     env: {
       ...process.env,
-      CLAUDE_AGENT_SDK_CLIENT_APP:
-        process.env.CLAUDE_AGENT_SDK_CLIENT_APP ?? "sentinel",
+      HOME: process.env.HOME ?? os.homedir(),
+      ...(pathValue ? { PATH: pathValue } : {}),
     },
+    executablePath: resolvedCommand,
+  } satisfies ResolvedClaudeCodeRuntime;
+}
+
+export async function resolveClaudeCodeRuntime(options?: {
+  forceRefresh?: boolean;
+}) {
+  const forceRefresh = options?.forceRefresh ?? false;
+  const now = Date.now();
+
+  if (!forceRefresh && cachedRuntime && cachedRuntime.expiresAt > now) {
+    return await cachedRuntime.promise;
+  }
+
+  const promise = (async () => {
+    const directCommand = await findExecutableInPath(
+      "claude",
+      process.env.PATH,
+    );
+    if (directCommand) {
+      return {
+        env: {
+          ...process.env,
+          HOME: process.env.HOME ?? os.homedir(),
+        },
+        executablePath: directCommand,
+      } satisfies ResolvedClaudeCodeRuntime;
+    }
+
+    const windowsWhereCommand =
+      await resolveClaudeCodeRuntimeFromWindowsWhere();
+    if (windowsWhereCommand) {
+      return windowsWhereCommand;
+    }
+
+    const shellRuntime = await resolveClaudeCodeRuntimeFromShell();
+    if (shellRuntime) {
+      return shellRuntime;
+    }
+
+    return {
+      env: {
+        ...process.env,
+        HOME: process.env.HOME ?? os.homedir(),
+      },
+      executablePath: null,
+    } satisfies ResolvedClaudeCodeRuntime;
+  })();
+
+  cachedRuntime = {
+    expiresAt: now + CLAUDE_RUNTIME_CACHE_TTL_MS,
+    promise,
+  };
+
+  return await promise;
+}
+
+export function resetClaudeCodeRuntimeCache() {
+  cachedRuntime = null;
+}
+
+export function buildClaudeSdkBaseOptions(options?: Partial<Options>): Options {
+  const baseEnv = options?.env ?? process.env;
+  const runtimeEnv = {
+    ...baseEnv,
+    CLAUDE_AGENT_SDK_CLIENT_APP:
+      baseEnv.CLAUDE_AGENT_SDK_CLIENT_APP ??
+      process.env.CLAUDE_AGENT_SDK_CLIENT_APP ??
+      "sentinel",
+  };
+
+  return {
+    ...options,
+    cwd: options?.cwd ?? process.cwd(),
+    env: runtimeEnv,
     spawnClaudeCodeProcess: (spawnOptions) => {
       const child: ChildProcessByStdio<Writable, Readable, null> = spawn(
         resolveClaudeSdkExecutable(spawnOptions.command),
@@ -170,11 +477,13 @@ export function buildClaudeSdkBaseOptions(options?: Partial<Options>): Options {
         off: child.off.bind(child),
       };
     },
-    persistSession: true,
-    settingSources: [...CLAUDE_SETTING_SOURCES],
-    systemPrompt: { type: "preset", preset: "claude_code" },
-    tools: { type: "preset", preset: "claude_code" },
-    ...(options ?? {}),
+    persistSession: options?.persistSession ?? true,
+    settingSources: options?.settingSources ?? [...CLAUDE_SETTING_SOURCES],
+    systemPrompt: options?.systemPrompt ?? {
+      type: "preset",
+      preset: "claude_code",
+    },
+    tools: options?.tools ?? { type: "preset", preset: "claude_code" },
   };
 }
 
@@ -182,12 +491,17 @@ async function readClaudeStatus(): Promise<ClaudeEngineStatus> {
   let claudeQuery: ReturnType<typeof query> | null = null;
 
   try {
+    const runtime = await resolveClaudeCodeRuntime();
     claudeQuery = query({
       prompt: "",
       options: buildClaudeSdkBaseOptions({
         cwd: process.cwd(),
+        env: runtime.env,
         includePartialMessages: false,
         maxTurns: 1,
+        ...(runtime.executablePath
+          ? { pathToClaudeCodeExecutable: runtime.executablePath }
+          : {}),
         persistSession: false,
       }),
     });
