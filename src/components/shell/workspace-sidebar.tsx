@@ -1426,7 +1426,7 @@ export function WorkspaceSidebar() {
               <Button
                 className={`justify-start rounded-lg ${
                   isActive
-                    ? "text-foreground"
+                    ? "bg-default text-foreground"
                     : "text-foreground hover:text-foreground"
                 }`}
                 fullWidth
