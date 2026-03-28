@@ -40,6 +40,7 @@ import {
   getCodexEventThreadId,
   type CodexPromptResponse,
 } from "./codex-event-helpers";
+import { serializeComposerContextToText } from "@/lib/composer-context/serialize";
 import { getToolPermissionMode, getWorkspaceRootPath } from "./workspace";
 
 const log = createLogger("CodexThreadChat");
@@ -1441,7 +1442,7 @@ function buildCodexUserInput(message: ThreadUIMessage | undefined) {
     | { type: "image"; url: string }
   > = [];
 
-  const text = message.parts
+  let text = message.parts
     .filter(
       (
         part,
@@ -1451,6 +1452,18 @@ function buildCodexUserInput(message: ThreadUIMessage | undefined) {
     .map((part) => part.text)
     .join("\n\n")
     .trim();
+
+  const composerContext = message.metadata?.composerContext;
+  if (
+    composerContext &&
+    ((composerContext.paths?.length ?? 0) > 0 ||
+      (composerContext.skills?.length ?? 0) > 0)
+  ) {
+    const prefix = serializeComposerContextToText(composerContext);
+    if (prefix) {
+      text = text ? `${prefix}\n\n${text}` : prefix;
+    }
+  }
 
   if (text) {
     inputs.push({

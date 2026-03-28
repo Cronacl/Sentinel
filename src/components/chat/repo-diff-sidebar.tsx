@@ -551,7 +551,7 @@ export function RepoDiffSidebar() {
         </Dropdown>
         <div className="min-w-0 flex-1">
           <span className="block min-w-0 truncate text-xs text-muted">
-            {diff?.sourceLabel ?? "Loading diff..."}
+            {diff?.sourceLabel ?? null}
           </span>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-1">
@@ -649,7 +649,7 @@ export function RepoDiffSidebar() {
       <div className="min-h-0 flex-1">
         {diffPanelQuery.isPending && !diff ? (
           <div className="flex h-full items-center justify-center px-6 text-sm text-muted">
-            Loading diff...
+            <Spinner color="current" size="sm" />
           </div>
         ) : diffPanelQuery.error ? (
           <div className="px-4 py-6 text-sm text-danger">

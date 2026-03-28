@@ -13,6 +13,9 @@ import type {
   ThreadUIMessage,
 } from "@/lib/ai/messages/types";
 import { extractLastTitle } from "@/components/chat/message-parts/reasoning/reasoning-utils";
+import type { ComposerContext } from "@/lib/composer-context/types";
+import { getDesktopApi } from "@/lib/desktop/client";
+import type { DesktopOpenTarget } from "@/lib/desktop/contracts";
 
 import { FilePart } from "./message-parts/file";
 import { ReasoningPart } from "./message-parts/reasoning";
@@ -32,6 +35,10 @@ import {
 } from "./message-parts/types";
 import { Button } from "@heroui/react";
 import type { ChatEngine } from "@/server/db/enums";
+
+const VARIABLE_TOKEN_REGEX = /(\{\{[^{}]+\}\})/g;
+const USER_MESSAGE_COLLAPSE_CHAR_THRESHOLD = 420;
+const USER_MESSAGE_COLLAPSE_LINE_THRESHOLD = 6;
 
 export function isVisibleAssistantPart(part: MessagePart) {
   if (part.type === "text") {
@@ -218,6 +225,165 @@ function getAttachmentGridColumns(count: number) {
   }
 
   return "grid-cols-2 sm:grid-cols-3";
+}
+
+function getUserMessageLineCount(text: string) {
+  return text.split("\n").length;
+}
+
+function shouldCollapseUserMessage(text: string) {
+  return (
+    text.length > USER_MESSAGE_COLLAPSE_CHAR_THRESHOLD ||
+    getUserMessageLineCount(text) > USER_MESSAGE_COLLAPSE_LINE_THRESHOLD
+  );
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildMentionTokenMap(composerContext?: ComposerContext) {
+  const tokens = new Map<
+    string,
+    | {
+        absolutePath: string;
+        className: "sentinel-chip--path";
+        kind: "file" | "directory";
+        text: string;
+      }
+    | {
+        className: "sentinel-chip--skill";
+        text: string;
+      }
+  >();
+
+  for (const path of composerContext?.paths ?? []) {
+    tokens.set(`@${path.relativePath}`, {
+      absolutePath: path.absolutePath,
+      className: "sentinel-chip--path",
+      kind: path.kind,
+      text: `@${path.label}`,
+    });
+    tokens.set(`@${path.label}`, {
+      absolutePath: path.absolutePath,
+      className: "sentinel-chip--path",
+      kind: path.kind,
+      text: `@${path.label}`,
+    });
+    tokens.set(path.relativePath, {
+      absolutePath: path.absolutePath,
+      className: "sentinel-chip--path",
+      kind: path.kind,
+      text: `@${path.label}`,
+    });
+    tokens.set(path.label, {
+      absolutePath: path.absolutePath,
+      className: "sentinel-chip--path",
+      kind: path.kind,
+      text: `@${path.label}`,
+    });
+  }
+
+  for (const skill of composerContext?.skills ?? []) {
+    tokens.set(`/${skill.name}`, {
+      className: "sentinel-chip--skill",
+      text: `/${skill.name}`,
+    });
+    tokens.set(skill.name, {
+      className: "sentinel-chip--skill",
+      text: `/${skill.name}`,
+    });
+  }
+
+  return tokens;
+}
+
+function getPreferredEditorTarget(openTargets: DesktopOpenTarget[]) {
+  return (
+    openTargets.find(
+      (target) => target.kind === "editor" || target.kind === "ide",
+    ) ?? null
+  );
+}
+
+function renderUserText(
+  text: string,
+  composerContext: ComposerContext | undefined,
+  onOpenMentionedPath?: (absolutePath: string) => void,
+) {
+  const mentionTokens = buildMentionTokenMap(composerContext);
+  const escapedMentionPatterns = Array.from(mentionTokens.keys())
+    .sort((left, right) => right.length - left.length)
+    .map((token) => escapeRegExp(token));
+  const tokenPattern = new RegExp(
+    [
+      VARIABLE_TOKEN_REGEX.source,
+      ...(escapedMentionPatterns.length > 0 ? escapedMentionPatterns : []),
+    ].join("|"),
+    "g",
+  );
+  const fragments: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null = null;
+  let key = 0;
+
+  while ((match = tokenPattern.exec(text)) !== null) {
+    const token = match[0];
+    const start = match.index;
+
+    if (start > lastIndex) {
+      fragments.push(<span key={key++}>{text.slice(lastIndex, start)}</span>);
+    }
+
+    if (token.startsWith("{{") && token.endsWith("}}")) {
+      fragments.push(
+        <span className="sentinel-chip sentinel-chip--variable" key={key++}>
+          {token}
+        </span>,
+      );
+    } else {
+      const mentionToken = mentionTokens.get(token);
+      if (mentionToken) {
+        if (
+          mentionToken.className === "sentinel-chip--path" &&
+          mentionToken.kind === "file" &&
+          onOpenMentionedPath
+        ) {
+          fragments.push(
+            <button
+              className={`sentinel-chip sentinel-chip--clickable ${mentionToken.className}`}
+              key={key++}
+              onClick={() => onOpenMentionedPath(mentionToken.absolutePath)}
+              type="button"
+            >
+              {mentionToken.text}
+            </button>,
+          );
+          continue;
+        }
+
+        fragments.push(
+          <span
+            className={`sentinel-chip ${mentionToken.className}`}
+            key={key++}
+          >
+            {/* remove the first char */}
+            {mentionToken.text.slice(1)}
+          </span>,
+        );
+      } else {
+        fragments.push(<span key={key++}>{token}</span>);
+      }
+    }
+
+    lastIndex = start + token.length;
+  }
+
+  if (lastIndex < text.length) {
+    fragments.push(<span key={key++}>{text.slice(lastIndex)}</span>);
+  }
+
+  return fragments;
 }
 
 function AssistantMessage({
@@ -439,16 +605,57 @@ function AssistantMessage({
   );
 }
 
+function ComposerContextChips({
+  composerContext,
+  messageId,
+  onOpenPath,
+}: {
+  composerContext: NonNullable<ThreadMessageMetadata["composerContext"]>;
+  messageId: string;
+  onOpenPath?: (absolutePath: string) => void;
+}) {
+  const hasEntries =
+    (composerContext.paths?.length ?? 0) > 0 ||
+    (composerContext.skills?.length ?? 0) > 0;
+
+  if (!hasEntries) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1">
+      {composerContext.paths?.map((entry, index) => (
+        <button
+          className="sentinel-chip sentinel-chip--clickable sentinel-chip--path"
+          key={`${messageId}:ctx-path:${index}`}
+          onClick={() => onOpenPath?.(entry.absolutePath)}
+          type="button"
+        >
+          @{entry.label}
+        </button>
+      ))}
+      {composerContext.skills?.map((entry, index) => (
+        <span
+          className="sentinel-chip sentinel-chip--skill"
+          key={`${messageId}:ctx-skill:${index}`}
+        >
+          /{entry.name}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function UserMessage({
   chatEngine,
   message,
   onEdit,
   onSelectBranch,
+  workspaceRootPath,
 }: {
   chatEngine?: ChatEngine;
   message: ThreadUIMessage;
   onEdit?: (message: ThreadUIMessage) => void;
   onSelectBranch?: (messageId: string) => void;
+  workspaceRootPath?: string | null;
 }) {
   const supportsSentinelMessageActions = chatEngine === "sentinel";
   const fileParts = message.parts.filter(
@@ -461,6 +668,38 @@ function UserMessage({
   );
   const metadata = message.metadata as ThreadMessageMetadata | undefined;
   const branchOptions = getBranchOptions(metadata);
+  const composerContext = metadata?.composerContext;
+  const combinedText = textParts.map((part) => part.text).join("\n\n");
+  const isCollapsible = shouldCollapseUserMessage(combinedText);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const shouldRenderComposerContextRow =
+    Boolean(composerContext) && textParts.length === 0;
+  const handleOpenMentionedPath = useCallback(
+    async (absolutePath: string) => {
+      if (!workspaceRootPath) {
+        return;
+      }
+
+      const desktop = getDesktopApi();
+      if (!desktop) {
+        return;
+      }
+
+      const openTargets =
+        await desktop.workspace.listOpenTargets(workspaceRootPath);
+      const preferredEditorTarget = getPreferredEditorTarget(openTargets);
+      if (!preferredEditorTarget) {
+        return;
+      }
+
+      await desktop.workspace.openFileInTarget(
+        workspaceRootPath,
+        absolutePath,
+        preferredEditorTarget.id,
+      );
+    },
+    [workspaceRootPath],
+  );
 
   return (
     <div className="flex justify-end">
@@ -479,25 +718,54 @@ function UserMessage({
           </div>
         ) : null}
 
+        {shouldRenderComposerContextRow ? (
+          <ComposerContextChips
+            composerContext={composerContext!}
+            messageId={message.id}
+            onOpenPath={handleOpenMentionedPath}
+          />
+        ) : null}
+
         {textParts.length > 0 ? (
           <div className="inline-flex border border-border/50 max-w-[82%] rounded-xl bg-surface-secondary/50 dark:bg-surface px-3 py-1">
             <div className="flex flex-col gap-2">
-              {textParts.map((part, index) => (
-                <p
-                  className="whitespace-pre-wrap text-[13px] text-foreground/96"
-                  key={`${message.id}:text:${index}`}
+              <div
+                className="flex flex-col gap-2 overflow-hidden"
+                style={
+                  isCollapsible && !isExpanded
+                    ? {
+                        maxHeight: "9rem",
+                      }
+                    : undefined
+                }
+              >
+                {textParts.map((part, index) => (
+                  <p
+                    className="whitespace-pre-wrap text-[13px] text-foreground/96"
+                    key={`${message.id}:text:${index}`}
+                  >
+                    {renderUserText(
+                      part.text,
+                      composerContext,
+                      handleOpenMentionedPath,
+                    )}
+                  </p>
+                ))}
+              </div>
+              {isCollapsible ? (
+                <button
+                  className="self-start text-[11px] font-medium text-foreground/60 transition-colors hover:text-foreground"
+                  onClick={() => setIsExpanded((current) => !current)}
+                  type="button"
                 >
-                  {part.text}
-                </p>
-              ))}
+                  {isExpanded ? "Show less" : "Show more"}
+                </button>
+              ) : null}
             </div>
           </div>
         ) : null}
         <div className="flex flex-wrap items-center gap-1 text-muted">
-          <CopyButton
-            text={textParts.map((part) => part.text).join("\n\n")}
-            title="Copy prompt"
-          />
+          <CopyButton text={combinedText} title="Copy prompt" />
           {supportsSentinelMessageActions && onEdit ? (
             <MessageActionButton
               icon={PencilEdit02Icon}
@@ -533,6 +801,7 @@ type ChatMessageProps = {
   onRegenerate?: (messageId: string) => void;
   onRetry?: (messageId: string) => void;
   onSelectBranch?: (messageId: string) => void;
+  workspaceRootPath?: string | null;
 };
 
 export const ChatMessage = memo(function ChatMessage({
@@ -548,6 +817,7 @@ export const ChatMessage = memo(function ChatMessage({
   onRegenerate,
   onRetry,
   onSelectBranch,
+  workspaceRootPath,
 }: ChatMessageProps) {
   if (message.role === "user") {
     return (
@@ -556,6 +826,7 @@ export const ChatMessage = memo(function ChatMessage({
         message={message}
         onEdit={onEdit}
         onSelectBranch={onSelectBranch}
+        workspaceRootPath={workspaceRootPath}
       />
     );
   }

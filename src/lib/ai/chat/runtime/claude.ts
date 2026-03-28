@@ -51,6 +51,7 @@ import {
   extractClaudeAssistantToolResultBlock,
   extractClaudeUserToolResults,
 } from "./claude-tool-output";
+import { serializeComposerContextToText } from "@/lib/composer-context/serialize";
 import { getToolPermissionMode, getWorkspaceRootPath } from "./workspace";
 import { ThreadChatConflictError } from "../errors";
 
@@ -465,10 +466,22 @@ function buildClaudeUserPrompt(
   );
 
   const content: Array<Record<string, unknown>> = [];
-  const text = textParts
+  let text = textParts
     .map((part) => part.text.trim())
     .filter(Boolean)
     .join("\n\n");
+
+  const composerContext = message.metadata?.composerContext;
+  if (
+    composerContext &&
+    ((composerContext.paths?.length ?? 0) > 0 ||
+      (composerContext.skills?.length ?? 0) > 0)
+  ) {
+    const prefix = serializeComposerContextToText(composerContext);
+    if (prefix) {
+      text = text ? `${prefix}\n\n${text}` : prefix;
+    }
+  }
 
   if (text) {
     content.push({ text, type: "text" });

@@ -5,6 +5,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DEFAULT_FOLLOW_UP_BEHAVIOR } from "@/schemas/general-settings.schema";
 import { getExactContextWindowUsage } from "@/lib/ai/chat/context-window";
+import {
+  extractComposerContext,
+  hasComposerContext,
+} from "@/lib/composer-context/extract";
 import { api } from "@/trpc/react";
 
 import { AttachmentManager } from "../attachment-manager";
@@ -130,14 +134,51 @@ export function ChatComposer({
   const hasModels = availableModels.length > 0;
   const isLocked = !hasWorkspace || !hasModels;
 
+  const skillsQuery = api.skills.list.useQuery(
+    activeWorkspace?.id ? { workspaceId: activeWorkspace.id } : undefined,
+    {
+      staleTime: 30_000,
+    },
+  );
+
+  const fetchPathSuggestions = useCallback(
+    async (query: string) => {
+      if (!activeWorkspace?.id) return [];
+      const result = await utils.workspaceFiles.search.fetch({
+        limit: 15,
+        query,
+        workspaceId: activeWorkspace.id,
+      });
+      return result.items;
+    },
+    [activeWorkspace?.id, utils.workspaceFiles.search],
+  );
+
+  const fetchSkillSuggestions = useCallback(() => {
+    const data = skillsQuery.data;
+    if (!data) return [];
+    return data.skills.map((skill) => ({
+      description: skill.description,
+      directory: skill.directory,
+      name: skill.name,
+      scope: skill.scope,
+      sourceKind: skill.sourceKind,
+      target: skill.target,
+    }));
+  }, [skillsQuery.data]);
+
   const { editor, placeholderText } = useComposerEditor({
+    activeWorkspaceId: activeWorkspace?.id ?? null,
     isBusy,
     isLocked,
     isThread: threadId != null,
     onAddBrowserFiles: addBrowserFiles,
+    onFetchPathSuggestions: fetchPathSuggestions,
+    onFetchSkillSuggestions: fetchSkillSuggestions,
     onSendRef: handleSendRef,
     promptSeed,
     promptSeedKey,
+    selectedEngine,
   });
 
   const threadMessages =
@@ -207,7 +248,10 @@ export function ChatComposer({
         return;
       }
 
+      const composerContext = extractComposerContext(editor);
+
       const messagePayload = {
+        ...(hasComposerContext(composerContext) ? { composerContext } : {}),
         engine: selectedEngine,
         ...(files.length > 0 ? { files } : {}),
         modelId: selectedModelKey,

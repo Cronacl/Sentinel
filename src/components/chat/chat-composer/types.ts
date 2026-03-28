@@ -2,11 +2,13 @@ import type { FileUIPart } from "ai";
 
 import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import type { ComposerContext } from "@/lib/composer-context/types";
 import type { ChatEngine } from "@/server/db/enums";
 
 export type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 
 export type ComposerSendInput = {
+  composerContext?: ComposerContext;
   engine: ChatEngine;
   files?: FileUIPart[];
   modelId: string;

@@ -314,6 +314,7 @@ export function ThreadScreen({
 
   const handleSend = useCallback(
     ({
+      composerContext,
       files,
       engine,
       modelId,
@@ -321,6 +322,7 @@ export function ThreadScreen({
       text,
       threadMode,
     }: {
+      composerContext?: import("@/lib/composer-context/types").ComposerContext;
       files?: FileUIPart[];
       engine: ChatEngine;
       modelId: string;
@@ -347,6 +349,7 @@ export function ThreadScreen({
         workspaceId: workspace.id,
       });
       void sendMessage({
+        composerContext,
         engine,
         files,
         modelId,
@@ -360,6 +363,7 @@ export function ThreadScreen({
 
   const handleQueueFollowUp = useCallback(
     async ({
+      composerContext,
       files,
       engine,
       modelId,
@@ -367,6 +371,7 @@ export function ThreadScreen({
       text,
       threadMode,
     }: {
+      composerContext?: import("@/lib/composer-context/types").ComposerContext;
       files?: FileUIPart[];
       engine: ChatEngine;
       modelId: string;
@@ -376,6 +381,7 @@ export function ThreadScreen({
     }) => {
       setChatError(null);
       await queueFollowUp({
+        composerContext,
         engine,
         files,
         modelId,
@@ -391,6 +397,7 @@ export function ThreadScreen({
 
   const handleSteerFollowUp = useCallback(
     async ({
+      composerContext,
       files,
       engine,
       modelId,
@@ -398,6 +405,7 @@ export function ThreadScreen({
       text,
       threadMode,
     }: {
+      composerContext?: import("@/lib/composer-context/types").ComposerContext;
       files?: FileUIPart[];
       engine: ChatEngine;
       modelId: string;
@@ -407,6 +415,7 @@ export function ThreadScreen({
     }) => {
       setChatError(null);
       await steerFollowUp({
+        composerContext,
         engine,
         files,
         modelId,
@@ -890,6 +899,7 @@ export function ThreadScreen({
                     supportsSentinelMessageActions ? handleRetry : undefined
                   }
                   onSelectBranch={handleSelectBranch}
+                  workspaceRootPath={workspace.rootPath}
                 />
               ))}
 

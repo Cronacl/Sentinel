@@ -22,10 +22,34 @@ const branchOptionSchema = z.object({
     .optional(),
 });
 
+const composerPathEntrySchema = z.object({
+  absolutePath: z.string(),
+  kind: z.enum(["file", "directory"]),
+  label: z.string(),
+  relativePath: z.string(),
+});
+
+const composerSkillEntrySchema = z.object({
+  directory: z.string().optional(),
+  engine: z.enum(["sentinel", "codex", "claude"]),
+  name: z.string(),
+  scope: z.enum(["global", "workspace"]).optional(),
+  sourceKind: z.enum(["sentinel", "agents", "claude", "codex"]).optional(),
+  target: z.enum(["sentinel", "codex"]).optional(),
+});
+
+const composerContextSchema = z
+  .object({
+    paths: z.array(composerPathEntrySchema).default([]),
+    skills: z.array(composerSkillEntrySchema).default([]),
+  })
+  .optional();
+
 export const threadMessageMetadataSchema = z
   .object({
     branchId: z.string().optional(),
     branchOptions: z.array(branchOptionSchema).optional(),
+    composerContext: composerContextSchema,
     editedFromMessageId: z.string().optional(),
     errorMessage: z.string().optional(),
     finishReason: z.string().optional(),
@@ -103,6 +127,29 @@ function getValueFingerprint(value: unknown) {
   } catch {
     return String(value);
   }
+}
+
+function getComposerContextFingerprint(
+  composerContext: ThreadMessageMetadata["composerContext"] | undefined,
+) {
+  if (!composerContext) {
+    return "";
+  }
+
+  const paths = (composerContext.paths ?? [])
+    .map(
+      (entry) =>
+        `${entry.kind}:${entry.label}:${entry.relativePath}:${entry.absolutePath}`,
+    )
+    .join("|");
+  const skills = (composerContext.skills ?? [])
+    .map(
+      (entry) =>
+        `${entry.name}:${entry.engine}:${entry.scope ?? ""}:${entry.sourceKind ?? ""}:${entry.target ?? ""}:${entry.directory ?? ""}`,
+    )
+    .join("|");
+
+  return `${paths}::${skills}`;
 }
 
 function getPartSyncToken(part: ThreadUIMessage["parts"][number]) {
@@ -432,6 +479,7 @@ export function getThreadMessageSyncToken(message: ThreadUIMessage) {
     metadata?.usage?.reasoningTokens ?? "",
     metadata?.reasoning?.durationMs ?? "",
     metadata?.reasoning?.activeSinceMs ?? "",
+    getComposerContextFingerprint(metadata?.composerContext),
     metadata?.branchOptions
       ?.map(
         (option) =>
