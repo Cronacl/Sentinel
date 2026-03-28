@@ -373,7 +373,7 @@ function PinnedThreadsList({
               className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-xs transition-colors ${
                 isActive
                   ? "bg-default text-foreground"
-                  : "text-foreground/90 hover:text-foreground"
+                  : "text-foreground hover:text-foreground"
               }`}
               key={thread.id}
               onClick={() => onPressThread(thread.workspace.id, thread.id)}
@@ -481,7 +481,7 @@ function ThreadRow({
       className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-xs transition-colors ${
         isActive
           ? "bg-default text-foreground"
-          : "text-foreground/90 hover:text-foreground"
+          : "text-foreground hover:text-foreground"
       }`}
       onClick={() => onPressThread(workspaceId, thread.id)}
       role="button"
@@ -562,7 +562,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
     <section>
       <div className="group relative">
         <Button
-          className="text-foreground/70 hover:bg-default/60 hover:text-foreground justify-start rounded-xl pr-10"
+          className="text-foreground/50 hover:bg-default/60 hover:text-foreground justify-start rounded-xl pr-10"
           fullWidth
           onPress={() => {
             onPressWorkspace(group.workspace.id);
@@ -625,7 +625,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
               {overflowThreads.length > 0 ? (
                 <>
                   <button
-                    className="flex w-full items-center gap-1 px-2 py-1.5 text-left text-xs text-foreground/40 transition-colors hover:text-foreground/90"
+                    className="flex w-full items-center gap-1 px-2 py-1.5 text-left text-xs text-foreground/40 transition-colors hover:text-foreground"
                     onClick={() =>
                       setShowOverflowThreads((current) => !current)
                     }
@@ -757,7 +757,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
         {overflowItems.length > 0 ? (
           <>
             <button
-              className="flex w-full items-center gap-1 px-3 py-1.5 text-left text-xs text-foreground/40 transition-colors hover:text-foreground/90"
+              className="flex w-full items-center gap-1 px-3 py-1.5 text-left text-xs text-foreground/40 transition-colors hover:text-foreground"
               onClick={() => setShowOverflowThreads((current) => !current)}
               type="button"
             >
@@ -1427,7 +1427,7 @@ export function WorkspaceSidebar() {
                 className={`justify-start rounded-lg ${
                   isActive
                     ? "text-foreground"
-                    : "text-foreground/90 hover:text-foreground"
+                    : "text-foreground hover:text-foreground"
                 }`}
                 fullWidth
                 key={item.href}
@@ -1628,7 +1628,7 @@ export function WorkspaceSidebar() {
 
       <div className="shrink-0 px-3 pb-3">
         <Button
-          className="text-foreground/90 hover:text-foreground justify-start rounded-lg"
+          className="text-foreground hover:text-foreground justify-start rounded-lg"
           fullWidth
           onPress={() => router.push("/settings")}
           size="sm"
