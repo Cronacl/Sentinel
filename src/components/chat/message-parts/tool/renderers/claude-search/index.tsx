@@ -111,7 +111,8 @@ function parseGrepFromText(text: string | null): ClaudeGrepOutput | null {
   if (!text) return null;
 
   const lines = text.split("\n");
-  const fileSet = new Set<string>();
+  const colonFileSet = new Set<string>();
+  const bareFileSet = new Set<string>();
   let matchCount = 0;
 
   for (const line of lines) {
@@ -122,55 +123,34 @@ function parseGrepFromText(text: string | null): ClaudeGrepOutput | null {
     if (colonIdx > 0) {
       const candidate = trimmed.slice(0, colonIdx);
       if (candidate.includes(".") || candidate.includes("/")) {
-        fileSet.add(candidate);
+        colonFileSet.add(candidate);
         matchCount++;
+        continue;
       }
     }
 
-    if (
-      fileSet.size === 0 &&
-      (trimmed.includes("/") || trimmed.includes("."))
-    ) {
-      const isFilePath =
+    if (trimmed.includes("/") || trimmed.includes(".")) {
+      const looksLikePath =
         /^[\w./@-]/.test(trimmed) &&
         !trimmed.startsWith("Found ") &&
         !trimmed.startsWith("No ") &&
-        trimmed.length < 500;
-      if (
-        isFilePath &&
-        (trimmed.includes("/") || /\.\w{1,10}$/.test(trimmed))
-      ) {
-        fileSet.add(trimmed);
+        trimmed.length < 500 &&
+        (trimmed.includes("/") || /\.\w{1,10}$/.test(trimmed));
+      if (looksLikePath) {
+        bareFileSet.add(trimmed);
       }
     }
   }
 
-  if (fileSet.size === 0) {
-    const foundMatch = text.match(/Found\s+(\d+)\s+files?/i);
-    if (foundMatch) {
-      const count = parseInt(foundMatch[1]!, 10);
-      const pathLines = lines
-        .map((l) => l.trim())
-        .filter(
-          (l) =>
-            l &&
-            !l.startsWith("Found ") &&
-            (l.includes("/") || /\.\w{1,10}$/.test(l)),
-        );
+  const fileSet = colonFileSet.size > 0 ? colonFileSet : bareFileSet;
 
-      return {
-        content: text,
-        filenames: pathLines,
-        numFiles: count || pathLines.length,
-        numMatches: matchCount > 0 ? matchCount : undefined,
-      };
-    }
-  }
+  const foundMatch = text.match(/Found\s+(\d+)\s+files?/i);
+  const reportedCount = foundMatch ? parseInt(foundMatch[1]!, 10) : 0;
 
   return {
     content: text,
     filenames: [...fileSet],
-    numFiles: fileSet.size,
+    numFiles: reportedCount || fileSet.size,
     numMatches: matchCount > 0 ? matchCount : undefined,
   };
 }
