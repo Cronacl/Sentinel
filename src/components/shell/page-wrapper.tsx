@@ -93,10 +93,10 @@ export function PageWrapper({
       )}
 
       {flush ? (
-        <div className="w-full flex-1 overflow-clip">{children}</div>
+        <div className="min-h-0 w-full flex-1 overflow-clip">{children}</div>
       ) : (
-        <div className="sentinel-scroll-shell flex w-full flex-1 overflow-clip">
-          <div className="sentinel-scroll-area h-[calc(100vh-44px)] w-full px-4 py-4 lg:px-5 lg:py-5">
+        <div className="sentinel-scroll-shell flex min-h-0 w-full flex-1 overflow-clip">
+          <div className="sentinel-scroll-area h-full w-full px-4 py-4 lg:px-5 lg:py-5">
             {children}
           </div>
         </div>

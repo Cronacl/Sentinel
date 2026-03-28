@@ -29,9 +29,9 @@ export function SettingsPageWrapper({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-clip">
-      <div className="sentinel-scroll-shell h-full w-full">
+      <div className="sentinel-scroll-shell min-h-0 h-full w-full">
         <div
-          className="sentinel-scroll-area h-[calc(100vh-0.25rem)] w-full px-6 py-8 lg:px-8"
+          className="sentinel-scroll-area h-full w-full px-6 py-8 lg:px-8"
           style={{ paddingLeft: leadingInset }}
         >
           <div className={`mx-auto w-full ${contentClassName ?? "max-w-2xl"}`}>
