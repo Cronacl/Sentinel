@@ -26,20 +26,21 @@ export function getAutomationEngineOptions(
 }
 
 export function getAvailableAutomationModels(
-  models: AutomationEngineModel[],
+  models: AutomationEngineModel[] | null | undefined,
 ): AutomationEngineModel[] {
-  return models.filter((model) => model.isConnected && model.isEnabled);
+  return (models ?? []).filter((model) => model.isConnected && model.isEnabled);
 }
 
 export function getAutomationModelsForEngine(
-  engine: ChatEngine,
-  queries: Record<ChatEngine, AutomationEngineModel[]>,
+  engine: ChatEngine | null | undefined,
+  queries: Partial<Record<ChatEngine, AutomationEngineModel[] | undefined>>,
 ) {
-  return queries[engine];
+  if (!engine) return [];
+  return queries[engine] ?? [];
 }
 
 export function getAutomationModelOptions(
-  models: AutomationEngineModel[],
+  models: AutomationEngineModel[] | null | undefined,
   selectedModelId?: string | null,
 ): SelectOption[] {
   const options: SelectOption[] = [
@@ -48,7 +49,7 @@ export function getAutomationModelOptions(
       label: "Use default model",
       value: "__default__",
     },
-    ...models.map((model) => ({
+    ...(models ?? []).map((model) => ({
       description: model.provider ?? getEngineModelDescription(model.engine),
       label: model.displayName,
       value: model.modelId,
@@ -93,13 +94,14 @@ export function getAutomationReasoningOptions(
 }
 
 export function resolveAutomationSelection(
-  models: AutomationEngineModel[],
+  models: AutomationEngineModel[] | null | undefined,
   preferredModelId?: string | null,
   preferredReasoningEffort?: ReasoningEffort | null,
 ) {
+  const availableModels = models ?? [];
   const selectedModel =
-    models.find((model) => model.modelId === preferredModelId) ??
-    models[0] ??
+    availableModels.find((model) => model.modelId === preferredModelId) ??
+    availableModels[0] ??
     null;
 
   return {
