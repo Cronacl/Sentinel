@@ -853,10 +853,10 @@ export function ThreadScreen({
       }
       flush
     >
-      <div className="sentinel-scroll-shell relative h-full">
+      <div className="sentinel-scroll-shell relative h-full min-h-0">
         <ScrollShadow
           ref={scrollAreaRef}
-          className="sentinel-scroll-area flex h-[calc(100vh-44px)] flex-col"
+          className="sentinel-scroll-area flex h-full flex-col"
         >
           <div className="mx-auto w-full max-w-2xl flex-1 px-6 pt-4 pb-20">
             <div className="flex flex-col gap-4">

@@ -657,10 +657,10 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         title={threadDetailsQuery.data?.thread.title ?? firstText}
         flush
       >
-        <div className="sentinel-scroll-shell relative h-full">
+        <div className="sentinel-scroll-shell relative h-full min-h-0">
           <div
             ref={scrollAreaRef}
-            className="sentinel-scroll-area flex h-[calc(100vh-44px)] flex-col"
+            className="sentinel-scroll-area flex h-full flex-col"
           >
             <div className="mx-auto w-full max-w-2xl flex-1 px-6 pt-4">
               <div className="flex flex-col gap-4">
@@ -741,7 +741,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
 
   return (
     <PageWrapper title="New Thread" flush>
-      <div className="sentinel-scroll-shell h-[calc(100vh-44px)]">
+      <div className="sentinel-scroll-shell h-full min-h-0">
         <div className="sentinel-scroll-area flex h-full flex-col">
           <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-6">
             <SentinelLogoBadge

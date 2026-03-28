@@ -106,7 +106,7 @@ export function AppShell({ children }: PropsWithChildren) {
         </LeftSidebar>
 
         <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip">
-          {children}
+          <div className="min-h-0 flex-1">{children}</div>
           <TerminalPanel />
         </main>
 

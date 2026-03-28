@@ -31,7 +31,7 @@ export function ThreadRouteScreen({ threadId }: { threadId: string }) {
   ) {
     return (
       <PageWrapper flush title="Thread">
-        <div className="flex h-[calc(100vh-44px)] items-center justify-center px-4">
+        <div className="flex h-full items-center justify-center px-4">
           <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground rounded-xl border px-3 py-2.5 text-xs">
             {threadQuery.error.message}
           </p>
@@ -43,7 +43,7 @@ export function ThreadRouteScreen({ threadId }: { threadId: string }) {
   if (!threadQuery.data) {
     return (
       <PageWrapper flush title="Thread">
-        <div className="flex h-[calc(100vh-44px)] items-center justify-center px-4">
+        <div className="flex h-full items-center justify-center px-4">
           <div
             aria-label="Loading"
             className="h-4 w-4 animate-spin rounded-full border-2 border-muted/25 border-t-foreground"
