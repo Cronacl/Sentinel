@@ -1,7 +1,14 @@
 "use client";
 
-import { Button, Chip, Skeleton, Switch } from "@heroui/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Button,
+  Chip,
+  Modal,
+  Skeleton,
+  Switch,
+  useOverlayState,
+} from "@heroui/react";
+import { useEffect, useMemo, useState } from "react";
 import { sileo } from "sileo";
 
 import { IntegrationProviderIcon } from "@/components/icons/integration-provider-icon";
@@ -14,7 +21,6 @@ import {
   type DatabaseIntegrationSummary,
 } from "@/components/settings/database-config-sidebar";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
-import { useRightSidebar } from "@/components/shell";
 import {
   INTEGRATION_METADATA,
   isIntegrationSetupReady,
@@ -228,12 +234,10 @@ export default function IntegrationsSettingsPage() {
     useState<IntegrationProvider | null>(null);
   const [connectingProvider, setConnectingProvider] =
     useState<IntegrationProvider | null>(null);
-  const previousRightSidebarOpenRef = useRef(false);
 
   const integrationsQuery = api.integrations.list.useQuery();
   const utils = api.useUtils();
   const connect = api.integrations.connect.useMutation();
-  const { close, isOpen, open } = useRightSidebar();
 
   const enableAuthless = api.integrations.enableAuthless.useMutation({
     onSettled: async () => {
@@ -308,8 +312,17 @@ export default function IntegrationsSettingsPage() {
       ? null
       : (integrations.find((item) => item.provider === selectedProvider) ??
         null);
+  const isDetailsOpen = selectedIntegration !== null;
+  const detailsOverlayState = useOverlayState({
+    isOpen: isDetailsOpen,
+    onOpenChange: (open) => {
+      if (!open) {
+        setSelectedProvider(null);
+      }
+    },
+  });
 
-  const sidebarContent = useMemo(() => {
+  const detailsContent = useMemo(() => {
     if (!selectedIntegration) {
       return null;
     }
@@ -330,27 +343,6 @@ export default function IntegrationsSettingsPage() {
       />
     );
   }, [selectedIntegration]);
-
-  useEffect(() => {
-    if (
-      previousRightSidebarOpenRef.current &&
-      !isOpen &&
-      selectedProvider !== null
-    ) {
-      setSelectedProvider(null);
-    }
-
-    previousRightSidebarOpenRef.current = isOpen;
-  }, [isOpen, selectedProvider]);
-
-  useEffect(() => {
-    if (!sidebarContent) {
-      close();
-      return;
-    }
-
-    open(sidebarContent);
-  }, [close, open, sidebarContent]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -428,7 +420,6 @@ export default function IntegrationsSettingsPage() {
       disableAuthless.mutate({ provider });
     }
   };
-
   const renderRows = (items: IntegrationListItem[], isToggling: boolean) =>
     items.map((integration) => (
       <IntegrationRow
@@ -454,67 +445,85 @@ export default function IntegrationsSettingsPage() {
       subtitle="Connect the external tools Sentinel can act on directly. Setup stays local, and each integration uses your own credentials."
       title="Integrations"
     >
-      {integrationsQuery.isPending && integrations.length === 0 ? (
-        <IntegrationsSkeleton />
-      ) : (
-        <div className="flex flex-col gap-5">
-          {connected.length > 0 ? (
-            <section>
-              <h2 className="text-foreground mb-2 px-1 text-sm font-medium">
-                Connected
-              </h2>
-              <div className="flex flex-col gap-2">
-                {renderRows(connected, toggle.isPending)}
-              </div>
-            </section>
-          ) : null}
-
-          {authless.length > 0 ? (
-            <section>
-              <div className="mb-2 px-1">
-                <h2 className="text-foreground text-sm font-medium">
-                  Public Data Sources
+      <>
+        {integrationsQuery.isPending && integrations.length === 0 ? (
+          <IntegrationsSkeleton />
+        ) : (
+          <div className="flex flex-col gap-5">
+            {connected.length > 0 ? (
+              <section>
+                <h2 className="text-foreground mb-2 px-1 text-sm font-medium">
+                  Connected
                 </h2>
-                <p className="text-muted mt-0.5 text-xs">
-                  These integrations use public APIs and require no credentials
-                  — just toggle them on.
-                </p>
-              </div>
-              <div className="flex flex-col gap-2">
-                {renderRows(authless, false)}
-              </div>
-            </section>
-          ) : null}
+                <div className="flex flex-col gap-2">
+                  {renderRows(connected, toggle.isPending)}
+                </div>
+              </section>
+            ) : null}
 
-          {readyToSetup.length > 0 ? (
-            <section>
-              <h2 className="text-foreground mb-2 px-1 text-sm font-medium">
-                Ready To Set Up
-              </h2>
-              <div className="flex flex-col gap-2">
-                {renderRows(readyToSetup, false)}
-              </div>
-            </section>
-          ) : null}
+            {authless.length > 0 ? (
+              <section>
+                <div className="mb-2 px-1">
+                  <h2 className="text-foreground text-sm font-medium">
+                    Public Data Sources
+                  </h2>
+                  <p className="text-muted mt-0.5 text-xs">
+                    These integrations use public APIs and require no
+                    credentials — just toggle them on.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {renderRows(authless, false)}
+                </div>
+              </section>
+            ) : null}
 
-          {comingSoon.length > 0 ? (
-            <section>
-              <div className="mb-2 px-1">
-                <h2 className="text-foreground text-sm font-medium">
-                  Coming Soon
+            {readyToSetup.length > 0 ? (
+              <section>
+                <h2 className="text-foreground mb-2 px-1 text-sm font-medium">
+                  Ready To Set Up
                 </h2>
-                <p className="text-muted mt-0.5 text-xs">
-                  These integrations are planned, but the connection flow is not
-                  available yet.
-                </p>
-              </div>
-              <div className="flex flex-col gap-2">
-                {renderRows(comingSoon, false)}
-              </div>
-            </section>
-          ) : null}
-        </div>
-      )}
+                <div className="flex flex-col gap-2">
+                  {renderRows(readyToSetup, false)}
+                </div>
+              </section>
+            ) : null}
+
+            {comingSoon.length > 0 ? (
+              <section>
+                <div className="mb-2 px-1">
+                  <h2 className="text-foreground text-sm font-medium">
+                    Coming Soon
+                  </h2>
+                  <p className="text-muted mt-0.5 text-xs">
+                    These integrations are planned, but the connection flow is
+                    not available yet.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {renderRows(comingSoon, false)}
+                </div>
+              </section>
+            ) : null}
+          </div>
+        )}
+        <Modal.Root state={detailsOverlayState}>
+          <Modal.Backdrop
+            className="items-stretch justify-end"
+            variant="opaque"
+          >
+            <Modal.Container
+              className="items-end justify-start p-0 sm:w-full sm:max-w-none sm:p-0"
+              placement="center"
+              size="full"
+            >
+              <Modal.Dialog className="border-separator bg-surface h-dvh w-[min(560px,92vw)] max-w-[92vw] rounded-none border-l p-0 shadow-xl sm:w-[560px] sm:max-w-[560px]">
+                {detailsContent}
+              </Modal.Dialog>
+            </Modal.Container>
+          </Modal.Backdrop>
+        </Modal.Root>
+      </>
     </SettingsPageWrapper>
   );
 }
