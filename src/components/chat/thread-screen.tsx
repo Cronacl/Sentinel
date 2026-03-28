@@ -263,7 +263,6 @@ export function ThreadScreen({
   } = useChatScrollControl(thread.id);
 
   const chat = useThreadChat({
-    hydrateFromServer: true,
     initialActiveRunId: thread.activeRunId,
     initialChatEngine: thread.chatEngine,
     threadId: thread.id,

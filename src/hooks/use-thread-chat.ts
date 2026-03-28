@@ -28,7 +28,6 @@ import type { ThreadMode, ThreadPlanAnswer } from "@/lib/plan";
 import type { ChatEngine, ThreadStatus } from "@/server/db/enums";
 
 type UseThreadChatOptions = {
-  hydrateFromServer?: boolean;
   initialActiveRunId?: string | null;
   initialChatEngine?: ChatEngine;
   initialMessages?: ThreadUIMessage[];
@@ -115,6 +114,16 @@ type SessionStore = {
 };
 
 const sessionStores = new Map<string, SessionStore>();
+
+export function hasActiveThreadRun(
+  activeRunId: string | null | undefined,
+  threadStatus: ThreadStatus,
+) {
+  return Boolean(
+    activeRunId &&
+    (threadStatus === "streaming" || threadStatus === "awaiting_approval"),
+  );
+}
 
 function getClientTimingNow() {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
@@ -262,11 +271,12 @@ function createInitialState(
     composerState: {
       pendingActionCount: 0,
     },
-    connectionState:
-      normalizedSnapshot?.activeRunId &&
-      normalizedSnapshot.threadStatus === "streaming"
-        ? "connecting"
-        : "idle",
+    connectionState: hasActiveThreadRun(
+      normalizedSnapshot?.activeRunId,
+      normalizedSnapshot?.threadStatus ?? "idle",
+    )
+      ? "connecting"
+      : "idle",
     errorMessage: null,
     lastAppliedRevision: normalizedSnapshot
       ? getMaxMessageRevision(normalizedSnapshot.messages)
@@ -340,12 +350,12 @@ export function mergeThreadSessionStateFromSnapshot(
     current.activeRunId != null &&
     current.lastAppliedRevision > nextRevision &&
     current.activeRunId === normalizedSnapshot.activeRunId;
-  const nextConnectionState =
-    normalizedSnapshot.activeRunId &&
-    (normalizedSnapshot.threadStatus === "streaming" ||
-      normalizedSnapshot.threadStatus === "awaiting_approval")
-      ? streamingConnectionState
-      : "idle";
+  const nextConnectionState = hasActiveThreadRun(
+    normalizedSnapshot.activeRunId,
+    normalizedSnapshot.threadStatus,
+  )
+    ? streamingConnectionState
+    : "idle";
   const nextLastAppliedRevision = preserveCurrentMessages
     ? current.lastAppliedRevision
     : Math.max(current.lastAppliedRevision, nextRevision);
@@ -389,12 +399,12 @@ export function mergeThreadSessionStateWithError(
   current: ThreadSessionState,
   errorMessage: string,
 ): ThreadSessionState {
-  const nextConnectionState =
-    current.activeRunId != null &&
-    (current.threadStatus === "streaming" ||
-      current.threadStatus === "awaiting_approval")
-      ? current.connectionState
-      : "error";
+  const nextConnectionState = hasActiveThreadRun(
+    current.activeRunId,
+    current.threadStatus,
+  )
+    ? current.connectionState
+    : "error";
 
   if (
     current.connectionState === nextConnectionState &&
@@ -636,12 +646,12 @@ function createSessionStore(
     streamAbortController = null;
     setState((current) => ({
       ...current,
-      connectionState:
-        current.activeRunId &&
-        (current.threadStatus === "streaming" ||
-          current.threadStatus === "awaiting_approval")
-          ? "disconnected"
-          : "idle",
+      connectionState: hasActiveThreadRun(
+        current.activeRunId,
+        current.threadStatus,
+      )
+        ? "disconnected"
+        : "idle",
     }));
   };
 
@@ -765,10 +775,10 @@ function createSessionStore(
       return;
     }
 
-    const isActiveRun =
-      state.activeRunId &&
-      (state.threadStatus === "streaming" ||
-        state.threadStatus === "awaiting_approval");
+    const isActiveRun = hasActiveThreadRun(
+      state.activeRunId,
+      state.threadStatus,
+    );
     if (!isActiveRun) {
       if (streamAbortController) {
         disconnect();
@@ -985,7 +995,6 @@ function getLastAssistantMessage(messages: ThreadUIMessage[]) {
 }
 
 export function useThreadChat({
-  hydrateFromServer = false,
   initialActiveRunId = null,
   initialChatEngine = "sentinel",
   initialMessages = [],
@@ -1047,20 +1056,6 @@ export function useThreadChat({
 
     return store.addSnapshotListener(onSnapshot);
   }, [onSnapshot, store]);
-
-  useEffect(() => {
-    if (!hydrateFromServer) {
-      return;
-    }
-
-    void store.refreshSnapshot({ allowMissing: true }).catch((error) => {
-      const nextError =
-        error instanceof Error
-          ? error
-          : new Error("Unable to refresh the chat session.");
-      onError?.(nextError);
-    });
-  }, [hydrateFromServer, onError, store]);
 
   const postThreadAction = useCallback(
     async (body: Record<string, unknown>) => {

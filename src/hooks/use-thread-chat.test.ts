@@ -6,6 +6,7 @@ import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import {
   fetchThreadSessionSnapshot,
   formatClientTimingLog,
+  hasActiveThreadRun,
   mergeThreadSessionStateFromSnapshot,
   mergeThreadSessionStateWithError,
   readThreadChatErrorMessage,
@@ -522,5 +523,14 @@ describe("formatClientTimingLog", () => {
     expect(formatClientTimingLog("first_stream_event", 12.8, "thread-1")).toBe(
       '[ThreadChatClient] {"elapsedMs":13,"phase":"first_stream_event","threadId":"thread-1"}',
     );
+  });
+});
+
+describe("hasActiveThreadRun", () => {
+  it("treats only streaming and approval states with a run id as live", () => {
+    expect(hasActiveThreadRun("run-1", "streaming")).toBe(true);
+    expect(hasActiveThreadRun("run-1", "awaiting_approval")).toBe(true);
+    expect(hasActiveThreadRun("run-1", "idle")).toBe(false);
+    expect(hasActiveThreadRun(null, "streaming")).toBe(false);
   });
 });

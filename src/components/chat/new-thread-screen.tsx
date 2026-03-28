@@ -32,6 +32,7 @@ import type { FileUIPart } from "ai";
 import { ChatComposer } from "./chat-composer";
 import { ChatMessage } from "./chat-message";
 import { ChatScrollControl, useChatScrollControl } from "./chat-scroll-control";
+import { buildThreadQueryOptions } from "./thread-query-options";
 
 type NewThreadScreenProps = {
   threadId?: string;
@@ -226,7 +227,10 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   const visibleChatError = chatError ?? errorMessage;
   const threadDetailsQuery = api.threads.get.useQuery(
     { threadId: draftThreadId },
-    { enabled: hasMessages },
+    {
+      ...buildThreadQueryOptions(cachedThreadDetails),
+      enabled: hasMessages,
+    },
   );
   const removeQueuedFollowUp = api.threads.removeQueuedFollowUp.useMutation({
     onSuccess: () => {

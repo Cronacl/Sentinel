@@ -16,6 +16,7 @@ import { TerminalPanel } from "@/components/terminal/terminal-panel";
 import { WorkspaceSidebar } from "./workspace-sidebar";
 import { LeftSidebar } from "./left-sidebar";
 import { RightSidebar } from "./right-sidebar";
+import { AppWarmupCoordinator } from "./app-warmup";
 import { ShellProvider } from "./shell-context";
 import {
   DesktopWindowControls,
@@ -93,6 +94,7 @@ export function AppShell({ children }: PropsWithChildren) {
   return (
     <ShellProvider>
       <ShellWarmCache />
+      <AppWarmupCoordinator />
       <div className="relative flex h-dvh overflow-clip">
         <LeftSidebar>
           <div className="flex h-full flex-col">

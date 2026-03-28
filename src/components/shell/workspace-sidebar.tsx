@@ -345,12 +345,14 @@ function PinnedThreadsList({
   threads,
   selectedThreadId,
   onPressThread,
+  onWarmThread,
   onPin,
   onArchive,
 }: {
   onArchive: (threadId: string) => void;
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
+  onWarmThread: (workspaceId: string, threadId: string) => void;
   selectedThreadId: string | null;
   threads: Array<{
     id: string;
@@ -376,6 +378,8 @@ function PinnedThreadsList({
                   : "text-foreground hover:text-foreground"
               }`}
               key={thread.id}
+              onFocus={() => onWarmThread(thread.workspace.id, thread.id)}
+              onMouseEnter={() => onWarmThread(thread.workspace.id, thread.id)}
               onClick={() => onPressThread(thread.workspace.id, thread.id)}
               role="button"
               tabIndex={0}
@@ -456,6 +460,7 @@ function ThreadRow({
   onArchive,
   onPin,
   onPressThread,
+  onWarmThread,
   selectedThreadId,
   thread,
   workspaceId,
@@ -464,6 +469,7 @@ function ThreadRow({
   onArchive: (threadId: string) => void;
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
+  onWarmThread: (workspaceId: string, threadId: string) => void;
   selectedThreadId: string | null;
   thread: {
     id: string;
@@ -483,6 +489,8 @@ function ThreadRow({
           ? "bg-default text-foreground"
           : "text-foreground hover:text-foreground"
       }`}
+      onFocus={() => onWarmThread(workspaceId, thread.id)}
+      onMouseEnter={() => onWarmThread(workspaceId, thread.id)}
       onClick={() => onPressThread(workspaceId, thread.id)}
       role="button"
       tabIndex={0}
@@ -531,6 +539,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
   onPressWorkspace,
   onRenameWorkspace,
   onToggleWorkspace,
+  onWarmThread,
   selectedThreadId,
 }: {
   group: ThreadGroup[number];
@@ -542,6 +551,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
   onPressWorkspace: (workspaceId: string) => void;
   onRenameWorkspace: (workspaceId: string) => void;
   onToggleWorkspace: (workspaceId: string) => void;
+  onWarmThread: (workspaceId: string, threadId: string) => void;
   selectedThreadId: string | null;
 }) {
   const [showOverflowThreads, setShowOverflowThreads] = useState(false);
@@ -616,6 +626,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
                   onArchive={onArchive}
                   onPin={onPin}
                   onPressThread={onPressThread}
+                  onWarmThread={onWarmThread}
                   selectedThreadId={selectedThreadId}
                   thread={thread}
                   workspaceId={group.workspace.id}
@@ -655,6 +666,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
                           onArchive={onArchive}
                           onPin={onPin}
                           onPressThread={onPressThread}
+                          onWarmThread={onWarmThread}
                           selectedThreadId={selectedThreadId}
                           thread={thread}
                           workspaceId={group.workspace.id}
@@ -687,6 +699,7 @@ const ThreadList = memo(function ThreadList({
   onPin,
   onArchive,
   onToggleWorkspace,
+  onWarmThread,
 }: {
   expandedWorkspaceIds: Set<string>;
   groups: ThreadGroup;
@@ -698,6 +711,7 @@ const ThreadList = memo(function ThreadList({
   onRenameWorkspace: (workspaceId: string) => void;
   selectedThreadId: string | null;
   onToggleWorkspace: (workspaceId: string) => void;
+  onWarmThread: (workspaceId: string, threadId: string) => void;
 }) {
   return (
     <ScrollShadow className="max-h-full px-3 py-1 pb-4" orientation="vertical">
@@ -714,6 +728,7 @@ const ThreadList = memo(function ThreadList({
             onPressWorkspace={onPressWorkspace}
             onRenameWorkspace={onRenameWorkspace}
             onToggleWorkspace={onToggleWorkspace}
+            onWarmThread={onWarmThread}
             selectedThreadId={selectedThreadId}
           />
         ))}
@@ -725,6 +740,7 @@ const ThreadList = memo(function ThreadList({
 const ChronologicalThreadList = memo(function ChronologicalThreadList({
   items,
   onPressThread,
+  onWarmThread,
   selectedThreadId,
   onPin,
   onArchive,
@@ -733,6 +749,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
   onArchive: (threadId: string) => void;
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
+  onWarmThread: (workspaceId: string, threadId: string) => void;
   selectedThreadId: string | null;
 }) {
   const [showOverflowThreads, setShowOverflowThreads] = useState(false);
@@ -749,6 +766,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
             onArchive={onArchive}
             onPin={onPin}
             onPressThread={onPressThread}
+            onWarmThread={onWarmThread}
             selectedThreadId={selectedThreadId}
             thread={item}
             workspaceId={item.workspace.id}
@@ -785,6 +803,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
                     onArchive={onArchive}
                     onPin={onPin}
                     onPressThread={onPressThread}
+                    onWarmThread={onWarmThread}
                     selectedThreadId={selectedThreadId}
                     thread={item}
                     workspaceId={item.workspace.id}
@@ -1347,16 +1366,28 @@ export function WorkspaceSidebar() {
     [toggleExpanded],
   );
 
+  const handleWarmThread = useCallback(
+    (_workspaceId: string, threadId: string) => {
+      if (selectedThreadId === threadId) {
+        return;
+      }
+
+      void utils.threads.get.prefetch({ threadId });
+      void router.prefetch(`/thread/${threadId}`);
+    },
+    [router, selectedThreadId, utils.threads.get],
+  );
+
   const handlePressThread = useCallback(
     (workspaceId: string, threadId: string) => {
       if (selectedWorkspaceId !== workspaceId) {
         void selectWorkspace.mutate({ workspaceId });
       }
 
-      void utils.threads.get.prefetch({ threadId });
+      handleWarmThread(workspaceId, threadId);
       router.push(`/thread/${threadId}`);
     },
-    [router, selectWorkspace, selectedWorkspaceId, utils.threads.get],
+    [handleWarmThread, router, selectWorkspace, selectedWorkspaceId],
   );
 
   const handleOpenRenameWorkspace = useCallback(
@@ -1566,6 +1597,7 @@ export function WorkspaceSidebar() {
                 onArchive={handleArchiveThread}
                 onPin={handlePin}
                 onPressThread={handlePressThread}
+                onWarmThread={handleWarmThread}
                 selectedThreadId={selectedThreadId}
                 threads={pinnedThreads}
               />
@@ -1581,6 +1613,7 @@ export function WorkspaceSidebar() {
                 onPressThread={handlePressThread}
                 onPressWorkspace={handlePressWorkspace}
                 onRenameWorkspace={handleOpenRenameWorkspace}
+                onWarmThread={handleWarmThread}
                 selectedThreadId={selectedThreadId}
                 onToggleWorkspace={handleToggleWorkspace}
               />
@@ -1592,6 +1625,7 @@ export function WorkspaceSidebar() {
                 onArchive={handleArchiveThread}
                 onPin={handlePin}
                 onPressThread={handlePressThread}
+                onWarmThread={handleWarmThread}
                 selectedThreadId={selectedThreadId}
               />
             ) : null}

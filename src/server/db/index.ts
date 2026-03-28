@@ -805,7 +805,11 @@ if (process.env.NODE_ENV !== "production") {
   globalForDb.vectorDb = vectorDb;
 }
 
-if (!shouldSkipStartupTasks && !globalForDb.automationSchedulerInit) {
+function startAutomationScheduler() {
+  if (shouldSkipStartupTasks || globalForDb.automationSchedulerInit) {
+    return globalForDb.automationSchedulerInit;
+  }
+
   globalForDb.automationSchedulerInit = Promise.resolve()
     .then(async () => {
       const { initAutomationScheduler } =
@@ -818,9 +822,15 @@ if (!shouldSkipStartupTasks && !globalForDb.automationSchedulerInit) {
         `Failed to initialize scheduler: ${error instanceof Error ? error.message : error}`,
       );
     });
+
+  return globalForDb.automationSchedulerInit;
 }
 
-if (!shouldSkipStartupTasks && !globalForDb.startupBackupInit) {
+function startStartupBackup() {
+  if (shouldSkipStartupTasks || globalForDb.startupBackupInit) {
+    return globalForDb.startupBackupInit;
+  }
+
   globalForDb.startupBackupInit = Promise.resolve()
     .then(async () => {
       const { createStartupBackup } = await import("@/server/db/backup");
@@ -837,6 +847,16 @@ if (!shouldSkipStartupTasks && !globalForDb.startupBackupInit) {
         `Startup backup failed: ${error instanceof Error ? error.message : error}`,
       );
     });
+
+  return globalForDb.startupBackupInit;
+}
+
+export async function startDeferredStartupTasks() {
+  const tasks = [startAutomationScheduler(), startStartupBackup()].filter(
+    (task): task is Promise<void> => Boolean(task),
+  );
+
+  await Promise.all(tasks);
 }
 
 export type Database = ReturnType<typeof createDatabase>;
