@@ -92,7 +92,7 @@ export function setRepoDiffSidebarState(input: {
   workspaceId: string;
 }) {
   const sourceKey = `${input.threadId}:${input.workspaceId}`;
-  const nextState: RepoDiffSidebarState = {
+  const nextState: RepoDiffSidebarRecord = {
     kind: "thread",
     sourceKey,
     threadId: input.threadId,
