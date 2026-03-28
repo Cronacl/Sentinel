@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.10.0-alpha.1...v0.11.0-alpha.1) (2026-03-28)
+
+
+### Features
+
+* add desktop file opening and improve repo diff sidebar state ([4ad3207](https://github.com/Cronacl/Sentinel/commit/4ad32074ebb8be20d4076fb6cc95a2d0c2a07334))
+* add thread repository action helpers and tests for commit message generation ([2b08571](https://github.com/Cronacl/Sentinel/commit/2b08571839f942c47560b0d172d17147436b661f))
+* implement spawn functionality for Claude SDK and add executable resolution ([5347a12](https://github.com/Cronacl/Sentinel/commit/5347a1216199d3762509cc85ff51d369da8ae1d6))
+
+
+### Bug Fixes
+
+* adjust title width in ThreadScreen and enhance Claude search parsing logic ([207b966](https://github.com/Cronacl/Sentinel/commit/207b96696122dd61d2e7539b31dc147fd775a2bd))
+* update button styling in WorkspaceSidebar for improved visibility ([68d2f54](https://github.com/Cronacl/Sentinel/commit/68d2f547049d84d1c1d857dc4895d3e2ebdde556))
+
 ## [0.10.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.9.0-alpha.1...v0.10.0-alpha.1) (2026-03-27)
 
 
