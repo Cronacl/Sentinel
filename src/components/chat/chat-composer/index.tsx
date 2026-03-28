@@ -340,7 +340,7 @@ export function ChatComposer({
     <>
       {isDraggingOver ? (
         <div className="pointer-events-none fixed inset-0 z-100 flex items-center justify-center bg-background/60 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3 rounded-3xl border-2 border-dashed border-accent/50 bg-surface/80 px-12 py-10">
+          <div className="flex flex-col items-center gap-3 rounded-3xl border-1 border-dashed border-separator/50 bg-surface px-12 py-10">
             <svg
               className="size-10 text-accent"
               fill="none"
