@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.12.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.11.0-alpha.1...v0.12.0-alpha.1) (2026-03-28)
+
+
+### Features
+
+* implement app warmup functionality and improve thread query handling ([78b4e3c](https://github.com/Cronacl/Sentinel/commit/78b4e3c40dadc9b2772f7f36623fffb21adae3e3))
+* integrate composer context into chat components for enhanced user experience ([4da686a](https://github.com/Cronacl/Sentinel/commit/4da686a44398eb7df669dc8ca30ba291fa877f05))
+
 ## [0.11.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.10.0-alpha.1...v0.11.0-alpha.1) (2026-03-28)
 
 
