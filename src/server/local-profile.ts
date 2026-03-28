@@ -27,6 +27,9 @@ export type LocalSession = {
   };
 };
 
+let localProfilePromise: Promise<User> | null = null;
+let localSessionPromise: Promise<LocalSession> | null = null;
+
 function getDefaultProfileSeed() {
   const machineName =
     process.env.USER ||
@@ -102,39 +105,55 @@ async function createLocalProfile(): Promise<User> {
 }
 
 export async function getOrCreateLocalProfile(): Promise<User> {
-  const state = await readState();
+  if (!localProfilePromise) {
+    localProfilePromise = (async () => {
+      const state = await readState();
 
-  if (state.localProfileId) {
-    const user = await db.query.users.findFirst({
-      where: eq(users.id, state.localProfileId),
+      if (state.localProfileId) {
+        const user = await db.query.users.findFirst({
+          where: eq(users.id, state.localProfileId),
+        });
+
+        if (user) {
+          return user;
+        }
+      }
+
+      const existingUser = await db.query.users.findFirst({
+        orderBy: (users, { asc }) => [asc(users.createdAt)],
+      });
+
+      if (existingUser) {
+        await persistProfileId(existingUser.id);
+        return existingUser;
+      }
+
+      return createLocalProfile();
+    })().catch((error) => {
+      localProfilePromise = null;
+      throw error;
     });
-
-    if (user) {
-      return user;
-    }
   }
 
-  const existingUser = await db.query.users.findFirst({
-    orderBy: (users, { asc }) => [asc(users.createdAt)],
-  });
-
-  if (existingUser) {
-    await persistProfileId(existingUser.id);
-    return existingUser;
-  }
-
-  return createLocalProfile();
+  return localProfilePromise;
 }
 
 export async function getLocalSession(): Promise<LocalSession> {
-  const user = await getOrCreateLocalProfile();
+  if (!localSessionPromise) {
+    localSessionPromise = getOrCreateLocalProfile()
+      .then((user) => ({
+        user: {
+          email: user.email,
+          id: user.id,
+          image: user.image,
+          name: user.name,
+        },
+      }))
+      .catch((error) => {
+        localSessionPromise = null;
+        throw error;
+      });
+  }
 
-  return {
-    user: {
-      email: user.email,
-      id: user.id,
-      image: user.image,
-      name: user.name,
-    },
-  };
+  return localSessionPromise;
 }

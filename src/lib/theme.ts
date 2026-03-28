@@ -4,6 +4,7 @@ export type ThemePreference = (typeof THEME_PREFERENCE_VALUES)[number];
 export type ResolvedTheme = Exclude<ThemePreference, "system">;
 
 export const DEFAULT_THEME_PREFERENCE: ThemePreference = "system";
+export const THEME_PREFERENCE_STORAGE_KEY = "sentinel.theme-preference";
 
 export const THEME_OPTIONS = [
   {
@@ -50,6 +51,11 @@ export function applyThemePreference(preference: ThemePreference) {
   (
     window as typeof window & { __sentinelThemePreference?: ThemePreference }
   ).__sentinelThemePreference = preference;
+  try {
+    window.localStorage.setItem(THEME_PREFERENCE_STORAGE_KEY, preference);
+  } catch {
+    // Ignore localStorage write failures and continue with the applied theme.
+  }
 
   root.setAttribute("data-theme", resolved);
   root.classList.toggle("dark", resolved === "dark");
@@ -57,8 +63,12 @@ export function applyThemePreference(preference: ThemePreference) {
   return resolved;
 }
 
-export function getThemeInitScript(preference: ThemePreference) {
-  return `(function(){var p=${JSON.stringify(
-    preference,
-  )};var d=document.documentElement;var t=p==="system"?(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):p;d.setAttribute("data-theme",t);d.classList.toggle("dark",t==="dark");window.__sentinelThemePreference=p;})();`;
+export function getThemeInitScript(
+  fallbackPreference: ThemePreference = DEFAULT_THEME_PREFERENCE,
+) {
+  return `(function(){var k=${JSON.stringify(
+    THEME_PREFERENCE_STORAGE_KEY,
+  )};var p=${JSON.stringify(
+    fallbackPreference,
+  )};try{var s=window.localStorage.getItem(k);if(s==="light"||s==="dark"||s==="system"){p=s;}}catch{}var d=document.documentElement;var t=p==="system"?(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):p;d.setAttribute("data-theme",t);d.classList.toggle("dark",t==="dark");window.__sentinelThemePreference=p;})();`;
 }

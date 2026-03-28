@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 
 import { Providers } from "@/components/providers";
-import { DEFAULT_THEME_PREFERENCE, getThemeInitScript } from "@/lib/theme";
-import { getOrCreateLocalProfile } from "@/server/local-profile";
+import { getThemeInitScript } from "@/lib/theme";
 import "@/styles/globals.css";
 
 export const metadata: Metadata = {
@@ -11,8 +10,6 @@ export const metadata: Metadata = {
   description: "Backend foundation for the Cronacl rewrite in Sentinel.",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
-
-export const dynamic = "force-dynamic";
 
 const satoshi = localFont({
   src: [
@@ -81,15 +78,9 @@ const millionaire = localFont({
   variable: "--font-millionaire",
 });
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const shouldSkipLocalProfile =
-    process.env.SENTINEL_SKIP_STARTUP_TASKS === "1" ||
-    process.env.SKIP_ENV_VALIDATION === "1";
-  const user = shouldSkipLocalProfile ? null : await getOrCreateLocalProfile();
-  const themePreference = user?.themePreference ?? DEFAULT_THEME_PREFERENCE;
-
   return (
     <html
       className={`${satoshi.variable} ${millionaire.variable}`}
@@ -99,7 +90,7 @@ export default async function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: getThemeInitScript(themePreference),
+            __html: getThemeInitScript(),
           }}
         />
       </head>

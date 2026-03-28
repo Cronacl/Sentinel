@@ -7,6 +7,7 @@ import { PageWrapper } from "@/components/shell";
 import { api } from "@/trpc/react";
 
 import { ThreadScreen } from "./thread-screen";
+import { buildThreadQueryOptions } from "./thread-query-options";
 
 export function ThreadRouteScreen({ threadId }: { threadId: string }) {
   const router = useRouter();
@@ -14,7 +15,7 @@ export function ThreadRouteScreen({ threadId }: { threadId: string }) {
   const cachedThread = utils.threads.get.getData({ threadId });
   const threadQuery = api.threads.get.useQuery(
     { threadId },
-    cachedThread ? { initialData: cachedThread } : undefined,
+    buildThreadQueryOptions(cachedThread),
   );
 
   useEffect(() => {
