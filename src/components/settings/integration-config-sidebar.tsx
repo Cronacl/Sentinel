@@ -28,7 +28,6 @@ import {
 import { openIntegrationOAuthPopup } from "@/lib/integrations/oauth/popup";
 import type { IntegrationProvider } from "@/server/db/enums";
 import { api } from "@/trpc/react";
-import { useRightSidebar } from "@/components/shell/shell-context";
 
 function isGoogleIntegration(provider: IntegrationProvider) {
   return (
@@ -198,7 +197,6 @@ export function IntegrationConfigSidebar({
   integration,
   onClose,
 }: IntegrationConfigSidebarProps) {
-  const { close } = useRightSidebar();
   const utils = api.useUtils();
   const metadata = INTEGRATION_METADATA[integration.provider];
   const isSetupReady = isIntegrationSetupReady(integration.provider);
@@ -290,11 +288,6 @@ export function IntegrationConfigSidebar({
     connect.isPending ||
     disconnect.isPending ||
     toggle.isPending;
-
-  const handleSidebarClose = () => {
-    onClose();
-    close();
-  };
 
   const handleSave = async (values: IntegrationConfigFormValues) => {
     setSubmitError("");
@@ -440,9 +433,9 @@ export function IntegrationConfigSidebar({
           </p>
         </div>
         <CloseButton
-          aria-label={`Close ${integration.label} sidebar`}
+          aria-label={`Close ${integration.label} details`}
           className="shrink-0"
-          onPress={handleSidebarClose}
+          onPress={onClose}
         />
       </header>
 

@@ -23,7 +23,6 @@ import { IntegrationProviderIcon } from "@/components/icons/integration-provider
 import { INTEGRATION_METADATA } from "@/lib/integrations/metadata";
 import type { DatabaseIntegrationProvider } from "@/server/db/enums";
 import { api } from "@/trpc/react";
-import { useRightSidebar } from "@/components/shell/shell-context";
 
 const DEFAULT_PORTS: Record<DatabaseIntegrationProvider, string> = {
   postgresql: "5432",
@@ -111,7 +110,6 @@ export function DatabaseConfigSidebar({
   integration,
   onClose,
 }: DatabaseConfigSidebarProps) {
-  const { close } = useRightSidebar();
   const utils = api.useUtils();
   const metadata = INTEGRATION_METADATA[integration.provider];
   const [submitError, setSubmitError] = useState("");
@@ -183,11 +181,6 @@ export function DatabaseConfigSidebar({
     removeDatabaseConfig.isPending ||
     toggle.isPending;
 
-  const handleSidebarClose = () => {
-    onClose();
-    close();
-  };
-
   const handleSave = async (values: DatabaseConfigFormValues) => {
     setSubmitError("");
 
@@ -257,7 +250,7 @@ export function DatabaseConfigSidebar({
       });
       await utils.integrations.list.invalidate();
       sileo.success({ description: "Database disconnected." });
-      handleSidebarClose();
+      onClose();
     } catch (error) {
       setSubmitError(
         error instanceof Error
@@ -294,9 +287,9 @@ export function DatabaseConfigSidebar({
           </p>
         </div>
         <CloseButton
-          aria-label={`Close ${integration.label} sidebar`}
+          aria-label={`Close ${integration.label} details`}
           className="shrink-0"
-          onPress={handleSidebarClose}
+          onPress={onClose}
         />
       </header>
 
