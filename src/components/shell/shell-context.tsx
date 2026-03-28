@@ -16,6 +16,13 @@ import {
 import { useMediaQuery } from "@/hooks/use-media-query";
 
 const RIGHT_SIDEBAR_DRAWER_BREAKPOINT = "(max-width: 1024px)";
+export type RightSidebarSize = "narrow" | "wide";
+export type RightSidebarPanelId = "repo-diff" | null;
+
+type RightSidebarOptions = {
+  panelId?: RightSidebarPanelId;
+  size?: RightSidebarSize;
+};
 
 interface ShellContextValue {
   leftSidebarOpen: boolean;
@@ -25,10 +32,15 @@ interface ShellContextValue {
   rightSidebarOpen: boolean;
   rightSidebarContent: ReactNode | null;
   rightSidebarDrawerMode: boolean;
+  rightSidebarPanelId: RightSidebarPanelId;
+  rightSidebarSize: RightSidebarSize;
   toggleRightSidebar: () => void;
-  openRightSidebar: (content: ReactNode) => void;
+  openRightSidebar: (content: ReactNode, options?: RightSidebarOptions) => void;
   closeRightSidebar: () => void;
-  setRightSidebarContent: (content: ReactNode | null) => void;
+  setRightSidebarContent: (
+    content: ReactNode | null,
+    options?: RightSidebarOptions,
+  ) => void;
 }
 
 const ShellContext = createContext<ShellContextValue | null>(null);
@@ -41,6 +53,10 @@ export function ShellProvider({ children }: PropsWithChildren) {
   const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
   const [rightSidebarContent, setRightSidebarContent] =
     useState<ReactNode | null>(null);
+  const [rightSidebarPanelId, setRightSidebarPanelId] =
+    useState<RightSidebarPanelId>(null);
+  const [rightSidebarSize, setRightSidebarSize] =
+    useState<RightSidebarSize>("narrow");
   const rightSidebarDrawerMode = useMediaQuery(RIGHT_SIDEBAR_DRAWER_BREAKPOINT);
 
   useEffect(() => {
@@ -64,10 +80,33 @@ export function ShellProvider({ children }: PropsWithChildren) {
     [rightSidebarContent],
   );
 
-  const openRightSidebar = useCallback((content: ReactNode) => {
-    setRightSidebarContent(content);
-    setRightSidebarOpen(true);
-  }, []);
+  const openRightSidebar = useCallback(
+    (content: ReactNode, options?: RightSidebarOptions) => {
+      setRightSidebarPanelId(options?.panelId ?? null);
+      setRightSidebarSize(options?.size ?? "narrow");
+      setRightSidebarContent(content);
+      setRightSidebarOpen(true);
+    },
+    [],
+  );
+
+  const updateRightSidebarContent = useCallback(
+    (content: ReactNode | null, options?: RightSidebarOptions) => {
+      if (options?.panelId !== undefined) {
+        setRightSidebarPanelId(options.panelId);
+      }
+      if (options?.size) {
+        setRightSidebarSize(options.size);
+      } else if (content === null) {
+        setRightSidebarSize("narrow");
+      }
+      if (content === null && options?.panelId === undefined) {
+        setRightSidebarPanelId(null);
+      }
+      setRightSidebarContent(content);
+    },
+    [],
+  );
 
   const closeRightSidebar = useCallback(() => {
     setRightSidebarOpen(false);
@@ -81,10 +120,12 @@ export function ShellProvider({ children }: PropsWithChildren) {
       rightSidebarOpen,
       rightSidebarContent,
       rightSidebarDrawerMode,
+      rightSidebarPanelId,
+      rightSidebarSize,
       toggleRightSidebar,
       openRightSidebar,
       closeRightSidebar,
-      setRightSidebarContent,
+      setRightSidebarContent: updateRightSidebarContent,
     }),
     [
       leftSidebarOpen,
@@ -93,10 +134,12 @@ export function ShellProvider({ children }: PropsWithChildren) {
       rightSidebarOpen,
       rightSidebarContent,
       rightSidebarDrawerMode,
+      rightSidebarPanelId,
+      rightSidebarSize,
       toggleRightSidebar,
       openRightSidebar,
       closeRightSidebar,
-      setRightSidebarContent,
+      updateRightSidebarContent,
     ],
   );
 
@@ -118,6 +161,8 @@ export function useRightSidebar() {
     setRightSidebarContent,
     rightSidebarOpen,
     rightSidebarDrawerMode,
+    rightSidebarPanelId,
+    rightSidebarSize,
     toggleRightSidebar,
   } = useShell();
 
@@ -129,6 +174,8 @@ export function useRightSidebar() {
       setContent: setRightSidebarContent,
       isOpen: rightSidebarOpen,
       isDrawerMode: rightSidebarDrawerMode,
+      panelId: rightSidebarPanelId,
+      size: rightSidebarSize,
     }),
     [
       openRightSidebar,
@@ -137,6 +184,8 @@ export function useRightSidebar() {
       setRightSidebarContent,
       rightSidebarOpen,
       rightSidebarDrawerMode,
+      rightSidebarPanelId,
+      rightSidebarSize,
     ],
   );
 }

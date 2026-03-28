@@ -118,3 +118,33 @@ export function getOpenCommandForTarget(target, projectPath) {
     command: "open",
   };
 }
+
+export function getOpenFileCommandForTarget(target, filePath, lineNumber) {
+  if (target.id === "finder") {
+    return {
+      args: ["-R", filePath],
+      command: "open",
+    };
+  }
+
+  const application = target.appPath ?? target.systemApp ?? target.label;
+  const lineSuffix =
+    typeof lineNumber === "number" &&
+    Number.isFinite(lineNumber) &&
+    lineNumber > 0
+      ? `:${Math.trunc(lineNumber)}`
+      : "";
+  const supportsGoto = new Set(["cursor", "vscode", "windsurf"]);
+
+  if (supportsGoto.has(target.id)) {
+    return {
+      args: ["-a", application, "--args", "-g", `${filePath}${lineSuffix}`],
+      command: "open",
+    };
+  }
+
+  return {
+    args: ["-a", application, filePath],
+    command: "open",
+  };
+}

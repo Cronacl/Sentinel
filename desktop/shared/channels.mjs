@@ -7,6 +7,7 @@ export const DESKTOP_CHANNELS = {
   SERVICES_STATUS: "sentinel:services-status",
   SERVICES_STOP: "sentinel:services-stop",
   WORKSPACE_LIST_OPEN_TARGETS: "sentinel:workspace-list-open-targets",
+  WORKSPACE_OPEN_FILE_IN_TARGET: "sentinel:workspace-open-file-in-target",
   WORKSPACE_OPEN_IN_TARGET: "sentinel:workspace-open-in-target",
   WORKSPACE_OPEN_IN_TERMINAL: "sentinel:workspace-open-in-terminal",
   WORKSPACE_REVEAL_IN_FILE_MANAGER: "sentinel:workspace-reveal-in-file-manager",

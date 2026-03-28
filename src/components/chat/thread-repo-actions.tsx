@@ -1,20 +1,6 @@
 "use client";
 
 import {
-  AiIdeaIcon,
-  ArrowDown01Icon,
-  ArrowUp01Icon,
-  CodeSquareIcon,
-  ComputerTerminal01Icon,
-  FolderOpenIcon,
-  GitBranchIcon,
-  GitCommitIcon,
-  GitPullRequestIcon,
-  GithubIcon,
-  Tick02Icon,
-} from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
-import {
   BUTTON_GROUP_CHILD,
   Button,
   ButtonGroup,
@@ -27,18 +13,40 @@ import {
   TextArea,
   useOverlayState,
 } from "@heroui/react";
+import {
+  AiIdeaIcon,
+  ArrowDown01Icon,
+  ArrowUp01Icon,
+  CodeSquareIcon,
+  ComputerTerminal01Icon,
+  FileDiffIcon,
+  FolderOpenIcon,
+  GitBranchIcon,
+  GitCommitIcon,
+  GitPullRequestIcon,
+  GithubIcon,
+  Tick02Icon,
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sileo } from "sileo";
 
+import {
+  OpenTargetGlyph,
+  isCustomOpenTargetGlyph,
+} from "@/components/icons/open-target-icons";
+import { useRightSidebar } from "@/components/shell/shell-context";
+import { TerminalToggleButton } from "@/components/terminal/terminal-toggle-button";
 import { getDesktopApi, isDesktopRuntime } from "@/lib/desktop/client";
 import type { DesktopOpenTarget } from "@/lib/desktop/contracts";
-import {
-  isCustomOpenTargetGlyph,
-  OpenTargetGlyph,
-} from "@/components/icons/open-target-icons";
-import { TerminalToggleButton } from "@/components/terminal/terminal-toggle-button";
 import { getErrorMessage } from "@/lib/errors";
 import { api } from "@/trpc/react";
+import { RepoDiffSidebar } from "./repo-diff-sidebar";
+import {
+  closeRepoDiffSidebarState,
+  setRepoDiffSidebarState,
+  useRepoDiffSidebarState,
+} from "./repo-diff-sidebar-store";
 import {
   buildCreatePullRequestInput,
   buildGenerateCommitMessageInput,
@@ -94,6 +102,7 @@ export function ThreadRepoActions({
   const desktop = getDesktopApi();
   const isDesktop = isDesktopRuntime();
   const utils = api.useUtils();
+  const rightSidebar = useRightSidebar();
   const [launchTargets, setLaunchTargets] = useState<DesktopOpenTarget[]>([]);
   const [isLoadingTargets, setIsLoadingTargets] = useState(false);
   const [launchingTargetId, setLaunchingTargetId] = useState<string | null>(
@@ -133,6 +142,7 @@ export function ThreadRepoActions({
     pushModalState.isOpen ||
     branchModalState.isOpen ||
     prBranchModalState.isOpen;
+  const repoDiffSidebarState = useRepoDiffSidebarState();
 
   const repoContextQuery = api.repo.getContext.useQuery(repoContextQueryInput, {
     enabled: isDesktop && Boolean(workspaceRootPath),
@@ -643,6 +653,29 @@ export function ThreadRepoActions({
     createPullRequestMutation.isPending ||
     pushMutation.isPending ||
     isGeneratingCommitMessage;
+  const isRepoDiffSidebarActive =
+    rightSidebar.isOpen &&
+    rightSidebar.panelId === "repo-diff" &&
+    repoDiffSidebarState.kind === "thread" &&
+    repoDiffSidebarState.threadId === threadId &&
+    repoDiffSidebarState.workspaceId === workspaceId;
+
+  const handleToggleRepoDiffSidebar = useCallback(() => {
+    if (isRepoDiffSidebarActive) {
+      closeRepoDiffSidebarState();
+      rightSidebar.close();
+      return;
+    }
+
+    setRepoDiffSidebarState({
+      threadId,
+      workspaceId,
+    });
+    rightSidebar.open(<RepoDiffSidebar />, {
+      panelId: "repo-diff",
+      size: "wide",
+    });
+  }, [isRepoDiffSidebarActive, rightSidebar, threadId, workspaceId]);
 
   if (!isDesktop || !workspaceRootPath) {
     return null;
@@ -723,6 +756,7 @@ export function ThreadRepoActions({
     <>
       <div className="flex items-center gap-2">
         <TerminalToggleButton cwd={launchPath} />
+
         <ButtonGroup size="sm" variant="tertiary">
           <Button
             variant="tertiary"
@@ -781,7 +815,7 @@ export function ThreadRepoActions({
           <Dropdown>
             <Button
               aria-label="Choose app to open project"
-              className="max-h-7"
+              className="max-h-7 max-w-6"
               isDisabled={isLoadingTargets || launchTargets.length === 0}
               isIconOnly
               {...{ [BUTTON_GROUP_CHILD]: true }}
@@ -946,6 +980,21 @@ export function ThreadRepoActions({
             </Dropdown.Popover>
           </Dropdown>
         </div>
+        <Button
+          className="max-h-7 rounded-xl px-3"
+          isDisabled={repoContextQuery.isLoading || !repoContext?.isGitRepo}
+          onPress={handleToggleRepoDiffSidebar}
+          size="sm"
+          isIconOnly
+          variant={isRepoDiffSidebarActive ? "secondary" : "tertiary"}
+        >
+          <HugeiconsIcon
+            color="currentColor"
+            icon={FileDiffIcon}
+            size={16}
+            strokeWidth={1.5}
+          />
+        </Button>
       </div>
 
       {/* ── Commit Modal ── */}

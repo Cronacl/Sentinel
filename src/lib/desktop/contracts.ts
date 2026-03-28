@@ -44,6 +44,12 @@ export type SentinelDesktopApi = {
   };
   workspace: {
     listOpenTargets: (projectPath: string) => Promise<DesktopOpenTarget[]>;
+    openFileInTarget: (
+      projectPath: string,
+      filePath: string,
+      targetId?: string,
+      lineNumber?: number,
+    ) => Promise<void>;
     openInTarget: (projectPath: string, targetId: string) => Promise<void>;
     openInTerminal: (
       projectPath: string,

@@ -56,6 +56,26 @@ const getHeadCommitMessage = mock(async () => ({
   message: "Latest subject\n\n- latest body",
   subject: "Latest subject",
 }));
+const getRepoDiffPanelData = mock(async (rootPath, mode: string) => ({
+  branch: "feature/test",
+  disabledReason: mode === "branch" ? null : null,
+  fileCount: 1,
+  files: [
+    {
+      additions: 1,
+      deletions: 1,
+      firstChangedLine: 42,
+      isUntracked: false,
+      patch:
+        "diff --git a/file.ts b/file.ts\n--- a/file.ts\n+++ b/file.ts\n@@ -42,1 +42,1 @@\n-old\n+new\n",
+      path: "file.ts",
+    },
+  ],
+  mode,
+  sourceLabel: mode === "branch" ? "feature/test -> origin/main" : "Staged",
+  totalAdditions: 1,
+  totalDeletions: 1,
+}));
 const buildFallbackCommitMessage = mock(() => "Update file");
 const commitAllChanges = mock(async () => ({
   commit: "1234567",
@@ -76,6 +96,9 @@ const listBranches = mock(async () => ({
   ],
 }));
 const pushCurrentBranch = mock(async () => ({ branch: "feature/test" }));
+const revertFiles = mock(async () => ({ paths: ["file.ts"] }));
+const stageFiles = mock(async () => ({ paths: ["file.ts"] }));
+const unstageFiles = mock(async () => ({ paths: ["file.ts"] }));
 const generateGitCommitMessage = mock(async () => ({
   body: "- add tests",
   message: "Add generated message\n\n- add tests",
@@ -141,11 +164,15 @@ mock.module("@/lib/git/repo", () => ({
   commitAllChanges,
   createAndCheckoutBranch,
   getCommitMessageContext,
+  getRepoDiffPanelData,
   getHeadCommitMessage,
   initializeRepository,
   listBranches,
   pushCurrentBranch,
+  revertFiles,
   resolveRepoContext,
+  stageFiles,
+  unstageFiles,
 }));
 
 mock.module("@/lib/git/commit-message", () => ({
@@ -186,6 +213,7 @@ beforeEach(() => {
   getOwnedThreadOrThrow.mockClear();
   resolveRepoContext.mockClear();
   getCommitMessageContext.mockClear();
+  getRepoDiffPanelData.mockClear();
   getHeadCommitMessage.mockClear();
   buildFallbackCommitMessage.mockClear();
   checkoutBranch.mockClear();
@@ -194,6 +222,9 @@ beforeEach(() => {
   initializeRepository.mockClear();
   listBranches.mockClear();
   pushCurrentBranch.mockClear();
+  revertFiles.mockClear();
+  stageFiles.mockClear();
+  unstageFiles.mockClear();
   generateGitCommitMessage.mockClear();
   findGithubIntegration.mockClear();
   getValidAccessToken.mockClear();
@@ -862,6 +893,91 @@ describe("repoRouter.setPreferredOpenTarget", () => {
     expect(run).toHaveBeenCalled();
     expect(result).toEqual({
       targetId: "cursor",
+    });
+  });
+});
+
+describe("repoRouter.diff panel", () => {
+  it("returns diff data for the selected mode with refreshed repo context", async () => {
+    const result = await repoRouter.getDiffPanelData({
+      ctx: {
+        session: { user: { id: "user-1" } },
+        user: {
+          id: "user-1",
+          lastProjectOpenTargetId: "cursor",
+        },
+      },
+      input: {
+        mode: "staged",
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(getRepoDiffPanelData).toHaveBeenCalledWith(
+      "/tmp/workspace",
+      "staged",
+    );
+    expect(result.diff).toMatchObject({
+      fileCount: 1,
+      mode: "staged",
+      sourceLabel: "Staged",
+    });
+    expect(result.repoContext.preferredOpenTargetId).toBe("cursor");
+  });
+
+  it("stages, unstages, and reverts files through repo mutations", async () => {
+    const ctx = {
+      session: { user: { id: "user-1" } },
+      user: {
+        id: "user-1",
+        lastProjectOpenTargetId: "cursor",
+      },
+    };
+
+    const stageResult = await repoRouter.stageFiles({
+      ctx,
+      input: {
+        mode: "unstaged",
+        paths: ["file.ts"],
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+    const unstageResult = await repoRouter.unstageFiles({
+      ctx,
+      input: {
+        mode: "staged",
+        paths: ["file.ts"],
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+    const revertResult = await repoRouter.revertFiles({
+      ctx,
+      input: {
+        mode: "unstaged",
+        paths: ["file.ts"],
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(stageFiles).toHaveBeenCalledWith("/tmp/workspace", ["file.ts"]);
+    expect(stageResult.diff).toMatchObject({
+      mode: "unstaged",
+    });
+    expect(unstageFiles).toHaveBeenCalledWith("/tmp/workspace", ["file.ts"]);
+    expect(unstageResult.diff).toMatchObject({
+      mode: "staged",
+    });
+    expect(revertFiles).toHaveBeenCalledWith(
+      "/tmp/workspace",
+      ["file.ts"],
+      "unstaged",
+    );
+    expect(revertResult.diff).toMatchObject({
+      mode: "unstaged",
     });
   });
 });
