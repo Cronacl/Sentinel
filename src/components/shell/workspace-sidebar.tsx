@@ -370,7 +370,7 @@ function PinnedThreadsList({
           const isActive = selectedThreadId === thread.id;
           return (
             <div
-              className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-xs transition-colors ${
+              className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-sm transition-colors ${
                 isActive
                   ? "bg-default text-foreground"
                   : "text-foreground hover:text-foreground"
@@ -625,7 +625,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
               {overflowThreads.length > 0 ? (
                 <>
                   <button
-                    className="flex w-full items-center gap-1 px-2 py-1.5 text-left text-xs text-foreground/40 transition-colors hover:text-foreground"
+                    className="flex w-full items-center gap-1 px-2 py-1.5 text-left text-sm text-foreground/40 transition-colors hover:text-foreground"
                     onClick={() =>
                       setShowOverflowThreads((current) => !current)
                     }
@@ -757,7 +757,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
         {overflowItems.length > 0 ? (
           <>
             <button
-              className="flex w-full items-center gap-1 px-3 py-1.5 text-left text-xs text-foreground/40 transition-colors hover:text-foreground"
+              className="flex w-full items-center gap-1 px-3 py-1.5 text-left text-sm text-foreground/40 transition-colors hover:text-foreground"
               onClick={() => setShowOverflowThreads((current) => !current)}
               type="button"
             >

@@ -738,6 +738,7 @@ export function ThreadScreen({
     <PageWrapper
       actions={
         <ThreadRepoActions
+          threadId={thread.id}
           workspaceId={workspace.id}
           workspaceRootPath={workspace.rootPath}
         />

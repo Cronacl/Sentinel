@@ -3,7 +3,16 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 
 const getOwnedWorkspaceOrThrow = mock(async () => ({
+  id: "workspace-1",
   rootPath: "/tmp/workspace",
+}));
+const getOwnedThreadOrThrow = mock(async () => ({
+  chatEngine: "codex",
+  chatEngineState: null,
+  chatModelId: "gpt-5.4",
+  chatReasoningEffort: "high",
+  id: "thread-1",
+  workspaceId: "workspace-1",
 }));
 const run = mock(() => undefined);
 const where = mock(() => ({ run }));
@@ -12,6 +21,8 @@ const update = mock(() => ({ set }));
 const resolveRepoContext = mock(async () => ({
   aheadCount: 0,
   branch: "feature/test",
+  changedFileCount: 0,
+  deletions: 0,
   githubRemote: {
     defaultBranch: "main",
     owner: "openai",
@@ -27,6 +38,7 @@ const resolveRepoContext = mock(async () => ({
   hasCommits: true,
   hasRemotes: true,
   hasUpstream: true,
+  insertions: 0,
   isDefaultBranch: false,
   isGitRepo: true,
   pushRemoteName: "origin",
@@ -35,8 +47,14 @@ const resolveRepoContext = mock(async () => ({
 const getCommitMessageContext = mock(async () => ({
   branch: "feature/test",
   changes: [{ path: "file.ts", type: "modified" }],
-  diffStat: " file.ts | 2 +-",
+  patch: "diff --git a/file.ts b/file.ts\n+export const updated = true;\n",
   repoRoot: "/tmp/workspace",
+  summary: "M file.ts",
+}));
+const getHeadCommitMessage = mock(async () => ({
+  body: "- latest body",
+  message: "Latest subject\n\n- latest body",
+  subject: "Latest subject",
 }));
 const buildFallbackCommitMessage = mock(() => "Update file");
 const commitAllChanges = mock(async () => ({
@@ -58,7 +76,36 @@ const listBranches = mock(async () => ({
   ],
 }));
 const pushCurrentBranch = mock(async () => ({ branch: "feature/test" }));
-const getEnabledModels = mock(async () => []);
+const generateGitCommitMessage = mock(async () => ({
+  body: "- add tests",
+  message: "Add generated message\n\n- add tests",
+  subject: "Add generated message",
+}));
+const findGithubIntegration = mock(async () => null);
+const getValidAccessToken = mock(async () => "github-token");
+const updateThreadRepoState = mock(() => undefined);
+const githubCreatePr = mock(async (input: any) => ({
+  additions: 10,
+  author: "user-1",
+  base: input.base,
+  body: input.body ?? "",
+  changedFiles: 1,
+  comments: 0,
+  createdAt: "2026-03-28T10:00:00.000Z",
+  deletions: 2,
+  draft: input.draft ?? false,
+  head: input.head,
+  htmlUrl: "https://github.com/openai/sentinel/pull/42",
+  id: 42,
+  labels: [],
+  mergeable: true,
+  merged: false,
+  number: 42,
+  reviewDecision: "",
+  state: "open",
+  title: input.title,
+  updatedAt: "2026-03-28T10:05:00.000Z",
+}));
 
 mock.module("@/server/api/trpc", () => ({
   createTRPCRouter: (routes: Record<string, any>) => routes,
@@ -72,10 +119,17 @@ mock.module("@/server/api/trpc", () => ({
 }));
 
 mock.module("./workspace-thread-helpers", () => ({
+  getOwnedThreadOrThrow,
   getOwnedWorkspaceOrThrow,
 }));
 
 mock.module("@/server/db/schema", () => ({
+  integrations: {
+    id: "integrations.id",
+    isEnabled: "integrations.isEnabled",
+    provider: "integrations.provider",
+    userId: "integrations.userId",
+  },
   users: {
     id: "user.id",
   },
@@ -87,34 +141,52 @@ mock.module("@/lib/git/repo", () => ({
   commitAllChanges,
   createAndCheckoutBranch,
   getCommitMessageContext,
+  getHeadCommitMessage,
   initializeRepository,
   listBranches,
   pushCurrentBranch,
   resolveRepoContext,
 }));
 
-mock.module("@/lib/ai/providers/resolver", () => ({
-  getEnabledModels,
-  parseModelId: (value: string) => {
-    const [provider, model] = value.split(":");
-    return { model, provider };
+mock.module("@/lib/git/commit-message", () => ({
+  generateGitCommitMessage,
+  parseCommitMessage: (message: string) => {
+    const normalized = message.replace(/\r\n/g, "\n").trim();
+    if (!normalized) {
+      return { body: "", subject: "" };
+    }
+    const [subjectLine = ""] = normalized.split("\n");
+    return {
+      body: normalized.slice(subjectLine.length).replace(/^\n+/, "").trim(),
+      subject: subjectLine.trim(),
+    };
   },
 }));
 
-mock.module("@/lib/ai/chat/title/model", () => ({
-  resolveThreadTitleModel: mock(async () => null),
+mock.module("@/lib/ai/chat/persistence", () => ({
+  updateThreadRepoState,
 }));
 
-mock.module("ai", () => ({
-  generateText: mock(async () => ({ text: "Update file" })),
+mock.module("@/lib/integrations/oauth/token-manager", () => ({
+  getValidAccessToken,
+}));
+
+mock.module("@/lib/integrations/providers/github/service", () => ({
+  GitHubService: class {
+    createPr(input: any) {
+      return githubCreatePr(input);
+    }
+  },
 }));
 
 const { repoRouter } = await import("./repo");
 
 beforeEach(() => {
   getOwnedWorkspaceOrThrow.mockClear();
+  getOwnedThreadOrThrow.mockClear();
   resolveRepoContext.mockClear();
   getCommitMessageContext.mockClear();
+  getHeadCommitMessage.mockClear();
   buildFallbackCommitMessage.mockClear();
   checkoutBranch.mockClear();
   commitAllChanges.mockClear();
@@ -122,15 +194,30 @@ beforeEach(() => {
   initializeRepository.mockClear();
   listBranches.mockClear();
   pushCurrentBranch.mockClear();
-  getEnabledModels.mockClear();
+  generateGitCommitMessage.mockClear();
+  findGithubIntegration.mockClear();
+  getValidAccessToken.mockClear();
+  updateThreadRepoState.mockClear();
+  githubCreatePr.mockClear();
   run.mockClear();
   where.mockClear();
   set.mockClear();
   update.mockClear();
 
+  getOwnedThreadOrThrow.mockImplementation(async () => ({
+    chatEngine: "codex",
+    chatEngineState: null,
+    chatModelId: "gpt-5.4",
+    chatReasoningEffort: "high",
+    id: "thread-1",
+    workspaceId: "workspace-1",
+  }));
+
   resolveRepoContext.mockImplementation(async () => ({
     aheadCount: 0,
     branch: "feature/test",
+    changedFileCount: 0,
+    deletions: 0,
     githubRemote: {
       defaultBranch: "main",
       owner: "openai",
@@ -146,10 +233,18 @@ beforeEach(() => {
     hasCommits: true,
     hasRemotes: true,
     hasUpstream: true,
+    insertions: 0,
     isDefaultBranch: false,
     isGitRepo: true,
     pushRemoteName: "origin",
     repoRoot: "/tmp/workspace",
+  }));
+
+  findGithubIntegration.mockImplementation(async () => null);
+  getHeadCommitMessage.mockImplementation(async () => ({
+    body: "- latest body",
+    message: "Latest subject\n\n- latest body",
+    subject: "Latest subject",
   }));
 });
 
@@ -159,6 +254,8 @@ describe("repoRouter.createPullRequest", () => {
       .mockImplementationOnce(async () => ({
         aheadCount: 0,
         branch: "feature/test",
+        changedFileCount: 1,
+        deletions: 0,
         githubRemote: {
           defaultBranch: "main",
           owner: "openai",
@@ -174,6 +271,7 @@ describe("repoRouter.createPullRequest", () => {
         hasCommits: true,
         hasRemotes: true,
         hasUpstream: false,
+        insertions: 0,
         isDefaultBranch: false,
         isGitRepo: true,
         pushRemoteName: "origin",
@@ -182,6 +280,8 @@ describe("repoRouter.createPullRequest", () => {
       .mockImplementationOnce(async () => ({
         aheadCount: 1,
         branch: "feature/test",
+        changedFileCount: 0,
+        deletions: 0,
         githubRemote: {
           defaultBranch: "main",
           owner: "openai",
@@ -197,6 +297,7 @@ describe("repoRouter.createPullRequest", () => {
         hasCommits: true,
         hasRemotes: true,
         hasUpstream: false,
+        insertions: 0,
         isDefaultBranch: false,
         isGitRepo: true,
         pushRemoteName: "origin",
@@ -205,6 +306,8 @@ describe("repoRouter.createPullRequest", () => {
       .mockImplementationOnce(async () => ({
         aheadCount: 0,
         branch: "feature/test",
+        changedFileCount: 0,
+        deletions: 0,
         githubRemote: {
           defaultBranch: "main",
           owner: "openai",
@@ -220,6 +323,7 @@ describe("repoRouter.createPullRequest", () => {
         hasCommits: true,
         hasRemotes: true,
         hasUpstream: true,
+        insertions: 0,
         isDefaultBranch: false,
         isGitRepo: true,
         pushRemoteName: "origin",
@@ -228,6 +332,13 @@ describe("repoRouter.createPullRequest", () => {
 
     const result = await repoRouter.createPullRequest({
       ctx: {
+        db: {
+          query: {
+            integrations: {
+              findFirst: findGithubIntegration,
+            },
+          },
+        },
         session: { user: { id: "user-1" } },
         user: {
           defaultChatModelId: null,
@@ -235,16 +346,43 @@ describe("repoRouter.createPullRequest", () => {
         },
       },
       input: {
+        threadId: "thread-1",
         workspaceId: "workspace-1",
       },
     });
 
     expect(commitAllChanges).toHaveBeenCalledWith(
       "/tmp/workspace",
-      "Update file",
+      "Add generated message\n\n- add tests",
+      true,
     );
     expect(pushCurrentBranch).toHaveBeenCalledWith("/tmp/workspace");
+    expect(generateGitCommitMessage).toHaveBeenCalledWith({
+      context: {
+        branch: "feature/test",
+        changes: [{ path: "file.ts", type: "modified" }],
+        patch:
+          "diff --git a/file.ts b/file.ts\n+export const updated = true;\n",
+        repoRoot: "/tmp/workspace",
+        summary: "M file.ts",
+      },
+      defaultChatModelId: null,
+      engine: "codex",
+      modelId: "gpt-5.4",
+      reasoningEffort: "high",
+      userId: "user-1",
+    });
     expect(result.pullRequestUrl).toContain("/compare/main...feature/test");
+    expect(updateThreadRepoState).toHaveBeenCalledWith("thread-1", {
+      lastPullRequest: expect.objectContaining({
+        kind: "compare",
+        repoFullName: "openai/sentinel",
+        url: expect.stringContaining("/compare/main...feature/test"),
+      }),
+    });
+    expect(result.repoContext.lastPullRequest).toMatchObject({
+      kind: "compare",
+    });
   });
 
   it("creates a branch first when invoked from the default branch", async () => {
@@ -252,6 +390,8 @@ describe("repoRouter.createPullRequest", () => {
       .mockImplementationOnce(async () => ({
         aheadCount: 0,
         branch: "main",
+        changedFileCount: 1,
+        deletions: 0,
         githubRemote: {
           defaultBranch: "main",
           owner: "openai",
@@ -267,6 +407,7 @@ describe("repoRouter.createPullRequest", () => {
         hasCommits: true,
         hasRemotes: true,
         hasUpstream: true,
+        insertions: 0,
         isDefaultBranch: true,
         isGitRepo: true,
         pushRemoteName: "origin",
@@ -275,6 +416,8 @@ describe("repoRouter.createPullRequest", () => {
       .mockImplementation(async () => ({
         aheadCount: 0,
         branch: "feature/new-pr",
+        changedFileCount: 0,
+        deletions: 0,
         githubRemote: {
           defaultBranch: "main",
           owner: "openai",
@@ -290,6 +433,7 @@ describe("repoRouter.createPullRequest", () => {
         hasCommits: true,
         hasRemotes: true,
         hasUpstream: true,
+        insertions: 0,
         isDefaultBranch: false,
         isGitRepo: true,
         pushRemoteName: "origin",
@@ -298,6 +442,13 @@ describe("repoRouter.createPullRequest", () => {
 
     const result = await repoRouter.createPullRequest({
       ctx: {
+        db: {
+          query: {
+            integrations: {
+              findFirst: findGithubIntegration,
+            },
+          },
+        },
         session: { user: { id: "user-1" } },
         user: {
           defaultChatModelId: null,
@@ -306,6 +457,7 @@ describe("repoRouter.createPullRequest", () => {
       },
       input: {
         branchName: "feature/new-pr",
+        threadId: "thread-1",
         workspaceId: "workspace-1",
       },
     });
@@ -315,6 +467,370 @@ describe("repoRouter.createPullRequest", () => {
       "feature/new-pr",
     );
     expect(result.createdBranch).toBe("feature/new-pr");
+  });
+
+  it("creates a real draft PR through the GitHub integration when connected", async () => {
+    findGithubIntegration.mockImplementationOnce(async () => ({
+      id: "integration-1",
+    }));
+
+    const result = await repoRouter.createPullRequest({
+      ctx: {
+        db: {
+          query: {
+            integrations: {
+              findFirst: findGithubIntegration,
+            },
+          },
+        },
+        session: { user: { id: "user-1" } },
+        user: {
+          defaultChatModelId: null,
+          id: "user-1",
+        },
+      },
+      input: {
+        draft: true,
+        message: "Ship draft PR\n\n- include metadata",
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(getValidAccessToken).toHaveBeenCalledWith("integration-1");
+    expect(githubCreatePr).toHaveBeenCalledWith({
+      base: "main",
+      body: "- include metadata",
+      draft: true,
+      head: "feature/test",
+      owner: "openai",
+      repo: "sentinel",
+      title: "Ship draft PR",
+    });
+    expect(updateThreadRepoState).toHaveBeenCalledWith("thread-1", {
+      lastPullRequest: expect.objectContaining({
+        kind: "github",
+        draft: true,
+        number: 42,
+        repoFullName: "openai/sentinel",
+        url: "https://github.com/openai/sentinel/pull/42",
+      }),
+    });
+    expect(result.pullRequestUrl).toBe(
+      "https://github.com/openai/sentinel/pull/42",
+    );
+    expect(result.repoContext.lastPullRequest).toMatchObject({
+      kind: "github",
+      draft: true,
+      number: 42,
+    });
+  });
+
+  it("rejects draft PR creation when GitHub is not connected", async () => {
+    await expect(
+      repoRouter.createPullRequest({
+        ctx: {
+          db: {
+            query: {
+              integrations: {
+                findFirst: findGithubIntegration,
+              },
+            },
+          },
+          session: { user: { id: "user-1" } },
+          user: {
+            defaultChatModelId: null,
+            id: "user-1",
+          },
+        },
+        input: {
+          draft: true,
+          threadId: "thread-1",
+          workspaceId: "workspace-1",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Connect GitHub to create draft pull requests.",
+    });
+  });
+
+  it("passes includeUnstaged and the provided message through to the commit step", async () => {
+    resolveRepoContext
+      .mockImplementationOnce(async () => ({
+        aheadCount: 0,
+        branch: "feature/test",
+        changedFileCount: 1,
+        deletions: 0,
+        githubRemote: {
+          defaultBranch: "main",
+          owner: "openai",
+          pullRequestUrl:
+            "https://github.com/openai/sentinel/compare/main...feature/test?expand=1",
+          pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+          remoteName: "origin",
+          remoteUrl: "git@github.com:openai/sentinel.git",
+          repo: "sentinel",
+          repositoryUrl: "https://github.com/openai/sentinel",
+        },
+        hasChanges: true,
+        hasCommits: true,
+        hasRemotes: true,
+        hasUpstream: true,
+        insertions: 0,
+        isDefaultBranch: false,
+        isGitRepo: true,
+        pushRemoteName: "origin",
+        repoRoot: "/tmp/workspace",
+      }))
+      .mockImplementation(async () => ({
+        aheadCount: 0,
+        branch: "feature/test",
+        changedFileCount: 0,
+        deletions: 0,
+        githubRemote: {
+          defaultBranch: "main",
+          owner: "openai",
+          pullRequestUrl:
+            "https://github.com/openai/sentinel/compare/main...feature/test?expand=1",
+          pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+          remoteName: "origin",
+          remoteUrl: "git@github.com:openai/sentinel.git",
+          repo: "sentinel",
+          repositoryUrl: "https://github.com/openai/sentinel",
+        },
+        hasChanges: false,
+        hasCommits: true,
+        hasRemotes: true,
+        hasUpstream: true,
+        insertions: 0,
+        isDefaultBranch: false,
+        isGitRepo: true,
+        pushRemoteName: "origin",
+        repoRoot: "/tmp/workspace",
+      }));
+
+    await repoRouter.createPullRequest({
+      ctx: {
+        db: {
+          query: {
+            integrations: {
+              findFirst: findGithubIntegration,
+            },
+          },
+        },
+        session: { user: { id: "user-1" } },
+        user: {
+          defaultChatModelId: null,
+          id: "user-1",
+        },
+      },
+      input: {
+        includeUnstaged: false,
+        message: "Use typed message",
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(commitAllChanges).toHaveBeenCalledWith(
+      "/tmp/workspace",
+      "Use typed message",
+      false,
+    );
+    expect(generateGitCommitMessage).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the deterministic message when external generation fails", async () => {
+    generateGitCommitMessage.mockImplementationOnce(async () => {
+      throw new Error("CLI failed");
+    });
+
+    resolveRepoContext
+      .mockImplementationOnce(async () => ({
+        aheadCount: 0,
+        branch: "feature/test",
+        changedFileCount: 1,
+        deletions: 0,
+        githubRemote: {
+          defaultBranch: "main",
+          owner: "openai",
+          pullRequestUrl:
+            "https://github.com/openai/sentinel/compare/main...feature/test?expand=1",
+          pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+          remoteName: "origin",
+          remoteUrl: "git@github.com:openai/sentinel.git",
+          repo: "sentinel",
+          repositoryUrl: "https://github.com/openai/sentinel",
+        },
+        hasChanges: true,
+        hasCommits: true,
+        hasRemotes: true,
+        hasUpstream: false,
+        insertions: 0,
+        isDefaultBranch: false,
+        isGitRepo: true,
+        pushRemoteName: "origin",
+        repoRoot: "/tmp/workspace",
+      }))
+      .mockImplementation(async () => ({
+        aheadCount: 0,
+        branch: "feature/test",
+        changedFileCount: 0,
+        deletions: 0,
+        githubRemote: {
+          defaultBranch: "main",
+          owner: "openai",
+          pullRequestUrl:
+            "https://github.com/openai/sentinel/compare/main...feature/test?expand=1",
+          pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+          remoteName: "origin",
+          remoteUrl: "git@github.com:openai/sentinel.git",
+          repo: "sentinel",
+          repositoryUrl: "https://github.com/openai/sentinel",
+        },
+        hasChanges: false,
+        hasCommits: true,
+        hasRemotes: true,
+        hasUpstream: true,
+        insertions: 0,
+        isDefaultBranch: false,
+        isGitRepo: true,
+        pushRemoteName: "origin",
+        repoRoot: "/tmp/workspace",
+      }));
+
+    await repoRouter.createPullRequest({
+      ctx: {
+        db: {
+          query: {
+            integrations: {
+              findFirst: findGithubIntegration,
+            },
+          },
+        },
+        session: { user: { id: "user-1" } },
+        user: {
+          defaultChatModelId: null,
+          id: "user-1",
+        },
+      },
+      input: {
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(commitAllChanges).toHaveBeenCalledWith(
+      "/tmp/workspace",
+      "Update file",
+      true,
+    );
+  });
+});
+
+describe("repoRouter.generateCommitMessage", () => {
+  it("uses the active thread engine and returns subject, body, and message", async () => {
+    const result = await repoRouter.generateCommitMessage({
+      ctx: {
+        session: { user: { id: "user-1" } },
+        user: {
+          defaultChatModelId: "openai:gpt-4.1",
+          id: "user-1",
+        },
+      },
+      input: {
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(generateGitCommitMessage).toHaveBeenCalledWith({
+      context: {
+        branch: "feature/test",
+        changes: [{ path: "file.ts", type: "modified" }],
+        patch:
+          "diff --git a/file.ts b/file.ts\n+export const updated = true;\n",
+        repoRoot: "/tmp/workspace",
+        summary: "M file.ts",
+      },
+      defaultChatModelId: "openai:gpt-4.1",
+      engine: "codex",
+      modelId: "gpt-5.4",
+      reasoningEffort: "high",
+      userId: "user-1",
+    });
+    expect(result).toEqual({
+      body: "- add tests",
+      message: "Add generated message\n\n- add tests",
+      subject: "Add generated message",
+    });
+  });
+
+  it("falls back to sentinel generation inputs when the thread has no external model", async () => {
+    getOwnedThreadOrThrow.mockImplementationOnce(async () => ({
+      chatEngine: "claude",
+      chatModelId: null,
+      chatReasoningEffort: "medium",
+      workspaceId: "workspace-1",
+    }));
+
+    await repoRouter.generateCommitMessage({
+      ctx: {
+        session: { user: { id: "user-1" } },
+        user: {
+          defaultChatModelId: "openai:gpt-4.1-mini",
+          id: "user-1",
+        },
+      },
+      input: {
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(generateGitCommitMessage).toHaveBeenCalledWith({
+      context: {
+        branch: "feature/test",
+        changes: [{ path: "file.ts", type: "modified" }],
+        patch:
+          "diff --git a/file.ts b/file.ts\n+export const updated = true;\n",
+        repoRoot: "/tmp/workspace",
+        summary: "M file.ts",
+      },
+      defaultChatModelId: "openai:gpt-4.1-mini",
+      engine: "claude",
+      modelId: null,
+      reasoningEffort: "medium",
+      userId: "user-1",
+    });
+  });
+
+  it("rejects threads from a different workspace", async () => {
+    getOwnedThreadOrThrow.mockImplementationOnce(async () => ({
+      chatEngine: "codex",
+      chatModelId: "gpt-5.4",
+      chatReasoningEffort: "high",
+      workspaceId: "workspace-2",
+    }));
+
+    await expect(
+      repoRouter.generateCommitMessage({
+        ctx: {
+          session: { user: { id: "user-1" } },
+          user: {
+            defaultChatModelId: null,
+            id: "user-1",
+          },
+        },
+        input: {
+          threadId: "thread-1",
+          workspaceId: "workspace-1",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+    });
   });
 });
 

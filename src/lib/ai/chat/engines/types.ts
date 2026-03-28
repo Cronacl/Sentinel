@@ -44,10 +44,44 @@ export const claudeThreadStateSchema = z.object({
   sessionId: z.string(),
 });
 
+const repoComparePullRequestSchema = z.object({
+  base: z.string(),
+  createdAt: z.string(),
+  draft: z.literal(false),
+  head: z.string(),
+  kind: z.literal("compare"),
+  repoFullName: z.string(),
+  url: z.string(),
+});
+
+const repoGithubPullRequestSchema = z.object({
+  base: z.string(),
+  createdAt: z.string(),
+  draft: z.boolean(),
+  head: z.string(),
+  kind: z.literal("github"),
+  number: z.number().int(),
+  repoFullName: z.string(),
+  state: z.string(),
+  title: z.string(),
+  updatedAt: z.string(),
+  url: z.string(),
+});
+
+export const repoLastPullRequestSchema = z.discriminatedUnion("kind", [
+  repoComparePullRequestSchema,
+  repoGithubPullRequestSchema,
+]);
+
+export const repoThreadStateSchema = z.object({
+  lastPullRequest: repoLastPullRequestSchema.nullish(),
+});
+
 export const threadChatEngineStateSchema = z
   .object({
     claude: claudeThreadStateSchema.nullish(),
     codex: codexThreadStateSchema.nullish(),
+    repo: repoThreadStateSchema.nullish(),
   })
   .partial();
 
@@ -63,6 +97,8 @@ export type CodexApprovalPolicy = z.infer<typeof codexApprovalPolicySchema>;
 export type CodexSandboxMode = z.infer<typeof codexSandboxModeSchema>;
 export type CodexThreadState = z.infer<typeof codexThreadStateSchema>;
 export type ClaudeThreadState = z.infer<typeof claudeThreadStateSchema>;
+export type RepoLastPullRequest = z.infer<typeof repoLastPullRequestSchema>;
+export type RepoThreadState = z.infer<typeof repoThreadStateSchema>;
 export type ThreadChatEngineState = z.infer<typeof threadChatEngineStateSchema>;
 
 export function parseThreadChatEngineState(
@@ -80,15 +116,31 @@ export function getClaudeThreadState(value: unknown): ClaudeThreadState | null {
   return parseThreadChatEngineState(value)?.claude ?? null;
 }
 
+export function getRepoThreadState(value: unknown): RepoThreadState | null {
+  return parseThreadChatEngineState(value)?.repo ?? null;
+}
+
+export function mergeThreadChatEngineState(
+  current: ThreadChatEngineState | null | undefined,
+  patch: ThreadChatEngineState | null | undefined,
+): ThreadChatEngineState | null {
+  const next = {
+    ...(current ?? {}),
+    ...(patch ?? {}),
+  };
+
+  if (!next.claude && !next.codex && !next.repo) {
+    return null;
+  }
+
+  return next;
+}
+
 export function buildThreadChatEngineState(
   engine: ExternalChatEngine,
   value: ThreadChatEngineStateMap[ExternalChatEngine] | null,
 ): ThreadChatEngineState | null {
-  if (!value) {
-    return null;
-  }
-
   return engine === "codex"
-    ? { codex: value as CodexThreadState }
-    : { claude: value as ClaudeThreadState };
+    ? { codex: value as CodexThreadState | null }
+    : { claude: value as ClaudeThreadState | null };
 }

@@ -310,14 +310,24 @@ export async function readCodexCliVersion() {
   }).catch(() => null);
 }
 
-export async function spawnCodexCli(args: string[]) {
+export async function spawnCodexCli(
+  args: string[],
+  options?: {
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
+  },
+) {
   const resolvedCli = await resolveCodexCli();
   if (!resolvedCli) {
     throw new Error("Codex CLI is not installed or not available on PATH.");
   }
 
   return spawn(resolvedCli.command, args, {
-    env: resolvedCli.env,
+    cwd: options?.cwd,
+    env: {
+      ...resolvedCli.env,
+      ...(options?.env ?? {}),
+    },
     stdio: ["pipe", "pipe", "pipe"],
   }) as ChildProcessWithoutNullStreams;
 }

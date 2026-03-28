@@ -1,6 +1,5 @@
-import { generateText } from "ai";
 import { TRPCError } from "@trpc/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -9,122 +8,85 @@ import {
   commitAllChanges,
   createAndCheckoutBranch,
   getCommitMessageContext,
+  getHeadCommitMessage,
   initializeRepository,
   listBranches,
   pushCurrentBranch,
   resolveRepoContext,
 } from "@/lib/git/repo";
-import { lines } from "@/lib/prompt";
-import { resolveThreadTitleModel } from "@/lib/ai/chat/title/model";
-import { normalizeSelectedModelId } from "@/lib/ai/providers/model-selection";
-import { getEnabledModels, parseModelId } from "@/lib/ai/providers/resolver";
+import {
+  generateGitCommitMessage,
+  type GeneratedCommitMessage,
+  parseCommitMessage,
+} from "@/lib/git/commit-message";
+import {
+  getRepoThreadState,
+  type RepoLastPullRequest,
+} from "@/lib/ai/chat/engines/types";
+import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import { updateThreadRepoState } from "@/lib/ai/chat/persistence";
+import { GitHubService } from "@/lib/integrations/providers/github/service";
+import { getValidAccessToken } from "@/lib/integrations/oauth/token-manager";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import { users } from "@/server/db/schema";
+import { integrations, users } from "@/server/db/schema";
 
-import { getOwnedWorkspaceOrThrow } from "./workspace-thread-helpers";
+import {
+  getOwnedThreadOrThrow,
+  getOwnedWorkspaceOrThrow,
+} from "./workspace-thread-helpers";
 
 const workspaceInputSchema = z.object({
   workspaceId: z.string().min(1),
+});
+const workspaceOptionalThreadInputSchema = workspaceInputSchema.extend({
+  threadId: z.string().min(1).optional(),
+});
+const workspaceThreadInputSchema = workspaceInputSchema.extend({
+  threadId: z.string().min(1),
 });
 const openTargetPreferenceSchema = z.object({
   targetId: z.string().trim().min(1).max(255),
 });
 
-const COMMIT_MESSAGE_SYSTEM_PROMPT = lines(
-  "Generate a concise git commit message for the provided repository changes.",
-  "Return a single-line commit subject only.",
-  "Use imperative mood.",
-  "Prefer concrete wording over generic phrasing.",
-  "Keep it under 72 characters when possible.",
-  "Do not wrap the result in quotes, markdown, or a prefix label.",
-);
-
-function sanitizeCommitMessage(value: string) {
-  return value
-    .replace(/\s+/g, " ")
-    .replace(/^(commit message|message)\s*:\s*/i, "")
-    .replace(/^["'`]+|["'`]+$/g, "")
-    .trim()
-    .slice(0, 120);
-}
-
-async function resolveCommitGenerationModel(user: {
-  defaultChatModelId?: string | null;
-  id: string;
-}) {
-  const enabledModels = await getEnabledModels(user.id);
-  if (enabledModels.length === 0) {
-    return null;
-  }
-
-  const preferredModelId =
-    normalizeSelectedModelId(user.defaultChatModelId ?? null, enabledModels) ??
-    enabledModels[0]?.compositeId ??
-    null;
-  if (!preferredModelId) {
-    return null;
-  }
-
-  const { provider } = parseModelId(preferredModelId);
-  return await resolveThreadTitleModel({
-    providerId: provider,
-    userId: user.id,
-  });
-}
-
 async function generateWorkspaceCommitMessage({
+  includeUnstaged,
   rootPath,
+  thread,
   user,
 }: {
+  includeUnstaged?: boolean;
   rootPath: string;
+  thread: {
+    chatEngine: "claude" | "codex" | "sentinel";
+    chatModelId: string | null;
+    chatReasoningEffort: string | null;
+  };
   user: {
     defaultChatModelId?: string | null;
     id: string;
   };
-}) {
-  const commitContext = await getCommitMessageContext(rootPath);
+}): Promise<GeneratedCommitMessage> {
+  const commitContext = await getCommitMessageContext(rootPath, {
+    includeUnstaged,
+  });
   const fallbackMessage = buildFallbackCommitMessage(commitContext.changes);
 
   try {
-    const model = await resolveCommitGenerationModel(user);
-    if (!model) {
-      return { message: fallbackMessage };
-    }
-
-    const prompt = lines(
-      commitContext.branch
-        ? `Current branch: ${commitContext.branch}`
-        : "Current branch: unknown",
-      "",
-      "Changed files:",
-      ...commitContext.changes.map(
-        (change) => `- ${change.type}: ${change.path}`,
-      ),
-      "",
-      commitContext.diffStat
-        ? `Diff stat:\n${commitContext.diffStat}`
-        : "Diff stat: unavailable",
-      "",
-      "Generate the best commit message now.",
-    );
-
-    const result = await generateText({
-      model: model.languageModel as Parameters<typeof generateText>[0]["model"],
-      prompt,
-      system: COMMIT_MESSAGE_SYSTEM_PROMPT,
-      temperature: 0.2,
-      ...(model.providerOptions
-        ? { providerOptions: model.providerOptions }
-        : {}),
+    return await generateGitCommitMessage({
+      context: commitContext,
+      defaultChatModelId: user.defaultChatModelId,
+      engine: thread.chatEngine,
+      modelId: thread.chatModelId,
+      reasoningEffort:
+        (thread.chatReasoningEffort as ReasoningEffort | null | undefined) ??
+        null,
+      userId: user.id,
     });
-
-    const message = sanitizeCommitMessage(result.text);
-    return {
-      message: message || fallbackMessage,
-    };
   } catch {
     return {
+      body: "",
       message: fallbackMessage,
+      subject: fallbackMessage,
     };
   }
 }
@@ -140,16 +102,140 @@ function assertWorkspaceRootPath(rootPath: string | null) {
   return rootPath;
 }
 
+async function getOwnedThreadForWorkspace(
+  ctx: Parameters<typeof getOwnedThreadOrThrow>[0],
+  input: {
+    threadId?: string;
+    workspaceId: string;
+  },
+) {
+  if (!input.threadId) {
+    return null;
+  }
+
+  const thread = await getOwnedThreadOrThrow(ctx, input.threadId);
+  if (thread.workspaceId !== input.workspaceId) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Thread does not belong to this workspace.",
+    });
+  }
+
+  return thread;
+}
+
+function getLastPullRequest(thread: { chatEngineState?: unknown } | null) {
+  return getRepoThreadState(thread?.chatEngineState)?.lastPullRequest ?? null;
+}
+
+async function buildRepoContextResponse(input: {
+  pathValue: string | null;
+  preferredOpenTargetId: string | null;
+  thread?: { chatEngineState?: unknown } | null;
+  lastPullRequest?: RepoLastPullRequest | null;
+}) {
+  const repoContext = await resolveRepoContext(input.pathValue);
+  return {
+    ...repoContext,
+    lastPullRequest:
+      input.lastPullRequest === undefined
+        ? getLastPullRequest(input.thread ?? null)
+        : input.lastPullRequest,
+    preferredOpenTargetId: input.preferredOpenTargetId,
+  };
+}
+
+async function resolveGitHubService(
+  ctx: Parameters<typeof getOwnedWorkspaceOrThrow>[0],
+) {
+  const integration = await ctx.db.query.integrations.findFirst({
+    where: and(
+      eq(integrations.userId, ctx.session.user.id),
+      eq(integrations.provider, "github"),
+      eq(integrations.isEnabled, true),
+    ),
+  });
+
+  if (!integration) {
+    return null;
+  }
+
+  const token = await getValidAccessToken(integration.id).catch(() => null);
+  if (!token) {
+    return null;
+  }
+
+  return new GitHubService(token);
+}
+
+async function resolvePullRequestMessage(input: {
+  commitMessage: string | null;
+  rootPath: string;
+}) {
+  if (input.commitMessage?.trim()) {
+    return input.commitMessage.trim();
+  }
+
+  return (await getHeadCommitMessage(input.rootPath)).message;
+}
+
+function buildComparePullRequestMetadata(input: {
+  base: string | null;
+  branch: string | null;
+  owner: string;
+  repo: string;
+  url: string;
+}): RepoLastPullRequest {
+  return {
+    base: input.base ?? "",
+    createdAt: new Date().toISOString(),
+    draft: false,
+    head: input.branch ?? "",
+    kind: "compare",
+    repoFullName: `${input.owner}/${input.repo}`,
+    url: input.url,
+  };
+}
+
+function buildGitHubPullRequestMetadata(input: {
+  base: string;
+  draft: boolean;
+  head: string;
+  number: number;
+  owner: string;
+  repo: string;
+  state: string;
+  title: string;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+}): RepoLastPullRequest {
+  return {
+    base: input.base,
+    createdAt: input.createdAt,
+    draft: input.draft,
+    head: input.head,
+    kind: "github",
+    number: input.number,
+    repoFullName: `${input.owner}/${input.repo}`,
+    state: input.state,
+    title: input.title,
+    updatedAt: input.updatedAt,
+    url: input.url,
+  };
+}
+
 export const repoRouter = createTRPCRouter({
   getContext: protectedProcedure
-    .input(workspaceInputSchema)
+    .input(workspaceOptionalThreadInputSchema)
     .query(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
-      const repoContext = await resolveRepoContext(workspace.rootPath);
-      return {
-        ...repoContext,
+      const thread = await getOwnedThreadForWorkspace(ctx, input);
+      return await buildRepoContextResponse({
+        pathValue: workspace.rootPath,
         preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
-      };
+        thread,
+      });
     }),
 
   setPreferredOpenTarget: protectedProcedure
@@ -170,30 +256,50 @@ export const repoRouter = createTRPCRouter({
 
   commit: protectedProcedure
     .input(
-      workspaceInputSchema.extend({
+      workspaceOptionalThreadInputSchema.extend({
+        includeUnstaged: z.boolean().optional(),
         message: z.string().trim().min(1).max(500),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
-      return await commitAllChanges(
-        assertWorkspaceRootPath(workspace.rootPath),
+      const thread = await getOwnedThreadForWorkspace(ctx, input);
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const result = await commitAllChanges(
+        rootPath,
         input.message,
+        input.includeUnstaged ?? true,
       );
+
+      return {
+        ...result,
+        repoContext: await buildRepoContextResponse({
+          pathValue: rootPath,
+          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+          thread,
+        }),
+      };
     }),
 
   createBranch: protectedProcedure
     .input(
-      workspaceInputSchema.extend({
+      workspaceOptionalThreadInputSchema.extend({
         branchName: z.string().trim().min(1).max(255),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
-      return await createAndCheckoutBranch(
-        assertWorkspaceRootPath(workspace.rootPath),
-        input.branchName,
-      );
+      const thread = await getOwnedThreadForWorkspace(ctx, input);
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const result = await createAndCheckoutBranch(rootPath, input.branchName);
+      return {
+        ...result,
+        repoContext: await buildRepoContextResponse({
+          pathValue: rootPath,
+          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+          thread,
+        }),
+      };
     }),
 
   listBranches: protectedProcedure
@@ -218,25 +324,41 @@ export const repoRouter = createTRPCRouter({
     }),
 
   generateCommitMessage: protectedProcedure
-    .input(workspaceInputSchema)
+    .input(
+      workspaceThreadInputSchema.extend({
+        includeUnstaged: z.boolean().optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const thread = await getOwnedThreadForWorkspace(ctx, input);
       const rootPath = assertWorkspaceRootPath(workspace.rootPath);
       return await generateWorkspaceCommitMessage({
+        includeUnstaged: input.includeUnstaged ?? true,
         rootPath,
+        thread: {
+          chatEngine: thread!.chatEngine,
+          chatModelId: thread!.chatModelId,
+          chatReasoningEffort: thread!.chatReasoningEffort,
+        },
         user: ctx.user,
       });
     }),
 
   createPullRequest: protectedProcedure
     .input(
-      workspaceInputSchema.extend({
+      workspaceThreadInputSchema.extend({
         branchName: z.string().trim().min(1).max(255).optional(),
+        draft: z.boolean().optional(),
+        includeUnstaged: z.boolean().optional(),
+        message: z.string().trim().min(1).max(500).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const thread = await getOwnedThreadForWorkspace(ctx, input);
       const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const includeUnstaged = input.includeUnstaged ?? true;
 
       let repoContext = await resolveRepoContext(rootPath);
       if (!repoContext.isGitRepo || !repoContext.githubRemote) {
@@ -248,6 +370,7 @@ export const repoRouter = createTRPCRouter({
 
       let createdBranch: string | null = null;
       let commitMessage: string | null = null;
+      let repoChanged = false;
 
       if (repoContext.isDefaultBranch) {
         if (!input.branchName?.trim()) {
@@ -263,16 +386,29 @@ export const repoRouter = createTRPCRouter({
           input.branchName,
         );
         createdBranch = created.branch;
-        repoContext = await resolveRepoContext(rootPath);
+        repoChanged = true;
       }
 
       if (repoContext.hasChanges) {
-        const generated = await generateWorkspaceCommitMessage({
-          rootPath,
-          user: ctx.user,
-        });
-        commitMessage = generated.message;
-        await commitAllChanges(rootPath, generated.message);
+        commitMessage =
+          input.message?.trim() ||
+          (
+            await generateWorkspaceCommitMessage({
+              includeUnstaged,
+              rootPath,
+              thread: {
+                chatEngine: thread!.chatEngine,
+                chatModelId: thread!.chatModelId,
+                chatReasoningEffort: thread!.chatReasoningEffort,
+              },
+              user: ctx.user,
+            })
+          ).message;
+        await commitAllChanges(rootPath, commitMessage, includeUnstaged);
+        repoChanged = true;
+      }
+
+      if (repoChanged) {
         repoContext = await resolveRepoContext(rootPath);
       }
 
@@ -280,6 +416,10 @@ export const repoRouter = createTRPCRouter({
         !repoContext.hasUpstream || (repoContext.aheadCount ?? 0) > 0;
       if (shouldPush) {
         await pushCurrentBranch(rootPath);
+        repoChanged = true;
+      }
+
+      if (repoChanged) {
         repoContext = await resolveRepoContext(rootPath);
       }
 
@@ -290,15 +430,81 @@ export const repoRouter = createTRPCRouter({
         });
       }
 
-      const pullRequestUrl =
-        repoContext.githubRemote.pullRequestUrl ??
-        repoContext.githubRemote.pullRequestsUrl;
+      const githubService = await resolveGitHubService(ctx);
+      const canCreateGitHubPullRequest = Boolean(
+        githubService &&
+        repoContext.branch &&
+        repoContext.githubRemote.defaultBranch,
+      );
+      if ((input.draft ?? false) && !canCreateGitHubPullRequest) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Connect GitHub to create draft pull requests.",
+        });
+      }
+
+      let lastPullRequest: RepoLastPullRequest;
+      let pullRequestUrl: string;
+
+      if (
+        githubService &&
+        repoContext.branch &&
+        repoContext.githubRemote.defaultBranch
+      ) {
+        const message = await resolvePullRequestMessage({
+          commitMessage: commitMessage ?? input.message?.trim() ?? null,
+          rootPath,
+        });
+        const { body, subject } = parseCommitMessage(message);
+        const pullRequest = await githubService.createPr({
+          base: repoContext.githubRemote.defaultBranch,
+          body: body || undefined,
+          draft: input.draft ?? false,
+          head: repoContext.branch,
+          owner: repoContext.githubRemote.owner,
+          repo: repoContext.githubRemote.repo,
+          title: subject,
+        });
+        pullRequestUrl = pullRequest.htmlUrl;
+        lastPullRequest = buildGitHubPullRequestMetadata({
+          base: pullRequest.base,
+          createdAt: pullRequest.createdAt,
+          draft: pullRequest.draft,
+          head: pullRequest.head,
+          number: pullRequest.number,
+          owner: repoContext.githubRemote.owner,
+          repo: repoContext.githubRemote.repo,
+          state: pullRequest.state,
+          title: pullRequest.title,
+          updatedAt: pullRequest.updatedAt,
+          url: pullRequest.htmlUrl,
+        });
+      } else {
+        pullRequestUrl =
+          repoContext.githubRemote.pullRequestUrl ??
+          repoContext.githubRemote.pullRequestsUrl;
+        lastPullRequest = buildComparePullRequestMetadata({
+          base: repoContext.githubRemote.defaultBranch,
+          branch: repoContext.branch,
+          owner: repoContext.githubRemote.owner,
+          repo: repoContext.githubRemote.repo,
+          url: pullRequestUrl,
+        });
+      }
+
+      updateThreadRepoState(thread!.id, { lastPullRequest });
 
       return {
         branch: repoContext.branch,
         commitMessage,
         createdBranch,
         pullRequestUrl,
+        repoContext: await buildRepoContextResponse({
+          lastPullRequest,
+          pathValue: rootPath,
+          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+          thread,
+        }),
       };
     }),
 
@@ -312,11 +518,19 @@ export const repoRouter = createTRPCRouter({
     }),
 
   push: protectedProcedure
-    .input(workspaceInputSchema)
+    .input(workspaceOptionalThreadInputSchema)
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
-      return await pushCurrentBranch(
-        assertWorkspaceRootPath(workspace.rootPath),
-      );
+      const thread = await getOwnedThreadForWorkspace(ctx, input);
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const result = await pushCurrentBranch(rootPath);
+      return {
+        ...result,
+        repoContext: await buildRepoContextResponse({
+          pathValue: rootPath,
+          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+          thread,
+        }),
+      };
     }),
 });

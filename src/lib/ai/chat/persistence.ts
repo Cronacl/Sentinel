@@ -8,10 +8,12 @@ import type { ChatEngine } from "@/server/db/enums";
 import type {
   ClaudeThreadState,
   CodexThreadState,
+  RepoThreadState,
   ThreadChatEngineState,
 } from "@/lib/ai/chat/engines/types";
 import {
   buildThreadChatEngineState,
+  mergeThreadChatEngineState,
   parseThreadChatEngineState,
 } from "@/lib/ai/chat/engines/types";
 
@@ -155,13 +157,34 @@ export function updateThreadChatEngineState(
   threadId: string,
   engineState: ThreadChatEngineState | null,
 ) {
+  const existing = db
+    .select({
+      chatEngineState: threads.chatEngineState,
+    })
+    .from(threads)
+    .where(eq(threads.id, threadId))
+    .get();
+  const nextState = mergeThreadChatEngineState(
+    parseThreadChatEngineState(existing?.chatEngineState),
+    engineState,
+  );
+
   db.update(threads)
     .set({
-      chatEngineState: engineState,
+      chatEngineState: nextState,
       updatedAt: new Date(),
     })
     .where(eq(threads.id, threadId))
     .run();
+}
+
+export function updateThreadRepoState(
+  threadId: string,
+  state: RepoThreadState | null,
+) {
+  updateThreadChatEngineState(threadId, {
+    repo: state,
+  });
 }
 
 export function updateCodexThreadState(

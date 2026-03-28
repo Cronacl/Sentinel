@@ -10,9 +10,11 @@ import {
   checkoutBranch,
   commitAllChanges,
   createAndCheckoutBranch,
+  getHeadCommitMessage,
   getCommitMessageContext,
   initializeRepository,
   listBranches,
+  parseShortStat,
   pushCurrentBranch,
   resolveRepoContext,
 } from "./repo";
@@ -46,6 +48,32 @@ async function createRepo() {
   return directory;
 }
 
+describe("parseShortStat", () => {
+  it("parses insertions and deletions from shortstat output", () => {
+    expect(
+      parseShortStat(" 3 files changed, 50 insertions(+), 10 deletions(-)"),
+    ).toEqual({ deletions: 10, insertions: 50 });
+  });
+
+  it("handles insertions only", () => {
+    expect(parseShortStat(" 1 file changed, 3 insertions(+)")).toEqual({
+      deletions: 0,
+      insertions: 3,
+    });
+  });
+
+  it("handles deletions only", () => {
+    expect(parseShortStat(" 1 file changed, 7 deletions(-)")).toEqual({
+      deletions: 7,
+      insertions: 0,
+    });
+  });
+
+  it("returns zeros for empty input", () => {
+    expect(parseShortStat("")).toEqual({ deletions: 0, insertions: 0 });
+  });
+});
+
 describe("resolveRepoContext", () => {
   it("returns git repo context for the repo root and nested directories", async () => {
     const repoRoot = await createRepo();
@@ -63,6 +91,9 @@ describe("resolveRepoContext", () => {
       path.basename(repoRoot),
     );
     expect(rootContext.branch).toBe("main");
+    expect(rootContext.changedFileCount).toBe(0);
+    expect(rootContext.insertions).toBe(0);
+    expect(rootContext.deletions).toBe(0);
     expect(nestedContext.isGitRepo).toBe(true);
     expect(path.basename(nestedContext.repoRoot ?? "")).toBe(
       path.basename(repoRoot),
@@ -101,6 +132,20 @@ describe("resolveRepoContext", () => {
     expect(context.hasChanges).toBe(false);
   });
 
+  it("reports changed file count and line stats for dirty trees", async () => {
+    const repoRoot = await createRepo();
+    await writeFile(
+      path.join(repoRoot, "file.ts"),
+      "export const value = 2;\nexport const extra = true;\n",
+    );
+    await writeFile(path.join(repoRoot, "new.ts"), "export const n = 1;\n");
+
+    const context = await resolveRepoContext(repoRoot);
+    expect(context.hasChanges).toBe(true);
+    expect(context.changedFileCount).toBe(2);
+    expect(context.insertions).toBeGreaterThan(0);
+  });
+
   it("detects first-push state when a remote exists without upstream", async () => {
     const repoRoot = await createRepo();
     const remoteRoot = await createDirectory("sentinel-first-push-");
@@ -131,7 +176,81 @@ describe("repo actions", () => {
         type: "untracked",
       },
     ]);
+    expect(context.summary).toBe("? src.ts");
+    expect(context.patch).toContain("diff --git a/src.ts b/src.ts");
+    expect(context.patch).toContain("new file mode 100644");
+    expect(context.patch).toContain("+export const created = true;");
     expect(buildFallbackCommitMessage(context.changes)).toBe("Add src");
+  });
+
+  it("creates commits with subject and body when a formatted message is provided", async () => {
+    const repoRoot = await createRepo();
+    await writeFile(
+      path.join(repoRoot, "file.ts"),
+      "export const value = 2;\n",
+    );
+
+    await commitAllChanges(
+      repoRoot,
+      "Update value\n\n- add body line\n- add another line",
+    );
+
+    const subject = await runGit(["log", "-1", "--pretty=%s"], repoRoot);
+    const body = await runGit(["log", "-1", "--pretty=%b"], repoRoot);
+
+    expect(subject.trim()).toBe("Update value");
+    expect(body.trim()).toBe("- add body line\n- add another line");
+  });
+
+  it("commits only staged changes when unstaged changes are excluded", async () => {
+    const repoRoot = await createRepo();
+    await writeFile(
+      path.join(repoRoot, "file.ts"),
+      "export const value = 2;\n",
+    );
+    await writeFile(path.join(repoRoot, "new.ts"), "export const n = 1;\n");
+    await runGit(["add", "file.ts"], repoRoot);
+
+    await commitAllChanges(repoRoot, "Update staged value", false);
+
+    const changedFiles = await runGit(
+      ["show", "--name-only", "--pretty="],
+      repoRoot,
+    );
+    const status = await runGit(["status", "--porcelain=v1"], repoRoot);
+
+    expect(changedFiles.trim()).toBe("file.ts");
+    expect(status).toContain("?? new.ts");
+  });
+
+  it("fails when no staged changes are available and unstaged changes are excluded", async () => {
+    const repoRoot = await createRepo();
+    await writeFile(
+      path.join(repoRoot, "file.ts"),
+      "export const value = 3;\n",
+    );
+
+    await expect(
+      commitAllChanges(repoRoot, "Skip unstaged changes", false),
+    ).rejects.toThrow(
+      "Commit requires staged changes when unstaged changes are excluded.",
+    );
+  });
+
+  it("reads the latest commit message as subject and body", async () => {
+    const repoRoot = await createRepo();
+    await writeFile(
+      path.join(repoRoot, "file.ts"),
+      "export const value = 2;\n",
+    );
+
+    await commitAllChanges(repoRoot, "Update latest\n\n- include body");
+
+    await expect(getHeadCommitMessage(repoRoot)).resolves.toEqual({
+      body: "- include body",
+      message: "Update latest\n\n- include body",
+      subject: "Update latest",
+    });
   });
 
   it("initializes a repository for a plain directory", async () => {

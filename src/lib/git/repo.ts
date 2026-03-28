@@ -1,4 +1,5 @@
-import { stat } from "node:fs/promises";
+import path from "node:path";
+import { readFile, stat } from "node:fs/promises";
 
 import { runCommand } from "@/lib/process/run-command";
 
@@ -16,11 +17,14 @@ export type RepoGitHubRemote = {
 export type RepoContext = {
   aheadCount: number;
   branch: string | null;
+  changedFileCount: number;
+  deletions: number;
   githubRemote: RepoGitHubRemote | null;
   hasChanges: boolean;
   hasCommits: boolean;
   hasRemotes: boolean;
   hasUpstream: boolean;
+  insertions: number;
   isDefaultBranch: boolean;
   isGitRepo: boolean;
   pushRemoteName: string | null;
@@ -41,16 +45,36 @@ function emptyRepoContext(): RepoContext {
   return {
     aheadCount: 0,
     branch: null,
+    changedFileCount: 0,
+    deletions: 0,
     githubRemote: null,
     hasChanges: false,
     hasCommits: false,
     hasRemotes: false,
     hasUpstream: false,
+    insertions: 0,
     isDefaultBranch: false,
     isGitRepo: false,
     pushRemoteName: null,
     repoRoot: null,
   };
+}
+
+export function parseShortStat(output: string) {
+  let insertions = 0;
+  let deletions = 0;
+
+  const insertionMatch = output.match(/(\d+)\s+insertion/);
+  if (insertionMatch) {
+    insertions = Number.parseInt(insertionMatch[1]!, 10);
+  }
+
+  const deletionMatch = output.match(/(\d+)\s+deletion/);
+  if (deletionMatch) {
+    deletions = Number.parseInt(deletionMatch[1]!, 10);
+  }
+
+  return { deletions, insertions };
 }
 
 function normalizeChangedPath(value: string) {
@@ -67,7 +91,10 @@ function mapGitStatusCode(code: string): RepoFileChange["type"] {
   return "modified";
 }
 
-function parseStatusChanges(statusOutput: string) {
+function parseStatusChanges(
+  statusOutput: string,
+  options?: { stagedOnly?: boolean },
+) {
   const changes: RepoFileChange[] = [];
 
   for (const line of statusOutput.split("\n")) {
@@ -79,6 +106,15 @@ function parseStatusChanges(statusOutput: string) {
     const unstagedCode = line[1] ?? " ";
     const rawPath = line.slice(3).trim();
     const path = normalizeChangedPath(rawPath);
+
+    if (options?.stagedOnly) {
+      if (stagedCode === " " || stagedCode === "?") {
+        continue;
+      }
+
+      changes.push({ path, type: mapGitStatusCode(stagedCode) });
+      continue;
+    }
 
     if (stagedCode === "?" && unstagedCode === "?") {
       changes.push({ path, type: "untracked" });
@@ -116,6 +152,85 @@ function summarizeChangeType(type: RepoFileChange["type"]) {
 function formatPathForCommit(pathValue: string) {
   const fileName = pathValue.split("/").filter(Boolean).at(-1) ?? pathValue;
   return fileName.replace(/\.[a-z0-9]+$/i, "");
+}
+
+function parseCommitMessage(message: string) {
+  const normalized = message.replace(/\r\n/g, "\n").trim();
+  if (!normalized) {
+    return {
+      body: "",
+      subject: "",
+    };
+  }
+
+  const [subjectLine = ""] = normalized.split("\n");
+  const subject = subjectLine.trim();
+  const body = normalized.slice(subjectLine.length).replace(/^\n+/, "").trim();
+
+  return {
+    body,
+    subject,
+  };
+}
+
+function formatChangeSummaryLine(change: RepoFileChange) {
+  const prefix =
+    change.type === "added"
+      ? "A"
+      : change.type === "deleted"
+        ? "D"
+        : change.type === "renamed"
+          ? "R"
+          : change.type === "untracked"
+            ? "?"
+            : "M";
+
+  return `${prefix} ${change.path}`;
+}
+
+function isProbablyBinaryContent(content: Buffer) {
+  return content.includes(0);
+}
+
+function buildSyntheticAddPatch(filePath: string, rawContent: string) {
+  const normalizedContent = rawContent.replace(/\r\n/g, "\n");
+  const hasTrailingNewline = normalizedContent.endsWith("\n");
+  const lines = normalizedContent.split("\n");
+  if (hasTrailingNewline && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+
+  const header = [
+    `diff --git a/${filePath} b/${filePath}`,
+    "new file mode 100644",
+    "--- /dev/null",
+    `+++ b/${filePath}`,
+  ];
+
+  if (lines.length === 0) {
+    return header.join("\n");
+  }
+
+  return [
+    ...header,
+    `@@ -0,0 +1,${lines.length} @@`,
+    ...lines.map((line) => `+${line}`),
+  ].join("\n");
+}
+
+async function buildUntrackedPatch(repoRoot: string, filePath: string) {
+  const absolutePath = path.join(repoRoot, filePath);
+  const fileStats = await stat(absolutePath).catch(() => null);
+  if (!fileStats?.isFile()) {
+    return null;
+  }
+
+  const content = await readFile(absolutePath).catch(() => null);
+  if (!content || isProbablyBinaryContent(content)) {
+    return null;
+  }
+
+  return buildSyntheticAddPatch(filePath, content.toString("utf8"));
 }
 
 export function buildFallbackCommitMessage(changes: RepoFileChange[]) {
@@ -312,16 +427,24 @@ export async function resolveRepoContext(
     return emptyRepoContext();
   }
 
-  const [branchResult, statusResult, upstreamResult, remotes] =
-    await Promise.all([
-      runGit(["rev-parse", "--abbrev-ref", "HEAD"], repoRoot),
-      runGit(["status", "--porcelain=v1"], repoRoot),
-      runGit(
-        ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
-        repoRoot,
-      ),
-      listRemotes(repoRoot),
-    ]);
+  const [
+    branchResult,
+    statusResult,
+    upstreamResult,
+    remotes,
+    stagedStat,
+    unstagedStat,
+  ] = await Promise.all([
+    runGit(["rev-parse", "--abbrev-ref", "HEAD"], repoRoot),
+    runGit(["status", "--porcelain=v1"], repoRoot),
+    runGit(
+      ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+      repoRoot,
+    ),
+    listRemotes(repoRoot),
+    runGit(["diff", "--cached", "--shortstat"], repoRoot),
+    runGit(["diff", "--shortstat"], repoRoot),
+  ]);
 
   let branch = normalizeBranch(
     branchResult.code === 0 ? branchResult.stdout : null,
@@ -336,6 +459,15 @@ export async function resolveRepoContext(
     );
   }
   const hasChanges = Boolean(statusResult.stdout.trim());
+  const changedFileCount = statusResult.stdout
+    .split("\n")
+    .filter((line) => line.trim()).length;
+  const staged = parseShortStat(stagedStat.code === 0 ? stagedStat.stdout : "");
+  const unstaged = parseShortStat(
+    unstagedStat.code === 0 ? unstagedStat.stdout : "",
+  );
+  const insertions = staged.insertions + unstaged.insertions;
+  const deletions = staged.deletions + unstaged.deletions;
   const upstreamRef =
     upstreamResult.code === 0 ? upstreamResult.stdout.trim() : null;
   const hasUpstream = Boolean(upstreamRef);
@@ -367,11 +499,14 @@ export async function resolveRepoContext(
     return {
       aheadCount,
       branch,
+      changedFileCount,
+      deletions,
       githubRemote: null,
       hasChanges,
       hasCommits,
       hasRemotes,
       hasUpstream,
+      insertions,
       isDefaultBranch: false,
       isGitRepo: true,
       pushRemoteName,
@@ -384,11 +519,14 @@ export async function resolveRepoContext(
     return {
       aheadCount,
       branch,
+      changedFileCount,
+      deletions,
       githubRemote: null,
       hasChanges,
       hasCommits,
       hasRemotes,
       hasUpstream,
+      insertions,
       isDefaultBranch: false,
       isGitRepo: true,
       pushRemoteName,
@@ -410,6 +548,8 @@ export async function resolveRepoContext(
   return {
     aheadCount,
     branch,
+    changedFileCount,
+    deletions,
     githubRemote: {
       defaultBranch,
       owner: parsedRemote.owner,
@@ -424,6 +564,7 @@ export async function resolveRepoContext(
     hasCommits,
     hasRemotes,
     hasUpstream,
+    insertions,
     isDefaultBranch: Boolean(
       branch && defaultBranch && branch === defaultBranch,
     ),
@@ -447,13 +588,28 @@ async function resolveRepoRootOrThrow(pathValue: string | null | undefined) {
   return repoRoot;
 }
 
+async function hasStagedChanges(repoRoot: string) {
+  const stagedStatusResult = await runGit(
+    ["diff", "--cached", "--name-only"],
+    repoRoot,
+  );
+  if (stagedStatusResult.code !== 0) {
+    throw new Error(
+      stagedStatusResult.stderr || "Failed to inspect staged changes.",
+    );
+  }
+
+  return Boolean(stagedStatusResult.stdout.trim());
+}
+
 export async function commitAllChanges(
   pathValue: string | null | undefined,
   message: string,
+  includeUnstaged = true,
 ) {
   const repoRoot = await resolveRepoRootOrThrow(pathValue);
-  const trimmedMessage = message.trim();
-  if (!trimmedMessage) {
+  const { body, subject } = parseCommitMessage(message);
+  if (!subject) {
     throw new Error("Commit message is required.");
   }
 
@@ -462,12 +618,23 @@ export async function commitAllChanges(
     throw new Error("Commit requires changes in the working tree.");
   }
 
-  const addResult = await runGit(["add", "-A"], repoRoot);
-  if (addResult.code !== 0) {
-    throw new Error(addResult.stderr || "Failed to stage changes.");
+  if (includeUnstaged) {
+    const addResult = await runGit(["add", "-A"], repoRoot);
+    if (addResult.code !== 0) {
+      throw new Error(addResult.stderr || "Failed to stage changes.");
+    }
+  } else if (!(await hasStagedChanges(repoRoot))) {
+    throw new Error(
+      "Commit requires staged changes when unstaged changes are excluded.",
+    );
   }
 
-  const commitResult = await runGit(["commit", "-m", trimmedMessage], repoRoot);
+  const commitArgs = ["commit", "-m", subject];
+  if (body) {
+    commitArgs.push("-m", body);
+  }
+
+  const commitResult = await runGit(commitArgs, repoRoot);
   if (commitResult.code !== 0) {
     throw new Error(commitResult.stderr || "Failed to create commit.");
   }
@@ -480,6 +647,33 @@ export async function commitAllChanges(
   return {
     commit: headResult.stdout.trim(),
     summary: commitResult.stdout.split("\n")[0] ?? "",
+  };
+}
+
+export async function getHeadCommitMessage(
+  pathValue: string | null | undefined,
+): Promise<{
+  body: string;
+  message: string;
+  subject: string;
+}> {
+  const repoRoot = await resolveRepoRootOrThrow(pathValue);
+  const result = await runGit(["log", "-1", "--pretty=%B"], repoRoot);
+  if (result.code !== 0) {
+    throw new Error(
+      result.stderr || "Failed to read the latest commit message.",
+    );
+  }
+
+  const { body, subject } = parseCommitMessage(result.stdout);
+  if (!subject) {
+    throw new Error("The latest commit message is empty.");
+  }
+
+  return {
+    body,
+    message: body ? `${subject}\n\n${body}` : subject,
+    subject,
   };
 }
 
@@ -636,12 +830,15 @@ export async function initializeRepository(
 
 export async function getCommitMessageContext(
   pathValue: string | null | undefined,
+  options?: { includeUnstaged?: boolean },
 ): Promise<{
   branch: string | null;
   changes: RepoFileChange[];
-  diffStat: string;
+  patch: string;
   repoRoot: string;
+  summary: string;
 }> {
+  const includeUnstaged = options?.includeUnstaged ?? true;
   const repoRoot = await resolveRepoRootOrThrow(pathValue);
   const context = await resolveRepoContext(repoRoot);
   if (!context.hasChanges) {
@@ -650,28 +847,51 @@ export async function getCommitMessageContext(
     );
   }
 
-  const [statusResult, stagedDiffStat, unstagedDiffStat] = await Promise.all([
-    runGit(["status", "--porcelain=v1"], repoRoot),
-    runGit(["diff", "--stat", "--cached"], repoRoot),
-    runGit(["diff", "--stat"], repoRoot),
-  ]);
+  const [statusResult, stagedPatchResult, unstagedPatchResult] =
+    await Promise.all([
+      runGit(["status", "--porcelain=v1"], repoRoot),
+      runGit(["diff", "--cached", "--patch", "--minimal"], repoRoot),
+      includeUnstaged
+        ? runGit(["diff", "--patch", "--minimal"], repoRoot)
+        : Promise.resolve({ code: 0, stderr: "", stdout: "" }),
+    ]);
 
   if (statusResult.code !== 0) {
     throw new Error(statusResult.stderr || "Failed to inspect git status.");
   }
 
-  const changes = parseStatusChanges(statusResult.stdout);
-  const diffStat = [
-    stagedDiffStat.stdout.trim(),
-    unstagedDiffStat.stdout.trim(),
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const changes = parseStatusChanges(statusResult.stdout, {
+    stagedOnly: !includeUnstaged,
+  });
+  if (changes.length === 0) {
+    throw new Error(
+      includeUnstaged
+        ? "Commit message generation requires changes in the working tree."
+        : "Commit message generation requires staged changes when unstaged changes are excluded.",
+    );
+  }
+
+  const summary = changes.map(formatChangeSummaryLine).join("\n");
+  const untrackedPatches = await Promise.all(
+    includeUnstaged
+      ? changes
+          .filter((change) => change.type === "untracked")
+          .map((change) => buildUntrackedPatch(repoRoot, change.path))
+      : [],
+  );
+  const patchSections = [
+    stagedPatchResult.stdout.trim(),
+    unstagedPatchResult.stdout.trim(),
+    ...untrackedPatches.filter((patch): patch is string =>
+      Boolean(patch?.trim()),
+    ),
+  ].filter(Boolean);
 
   return {
     branch: context.branch,
     changes,
-    diffStat,
+    patch: patchSections.join("\n\n"),
     repoRoot,
+    summary,
   };
 }
