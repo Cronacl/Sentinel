@@ -23,6 +23,7 @@ import { securityRouter } from "@/server/api/routers/security";
 import { skillsRouter } from "@/server/api/routers/skills";
 import { threadsRouter } from "@/server/api/routers/threads";
 import { createCallerFactory, createTRPCRouter } from "@/server/api/trpc";
+import { workspaceFilesRouter } from "@/server/api/routers/workspace-files";
 import { workspacesRouter } from "@/server/api/routers/workspaces";
 
 /**
@@ -55,6 +56,7 @@ export const appRouter = createTRPCRouter({
   security: securityRouter,
   skills: skillsRouter,
   threads: threadsRouter,
+  workspaceFiles: workspaceFilesRouter,
   workspaces: workspacesRouter,
 });
 

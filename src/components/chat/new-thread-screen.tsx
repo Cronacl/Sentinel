@@ -265,6 +265,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
 
   const handleSend = useCallback(
     async ({
+      composerContext,
       engine,
       files,
       modelId,
@@ -272,6 +273,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       text,
       threadMode = "chat",
     }: {
+      composerContext?: import("@/lib/composer-context/types").ComposerContext;
       engine: ChatEngine;
       files?: FileUIPart[];
       modelId: string;
@@ -321,6 +323,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         }));
       }
       const pendingBootstrap = sendMessage({
+        composerContext,
         engine,
         files,
         modelId,
@@ -408,6 +411,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
 
   const handleQueueFollowUp = useCallback(
     async ({
+      composerContext,
       engine,
       files,
       modelId,
@@ -415,6 +419,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       text,
       threadMode = "chat",
     }: {
+      composerContext?: import("@/lib/composer-context/types").ComposerContext;
       engine: ChatEngine;
       files?: FileUIPart[];
       modelId: string;
@@ -424,6 +429,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     }) => {
       setChatError(null);
       await queueFollowUp({
+        composerContext,
         engine,
         files,
         modelId,
@@ -439,6 +445,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
 
   const handleSteerFollowUp = useCallback(
     async ({
+      composerContext,
       engine,
       files,
       modelId,
@@ -446,6 +453,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       text,
       threadMode = "chat",
     }: {
+      composerContext?: import("@/lib/composer-context/types").ComposerContext;
       engine: ChatEngine;
       files?: FileUIPart[];
       modelId: string;
@@ -455,6 +463,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     }) => {
       setChatError(null);
       await steerFollowUp({
+        composerContext,
         engine,
         files,
         modelId,
@@ -682,6 +691,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                         ? handleStartPlanImplementation
                         : undefined
                     }
+                    workspaceRootPath={selectedWorkspace?.rootPath ?? null}
                   />
                 ))}
 

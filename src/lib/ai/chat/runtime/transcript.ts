@@ -8,6 +8,7 @@ import {
   mergeThreadMessageMetadata,
   type ThreadUIMessage,
 } from "@/lib/ai/messages/types";
+import { serializeComposerContextToText } from "@/lib/composer-context/serialize";
 
 import type { ThreadChatRequest } from "../types";
 
@@ -108,6 +109,45 @@ export function getParentMessageId(
     default:
       return null;
   }
+}
+
+/**
+ * Prepends serialized composer context to user message text parts in the
+ * transcript so the model receives referenced file/skill context.
+ */
+export function injectComposerContextIntoTranscript(
+  messages: ThreadUIMessage[],
+): ThreadUIMessage[] {
+  return messages.map((message) => {
+    if (message.role !== "user") return message;
+
+    const composerContext = message.metadata?.composerContext;
+    if (
+      !composerContext ||
+      ((composerContext.paths?.length ?? 0) === 0 &&
+        (composerContext.skills?.length ?? 0) === 0)
+    ) {
+      return message;
+    }
+
+    const prefix = serializeComposerContextToText(composerContext);
+    if (!prefix) return message;
+
+    let injected = false;
+    const parts = message.parts.map((part) => {
+      if (part.type === "text" && !injected) {
+        injected = true;
+        return { ...part, text: `${prefix}\n\n${part.text}` };
+      }
+      return part;
+    });
+
+    if (!injected) {
+      parts.unshift({ text: prefix, type: "text" as const });
+    }
+
+    return { ...message, parts } as ThreadUIMessage;
+  });
 }
 
 export { buildActiveThreadMessages };

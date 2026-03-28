@@ -54,6 +54,7 @@ import {
   buildModelTranscript,
   getFirstUserText,
   getParentMessageId,
+  injectComposerContextIntoTranscript,
 } from "./transcript";
 import {
   getEnabledIntegrations,
@@ -809,7 +810,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
     const titleUpdatePromise = launchTitleGeneration(run, resolvedModel);
     const normalizedModelTranscript =
       await normalizeTranscriptDocumentsForModel({
-        messages: run.modelTranscript,
+        messages: injectComposerContextIntoTranscript(run.modelTranscript),
         providerId: resolvedModel.providerId,
         responseModelId: resolvedModel.responseModelId,
       });

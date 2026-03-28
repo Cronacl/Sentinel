@@ -17,6 +17,7 @@ import type {
 } from "@/lib/ai/chat/session-types";
 import type { ThreadToolApprovalResponse } from "@/lib/ai/chat/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import type { ComposerContext } from "@/lib/composer-context/types";
 import {
   getThreadMessageSyncToken,
   getThreadMessageRevision,
@@ -41,6 +42,7 @@ type UseThreadChatOptions = {
 };
 
 type SendThreadMessageInput = {
+  composerContext?: ComposerContext;
   engine: ChatEngine;
   files?: FileUIPart[];
   modelId: string;
@@ -975,14 +977,23 @@ function getOrCreateSessionStore(
 }
 
 function createUserThreadMessage({
+  composerContext,
   files,
   text,
-}: Pick<SendThreadMessageInput, "files" | "text">): ThreadUIMessage {
+}: Pick<
+  SendThreadMessageInput,
+  "composerContext" | "files" | "text"
+>): ThreadUIMessage {
   const fileParts = files ?? [];
+  const hasContext =
+    composerContext &&
+    (composerContext.paths.length > 0 || composerContext.skills.length > 0);
 
   return {
     id: crypto.randomUUID(),
-    metadata: {},
+    metadata: {
+      ...(hasContext ? { composerContext } : {}),
+    },
     parts: [...fileParts, ...(text ? [{ text, type: "text" as const }] : [])],
     role: "user",
   };
@@ -1124,6 +1135,7 @@ export function useThreadChat({
 
   const sendMessage = useCallback(
     async ({
+      composerContext,
       engine,
       files,
       modelId,
@@ -1134,7 +1146,7 @@ export function useThreadChat({
       return runAction({
         engine,
         id: threadId,
-        message: createUserThreadMessage({ files, text }),
+        message: createUserThreadMessage({ composerContext, files, text }),
         modelId,
         ...(reasoningEffort ? { reasoningEffort } : {}),
         ...(threadMode ? { threadMode } : {}),
@@ -1147,6 +1159,7 @@ export function useThreadChat({
 
   const editMessage = useCallback(
     async ({
+      composerContext,
       engine,
       files,
       modelId,
@@ -1157,7 +1170,7 @@ export function useThreadChat({
       await runAction({
         engine,
         id: threadId,
-        message: createUserThreadMessage({ files, text }),
+        message: createUserThreadMessage({ composerContext, files, text }),
         messageId: targetMessageId,
         modelId,
         ...(reasoningEffort ? { reasoningEffort } : {}),
@@ -1170,6 +1183,7 @@ export function useThreadChat({
 
   const queueFollowUp = useCallback(
     async ({
+      composerContext,
       engine,
       files,
       modelId,
@@ -1180,7 +1194,7 @@ export function useThreadChat({
       await runAction({
         engine,
         id: threadId,
-        message: createUserThreadMessage({ files, text }),
+        message: createUserThreadMessage({ composerContext, files, text }),
         modelId,
         ...(reasoningEffort ? { reasoningEffort } : {}),
         ...(threadMode ? { threadMode } : {}),
@@ -1193,6 +1207,7 @@ export function useThreadChat({
 
   const steerFollowUp = useCallback(
     async ({
+      composerContext,
       engine,
       files,
       modelId,
@@ -1203,7 +1218,7 @@ export function useThreadChat({
       await runAction({
         engine,
         id: threadId,
-        message: createUserThreadMessage({ files, text }),
+        message: createUserThreadMessage({ composerContext, files, text }),
         modelId,
         ...(reasoningEffort ? { reasoningEffort } : {}),
         ...(threadMode ? { threadMode } : {}),

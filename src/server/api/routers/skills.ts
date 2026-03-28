@@ -26,6 +26,8 @@ import {
 } from "@/schemas/skill-install.schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
+import { getOwnedWorkspaceOrThrow } from "./workspace-thread-helpers";
+
 function resolveGlobalBase(user: { skillsBasePath?: string | null }) {
   return user.skillsBasePath?.trim() || null;
 }
@@ -92,25 +94,39 @@ async function buildCodexSkillList() {
 }
 
 export const skillsRouter = createTRPCRouter({
-  list: protectedProcedure.query(async ({ ctx }) => {
-    const localSnapshot = await getSkillSnapshot({
-      workspaceRoot: ctx.workspace?.rootPath?.trim() || null,
-      globalBase: resolveGlobalBase(ctx.user),
-    });
+  list: protectedProcedure
+    .input(
+      z
+        .object({
+          workspaceId: z.string().trim().min(1).optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const workspaceRoot = input?.workspaceId
+        ? (
+            await getOwnedWorkspaceOrThrow(ctx, input.workspaceId)
+          ).rootPath?.trim() || null
+        : ctx.workspace?.rootPath?.trim() || null;
 
-    const codexSkills = await buildCodexSkillList().catch(() => []);
+      const localSnapshot = await getSkillSnapshot({
+        workspaceRoot,
+        globalBase: resolveGlobalBase(ctx.user),
+      });
 
-    return {
-      ...localSnapshot,
-      skills: [
-        ...localSnapshot.skills.map((skill) => ({
-          ...skill,
-          target: "sentinel" as const,
-        })),
-        ...codexSkills,
-      ],
-    };
-  }),
+      const codexSkills = await buildCodexSkillList().catch(() => []);
+
+      return {
+        ...localSnapshot,
+        skills: [
+          ...localSnapshot.skills.map((skill) => ({
+            ...skill,
+            target: "sentinel" as const,
+          })),
+          ...codexSkills,
+        ],
+      };
+    }),
 
   get: protectedProcedure
     .input(
