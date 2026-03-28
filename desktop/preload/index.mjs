@@ -22,6 +22,14 @@ contextBridge.exposeInMainWorld("sentinelDesktop", {
         DESKTOP_CHANNELS.WORKSPACE_LIST_OPEN_TARGETS,
         projectPath,
       ),
+    openFileInTarget: (projectPath, filePath, targetId, lineNumber) =>
+      ipcRenderer.invoke(
+        DESKTOP_CHANNELS.WORKSPACE_OPEN_FILE_IN_TARGET,
+        projectPath,
+        filePath,
+        targetId,
+        lineNumber,
+      ),
     openInTarget: (projectPath, targetId) =>
       ipcRenderer.invoke(
         DESKTOP_CHANNELS.WORKSPACE_OPEN_IN_TARGET,

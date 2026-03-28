@@ -18,6 +18,7 @@ import * as nodePty from "node-pty";
 
 import { DESKTOP_CHANNELS } from "../shared/channels.mjs";
 import {
+  getOpenFileCommandForTarget,
   getOpenCommandForTarget,
   resolveMacOpenTargets,
 } from "../shared/workspace-targets.mjs";
@@ -767,6 +768,24 @@ function registerIpc() {
     async (_event, projectPath) => {
       await assertProjectDirectory(projectPath);
       return await listWorkspaceTargets();
+    },
+  );
+
+  ipcMain.handle(
+    DESKTOP_CHANNELS.WORKSPACE_OPEN_FILE_IN_TARGET,
+    async (_event, projectPath, filePath, targetId, lineNumber) => {
+      const normalizedPath = await assertProjectDirectory(projectPath);
+      const target = await resolveWorkspaceTarget(targetId || "cursor");
+      const resolvedFilePath = path.resolve(normalizedPath, filePath);
+      if (!resolvedFilePath.startsWith(normalizedPath)) {
+        throw new Error("Selected file is outside the project directory.");
+      }
+      const command = getOpenFileCommandForTarget(
+        target,
+        resolvedFilePath,
+        lineNumber,
+      );
+      await runOpenCommand(command.command, command.args);
     },
   );
 

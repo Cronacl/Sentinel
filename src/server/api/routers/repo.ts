@@ -8,11 +8,15 @@ import {
   commitAllChanges,
   createAndCheckoutBranch,
   getCommitMessageContext,
+  getRepoDiffPanelData,
   getHeadCommitMessage,
   initializeRepository,
   listBranches,
   pushCurrentBranch,
+  revertFiles,
   resolveRepoContext,
+  stageFiles,
+  unstageFiles,
 } from "@/lib/git/repo";
 import {
   generateGitCommitMessage,
@@ -43,6 +47,13 @@ const workspaceOptionalThreadInputSchema = workspaceInputSchema.extend({
 });
 const workspaceThreadInputSchema = workspaceInputSchema.extend({
   threadId: z.string().min(1),
+});
+const repoDiffModeSchema = z.enum(["branch", "staged", "unstaged"]);
+const repoDiffFilesInputSchema = workspaceThreadInputSchema.extend({
+  paths: z.array(z.string().trim().min(1)).min(1).max(200),
+});
+const repoDiffMutationInputSchema = repoDiffFilesInputSchema.extend({
+  mode: repoDiffModeSchema,
 });
 const openTargetPreferenceSchema = z.object({
   targetId: z.string().trim().min(1).max(255),
@@ -254,6 +265,27 @@ export const repoRouter = createTRPCRouter({
       };
     }),
 
+  getDiffPanelData: protectedProcedure
+    .input(
+      workspaceThreadInputSchema.extend({
+        mode: repoDiffModeSchema,
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const thread = await getOwnedThreadForWorkspace(ctx, input);
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+
+      return {
+        diff: await getRepoDiffPanelData(rootPath, input.mode),
+        repoContext: await buildRepoContextResponse({
+          pathValue: rootPath,
+          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+          thread,
+        }),
+      };
+    }),
+
   commit: protectedProcedure
     .input(
       workspaceOptionalThreadInputSchema.extend({
@@ -273,6 +305,70 @@ export const repoRouter = createTRPCRouter({
 
       return {
         ...result,
+        repoContext: await buildRepoContextResponse({
+          pathValue: rootPath,
+          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+          thread,
+        }),
+      };
+    }),
+
+  stageFiles: protectedProcedure
+    .input(repoDiffMutationInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const thread = await getOwnedThreadForWorkspace(ctx, input);
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+
+      await stageFiles(rootPath, input.paths);
+
+      return {
+        diff: await getRepoDiffPanelData(rootPath, input.mode),
+        paths: input.paths,
+        repoContext: await buildRepoContextResponse({
+          pathValue: rootPath,
+          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+          thread,
+        }),
+      };
+    }),
+
+  unstageFiles: protectedProcedure
+    .input(repoDiffMutationInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const thread = await getOwnedThreadForWorkspace(ctx, input);
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+
+      await unstageFiles(rootPath, input.paths);
+
+      return {
+        diff: await getRepoDiffPanelData(rootPath, input.mode),
+        paths: input.paths,
+        repoContext: await buildRepoContextResponse({
+          pathValue: rootPath,
+          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+          thread,
+        }),
+      };
+    }),
+
+  revertFiles: protectedProcedure
+    .input(
+      repoDiffFilesInputSchema.extend({
+        mode: z.enum(["staged", "unstaged"]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const thread = await getOwnedThreadForWorkspace(ctx, input);
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+
+      await revertFiles(rootPath, input.paths, input.mode);
+
+      return {
+        diff: await getRepoDiffPanelData(rootPath, input.mode),
+        paths: input.paths,
         repoContext: await buildRepoContextResponse({
           pathValue: rootPath,
           preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,

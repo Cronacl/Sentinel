@@ -36,6 +36,30 @@ export type RepoBranch = {
   name: string;
 };
 
+export type RepoDiffMode = "branch" | "staged" | "unstaged";
+
+export type RepoDiffFile = {
+  additions: number;
+  deletions: number;
+  firstChangedLine: number | null;
+  isUntracked: boolean;
+  newContents?: string;
+  oldContents?: string;
+  patch: string;
+  path: string;
+};
+
+export type RepoDiffPanelData = {
+  branch: string | null;
+  disabledReason: string | null;
+  fileCount: number;
+  files: RepoDiffFile[];
+  mode: RepoDiffMode;
+  sourceLabel: string;
+  totalAdditions: number;
+  totalDeletions: number;
+};
+
 type RepoFileChange = {
   path: string;
   type: "added" | "deleted" | "modified" | "renamed" | "untracked";
@@ -231,6 +255,298 @@ async function buildUntrackedPatch(repoRoot: string, filePath: string) {
   }
 
   return buildSyntheticAddPatch(filePath, content.toString("utf8"));
+}
+
+async function readWorktreeTextFile(repoRoot: string, filePath: string) {
+  const absolutePath = path.join(repoRoot, filePath);
+  const fileStats = await stat(absolutePath).catch(() => null);
+  if (!fileStats?.isFile()) {
+    return null;
+  }
+
+  const content = await readFile(absolutePath).catch(() => null);
+  if (!content || isProbablyBinaryContent(content)) {
+    return null;
+  }
+
+  return content.toString("utf8");
+}
+
+async function readGitTextFile(repoRoot: string, objectSpec: string) {
+  const result = await runGit(["show", objectSpec], repoRoot);
+  if (result.code !== 0) {
+    return null;
+  }
+
+  return result.stdout;
+}
+
+function parseStatusLines(statusOutput: string) {
+  return statusOutput
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .filter((line) => !line.startsWith("## "));
+}
+
+function collectUntrackedPaths(statusOutput: string) {
+  return new Set(
+    parseStatusLines(statusOutput)
+      .filter((line) => line.startsWith("?? "))
+      .map((line) => normalizeChangedPath(line.slice(3))),
+  );
+}
+
+function parsePatchFilePath(patch: string) {
+  const diffHeader = patch.match(/^diff --git a\/(.+?) b\/(.+)$/m);
+  if (diffHeader) {
+    const leftPath = diffHeader[1]?.trim() ?? "";
+    const rightPath = diffHeader[2]?.trim() ?? "";
+    if (rightPath && rightPath !== "/dev/null") {
+      return normalizeChangedPath(rightPath.replace(/^"|"$/g, ""));
+    }
+    if (leftPath && leftPath !== "/dev/null") {
+      return normalizeChangedPath(leftPath.replace(/^"|"$/g, ""));
+    }
+  }
+
+  const oldPath = patch.match(/^--- (.+)$/m)?.[1]?.trim() ?? "";
+  const newPath = patch.match(/^\+\+\+ (.+)$/m)?.[1]?.trim() ?? "";
+  const normalizedNewPath = newPath.replace(/^b\//, "").replace(/^"|"$/g, "");
+  const normalizedOldPath = oldPath.replace(/^a\//, "").replace(/^"|"$/g, "");
+
+  if (normalizedNewPath && normalizedNewPath !== "/dev/null") {
+    return normalizeChangedPath(normalizedNewPath);
+  }
+  if (normalizedOldPath && normalizedOldPath !== "/dev/null") {
+    return normalizeChangedPath(normalizedOldPath);
+  }
+
+  return null;
+}
+
+function summarizePatch(patch: string) {
+  let additions = 0;
+  let deletions = 0;
+
+  for (const line of patch.split("\n")) {
+    if (
+      line.startsWith("+++ ") ||
+      line.startsWith("--- ") ||
+      line.startsWith("@@") ||
+      line.startsWith("diff --git")
+    ) {
+      continue;
+    }
+    if (line.startsWith("+")) additions += 1;
+    if (line.startsWith("-")) deletions += 1;
+  }
+
+  return { additions, deletions };
+}
+
+function getFirstChangedLine(patch: string) {
+  const hunk = patch.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/m);
+  if (!hunk) {
+    return null;
+  }
+
+  const oldStart = Number.parseInt(hunk[1] ?? "", 10);
+  const newStart = Number.parseInt(hunk[2] ?? "", 10);
+
+  if (Number.isFinite(newStart) && newStart > 0) {
+    return newStart;
+  }
+  if (Number.isFinite(oldStart) && oldStart > 0) {
+    return oldStart;
+  }
+
+  return null;
+}
+
+function splitPatchIntoFiles(
+  patch: string,
+  options?: { untrackedPaths?: Set<string> },
+): RepoDiffFile[] {
+  const normalized = patch.trim();
+  if (!normalized) {
+    return [];
+  }
+
+  const sections = normalized
+    .split(/(?=^diff --git )/m)
+    .map((section) => section.trim())
+    .filter(Boolean);
+
+  return sections.flatMap((section) => {
+    const path = parsePatchFilePath(section);
+    if (!path) {
+      return [];
+    }
+
+    const { additions, deletions } = summarizePatch(section);
+    return [
+      {
+        additions,
+        deletions,
+        firstChangedLine: getFirstChangedLine(section),
+        isUntracked: options?.untrackedPaths?.has(path) ?? false,
+        patch: section,
+        path,
+      },
+    ];
+  });
+}
+
+function normalizePaths(paths: string[]) {
+  const unique = new Set<string>();
+
+  for (const value of paths) {
+    const normalized = normalizeChangedPath(value);
+    if (!normalized || normalized.startsWith("-")) {
+      continue;
+    }
+    unique.add(normalized);
+  }
+
+  return [...unique];
+}
+
+async function assertPathSelection(paths: string[]) {
+  const normalized = normalizePaths(paths);
+  if (normalized.length === 0) {
+    throw new Error("Select at least one file.");
+  }
+  return normalized;
+}
+
+async function resolveBranchDiffSpec(repoRoot: string) {
+  const context = await resolveRepoContext(repoRoot);
+  if (!context.branch) {
+    return {
+      branch: null,
+      baseRef: null,
+      disabledReason: "Branch diff requires a checked out branch.",
+      diffRef: null,
+      sourceLabel: "Branch",
+    };
+  }
+
+  const defaultBranch = context.githubRemote?.defaultBranch;
+  const remoteName = context.githubRemote?.remoteName;
+  if (!defaultBranch || !remoteName) {
+    return {
+      branch: context.branch,
+      baseRef: null,
+      disabledReason:
+        "Branch diff requires a GitHub remote with a resolvable default branch.",
+      diffRef: null,
+      sourceLabel: "Branch",
+    };
+  }
+
+  const remoteRef = `${remoteName}/${defaultBranch}`;
+  const remoteRefResult = await runGit(
+    ["rev-parse", "--verify", remoteRef],
+    repoRoot,
+  );
+  if (remoteRefResult.code !== 0) {
+    return {
+      branch: context.branch,
+      baseRef: null,
+      disabledReason: `Branch diff requires the remote ref ${remoteRef}.`,
+      diffRef: null,
+      sourceLabel: `${context.branch} -> ${remoteRef}`,
+    };
+  }
+
+  const mergeBaseResult = await runGit(
+    ["merge-base", "HEAD", remoteRef],
+    repoRoot,
+  );
+  if (mergeBaseResult.code !== 0 || !mergeBaseResult.stdout.trim()) {
+    return {
+      branch: context.branch,
+      baseRef: null,
+      disabledReason: `Branch diff could not resolve a merge base with ${remoteRef}.`,
+      diffRef: null,
+      sourceLabel: `${context.branch} -> ${remoteRef}`,
+    };
+  }
+
+  const mergeBase = mergeBaseResult.stdout.trim();
+
+  return {
+    baseRef: mergeBase,
+    branch: context.branch,
+    disabledReason: null,
+    diffRef: `${remoteRef}...HEAD`,
+    sourceLabel: `${context.branch} -> ${remoteRef}`,
+  };
+}
+
+async function hydrateDiffFilesWithContents(
+  repoRoot: string,
+  mode: RepoDiffMode,
+  files: RepoDiffFile[],
+  options?: {
+    branchBaseRef?: string | null;
+    untrackedPaths?: Set<string>;
+  },
+) {
+  return await Promise.all(
+    files.map(async (file) => {
+      if (!file.patch.includes("@@")) {
+        return file;
+      }
+
+      if (mode === "unstaged") {
+        const isUntracked =
+          options?.untrackedPaths?.has(file.path) ?? file.isUntracked;
+        const [oldContents, newContents] = await Promise.all([
+          isUntracked
+            ? Promise.resolve("")
+            : readGitTextFile(repoRoot, `:${file.path}`),
+          readWorktreeTextFile(repoRoot, file.path),
+        ]);
+
+        return {
+          ...file,
+          newContents: newContents ?? "",
+          oldContents: oldContents ?? "",
+        };
+      }
+
+      if (mode === "staged") {
+        const [oldContents, newContents] = await Promise.all([
+          readGitTextFile(repoRoot, `HEAD:${file.path}`),
+          readGitTextFile(repoRoot, `:${file.path}`),
+        ]);
+
+        return {
+          ...file,
+          newContents: newContents ?? "",
+          oldContents: oldContents ?? "",
+        };
+      }
+
+      const baseRef = options?.branchBaseRef?.trim();
+      if (!baseRef) {
+        return file;
+      }
+
+      const [oldContents, newContents] = await Promise.all([
+        readGitTextFile(repoRoot, `${baseRef}:${file.path}`),
+        readGitTextFile(repoRoot, `HEAD:${file.path}`),
+      ]);
+
+      return {
+        ...file,
+        newContents: newContents ?? "",
+        oldContents: oldContents ?? "",
+      };
+    }),
+  );
 }
 
 export function buildFallbackCommitMessage(changes: RepoFileChange[]) {
@@ -787,6 +1103,215 @@ export async function pushCurrentBranch(pathValue: string | null | undefined) {
   }
 
   return { branch: context.branch };
+}
+
+export async function getRepoDiffPanelData(
+  pathValue: string | null | undefined,
+  mode: RepoDiffMode,
+): Promise<RepoDiffPanelData> {
+  const repoRoot = await resolveRepoRootOrThrow(pathValue);
+  const context = await resolveRepoContext(repoRoot);
+
+  if (!context.isGitRepo) {
+    throw new Error("The selected workspace root is not a git repository.");
+  }
+
+  let patch = "";
+  let sourceLabel =
+    mode === "unstaged" ? "Unstaged" : mode === "staged" ? "Staged" : "Branch";
+  let disabledReason: string | null = null;
+  let branchBaseRef: string | null = null;
+  let untrackedPaths = new Set<string>();
+
+  if (mode === "unstaged") {
+    const [statusResult, patchResult] = await Promise.all([
+      runGit(["status", "--porcelain=v1"], repoRoot),
+      runGit(["diff", "--patch", "--minimal"], repoRoot),
+    ]);
+    if (statusResult.code !== 0) {
+      throw new Error(statusResult.stderr || "Failed to inspect git status.");
+    }
+    if (patchResult.code !== 0) {
+      throw new Error(
+        patchResult.stderr || "Failed to generate unstaged diff.",
+      );
+    }
+
+    untrackedPaths = collectUntrackedPaths(statusResult.stdout);
+    const untrackedPatches = await Promise.all(
+      [...untrackedPaths].map((filePath) =>
+        buildUntrackedPatch(repoRoot, filePath),
+      ),
+    );
+    patch = [
+      patchResult.stdout.trim(),
+      ...untrackedPatches.filter((entry): entry is string =>
+        Boolean(entry?.trim()),
+      ),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  } else if (mode === "staged") {
+    const patchResult = await runGit(
+      ["diff", "--cached", "--patch", "--minimal"],
+      repoRoot,
+    );
+    if (patchResult.code !== 0) {
+      throw new Error(patchResult.stderr || "Failed to generate staged diff.");
+    }
+    patch = patchResult.stdout.trim();
+  } else {
+    const branchSpec = await resolveBranchDiffSpec(repoRoot);
+    branchBaseRef = branchSpec.baseRef ?? null;
+    sourceLabel = branchSpec.sourceLabel;
+    disabledReason = branchSpec.disabledReason;
+
+    if (!branchSpec.diffRef) {
+      return {
+        branch: branchSpec.branch,
+        disabledReason,
+        fileCount: 0,
+        files: [],
+        mode,
+        sourceLabel,
+        totalAdditions: 0,
+        totalDeletions: 0,
+      };
+    }
+
+    const patchResult = await runGit(
+      ["diff", "--patch", "--minimal", branchSpec.diffRef],
+      repoRoot,
+    );
+    if (patchResult.code !== 0) {
+      throw new Error(patchResult.stderr || "Failed to generate branch diff.");
+    }
+    patch = patchResult.stdout.trim();
+  }
+
+  const files = await hydrateDiffFilesWithContents(
+    repoRoot,
+    mode,
+    splitPatchIntoFiles(patch, { untrackedPaths }),
+    {
+      branchBaseRef,
+      untrackedPaths,
+    },
+  );
+  const totals = files.reduce(
+    (acc, file) => ({
+      additions: acc.additions + file.additions,
+      deletions: acc.deletions + file.deletions,
+    }),
+    { additions: 0, deletions: 0 },
+  );
+
+  return {
+    branch: context.branch,
+    disabledReason,
+    fileCount: files.length,
+    files,
+    mode,
+    sourceLabel,
+    totalAdditions: totals.additions,
+    totalDeletions: totals.deletions,
+  };
+}
+
+export async function stageFiles(
+  pathValue: string | null | undefined,
+  paths: string[],
+) {
+  const repoRoot = await resolveRepoRootOrThrow(pathValue);
+  const normalizedPaths = await assertPathSelection(paths);
+  const result = await runGit(["add", "--", ...normalizedPaths], repoRoot);
+  if (result.code !== 0) {
+    throw new Error(result.stderr || "Failed to stage files.");
+  }
+
+  return { paths: normalizedPaths };
+}
+
+export async function unstageFiles(
+  pathValue: string | null | undefined,
+  paths: string[],
+) {
+  const repoRoot = await resolveRepoRootOrThrow(pathValue);
+  const normalizedPaths = await assertPathSelection(paths);
+  const result = await runGit(
+    ["restore", "--staged", "--", ...normalizedPaths],
+    repoRoot,
+  );
+  if (result.code !== 0) {
+    throw new Error(result.stderr || "Failed to unstage files.");
+  }
+
+  return { paths: normalizedPaths };
+}
+
+export async function revertFiles(
+  pathValue: string | null | undefined,
+  paths: string[],
+  mode: Exclude<RepoDiffMode, "branch">,
+) {
+  const repoRoot = await resolveRepoRootOrThrow(pathValue);
+  const normalizedPaths = await assertPathSelection(paths);
+
+  if (mode === "staged") {
+    const result = await runGit(
+      [
+        "restore",
+        "--source=HEAD",
+        "--staged",
+        "--worktree",
+        "--",
+        ...normalizedPaths,
+      ],
+      repoRoot,
+    );
+    if (result.code !== 0) {
+      throw new Error(result.stderr || "Failed to revert staged files.");
+    }
+
+    return { paths: normalizedPaths };
+  }
+
+  const statusResult = await runGit(
+    ["status", "--porcelain=v1", "--", ...normalizedPaths],
+    repoRoot,
+  );
+  if (statusResult.code !== 0) {
+    throw new Error(statusResult.stderr || "Failed to inspect file changes.");
+  }
+
+  const untrackedPaths = collectUntrackedPaths(statusResult.stdout);
+  const trackedPaths = normalizedPaths.filter(
+    (filePath) => !untrackedPaths.has(filePath),
+  );
+
+  if (trackedPaths.length > 0) {
+    const restoreResult = await runGit(
+      ["restore", "--worktree", "--", ...trackedPaths],
+      repoRoot,
+    );
+    if (restoreResult.code !== 0) {
+      throw new Error(restoreResult.stderr || "Failed to revert files.");
+    }
+  }
+
+  if (untrackedPaths.size > 0) {
+    const cleanResult = await runGit(
+      ["clean", "-f", "--", ...[...untrackedPaths]],
+      repoRoot,
+    );
+    if (cleanResult.code !== 0) {
+      throw new Error(
+        cleanResult.stderr || "Failed to remove untracked files.",
+      );
+    }
+  }
+
+  return { paths: normalizedPaths };
 }
 
 export async function initializeRepository(

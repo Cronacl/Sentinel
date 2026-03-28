@@ -12,11 +12,15 @@ import {
   createAndCheckoutBranch,
   getHeadCommitMessage,
   getCommitMessageContext,
+  getRepoDiffPanelData,
   initializeRepository,
   listBranches,
   parseShortStat,
   pushCurrentBranch,
+  revertFiles,
   resolveRepoContext,
+  stageFiles,
+  unstageFiles,
 } from "./repo";
 
 async function createDirectory(prefix: string) {
@@ -347,5 +351,92 @@ describe("repo actions", () => {
     const context = await resolveRepoContext(repoRoot);
     expect(context.hasUpstream).toBe(true);
     expect(context.pushRemoteName).toBe("origin");
+  });
+
+  it("returns unstaged diff data including untracked files", async () => {
+    const repoRoot = await createRepo();
+    await writeFile(
+      path.join(repoRoot, "file.ts"),
+      "export const value = 2;\n",
+    );
+    await writeFile(path.join(repoRoot, "new.ts"), "export const n = 1;\n");
+
+    const result = await getRepoDiffPanelData(repoRoot, "unstaged");
+
+    expect(result.mode).toBe("unstaged");
+    expect(result.files.map((file) => file.path)).toEqual(
+      expect.arrayContaining(["file.ts", "new.ts"]),
+    );
+    expect(
+      result.files.find((file) => file.path === "new.ts")?.isUntracked,
+    ).toBe(true);
+  });
+
+  it("returns only staged entries for staged diff mode", async () => {
+    const repoRoot = await createRepo();
+    await writeFile(
+      path.join(repoRoot, "file.ts"),
+      "export const value = 2;\n",
+    );
+    await writeFile(path.join(repoRoot, "new.ts"), "export const n = 1;\n");
+    await runGit(["add", "file.ts"], repoRoot);
+
+    const result = await getRepoDiffPanelData(repoRoot, "staged");
+
+    expect(result.mode).toBe("staged");
+    expect(result.files).toHaveLength(1);
+    expect(result.files[0]?.path).toBe("file.ts");
+  });
+
+  it("stages, unstages, and reverts files by path", async () => {
+    const repoRoot = await createRepo();
+    await writeFile(
+      path.join(repoRoot, "file.ts"),
+      "export const value = 2;\n",
+    );
+
+    await stageFiles(repoRoot, ["file.ts"]);
+    await expect(
+      getRepoDiffPanelData(repoRoot, "staged"),
+    ).resolves.toMatchObject({
+      fileCount: 1,
+    });
+
+    await unstageFiles(repoRoot, ["file.ts"]);
+    await expect(
+      getRepoDiffPanelData(repoRoot, "staged"),
+    ).resolves.toMatchObject({
+      fileCount: 0,
+    });
+
+    await revertFiles(repoRoot, ["file.ts"], "unstaged");
+    await expect(resolveRepoContext(repoRoot)).resolves.toMatchObject({
+      hasChanges: false,
+    });
+  });
+
+  it("returns branch diff data against the remote default branch", async () => {
+    const repoRoot = await createRepo();
+    const remoteRoot = await createDirectory("sentinel-branch-diff-");
+    await runGit(["init", "--bare"], remoteRoot);
+    await runGit(["remote", "add", "origin", remoteRoot], repoRoot);
+    await runGit(["push", "-u", "origin", "main"], repoRoot);
+    await runGit(
+      ["remote", "set-url", "origin", "git@github.com:openai/sentinel.git"],
+      repoRoot,
+    );
+    await createAndCheckoutBranch(repoRoot, "feature/branch-diff");
+    await writeFile(
+      path.join(repoRoot, "file.ts"),
+      "export const value = 4;\n",
+    );
+    await commitAllChanges(repoRoot, "Branch diff change");
+
+    const result = await getRepoDiffPanelData(repoRoot, "branch");
+
+    expect(result.mode).toBe("branch");
+    expect(result.sourceLabel).toBe("feature/branch-diff -> origin/main");
+    expect(result.files).toHaveLength(1);
+    expect(result.files[0]?.path).toBe("file.ts");
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  getOpenFileCommandForTarget,
   getOpenCommandForTarget,
   resolveMacOpenTargets,
 } from "./workspace-targets.mjs";
@@ -51,6 +52,47 @@ describe("getOpenCommandForTarget", () => {
       ),
     ).toEqual({
       args: ["/tmp/project"],
+      command: "open",
+    });
+  });
+});
+
+describe("getOpenFileCommandForTarget", () => {
+  it("builds file open commands for editors and finder", () => {
+    expect(
+      getOpenFileCommandForTarget(
+        {
+          appPath: "/Applications/Cursor.app",
+          id: "cursor",
+          kind: "editor",
+          label: "Cursor",
+        },
+        "/tmp/project/src/file.ts",
+        42,
+      ),
+    ).toEqual({
+      args: [
+        "-a",
+        "/Applications/Cursor.app",
+        "--args",
+        "-g",
+        "/tmp/project/src/file.ts:42",
+      ],
+      command: "open",
+    });
+
+    expect(
+      getOpenFileCommandForTarget(
+        {
+          id: "finder",
+          kind: "file_manager",
+          label: "Finder",
+          systemApp: "Finder",
+        },
+        "/tmp/project/src/file.ts",
+      ),
+    ).toEqual({
+      args: ["-R", "/tmp/project/src/file.ts"],
       command: "open",
     });
   });
