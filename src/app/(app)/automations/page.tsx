@@ -78,13 +78,13 @@ function AutomationRow({
   onToggleStatus: (id: string) => void;
 }) {
   return (
-    <div className="border-separator bg-surface group flex items-center gap-3 rounded-2xl border p-3 transition-colors">
+    <div className="border-separator/30 bg-surface group flex items-center gap-2.5 rounded-xl border p-2.5 transition-colors">
       <Link
-        className="flex min-w-0 flex-1 items-center gap-3 hover:opacity-80 transition-opacity"
+        className="flex min-w-0 flex-1 items-center gap-2.5 hover:opacity-80 transition-opacity"
         href={`/automations/${encodeURIComponent(automation.id)}`}
         prefetch
       >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/50 text-foreground/75">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-border/30 bg-background/50 text-foreground/75">
           <HugeiconsIcon
             color="currentColor"
             icon={automation.status === "active" ? Rocket01Icon : PauseIcon}
@@ -98,7 +98,7 @@ function AutomationRow({
               {automation.title}
             </span>
             <Chip
-              className="hidden sm:inline-flex border border-border/50 bg-background/80 text-foreground/75"
+              className="hidden sm:inline-flex border border-border/30 bg-background/80 text-foreground/75"
               size="sm"
               variant="tertiary"
             >
@@ -143,7 +143,7 @@ function AutomationRow({
           href={`/automations/${encodeURIComponent(automation.id)}`}
           prefetch
         >
-          <div className="text-muted opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="text-muted/50 transition-colors group-hover:text-muted">
             <HugeiconsIcon
               color="currentColor"
               icon={ArrowRight01Icon}
@@ -162,10 +162,10 @@ function AutomationsSkeleton() {
     <>
       {Array.from({ length: 4 }).map((_, index) => (
         <div
-          className="border-separator bg-surface flex items-center gap-3 rounded-2xl border p-4"
+          className="border-separator/30 bg-surface flex items-center gap-2.5 rounded-xl border p-2.5"
           key={index}
         >
-          <Skeleton className="h-9 w-9 shrink-0 rounded-xl" />
+          <Skeleton className="h-8 w-8 shrink-0 rounded-[8px]" />
           <div className="min-w-0 flex-1 space-y-2">
             <Skeleton className="h-4 w-36 rounded-md" />
             <Skeleton className="h-3 w-56 max-w-full rounded-md" />
@@ -295,7 +295,7 @@ export default function AutomationsPage() {
         </p>
       ) : null}
 
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-5">
         <Input
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search automations"
@@ -320,7 +320,7 @@ export default function AutomationsPage() {
                 />
               ))
             ) : active.length ? (
-              <div className="border-separator/20 bg-surface rounded-2xl border p-5 col-span-full">
+              <div className="border-separator/20 bg-surface rounded-xl border p-4 col-span-full">
                 <h2 className="text-foreground text-sm font-medium">
                   No matching automations
                 </h2>
@@ -329,7 +329,7 @@ export default function AutomationsPage() {
                 </p>
               </div>
             ) : (
-              <div className="border-separator/20 bg-surface rounded-2xl border p-5 col-span-full">
+              <div className="border-separator/20 bg-surface rounded-xl border p-4 col-span-full">
                 <h2 className="text-foreground text-sm font-medium">
                   No active automations
                 </h2>
@@ -359,7 +359,7 @@ export default function AutomationsPage() {
                 />
               ))
             ) : paused.length ? (
-              <div className="border-separator/20 bg-surface rounded-2xl border p-5 col-span-full">
+              <div className="border-separator/20 bg-surface rounded-xl border p-4 col-span-full">
                 <h2 className="text-foreground text-sm font-medium">
                   No matching automations
                 </h2>
@@ -368,7 +368,7 @@ export default function AutomationsPage() {
                 </p>
               </div>
             ) : (
-              <div className="border-separator/20 bg-surface rounded-2xl border p-5 col-span-full">
+              <div className="border-separator/20 bg-surface rounded-xl border p-4 col-span-full">
                 <h2 className="text-foreground text-sm font-medium">
                   No paused automations
                 </h2>
@@ -388,12 +388,12 @@ export default function AutomationsPage() {
           <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
             {AUTOMATION_TEMPLATES.map((template) => (
               <button
-                className="border-separator cursor-pointer bg-surface hover:bg-surface-hover group flex flex-col items-start gap-1 rounded-2xl border p-3 text-left transition-colors"
+                className="border-separator/30 cursor-pointer bg-surface hover:bg-surface-hover group flex flex-col items-start gap-1 rounded-xl border p-2.5 text-left transition-colors"
                 key={template.id}
                 onClick={() => handleOpenModal(template)}
                 type="button"
               >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/50 text-foreground/75">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-border/30 bg-background/50 text-foreground/75">
                   <HugeiconsIcon
                     color="currentColor"
                     icon={template.icon}
