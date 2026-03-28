@@ -15,6 +15,7 @@ import {
 import {
   buildClaudeSdkBaseOptions,
   buildClaudeThreadState,
+  resolveClaudeCodeRuntime,
 } from "@/lib/ai/chat/engines/claude-sdk";
 import {
   getClaudeThreadState,
@@ -612,7 +613,7 @@ function buildClaudePermissionMode(
   return permissionMode === "full" ? "bypassPermissions" : "default";
 }
 
-function buildClaudeRuntimeOptions(input: {
+async function buildClaudeRuntimeOptions(input: {
   cwd: string;
   permissionMode: "default" | "full";
   requestedModelId: string | null;
@@ -624,6 +625,7 @@ function buildClaudeRuntimeOptions(input: {
     input.threadMode,
     input.permissionMode,
   );
+  const runtime = await resolveClaudeCodeRuntime();
 
   return {
     options: buildClaudeSdkBaseOptions({
@@ -635,6 +637,10 @@ function buildClaudeRuntimeOptions(input: {
           }
         : { permissionMode: claudePermissionMode }),
       cwd: input.cwd,
+      env: runtime.env,
+      ...(runtime.executablePath
+        ? { pathToClaudeCodeExecutable: runtime.executablePath }
+        : {}),
       sandbox:
         input.permissionMode === "full"
           ? undefined
@@ -1379,7 +1385,7 @@ export async function runClaudeThreadChat(
   );
   const sessionId = existingClaudeState?.sessionId ?? crypto.randomUUID();
   const cwd = workspaceRoot ?? existingClaudeState?.cwd ?? process.cwd();
-  const { options, permissionMode } = buildClaudeRuntimeOptions({
+  const { options, permissionMode } = await buildClaudeRuntimeOptions({
     cwd,
     permissionMode: workspacePermissionMode,
     requestedModelId: request.modelId ?? existingClaudeState?.modelId ?? null,

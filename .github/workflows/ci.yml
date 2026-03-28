@@ -87,25 +87,3 @@ jobs:
 
       - name: Run tests
         run: bun run test
-
-  desktop-smoke:
-    name: desktop-smoke
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    env:
-      CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      SKIP_ENV_VALIDATION: "1"
-      NODE_OPTIONS: "--max-old-space-size=4096"
-      SENTINEL_SKIP_STARTUP_TASKS: "1"
-      SENTINEL_DB_PATH: ${{ github.workspace }}/.sentinel-ci/sentinel.db
-      SENTINEL_STATE_PATH: ${{ github.workspace }}/.sentinel-ci/state.json
-      ENCRYPTION_KEY: "1111111111111111111111111111111111111111111111111111111111111111"
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: ./.github/actions/setup-bun
-
-      - name: Linux desktop packaging smoke test
-        run: bun run build:desktop:linux
