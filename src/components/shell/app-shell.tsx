@@ -88,8 +88,7 @@ function SidebarContent() {
 export function AppShell({ children }: PropsWithChildren) {
   const desktop = getDesktopApi();
   const platform = desktop?.app.platform ?? null;
-  const showDesktopWindowControls =
-    platform === "win32" || platform === "linux";
+  const showDesktopWindowControls = platform === "linux";
 
   return (
     <ShellProvider>

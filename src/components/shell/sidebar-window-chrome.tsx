@@ -43,27 +43,6 @@ function WindowsMinimizeIcon() {
   );
 }
 
-function WindowsMaximizeIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="h-2.5 w-2.5"
-      fill="none"
-      viewBox="0 0 10 10"
-    >
-      <rect
-        height="5.5"
-        rx="0.2"
-        stroke="currentColor"
-        strokeWidth="1"
-        width="5.5"
-        x="2.25"
-        y="2.25"
-      />
-    </svg>
-  );
-}
-
 function LinuxMaximizeIcon() {
   return (
     <svg
@@ -126,38 +105,6 @@ function WindowControlButton({
   );
 }
 
-function WindowsWindowControls({ className }: { className?: string }) {
-  const desktop = getDesktopApi();
-
-  return (
-    <div
-      className={`flex h-8 items-stretch justify-end ${className ?? ""}`.trim()}
-    >
-      <WindowControlButton
-        ariaLabel="Minimize window"
-        className="h-8 w-11 hover:bg-black/6 dark:hover:bg-white/8"
-        onPress={() => void desktop?.window.minimize()}
-      >
-        <WindowsMinimizeIcon />
-      </WindowControlButton>
-      <WindowControlButton
-        ariaLabel="Maximize window"
-        className="h-8 w-11 hover:bg-black/6 dark:hover:bg-white/8"
-        onPress={() => void desktop?.window.toggleMaximize()}
-      >
-        <WindowsMaximizeIcon />
-      </WindowControlButton>
-      <WindowControlButton
-        ariaLabel="Close window"
-        className="h-8 w-11 hover:bg-[#e81123] hover:text-white"
-        onPress={() => void desktop?.window.close()}
-      >
-        <CloseIcon />
-      </WindowControlButton>
-    </div>
-  );
-}
-
 function LinuxWindowControls({ className }: { className?: string }) {
   const desktop = getDesktopApi();
 
@@ -195,10 +142,6 @@ export function DesktopWindowControls({
 }: {
   platform: DesktopPlatform | null;
 }) {
-  if (platform === "win32") {
-    return <WindowsWindowControls />;
-  }
-
   if (platform === "linux") {
     return <LinuxWindowControls />;
   }

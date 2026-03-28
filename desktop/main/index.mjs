@@ -41,6 +41,7 @@ let serverState = null;
 let isQuitting = false;
 let resolvedTheme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
 const terminalSessions = new Map();
+const WINDOWS_TITLE_BAR_HEIGHT = 32;
 
 // GPU acceleration is required for smooth backdrop-blur, shadows, and animations.
 // Only disable if a specific driver issue is confirmed on a target platform.
@@ -312,16 +313,46 @@ function createTerminalSession(cwd) {
   };
 }
 
-function getBrowserWindowChromeOptions() {
+function getWindowTitleBarOverlay(theme) {
+  if (process.platform !== "win32") {
+    return undefined;
+  }
+
+  return {
+    color: theme === "light" ? "#fcfcfc" : "#090909",
+    height: WINDOWS_TITLE_BAR_HEIGHT,
+    symbolColor: theme === "light" ? "#18181b" : "#f5f5f5",
+  };
+}
+
+function getBrowserWindowChromeOptions(theme = resolvedTheme) {
   if (process.platform === "darwin") {
     return {
       titleBarStyle: "hiddenInset",
     };
   }
 
+  if (process.platform === "win32") {
+    return {
+      titleBarOverlay: getWindowTitleBarOverlay(theme),
+      titleBarStyle: "hidden",
+    };
+  }
+
   return {
     frame: false,
   };
+}
+
+function syncWindowsTitleBarOverlay(theme) {
+  if (process.platform !== "win32") {
+    return;
+  }
+
+  const overlay = getWindowTitleBarOverlay(theme);
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.setTitleBarOverlay(overlay);
+  }
 }
 
 async function applyThemeToPopupGuest(guestContents, theme) {
@@ -348,10 +379,10 @@ function getPopupHtml(targetUrl, appOrigin, theme, platform) {
   const escapedAppOrigin = escapeHtml(appOrigin);
   const escapedTheme = theme === "light" ? "light" : "dark";
   const usesNativeMacChrome = platform === "darwin";
-  const isWindows = platform === "win32";
+  const usesNativeWindowsChrome = platform === "win32";
   const edgeWidth = usesNativeMacChrome
     ? 72
-    : isWindows
+    : usesNativeWindowsChrome
       ? 132
       : platform === "linux"
         ? 112
@@ -366,21 +397,8 @@ function getPopupHtml(targetUrl, appOrigin, theme, platform) {
   }
 
   const leadingChrome = `<div class="ws" aria-hidden="true"></div>`;
-  const trailingChrome = isWindows
-    ? `
-      <div class="wcwr" aria-label="Window controls">
-        <button class="wc wb" id="bn" title="Minimize" aria-label="Minimize window">
-          <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 7.25h6"/></svg>
-        </button>
-        <button class="wc wb" id="bx" title="${expandButtonTitle}" aria-label="Maximize window">
-          <svg viewBox="0 0 10 10" aria-hidden="true"><rect x="2.25" y="2.25" width="5.5" height="5.5" rx=".2"/></svg>
-        </button>
-        <button class="wc wbc" id="bc" title="Close" aria-label="Close window">
-          <svg viewBox="0 0 10 10" aria-hidden="true"><path d="m2.5 2.5 5 5m0-5-5 5"/></svg>
-        </button>
-      </div>
-    `
-    : platform === "linux"
+  const trailingChrome =
+    platform === "linux"
       ? `
         <div class="wcwr wcwr-linux" aria-label="Window controls">
           <button class="wc wl" id="bn" title="Minimize" aria-label="Minimize window">
@@ -505,7 +523,7 @@ function createBrowserPopup(url) {
       webviewTag: true,
     },
     width: 1020,
-    ...getBrowserWindowChromeOptions(),
+    ...getBrowserWindowChromeOptions(theme),
   });
 
   popup.webContents.on("did-attach-webview", (_event, guestContents) => {
@@ -571,7 +589,7 @@ function createWindow() {
       sandbox: false,
     },
     width: 1440,
-    ...getBrowserWindowChromeOptions(),
+    ...getBrowserWindowChromeOptions(resolvedTheme),
   });
   let hasShownWindow = false;
   const showWindow = () => {
@@ -916,6 +934,7 @@ function registerIpc() {
   });
   ipcMain.handle(DESKTOP_CHANNELS.WINDOW_SYNC_THEME, async (_event, theme) => {
     resolvedTheme = theme === "light" ? "light" : "dark";
+    syncWindowsTitleBarOverlay(resolvedTheme);
   });
   ipcMain.handle(DESKTOP_CHANNELS.WINDOW_TOGGLE_MAXIMIZE, async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
