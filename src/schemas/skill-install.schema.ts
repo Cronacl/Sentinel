@@ -33,7 +33,7 @@ function isGitHubRepoUrl(value: string) {
 }
 
 export const skillScopeSchema = z.enum(["global", "workspace"]);
-export const skillInstallTargetSchema = z.enum(["sentinel", "codex"]);
+export const skillInstallTargetSchema = z.enum(["sentinel", "codex", "claude"]);
 
 export const skillNameSchema = z
   .string()

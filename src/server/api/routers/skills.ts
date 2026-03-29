@@ -36,7 +36,7 @@ function resolveDestRoot(
   user: { skillsBasePath?: string | null },
   scope: "global" | "workspace",
   workspaceRootPath: string | null,
-  target: "sentinel" | "codex",
+  target: "sentinel" | "codex" | "claude",
 ) {
   if (target === "codex") {
     if (scope === "workspace") {
@@ -93,6 +93,16 @@ async function buildCodexSkillList() {
   }));
 }
 
+function mapLocalSkillTarget(
+  sourceKind: "agents" | "claude" | "codex" | "sentinel",
+) {
+  if (sourceKind === "codex") {
+    return "codex" as const;
+  }
+
+  return sourceKind === "claude" ? ("claude" as const) : ("sentinel" as const);
+}
+
 export const skillsRouter = createTRPCRouter({
   list: protectedProcedure
     .input(
@@ -121,7 +131,7 @@ export const skillsRouter = createTRPCRouter({
         skills: [
           ...localSnapshot.skills.map((skill) => ({
             ...skill,
-            target: "sentinel" as const,
+            target: mapLocalSkillTarget(skill.sourceKind),
           })),
           ...codexSkills,
         ],
@@ -147,6 +157,7 @@ export const skillsRouter = createTRPCRouter({
 
       return await loadSkillByName({
         name: input.name,
+        target: input.target,
         workspaceRoot: ctx.workspace?.rootPath?.trim() || null,
         globalBase: resolveGlobalBase(ctx.user),
       });
@@ -164,7 +175,14 @@ export const skillsRouter = createTRPCRouter({
     }));
 
     const installedSentinelNames = new Set(
-      snapshot.skills.map((s) => s.name.trim().toLowerCase()),
+      snapshot.skills
+        .filter((skill) => mapLocalSkillTarget(skill.sourceKind) === "sentinel")
+        .map((s) => s.name.trim().toLowerCase()),
+    );
+    const installedClaudeNames = new Set(
+      snapshot.skills
+        .filter((skill) => mapLocalSkillTarget(skill.sourceKind) === "claude")
+        .map((s) => s.name.trim().toLowerCase()),
     );
     const installedCodexNames = new Set(
       (await buildCodexSkillList().catch(() => [])).map((skill) =>
@@ -178,6 +196,7 @@ export const skillsRouter = createTRPCRouter({
       repoUrl: entry.repoUrl,
       description: entry.description,
       installedTargets: {
+        claude: installedClaudeNames.has(entry.name.trim().toLowerCase()),
         codex: installedCodexNames.has(entry.name.trim().toLowerCase()),
         sentinel: installedSentinelNames.has(entry.name.trim().toLowerCase()),
       },

@@ -41,8 +41,8 @@ function filterSkillsForEngine(
     case "claude":
       return skills.filter(
         (s) =>
-          s.target === "sentinel" &&
-          (s.sourceKind === "claude" || s.sourceKind === "agents"),
+          s.target === "claude" ||
+          (s.target === "sentinel" && s.sourceKind === "agents"),
       );
     default:
       return skills;

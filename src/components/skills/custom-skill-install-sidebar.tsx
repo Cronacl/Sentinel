@@ -49,6 +49,11 @@ const TARGET_OPTIONS = [
     value: "sentinel",
   },
   {
+    description: "Install under Claude's .claude/skills directories.",
+    label: "Claude",
+    value: "claude",
+  },
+  {
     description: "Install under the Codex home skills directory.",
     label: "Codex",
     value: "codex",
@@ -121,12 +126,16 @@ export function CustomSkillInstallSidebar({
     setSubmitError("");
 
     try {
-      await installCustom.mutateAsync(values);
+      const result = await installCustom.mutateAsync(values);
       await Promise.all([
         utils.skills.list.invalidate(),
         utils.skills.registry.invalidate(),
       ]);
-      sileo.success({ description: "Custom skill installed." });
+      sileo.success({
+        description: result.alreadyInstalled
+          ? "Skill already installed. Refreshed skill state."
+          : "Custom skill installed.",
+      });
       close();
     } catch (error) {
       setSubmitError(

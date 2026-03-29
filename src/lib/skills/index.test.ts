@@ -129,6 +129,45 @@ describe("skills", () => {
     expect(loaded?.content).toBe("## Steps\n\n1. Do the thing.");
   });
 
+  it("loads skills from the requested target root", async () => {
+    await writeSkill({
+      baseDirectory: workspaceRoot,
+      container: ".sentinel/skills",
+      content: "Sentinel workflow.\n",
+      description: "Sentinel version",
+      name: "shared-skill",
+    });
+    await writeSkill({
+      baseDirectory: workspaceRoot,
+      container: ".claude/skills",
+      content: "Claude workflow.\n",
+      description: "Claude version",
+      name: "shared-skill",
+    });
+
+    const sentinelSkill = await loadSkillByName({
+      name: "shared-skill",
+      target: "sentinel",
+      workspaceRoot,
+    });
+    const claudeSkill = await loadSkillByName({
+      name: "shared-skill",
+      target: "claude",
+      workspaceRoot,
+    });
+
+    expect(sentinelSkill).toMatchObject({
+      content: "Sentinel workflow.",
+      description: "Sentinel version",
+      sourceKind: "sentinel",
+    });
+    expect(claudeSkill).toMatchObject({
+      content: "Claude workflow.",
+      description: "Claude version",
+      sourceKind: "claude",
+    });
+  });
+
   it("deduplicates by precedence and ignores exact duplicate filesystem entries", async () => {
     await writeSkill({
       baseDirectory: homeDirectory,
