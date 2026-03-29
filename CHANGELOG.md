@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.12.0-alpha.1...v0.13.0-alpha.1) (2026-03-29)
+
+
+### Features
+
+* add runtime composer unavailable message functions for Claude and Codex ([d8a0255](https://github.com/Cronacl/Sentinel/commit/d8a0255a95d04a4f275a48d8e0021d1f5c2c7f7c))
+* add runtime refresh functionality for Codex and Claude engines ([9118532](https://github.com/Cronacl/Sentinel/commit/91185321c95b6f386424bce4213de00049a63609))
+* add unit tests for chat composer model helpers and implement model filtering ([4779475](https://github.com/Cronacl/Sentinel/commit/4779475b1cabebc76fb82d417c6c7354a6450e1e))
+* enhance Codex runtime status management with improved fallback and caching mechanisms ([df1f300](https://github.com/Cronacl/Sentinel/commit/df1f300dda61a3456c32daa570ff5cd1da6918f3))
+* extend skill management to support Claude runtime ([2ee16b4](https://github.com/Cronacl/Sentinel/commit/2ee16b42e91712c3bc8769ebb8eb268e4066df8a))
+* implement Claude runtime status management with enhanced fallback handling ([173df50](https://github.com/Cronacl/Sentinel/commit/173df50c2784f5799ad91ae940cb5b52ddcf0b8d))
+
 ## [0.12.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.11.0-alpha.1...v0.12.0-alpha.1) (2026-03-28)
 
 
