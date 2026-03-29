@@ -16,6 +16,40 @@ export type ChatComposerModel = {
   supportedReasoningEfforts: ReasoningEffort[];
 };
 
+export function filterSelectableModels(models: ChatComposerModel[]) {
+  return models.filter((model) => model.isConnected && model.isEnabled);
+}
+
+export function haveSameSelectableModelSet(
+  currentModels: ChatComposerModel[],
+  nextModels: ChatComposerModel[],
+) {
+  if (currentModels.length !== nextModels.length) {
+    return false;
+  }
+
+  return currentModels.every((model, index) => {
+    const nextModel = nextModels[index];
+
+    return (
+      nextModel != null &&
+      model.engine === nextModel.engine &&
+      model.modelId === nextModel.modelId &&
+      model.provider === nextModel.provider &&
+      model.rawModelId === nextModel.rawModelId
+    );
+  });
+}
+
+export function resolveStableSelectableModels(
+  liveModels: ChatComposerModel[],
+  cachedModels: ChatComposerModel[],
+) {
+  const selectableLiveModels = filterSelectableModels(liveModels);
+
+  return selectableLiveModels.length > 0 ? selectableLiveModels : cachedModels;
+}
+
 export function getReasoningEffortLabel(effort: ReasoningEffort) {
   return effort.charAt(0).toUpperCase() + effort.slice(1);
 }
