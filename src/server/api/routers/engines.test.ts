@@ -216,6 +216,28 @@ describe("enginesRouter.list", () => {
       }),
     );
   });
+
+  it("falls back when engine detection times out", async () => {
+    getStatus.mockImplementationOnce(() => new Promise(() => undefined));
+    getClaudeEngineStatus.mockImplementationOnce(
+      () => new Promise(() => undefined),
+    );
+
+    const result = await enginesRouter.list({});
+
+    expect(result.find((engine: any) => engine.engine === "codex")).toEqual(
+      expect.objectContaining({
+        error: "Timed out while checking Codex availability.",
+        isAvailable: false,
+      }),
+    );
+    expect(result.find((engine: any) => engine.engine === "claude")).toEqual(
+      expect.objectContaining({
+        error: "Timed out while checking Claude availability.",
+        isAvailable: false,
+      }),
+    );
+  }, 2_500);
 });
 
 describe("enginesRouter.models", () => {
@@ -244,4 +266,18 @@ describe("enginesRouter.models", () => {
       }),
     ]);
   });
+
+  it("returns an empty list when Codex model discovery times out", async () => {
+    getStatus.mockImplementationOnce(() => new Promise(() => undefined));
+
+    const result = await enginesRouter.models({
+      ctx: {
+        db: {},
+        session: { user: { id: "user-1" } },
+      },
+      input: { engine: "codex" },
+    });
+
+    expect(result).toEqual([]);
+  }, 2_500);
 });

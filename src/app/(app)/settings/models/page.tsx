@@ -402,7 +402,7 @@ export default function ModelsPage() {
                 </div>
 
                 {!codexEngine?.isAvailable && codexEngine?.error ? (
-                  <p className="border-warning/20 bg-warning-soft text-warning-foreground mt-2 rounded-lg border px-2.5 py-1.5 text-xs">
+                  <p className="border-warning/20 bg-warning-soft text-warning-soft-foreground mt-2 rounded-lg border px-2.5 py-1.5 text-xs">
                     {codexEngine.error}
                   </p>
                 ) : null}
@@ -500,7 +500,7 @@ export default function ModelsPage() {
                 </div>
 
                 {!claudeEngine?.isAvailable && claudeEngine?.error ? (
-                  <p className="border-warning/20 bg-warning-soft text-warning-foreground mt-2 rounded-lg border px-2.5 py-1.5 text-xs">
+                  <p className="border-warning/20 bg-warning-soft text-warning-soft-foreground mt-2 rounded-lg border px-2.5 py-1.5 text-xs">
                     {claudeEngine.error}
                   </p>
                 ) : null}

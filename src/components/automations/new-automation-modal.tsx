@@ -247,18 +247,33 @@ export function NewAutomationModal({
   const utils = api.useUtils();
   const [submitError, setSubmitError] = useState("");
 
-  const workspacesQuery = api.workspaces.list.useQuery();
-  const enginesQuery = api.engines.list.useQuery();
-  const sentinelModelsQuery = api.engines.models.useQuery({
-    engine: "sentinel",
+  const workspacesQuery = api.workspaces.list.useQuery(undefined, {
+    enabled: isOpen,
   });
-  const codexModelsQuery = api.engines.models.useQuery({
-    engine: "codex",
+  const enginesQuery = api.engines.list.useQuery(undefined, {
+    enabled: isOpen,
   });
-  const claudeModelsQuery = api.engines.models.useQuery({
-    engine: "claude",
+  const sentinelModelsQuery = api.engines.models.useQuery(
+    {
+      engine: "sentinel",
+    },
+    { enabled: isOpen },
+  );
+  const codexModelsQuery = api.engines.models.useQuery(
+    {
+      engine: "codex",
+    },
+    { enabled: isOpen },
+  );
+  const claudeModelsQuery = api.engines.models.useQuery(
+    {
+      engine: "claude",
+    },
+    { enabled: isOpen },
+  );
+  const chatPreferencesQuery = api.chatPreferences.get.useQuery(undefined, {
+    enabled: isOpen,
   });
-  const chatPreferencesQuery = api.chatPreferences.get.useQuery();
   const createMutation = api.automations.create.useMutation();
 
   const availableSentinelModels = useMemo(
