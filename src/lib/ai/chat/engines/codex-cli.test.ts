@@ -103,4 +103,74 @@ describe("resolveCodexCli", () => {
       await rm(tempRoot, { force: true, recursive: true });
     }
   });
+
+  it("does not persist transient fnm multishell paths", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
+    const fnmBinRoot = path.join(
+      tempRoot,
+      ".local",
+      "state",
+      "fnm_multishells",
+      "123",
+      "bin",
+    );
+    const executablePath = path.join(fnmBinRoot, "codex");
+
+    try {
+      await mkdir(fnmBinRoot, { recursive: true });
+      await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
+      await chmod(executablePath, 0o755);
+      process.env.HOME = tempRoot;
+      process.env.PATH = `${fnmBinRoot}${path.delimiter}/usr/bin:/bin`;
+
+      const resolved = await resolveCodexCli({ forceRefresh: true });
+      const savedEnv = await readFile(
+        path.join(tempRoot, ".sentinel", "desktop.env"),
+        "utf8",
+      ).catch(() => "");
+
+      expect(resolved).not.toBeNull();
+      expect(resolved?.command).toBe(executablePath);
+      expect(process.env.SENTINEL_CODEX_PATH).toBe(executablePath);
+      expect(savedEnv).not.toContain("SENTINEL_CODEX_PATH=");
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("clears a stale persisted override before falling back to PATH discovery", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
+    const stableBinRoot = path.join(tempRoot, ".bun", "bin");
+    const executablePath = path.join(stableBinRoot, "codex");
+    const staleOverridePath = path.join(tempRoot, "missing", "codex");
+
+    try {
+      await mkdir(stableBinRoot, { recursive: true });
+      await mkdir(path.join(tempRoot, ".sentinel"), { recursive: true });
+      await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
+      await chmod(executablePath, 0o755);
+      process.env.HOME = tempRoot;
+      process.env.PATH = "/usr/bin:/bin";
+      process.env.SENTINEL_CODEX_PATH = staleOverridePath;
+      await writeFile(
+        path.join(tempRoot, ".sentinel", "desktop.env"),
+        `SENTINEL_CODEX_PATH="${staleOverridePath}"\n`,
+        "utf8",
+      );
+
+      const resolved = await resolveCodexCli({ forceRefresh: true });
+      const savedEnv = await readFile(
+        path.join(tempRoot, ".sentinel", "desktop.env"),
+        "utf8",
+      );
+
+      expect(resolved).not.toBeNull();
+      expect(resolved?.command).toBe(executablePath);
+      expect(process.env.SENTINEL_CODEX_PATH).toBe(executablePath);
+      expect(savedEnv).toContain(`SENTINEL_CODEX_PATH="${executablePath}"`);
+      expect(savedEnv).not.toContain(staleOverridePath);
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
 });

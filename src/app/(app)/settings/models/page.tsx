@@ -22,6 +22,10 @@ import {
   ControlledTextField,
 } from "@/components/forms/controlled-fields";
 import {
+  getCodexRuntimeBadgeColor,
+  getCodexRuntimeBadgeLabel,
+  getCodexRuntimeCliLabel,
+  getCodexRuntimeFallbackMessage,
   getClaudeRuntimeBadgeColor,
   getClaudeRuntimeBadgeLabel,
   getClaudeRuntimeBinaryLabel,
@@ -337,6 +341,7 @@ export default function ModelsPage() {
     claudeStatus?.availableModels && claudeStatus.availableModels.length > 0;
   const isRefreshingCodex = pendingRuntimeRefresh === "codex";
   const isRefreshingClaude = pendingRuntimeRefresh === "claude";
+  const codexFallbackMessage = getCodexRuntimeFallbackMessage(codexStatus);
   const claudeFallbackMessage = getClaudeRuntimeFallbackMessage(claudeStatus);
 
   return (
@@ -373,11 +378,17 @@ export default function ModelsPage() {
                       Reload
                     </Button>
                     <Chip
-                      color={codexEngine?.isAvailable ? "success" : "warning"}
+                      color={getCodexRuntimeBadgeColor(
+                        codexStatus,
+                        codexEngine?.isAvailable ?? false,
+                      )}
                       size="sm"
                       variant="soft"
                     >
-                      {codexEngine?.isAvailable ? "Ready" : "Setup needed"}
+                      {getCodexRuntimeBadgeLabel(
+                        codexStatus,
+                        codexEngine?.isAvailable ?? false,
+                      )}
                     </Chip>
                   </div>
                 </div>
@@ -386,9 +397,7 @@ export default function ModelsPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-muted">CLI</span>
                     <span className="text-foreground">
-                      {codexStatus?.cliDetected
-                        ? (codexStatus.cliVersion ?? "Detected")
-                        : "Not detected"}
+                      {getCodexRuntimeCliLabel(codexStatus)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
@@ -471,7 +480,15 @@ export default function ModelsPage() {
                   </div>
                 </div>
 
-                {!codexEngine?.isAvailable && codexEngine?.error ? (
+                {codexFallbackMessage ? (
+                  <p className="border-warning/20 bg-warning-soft text-warning-soft-foreground mt-2 rounded-lg border px-2.5 py-1.5 text-xs">
+                    {codexFallbackMessage}
+                  </p>
+                ) : null}
+
+                {!codexFallbackMessage &&
+                !codexEngine?.isAvailable &&
+                codexEngine?.error ? (
                   <p className="border-warning/20 bg-warning-soft text-warning-soft-foreground mt-2 rounded-lg border px-2.5 py-1.5 text-xs">
                     {codexEngine.error}
                   </p>

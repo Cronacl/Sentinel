@@ -11,6 +11,7 @@ import {
 import {
   type CodexEngineStatus,
   getCodexAppServerManager,
+  resetCodexEngineStatusCache,
 } from "@/lib/ai/chat/engines/codex-app-server";
 import { resetCodexCliResolutionCache } from "@/lib/ai/chat/engines/codex-cli";
 import { getCodexThreadState } from "@/lib/ai/chat/engines/types";
@@ -30,61 +31,6 @@ import { getOwnedThreadOrThrow } from "./workspace-thread-helpers";
 
 const chatEngineSchema = z.enum(CHAT_ENGINES);
 const runtimeEngineSchema = z.enum(["codex", "claude"]);
-const CODEX_ENGINE_STATUS_TIMEOUT_MS = 1_500;
-const CLAUDE_ENGINE_STATUS_TIMEOUT_MS = 3_500;
-
-function withTimeout<T>(
-  promise: Promise<T>,
-  fallback: () => T,
-  timeoutMs: number,
-): Promise<T> {
-  return new Promise((resolve) => {
-    let settled = false;
-    const timeoutId = setTimeout(() => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      resolve(fallback());
-    }, timeoutMs);
-
-    void promise
-      .then((value) => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve(value);
-      })
-      .catch(() => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve(fallback());
-      });
-  });
-}
-
-function buildTimedOutCodexStatus() {
-  return {
-    account: null,
-    authReady: false,
-    availableModels: [],
-    cliDetected: false,
-    cliVersion: null,
-    engine: "codex" as const,
-    error: "Timed out while checking Codex availability.",
-    isDesktopRuntime: false,
-    requiresOpenaiAuth: false,
-    serverReachable: false,
-  };
-}
 
 function isCodexEngineAvailable(status: CodexEngineStatus) {
   if (!status.cliDetected) {
@@ -138,23 +84,6 @@ function buildFallbackCodexModels() {
     }));
 }
 
-function buildTimedOutClaudeStatus() {
-  return {
-    account: null,
-    authReady: false,
-    availableModels: [],
-    binaryDetected: false,
-    binaryPath: null,
-    binaryVersion: null,
-    engine: "claude" as const,
-    error: "Timed out while checking Claude availability.",
-    lastSuccessfulProbeAt: null,
-    sdkDetected: false,
-    state: "timeout_no_cache" as const,
-    usedCachedStatus: false,
-  };
-}
-
 function canUseClaudeFallbackModels(status: ClaudeEngineStatus) {
   return (
     status.binaryDetected &&
@@ -198,20 +127,35 @@ async function resolveCodexThreadId(
   return state.codexThreadId;
 }
 
+function createRuntimeStatusResolver(options?: { forceRefresh?: boolean }) {
+  let codexPromise: Promise<CodexEngineStatus> | null = null;
+  let claudePromise: Promise<ClaudeEngineStatus> | null = null;
+
+  return {
+    all: async () => {
+      const [codex, claude] = await Promise.all([
+        codexPromise ??
+          (codexPromise = getCodexAppServerManager().getStatus(options)),
+        claudePromise ?? (claudePromise = getClaudeEngineStatus(options)),
+      ]);
+
+      return { claude, codex };
+    },
+    claude: async () => {
+      claudePromise ??= getClaudeEngineStatus(options);
+      return await claudePromise;
+    },
+    codex: async () => {
+      codexPromise ??= getCodexAppServerManager().getStatus(options);
+      return await codexPromise;
+    },
+  };
+}
+
 export const enginesRouter = createTRPCRouter({
   list: protectedProcedure.query(async () => {
-    const [codex, claude] = await Promise.all([
-      withTimeout(
-        getCodexAppServerManager().getStatus(),
-        buildTimedOutCodexStatus,
-        CODEX_ENGINE_STATUS_TIMEOUT_MS,
-      ),
-      withTimeout(
-        getClaudeEngineStatus(),
-        buildTimedOutClaudeStatus,
-        CLAUDE_ENGINE_STATUS_TIMEOUT_MS,
-      ),
-    ]);
+    const runtimeStatuses = createRuntimeStatusResolver();
+    const { codex, claude } = await runtimeStatuses.all();
 
     return [
       {
@@ -244,12 +188,10 @@ export const enginesRouter = createTRPCRouter({
   models: protectedProcedure
     .input(z.object({ engine: chatEngineSchema }))
     .query(async ({ ctx, input }) => {
+      const runtimeStatuses = createRuntimeStatusResolver();
+
       if (input.engine === "codex") {
-        const status = await withTimeout(
-          getCodexAppServerManager().getStatus(),
-          buildTimedOutCodexStatus,
-          CODEX_ENGINE_STATUS_TIMEOUT_MS,
-        );
+        const status = await runtimeStatuses.codex();
         const isAvailable = isCodexEngineAvailable(status);
         const models = canUseCodexFallbackModels(status)
           ? buildFallbackCodexModels()
@@ -274,11 +216,7 @@ export const enginesRouter = createTRPCRouter({
       }
 
       if (input.engine === "claude") {
-        const status = await withTimeout(
-          getClaudeEngineStatus(),
-          buildTimedOutClaudeStatus,
-          CLAUDE_ENGINE_STATUS_TIMEOUT_MS,
-        );
+        const status = await runtimeStatuses.claude();
         const isAvailable = isClaudeEngineAvailable(status);
         const models = canUseClaudeFallbackModels(status)
           ? buildFallbackClaudeModels()
@@ -386,14 +324,14 @@ export const enginesRouter = createTRPCRouter({
   refreshStatus: protectedProcedure
     .input(z.object({ engine: runtimeEngineSchema }))
     .mutation(async ({ input }) => {
+      const runtimeStatuses = createRuntimeStatusResolver({
+        forceRefresh: true,
+      });
+
       if (input.engine === "codex") {
         resetCodexCliResolutionCache();
-        const codex = getCodexAppServerManager();
-        const status = await withTimeout(
-          codex.getStatus({ forceRefresh: true }),
-          buildTimedOutCodexStatus,
-          CODEX_ENGINE_STATUS_TIMEOUT_MS,
-        );
+        resetCodexEngineStatusCache();
+        const status = await runtimeStatuses.codex();
 
         return {
           engine: "codex" as const,
@@ -403,12 +341,7 @@ export const enginesRouter = createTRPCRouter({
 
       resetClaudeCodeRuntimeCache();
       resetClaudeEngineStatusCache();
-
-      const status = await withTimeout(
-        getClaudeEngineStatus({ forceRefresh: true }),
-        buildTimedOutClaudeStatus,
-        CLAUDE_ENGINE_STATUS_TIMEOUT_MS,
-      );
+      const status = await runtimeStatuses.claude();
 
       return {
         engine: "claude" as const,
