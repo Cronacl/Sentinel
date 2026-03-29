@@ -22,6 +22,7 @@ const {
 const originalPath = process.env.PATH;
 const originalHome = process.env.HOME;
 const originalSentinelClaudePath = process.env.SENTINEL_CLAUDE_PATH;
+const originalClaudePath = process.env.CLAUDE_PATH;
 
 afterEach(async () => {
   process.env.PATH = originalPath;
@@ -30,6 +31,11 @@ afterEach(async () => {
     process.env.SENTINEL_CLAUDE_PATH = originalSentinelClaudePath;
   } else {
     delete process.env.SENTINEL_CLAUDE_PATH;
+  }
+  if (originalClaudePath) {
+    process.env.CLAUDE_PATH = originalClaudePath;
+  } else {
+    delete process.env.CLAUDE_PATH;
   }
   resetClaudeCodeRuntimeCache();
 });
@@ -68,6 +74,8 @@ describe("resolveClaudeCodeRuntime", () => {
       const resolved = await resolveClaudeCodeRuntime({ forceRefresh: true });
 
       expect(resolved.executablePath).toBe(executablePath);
+      expect(resolved.binaryDetected).toBe(true);
+      expect(resolved.binaryVersion).toBeNull();
       expect(resolved.env.PATH).toContain(tempRoot);
       expect(process.env.SENTINEL_CLAUDE_PATH).toBe(executablePath);
     } finally {
@@ -94,9 +102,33 @@ describe("resolveClaudeCodeRuntime", () => {
       );
 
       expect(resolved.executablePath).toBe(executablePath);
+      expect(resolved.binaryDetected).toBe(true);
       expect(resolved.env.PATH).toContain(bunBinRoot);
       expect(process.env.SENTINEL_CLAUDE_PATH).toBe(executablePath);
       expect(savedEnv).toContain(`SENTINEL_CLAUDE_PATH="${executablePath}"`);
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("ignores a stale override when the configured claude binary cannot run", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
+    const executablePath = path.join(tempRoot, "claude");
+
+    try {
+      await writeFile(executablePath, "#!/bin/sh\nexit 1\n", "utf8");
+      await chmod(executablePath, 0o755);
+      process.env.HOME = tempRoot;
+      process.env.PATH = "/usr/bin:/bin";
+      process.env.SENTINEL_CLAUDE_PATH = executablePath;
+      delete process.env.CLAUDE_PATH;
+
+      const resolved = await resolveClaudeCodeRuntime({ forceRefresh: true });
+
+      expect(resolved.binaryDetected).toBe(false);
+      expect(resolved.binaryVersion).toBeNull();
+      expect(resolved.executablePath).toBeNull();
+      expect(process.env.SENTINEL_CLAUDE_PATH).toBeUndefined();
     } finally {
       await rm(tempRoot, { force: true, recursive: true });
     }

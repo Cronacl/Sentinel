@@ -37,8 +37,14 @@ const getClaudeEngineStatus = mock(async () => ({
       supportedReasoningEfforts: [{ effort: "high" }],
     },
   ],
+  binaryDetected: true,
+  binaryPath: "/Users/test/.local/bin/claude",
+  binaryVersion: "2.1.39 (Claude Code)",
   error: null,
+  lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
   sdkDetected: true,
+  state: "ready",
+  usedCachedStatus: false,
 }));
 const resetCodexCliResolutionCache = mock(() => undefined);
 const resetClaudeCodeRuntimeCache = mock(() => undefined);
@@ -73,6 +79,10 @@ mock.module("@/lib/ai/chat/engines/codex-app-server", () => ({
 
 mock.module("@/lib/ai/chat/engines/claude-sdk", () => ({
   getClaudeEngineStatus,
+  isClaudeEngineAvailable: (status: any) =>
+    status.binaryDetected &&
+    status.state !== "missing_binary" &&
+    status.state !== "auth_unavailable",
   resetClaudeCodeRuntimeCache,
   resetClaudeEngineStatusCache,
 }));
@@ -88,8 +98,34 @@ mock.module("@/lib/ai/chat/engines/types", () => ({
 mock.module("@/lib/ai/providers/models", () => ({
   MODEL_CATALOG: {},
   getDefaultReasoningEffort: () => "medium",
-  getModelsForProvider: () => [],
-  getSupportedReasoningEfforts: () => [],
+  getModelsForProvider: (provider: string) =>
+    provider === "anthropic"
+      ? [
+          {
+            capabilities: ["vision", "tool_use", "object_generation"],
+            contextWindow: 200_000,
+            description: "Balanced performance and speed.",
+            displayName: "Claude Sonnet 4.5",
+            id: "claude-sonnet-4-5",
+          },
+        ]
+      : provider === "openai"
+        ? [
+            {
+              capabilities: ["tool_use", "object_generation"],
+              description: "Codex flagship model.",
+              displayName: "GPT-5 Codex",
+              id: "gpt-5-codex",
+            },
+            {
+              capabilities: ["tool_use", "object_generation"],
+              description: "Compact Codex model.",
+              displayName: "Codex Mini Latest",
+              id: "codex-mini-latest",
+            },
+          ]
+        : [],
+  getSupportedReasoningEfforts: () => ["medium"],
   isKnownModel: () => false,
 }));
 
@@ -159,8 +195,14 @@ beforeEach(() => {
         supportedReasoningEfforts: [{ effort: "high" }],
       },
     ],
+    binaryDetected: true,
+    binaryPath: "/Users/test/.local/bin/claude",
+    binaryVersion: "2.1.39 (Claude Code)",
     error: null,
+    lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
     sdkDetected: true,
+    state: "ready",
+    usedCachedStatus: false,
   }));
   getOwnedThreadOrThrow.mockImplementation(async () => ({
     chatEngineState: {
@@ -208,7 +250,10 @@ describe("enginesRouter.list", () => {
           label: "Claude",
           status: expect.objectContaining({
             authReady: true,
+            binaryDetected: true,
             sdkDetected: true,
+            state: "ready",
+            usedCachedStatus: false,
           }),
         }),
       ]),
@@ -219,8 +264,14 @@ describe("enginesRouter.list", () => {
     getClaudeEngineStatus.mockImplementationOnce(async () => ({
       authReady: false,
       availableModels: [],
+      binaryDetected: false,
+      binaryPath: null,
+      binaryVersion: null,
       error: "Claude Code is not authenticated.",
+      lastSuccessfulProbeAt: null,
       sdkDetected: false,
+      state: "auth_unavailable",
+      usedCachedStatus: false,
     }));
 
     const result = await enginesRouter.list({});
@@ -254,6 +305,97 @@ describe("enginesRouter.list", () => {
       }),
     );
   }, 5_000);
+
+  it("marks Codex available when the CLI is detected but the runtime probe timed out", async () => {
+    getStatus.mockImplementationOnce(async () => ({
+      account: null,
+      authReady: false,
+      availableModels: [],
+      cliDetected: true,
+      cliVersion: "codex-cli 0.98.0",
+      error: "Timed out while querying Codex runtime.",
+      isDesktopRuntime: true,
+      requiresOpenaiAuth: false,
+      serverReachable: false,
+    }));
+
+    const result = await enginesRouter.list({});
+
+    expect(result.find((engine: any) => engine.engine === "codex")).toEqual(
+      expect.objectContaining({
+        isAvailable: true,
+        status: expect.objectContaining({
+          cliDetected: true,
+          serverReachable: false,
+        }),
+      }),
+    );
+  });
+
+  it("marks Claude available when cached models are reused after a timeout", async () => {
+    getClaudeEngineStatus.mockImplementationOnce(async () => ({
+      authReady: true,
+      availableModels: [
+        {
+          contextWindow: 200_000,
+          defaultReasoningEffort: "high",
+          description: "Claude model",
+          displayName: "Claude Sonnet 4.5",
+          id: "claude-sonnet-4-5",
+          inputModalities: ["text", "image"],
+          model: "claude-sonnet-4-5-20250929",
+          supportedReasoningEfforts: [{ effort: "high" }],
+        },
+      ],
+      binaryDetected: true,
+      binaryPath: "/Users/test/.local/bin/claude",
+      binaryVersion: "2.1.39 (Claude Code)",
+      error: "Timed out while querying Claude Code runtime.",
+      lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
+      sdkDetected: true,
+      state: "timeout_using_cache",
+      usedCachedStatus: true,
+    }));
+
+    const result = await enginesRouter.list({});
+
+    expect(result.find((engine: any) => engine.engine === "claude")).toEqual(
+      expect.objectContaining({
+        isAvailable: true,
+        status: expect.objectContaining({
+          state: "timeout_using_cache",
+          usedCachedStatus: true,
+        }),
+      }),
+    );
+  });
+
+  it("marks Claude available when the binary is detected but the live probe timed out without cache", async () => {
+    getClaudeEngineStatus.mockImplementationOnce(async () => ({
+      authReady: false,
+      availableModels: [],
+      binaryDetected: true,
+      binaryPath: "/Users/test/.local/bin/claude",
+      binaryVersion: "2.1.39 (Claude Code)",
+      error: "Timed out while querying Claude Code runtime.",
+      lastSuccessfulProbeAt: null,
+      sdkDetected: true,
+      state: "timeout_no_cache",
+      usedCachedStatus: false,
+    }));
+
+    const result = await enginesRouter.list({});
+
+    expect(result.find((engine: any) => engine.engine === "claude")).toEqual(
+      expect.objectContaining({
+        isAvailable: true,
+        status: expect.objectContaining({
+          state: "timeout_no_cache",
+          usedCachedStatus: false,
+        }),
+      }),
+    );
+  });
 });
 
 describe("enginesRouter.models", () => {
@@ -283,6 +425,81 @@ describe("enginesRouter.models", () => {
     ]);
   });
 
+  it("marks cached Claude models as connected during degraded mode", async () => {
+    getClaudeEngineStatus.mockImplementationOnce(async () => ({
+      authReady: true,
+      availableModels: [
+        {
+          contextWindow: 200_000,
+          defaultReasoningEffort: "high",
+          description: "Claude model",
+          displayName: "Claude Sonnet 4.5",
+          id: "claude-sonnet-4-5",
+          inputModalities: ["text", "image"],
+          model: "claude-sonnet-4-5-20250929",
+          supportedReasoningEfforts: [{ effort: "high" }],
+        },
+      ],
+      binaryDetected: true,
+      binaryPath: "/Users/test/.local/bin/claude",
+      binaryVersion: "2.1.39 (Claude Code)",
+      error: "Timed out while querying Claude Code runtime.",
+      lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
+      sdkDetected: true,
+      state: "timeout_using_cache",
+      usedCachedStatus: true,
+    }));
+
+    const result = await enginesRouter.models({
+      ctx: {
+        db: {},
+        session: { user: { id: "user-1" } },
+      },
+      input: { engine: "claude" },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        isConnected: true,
+        modelId: "claude-sonnet-4-5",
+      }),
+    ]);
+  });
+
+  it("returns fallback Claude models when the binary is detected but no cache exists yet", async () => {
+    getClaudeEngineStatus.mockImplementationOnce(async () => ({
+      authReady: false,
+      availableModels: [],
+      binaryDetected: true,
+      binaryPath: "/Users/test/.local/bin/claude",
+      binaryVersion: "2.1.39 (Claude Code)",
+      error: "Timed out while querying Claude Code runtime.",
+      lastSuccessfulProbeAt: null,
+      sdkDetected: true,
+      state: "timeout_no_cache",
+      usedCachedStatus: false,
+    }));
+
+    const result = await enginesRouter.models({
+      ctx: {
+        db: {},
+        session: { user: { id: "user-1" } },
+      },
+      input: { engine: "claude" },
+    });
+
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          displayName: "Claude Sonnet 4.5",
+          isConnected: true,
+          isEnabled: true,
+          modelId: "claude-sonnet-4-5",
+        }),
+      ]),
+    );
+  });
+
   it("returns an empty list when Codex model discovery times out", async () => {
     getStatus.mockImplementationOnce(() => new Promise(() => undefined));
 
@@ -296,6 +513,39 @@ describe("enginesRouter.models", () => {
 
     expect(result).toEqual([]);
   }, 2_500);
+
+  it("returns fallback Codex models when the CLI is detected but the runtime is unreachable", async () => {
+    getStatus.mockImplementationOnce(async () => ({
+      account: null,
+      authReady: false,
+      availableModels: [],
+      cliDetected: true,
+      cliVersion: "codex-cli 0.98.0",
+      error: "Timed out while querying Codex runtime.",
+      isDesktopRuntime: true,
+      requiresOpenaiAuth: false,
+      serverReachable: false,
+    }));
+
+    const result = await enginesRouter.models({
+      ctx: {
+        db: {},
+        session: { user: { id: "user-1" } },
+      },
+      input: { engine: "codex" },
+    });
+
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          displayName: "GPT-5 Codex",
+          isConnected: true,
+          isEnabled: true,
+          modelId: "gpt-5-codex",
+        }),
+      ]),
+    );
+  });
 });
 
 describe("enginesRouter.refreshStatus", () => {
