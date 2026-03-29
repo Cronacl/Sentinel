@@ -14,6 +14,68 @@ async function pathExists(targetPath) {
 }
 
 /**
+ * @param {string} projectDir
+ * @param {string} packageName
+ */
+function resolveNodeModulePath(projectDir, packageName) {
+  return path.join(projectDir, "node_modules", ...packageName.split("/"));
+}
+
+/**
+ * @param {string} projectDir
+ * @param {string} targetNodeModulesPath
+ * @param {string} packageName
+ * @param {Set<string>} [copiedPackages]
+ */
+async function copyPackageWithDependencies(
+  projectDir,
+  targetNodeModulesPath,
+  packageName,
+  copiedPackages = new Set(),
+) {
+  if (copiedPackages.has(packageName)) {
+    return;
+  }
+
+  copiedPackages.add(packageName);
+
+  const sourcePackagePath = resolveNodeModulePath(projectDir, packageName);
+  const sourcePackageJsonPath = path.join(sourcePackagePath, "package.json");
+
+  if (!(await pathExists(sourcePackageJsonPath))) {
+    throw new Error(
+      `Expected packaged desktop dependency at ${sourcePackageJsonPath}.`,
+    );
+  }
+
+  const targetPackagePath = path.join(
+    targetNodeModulesPath,
+    ...packageName.split("/"),
+  );
+
+  await fs.rm(targetPackagePath, { force: true, recursive: true });
+  await fs.mkdir(path.dirname(targetPackagePath), { recursive: true });
+  await fs.cp(sourcePackagePath, targetPackagePath, { recursive: true });
+
+  const packageJson = JSON.parse(
+    await fs.readFile(sourcePackageJsonPath, "utf8"),
+  );
+  const dependencyNames = [
+    ...Object.keys(packageJson.dependencies ?? {}),
+    ...Object.keys(packageJson.optionalDependencies ?? {}),
+  ];
+
+  for (const dependencyName of dependencyNames) {
+    await copyPackageWithDependencies(
+      projectDir,
+      targetNodeModulesPath,
+      dependencyName,
+      copiedPackages,
+    );
+  }
+}
+
+/**
  * @param {{
  *   appOutDir: string;
  *   electronPlatformName: string;
@@ -81,4 +143,10 @@ module.exports = async function afterPack(context) {
   await fs.cp(sourceShellNodePtyPath, targetShellNodePtyPath, {
     recursive: true,
   });
+
+  await copyPackageWithDependencies(
+    context.packager.projectDir,
+    targetShellNodeModulesPath,
+    "electron-updater",
+  );
 };
