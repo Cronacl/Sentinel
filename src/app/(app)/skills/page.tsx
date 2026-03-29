@@ -56,7 +56,7 @@ import { api, type RouterOutputs } from "@/trpc/react";
 
 type SkillListItem = RouterOutputs["skills"]["list"]["skills"][number];
 type RegistryItem = RouterOutputs["skills"]["registry"][number];
-type SkillInstallTarget = "codex" | "sentinel";
+type SkillInstallTarget = "claude" | "codex" | "sentinel";
 type InstalledSkillAction = Pick<SkillListItem, "name" | "scope" | "target">;
 
 const SOURCE_LABEL = {
@@ -67,6 +67,7 @@ const SOURCE_LABEL = {
 } as const;
 
 const TARGET_LABEL = {
+  claude: "Claude",
   codex: "Codex",
   sentinel: "Sentinel",
 } as const;
@@ -76,6 +77,11 @@ const TARGET_OPTIONS: SelectOption[] = [
     description: "Install into Sentinel's local skill directories.",
     label: "Sentinel",
     value: "sentinel",
+  },
+  {
+    description: "Install into Claude's .claude/skills directories.",
+    label: "Claude",
+    value: "claude",
   },
   {
     description: "Install into the Codex home skills directory.",
@@ -124,7 +130,11 @@ function matchesRegistrySkill(
 function isRegistrySkillFullyInstalled(
   skill: Pick<RegistryItem, "installedTargets">,
 ) {
-  return skill.installedTargets.codex && skill.installedTargets.sentinel;
+  return (
+    skill.installedTargets.claude &&
+    skill.installedTargets.codex &&
+    skill.installedTargets.sentinel
+  );
 }
 
 type BrandIconEntry = {
@@ -194,9 +204,37 @@ function getInstallStateKey(name: string, target: SkillInstallTarget) {
   return `${name}:${target}`;
 }
 
+function markRegistrySkillInstalled(
+  current: RegistryItem[] | undefined,
+  name: string,
+  target: SkillInstallTarget,
+) {
+  if (!current) {
+    return current;
+  }
+
+  const normalizedName = name.trim().toLowerCase();
+
+  return current.map((entry) =>
+    entry.name.trim().toLowerCase() === normalizedName
+      ? {
+          ...entry,
+          installedTargets: {
+            ...entry.installedTargets,
+            [target]: true,
+          },
+        }
+      : entry,
+  );
+}
+
 function getInstalledDetailHref(skill: SkillListItem) {
   if (skill.target === "codex") {
     return `/skills/${encodeURIComponent(skill.name)}?target=codex`;
+  }
+
+  if (skill.target === "claude") {
+    return `/skills/${encodeURIComponent(skill.name)}?target=claude`;
   }
 
   return `/skills/${encodeURIComponent(skill.name)}`;
@@ -326,15 +364,27 @@ function RegistrySkillRow({
   onInstall: (entry: RegistryItem, target: SkillInstallTarget) => void;
 }) {
   const installStatusLabel =
-    entry.installedTargets.codex && entry.installedTargets.sentinel
-      ? "Installed in Sentinel and Codex"
-      : entry.installedTargets.codex
-        ? "Installed in Codex"
-        : entry.installedTargets.sentinel
-          ? "Installed in Sentinel"
-          : null;
+    entry.installedTargets.claude &&
+    entry.installedTargets.codex &&
+    entry.installedTargets.sentinel
+      ? "Installed in Sentinel, Claude, and Codex"
+      : entry.installedTargets.claude && entry.installedTargets.codex
+        ? "Installed in Claude and Codex"
+        : entry.installedTargets.claude && entry.installedTargets.sentinel
+          ? "Installed in Sentinel and Claude"
+          : entry.installedTargets.codex && entry.installedTargets.sentinel
+            ? "Installed in Sentinel and Codex"
+            : entry.installedTargets.claude
+              ? "Installed in Claude"
+              : entry.installedTargets.codex
+                ? "Installed in Codex"
+                : entry.installedTargets.sentinel
+                  ? "Installed in Sentinel"
+                  : null;
   const allTargetsInstalled =
-    entry.installedTargets.codex && entry.installedTargets.sentinel;
+    entry.installedTargets.claude &&
+    entry.installedTargets.codex &&
+    entry.installedTargets.sentinel;
 
   return (
     <div className="border-separator/30 bg-surface rounded-xl border p-3 transition-colors">
@@ -504,14 +554,23 @@ export default function SkillsPage() {
       });
 
       try {
-        await installMutation.mutateAsync({
+        const result = await installMutation.mutateAsync({
           name: entry.name,
           scope: "global",
           target,
         });
-        void utils.skills.list.invalidate();
-        void utils.skills.registry.invalidate();
-        sileo.success({ description: "Skill installed." });
+        utils.skills.registry.setData(undefined, (current) =>
+          markRegistrySkillInstalled(current, entry.name, target),
+        );
+        await Promise.all([
+          utils.skills.list.invalidate(),
+          utils.skills.registry.invalidate(),
+        ]);
+        sileo.success({
+          description: result.alreadyInstalled
+            ? "Skill already installed. Refreshed skill state."
+            : "Skill installed.",
+        });
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Installation failed.";
@@ -589,8 +648,8 @@ export default function SkillsPage() {
       }
       subtitle={
         <span className="max-w-sm">
-          Browse discovered skills across Sentinel and Codex, and install
-          recommended skills into either runtime.
+          Browse discovered skills across Sentinel, Claude, and Codex, and
+          install recommended skills into the runtimes you use.
         </span>
       }
       title={
@@ -653,9 +712,9 @@ export default function SkillsPage() {
                 </h2>
                 <p className="text-muted mt-1 text-sm">
                   Install a recommended skill below, or add one under{" "}
-                  <code className="text-foreground/80">.sentinel/skills</code>{" "}
-                  or <code className="text-foreground/80">~/.codex/skills</code>
-                  .
+                  <code className="text-foreground/80">.sentinel/skills</code> ,{" "}
+                  <code className="text-foreground/80">.claude/skills</code>, or{" "}
+                  <code className="text-foreground/80">~/.codex/skills</code>.
                 </p>
               </div>
             )}
@@ -679,12 +738,16 @@ export default function SkillsPage() {
                       installErrors[
                         getInstallStateKey(entry.name, "sentinel")
                       ] ??
+                      installErrors[getInstallStateKey(entry.name, "claude")] ??
                       installErrors[getInstallStateKey(entry.name, "codex")] ??
                       null
                     }
                     isInstalling={
                       installingSkills.has(
                         getInstallStateKey(entry.name, "sentinel"),
+                      ) ||
+                      installingSkills.has(
+                        getInstallStateKey(entry.name, "claude"),
                       ) ||
                       installingSkills.has(
                         getInstallStateKey(entry.name, "codex"),
@@ -705,7 +768,7 @@ export default function SkillsPage() {
                 </h2>
                 <p className="text-muted mt-1 text-sm">
                   You have installed every skill from the curated registry for
-                  both runtimes.
+                  all runtimes.
                 </p>
               </div>
             ) : (

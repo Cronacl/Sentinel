@@ -13,7 +13,13 @@ export default async function SkillDetailPage({
   return (
     <SkillDetailScreen
       skillName={decodeURIComponent(skillName)}
-      target={target === "codex" ? "codex" : "sentinel"}
+      target={
+        target === "codex"
+          ? "codex"
+          : target === "claude"
+            ? "claude"
+            : "sentinel"
+      }
     />
   );
 }

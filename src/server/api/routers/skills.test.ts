@@ -24,16 +24,36 @@ const getSkillSnapshot = mock(async ({ workspaceRoot, globalBase }) => ({
 }));
 const discoverCodexSkills = mock(async () => []);
 const loadSkillByName = mock(async () => null);
-const executeInstallSteps = mock(async ({ name, destRoot, installSteps }) => ({
-  directory: `${destRoot}/.sentinel/skills/${name}`,
-  installSteps,
-  name,
-}));
+function resolveTargetDirectory(
+  destRoot: string,
+  name: string,
+  target: "claude" | "codex" | "sentinel" = "sentinel",
+) {
+  if (target === "codex") {
+    return `${destRoot}/skills/${name}`;
+  }
+
+  if (target === "claude") {
+    return `${destRoot}/.claude/skills/${name}`;
+  }
+
+  return `${destRoot}/.sentinel/skills/${name}`;
+}
+
+const executeInstallSteps = mock(
+  async ({ name, destRoot, installSteps, target = "sentinel" }) => ({
+    directory: resolveTargetDirectory(destRoot, name, target),
+    installSteps,
+    name,
+  }),
+);
 const resolveCodexHome = mock(() => "/tmp/codex-home");
-const uninstallSkill = mock(async ({ name, destRoot }) => ({
-  directory: `${destRoot}/.sentinel/skills/${name}`,
-  name,
-}));
+const uninstallSkill = mock(
+  async ({ name, destRoot, target = "sentinel" }) => ({
+    directory: resolveTargetDirectory(destRoot, name, target),
+    name,
+  }),
+);
 const listCodexSkills = mock(async () => ({ skills: [] }));
 const writeSkillConfig = mock(async () => {});
 const buildInstallSteps = mock((repoUrl, skillPath, ref) => [
@@ -113,6 +133,49 @@ describe("skillsRouter", () => {
     });
     expect(result.revision).toBe(2);
     expect(result.skills[0]?.name).toBe("example");
+    expect(result.skills[0]?.target).toBe("sentinel");
+  });
+
+  it("returns claude-discovered skills with a claude install target", async () => {
+    getSkillSnapshot.mockImplementationOnce(
+      async ({ workspaceRoot, globalBase }) => ({
+        revision: 2,
+        skillRoots: [
+          `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.claude/skills/example`,
+        ],
+        skills: [
+          {
+            description: "Helpful skill",
+            directory: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.claude/skills/example`,
+            name: "example",
+            preview: "# Example",
+            scope: workspaceRoot ? "workspace" : "global",
+            skillFile: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.claude/skills/example/SKILL.md`,
+            sourceKind: "claude",
+          },
+        ],
+        updatedAt: 123,
+      }),
+    );
+
+    const result = await skillsRouter.list({
+      ctx: {
+        user: {
+          skillsBasePath: "/tmp/custom-home",
+        },
+        workspace: {
+          rootPath: "/tmp/workspace",
+        },
+      },
+    });
+
+    expect(result.skills).toEqual([
+      expect.objectContaining({
+        name: "example",
+        sourceKind: "claude",
+        target: "claude",
+      }),
+    ]);
   });
 
   it("marks curated skills as installed in codex when present in the codex skills directory", async () => {
@@ -140,8 +203,52 @@ describe("skillsRouter", () => {
     expect(result).toEqual([
       expect.objectContaining({
         installedTargets: {
+          claude: false,
           codex: true,
           sentinel: true,
+        },
+        name: "example",
+      }),
+    ]);
+  });
+
+  it("marks curated skills as installed in claude independently from sentinel and codex", async () => {
+    getSkillSnapshot.mockImplementationOnce(
+      async ({ workspaceRoot, globalBase }) => ({
+        revision: 2,
+        skillRoots: workspaceRoot
+          ? [`${workspaceRoot}/.claude/skills/example`]
+          : [],
+        skills: [
+          {
+            description: "Helpful skill",
+            directory: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.claude/skills/example`,
+            name: "example",
+            preview: "# Example",
+            scope: workspaceRoot ? "workspace" : "global",
+            skillFile: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.claude/skills/example/SKILL.md`,
+            sourceKind: "claude",
+          },
+        ],
+        updatedAt: 123,
+      }),
+    );
+
+    const result = await skillsRouter.registry({
+      ctx: {
+        user: {
+          skillsBasePath: "/tmp/custom-home",
+        },
+        workspace: null,
+      },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        installedTargets: {
+          claude: true,
+          codex: false,
+          sentinel: false,
         },
         name: "example",
       }),
@@ -159,6 +266,7 @@ describe("skillsRouter", () => {
       input: {
         name: "example",
         scope: "global",
+        target: "sentinel",
       },
     });
 
@@ -166,8 +274,59 @@ describe("skillsRouter", () => {
       destRoot: "/tmp/custom-home",
       installSteps: registryEntry.installSteps,
       name: "example",
+      target: "sentinel",
     });
     expect(result.directory).toBe("/tmp/custom-home/.sentinel/skills/example");
+  });
+
+  it("installs curated skills into claude global skills directories", async () => {
+    const result = await skillsRouter.install({
+      ctx: {
+        user: {
+          skillsBasePath: "/tmp/custom-home",
+        },
+        workspace: null,
+      },
+      input: {
+        name: "example",
+        scope: "global",
+        target: "claude",
+      },
+    });
+
+    expect(executeInstallSteps).toHaveBeenCalledWith({
+      destRoot: "/tmp/custom-home",
+      installSteps: registryEntry.installSteps,
+      name: "example",
+      target: "claude",
+    });
+    expect(result.directory).toBe("/tmp/custom-home/.claude/skills/example");
+  });
+
+  it("installs curated skills into claude workspace skills directories", async () => {
+    const result = await skillsRouter.install({
+      ctx: {
+        user: {
+          skillsBasePath: "/tmp/custom-home",
+        },
+        workspace: {
+          rootPath: "/tmp/workspace",
+        },
+      },
+      input: {
+        name: "example",
+        scope: "workspace",
+        target: "claude",
+      },
+    });
+
+    expect(executeInstallSteps).toHaveBeenCalledWith({
+      destRoot: "/tmp/workspace",
+      installSteps: registryEntry.installSteps,
+      name: "example",
+      target: "claude",
+    });
+    expect(result.directory).toBe("/tmp/workspace/.claude/skills/example");
   });
 
   it("does not fail codex installs when the codex skill inventory is unavailable", async () => {
@@ -188,7 +347,7 @@ describe("skillsRouter", () => {
         },
       }),
     ).resolves.toEqual({
-      directory: "/tmp/codex-home/.sentinel/skills/example",
+      directory: "/tmp/codex-home/skills/example",
       installSteps: registryEntry.installSteps,
       name: "example",
     });
@@ -213,6 +372,7 @@ describe("skillsRouter", () => {
         repoUrl: "https://github.com/example/repo",
         scope: "workspace",
         skillPath: "skills/custom-skill",
+        target: "sentinel",
       },
     });
 
@@ -228,6 +388,31 @@ describe("skillsRouter", () => {
         "copy skills/custom-skill@main {{DEST}}",
       ],
       name: "custom-skill",
+      target: "sentinel",
+    });
+  });
+
+  it("loads claude-targeted skills using the claude lookup target", async () => {
+    await skillsRouter.get({
+      ctx: {
+        user: {
+          skillsBasePath: "/tmp/custom-home",
+        },
+        workspace: {
+          rootPath: "/tmp/workspace",
+        },
+      },
+      input: {
+        name: "example",
+        target: "claude",
+      },
+    });
+
+    expect(loadSkillByName).toHaveBeenCalledWith({
+      globalBase: "/tmp/custom-home",
+      name: "example",
+      target: "claude",
+      workspaceRoot: "/tmp/workspace",
     });
   });
 
@@ -244,12 +429,39 @@ describe("skillsRouter", () => {
       input: {
         name: "example",
         scope: "workspace",
+        target: "sentinel",
       },
     });
 
     expect(uninstallSkill).toHaveBeenCalledWith({
       destRoot: "/tmp/workspace",
       name: "example",
+      target: "sentinel",
     });
+  });
+
+  it("uninstalls claude skills from the claude destination", async () => {
+    const result = await skillsRouter.uninstall({
+      ctx: {
+        user: {
+          skillsBasePath: "/tmp/custom-home",
+        },
+        workspace: {
+          rootPath: "/tmp/workspace",
+        },
+      },
+      input: {
+        name: "example",
+        scope: "workspace",
+        target: "claude",
+      },
+    });
+
+    expect(uninstallSkill).toHaveBeenCalledWith({
+      destRoot: "/tmp/workspace",
+      name: "example",
+      target: "claude",
+    });
+    expect(result.directory).toBe("/tmp/workspace/.claude/skills/example");
   });
 });

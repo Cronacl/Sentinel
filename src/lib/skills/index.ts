@@ -51,6 +51,8 @@ export type SkillSnapshot = {
   updatedAt: number;
 };
 
+type SkillLookupTarget = "sentinel" | "codex" | "claude";
+
 type ConventionalSkillRoot = {
   containerDirectory: string;
   precedence: number;
@@ -689,7 +691,7 @@ export async function loadSkillByName({
   name: string;
   workspaceRoot: string | null;
   globalBase?: string | null;
-  target?: "sentinel" | "codex";
+  target?: SkillLookupTarget;
 }) {
   if (target === "codex") {
     return await loadSkillFromDirectory({
@@ -708,9 +710,17 @@ export async function loadSkillByName({
     workspaceRoot ? path.resolve(workspaceRoot) : null,
     globalBase,
   );
+  const allowedSourceKinds =
+    target === "claude"
+      ? new Set<SkillSourceKind>(["claude"])
+      : new Set<SkillSourceKind>(["sentinel", "agents"]);
   const seenRealFiles = new Set<string>();
 
   for (const root of roots) {
+    if (!allowedSourceKinds.has(root.sourceKind)) {
+      continue;
+    }
+
     const discoveredInRoot = await discoverSkillsInRoot(root);
 
     for (const skill of discoveredInRoot) {

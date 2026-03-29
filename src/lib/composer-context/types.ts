@@ -14,7 +14,7 @@ export type ComposerSkillEntry = {
   name: string;
   scope?: "global" | "workspace";
   sourceKind?: SkillSourceKind;
-  target?: "codex" | "sentinel";
+  target?: "claude" | "codex" | "sentinel";
 };
 
 export type ComposerContext = {

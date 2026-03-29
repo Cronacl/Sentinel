@@ -160,7 +160,7 @@ export function SkillDetailScreen({
   target = "sentinel",
 }: {
   skillName: string;
-  target?: "codex" | "sentinel";
+  target?: "claude" | "codex" | "sentinel";
 }) {
   const { leftSidebarOpen } = useShell();
   const [copiedLabel, setCopiedLabel] = useState<"name" | "path" | null>(null);
