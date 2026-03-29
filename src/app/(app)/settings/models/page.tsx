@@ -21,6 +21,12 @@ import {
   ControlledSelectField,
   ControlledTextField,
 } from "@/components/forms/controlled-fields";
+import {
+  getClaudeRuntimeBadgeColor,
+  getClaudeRuntimeBadgeLabel,
+  getClaudeRuntimeBinaryLabel,
+  getClaudeRuntimeFallbackMessage,
+} from "@/components/settings/runtime-status";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { PROVIDERS } from "@/lib/ai/providers/registry";
 import {
@@ -331,6 +337,7 @@ export default function ModelsPage() {
     claudeStatus?.availableModels && claudeStatus.availableModels.length > 0;
   const isRefreshingCodex = pendingRuntimeRefresh === "codex";
   const isRefreshingClaude = pendingRuntimeRefresh === "claude";
+  const claudeFallbackMessage = getClaudeRuntimeFallbackMessage(claudeStatus);
 
   return (
     <SettingsPageWrapper
@@ -487,20 +494,26 @@ export default function ModelsPage() {
                       Reload
                     </Button>
                     <Chip
-                      color={claudeEngine?.isAvailable ? "success" : "warning"}
+                      color={getClaudeRuntimeBadgeColor(
+                        claudeStatus,
+                        claudeEngine?.isAvailable ?? false,
+                      )}
                       size="sm"
                       variant="soft"
                     >
-                      {claudeEngine?.isAvailable ? "Ready" : "Setup needed"}
+                      {getClaudeRuntimeBadgeLabel(
+                        claudeStatus,
+                        claudeEngine?.isAvailable ?? false,
+                      )}
                     </Chip>
                   </div>
                 </div>
 
                 <div className="mt-2 space-y-1 text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="text-muted">SDK</span>
+                    <span className="text-muted">Binary</span>
                     <span className="text-foreground">
-                      {claudeStatus?.sdkDetected ? "Detected" : "Not detected"}
+                      {getClaudeRuntimeBinaryLabel(claudeStatus)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
@@ -573,7 +586,15 @@ export default function ModelsPage() {
                   </div>
                 </div>
 
-                {!claudeEngine?.isAvailable && claudeEngine?.error ? (
+                {claudeFallbackMessage ? (
+                  <p className="border-warning/20 bg-warning-soft text-warning-soft-foreground mt-2 rounded-lg border px-2.5 py-1.5 text-xs">
+                    {claudeFallbackMessage}
+                  </p>
+                ) : null}
+
+                {!claudeFallbackMessage &&
+                !claudeEngine?.isAvailable &&
+                claudeEngine?.error ? (
                   <p className="border-warning/20 bg-warning-soft text-warning-soft-foreground mt-2 rounded-lg border px-2.5 py-1.5 text-xs">
                     {claudeEngine.error}
                   </p>

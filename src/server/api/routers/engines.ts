@@ -2,11 +2,16 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import {
+  type ClaudeEngineStatus,
   getClaudeEngineStatus,
+  isClaudeEngineAvailable,
   resetClaudeCodeRuntimeCache,
   resetClaudeEngineStatusCache,
 } from "@/lib/ai/chat/engines/claude-sdk";
-import { getCodexAppServerManager } from "@/lib/ai/chat/engines/codex-app-server";
+import {
+  type CodexEngineStatus,
+  getCodexAppServerManager,
+} from "@/lib/ai/chat/engines/codex-app-server";
 import { resetCodexCliResolutionCache } from "@/lib/ai/chat/engines/codex-cli";
 import { getCodexThreadState } from "@/lib/ai/chat/engines/types";
 import {
@@ -81,15 +86,104 @@ function buildTimedOutCodexStatus() {
   };
 }
 
+function isCodexEngineAvailable(status: CodexEngineStatus) {
+  if (!status.cliDetected) {
+    return false;
+  }
+
+  if (status.serverReachable) {
+    return status.authReady;
+  }
+
+  return !status.requiresOpenaiAuth;
+}
+
+function canUseCodexFallbackModels(status: CodexEngineStatus) {
+  return (
+    status.cliDetected &&
+    !status.serverReachable &&
+    status.availableModels.length === 0 &&
+    !status.requiresOpenaiAuth
+  );
+}
+
+function buildFallbackCodexModels() {
+  const allowedIds = new Set([
+    "gpt-5-codex",
+    "gpt-5.1-codex-mini",
+    "codex-mini-latest",
+  ]);
+
+  return getModelsForProvider("openai")
+    .filter((model) => allowedIds.has(model.id))
+    .map((model) => ({
+      defaultReasoningEffort: getDefaultReasoningEffort("openai", model.id),
+      description: model.description,
+      displayName: model.displayName,
+      id: model.id,
+      inputModalities: model.capabilities.includes("vision")
+        ? ["text", "image"]
+        : ["text"],
+      isDefault: model.id === "gpt-5-codex",
+      model: model.id,
+      supportedReasoningEfforts: getSupportedReasoningEfforts(
+        "openai",
+        model.id,
+      ).map((effort) => ({
+        description: `${model.displayName} supports ${effort} reasoning effort.`,
+        effort,
+        label: effort[0]!.toUpperCase() + effort.slice(1),
+      })),
+      supportsPersonality: false,
+    }));
+}
+
 function buildTimedOutClaudeStatus() {
   return {
     account: null,
     authReady: false,
     availableModels: [],
+    binaryDetected: false,
+    binaryPath: null,
+    binaryVersion: null,
     engine: "claude" as const,
     error: "Timed out while checking Claude availability.",
+    lastSuccessfulProbeAt: null,
     sdkDetected: false,
+    state: "timeout_no_cache" as const,
+    usedCachedStatus: false,
   };
+}
+
+function canUseClaudeFallbackModels(status: ClaudeEngineStatus) {
+  return (
+    status.binaryDetected &&
+    (status.state === "timeout_no_cache" || status.state === "error") &&
+    status.availableModels.length === 0
+  );
+}
+
+function buildFallbackClaudeModels() {
+  return getModelsForProvider("anthropic").map((model) => ({
+    contextWindow: model.contextWindow,
+    defaultReasoningEffort: getDefaultReasoningEffort("anthropic", model.id),
+    description: model.description,
+    displayName: model.displayName,
+    id: model.id,
+    inputModalities: model.capabilities.includes("vision")
+      ? ["text", "image"]
+      : ["text"],
+    isDefault: model.id === "claude-sonnet-4-5",
+    model: model.id,
+    supportedReasoningEfforts: getSupportedReasoningEfforts(
+      "anthropic",
+      model.id,
+    ).map((effort) => ({
+      description: `${model.displayName} supports ${effort} reasoning effort.`,
+      effort,
+      label: effort[0]!.toUpperCase() + effort.slice(1),
+    })),
+  }));
 }
 
 async function resolveCodexThreadId(
@@ -132,8 +226,7 @@ export const enginesRouter = createTRPCRouter({
         description: "Use the Codex CLI already configured on this machine.",
         engine: "codex" as const,
         error: codex.error,
-        isAvailable:
-          codex.cliDetected && codex.serverReachable && codex.authReady,
+        isAvailable: isCodexEngineAvailable(codex),
         label: "Codex",
         status: codex,
       },
@@ -141,7 +234,7 @@ export const enginesRouter = createTRPCRouter({
         description: "Use the locally configured Claude Code SDK runtime.",
         engine: "claude" as const,
         error: claude.error,
-        isAvailable: claude.sdkDetected && claude.authReady,
+        isAvailable: isClaudeEngineAvailable(claude),
         label: "Claude",
         status: claude,
       },
@@ -157,10 +250,12 @@ export const enginesRouter = createTRPCRouter({
           buildTimedOutCodexStatus,
           CODEX_ENGINE_STATUS_TIMEOUT_MS,
         );
-        const isAvailable =
-          status.cliDetected && status.serverReachable && status.authReady;
+        const isAvailable = isCodexEngineAvailable(status);
+        const models = canUseCodexFallbackModels(status)
+          ? buildFallbackCodexModels()
+          : status.availableModels;
 
-        return status.availableModels.map((model) => ({
+        return models.map((model) => ({
           contextWindow: undefined as number | undefined,
           defaultReasoningEffort: model.defaultReasoningEffort,
           description: model.description,
@@ -184,9 +279,12 @@ export const enginesRouter = createTRPCRouter({
           buildTimedOutClaudeStatus,
           CLAUDE_ENGINE_STATUS_TIMEOUT_MS,
         );
-        const isAvailable = status.sdkDetected && status.authReady;
+        const isAvailable = isClaudeEngineAvailable(status);
+        const models = canUseClaudeFallbackModels(status)
+          ? buildFallbackClaudeModels()
+          : status.availableModels;
 
-        return status.availableModels.map((model) => ({
+        return models.map((model) => ({
           contextWindow: model.contextWindow,
           defaultReasoningEffort: model.defaultReasoningEffort,
           description: model.description,
