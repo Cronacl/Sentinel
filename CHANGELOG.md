@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.14.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.13.0-alpha.1...v0.14.0-alpha.1) (2026-03-29)
+
+
+### Features
+
+* implement desktop update management with background checks and UI integration ([07b64ec](https://github.com/Cronacl/Sentinel/commit/07b64ec9ca16851ab2f3bc139ae88e8c3e27879a))
+
 ## [0.13.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.12.0-alpha.1...v0.13.0-alpha.1) (2026-03-29)
 
 
