@@ -1,18 +1,36 @@
-import { afterEach, describe, expect, it } from "bun:test";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { afterEach, describe, expect, it, mock } from "bun:test";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import {
+mock.module("server-only", () => ({}));
+
+const {
   parseShellLookupOutput,
   resetCodexCliResolutionCache,
   resolveCodexCli,
-} from "./codex-cli";
+  // @ts-expect-error Bun test-only cache-busting import for module isolation.
+} = await import("./codex-cli.ts?codex-cli-test");
 
 const originalPath = process.env.PATH;
+const originalHome = process.env.HOME;
+const originalSentinelCodexPath = process.env.SENTINEL_CODEX_PATH;
 
 afterEach(async () => {
   process.env.PATH = originalPath;
+  process.env.HOME = originalHome;
+  if (originalSentinelCodexPath) {
+    process.env.SENTINEL_CODEX_PATH = originalSentinelCodexPath;
+  } else {
+    delete process.env.SENTINEL_CODEX_PATH;
+  }
   resetCodexCliResolutionCache();
 });
 
@@ -45,12 +63,42 @@ describe("resolveCodexCli", () => {
     try {
       await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
       await chmod(executablePath, 0o755);
+      process.env.HOME = tempRoot;
       process.env.PATH = `${tempRoot}${path.delimiter}${originalPath ?? ""}`;
 
       const resolved = await resolveCodexCli({ forceRefresh: true });
 
       expect(resolved).not.toBeNull();
       expect(resolved?.command).toBe(executablePath);
+      expect(process.env.SENTINEL_CODEX_PATH).toBe(executablePath);
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("detects codex from common user bin locations when PATH is stripped", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
+    const bunBinRoot = path.join(tempRoot, ".bun", "bin");
+    const executablePath = path.join(bunBinRoot, "codex");
+
+    try {
+      await mkdir(bunBinRoot, { recursive: true });
+      await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
+      await chmod(executablePath, 0o755);
+      process.env.HOME = tempRoot;
+      process.env.PATH = "/usr/bin:/bin";
+
+      const resolved = await resolveCodexCli({ forceRefresh: true });
+      const savedEnv = await readFile(
+        path.join(tempRoot, ".sentinel", "desktop.env"),
+        "utf8",
+      );
+
+      expect(resolved).not.toBeNull();
+      expect(resolved?.command).toBe(executablePath);
+      expect(resolved?.env.PATH).toContain(bunBinRoot);
+      expect(process.env.SENTINEL_CODEX_PATH).toBe(executablePath);
+      expect(savedEnv).toContain(`SENTINEL_CODEX_PATH="${executablePath}"`);
     } finally {
       await rm(tempRoot, { force: true, recursive: true });
     }

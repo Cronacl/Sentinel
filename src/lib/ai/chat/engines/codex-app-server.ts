@@ -8,9 +8,14 @@ import type {
   CodexSandboxMode,
 } from "@/lib/ai/chat/engines/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
-import { readCodexCliVersion, spawnCodexCli } from "./codex-cli";
+import {
+  readCodexCliVersion,
+  resolveCodexCli,
+  spawnCodexCli,
+} from "./codex-cli";
 
 const log = createLogger("CodexAppServer");
+const CODEX_STATUS_QUERY_TIMEOUT_MS = 1_200;
 
 type JsonRpcId = number | string;
 
@@ -308,6 +313,43 @@ function toCodexError(message: string, error?: unknown) {
   return new Error(message);
 }
 
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<T | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timeoutId = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      resolve(null);
+    }, timeoutMs);
+
+    void promise
+      .then((value) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch(() => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        clearTimeout(timeoutId);
+        resolve(null);
+      });
+  });
+}
+
 class CodexAppServerManager {
   private buffer = "";
 
@@ -522,10 +564,21 @@ class CodexAppServerManager {
     };
   }
 
-  async getStatus(): Promise<CodexEngineStatus> {
-    const cliVersion = await readCodexCliVersion();
+  async reloadRuntime() {
+    const child = this.child;
+    this.resetProcess(new Error("Codex runtime was reloaded."));
 
-    if (!cliVersion) {
+    if (child && !child.killed) {
+      child.kill();
+    }
+  }
+
+  async getStatus(options?: {
+    forceRefresh?: boolean;
+  }): Promise<CodexEngineStatus> {
+    const forceRefresh = options?.forceRefresh ?? false;
+    const resolvedCli = await resolveCodexCli({ forceRefresh });
+    if (!resolvedCli) {
       return {
         account: null,
         authReady: false,
@@ -540,21 +593,49 @@ class CodexAppServerManager {
       };
     }
 
+    const cliVersion = await readCodexCliVersion(resolvedCli);
+
+    if (forceRefresh) {
+      await this.reloadRuntime();
+    }
+
     try {
-      await this.ensureStarted();
-      const [{ account, requiresOpenaiAuth }, availableModels] =
-        await Promise.all([this.readAccount(), this.listModels()]);
+      const statusPayload = await withTimeout(
+        (async () => {
+          await this.ensureStarted();
+          const [{ account, requiresOpenaiAuth }, availableModels] =
+            await Promise.all([this.readAccount(), this.listModels()]);
+          return { account, availableModels, requiresOpenaiAuth };
+        })(),
+        CODEX_STATUS_QUERY_TIMEOUT_MS,
+      );
+
+      if (!statusPayload) {
+        return {
+          account: null,
+          authReady: false,
+          availableModels: [],
+          cliDetected: true,
+          cliVersion,
+          engine: "codex",
+          error: "Timed out while querying Codex runtime.",
+          isDesktopRuntime: true,
+          requiresOpenaiAuth: false,
+          serverReachable: false,
+        };
+      }
 
       return {
-        account,
-        authReady: account != null || !requiresOpenaiAuth,
-        availableModels,
+        account: statusPayload.account,
+        authReady:
+          statusPayload.account != null || !statusPayload.requiresOpenaiAuth,
+        availableModels: statusPayload.availableModels,
         cliDetected: true,
         cliVersion,
         engine: "codex",
         error: null,
         isDesktopRuntime: true,
-        requiresOpenaiAuth,
+        requiresOpenaiAuth: statusPayload.requiresOpenaiAuth,
         serverReachable: true,
       };
     } catch (error) {

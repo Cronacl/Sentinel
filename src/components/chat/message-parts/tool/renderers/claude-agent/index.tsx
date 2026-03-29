@@ -18,6 +18,7 @@ import {
   useClaudeExpansionState,
   unwrapClaudeInput,
 } from "../claude-helpers";
+import { Brain02Icon, HugeiconsIcon } from "@hugeicons/core-free-icons";
 
 type ClaudeAgentInput = {
   description: string;
@@ -158,15 +159,7 @@ export const ClaudeAgentTool = memo(function ClaudeAgentTool({
     part.state === "approval-requested",
   );
 
-  const summary = (
-    <>
-      <Icon
-        icon="solar:cpu-bolt-linear"
-        className="mr-1 inline-block h-3.5 w-3.5 shrink-0 align-text-bottom text-foreground/50"
-      />
-      {AgentSummary(part, agentInput, agentOutput)}
-    </>
-  );
+  const summary = <>{AgentSummary(part, agentInput, agentOutput)}</>;
   const actions = renderClaudeApprovalActions({ onApprove, onDeny, part });
 
   return (

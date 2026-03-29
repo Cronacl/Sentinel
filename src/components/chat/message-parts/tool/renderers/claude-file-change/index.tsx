@@ -134,30 +134,14 @@ function buildSummary(
 ): ReactNode {
   const name = getFileName(filePath);
   const action = getFileAction(isEdit, output);
-  const icon =
-    languageToVSCodeIcon[detectLanguageFromPath(filePath)] ??
-    "vscode-icons:default-file";
-
-  const prefix = (
-    <Icon
-      className="mr-1 inline-block h-3.5 w-3.5 shrink-0 align-text-bottom text-foreground/50"
-      icon={icon}
-    />
-  );
 
   if (part.state === "output-denied") {
-    return (
-      <>
-        {prefix}
-        File change denied
-      </>
-    );
+    return <>File change denied</>;
   }
 
   if (part.state === "output-error") {
     return (
       <>
-        {prefix}
         Failed to modify <span className="font-mono text-[12px]">{name}</span>
       </>
     );
@@ -166,7 +150,6 @@ function buildSummary(
   if (part.state === "output-available") {
     return (
       <>
-        {prefix}
         {action} <span className="font-mono text-[12px]">{name}</span>
         {output?.gitDiff && (
           <span className="ml-1.5 text-[11px] text-foreground/40">
@@ -181,7 +164,6 @@ function buildSummary(
   if (part.state === "approval-requested") {
     return (
       <>
-        {prefix}
         {isEdit ? "Edit" : "Write"}{" "}
         <span className="font-mono text-[12px]">{name}</span>
       </>
@@ -190,7 +172,6 @@ function buildSummary(
 
   return (
     <>
-      {prefix}
       {isEdit ? "Editing" : "Writing"}{" "}
       <span className="font-mono text-[12px]">{name}</span>
     </>

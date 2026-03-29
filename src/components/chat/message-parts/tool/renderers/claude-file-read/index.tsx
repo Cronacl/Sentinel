@@ -249,21 +249,10 @@ function buildSummary(
   output: ClaudeReadOutput | null,
 ): ReactNode {
   const name = getFileName(input.file_path);
-  const icon =
-    languageToVSCodeIcon[detectLanguageFromPath(input.file_path)] ??
-    "vscode-icons:default-file";
-
-  const prefix = (
-    <Icon
-      className="mr-1 inline-block h-3.5 w-3.5 shrink-0 align-text-bottom text-foreground/50"
-      icon={icon}
-    />
-  );
 
   if (part.state === "output-denied") {
     return (
       <>
-        {prefix}
         Read denied <span className="font-mono text-[12px]">{name}</span>
       </>
     );
@@ -272,7 +261,6 @@ function buildSummary(
   if (part.state === "output-error") {
     return (
       <>
-        {prefix}
         Failed to read <span className="font-mono text-[12px]">{name}</span>
       </>
     );
@@ -285,7 +273,6 @@ function buildSummary(
         : ` (${output.file.totalLines} lines)`;
     return (
       <>
-        {prefix}
         Read <span className="font-mono text-[12px]">{name}</span>
         <span className="ml-1 text-[11px] text-foreground/40">{lineInfo}</span>
       </>
@@ -295,7 +282,6 @@ function buildSummary(
   if (output?.type === "image") {
     return (
       <>
-        {prefix}
         Viewed <span className="font-mono text-[12px]">{name}</span>
       </>
     );
@@ -304,7 +290,6 @@ function buildSummary(
   if (part.state === "output-available") {
     return (
       <>
-        {prefix}
         Read <span className="font-mono text-[12px]">{name}</span>
       </>
     );
@@ -313,7 +298,6 @@ function buildSummary(
   if (part.state === "approval-requested") {
     return (
       <>
-        {prefix}
         Read <span className="font-mono text-[12px]">{name}</span>
       </>
     );
@@ -321,7 +305,6 @@ function buildSummary(
 
   return (
     <>
-      {prefix}
       Reading <span className="font-mono text-[12px]">{name}</span>
     </>
   );
