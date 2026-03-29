@@ -98,6 +98,39 @@ function getRuntimeFallbackMessage(
   return `Live ${runtime} probe failed; using cached models${suffix}.`;
 }
 
+function getRuntimeComposerUnavailableMessage(
+  runtime: RuntimeStatusKind,
+  status: RuntimeStatusLike | null | undefined,
+) {
+  if (!status) {
+    return `${runtime} is unavailable in this Sentinel runtime.`;
+  }
+
+  if (status.state === "auth_unavailable") {
+    return `${runtime} needs authentication before it can be used here.`;
+  }
+
+  if (
+    status.state === "missing_binary" ||
+    status.state === "missing_cli" ||
+    (runtime === "Claude" && status.binaryDetected === false) ||
+    (runtime === "Codex" && status.cliDetected === false)
+  ) {
+    return `${runtime} runtime was not detected in this Sentinel session.`;
+  }
+
+  if (
+    status.usedCachedStatus ||
+    status.state === "timeout_no_cache" ||
+    status.state === "timeout_using_cache" ||
+    status.state === "error"
+  ) {
+    return `${runtime} is temporarily unavailable in this Sentinel runtime.`;
+  }
+
+  return `${runtime} is unavailable in this Sentinel runtime.`;
+}
+
 type ClaudeRuntimeStatusLike = RuntimeStatusLike;
 type CodexRuntimeStatusLike = RuntimeStatusLike;
 
@@ -144,6 +177,12 @@ export function getClaudeRuntimeFallbackMessage(
   return getRuntimeFallbackMessage("Claude", status, formatter);
 }
 
+export function getClaudeComposerUnavailableMessage(
+  status: ClaudeRuntimeStatusLike | null | undefined,
+) {
+  return getRuntimeComposerUnavailableMessage("Claude", status);
+}
+
 export function getCodexRuntimeBadgeLabel(
   status: CodexRuntimeStatusLike | null | undefined,
   isAvailable: boolean,
@@ -178,4 +217,10 @@ export function getCodexRuntimeFallbackMessage(
   formatter?: (date: Date) => string,
 ) {
   return getRuntimeFallbackMessage("Codex", status, formatter);
+}
+
+export function getCodexComposerUnavailableMessage(
+  status: CodexRuntimeStatusLike | null | undefined,
+) {
+  return getRuntimeComposerUnavailableMessage("Codex", status);
 }
