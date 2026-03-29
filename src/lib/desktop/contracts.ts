@@ -16,12 +16,37 @@ export type DesktopServicesStatus = {
 
 export type DesktopResolvedTheme = "light" | "dark";
 export type DesktopPlatform = "darwin" | "linux" | "win32";
+export type DesktopUpdateStatus =
+  | "idle"
+  | "checking"
+  | "available"
+  | "downloading"
+  | "downloaded"
+  | "up_to_date"
+  | "error";
 
 export type DesktopOpenTarget = {
   icon?: string;
   id: string;
   kind: "editor" | "file_manager" | "ide" | "terminal";
   label: string;
+};
+
+export type DesktopUpdateState = {
+  availableVersion: string | null;
+  bytesTotal: number | null;
+  bytesTransferred: number | null;
+  checkedAt: string | null;
+  currentVersion: string;
+  downloadPercent: number | null;
+  errorMessage: string | null;
+  isSupported: boolean;
+  releaseDate: string | null;
+  releaseName: string | null;
+  releaseNotes: string | null;
+  releasePageUrl: string | null;
+  status: DesktopUpdateStatus;
+  supportReason: string | null;
 };
 
 export type DesktopTerminalSession = {
@@ -41,6 +66,14 @@ export type SentinelDesktopApi = {
     start: () => Promise<DesktopServicesStatus>;
     status: () => Promise<DesktopServicesStatus>;
     stop: () => Promise<DesktopServicesStatus>;
+  };
+  updates: {
+    check: () => Promise<DesktopUpdateState>;
+    getState: () => Promise<DesktopUpdateState>;
+    install: () => Promise<void>;
+    onStateChange: (
+      callback: (state: DesktopUpdateState) => void,
+    ) => () => void;
   };
   workspace: {
     listOpenTargets: (projectPath: string) => Promise<DesktopOpenTarget[]>;

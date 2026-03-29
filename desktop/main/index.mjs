@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import * as nodePty from "node-pty";
 
 import { DESKTOP_CHANNELS } from "../shared/channels.mjs";
+import { createDesktopUpdaterController } from "./updater.mjs";
 import {
   getOpenFileCommandForTarget,
   getOpenCommandForTarget,
@@ -36,12 +37,20 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
+const { autoUpdater } = require("electron-updater");
 let mainWindow = null;
 let serverState = null;
 let isQuitting = false;
 let resolvedTheme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
 const terminalSessions = new Map();
 const WINDOWS_TITLE_BAR_HEIGHT = 32;
+const desktopUpdater = createDesktopUpdaterController({
+  appVersion: () => app.getVersion(),
+  isPackaged: () => app.isPackaged,
+  logger: console,
+  platform: process.platform,
+  updater: autoUpdater,
+});
 
 // GPU acceleration is required for smooth backdrop-blur, shadows, and animations.
 // Only disable if a specific driver issue is confirmed on a target platform.
@@ -239,6 +248,14 @@ function sendTerminalEvent(channel, ...args) {
   }
 
   mainWindow.webContents.send(channel, ...args);
+}
+
+function sendDesktopUpdateState(state) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  mainWindow.webContents.send(DESKTOP_CHANNELS.UPDATES_STATE, state);
 }
 
 function cleanupTerminalSession(sessionId) {
@@ -669,6 +686,7 @@ async function bootstrapDesktop() {
 
   serverState = await startLocalServer(runtimePaths);
   await mainWindow?.loadURL(serverState.url);
+  void desktopUpdater.runBackgroundUpdateCheck();
 }
 
 async function assertProjectDirectory(projectPath) {
@@ -915,6 +933,23 @@ function registerIpc() {
 
     return { appServer: false };
   });
+  ipcMain.handle(DESKTOP_CHANNELS.UPDATES_GET_STATE, async () =>
+    desktopUpdater.getState(),
+  );
+  ipcMain.handle(DESKTOP_CHANNELS.UPDATES_CHECK, async () =>
+    desktopUpdater.checkForUpdates(),
+  );
+  ipcMain.handle(DESKTOP_CHANNELS.UPDATES_INSTALL, async () => {
+    killAllTerminalSessions();
+
+    if (serverState?.process && !serverState.process.killed) {
+      await stopLocalServer(serverState);
+      serverState = null;
+      await killProcessOnPort(APP_PORT);
+    }
+
+    desktopUpdater.installUpdate();
+  });
 
   ipcMain.handle(DESKTOP_CHANNELS.APP_VERSION, async () => app.getVersion());
   ipcMain.handle(DESKTOP_CHANNELS.OPEN_EXTERNAL, async (_event, url) => {
@@ -965,6 +1000,8 @@ app.whenReady().then(async () => {
 
   await prepareDevSession();
   createWindow();
+  desktopUpdater.subscribe(sendDesktopUpdateState);
+  desktopUpdater.initialize();
   registerIpc();
 
   try {
