@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode, memo } from "react";
-import { ToolLayout } from "../../shared/tool-layout";
+import { ToolLayout, useToolExpansionState } from "../../shared/tool-layout";
 
 type IntegrationToolLayoutProps = {
   provider: string;
@@ -35,3 +35,5 @@ export const IntegrationToolLayout = memo(function IntegrationToolLayout({
     />
   );
 });
+
+export { useToolExpansionState };

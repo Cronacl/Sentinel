@@ -1,12 +1,15 @@
 "use client";
 
 import { Button } from "@heroui/react";
-import { memo, useEffect, useState } from "react";
+import { memo } from "react";
 import { Icon } from "@iconify/react";
 
 import type { RendererProps } from "../../../renderer";
 import type { ToolPart } from "../../../../types";
-import { IntegrationToolLayout } from "../shared/integration-tool-layout";
+import {
+  IntegrationToolLayout,
+  useToolExpansionState,
+} from "../shared/integration-tool-layout";
 import { getIntegrationToolInteractionState } from "../shared/state";
 import { IntegrationProviderIcon } from "@/components/icons/integration-provider-icon";
 
@@ -71,11 +74,11 @@ export const GmailBulkActionTool = memo(function GmailBulkActionTool({
     onApprove,
     onDeny,
   });
-  const [isExpanded, setIsExpanded] = useState(state.needsApproval);
-
-  useEffect(() => {
-    setIsExpanded(state.needsApproval);
-  }, [part.toolCallId, state.needsApproval]);
+  const [isExpanded, setIsExpanded] = useToolExpansionState({
+    toolCallId: part.toolCallId,
+    defaultExpanded: state.needsApproval,
+    autoExpand: state.needsApproval,
+  });
 
   const input = "input" in part ? (part.input as BulkInput) : null;
   const output =
@@ -132,7 +135,7 @@ export const GmailBulkActionTool = memo(function GmailBulkActionTool({
       summary={summary}
       isRunning={state.isRunning}
       isError={state.isError}
-      isExpandable={Boolean(state.needsApproval && input)}
+      isExpandable={Boolean(input)}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
       footer={

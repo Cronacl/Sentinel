@@ -1,11 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { memo, useEffect, useState } from "react";
+import { memo } from "react";
 import { Button, ScrollShadow } from "@heroui/react";
 
 import type { RendererProps } from "../../renderer";
-import { ToolLayout } from "../shared/tool-layout";
+import { ToolLayout, useToolExpansionState } from "../shared/tool-layout";
 import { MarkdownContent } from "../../../text/markdown-content";
 
 type WebFetchToolInput = {
@@ -401,13 +401,11 @@ export const WebFetchTool = memo(function WebFetchTool({
     part.state === "output-denied" ||
     part.state === "output-error" ||
     (output && output.failureCount > 0 && output.successCount === 0);
-  const [isExpanded, setIsExpanded] = useState(
-    part.state === "approval-requested" || isRunningState,
-  );
-
-  useEffect(() => {
-    setIsExpanded(part.state === "approval-requested" || isRunningState);
-  }, [isRunningState, part.state, part.toolCallId]);
+  const [isExpanded, setIsExpanded] = useToolExpansionState({
+    toolCallId: part.toolCallId,
+    defaultExpanded: part.state === "approval-requested" || isRunningState,
+    autoExpand: part.state === "approval-requested",
+  });
 
   if (!input) return null;
 
@@ -437,7 +435,7 @@ export const WebFetchTool = memo(function WebFetchTool({
         (!isFinishedState && part.state !== "approval-requested")
       }
       isError={Boolean(isErrorState)}
-      isExpandable={isFinishedState}
+      isExpandable={Boolean(body)}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
       errorText={

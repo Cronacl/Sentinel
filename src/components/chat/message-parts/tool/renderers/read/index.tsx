@@ -1,11 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useMemo } from "react";
 import { ScrollShadow } from "@heroui/react";
 
 import type { RendererProps } from "../../renderer";
-import { ToolLayout } from "../shared/tool-layout";
+import { ToolLayout, useToolExpansionState } from "../shared/tool-layout";
 import { CodePreview } from "../shared/code-preview";
 import { MarkdownContent } from "../../../text/markdown-content";
 import { detectLanguageFromPath } from "@/lib/syntax/highlighter";
@@ -204,11 +204,10 @@ export const ReadTool = memo(function ReadTool({ part }: RendererProps) {
     part.state === "output-error" ||
     (part.state === "output-available" && Boolean(readOutput));
   const isErrorState = part.state === "output-error";
-  const [isExpanded, setIsExpanded] = useState(!isFinishedState);
-
-  useEffect(() => {
-    setIsExpanded(!isFinishedState);
-  }, [isFinishedState, part.toolCallId]);
+  const [isExpanded, setIsExpanded] = useToolExpansionState({
+    toolCallId: part.toolCallId,
+    defaultExpanded: !isFinishedState,
+  });
 
   const shownPath = readOutput?.path ?? readInput?.path ?? ".";
   const summary = buildSummary(part, shownPath, readOutput);
@@ -233,7 +232,7 @@ export const ReadTool = memo(function ReadTool({ part }: RendererProps) {
       summary={summary}
       isRunning={!isFinishedState}
       isError={isErrorState}
-      isExpandable={isFinishedState}
+      isExpandable={true}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
       errorText={

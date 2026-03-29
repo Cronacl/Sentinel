@@ -27,7 +27,34 @@ function ensureDirectory(filePath: string) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-function ensureTables(db: ReturnType<typeof drizzle>) {
+function ensureTableColumns(
+  sqlite: Database.Database,
+  tableName: string,
+  columns: Array<{ name: string; definition: string }>,
+) {
+  const existingColumns = new Set<string>(
+    (
+      sqlite
+        .prepare(`PRAGMA table_info("${tableName.replaceAll('"', '""')}")`)
+        .all() as Array<{ name: string }>
+    ).map((column) => column.name),
+  );
+
+  for (const column of columns) {
+    if (existingColumns.has(column.name)) {
+      continue;
+    }
+
+    sqlite.exec(
+      `ALTER TABLE "${tableName.replaceAll('"', '""')}" ADD COLUMN "${column.name.replaceAll('"', '""')}" ${column.definition}`,
+    );
+  }
+}
+
+export function ensureTables(
+  db: ReturnType<typeof drizzle>,
+  sqlite: Database.Database,
+) {
   db.run(sql`CREATE TABLE IF NOT EXISTS "user" (
     "id" text PRIMARY KEY NOT NULL,
     "name" text NOT NULL,
@@ -583,6 +610,12 @@ function ensureTables(db: ReturnType<typeof drizzle>) {
   db.run(
     sql`CREATE INDEX IF NOT EXISTS "automation_next_run_idx" ON "automation" ("next_run_at")`,
   );
+  ensureTableColumns(sqlite, "automation", [
+    {
+      name: "chat_engine",
+      definition: "text DEFAULT 'sentinel' NOT NULL",
+    },
+  ]);
 
   db.run(sql`CREATE TABLE IF NOT EXISTS "automation_run" (
     "id" text PRIMARY KEY NOT NULL,
@@ -767,7 +800,7 @@ function createDatabase() {
 
   const db = drizzle(sqlite, { schema });
 
-  ensureTables(db);
+  ensureTables(db, sqlite);
 
   return db;
 }

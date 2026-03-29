@@ -1,12 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { memo, useEffect, useState } from "react";
+import { memo } from "react";
 import { ScrollShadow } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
 import type { RendererProps } from "../../renderer";
-import { ToolLayout } from "../shared/tool-layout";
+import { ToolLayout, useToolExpansionState } from "../shared/tool-layout";
 import {
   detectLanguageFromPath,
   languageToVSCodeIcon,
@@ -180,11 +180,10 @@ export const ListTool = memo(function ListTool({ part }: RendererProps) {
     part.state === "output-error" ||
     (part.state === "output-available" && Boolean(listOutput));
   const isErrorState = part.state === "output-error";
-  const [isExpanded, setIsExpanded] = useState(!isFinishedState);
-
-  useEffect(() => {
-    setIsExpanded(!isFinishedState);
-  }, [isFinishedState, part.toolCallId]);
+  const [isExpanded, setIsExpanded] = useToolExpansionState({
+    toolCallId: part.toolCallId,
+    defaultExpanded: !isFinishedState,
+  });
 
   const requestedPath = listInput?.path?.trim() || ".";
   const shownRoot = listOutput?.root ?? requestedPath;
@@ -204,7 +203,7 @@ export const ListTool = memo(function ListTool({ part }: RendererProps) {
       summary={summary}
       isRunning={!isFinishedState}
       isError={isErrorState}
-      isExpandable={isFinishedState}
+      isExpandable={true}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
       errorText={

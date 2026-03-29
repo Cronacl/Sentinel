@@ -1,11 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useMemo } from "react";
 import { Button, ScrollShadow } from "@heroui/react";
 
 import type { RendererProps } from "../../renderer";
-import { ToolLayout } from "../shared/tool-layout";
+import { ToolLayout, useToolExpansionState } from "../shared/tool-layout";
 import { DiffView } from "../shared/diff-view";
 
 type DiffInput = {
@@ -654,13 +654,11 @@ export const WorkspaceTool = memo(function WorkspaceTool({
     part.state === "output-denied" || part.state === "output-error";
   const partErrorText = "errorText" in part ? part.errorText : undefined;
   const rationale = getRationale(toolName, part);
-  const [isExpanded, setIsExpanded] = useState(
-    part.state === "approval-requested" || isRunningState,
-  );
-
-  useEffect(() => {
-    setIsExpanded(part.state === "approval-requested" || isRunningState);
-  }, [isRunningState, part.state, part.toolCallId]);
+  const [isExpanded, setIsExpanded] = useToolExpansionState({
+    toolCallId: part.toolCallId,
+    defaultExpanded: part.state === "approval-requested" || isRunningState,
+    autoExpand: part.state === "approval-requested",
+  });
 
   const summary = useMemo(() => buildSummary(toolName, part), [part, toolName]);
   const body = renderBody(toolName, part, partErrorText);
@@ -673,7 +671,7 @@ export const WorkspaceTool = memo(function WorkspaceTool({
         (!isFinishedState && part.state !== "approval-requested")
       }
       isError={isErrorState}
-      isExpandable={isFinishedState}
+      isExpandable={Boolean(body)}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
       errorText={

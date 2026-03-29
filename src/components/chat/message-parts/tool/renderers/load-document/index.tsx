@@ -1,10 +1,10 @@
 "use client";
 
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useMemo } from "react";
 import { ScrollShadow } from "@heroui/react";
 
 import type { RendererProps } from "../../renderer";
-import { ToolLayout } from "../shared/tool-layout";
+import { ToolLayout, useToolExpansionState } from "../shared/tool-layout";
 import { MarkdownContent } from "../../../text/markdown-content";
 
 type LoadDocumentInput = {
@@ -64,11 +64,10 @@ export const LoadDocumentTool = memo(function LoadDocumentTool({
     part.state === "output-error" ||
     (part.state === "output-available" && Boolean(loadOutput));
   const isErrorState = part.state === "output-error";
-  const [isExpanded, setIsExpanded] = useState(!isFinishedState);
-
-  useEffect(() => {
-    setIsExpanded(!isFinishedState);
-  }, [isFinishedState, part.toolCallId]);
+  const [isExpanded, setIsExpanded] = useToolExpansionState({
+    toolCallId: part.toolCallId,
+    defaultExpanded: !isFinishedState,
+  });
 
   const targetLabel =
     loadOutput?.filename ??
@@ -130,7 +129,7 @@ export const LoadDocumentTool = memo(function LoadDocumentTool({
       summary={summary}
       isRunning={!isFinishedState}
       isError={isErrorState}
-      isExpandable={isFinishedState}
+      isExpandable={true}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
       errorText={"errorText" in part ? part.errorText : undefined}

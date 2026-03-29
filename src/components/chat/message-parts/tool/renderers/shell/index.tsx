@@ -7,7 +7,7 @@ import { Copy01Icon, Tick01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
 import type { RendererProps } from "../../renderer";
-import { ToolLayout } from "../shared/tool-layout";
+import { ToolLayout, useToolExpansionState } from "../shared/tool-layout";
 import { highlightToTokens, type ThemedToken } from "@/lib/syntax/highlighter";
 import { useResolvedTheme } from "@/lib/syntax/use-resolved-theme";
 
@@ -309,13 +309,11 @@ export const ShellTool = memo(function ShellTool({
     part.state === "output-denied" ||
     part.state === "output-error" ||
     (isCompletedShellOutput(shellOutput) && shellOutput.exitCode !== 0);
-  const [isExpanded, setIsExpanded] = useState(
-    part.state === "approval-requested" || isRunningShellState,
-  );
-
-  useEffect(() => {
-    setIsExpanded(part.state === "approval-requested" || isRunningShellState);
-  }, [isRunningShellState, part.state, part.toolCallId]);
+  const [isExpanded, setIsExpanded] = useToolExpansionState({
+    toolCallId: part.toolCallId,
+    defaultExpanded: part.state === "approval-requested" || isRunningShellState,
+    autoExpand: part.state === "approval-requested",
+  });
 
   if (!shellInput) return null;
 
