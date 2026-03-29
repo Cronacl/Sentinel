@@ -13,6 +13,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 
 import type { RendererProps } from "../../renderer";
 import { MarkdownContent } from "../../../text/markdown-content";
+import { useToolExpansionState } from "../shared/tool-layout";
 import {
   unwrapClaudeInput,
   extractTextFromContent,
@@ -99,12 +100,12 @@ export const ClaudePlanTool = memo(function ClaudePlanTool({
       ? part.approval.id
       : null;
 
-  const [isExpanded, setIsExpanded] = useState(isApproval);
+  const [isExpanded, setIsExpanded] = useToolExpansionState({
+    toolCallId: part.toolCallId,
+    defaultExpanded: isApproval,
+    autoExpand: isApproval,
+  });
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    setIsExpanded(isApproval);
-  }, [part.toolCallId, isApproval]);
 
   const body = useMemo(
     () => extractPlanText(planInput, planOutput, rawOutput),

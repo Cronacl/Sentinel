@@ -1,10 +1,10 @@
 "use client";
 
 import { Button } from "@heroui/react";
-import { memo, useEffect, useState } from "react";
+import { memo } from "react";
 
 import type { RendererProps } from "../renderer";
-import { ToolLayout } from "./shared/tool-layout";
+import { ToolLayout, useToolExpansionState } from "./shared/tool-layout";
 
 function formatToolName(toolName: string) {
   return toolName
@@ -49,15 +49,13 @@ export const CodexRuntimeTool = memo(function CodexRuntimeTool({
     part.state === "approval-responded";
   const isError =
     part.state === "output-error" || part.state === "output-denied";
-  const [isExpanded, setIsExpanded] = useState(
-    part.state === "approval-requested" || part.state === "output-error",
-  );
-
-  useEffect(() => {
-    setIsExpanded(
+  const [isExpanded, setIsExpanded] = useToolExpansionState({
+    toolCallId: part.toolCallId,
+    defaultExpanded:
       part.state === "approval-requested" || part.state === "output-error",
-    );
-  }, [part.state, part.toolCallId]);
+    autoExpand:
+      part.state === "approval-requested" || part.state === "output-error",
+  });
 
   return (
     <ToolLayout

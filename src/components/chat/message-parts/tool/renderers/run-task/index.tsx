@@ -1,11 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { memo, useEffect, useState } from "react";
+import { memo } from "react";
 import { Button, ScrollShadow } from "@heroui/react";
 
 import type { RendererProps } from "../../renderer";
-import { ToolLayout } from "../shared/tool-layout";
+import { ToolLayout, useToolExpansionState } from "../shared/tool-layout";
 
 type RunTaskToolInput = {
   path?: string;
@@ -217,13 +217,11 @@ export const RunTaskTool = memo(function RunTaskTool({
     part.state === "output-denied" ||
     part.state === "output-error" ||
     (isCompletedOutput(runTaskOutput) && runTaskOutput.exitCode !== 0);
-  const [isExpanded, setIsExpanded] = useState(
-    part.state === "approval-requested" || isRunningState,
-  );
-
-  useEffect(() => {
-    setIsExpanded(part.state === "approval-requested" || isRunningState);
-  }, [isRunningState, part.state, part.toolCallId]);
+  const [isExpanded, setIsExpanded] = useToolExpansionState({
+    toolCallId: part.toolCallId,
+    defaultExpanded: part.state === "approval-requested" || isRunningState,
+    autoExpand: part.state === "approval-requested",
+  });
 
   if (!runTaskInput) return null;
 
@@ -260,7 +258,7 @@ export const RunTaskTool = memo(function RunTaskTool({
       summary={summary}
       isRunning={isRunningState}
       isError={isErrorState}
-      isExpandable={isFinishedState}
+      isExpandable={true}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
       errorText={

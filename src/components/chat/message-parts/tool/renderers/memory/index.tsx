@@ -1,11 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { memo, useEffect, useState } from "react";
+import { memo } from "react";
 import { Button } from "@heroui/react";
 
 import type { RendererProps } from "../../renderer";
-import { ToolLayout } from "../shared/tool-layout";
+import { ToolLayout, useToolExpansionState } from "../shared/tool-layout";
 
 type SearchMemoryInput = {
   limit?: number;
@@ -201,13 +201,13 @@ export const MemoryTool = memo(function MemoryTool({
   const showApprovalActions =
     part.state === "approval-requested" && approvalId && onApprove && onDeny;
 
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  useEffect(() => {
-    setIsExpanded(
+  const [isExpanded, setIsExpanded] = useToolExpansionState({
+    toolCallId: part.toolCallId,
+    defaultExpanded:
       part.state === "approval-requested" || part.state === "output-error",
-    );
-  }, [part.state]);
+    autoExpand:
+      part.state === "approval-requested" || part.state === "output-error",
+  });
 
   const summary = buildSummary(part, toolName);
 
@@ -237,7 +237,7 @@ export const MemoryTool = memo(function MemoryTool({
       summary={summary}
       isRunning={isRunning}
       isError={isError || isDenied}
-      isExpandable={isFinished}
+      isExpandable={true}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
       errorText={

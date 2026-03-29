@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, memo, useEffect, useState } from "react";
+import { type ReactNode, memo, useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
 
 type ToolLayoutProps = {
@@ -15,6 +15,35 @@ type ToolLayoutProps = {
   actions?: ReactNode;
   errorText?: string;
 };
+
+type UseToolExpansionStateOptions = {
+  toolCallId: string;
+  defaultExpanded: boolean;
+  autoExpand?: boolean;
+};
+
+export function useToolExpansionState({
+  toolCallId,
+  defaultExpanded,
+  autoExpand = false,
+}: UseToolExpansionStateOptions) {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const lastToolCallIdRef = useRef(toolCallId);
+
+  useEffect(() => {
+    if (lastToolCallIdRef.current !== toolCallId) {
+      lastToolCallIdRef.current = toolCallId;
+      setIsExpanded(defaultExpanded);
+      return;
+    }
+
+    if (autoExpand) {
+      setIsExpanded(true);
+    }
+  }, [autoExpand, defaultExpanded, toolCallId]);
+
+  return [isExpanded, setIsExpanded] as const;
+}
 
 export const ToolLayout = memo(function ToolLayout({
   summary,
