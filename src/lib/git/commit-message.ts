@@ -6,7 +6,6 @@ import path from "node:path";
 import { generateObject } from "ai";
 import { z } from "zod";
 
-import { spawnCodexCli } from "@/lib/ai/chat/engines/codex-cli";
 import {
   getReasoningProviderOptions,
   type ReasoningEffort,
@@ -342,6 +341,11 @@ async function cleanupTempDirectory(directory: string) {
   await rm(directory, { force: true, recursive: true }).catch(() => undefined);
 }
 
+async function loadSpawnCodexCli() {
+  const { spawnCodexCli } = await import("@/lib/ai/chat/engines/codex-cli");
+  return spawnCodexCli;
+}
+
 export async function generateSentinelCommitMessage(
   input: GenerateSentinelCommitMessageInput,
 ) {
@@ -375,7 +379,9 @@ export async function generateCodexCommitMessage(
   const createProcess =
     dependencies?.createProcess ??
     (async ({ args, cwd }: { args: string[]; cwd: string }) =>
-      (await spawnCodexCli(args, {
+      (await (
+        await loadSpawnCodexCli()
+      )(args, {
         cwd,
       })) as ChildProcessWithoutNullStreams);
 
