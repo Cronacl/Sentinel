@@ -245,11 +245,11 @@ function SkillsSkeleton() {
     <>
       {Array.from({ length: 4 }).map((_, index) => (
         <div
-          className="border-separator/30 bg-surface flex items-center gap-2.5 rounded-xl border p-2.5"
+          className="border-separator/30 bg-surface flex items-center gap-2.5 rounded-2xl border p-2.5"
           key={index}
         >
-          <Skeleton className="h-8 w-8 shrink-0 rounded-[8px]" />
-          <div className="min-w-0 flex-1 space-y-2">
+          <Skeleton className="h-8 w-8 shrink-0 rounded-xl" />
+          <div className="min-w-0ex-1 space-y-2">
             <Skeleton className="h-4 w-36 rounded-md" />
             <Skeleton className="h-3 w-56 max-w-full rounded-md" />
           </div>
@@ -270,13 +270,13 @@ function InstalledSkillRow({
   isUninstalling: boolean;
 }) {
   return (
-    <div className="border-separator/30 bg-surface group flex items-center gap-2.5 rounded-xl border p-2.5 transition-colors">
+    <div className="border-separator/30 bg-surface group flex items-center gap-2.5 rounded-2xl border p-2.5 transition-colors">
       <Link
         className="flex min-w-0 flex-1 items-center gap-2.5 transition-opacity hover:opacity-80"
         href={getInstalledDetailHref(skill)}
         prefetch
       >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-border/30 bg-background/50 text-foreground/75">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/30 bg-background text-foreground/75">
           <SkillIcon name={skill.name} />
         </div>
 
@@ -387,9 +387,9 @@ function RegistrySkillRow({
     entry.installedTargets.sentinel;
 
   return (
-    <div className="border-separator/30 bg-surface rounded-xl border p-3 transition-colors">
+    <div className="border-separator/30 bg-surface rounded-2xl border p-3 transition-colors">
       <div className="flex items-start gap-2.5">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-border/30 bg-background/50 text-foreground/75">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/30 bg-background text-foreground/75">
           <SkillIcon name={entry.name} />
         </div>
 
@@ -483,7 +483,7 @@ function RegistrySkillRow({
       </div>
 
       {installError ? (
-        <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mt-2 rounded-xl border px-3 py-2 text-xs">
+        <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mt-2 rounded-2xl border px-3 py-2 text-xs">
           {installError}
         </p>
       ) : null}
@@ -660,7 +660,7 @@ export default function SkillsPage() {
       }
     >
       {skills.error ? (
-        <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
+        <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-2xl border px-3 py-2.5 text-xs">
           {skills.error.message}
         </p>
       ) : null}
@@ -697,7 +697,7 @@ export default function SkillsPage() {
                 );
               })
             ) : allSkills.length ? (
-              <div className="border-separator/20 bg-surface rounded-xl border p-4">
+              <div className="border-separator/20 bg-surface rounded-2xl border p-4">
                 <h2 className="text-foreground text-sm font-medium">
                   No matching skills
                 </h2>
@@ -706,7 +706,7 @@ export default function SkillsPage() {
                 </p>
               </div>
             ) : (
-              <div className="border-separator/30 bg-surface col-span-full rounded-xl border p-4">
+              <div className="border-separator/30 bg-surface col-span-full rounded-2xl border p-4">
                 <h2 className="text-foreground text-sm font-medium">
                   No skills installed
                 </h2>
@@ -762,7 +762,7 @@ export default function SkillsPage() {
               registryEntries.every((entry) =>
                 isRegistrySkillFullyInstalled(entry),
               ) ? (
-              <div className="border-separator/30 bg-surface col-span-full rounded-xl border p-4">
+              <div className="border-separator/30 bg-surface col-span-full rounded-2xl border p-4">
                 <h2 className="text-foreground text-sm font-medium">
                   All recommended skills installed
                 </h2>
@@ -772,7 +772,7 @@ export default function SkillsPage() {
                 </p>
               </div>
             ) : (
-              <div className="border-separator/30 bg-surface col-span-full rounded-xl border p-4">
+              <div className="border-separator/30 bg-surface col-span-full rounded-2xl border p-4">
                 <h2 className="text-foreground text-sm font-medium">
                   No matching skills
                 </h2>

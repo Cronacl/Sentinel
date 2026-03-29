@@ -78,13 +78,13 @@ function AutomationRow({
   onToggleStatus: (id: string) => void;
 }) {
   return (
-    <div className="border-separator/30 bg-surface group flex items-center gap-2.5 rounded-xl border p-2.5 transition-colors">
+    <div className="border-separator/30 bg-surface group flex items-center gap-2.5 rounded-2xl border p-2.5 transition-colors">
       <Link
         className="flex min-w-0 flex-1 items-center gap-2.5 hover:opacity-80 transition-opacity"
         href={`/automations/${encodeURIComponent(automation.id)}`}
         prefetch
       >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-border/30 bg-background/50 text-foreground/75">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/30 bg-background text-foreground/75">
           <HugeiconsIcon
             color="currentColor"
             icon={automation.status === "active" ? Rocket01Icon : PauseIcon}
@@ -162,11 +162,11 @@ function AutomationsSkeleton() {
     <>
       {Array.from({ length: 4 }).map((_, index) => (
         <div
-          className="border-separator/30 bg-surface flex items-center gap-2.5 rounded-xl border p-2.5"
+          className="border-separator/30 bg-surface flex items-center gap-2.5 rounded-2xl border p-2.5"
           key={index}
         >
-          <Skeleton className="h-8 w-8 shrink-0 rounded-[8px]" />
-          <div className="min-w-0 flex-1 space-y-2">
+          <Skeleton className="h-8 w-8 shrink-0 rounded-xl" />
+          <div className="min-w-0ex-1 space-y-2">
             <Skeleton className="h-4 w-36 rounded-md" />
             <Skeleton className="h-3 w-56 max-w-full rounded-md" />
           </div>
@@ -393,7 +393,7 @@ export default function AutomationsPage() {
                 onClick={() => handleOpenModal(template)}
                 type="button"
               >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-border/30 bg-background/50 text-foreground/75">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-border/30 bg-background text-foreground/75">
                   <HugeiconsIcon
                     color="currentColor"
                     icon={template.icon}
