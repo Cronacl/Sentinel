@@ -16,6 +16,17 @@ contextBridge.exposeInMainWorld("sentinelDesktop", {
     status: () => ipcRenderer.invoke(DESKTOP_CHANNELS.SERVICES_STATUS),
     stop: () => ipcRenderer.invoke(DESKTOP_CHANNELS.SERVICES_STOP),
   },
+  updates: {
+    check: () => ipcRenderer.invoke(DESKTOP_CHANNELS.UPDATES_CHECK),
+    getState: () => ipcRenderer.invoke(DESKTOP_CHANNELS.UPDATES_GET_STATE),
+    install: () => ipcRenderer.invoke(DESKTOP_CHANNELS.UPDATES_INSTALL),
+    onStateChange: (callback) => {
+      const handler = (_event, state) => callback(state);
+      ipcRenderer.on(DESKTOP_CHANNELS.UPDATES_STATE, handler);
+      return () =>
+        ipcRenderer.removeListener(DESKTOP_CHANNELS.UPDATES_STATE, handler);
+    },
+  },
   workspace: {
     listOpenTargets: (projectPath) =>
       ipcRenderer.invoke(
