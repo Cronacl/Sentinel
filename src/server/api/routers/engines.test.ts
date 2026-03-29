@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 const startReview = mock(async () => ({
   review: { id: "review-1", text: "ok" },
 }));
+const reloadRuntime = mock(async () => undefined);
 const getStatus = mock(async () => ({
   authReady: true,
   availableModels: [
@@ -39,6 +40,9 @@ const getClaudeEngineStatus = mock(async () => ({
   error: null,
   sdkDetected: true,
 }));
+const resetCodexCliResolutionCache = mock(() => undefined);
+const resetClaudeCodeRuntimeCache = mock(() => undefined);
+const resetClaudeEngineStatusCache = mock(() => undefined);
 const getOwnedThreadOrThrow = mock(async () => ({
   chatEngineState: {
     codex: {
@@ -62,12 +66,19 @@ mock.module("@/server/api/trpc", () => ({
 mock.module("@/lib/ai/chat/engines/codex-app-server", () => ({
   getCodexAppServerManager: () => ({
     getStatus,
+    reloadRuntime,
     startReview,
   }),
 }));
 
 mock.module("@/lib/ai/chat/engines/claude-sdk", () => ({
   getClaudeEngineStatus,
+  resetClaudeCodeRuntimeCache,
+  resetClaudeEngineStatusCache,
+}));
+
+mock.module("@/lib/ai/chat/engines/codex-cli", () => ({
+  resetCodexCliResolutionCache,
 }));
 
 mock.module("@/lib/ai/chat/engines/types", () => ({
@@ -105,13 +116,18 @@ const { enginesRouter } = await import("./engines");
 
 beforeEach(() => {
   startReview.mockReset();
+  reloadRuntime.mockReset();
   getStatus.mockReset();
   getClaudeEngineStatus.mockReset();
+  resetCodexCliResolutionCache.mockReset();
+  resetClaudeCodeRuntimeCache.mockReset();
+  resetClaudeEngineStatusCache.mockReset();
   getOwnedThreadOrThrow.mockReset();
 
   startReview.mockImplementation(async () => ({
     review: { id: "review-1", text: "ok" },
   }));
+  reloadRuntime.mockImplementation(async () => undefined);
   getStatus.mockImplementation(async () => ({
     authReady: true,
     availableModels: [
@@ -237,7 +253,7 @@ describe("enginesRouter.list", () => {
         isAvailable: false,
       }),
     );
-  }, 2_500);
+  }, 5_000);
 });
 
 describe("enginesRouter.models", () => {
@@ -280,4 +296,45 @@ describe("enginesRouter.models", () => {
 
     expect(result).toEqual([]);
   }, 2_500);
+});
+
+describe("enginesRouter.refreshStatus", () => {
+  it("forces a fresh Claude runtime probe", async () => {
+    const result = await enginesRouter.refreshStatus({
+      input: { engine: "claude" },
+    });
+
+    expect(resetClaudeCodeRuntimeCache).toHaveBeenCalledTimes(1);
+    expect(resetClaudeEngineStatusCache).toHaveBeenCalledTimes(1);
+    expect(getClaudeEngineStatus).toHaveBeenCalledWith({
+      forceRefresh: true,
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        engine: "claude",
+        status: expect.objectContaining({
+          sdkDetected: true,
+        }),
+      }),
+    );
+  });
+
+  it("forces a fresh Codex runtime probe", async () => {
+    const result = await enginesRouter.refreshStatus({
+      input: { engine: "codex" },
+    });
+
+    expect(resetCodexCliResolutionCache).toHaveBeenCalledTimes(1);
+    expect(getStatus).toHaveBeenCalledWith({
+      forceRefresh: true,
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        engine: "codex",
+        status: expect.objectContaining({
+          cliDetected: true,
+        }),
+      }),
+    );
+  });
 });

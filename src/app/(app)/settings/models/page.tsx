@@ -30,6 +30,7 @@ import {
 import { api } from "@/trpc/react";
 
 type ProviderKey = AIProvider;
+type RuntimeEngineKey = "claude" | "codex";
 
 const CAPABILITY_LABEL: Record<string, string> = {
   object_generation: "Structured",
@@ -181,6 +182,7 @@ export default function ModelsPage() {
       sileo.error({ description: "Failed to remove model." });
     },
   });
+  const refreshRuntimeStatus = api.engines.refreshStatus.useMutation();
 
   const customModelForm = useForm<CustomModelFormValues>({
     defaultValues: {
@@ -196,6 +198,8 @@ export default function ModelsPage() {
   const [expandedProviders, setExpandedProviders] = useState<
     Set<string | number>
   >(new Set());
+  const [pendingRuntimeRefresh, setPendingRuntimeRefresh] =
+    useState<RuntimeEngineKey | null>(null);
   const [showCodexAccount, setShowCodexAccount] = useState(false);
   const [showClaudeAccount, setShowClaudeAccount] = useState(false);
 
@@ -275,10 +279,58 @@ export default function ModelsPage() {
     }
   };
 
+  const handleRefreshRuntime = useCallback(
+    async (engine: RuntimeEngineKey) => {
+      if (pendingRuntimeRefresh) {
+        return;
+      }
+
+      setActionError("");
+      setPendingRuntimeRefresh(engine);
+
+      try {
+        const refreshed = await refreshRuntimeStatus.mutateAsync({ engine });
+        await Promise.all([
+          utils.engines.list.invalidate(),
+          utils.engines.models.invalidate(),
+        ]);
+
+        if (refreshed.status.error) {
+          sileo.error({ description: refreshed.status.error });
+        } else {
+          sileo.success({
+            description:
+              engine === "codex"
+                ? "Codex detection reloaded."
+                : "Claude detection reloaded.",
+          });
+        }
+      } catch (error) {
+        setActionError(
+          error instanceof Error
+            ? error.message
+            : "Unable to reload runtime detection.",
+        );
+      } finally {
+        setPendingRuntimeRefresh((current) =>
+          current === engine ? null : current,
+        );
+      }
+    },
+    [
+      pendingRuntimeRefresh,
+      refreshRuntimeStatus,
+      utils.engines.list,
+      utils.engines.models,
+    ],
+  );
+
   const hasCodexModels =
     codexStatus?.availableModels && codexStatus.availableModels.length > 0;
   const hasClaudeModels =
     claudeStatus?.availableModels && claudeStatus.availableModels.length > 0;
+  const isRefreshingCodex = pendingRuntimeRefresh === "codex";
+  const isRefreshingClaude = pendingRuntimeRefresh === "claude";
 
   return (
     <SettingsPageWrapper
@@ -303,13 +355,24 @@ export default function ModelsPage() {
                   <h2 className="text-foreground text-sm font-medium">
                     Codex Runtime
                   </h2>
-                  <Chip
-                    color={codexEngine?.isAvailable ? "success" : "warning"}
-                    size="sm"
-                    variant="soft"
-                  >
-                    {codexEngine?.isAvailable ? "Ready" : "Setup needed"}
-                  </Chip>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      isDisabled={isRefreshingCodex}
+                      isPending={isRefreshingCodex}
+                      onPress={() => void handleRefreshRuntime("codex")}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      Reload
+                    </Button>
+                    <Chip
+                      color={codexEngine?.isAvailable ? "success" : "warning"}
+                      size="sm"
+                      variant="soft"
+                    >
+                      {codexEngine?.isAvailable ? "Ready" : "Setup needed"}
+                    </Chip>
+                  </div>
                 </div>
 
                 <div className="mt-2 space-y-1 text-xs">
@@ -413,13 +476,24 @@ export default function ModelsPage() {
                   <h2 className="text-foreground text-sm font-medium">
                     Claude Code Runtime
                   </h2>
-                  <Chip
-                    color={claudeEngine?.isAvailable ? "success" : "warning"}
-                    size="sm"
-                    variant="soft"
-                  >
-                    {claudeEngine?.isAvailable ? "Ready" : "Setup needed"}
-                  </Chip>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      isDisabled={isRefreshingClaude}
+                      isPending={isRefreshingClaude}
+                      onPress={() => void handleRefreshRuntime("claude")}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      Reload
+                    </Button>
+                    <Chip
+                      color={claudeEngine?.isAvailable ? "success" : "warning"}
+                      size="sm"
+                      variant="soft"
+                    >
+                      {claudeEngine?.isAvailable ? "Ready" : "Setup needed"}
+                    </Chip>
+                  </div>
                 </div>
 
                 <div className="mt-2 space-y-1 text-xs">

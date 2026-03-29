@@ -1,8 +1,13 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { getClaudeEngineStatus } from "@/lib/ai/chat/engines/claude-sdk";
+import {
+  getClaudeEngineStatus,
+  resetClaudeCodeRuntimeCache,
+  resetClaudeEngineStatusCache,
+} from "@/lib/ai/chat/engines/claude-sdk";
 import { getCodexAppServerManager } from "@/lib/ai/chat/engines/codex-app-server";
+import { resetCodexCliResolutionCache } from "@/lib/ai/chat/engines/codex-cli";
 import { getCodexThreadState } from "@/lib/ai/chat/engines/types";
 import {
   getDefaultReasoningEffort,
@@ -19,12 +24,14 @@ import { modelPreferences, providerCredentials } from "@/server/db/schema";
 import { getOwnedThreadOrThrow } from "./workspace-thread-helpers";
 
 const chatEngineSchema = z.enum(CHAT_ENGINES);
-const ENGINE_STATUS_TIMEOUT_MS = 1_500;
+const runtimeEngineSchema = z.enum(["codex", "claude"]);
+const CODEX_ENGINE_STATUS_TIMEOUT_MS = 1_500;
+const CLAUDE_ENGINE_STATUS_TIMEOUT_MS = 3_500;
 
 function withTimeout<T>(
   promise: Promise<T>,
   fallback: () => T,
-  timeoutMs = ENGINE_STATUS_TIMEOUT_MS,
+  timeoutMs: number,
 ): Promise<T> {
   return new Promise((resolve) => {
     let settled = false;
@@ -103,8 +110,13 @@ export const enginesRouter = createTRPCRouter({
       withTimeout(
         getCodexAppServerManager().getStatus(),
         buildTimedOutCodexStatus,
+        CODEX_ENGINE_STATUS_TIMEOUT_MS,
       ),
-      withTimeout(getClaudeEngineStatus(), buildTimedOutClaudeStatus),
+      withTimeout(
+        getClaudeEngineStatus(),
+        buildTimedOutClaudeStatus,
+        CLAUDE_ENGINE_STATUS_TIMEOUT_MS,
+      ),
     ]);
 
     return [
@@ -143,6 +155,7 @@ export const enginesRouter = createTRPCRouter({
         const status = await withTimeout(
           getCodexAppServerManager().getStatus(),
           buildTimedOutCodexStatus,
+          CODEX_ENGINE_STATUS_TIMEOUT_MS,
         );
         const isAvailable =
           status.cliDetected && status.serverReachable && status.authReady;
@@ -169,6 +182,7 @@ export const enginesRouter = createTRPCRouter({
         const status = await withTimeout(
           getClaudeEngineStatus(),
           buildTimedOutClaudeStatus,
+          CLAUDE_ENGINE_STATUS_TIMEOUT_MS,
         );
         const isAvailable = status.sdkDetected && status.authReady;
 
@@ -269,6 +283,39 @@ export const enginesRouter = createTRPCRouter({
           return [...builtIn, ...customModels];
         },
       );
+    }),
+
+  refreshStatus: protectedProcedure
+    .input(z.object({ engine: runtimeEngineSchema }))
+    .mutation(async ({ input }) => {
+      if (input.engine === "codex") {
+        resetCodexCliResolutionCache();
+        const codex = getCodexAppServerManager();
+        const status = await withTimeout(
+          codex.getStatus({ forceRefresh: true }),
+          buildTimedOutCodexStatus,
+          CODEX_ENGINE_STATUS_TIMEOUT_MS,
+        );
+
+        return {
+          engine: "codex" as const,
+          status,
+        };
+      }
+
+      resetClaudeCodeRuntimeCache();
+      resetClaudeEngineStatusCache();
+
+      const status = await withTimeout(
+        getClaudeEngineStatus({ forceRefresh: true }),
+        buildTimedOutClaudeStatus,
+        CLAUDE_ENGINE_STATUS_TIMEOUT_MS,
+      );
+
+      return {
+        engine: "claude" as const,
+        status,
+      };
     }),
 
   codexReview: protectedProcedure
