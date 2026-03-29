@@ -19,6 +19,71 @@ import { modelPreferences, providerCredentials } from "@/server/db/schema";
 import { getOwnedThreadOrThrow } from "./workspace-thread-helpers";
 
 const chatEngineSchema = z.enum(CHAT_ENGINES);
+const ENGINE_STATUS_TIMEOUT_MS = 1_500;
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  fallback: () => T,
+  timeoutMs = ENGINE_STATUS_TIMEOUT_MS,
+): Promise<T> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timeoutId = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      resolve(fallback());
+    }, timeoutMs);
+
+    void promise
+      .then((value) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch(() => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        clearTimeout(timeoutId);
+        resolve(fallback());
+      });
+  });
+}
+
+function buildTimedOutCodexStatus() {
+  return {
+    account: null,
+    authReady: false,
+    availableModels: [],
+    cliDetected: false,
+    cliVersion: null,
+    engine: "codex" as const,
+    error: "Timed out while checking Codex availability.",
+    isDesktopRuntime: false,
+    requiresOpenaiAuth: false,
+    serverReachable: false,
+  };
+}
+
+function buildTimedOutClaudeStatus() {
+  return {
+    account: null,
+    authReady: false,
+    availableModels: [],
+    engine: "claude" as const,
+    error: "Timed out while checking Claude availability.",
+    sdkDetected: false,
+  };
+}
 
 async function resolveCodexThreadId(
   ctx: Parameters<typeof getOwnedThreadOrThrow>[0],
@@ -35,8 +100,11 @@ async function resolveCodexThreadId(
 export const enginesRouter = createTRPCRouter({
   list: protectedProcedure.query(async () => {
     const [codex, claude] = await Promise.all([
-      getCodexAppServerManager().getStatus(),
-      getClaudeEngineStatus(),
+      withTimeout(
+        getCodexAppServerManager().getStatus(),
+        buildTimedOutCodexStatus,
+      ),
+      withTimeout(getClaudeEngineStatus(), buildTimedOutClaudeStatus),
     ]);
 
     return [
@@ -72,7 +140,10 @@ export const enginesRouter = createTRPCRouter({
     .input(z.object({ engine: chatEngineSchema }))
     .query(async ({ ctx, input }) => {
       if (input.engine === "codex") {
-        const status = await getCodexAppServerManager().getStatus();
+        const status = await withTimeout(
+          getCodexAppServerManager().getStatus(),
+          buildTimedOutCodexStatus,
+        );
         const isAvailable =
           status.cliDetected && status.serverReachable && status.authReady;
 
@@ -95,7 +166,10 @@ export const enginesRouter = createTRPCRouter({
       }
 
       if (input.engine === "claude") {
-        const status = await getClaudeEngineStatus();
+        const status = await withTimeout(
+          getClaudeEngineStatus(),
+          buildTimedOutClaudeStatus,
+        );
         const isAvailable = status.sdkDetected && status.authReady;
 
         return status.availableModels.map((model) => ({
