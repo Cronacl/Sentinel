@@ -17,6 +17,7 @@ import type { ChatEngine } from "@/server/db/enums";
 import { ContextWindowIndicator } from "./chat-composer/context-window-indicator";
 
 type ComposerToolbarProps = {
+  canSend: boolean;
   contextWindowIndicator?: {
     compactionEnabled: boolean;
     compactionWindowPercent: number;
@@ -49,6 +50,7 @@ type ComposerToolbarProps = {
 };
 
 export function ComposerToolbar({
+  canSend,
   contextWindowIndicator,
   engineOptions,
   hasWorkspace,
@@ -253,7 +255,7 @@ export function ComposerToolbar({
         ) : (
           <button
             className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-accent-foreground transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-25"
-            disabled={isLocked || !selectedModelKey}
+            disabled={!canSend}
             onClick={onSend}
             type="button"
           >

@@ -3,6 +3,7 @@
 import { EditorContent } from "@tiptap/react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "@heroui/react";
 import { DEFAULT_FOLLOW_UP_BEHAVIOR } from "@/schemas/general-settings.schema";
 import { getExactContextWindowUsage } from "@/lib/ai/chat/context-window";
 import {
@@ -10,13 +11,16 @@ import {
   hasComposerContext,
 } from "@/lib/composer-context/extract";
 import { api } from "@/trpc/react";
+import {
+  getClaudeComposerUnavailableMessage,
+  getCodexComposerUnavailableMessage,
+} from "@/components/settings/runtime-status";
 
 import { AttachmentManager } from "../attachment-manager";
 import { ComposerToolbar } from "../composer-toolbar";
 import { ComposerWorkspaceBar } from "../composer-workspace-bar";
 import { ModelSelector } from "../model-selector";
 import { QueuedMessages } from "../queued-messages";
-import { Button } from "@heroui/react";
 
 import type { ChatComposerProps } from "./types";
 import { useAttachments } from "./use-attachments";
@@ -132,7 +136,8 @@ export function ChatComposer({
   });
 
   const hasModels = availableModels.length > 0;
-  const isLocked = !hasWorkspace || !hasModels;
+  const isLocked = !hasWorkspace;
+  const canSend = hasWorkspace && hasModels && Boolean(selectedModelKey);
 
   const skillsQuery = api.skills.list.useQuery(
     activeWorkspace?.id ? { workspaceId: activeWorkspace.id } : undefined,
@@ -236,7 +241,7 @@ export function ChatComposer({
   ]);
 
   const handleSend = useCallback(async () => {
-    if (!editor || !selectedModelKey || !onSend) return;
+    if (!editor || !selectedModelKey || !onSend || !canSend) return;
     const text = editor.getText().trim();
     if (!text && attachments.length === 0) return;
 
@@ -288,6 +293,7 @@ export function ChatComposer({
     onSteerFollowUp,
     planMode,
     planModeAvailable,
+    canSend,
     selectedEngine,
     selectedModelKey,
     selectedReasoningEffort,
@@ -303,8 +309,18 @@ export function ChatComposer({
     !modelsQuery.isLoading && !hasModels ? (
       <>
         {selectedEngine !== "sentinel" ? (
-          (selectedEngineStatus?.error ??
-          `${selectedEngineStatus?.label ?? "This engine"} is unavailable in this Sentinel runtime.`)
+          <>
+            {selectedEngine === "codex"
+              ? getCodexComposerUnavailableMessage(selectedEngineStatus?.status)
+              : getClaudeComposerUnavailableMessage(
+                  selectedEngineStatus?.status,
+                )}{" "}
+            Open{" "}
+            <Link className="text-foreground underline" href="/settings/models">
+              Settings
+            </Link>{" "}
+            to reload the runtime.
+          </>
         ) : (
           <>
             Connect a provider in{" "}
@@ -457,6 +473,7 @@ export function ChatComposer({
           )}
 
           <ComposerToolbar
+            canSend={canSend}
             engineOptions={engineOptions}
             hasWorkspace={hasWorkspace}
             isBusy={isBusy}
@@ -484,7 +501,6 @@ export function ChatComposer({
             modelSelector={
               <ModelSelector
                 availableModels={availableModels}
-                isLoading={modelsQuery.isLoading}
                 onSelectModel={handleSelectModel}
                 onSelectReasoningEffort={handleSelectReasoningEffort}
                 selectedModel={selectedModel}

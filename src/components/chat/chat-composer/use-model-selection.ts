@@ -4,11 +4,17 @@ import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ChatEngine } from "@/server/db/enums";
 import { api } from "@/trpc/react";
 
-import { resolveReasoningEffort } from "../chat-composer-helpers";
+import {
+  filterSelectableModels,
+  haveSameSelectableModelSet,
+  resolveReasoningEffort,
+  resolveStableSelectableModels,
+} from "../chat-composer-helpers";
 
 import type { usePersistSelection } from "./use-persist-selection";
 
 type PersistSelectionReturn = ReturnType<typeof usePersistSelection>;
+const MODEL_SELECTION_ENGINES = ["claude", "codex", "sentinel"] as const;
 
 export function useModelSelection({
   globalSelectionQuery,
@@ -49,6 +55,12 @@ export function useModelSelection({
   const [selectedModelKey, setSelectedModelKey] = useState<string | null>(null);
   const [selectedReasoningEffort, setSelectedReasoningEffort] =
     useState<ReasoningEffort | null>(null);
+  const [cachedAvailableModelsByEngine, setCachedAvailableModelsByEngine] =
+    useState<Record<ChatEngine, ReturnType<typeof filterSelectableModels>>>({
+      claude: [],
+      codex: [],
+      sentinel: [],
+    });
   const initializedSelectionScopeRef = useRef<string | null>(null);
   const threadPersistenceReadyRef = useRef(false);
   const manualEngineSelectionRef = useRef<ChatEngine | null>(null);
@@ -83,17 +95,44 @@ export function useModelSelection({
   };
   const selectedEngineModels = modelsByEngine[selectedEngine];
   const modelsQuery = modelsQueryByEngine[selectedEngine];
-
-  const availableModels = useMemo(
-    () =>
-      selectedEngineModels.filter(
-        (model) => model.isConnected && model.isEnabled,
-      ),
-    [selectedEngineModels],
+  const liveAvailableModelsByEngine = useMemo(
+    () => ({
+      claude: filterSelectableModels(modelsByEngine.claude),
+      codex: filterSelectableModels(modelsByEngine.codex),
+      sentinel: filterSelectableModels(modelsByEngine.sentinel),
+    }),
+    [modelsByEngine.claude, modelsByEngine.codex, modelsByEngine.sentinel],
   );
+  const availableModelsByEngine = useMemo(
+    () => ({
+      claude: resolveStableSelectableModels(
+        modelsByEngine.claude,
+        cachedAvailableModelsByEngine.claude,
+      ),
+      codex: resolveStableSelectableModels(
+        modelsByEngine.codex,
+        cachedAvailableModelsByEngine.codex,
+      ),
+      sentinel: resolveStableSelectableModels(
+        modelsByEngine.sentinel,
+        cachedAvailableModelsByEngine.sentinel,
+      ),
+    }),
+    [
+      cachedAvailableModelsByEngine.claude,
+      cachedAvailableModelsByEngine.codex,
+      cachedAvailableModelsByEngine.sentinel,
+      modelsByEngine.claude,
+      modelsByEngine.codex,
+      modelsByEngine.sentinel,
+    ],
+  );
+  const availableModels = availableModelsByEngine[selectedEngine];
+  const displayModels =
+    selectedEngineModels.length > 0 ? selectedEngineModels : availableModels;
 
   const selectedModel =
-    availableModels.find((model) => model.modelId === selectedModelKey) ?? null;
+    displayModels.find((model) => model.modelId === selectedModelKey) ?? null;
 
   const supportedReasoningEfforts =
     selectedModel?.supportedReasoningEfforts ?? [];
@@ -104,6 +143,29 @@ export function useModelSelection({
       threadPersistenceReadyRef.current = false;
     }
   }, [selectionScopeKey]);
+
+  useEffect(() => {
+    setCachedAvailableModelsByEngine((currentCache) => {
+      let changed = false;
+      const nextCache = { ...currentCache };
+
+      for (const engine of MODEL_SELECTION_ENGINES) {
+        const nextModels = liveAvailableModelsByEngine[engine];
+
+        if (
+          nextModels.length === 0 ||
+          haveSameSelectableModelSet(currentCache[engine], nextModels)
+        ) {
+          continue;
+        }
+
+        nextCache[engine] = nextModels;
+        changed = true;
+      }
+
+      return changed ? nextCache : currentCache;
+    });
+  }, [liveAvailableModelsByEngine]);
 
   useEffect(() => {
     if (!preferencesReady) {
@@ -145,37 +207,110 @@ export function useModelSelection({
       return;
     }
 
-    if (modelsQuery.isLoading) {
+    if (modelsQuery.isLoading && availableModels.length === 0) {
       return;
     }
 
-    if (selectedEngineModels.length === 0) {
-      setSelectedModelKey(null);
-      setSelectedReasoningEffort(null);
+    if (availableModels.length === 0) {
+      const fallbackDisplayModel =
+        displayModels.find((model) => model.modelId === preferredModelId) ??
+        displayModels[0] ??
+        null;
+
+      setSelectedModelKey(fallbackDisplayModel?.modelId ?? preferredModelId);
+      setSelectedReasoningEffort(
+        fallbackDisplayModel
+          ? resolveReasoningEffort(
+              fallbackDisplayModel,
+              preferredReasoningEffort,
+            )
+          : preferredReasoningEffort,
+      );
       initializedSelectionScopeRef.current = selectionScopeKey;
       return;
     }
 
-    const preferredModel = selectedEngineModels.find(
+    const preferredModel = availableModels.find(
       (model) => model.modelId === preferredModelId,
     );
-    const nextModel = preferredModel ?? selectedEngineModels[0] ?? null;
+    const nextModel = preferredModel ?? availableModels[0] ?? null;
+    const nextReasoningEffort = nextModel
+      ? resolveReasoningEffort(nextModel, preferredReasoningEffort)
+      : null;
 
     setSelectedModelKey(nextModel?.modelId ?? null);
-    setSelectedReasoningEffort(
-      nextModel
-        ? resolveReasoningEffort(nextModel, preferredReasoningEffort)
-        : null,
-    );
+    setSelectedReasoningEffort(nextReasoningEffort);
     initializedSelectionScopeRef.current = selectionScopeKey;
+
+    if (
+      nextModel &&
+      (preferredEngine !== selectedEngine ||
+        preferredModelId !== nextModel.modelId ||
+        preferredReasoningEffort !== nextReasoningEffort)
+    ) {
+      onSelectionChange?.({
+        engine: selectedEngine,
+        modelId: nextModel.modelId,
+        reasoningEffort: nextReasoningEffort,
+      });
+      persistSelection(nextModel.modelId, nextReasoningEffort, {
+        engine: selectedEngine,
+      });
+    }
   }, [
+    availableModels,
+    onSelectionChange,
+    persistSelection,
     preferredEngine,
     preferredModelId,
     preferredReasoningEffort,
     preferencesReady,
     modelsQuery.isLoading,
     selectedEngine,
-    selectedEngineModels,
+    selectionScopeKey,
+  ]);
+
+  useEffect(() => {
+    if (
+      initializedSelectionScopeRef.current !== selectionScopeKey ||
+      selectedModelKey ||
+      availableModels.length === 0
+    ) {
+      return;
+    }
+
+    const preferredModel = availableModels.find(
+      (model) => model.modelId === preferredModelId,
+    );
+    const nextModel = preferredModel ?? availableModels[0] ?? null;
+
+    if (!nextModel) {
+      return;
+    }
+
+    const nextReasoningEffort = resolveReasoningEffort(
+      nextModel,
+      preferredReasoningEffort,
+    );
+
+    setSelectedModelKey(nextModel.modelId);
+    setSelectedReasoningEffort(nextReasoningEffort);
+    onSelectionChange?.({
+      engine: selectedEngine,
+      modelId: nextModel.modelId,
+      reasoningEffort: nextReasoningEffort,
+    });
+    persistSelection(nextModel.modelId, nextReasoningEffort, {
+      engine: selectedEngine,
+    });
+  }, [
+    availableModels,
+    onSelectionChange,
+    persistSelection,
+    preferredModelId,
+    preferredReasoningEffort,
+    selectedEngine,
+    selectedModelKey,
     selectionScopeKey,
   ]);
 
@@ -188,6 +323,10 @@ export function useModelSelection({
       (model) => model.modelId === selectedModelKey,
     );
     if (stillAvailable) {
+      return;
+    }
+
+    if (availableModels.length === 0) {
       return;
     }
 
@@ -241,10 +380,7 @@ export function useModelSelection({
       setSelectedEngine(engine);
       initializedSelectionScopeRef.current = null;
 
-      const nextModels = modelsByEngine[engine];
-      const nextModel = nextModels.find(
-        (model) => model.isConnected && model.isEnabled,
-      );
+      const nextModel = availableModelsByEngine[engine][0];
       const nextMode = undefined;
 
       if (!nextModel) {
@@ -278,7 +414,7 @@ export function useModelSelection({
       });
     },
     [
-      modelsByEngine,
+      availableModelsByEngine,
       onSelectionChange,
       persistEngineSelection,
       persistSelection,

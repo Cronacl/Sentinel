@@ -3,7 +3,7 @@
 import { type SVGProps, useState } from "react";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, ListBox, Popover, ScrollShadow, Spinner } from "@heroui/react";
+import { Button, ListBox, Popover, ScrollShadow } from "@heroui/react";
 
 import { ProviderIcon } from "@/components/icons/provider-icon";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
@@ -39,7 +39,6 @@ function renderExternalEngineIcon(
 
 type ModelSelectorProps = {
   availableModels: ChatComposerModel[];
-  isLoading: boolean;
   onSelectModel: (modelKey: string) => void;
   onSelectReasoningEffort: (effort: ReasoningEffort) => void;
   selectedModel: ChatComposerModel | null;
@@ -50,7 +49,6 @@ type ModelSelectorProps = {
 
 export function ModelSelector({
   availableModels,
-  isLoading,
   onSelectModel,
   onSelectReasoningEffort,
   selectedModel,
@@ -58,6 +56,7 @@ export function ModelSelector({
   selectedReasoningEffort,
   supportedReasoningEfforts,
 }: ModelSelectorProps) {
+  const hasModels = availableModels.length > 0;
   const supportsReasoning = supportedReasoningEfforts.length > 0;
   const [modelOpen, setModelOpen] = useState(false);
   const [reasoningOpen, setReasoningOpen] = useState(false);
@@ -68,27 +67,23 @@ export function ModelSelector({
         <Popover.Trigger>
           <Button
             className="h-8 gap-1 rounded-xl border border-border/50 bg-background px-2.5 text-[13px] text-muted shadow-none hover:bg-default hover:text-foreground disabled:opacity-30"
-            isDisabled={availableModels.length === 0 || isLoading}
+            isDisabled={!hasModels}
             size="sm"
             variant="ghost"
           >
-            {isLoading ? (
-              <Spinner color="current" size="sm" />
-            ) : (
-              <span className="flex min-w-0 items-center gap-2">
-                {selectedModel?.provider ? (
-                  <ProviderIcon
-                    className="size-3"
-                    provider={selectedModel.provider}
-                  />
-                ) : (
-                  renderExternalEngineIcon(selectedModel?.engine, "size-3")
-                )}
-                <span className="max-w-[160px] truncate">
-                  {selectedModel?.displayName ?? "No model"}
-                </span>
+            <span className="flex min-w-0 items-center gap-2">
+              {selectedModel?.provider ? (
+                <ProviderIcon
+                  className="size-3"
+                  provider={selectedModel.provider}
+                />
+              ) : (
+                renderExternalEngineIcon(selectedModel?.engine, "size-3")
+              )}
+              <span className="max-w-[160px] truncate">
+                {selectedModel?.displayName ?? selectedModelKey ?? "No model"}
               </span>
-            )}
+            </span>
             <HugeiconsIcon
               color="currentColor"
               icon={ArrowDown01Icon}
