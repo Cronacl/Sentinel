@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.16.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.15.0-alpha.1...v0.16.0-alpha.1) (2026-03-29)
+
+
+### Features
+
+* add package copying functionality with dependencies in after-pack script ([07a4744](https://github.com/Cronacl/Sentinel/commit/07a4744c25799da65098d9be767ad677296ad761))
+
 ## [0.15.0-alpha.1](https://github.com/Cronacl/Sentinel/compare/v0.14.0-alpha.1...v0.15.0-alpha.1) (2026-03-29)
 
 
