@@ -20,8 +20,14 @@ const getStatus = mock(async () => ({
     },
   ],
   cliDetected: true,
+  cliVersion: "codex-cli 0.98.0",
   error: null,
+  isDesktopRuntime: true,
+  lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
+  requiresOpenaiAuth: false,
   serverReachable: true,
+  state: "ready",
+  usedCachedStatus: false,
 }));
 const getClaudeEngineStatus = mock(async () => ({
   authReady: true,
@@ -47,6 +53,7 @@ const getClaudeEngineStatus = mock(async () => ({
   usedCachedStatus: false,
 }));
 const resetCodexCliResolutionCache = mock(() => undefined);
+const resetCodexEngineStatusCache = mock(() => undefined);
 const resetClaudeCodeRuntimeCache = mock(() => undefined);
 const resetClaudeEngineStatusCache = mock(() => undefined);
 const getOwnedThreadOrThrow = mock(async () => ({
@@ -75,6 +82,7 @@ mock.module("@/lib/ai/chat/engines/codex-app-server", () => ({
     reloadRuntime,
     startReview,
   }),
+  resetCodexEngineStatusCache,
 }));
 
 mock.module("@/lib/ai/chat/engines/claude-sdk", () => ({
@@ -156,6 +164,7 @@ beforeEach(() => {
   getStatus.mockReset();
   getClaudeEngineStatus.mockReset();
   resetCodexCliResolutionCache.mockReset();
+  resetCodexEngineStatusCache.mockReset();
   resetClaudeCodeRuntimeCache.mockReset();
   resetClaudeEngineStatusCache.mockReset();
   getOwnedThreadOrThrow.mockReset();
@@ -178,8 +187,14 @@ beforeEach(() => {
       },
     ],
     cliDetected: true,
+    cliVersion: "codex-cli 0.98.0",
     error: null,
+    isDesktopRuntime: true,
+    lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
+    requiresOpenaiAuth: false,
     serverReachable: true,
+    state: "ready",
+    usedCachedStatus: false,
   }));
   getClaudeEngineStatus.mockImplementation(async () => ({
     authReady: true,
@@ -284,27 +299,50 @@ describe("enginesRouter.list", () => {
     );
   });
 
-  it("falls back when engine detection times out", async () => {
-    getStatus.mockImplementationOnce(() => new Promise(() => undefined));
-    getClaudeEngineStatus.mockImplementationOnce(
-      () => new Promise(() => undefined),
-    );
+  it("uses engine-level degraded timeout states instead of router placeholders", async () => {
+    getStatus.mockImplementationOnce(async () => ({
+      account: null,
+      authReady: false,
+      availableModels: [],
+      cliDetected: true,
+      cliVersion: "codex-cli 0.98.0",
+      error: "Timed out while querying Codex runtime.",
+      isDesktopRuntime: true,
+      lastSuccessfulProbeAt: null,
+      requiresOpenaiAuth: false,
+      serverReachable: false,
+      state: "timeout_no_cache",
+      usedCachedStatus: false,
+    }));
+    getClaudeEngineStatus.mockImplementationOnce(async () => ({
+      account: null,
+      authReady: false,
+      availableModels: [],
+      binaryDetected: true,
+      binaryPath: "/Users/test/.local/bin/claude",
+      binaryVersion: "2.1.39 (Claude Code)",
+      error: "Timed out while querying Claude Code runtime.",
+      lastSuccessfulProbeAt: null,
+      sdkDetected: true,
+      state: "timeout_no_cache",
+      usedCachedStatus: false,
+    }));
 
     const result = await enginesRouter.list({});
 
     expect(result.find((engine: any) => engine.engine === "codex")).toEqual(
       expect.objectContaining({
-        error: "Timed out while checking Codex availability.",
-        isAvailable: false,
+        error: "Timed out while querying Codex runtime.",
+        isAvailable: true,
       }),
     );
     expect(result.find((engine: any) => engine.engine === "claude")).toEqual(
       expect.objectContaining({
-        error: "Timed out while checking Claude availability.",
-        isAvailable: false,
+        error: "Timed out while querying Claude Code runtime.",
+        isAvailable: true,
       }),
     );
-  }, 5_000);
+  });
 
   it("marks Codex available when the CLI is detected but the runtime probe timed out", async () => {
     getStatus.mockImplementationOnce(async () => ({
@@ -315,8 +353,11 @@ describe("enginesRouter.list", () => {
       cliVersion: "codex-cli 0.98.0",
       error: "Timed out while querying Codex runtime.",
       isDesktopRuntime: true,
+      lastSuccessfulProbeAt: null,
       requiresOpenaiAuth: false,
       serverReachable: false,
+      state: "timeout_no_cache",
+      usedCachedStatus: false,
     }));
 
     const result = await enginesRouter.list({});
@@ -500,8 +541,21 @@ describe("enginesRouter.models", () => {
     );
   });
 
-  it("returns an empty list when Codex model discovery times out", async () => {
-    getStatus.mockImplementationOnce(() => new Promise(() => undefined));
+  it("returns fallback Codex models when the runtime times out without cached models", async () => {
+    getStatus.mockImplementationOnce(async () => ({
+      account: null,
+      authReady: false,
+      availableModels: [],
+      cliDetected: true,
+      cliVersion: "codex-cli 0.98.0",
+      error: "Timed out while querying Codex runtime.",
+      isDesktopRuntime: true,
+      lastSuccessfulProbeAt: null,
+      requiresOpenaiAuth: false,
+      serverReachable: false,
+      state: "timeout_no_cache",
+      usedCachedStatus: false,
+    }));
 
     const result = await enginesRouter.models({
       ctx: {
@@ -511,8 +565,16 @@ describe("enginesRouter.models", () => {
       input: { engine: "codex" },
     });
 
-    expect(result).toEqual([]);
-  }, 2_500);
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          displayName: "GPT-5 Codex",
+          isConnected: true,
+          modelId: "gpt-5-codex",
+        }),
+      ]),
+    );
+  });
 
   it("returns fallback Codex models when the CLI is detected but the runtime is unreachable", async () => {
     getStatus.mockImplementationOnce(async () => ({
@@ -523,8 +585,11 @@ describe("enginesRouter.models", () => {
       cliVersion: "codex-cli 0.98.0",
       error: "Timed out while querying Codex runtime.",
       isDesktopRuntime: true,
+      lastSuccessfulProbeAt: null,
       requiresOpenaiAuth: false,
       serverReachable: false,
+      state: "timeout_no_cache",
+      usedCachedStatus: false,
     }));
 
     const result = await enginesRouter.models({
@@ -545,6 +610,52 @@ describe("enginesRouter.models", () => {
         }),
       ]),
     );
+  });
+
+  it("returns cached Codex models during degraded mode", async () => {
+    getStatus.mockImplementationOnce(async () => ({
+      account: {
+        email: "codex@example.com",
+        planType: "plus",
+        type: "chatgpt",
+      },
+      authReady: true,
+      availableModels: [
+        {
+          defaultReasoningEffort: "medium",
+          description: "Codex model",
+          displayName: "GPT-5 Codex",
+          id: "gpt-5-codex",
+          inputModalities: ["text"],
+          model: "gpt-5-codex",
+          supportedReasoningEfforts: [{ effort: "medium" }],
+        },
+      ],
+      cliDetected: true,
+      cliVersion: "codex-cli 0.98.0",
+      error: "Timed out while querying Codex runtime.",
+      isDesktopRuntime: true,
+      lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
+      requiresOpenaiAuth: false,
+      serverReachable: false,
+      state: "timeout_using_cache",
+      usedCachedStatus: true,
+    }));
+
+    const result = await enginesRouter.models({
+      ctx: {
+        db: {},
+        session: { user: { id: "user-1" } },
+      },
+      input: { engine: "codex" },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        isConnected: true,
+        modelId: "gpt-5-codex",
+      }),
+    ]);
   });
 });
 
@@ -575,6 +686,7 @@ describe("enginesRouter.refreshStatus", () => {
     });
 
     expect(resetCodexCliResolutionCache).toHaveBeenCalledTimes(1);
+    expect(resetCodexEngineStatusCache).toHaveBeenCalledTimes(1);
     expect(getStatus).toHaveBeenCalledWith({
       forceRefresh: true,
     });
@@ -583,6 +695,54 @@ describe("enginesRouter.refreshStatus", () => {
         engine: "codex",
         status: expect.objectContaining({
           cliDetected: true,
+        }),
+      }),
+    );
+  });
+
+  it("returns degraded cached Codex state after a failed forced probe", async () => {
+    getStatus.mockImplementationOnce(async () => ({
+      account: {
+        email: "codex@example.com",
+        planType: "plus",
+        type: "chatgpt",
+      },
+      authReady: true,
+      availableModels: [
+        {
+          defaultReasoningEffort: "medium",
+          description: "Codex model",
+          displayName: "GPT-5 Codex",
+          id: "gpt-5-codex",
+          inputModalities: ["text"],
+          model: "gpt-5-codex",
+          supportedReasoningEfforts: [{ effort: "medium" }],
+        },
+      ],
+      cliDetected: true,
+      cliVersion: "codex-cli 0.98.0",
+      error: "Timed out while querying Codex runtime.",
+      isDesktopRuntime: true,
+      lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
+      requiresOpenaiAuth: false,
+      serverReachable: false,
+      state: "timeout_using_cache",
+      usedCachedStatus: true,
+    }));
+
+    const result = await enginesRouter.refreshStatus({
+      input: { engine: "codex" },
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        engine: "codex",
+        status: expect.objectContaining({
+          account: expect.objectContaining({
+            email: "codex@example.com",
+          }),
+          state: "timeout_using_cache",
+          usedCachedStatus: true,
         }),
       }),
     );

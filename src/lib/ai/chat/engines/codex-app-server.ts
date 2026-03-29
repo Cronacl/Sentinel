@@ -1,6 +1,9 @@
 import "server-only";
 
 import { type ChildProcessWithoutNullStreams } from "node:child_process";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 import { createLogger } from "@/lib/logger";
 import type {
@@ -16,6 +19,11 @@ import {
 
 const log = createLogger("CodexAppServer");
 const CODEX_STATUS_QUERY_TIMEOUT_MS = 1_200;
+const CODEX_STATUS_CACHE_TTL_MS = 15_000;
+const CODEX_STATUS_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
+const LOCAL_STATE_DIRECTORY_MODE = 0o700;
+const LOCAL_STATE_FILE_MODE = 0o600;
+const CODEX_STATUS_SNAPSHOT_FILE = "codex-status.json";
 
 type JsonRpcId = number | string;
 
@@ -70,6 +78,132 @@ function normalizeCodexReasoningEffort(
   }
 }
 
+function getLocalStateDirectory() {
+  return path.join(process.env.HOME?.trim() || os.homedir(), ".sentinel");
+}
+
+function getCodexStatusSnapshotPath() {
+  return path.join(getLocalStateDirectory(), CODEX_STATUS_SNAPSHOT_FILE);
+}
+
+async function writeCodexStatusSnapshot(snapshot: CodexStatusSnapshot) {
+  const snapshotPath = getCodexStatusSnapshotPath();
+  const localStateDirectory = getLocalStateDirectory();
+
+  await mkdir(localStateDirectory, {
+    mode: LOCAL_STATE_DIRECTORY_MODE,
+    recursive: true,
+  });
+  await writeFile(snapshotPath, JSON.stringify(snapshot, null, 2), {
+    encoding: "utf8",
+    mode: LOCAL_STATE_FILE_MODE,
+  });
+  await chmod(localStateDirectory, LOCAL_STATE_DIRECTORY_MODE);
+  await chmod(snapshotPath, LOCAL_STATE_FILE_MODE);
+}
+
+async function readCodexStatusSnapshot(options: { cliPath: string }) {
+  try {
+    const rawSnapshot = await readFile(getCodexStatusSnapshotPath(), "utf8");
+    const parsed = JSON.parse(rawSnapshot) as Partial<CodexStatusSnapshot>;
+
+    if (
+      typeof parsed.cliPath !== "string" ||
+      parsed.cliPath !== options.cliPath ||
+      typeof parsed.recordedAt !== "string" ||
+      !Array.isArray(parsed.availableModels)
+    ) {
+      return null;
+    }
+
+    const recordedAt = new Date(parsed.recordedAt);
+    if (Number.isNaN(recordedAt.getTime())) {
+      return null;
+    }
+
+    if (Date.now() - recordedAt.getTime() > CODEX_STATUS_SNAPSHOT_MAX_AGE_MS) {
+      return null;
+    }
+
+    return {
+      account: (parsed.account as CodexAccountInfo | null | undefined) ?? null,
+      availableModels: parsed.availableModels as CodexModelInfo[],
+      cliPath: parsed.cliPath,
+      cliVersion:
+        typeof parsed.cliVersion === "string" ? parsed.cliVersion : null,
+      recordedAt: recordedAt.toISOString(),
+      requiresOpenaiAuth: Boolean(parsed.requiresOpenaiAuth),
+    } satisfies CodexStatusSnapshot;
+  } catch {
+    return null;
+  }
+}
+
+function buildCodexEngineStatus(input: {
+  account: CodexAccountInfo | null;
+  authReady: boolean;
+  availableModels: CodexModelInfo[];
+  cliDetected: boolean;
+  cliVersion: string | null;
+  error: string | null;
+  isDesktopRuntime: boolean;
+  lastSuccessfulProbeAt: string | null;
+  requiresOpenaiAuth: boolean;
+  serverReachable: boolean;
+  state: CodexEngineState;
+  usedCachedStatus: boolean;
+}) {
+  return {
+    account: input.account,
+    authReady: input.authReady,
+    availableModels: input.availableModels,
+    cliDetected: input.cliDetected,
+    cliVersion: input.cliVersion,
+    engine: "codex" as const,
+    error: input.error,
+    isDesktopRuntime: input.isDesktopRuntime,
+    lastSuccessfulProbeAt: input.lastSuccessfulProbeAt,
+    requiresOpenaiAuth: input.requiresOpenaiAuth,
+    serverReachable: input.serverReachable,
+    state: input.state,
+    usedCachedStatus: input.usedCachedStatus,
+  } satisfies CodexEngineStatus;
+}
+
+function buildCachedCodexStatus(input: {
+  cliVersion: string | null;
+  error: string;
+  snapshot: CodexStatusSnapshot;
+  state: "error" | "timeout_using_cache";
+}) {
+  return buildCodexEngineStatus({
+    account: input.snapshot.account,
+    authReady:
+      input.snapshot.account != null || !input.snapshot.requiresOpenaiAuth,
+    availableModels: input.snapshot.availableModels,
+    cliDetected: true,
+    cliVersion: input.cliVersion,
+    error: input.error,
+    isDesktopRuntime: true,
+    lastSuccessfulProbeAt: input.snapshot.recordedAt,
+    requiresOpenaiAuth: input.snapshot.requiresOpenaiAuth,
+    serverReachable: false,
+    state: input.state,
+    usedCachedStatus: true,
+  });
+}
+
+function isCodexAuthErrorMessage(message: string) {
+  const normalizedMessage = message.toLowerCase();
+
+  return (
+    normalizedMessage.includes("auth") ||
+    normalizedMessage.includes("login") ||
+    normalizedMessage.includes("not authenticated") ||
+    normalizedMessage.includes("unauth")
+  );
+}
+
 export type CodexApprovalDecision =
   | "accept"
   | "acceptForSession"
@@ -103,6 +237,14 @@ export type CodexAccountInfo =
       type: "chatgpt";
     };
 
+export type CodexEngineState =
+  | "auth_unavailable"
+  | "error"
+  | "missing_cli"
+  | "ready"
+  | "timeout_no_cache"
+  | "timeout_using_cache";
+
 export type CodexEngineStatus = {
   account: CodexAccountInfo | null;
   authReady: boolean;
@@ -112,8 +254,20 @@ export type CodexEngineStatus = {
   engine: "codex";
   error: string | null;
   isDesktopRuntime: boolean;
+  lastSuccessfulProbeAt: string | null;
   requiresOpenaiAuth: boolean;
   serverReachable: boolean;
+  state: CodexEngineState;
+  usedCachedStatus: boolean;
+};
+
+type CodexStatusSnapshot = {
+  account: CodexAccountInfo | null;
+  availableModels: CodexModelInfo[];
+  cliPath: string;
+  cliVersion: string | null;
+  recordedAt: string;
+  requiresOpenaiAuth: boolean;
 };
 
 type CodexInitializeResult = {
@@ -350,6 +504,11 @@ function withTimeout<T>(
   });
 }
 
+let cachedStatus: {
+  expiresAt: number;
+  promise: Promise<CodexEngineStatus>;
+} | null = null;
+
 class CodexAppServerManager {
   private buffer = "";
 
@@ -577,82 +736,162 @@ class CodexAppServerManager {
     forceRefresh?: boolean;
   }): Promise<CodexEngineStatus> {
     const forceRefresh = options?.forceRefresh ?? false;
-    const resolvedCli = await resolveCodexCli({ forceRefresh });
-    if (!resolvedCli) {
-      return {
-        account: null,
-        authReady: false,
-        availableModels: [],
-        cliDetected: false,
-        cliVersion: null,
-        engine: "codex",
-        error: "Codex CLI is not installed or not available on PATH.",
-        isDesktopRuntime: false,
-        requiresOpenaiAuth: false,
-        serverReachable: false,
-      };
+    const now = Date.now();
+
+    if (!forceRefresh && cachedStatus && cachedStatus.expiresAt > now) {
+      return await cachedStatus.promise;
     }
 
-    const cliVersion = await readCodexCliVersion(resolvedCli);
+    const pending = (async () => {
+      const resolvedCli = await resolveCodexCli({ forceRefresh });
+      if (!resolvedCli) {
+        return buildCodexEngineStatus({
+          account: null,
+          authReady: false,
+          availableModels: [],
+          cliDetected: false,
+          cliVersion: null,
+          error: "Codex CLI is not installed or not available on PATH.",
+          isDesktopRuntime: false,
+          lastSuccessfulProbeAt: null,
+          requiresOpenaiAuth: false,
+          serverReachable: false,
+          state: "missing_cli",
+          usedCachedStatus: false,
+        });
+      }
 
-    if (forceRefresh) {
-      await this.reloadRuntime();
-    }
+      const cliVersion = await readCodexCliVersion(resolvedCli);
 
-    try {
-      const statusPayload = await withTimeout(
-        (async () => {
-          await this.ensureStarted();
-          const [{ account, requiresOpenaiAuth }, availableModels] =
-            await Promise.all([this.readAccount(), this.listModels()]);
-          return { account, availableModels, requiresOpenaiAuth };
-        })(),
-        CODEX_STATUS_QUERY_TIMEOUT_MS,
-      );
+      if (forceRefresh) {
+        await this.reloadRuntime();
+      }
 
-      if (!statusPayload) {
-        return {
+      try {
+        const statusPayload = await withTimeout(
+          (async () => {
+            await this.ensureStarted();
+            const [{ account, requiresOpenaiAuth }, availableModels] =
+              await Promise.all([this.readAccount(), this.listModels()]);
+            return { account, availableModels, requiresOpenaiAuth };
+          })(),
+          CODEX_STATUS_QUERY_TIMEOUT_MS,
+        );
+
+        if (!statusPayload) {
+          const snapshot = await readCodexStatusSnapshot({
+            cliPath: resolvedCli.command,
+          });
+          if (snapshot) {
+            return buildCachedCodexStatus({
+              cliVersion,
+              error: "Timed out while querying Codex runtime.",
+              snapshot,
+              state: "timeout_using_cache",
+            });
+          }
+
+          return buildCodexEngineStatus({
+            account: null,
+            authReady: false,
+            availableModels: [],
+            cliDetected: true,
+            cliVersion,
+            error: "Timed out while querying Codex runtime.",
+            isDesktopRuntime: true,
+            lastSuccessfulProbeAt: null,
+            requiresOpenaiAuth: false,
+            serverReachable: false,
+            state: "timeout_no_cache",
+            usedCachedStatus: false,
+          });
+        }
+
+        if (statusPayload.requiresOpenaiAuth && statusPayload.account == null) {
+          return buildCodexEngineStatus({
+            account: null,
+            authReady: false,
+            availableModels: [],
+            cliDetected: true,
+            cliVersion,
+            error: "Codex CLI is not authenticated.",
+            isDesktopRuntime: true,
+            lastSuccessfulProbeAt: null,
+            requiresOpenaiAuth: true,
+            serverReachable: true,
+            state: "auth_unavailable",
+            usedCachedStatus: false,
+          });
+        }
+
+        const recordedAt = new Date().toISOString();
+        await writeCodexStatusSnapshot({
+          account: statusPayload.account,
+          availableModels: statusPayload.availableModels,
+          cliPath: resolvedCli.command,
+          cliVersion,
+          recordedAt,
+          requiresOpenaiAuth: statusPayload.requiresOpenaiAuth,
+        });
+
+        return buildCodexEngineStatus({
+          account: statusPayload.account,
+          authReady:
+            statusPayload.account != null || !statusPayload.requiresOpenaiAuth,
+          availableModels: statusPayload.availableModels,
+          cliDetected: true,
+          cliVersion,
+          error: null,
+          isDesktopRuntime: true,
+          lastSuccessfulProbeAt: recordedAt,
+          requiresOpenaiAuth: statusPayload.requiresOpenaiAuth,
+          serverReachable: true,
+          state: "ready",
+          usedCachedStatus: false,
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unable to reach Codex.";
+
+        if (!isCodexAuthErrorMessage(message)) {
+          const snapshot = await readCodexStatusSnapshot({
+            cliPath: resolvedCli.command,
+          });
+          if (snapshot) {
+            return buildCachedCodexStatus({
+              cliVersion,
+              error: message,
+              snapshot,
+              state: "error",
+            });
+          }
+        }
+
+        return buildCodexEngineStatus({
           account: null,
           authReady: false,
           availableModels: [],
           cliDetected: true,
           cliVersion,
-          engine: "codex",
-          error: "Timed out while querying Codex runtime.",
+          error: message,
           isDesktopRuntime: true,
-          requiresOpenaiAuth: false,
+          lastSuccessfulProbeAt: null,
+          requiresOpenaiAuth: isCodexAuthErrorMessage(message),
           serverReachable: false,
-        };
+          state: isCodexAuthErrorMessage(message)
+            ? "auth_unavailable"
+            : "error",
+          usedCachedStatus: false,
+        });
       }
+    })();
 
-      return {
-        account: statusPayload.account,
-        authReady:
-          statusPayload.account != null || !statusPayload.requiresOpenaiAuth,
-        availableModels: statusPayload.availableModels,
-        cliDetected: true,
-        cliVersion,
-        engine: "codex",
-        error: null,
-        isDesktopRuntime: true,
-        requiresOpenaiAuth: statusPayload.requiresOpenaiAuth,
-        serverReachable: true,
-      };
-    } catch (error) {
-      return {
-        account: null,
-        authReady: false,
-        availableModels: [],
-        cliDetected: true,
-        cliVersion,
-        engine: "codex",
-        error:
-          error instanceof Error ? error.message : "Unable to reach Codex.",
-        isDesktopRuntime: true,
-        requiresOpenaiAuth: false,
-        serverReachable: false,
-      };
-    }
+    cachedStatus = {
+      expiresAt: now + CODEX_STATUS_CACHE_TTL_MS,
+      promise: pending,
+    };
+
+    return await pending;
   }
 
   async startThread(params: {
@@ -851,6 +1090,8 @@ class CodexAppServerManager {
   }
 
   private resetProcess(error: Error) {
+    cachedStatus = null;
+
     if (this.child) {
       this.child.removeAllListeners();
       this.child.stdout.removeAllListeners();
@@ -1005,6 +1246,10 @@ class CodexAppServerManager {
 }
 
 let codexAppServerManager: CodexAppServerManager | null = null;
+
+export function resetCodexEngineStatusCache() {
+  cachedStatus = null;
+}
 
 export function getCodexAppServerManager() {
   if (!codexAppServerManager) {

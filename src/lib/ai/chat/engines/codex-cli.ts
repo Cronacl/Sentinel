@@ -33,10 +33,37 @@ let cachedResolution: {
   promise: Promise<ResolvedCodexCli | null>;
 } | null = null;
 
-async function persistResolvedCodexCli(command: string | null) {
+function setProcessCodexPath(command: string | null) {
+  if (command?.trim()) {
+    process.env.SENTINEL_CODEX_PATH = command;
+    return;
+  }
+
+  delete process.env.SENTINEL_CODEX_PATH;
+}
+
+function isPersistableCodexPath(command: string) {
+  const normalized = command.replaceAll("\\", "/");
+  return !normalized.includes("/fnm_multishells/");
+}
+
+async function persistResolvedCodexCli(
+  command: string | null,
+  options?: { persist?: boolean },
+) {
+  const persist = options?.persist ?? Boolean(command?.trim());
+
   try {
-    await setLocalRuntimeEnvValue("SENTINEL_CODEX_PATH", command);
-  } catch {}
+    if (persist) {
+      await setLocalRuntimeEnvValue("SENTINEL_CODEX_PATH", command);
+      return;
+    }
+
+    await setLocalRuntimeEnvValue("SENTINEL_CODEX_PATH", null);
+    setProcessCodexPath(command);
+  } catch {
+    setProcessCodexPath(command);
+  }
 }
 
 function getExecutableNames(command: string) {
@@ -352,8 +379,17 @@ export async function resolveCodexCli(options?: { forceRefresh?: boolean }) {
           PATH: preferredPath,
         },
       } satisfies ResolvedCodexCli;
-      await persistResolvedCodexCli(resolvedCli.command);
+      await persistResolvedCodexCli(resolvedCli.command, {
+        persist: isPersistableCodexPath(resolvedCli.command),
+      });
       return resolvedCli;
+    }
+
+    if (
+      process.env.SENTINEL_CODEX_PATH?.trim() &&
+      process.env.SENTINEL_CODEX_PATH?.trim() === overridePath
+    ) {
+      await persistResolvedCodexCli(null);
     }
 
     const directCommand = await findExecutableInPath("codex", preferredPath);
@@ -365,18 +401,26 @@ export async function resolveCodexCli(options?: { forceRefresh?: boolean }) {
           PATH: preferredPath,
         },
       } satisfies ResolvedCodexCli;
-      await persistResolvedCodexCli(resolvedCli.command);
+      await persistResolvedCodexCli(resolvedCli.command, {
+        persist: isPersistableCodexPath(resolvedCli.command),
+      });
       return resolvedCli;
     }
 
     const windowsWhereCommand = await resolveCodexCliFromWindowsWhere();
     if (windowsWhereCommand) {
-      await persistResolvedCodexCli(windowsWhereCommand.command);
+      await persistResolvedCodexCli(windowsWhereCommand.command, {
+        persist: isPersistableCodexPath(windowsWhereCommand.command),
+      });
       return windowsWhereCommand;
     }
 
     const shellResolution = await resolveCodexCliFromShell();
-    await persistResolvedCodexCli(shellResolution?.command ?? null);
+    await persistResolvedCodexCli(shellResolution?.command ?? null, {
+      persist: shellResolution?.command
+        ? isPersistableCodexPath(shellResolution.command)
+        : false,
+    });
     return shellResolution;
   })();
 
