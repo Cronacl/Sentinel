@@ -171,7 +171,12 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "gatekeeperAssess": false,
+      "hardenedRuntime": true,
       "icon": "assets/icon.icns",
+      "notarize": true,
       "target": [
         "dmg"
       ]

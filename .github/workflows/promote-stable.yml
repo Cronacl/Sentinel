@@ -53,5 +53,6 @@ jobs:
             Promote `${{ github.event.inputs.alpha_tag }}` to the stable `${{ github.event.inputs.stable_version }}` line.
 
             After merging this PR:
-            - run the `publish-release` workflow for `v${{ github.event.inputs.stable_version }}` if the tag was created manually
+            - the `tag-stable-release` workflow creates `v${{ github.event.inputs.stable_version }}` automatically if it does not already exist
+            - the `publish-release` workflow publishes desktop artifacts from that tag automatically
             - merge or trigger the next alpha release PR on `main` to continue prerelease publishing
