@@ -27,11 +27,12 @@ function canLoadNativeModule(moduleName) {
   }
 }
 
-function run(command, args) {
+function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: projectRoot,
       stdio: "inherit",
+      ...options,
     });
 
     child.on("exit", (code, signal) => {
@@ -52,12 +53,8 @@ function run(command, args) {
   });
 }
 
-function ensureNodePtySpawnHelperExecutable() {
-  if (process.platform === "win32") {
-    return;
-  }
-
-  const helperCandidates = [
+function getNodePtySpawnHelperCandidates() {
+  return [
     path.join(
       projectRoot,
       "node_modules",
@@ -83,8 +80,24 @@ function ensureNodePtySpawnHelperExecutable() {
       "spawn-helper",
     ),
   ];
+}
 
-  for (const helperPath of helperCandidates) {
+function hasNodePtySpawnHelper() {
+  if (process.platform === "win32") {
+    return true;
+  }
+
+  return getNodePtySpawnHelperCandidates().some((helperPath) =>
+    existsSync(helperPath),
+  );
+}
+
+function ensureNodePtySpawnHelperExecutable() {
+  if (process.platform === "win32") {
+    return;
+  }
+
+  for (const helperPath of getNodePtySpawnHelperCandidates()) {
     if (!existsSync(helperPath)) {
       continue;
     }
@@ -95,13 +108,33 @@ function ensureNodePtySpawnHelperExecutable() {
 }
 
 for (const moduleName of NATIVE_MODULES) {
-  if (!canLoadNativeModule(moduleName)) {
-    await run(npmExecutable, ["rebuild", moduleName]);
+  const needsNodePtySourceRebuild =
+    moduleName === "node-pty" &&
+    process.platform !== "win32" &&
+    !hasNodePtySpawnHelper();
+
+  if (!canLoadNativeModule(moduleName) || needsNodePtySourceRebuild) {
+    const rebuildEnv = needsNodePtySourceRebuild
+      ? {
+          ...process.env,
+          npm_config_build_from_source: "true",
+        }
+      : process.env;
+
+    await run(npmExecutable, ["rebuild", moduleName], {
+      env: rebuildEnv,
+    });
   }
 
   if (!canLoadNativeModule(moduleName)) {
     throw new Error(
       `${moduleName} is still not loadable for ${path.basename(process.execPath)}.`,
+    );
+  }
+
+  if (moduleName === "node-pty" && !hasNodePtySpawnHelper()) {
+    throw new Error(
+      `node-pty is loadable, but spawn-helper is still missing for ${process.platform}-${process.arch}.`,
     );
   }
 }
