@@ -1,4 +1,4 @@
-const RELEASES_BASE_URL = "https://github.com/Cronacl/Sentinel/releases";
+const RELEASES_BASE_URL = "https://github.com/chaqchase/Sentinel/releases";
 
 export function buildReleasePageUrl(version) {
   if (typeof version !== "string" || !version.trim()) {

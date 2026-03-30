@@ -1,6 +1,6 @@
 import type { DesktopUpdateState } from "@/lib/desktop/contracts";
 
-const FALLBACK_RELEASES_URL = "https://github.com/Cronacl/Sentinel/releases";
+const FALLBACK_RELEASES_URL = "https://github.com/chaqchase/Sentinel/releases";
 
 export function formatUpdateBytes(bytes: number | null | undefined) {
   if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) {
