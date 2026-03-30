@@ -562,6 +562,14 @@ function AssistantMessage({
           </div>
         ))}
 
+        {isStreaming && hasVisibleParts ? (
+          <p className="flex min-w-0 items-center gap-2 py-1 text-xs font-medium text-foreground/70">
+            <span className="sentinel-thinking-shimmer truncate">
+              Working...
+            </span>
+          </p>
+        ) : null}
+
         {assistantText ||
         status === "completed" ||
         status === "error" ||
