@@ -3,11 +3,11 @@ name: publish-release
 on:
   push:
     tags:
-      - "v*"
+      - "v*.*.*"
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Release tag to publish, for example v0.2.5-alpha.1
+        description: Release tag to publish, for example v0.0.1
         required: true
         type: string
 
@@ -31,7 +31,6 @@ jobs:
     name: prepare
     runs-on: ubuntu-24.04
     outputs:
-      prerelease: ${{ steps.resolve.outputs.prerelease }}
       release_tag: ${{ steps.resolve.outputs.release_tag }}
       target_commitish: ${{ steps.resolve.outputs.target_commitish }}
     steps:
@@ -74,30 +73,17 @@ jobs:
 
           TARGET_COMMITISH="$(git rev-list -n 1 "refs/tags/$RELEASE_TAG")"
 
-          if [[ "$RELEASE_TAG" == *-* ]]; then
-            PRERELEASE=true
-          else
-            PRERELEASE=false
-          fi
-
           echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
           echo "target_commitish=$TARGET_COMMITISH" >> "$GITHUB_OUTPUT"
 
       - name: Summarize release inputs
         run: |
-          if [ "${{ steps.resolve.outputs.prerelease }}" = "true" ]; then
-            MODE="prerelease"
-          else
-            MODE="stable"
-          fi
-
           {
             echo "## Publish release"
             echo
             echo "- Tag: \`${{ steps.resolve.outputs.release_tag }}\`"
             echo "- Commit: \`${{ steps.resolve.outputs.target_commitish }}\`"
-            echo "- Mode: $MODE"
+            echo "- Mode: release"
             echo "- Platforms: mac, windows, linux"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -233,6 +219,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: refs/tags/${{ needs.prepare.outputs.release_tag }}
+
       - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
@@ -240,11 +231,16 @@ jobs:
           path: release-assets
           pattern: release-*
 
+      - name: Extract changelog release notes
+        run: |
+          node ./scripts/release/extract-changelog-section.mjs \
+            "${{ needs.prepare.outputs.release_tag }}" \
+            "$RUNNER_TEMP/release-notes.md"
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          body_path: ${{ runner.temp }}/release-notes.md
           files: release-assets/**/*
-          generate_release_notes: true
-          prerelease: ${{ needs.prepare.outputs.prerelease == 'true' }}
           tag_name: ${{ needs.prepare.outputs.release_tag }}
           target_commitish: ${{ needs.prepare.outputs.target_commitish }}
