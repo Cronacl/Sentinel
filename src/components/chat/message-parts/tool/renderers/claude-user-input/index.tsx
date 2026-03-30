@@ -215,12 +215,18 @@ export const ClaudeUserInputTool = memo(function ClaudeUserInputTool({
     userInput?.type === "questions"
       ? (userInput.questions[currentStep] ?? null)
       : null;
+  const singleSelection =
+    currentQuestion == null
+      ? undefined
+      : singleSelections[currentQuestion.question];
   const currentSelections =
     currentQuestion == null
       ? []
       : currentQuestion.multiSelect
         ? (multiSelections[currentQuestion.question] ?? [])
-        : [singleSelections[currentQuestion.question]].filter(Boolean);
+        : typeof singleSelection === "string"
+          ? [singleSelection]
+          : [];
   const questionCount =
     userInput?.type === "questions" ? userInput.questions.length : 0;
   const isLastStep =
@@ -401,7 +407,7 @@ export const ClaudeUserInputTool = memo(function ClaudeUserInputTool({
                     </span>
                     <div className="flex items-center gap-1.5">
                       <Button
-                        disabled={currentStep === 0}
+                        isDisabled={currentStep === 0}
                         onPress={() =>
                           setCurrentStep((step) => Math.max(0, step - 1))
                         }
@@ -412,7 +418,7 @@ export const ClaudeUserInputTool = memo(function ClaudeUserInputTool({
                       </Button>
                       {isLastStep ? (
                         <Button
-                          disabled={!structuredResponse.trim()}
+                          isDisabled={!structuredResponse.trim()}
                           onPress={handleSubmit}
                           size="sm"
                         >
@@ -420,7 +426,7 @@ export const ClaudeUserInputTool = memo(function ClaudeUserInputTool({
                         </Button>
                       ) : (
                         <Button
-                          disabled={!canMoveForward}
+                          isDisabled={!canMoveForward}
                           onPress={() =>
                             setCurrentStep((step) =>
                               Math.min(questionCount - 1, step + 1),
