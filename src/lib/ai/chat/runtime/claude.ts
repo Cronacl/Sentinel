@@ -199,7 +199,14 @@ type ActiveClaudeRunControl = {
       toolCallId: string;
     }
   >;
-  pendingQuestions: Map<string, { toolCallId: string }>;
+  pendingQuestions: Map<
+    string,
+    {
+      input?: Record<string, unknown>;
+      resolve?: (result: PermissionResult) => void;
+      toolCallId: string;
+    }
+  >;
   query: ClaudeQuery;
   runId: string;
   sessionId: string;
@@ -405,6 +412,18 @@ function normalizeClaudeToolName(toolName: string) {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")}`;
+}
+
+function isClaudeSdkUserInputTool(toolName: string) {
+  return (
+    toolName.replace(/[^a-z0-9]+/gi, "").toLowerCase() === "askuserquestion"
+  );
+}
+
+function normalizeClaudeSdkToolName(toolName: string) {
+  return isClaudeSdkUserInputTool(toolName)
+    ? "claude_user_input"
+    : normalizeClaudeToolName(toolName);
 }
 
 function extractTextContent(block: Record<string, unknown>) {
@@ -856,6 +875,10 @@ async function applyClaudePromptResponse(
         sessionId: control.sessionId,
       }),
     );
+    pendingQuestion.resolve?.({
+      behavior: "allow",
+      updatedInput: normalizeClaudePermissionInput(pendingQuestion.input),
+    });
   } else {
     const pendingApproval = control.pendingApprovals.get(response.approvalId);
     if (!pendingApproval) {
@@ -1007,10 +1030,7 @@ function updateClaudeMirrorFromAssistantMessage(
       continue;
     }
 
-    const toolName =
-      candidate.name === "AskUserQuestion"
-        ? "claude_user_input"
-        : normalizeClaudeToolName(candidate.name);
+    const toolName = normalizeClaudeSdkToolName(candidate.name);
 
     upsertClaudeTool(state, {
       approval:
@@ -1027,7 +1047,10 @@ function updateClaudeMirrorFromAssistantMessage(
     });
 
     if (toolName === "claude_user_input") {
-      control.pendingQuestions.set(candidate.id, { toolCallId: candidate.id });
+      control.pendingQuestions.set(candidate.id, {
+        ...(control.pendingQuestions.get(candidate.id) ?? {}),
+        toolCallId: candidate.id,
+      });
       ensurePersistedClaudePromptResponseWatcher(control, candidate.id);
     }
   }
@@ -1041,7 +1064,7 @@ function updateClaudeMirrorFromToolProgress(
   upsertClaudeTool(state, {
     id: message.tool_use_id,
     input: existing?.input,
-    name: existing?.name ?? normalizeClaudeToolName(message.tool_name),
+    name: existing?.name ?? normalizeClaudeSdkToolName(message.tool_name),
     output:
       existing?.output === undefined
         ? {
@@ -1131,6 +1154,14 @@ async function finishClaudeRun(
       message: "Session ended before approval was received.",
     });
     control.pendingApprovals.delete(id);
+  }
+
+  for (const [id, pending] of control.pendingQuestions) {
+    pending.resolve?.({
+      behavior: "deny",
+      message: "Session ended before input was received.",
+    });
+    control.pendingQuestions.delete(id);
   }
 
   persist.clearActiveStream(control.threadId);
@@ -1464,7 +1495,14 @@ export async function runClaudeThreadChat(
         toolCallId: string;
       }
     >();
-    const pendingQuestions = new Map<string, { toolCallId: string }>();
+    const pendingQuestions = new Map<
+      string,
+      {
+        input?: Record<string, unknown>;
+        resolve?: (result: PermissionResult) => void;
+        toolCallId: string;
+      }
+    >();
     const pendingResponseWatchers = new Set<string>();
     let control: ActiveClaudeRunControl | null = null;
     const claudeQuery = query({
@@ -1478,20 +1516,33 @@ export async function runClaudeThreadChat(
         canUseTool: async (toolName, input, permissionOptions) => {
           return await new Promise<PermissionResult>((resolve) => {
             const approvalId = permissionOptions.toolUseID;
-            pendingApprovals.set(approvalId, {
-              input: normalizeClaudePermissionInput(input),
-              resolve,
-              toolCallId: approvalId,
-            });
+            const normalizedToolName = normalizeClaudeSdkToolName(toolName);
+            const normalizedInput = normalizeClaudePermissionInput(input);
+
+            if (normalizedToolName === "claude_user_input") {
+              pendingQuestions.set(approvalId, {
+                input: normalizedInput,
+                resolve,
+                toolCallId: approvalId,
+              });
+            } else {
+              pendingApprovals.set(approvalId, {
+                input: normalizedInput,
+                resolve,
+                toolCallId: approvalId,
+              });
+            }
 
             upsertClaudeTool(mirror, {
               approval: {
                 id: approvalId,
-                reason: permissionOptions.decisionReason,
+                ...(normalizedToolName === "claude_user_input"
+                  ? {}
+                  : { reason: permissionOptions.decisionReason }),
               },
               id: approvalId,
               input,
-              name: normalizeClaudeToolName(toolName),
+              name: normalizedToolName,
               state: "approval-requested",
             });
 
