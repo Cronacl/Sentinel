@@ -39,11 +39,8 @@ The main CI workflow is split into stable branch-protection jobs:
 - `format`
 - `typecheck`
 - `test`
-- `desktop-smoke`
 
-`changes` uses path-aware filters so docs-only pull requests skip `typecheck`, `test`, and desktop packaging work.
-
-`desktop-smoke` runs only on pushes to `main` when desktop packaging or release files change. It keeps the Linux desktop packaging path covered in CI without pushing the full packaging cost into pull requests.
+`changes` uses path-aware filters so docs-only pull requests skip `typecheck` and `test`.
 
 ## Alpha Releases
 
