@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.18.0-alpha.1](https://github.com/chaqchase/Sentinel/compare/v0.17.0-alpha.1...v0.18.0-alpha.1) (2026-03-30)
+
+
+### Features
+
+* add JSDoc annotation for options parameter in pruneNodePtyForPlatform function ([20965bb](https://github.com/chaqchase/Sentinel/commit/20965bbcf91b618318cfb339624d3fc2e57072e3))
+* implement platform-specific pruning of NodePty prebuilds ([e1be17c](https://github.com/chaqchase/Sentinel/commit/e1be17c298723b4116fc5c9ce67a2dc816c72291))
+
 ## [0.17.0-alpha.1](https://github.com/chaqchase/Sentinel/compare/v0.16.0-alpha.1...v0.17.0-alpha.1) (2026-03-30)
 
 
