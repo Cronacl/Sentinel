@@ -229,8 +229,13 @@ describe("runClaudeThreadChat approvals", () => {
     );
 
     const mirroredAssistant = upsertMessage.mock.calls
-      .map((call) => call[1])
-      .findLast((message) => message?.role === "assistant");
+      .map((call: Parameters<typeof upsertMessage>[0]) => call[1])
+      .findLast(
+        (
+          message,
+        ): message is { parts?: unknown[]; role?: string } | undefined =>
+          message?.role === "assistant",
+      );
 
     expect(mirroredAssistant?.parts).toContainEqual(
       expect.objectContaining({
@@ -254,7 +259,10 @@ describe("runClaudeThreadChat approvals", () => {
             metadata: {},
             parts: [
               {
-                approval: { id: "approval-ask", response: "Critical fixes" },
+                approval: {
+                  id: "approval-ask",
+                  response: "Critical fixes",
+                } as any,
                 input: userQuestionInput,
                 state: "approval-responded",
                 toolCallId: "approval-ask",
