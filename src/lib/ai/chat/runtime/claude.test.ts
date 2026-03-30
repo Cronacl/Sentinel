@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
+let capturedClaudeQueryInput: { options?: Record<string, unknown> } | null =
+  null;
+
 const upsertMessage = mock(() => {});
 const setActiveMessage = mock(async () => {});
 const clearActiveStream = mock(() => {});
@@ -15,6 +18,13 @@ const loadThreadSessionSnapshot = mock(async (threadId: string) => ({
 }));
 
 mock.module("server-only", () => ({}));
+
+mock.module("@anthropic-ai/claude-agent-sdk", () => ({
+  query: mock((input: { options?: Record<string, unknown> }) => {
+    capturedClaudeQueryInput = input;
+    return createQueryMock();
+  }),
+}));
 
 mock.module("../persistence", () => ({
   clearActiveStream,
@@ -104,8 +114,18 @@ function createClaudeAssistantPart(input: Record<string, unknown> = {}) {
   } as any;
 }
 
+function createUserMessage(text: string) {
+  return {
+    id: "user-1",
+    metadata: {},
+    parts: [{ text, type: "text" as const }],
+    role: "user" as const,
+  };
+}
+
 describe("runClaudeThreadChat approvals", () => {
   beforeEach(() => {
+    capturedClaudeQueryInput = null;
     clearActiveStream.mockClear();
     loadThreadSessionSnapshot.mockClear();
     setActiveMessage.mockClear();
@@ -119,6 +139,174 @@ describe("runClaudeThreadChat approvals", () => {
 
   afterEach(() => {
     (globalThis as any).__sentinelActiveClaudeRunControls?.clear();
+  });
+
+  it("mirrors AskUserQuestion as claude_user_input from the permission callback and resumes with the submitted response", async () => {
+    const response = await runClaudeThreadChat(
+      {
+        message: createUserMessage("Help me plan this."),
+        threadId: "thread-1",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      {
+        chatEngineState: {
+          claude: {
+            cwd: "/tmp/workspace",
+            modelId: null,
+            permissionMode: "default",
+            sessionId: "session-1",
+          },
+        },
+        mode: "chat",
+        status: "idle",
+      } as any,
+    );
+
+    expect(response.status).toBe(202);
+
+    const canUseTool = capturedClaudeQueryInput?.options?.canUseTool as
+      | ((
+          toolName: string,
+          input: Record<string, unknown>,
+          permissionOptions: {
+            decisionReason?: string;
+            signal: AbortSignal;
+            toolUseID: string;
+          },
+        ) => Promise<unknown>)
+      | undefined;
+
+    expect(canUseTool).toBeDefined();
+
+    const userQuestionInput = {
+      questions: [
+        {
+          header: "Priority Focus",
+          multiSelect: false,
+          options: [
+            {
+              description: "Address stability issues first.",
+              label: "Critical fixes",
+            },
+          ],
+          question: "Which improvements would you like to prioritize first?",
+        },
+      ],
+    };
+
+    const permissionPromise = canUseTool?.(
+      "Askuserquestion",
+      userQuestionInput,
+      {
+        decisionReason: "Needs permission",
+        signal: new AbortController().signal,
+        toolUseID: "approval-ask",
+      },
+    );
+
+    const activeRuns = (globalThis as any)
+      .__sentinelActiveClaudeRunControls as Map<
+      string,
+      {
+        inputQueue: {
+          stream: AsyncIterable<unknown>;
+        };
+        pendingApprovals: Map<string, unknown>;
+        pendingQuestions: Map<string, unknown>;
+      }
+    >;
+    const [runId, control] = [...activeRuns.entries()][0] ?? [];
+
+    expect(runId).toBeString();
+    expect(control?.pendingApprovals.has("approval-ask")).toBe(false);
+    expect(control?.pendingQuestions.has("approval-ask")).toBe(true);
+
+    expect(setThreadStatus).toHaveBeenCalledWith(
+      "thread-1",
+      "awaiting_approval",
+    );
+
+    const mirroredAssistant = upsertMessage.mock.calls
+      .map((call) => call[1])
+      .findLast((message) => message?.role === "assistant");
+
+    expect(mirroredAssistant?.parts).toContainEqual(
+      expect.objectContaining({
+        approval: { id: "approval-ask" },
+        input: userQuestionInput,
+        state: "approval-requested",
+        toolCallId: "approval-ask",
+        toolName: "claude_user_input",
+        type: "dynamic-tool",
+      }),
+    );
+
+    const promptIterator = control?.inputQueue.stream[Symbol.asyncIterator]();
+    await promptIterator?.next();
+
+    const approvalResponse = await runClaudeThreadChat(
+      {
+        messages: [
+          {
+            id: "assistant-1",
+            metadata: {},
+            parts: [
+              {
+                approval: { id: "approval-ask", response: "Critical fixes" },
+                input: userQuestionInput,
+                state: "approval-responded",
+                toolCallId: "approval-ask",
+                toolName: "claude_user_input",
+                type: "dynamic-tool",
+              },
+            ],
+            role: "assistant",
+          },
+        ],
+        threadId: "thread-1",
+        toolApprovalResponse: {
+          approved: true,
+          id: "approval-ask",
+          response: "Critical fixes",
+        },
+        trigger: "submit-tool-approval",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      {
+        activeStreamId: runId,
+        chatEngineState: {
+          claude: {
+            cwd: "/tmp/workspace",
+            modelId: null,
+            permissionMode: "default",
+            sessionId: "session-1",
+          },
+        },
+        status: "awaiting_approval",
+      } as any,
+    );
+
+    expect(approvalResponse.status).toBe(204);
+    await expect(permissionPromise).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: userQuestionInput,
+    });
+
+    await expect(promptIterator?.next()).resolves.toEqual({
+      done: false,
+      value: expect.objectContaining({
+        parent_tool_use_id: "approval-ask",
+        tool_use_result: {
+          action: "accept",
+          answers: { response: "Critical fixes" },
+        },
+        type: "user",
+      }),
+    });
+    expect(setThreadStatus).toHaveBeenCalledWith("thread-1", "streaming");
   });
 
   it("resumes a live Claude approval using the explicit approval payload", async () => {

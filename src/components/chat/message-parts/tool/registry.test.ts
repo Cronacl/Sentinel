@@ -485,6 +485,7 @@ describe("resolveRenderer", () => {
     } as any);
 
     expect(renderer).toBe(ClaudeUserInputTool);
+    expect(renderer).not.toBe(ClaudeRuntimeTool);
   });
 
   it("keeps the specialized Claude approval renderer for claude_bash", () => {
