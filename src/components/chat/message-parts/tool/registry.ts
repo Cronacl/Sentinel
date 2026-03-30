@@ -402,6 +402,24 @@ export const KNOWN_CLAUDE_RENDERER_TOOL_NAMES = Object.freeze(
   Object.keys(claudeRenderers).sort(),
 );
 
+function normalizeLooseToolName(name: string) {
+  return name.replace(/[^a-z0-9]+/gi, "").toLowerCase();
+}
+
+function isStructuredUserInputToolName(name: string) {
+  const normalized = normalizeLooseToolName(name);
+  const withoutClaudePrefix = normalized.startsWith("claude")
+    ? normalized.slice("claude".length)
+    : normalized;
+
+  return (
+    normalized === "askuserquestion" ||
+    normalized === "requestuserinput" ||
+    withoutClaudePrefix === "askuserquestion" ||
+    withoutClaudePrefix === "requestuserinput"
+  );
+}
+
 function isIntegrationToolName(name: string) {
   return (
     name.startsWith("gmail_") ||
@@ -444,6 +462,10 @@ export function resolveRenderer(part: ToolPart): Renderer | undefined {
   }
 
   if (part.type === "dynamic-tool") {
+    if (isStructuredUserInputToolName(part.toolName)) {
+      return ClaudeUserInputTool;
+    }
+
     if (part.toolName.startsWith("codex_")) {
       return codexRenderers[part.toolName] ?? CodexRuntimeTool;
     }
@@ -457,5 +479,10 @@ export function resolveRenderer(part: ToolPart): Renderer | undefined {
     );
   }
 
-  return renderers[part.type.slice(5)];
+  const staticToolName = part.type.slice(5);
+  if (isStructuredUserInputToolName(staticToolName)) {
+    return ClaudeUserInputTool;
+  }
+
+  return renderers[staticToolName];
 }
