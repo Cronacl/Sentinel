@@ -229,10 +229,10 @@ describe("runClaudeThreadChat approvals", () => {
     );
 
     const mirroredAssistant = upsertMessage.mock.calls
-      .map((call: Parameters<typeof upsertMessage>[0]) => call[1])
+      .map((call: any[]) => call[1])
       .findLast(
         (
-          message,
+          message: any,
         ): message is { parts?: unknown[]; role?: string } | undefined =>
           message?.role === "assistant",
       );
