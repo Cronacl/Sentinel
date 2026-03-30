@@ -77,6 +77,8 @@ bun run build:desktop:windows
 bun run build:desktop:linux
 ```
 
+For signed macOS release builds, see [docs/macos-signing.md](/Users/mohamedachaq/rework/cronacl-saas/sentinel/docs/macos-signing.md).
+
 ## Contributing
 
 Contributor workflow is intentionally light. Conventional commits, local hooks, and release automation are already wired into the repo.

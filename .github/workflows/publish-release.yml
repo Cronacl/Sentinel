@@ -1,7 +1,20 @@
 name: publish-release
 
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to publish, for example v0.2.5-alpha.1
+        required: true
+        type: string
+      git_ref:
+        description: Optional git ref to build from. Defaults to the release tag.
+        required: false
+        type: string
+  workflow_call:
     inputs:
       release_tag:
         description: Release tag to publish, for example v0.2.5-alpha.1
@@ -13,14 +26,13 @@ on:
         type: string
 
 concurrency:
-  group: publish-release-${{ github.event.inputs.release_tag || github.ref }}
+  group: publish-release-${{ inputs.release_tag || github.event.inputs.release_tag || github.ref_name || github.sha }}
   cancel-in-progress: true
 
 permissions:
   contents: write
 
 env:
-  CSC_IDENTITY_AUTO_DISCOVERY: "false"
   ENCRYPTION_KEY: "1111111111111111111111111111111111111111111111111111111111111111"
   NODE_OPTIONS: "--max-old-space-size=4096"
   SENTINEL_DB_PATH: ${{ github.workspace }}/.sentinel-ci/sentinel.db
@@ -42,11 +54,11 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_SHA: ${{ github.sha }}
-          INPUT_GIT_REF: ${{ github.event.inputs.git_ref }}
-          INPUT_RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+          INPUT_GIT_REF: ${{ inputs.git_ref || github.event.inputs.git_ref }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag || github.event.inputs.release_tag }}
           REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] || [ "$EVENT_NAME" = "workflow_call" ]; then
             RELEASE_TAG="$INPUT_RELEASE_TAG"
             GIT_REF="${INPUT_GIT_REF:-$RELEASE_TAG}"
             TARGET_COMMITISH="${INPUT_GIT_REF:-$RELEASE_TAG}"
@@ -79,6 +91,23 @@ jobs:
           echo "git_ref=$GIT_REF" >> "$GITHUB_OUTPUT"
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
           echo "target_commitish=$TARGET_COMMITISH" >> "$GITHUB_OUTPUT"
+
+      - name: Summarize release inputs
+        run: |
+          if [ "${{ steps.resolve.outputs.prerelease }}" = "true" ]; then
+            MODE="prerelease"
+          else
+            MODE="stable"
+          fi
+
+          {
+            echo "## Publish release"
+            echo
+            echo "- Tag: \`${{ steps.resolve.outputs.release_tag }}\`"
+            echo "- Ref: \`${{ steps.resolve.outputs.git_ref }}\`"
+            echo "- Mode: $MODE"
+            echo "- Platforms: mac, windows, linux"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   build:
     name: build-${{ matrix.platform }}
@@ -122,6 +151,48 @@ jobs:
           ref: ${{ needs.prepare.outputs.git_ref }}
 
       - uses: ./.github/actions/setup-bun
+
+      - name: Configure macOS signing
+        if: ${{ matrix.platform == 'mac' }}
+        env:
+          APPLE_APP_SPECIFIC_PASSWORD_SECRET: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_ID_SECRET: ${{ secrets.APPLE_ID }}
+          APPLE_SIGNING_CERT_BASE64_SECRET: ${{ secrets.APPLE_SIGNING_CERT_BASE64 }}
+          APPLE_SIGNING_CERT_PASSWORD_SECRET: ${{ secrets.APPLE_SIGNING_CERT_PASSWORD }}
+          APPLE_TEAM_ID_SECRET: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+
+          if [ -z "$APPLE_SIGNING_CERT_BASE64_SECRET" ] || [ -z "$APPLE_SIGNING_CERT_PASSWORD_SECRET" ]; then
+            {
+              echo "### macOS signing"
+              echo
+              echo "Signing secrets are not configured. Building an unsigned macOS artifact."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "CSC_LINK=$APPLE_SIGNING_CERT_BASE64_SECRET" >> "$GITHUB_ENV"
+          echo "CSC_KEY_PASSWORD=$APPLE_SIGNING_CERT_PASSWORD_SECRET" >> "$GITHUB_ENV"
+
+          if [ -n "$APPLE_ID_SECRET" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD_SECRET" ] && [ -n "$APPLE_TEAM_ID_SECRET" ]; then
+            echo "APPLE_ID=$APPLE_ID_SECRET" >> "$GITHUB_ENV"
+            echo "APPLE_APP_SPECIFIC_PASSWORD=$APPLE_APP_SPECIFIC_PASSWORD_SECRET" >> "$GITHUB_ENV"
+            echo "APPLE_TEAM_ID=$APPLE_TEAM_ID_SECRET" >> "$GITHUB_ENV"
+
+            {
+              echo "### macOS signing"
+              echo
+              echo "Developer ID signing and notarization are enabled for this build."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### macOS signing"
+              echo
+              echo "Developer ID signing is enabled, but notarization secrets are incomplete."
+              echo "Set \`APPLE_ID\`, \`APPLE_APP_SPECIFIC_PASSWORD\`, and \`APPLE_TEAM_ID\` to notarize the app."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Validate release tag against package version
         run: bun run release:version:check "${{ needs.prepare.outputs.release_tag }}"

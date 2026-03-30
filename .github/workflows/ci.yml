@@ -11,6 +11,60 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      docs_config: ${{ steps.filter.outputs.docs_config }}
+      desktop_release: ${{ steps.filter.outputs.desktop_release }}
+      source: ${{ steps.filter.outputs.source }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            source:
+              - 'src/**'
+              - 'desktop/**'
+              - 'scripts/**'
+              - 'package.json'
+              - 'bun.lock'
+              - 'package-lock.json'
+              - 'tsconfig*.json'
+              - 'next.config.*'
+              - 'postcss.config.*'
+              - '.github/actions/**'
+              - '.github/workflows/**'
+              - 'release-please-config.json'
+              - '.release-please-manifest.json'
+            docs_config:
+              - 'docs/**'
+              - '*.md'
+              - '.gitignore'
+              - '.editorconfig'
+              - '.prettier*'
+              - '.npmrc'
+            desktop_release:
+              - 'desktop/**'
+              - 'scripts/desktop/**'
+              - 'scripts/release/**'
+              - 'assets/**'
+              - 'build/**'
+              - 'package.json'
+              - '.github/actions/**'
+              - '.github/workflows/publish-release.yml'
+              - '.github/workflows/promote-stable.yml'
+              - '.github/workflows/release-please.yml'
+              - '.github/workflows/tag-stable-release.yml'
+
   pr-metadata:
     if: github.event_name == 'pull_request'
     name: pr-metadata
@@ -40,6 +94,8 @@ jobs:
 
   format:
     name: format
+    needs: changes
+    if: ${{ needs.changes.outputs.source == 'true' || needs.changes.outputs.docs_config == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -54,6 +110,8 @@ jobs:
 
   typecheck:
     name: typecheck
+    needs: changes
+    if: ${{ needs.changes.outputs.source == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -68,6 +126,8 @@ jobs:
 
   test:
     name: test
+    needs: changes
+    if: ${{ needs.changes.outputs.source == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
@@ -87,3 +147,27 @@ jobs:
 
       - name: Run tests
         run: bun run test
+
+  desktop-smoke:
+    name: desktop-smoke
+    needs: changes
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.desktop_release == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      ENCRYPTION_KEY: "1111111111111111111111111111111111111111111111111111111111111111"
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      SENTINEL_DB_PATH: ${{ github.workspace }}/.sentinel-ci/sentinel.db
+      SENTINEL_SKIP_STARTUP_TASKS: "1"
+      SENTINEL_STATE_PATH: ${{ github.workspace }}/.sentinel-ci/state.json
+      SKIP_ENV_VALIDATION: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build Linux desktop smoke package
+        run: bun run build:desktop:linux
