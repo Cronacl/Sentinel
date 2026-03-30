@@ -46,6 +46,18 @@ function run(command, args, options = {}) {
   });
 }
 
+function hasMacSigningCredentials() {
+  return Boolean(process.env.CSC_LINK?.trim() || process.env.CSC_NAME?.trim());
+}
+
+function hasMacNotarizationCredentials() {
+  return Boolean(
+    process.env.APPLE_ID?.trim() &&
+    process.env.APPLE_APP_SPECIFIC_PASSWORD?.trim() &&
+    process.env.APPLE_TEAM_ID?.trim(),
+  );
+}
+
 const platform = getArgValue("--platform");
 if (!platform || !Object.hasOwn(PLATFORM_CONFIG, platform)) {
   throw new Error('Expected "--platform" to be one of: mac, win, linux.');
@@ -61,13 +73,24 @@ const electronBuilderCli = path.join(
   "cli.js",
 );
 
-await run(process.execPath, [
-  electronBuilderCli,
+const builderArgs = [
   PLATFORM_CONFIG[platform].builderFlag,
   target,
   "--publish",
   "never",
-]);
+];
+
+if (platform === "mac") {
+  if (!hasMacSigningCredentials()) {
+    // Apple Silicon runners otherwise fall back to ad-hoc signing, which breaks
+    // unsigned builds and tries to sign non-mac helper payloads in dependencies.
+    builderArgs.push("-c.mac.identity=null", "-c.mac.notarize=false");
+  } else if (!hasMacNotarizationCredentials()) {
+    builderArgs.push("-c.mac.notarize=false");
+  }
+}
+
+await run(process.execPath, [electronBuilderCli, ...builderArgs]);
 
 await run(process.execPath, [
   "./scripts/desktop/audit-bundle.mjs",
