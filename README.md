@@ -1,54 +1,82 @@
 # Sentinel
 
-A local-first AI desktop assistant by [Cronacl](https://github.com/Cronacl). Chat with multiple AI providers, connect your tools, and automate workflows — all from a single app that keeps your data on your machine.
+Sentinel is a local-first AI desktop workspace for running serious work across models, tools, memory, and automations on your own machine.
 
-> **Status:** Alpha — expect breaking changes and rough edges.
+It is built for people who want the reach of modern AI systems without handing the workflow to a browser tab or a hosted black box. Conversations, workspace context, connected tools, and recurring workflows live in one desktop environment with local state and explicit user control.
 
-## Features
+> **Status:** Alpha. The product is usable, but the surface area is still moving.
 
-- **Multi-model AI chat** — OpenAI, Anthropic, Google Gemini, and Vertex AI
-- **Workspaces** — organize threads by project directory
-- **Plan mode** — break conversations into structured tasks and subtasks
-- **Automations** — schedule recurring workflows (hourly, daily, weekly, cron)
-- **Semantic memory** — vector-based recall across conversations
-- **11 integrations** — Gmail, Google Calendar, Google Drive, Slack, GitHub, Linear, Notion, Airtable, PostgreSQL, MySQL, MongoDB
-- **MCP support** — Model Context Protocol servers (stdio & HTTP)
-- **Skills** — install and manage custom skill packs
-- **Web search** — Exa and SearXNG providers
-- **Local-first** — SQLite database stored on your machine, encrypted at rest
+## Why Sentinel
 
-## Prerequisites
+Most AI products are either chat wrappers or cloud control planes. Sentinel is built around a different operating model: keep the assistant close to the work, keep the data path legible, and keep execution under the user's control.
 
-- [Bun](https://bun.sh) 1.3.6
-- Node.js 21.7.3
+That means local state, workspace-aware context, explicit tool access, support for multiple model providers, and a desktop environment built for ongoing work rather than one-off prompts.
 
-## Getting Started
+## Core Capabilities
+
+### Work across models, not inside one vendor
+
+Sentinel can run against multiple model providers in the same product, so the workspace does not need to be shaped around a single API or a single company’s roadmap.
+
+It can also use the Codex and Claude Code runtimes already configured on the machine, so users can bring their own subscriptions instead of routing every workflow through a separate provider setup inside Sentinel.
+
+### Connect the assistant to real systems
+
+Sentinel can operate across email, calendars, files, repositories, databases, team tools, and web search. The point is not to collect integrations for a settings page. It is to let the assistant work where the task already lives.
+
+### Keep context attached to the workspace
+
+Threads are organized around workspaces, not just chats. Sentinel can retain structured memory, recover relevant context, and keep project-specific state closer to the working directory.
+
+### Move from chat to execution
+
+Sentinel supports structured planning, approvals, task breakdowns, and recurring automations. It is meant for workflows that continue over time, not for generating a response and disappearing.
+
+### Extend the runtime without forking the product
+
+MCP support and installable skills make it possible to extend the environment without rewriting the core app for every new capability.
+
+## Operating Model
+
+Sentinel combines conversation, tool use, planning, memory, and automation in one desktop runtime.
+
+A typical workflow starts with a thread tied to a workspace. From there, the assistant can reason across project files, use connected tools, propose plans, operate under approval controls, save useful context to memory, and hand repeated work off to scheduled automations. The goal is not “chat with AI.” It is a stable operating environment for AI-assisted work.
+
+Local data is stored on the machine. Sentinel uses a local database and supports encryption at rest for persisted state.
+
+## What Sentinel Covers Today
+
+- Multi-provider AI chat and model routing
+- Support for locally configured Codex and Claude Code runtimes
+- Workspace-based threads and project context
+- Structured plan mode with tasks and follow-up questions
+- Recurring automations for repeated workflows
+- Semantic memory with workspace-aware recall
+- Connected integrations across work tools and data systems
+- MCP support for external tool runtimes
+- Skills for extending behavior and workflows
+- Web search support
+
+## Run Locally
 
 ```bash
-# Install dependencies
 bun install
-
-# Start development (web)
-bun run dev
-
-# Start development (desktop)
+cp .env.example .env
 bun run dev:desktop
 ```
 
-The app runs on `http://localhost:3232` by default.
+Sentinel runs locally on `http://localhost:3232` during development.
 
-## Environment
+`ENCRYPTION_KEY` can be left empty in `.env`; it is generated automatically on first desktop launch unless you want to set it yourself.
 
-Copy `.env.example` to `.env`. The `ENCRYPTION_KEY` is auto-generated on first desktop launch, or you can set a 64-character hex string manually.
-
-## Building
+## Build
 
 ```bash
-bun run build:desktop:mac       # macOS (.dmg)
-bun run build:desktop:windows   # Windows (.exe)
-bun run build:desktop:linux     # Linux (.AppImage)
+bun run build:desktop:mac
+bun run build:desktop:windows
+bun run build:desktop:linux
 ```
 
 ## Contributing
 
-The repo uses Conventional Commits, local `lefthook` automation, and a `release-please` release PR workflow. See [docs/release-process.md](docs/release-process.md) for the contributor and release process.
+Contributor workflow is intentionally light. Conventional commits, local hooks, and release automation are already wired into the repo.
