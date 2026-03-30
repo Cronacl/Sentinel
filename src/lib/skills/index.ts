@@ -62,6 +62,7 @@ type ConventionalSkillRoot = {
 
 type SkillRegistryEntry = {
   debounceTimer: ReturnType<typeof setTimeout> | null;
+  disposed: boolean;
   fingerprint: string | null;
   globalBase: string | null;
   key: string;
@@ -446,15 +447,49 @@ async function buildWatchTargets(
 }
 
 async function refreshEntry(entry: SkillRegistryEntry) {
+  if (entry.disposed) {
+    return (
+      entry.snapshot ?? {
+        revision: 0,
+        skillRoots: [],
+        skills: [],
+        updatedAt: Date.now(),
+      }
+    );
+  }
+
   if (entry.refreshPromise) {
     return await entry.refreshPromise;
   }
 
   entry.refreshPromise = (async () => {
+    if (entry.disposed) {
+      return (
+        entry.snapshot ?? {
+          revision: 0,
+          skillRoots: [],
+          skills: [],
+          updatedAt: Date.now(),
+        }
+      );
+    }
+
     const { effectiveSkills } = await discoverSkillState(
       entry.workspaceRoot,
       entry.globalBase,
     );
+
+    if (entry.disposed) {
+      return (
+        entry.snapshot ?? {
+          revision: 0,
+          skillRoots: [],
+          skills: [],
+          updatedAt: Date.now(),
+        }
+      );
+    }
+
     const { fingerprint, snapshot } = toSkillSnapshot(
       effectiveSkills,
       entry.snapshot,
@@ -479,6 +514,11 @@ function closeWatchers(entry: SkillRegistryEntry) {
 }
 
 async function syncWatchers(entry: SkillRegistryEntry) {
+  if (entry.disposed) {
+    closeWatchers(entry);
+    return;
+  }
+
   const { targets } = await buildWatchTargets(
     entry.workspaceRoot,
     entry.globalBase,
@@ -499,17 +539,29 @@ async function syncWatchers(entry: SkillRegistryEntry) {
   }
 
   for (const [key, target] of nextTargets.entries()) {
+    if (entry.disposed) {
+      break;
+    }
+
     if (entry.watchers.has(key)) {
       continue;
     }
 
     const watcher = watch(target, { persistent: false }, () => {
+      if (entry.disposed) {
+        return;
+      }
+
       if (entry.debounceTimer) {
         clearTimeout(entry.debounceTimer);
       }
 
       entry.debounceTimer = setTimeout(() => {
         entry.debounceTimer = null;
+        if (entry.disposed) {
+          return;
+        }
+
         void refreshWatchedEntry(entry);
       }, WATCH_DEBOUNCE_MS);
     });
@@ -524,11 +576,19 @@ async function syncWatchers(entry: SkillRegistryEntry) {
 }
 
 async function refreshWatchedEntry(entry: SkillRegistryEntry) {
+  if (entry.disposed) {
+    return;
+  }
+
   const startingRevision = entry.snapshot?.revision ?? 0;
 
   await syncWatchers(entry);
   const snapshot = await refreshEntry(entry);
   await syncWatchers(entry);
+
+  if (entry.disposed) {
+    return;
+  }
 
   if (snapshot.revision > startingRevision) {
     return;
@@ -538,6 +598,11 @@ async function refreshWatchedEntry(entry: SkillRegistryEntry) {
   // lands, especially on Linux CI when a new skills container is created
   // recursively. A short second pass keeps the watcher behavior deterministic.
   await new Promise((resolve) => setTimeout(resolve, WATCH_DEBOUNCE_MS));
+
+  if (entry.disposed) {
+    return;
+  }
+
   await syncWatchers(entry);
   await refreshEntry(entry);
   await syncWatchers(entry);
@@ -559,6 +624,7 @@ function getOrCreateEntry(
 
   const entry: SkillRegistryEntry = {
     debounceTimer: null,
+    disposed: false,
     fingerprint: null,
     globalBase: globalBase || null,
     key,
@@ -752,8 +818,10 @@ export async function loadSkillByName({
 export const __internal = {
   clearSkillRegistry() {
     for (const entry of skillRegistry.values()) {
+      entry.disposed = true;
       if (entry.debounceTimer) {
         clearTimeout(entry.debounceTimer);
+        entry.debounceTimer = null;
       }
       closeWatchers(entry);
     }
