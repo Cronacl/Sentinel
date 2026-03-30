@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.18.1-alpha.1](https://github.com/chaqchase/Sentinel/compare/v0.18.0-alpha.1...v0.18.1-alpha.1) (2026-03-30)
+
+
+### Bug Fixes
+
+* update macOS signing setup to use heredoc for CSC_LINK in GitHub Actions workflow ([cce73da](https://github.com/chaqchase/Sentinel/commit/cce73da3ee73f2ac0993c9a3e2a31b0da15e5b49))
+
 ## [0.18.0-alpha.1](https://github.com/chaqchase/Sentinel/compare/v0.17.0-alpha.1...v0.18.0-alpha.1) (2026-03-30)
 
 
