@@ -20,6 +20,8 @@ jobs:
   release-please:
     name: release-please
     runs-on: ubuntu-24.04
+    env:
+      HAS_RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN != '' }}
     steps:
       - id: release
         uses: googleapis/release-please-action@v4
@@ -29,7 +31,7 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
 
       - name: Trigger publish-release for fallback token releases
-        if: ${{ steps.release.outputs.release_created == 'true' && secrets.RELEASE_PLEASE_TOKEN == '' }}
+        if: ${{ steps.release.outputs.release_created == 'true' && env.HAS_RELEASE_PLEASE_TOKEN != 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
