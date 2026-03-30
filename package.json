@@ -1,6 +1,6 @@
 {
   "name": "Sentinel",
-  "version": "0.19.0-alpha.1",
+  "version": "0.20.0-alpha.1",
   "private": true,
   "license": "Apache-2.0",
   "description": "Sentinel local-first desktop app",

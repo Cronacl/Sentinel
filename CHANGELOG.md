@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.20.0-alpha.1](https://github.com/chaqchase/Sentinel/compare/v0.19.0-alpha.1...v0.20.0-alpha.1) (2026-03-30)
+
+
+### Features
+
+* add desktop verification workflow and setup desktop build action for cross-platform packaging ([f286ad1](https://github.com/chaqchase/Sentinel/commit/f286ad18fc6087bc38a45132f8277aa51bbbf7f1))
+
 ## [0.19.0-alpha.1](https://github.com/chaqchase/Sentinel/compare/v0.18.1-alpha.1...v0.19.0-alpha.1) (2026-03-30)
 
 
