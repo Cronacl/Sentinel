@@ -172,7 +172,11 @@ jobs:
             exit 0
           fi
 
-          echo "CSC_LINK=$APPLE_SIGNING_CERT_BASE64_SECRET" >> "$GITHUB_ENV"
+          {
+            echo "CSC_LINK<<__EOF__"
+            printf '%s\n' "$APPLE_SIGNING_CERT_BASE64_SECRET"
+            echo "__EOF__"
+          } >> "$GITHUB_ENV"
           echo "CSC_KEY_PASSWORD=$APPLE_SIGNING_CERT_PASSWORD_SECRET" >> "$GITHUB_ENV"
 
           if [ -n "$APPLE_ID_SECRET" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD_SECRET" ] && [ -n "$APPLE_TEAM_ID_SECRET" ]; then
