@@ -42,6 +42,16 @@ The main CI workflow is split into stable branch-protection jobs:
 
 `changes` uses path-aware filters so docs-only pull requests skip `typecheck` and `test`.
 
+## Desktop Verification
+
+Use the `desktop-verify` workflow to test desktop packaging before a tag exists.
+
+1. Open GitHub Actions and run `desktop-verify`.
+2. Set `git_ref` to the branch, commit SHA, or tag you want to validate.
+3. Leave `platforms` as `linux` for the cheapest default verification.
+4. Select `mac`, `windows`, or `all` only when you need platform-specific validation.
+5. Review the uploaded workflow artifacts. This workflow never creates or updates a GitHub Release.
+
 ## Alpha Releases
 
 `main` is used for alpha releases only.
@@ -68,4 +78,8 @@ The promotion workflow is intentionally strict. It only succeeds when the select
 
 ## Manual Rebuilds
 
-`publish-release` remains manually dispatchable for rebuilds or republishing an existing release tag from a chosen ref. This is the fallback path for retries, not the normal alpha or stable release path.
+`publish-release` remains manually dispatchable for rebuilding or republishing an existing release tag only.
+
+- It always builds the exact tagged commit.
+- It no longer accepts an override ref.
+- Use `desktop-verify` for untagged branches, SHAs, or packaging fixes that still need validation before release.
