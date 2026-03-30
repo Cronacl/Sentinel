@@ -75,6 +75,46 @@ async function copyPackageWithDependencies(
   }
 }
 
+async function pruneNodePtyForPlatform({ nodePtyPath, platform }) {
+  await fs.rm(path.join(nodePtyPath, "deps"), { force: true, recursive: true });
+  await fs.rm(path.join(nodePtyPath, "src"), { force: true, recursive: true });
+  await fs.rm(path.join(nodePtyPath, "third_party"), {
+    force: true,
+    recursive: true,
+  });
+
+  const prebuildsPath = path.join(nodePtyPath, "prebuilds");
+  if (!(await pathExists(prebuildsPath))) {
+    return;
+  }
+
+  const allowedPrebuilds =
+    platform === "darwin"
+      ? new Set(["darwin-arm64", "darwin-x64"])
+      : platform === "win32"
+        ? new Set(["win32-arm64", "win32-x64"])
+        : new Set(["linux-arm64", "linux-x64"]);
+
+  const prebuildEntries = await fs.readdir(prebuildsPath, {
+    withFileTypes: true,
+  });
+
+  for (const entry of prebuildEntries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    if (allowedPrebuilds.has(entry.name)) {
+      continue;
+    }
+
+    await fs.rm(path.join(prebuildsPath, entry.name), {
+      force: true,
+      recursive: true,
+    });
+  }
+}
+
 /**
  * @param {{
  *   appOutDir: string;
@@ -142,6 +182,10 @@ module.exports = async function afterPack(context) {
   await fs.mkdir(targetShellNodeModulesPath, { recursive: true });
   await fs.cp(sourceShellNodePtyPath, targetShellNodePtyPath, {
     recursive: true,
+  });
+  await pruneNodePtyForPlatform({
+    nodePtyPath: targetShellNodePtyPath,
+    platform: context.electronPlatformName,
   });
 
   await copyPackageWithDependencies(
