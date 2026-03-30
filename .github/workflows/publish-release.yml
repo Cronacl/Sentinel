@@ -172,11 +172,17 @@ jobs:
             exit 0
           fi
 
-          {
-            echo "CSC_LINK<<__EOF__"
-            printf '%s\n' "$APPLE_SIGNING_CERT_BASE64_SECRET"
-            echo "__EOF__"
-          } >> "$GITHUB_ENV"
+          CERT_PATH="$RUNNER_TEMP/apple-signing-cert.p12"
+          node -e "const fs=require('fs'); fs.writeFileSync(process.argv[1], Buffer.from(process.argv[2], 'base64'))" \
+            "$CERT_PATH" \
+            "$APPLE_SIGNING_CERT_BASE64_SECRET"
+
+          if ! openssl pkcs12 -in "$CERT_PATH" -nokeys -passin "pass:$APPLE_SIGNING_CERT_PASSWORD_SECRET" >/dev/null 2>&1; then
+            echo "APPLE_SIGNING_CERT_BASE64 or APPLE_SIGNING_CERT_PASSWORD is invalid." >&2
+            exit 1
+          fi
+
+          echo "CSC_LINK=$CERT_PATH" >> "$GITHUB_ENV"
           echo "CSC_KEY_PASSWORD=$APPLE_SIGNING_CERT_PASSWORD_SECRET" >> "$GITHUB_ENV"
 
           if [ -n "$APPLE_ID_SECRET" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD_SECRET" ] && [ -n "$APPLE_TEAM_ID_SECRET" ]; then
