@@ -1,4 +1,6 @@
 const RELEASES_BASE_URL = "https://github.com/chaqchase/Sentinel/releases";
+export const PRIVATE_GITHUB_RELEASES_UNSUPPORTED_REASON =
+  "Background updates are currently unavailable because Sentinel desktop builds are published through a private GitHub Releases feed. Use Release notes to download and install new versions manually.";
 
 export function buildReleasePageUrl(version) {
   if (typeof version !== "string" || !version.trim()) {
@@ -173,6 +175,8 @@ function applyErrorState(state, error, checkedAt) {
 
 export function createDesktopUpdaterController({
   appVersion,
+  backgroundUpdatesEnabled = true,
+  backgroundUpdatesSupportReason = null,
   isPackaged,
   logger = console,
   now = () => new Date().toISOString(),
@@ -205,6 +209,13 @@ export function createDesktopUpdaterController({
   function getSupportReason() {
     if (!isPackaged()) {
       return "Native background updates are only available in packaged desktop builds.";
+    }
+
+    if (!backgroundUpdatesEnabled) {
+      return (
+        backgroundUpdatesSupportReason ??
+        "Native background updates are not available for this build."
+      );
     }
 
     if (

@@ -5,6 +5,7 @@ import {
   buildReleasePageUrl,
   createDesktopUpdaterController,
   createInitialUpdateState,
+  PRIVATE_GITHUB_RELEASES_UNSUPPORTED_REASON,
   serializeReleaseNotes,
 } from "./updater.mjs";
 
@@ -65,6 +66,28 @@ describe("desktop updater controller", () => {
 
     expect(state.isSupported).toBe(false);
     expect(state.supportReason).toContain("packaged desktop builds");
+    expect(updater.checkCalls).toBe(0);
+  });
+
+  it("reports unsupported state when background updates are explicitly disabled", async () => {
+    const updater = new MockUpdater();
+    const controller = createDesktopUpdaterController({
+      appVersion: () => "1.0.0",
+      backgroundUpdatesEnabled: false,
+      backgroundUpdatesSupportReason:
+        PRIVATE_GITHUB_RELEASES_UNSUPPORTED_REASON,
+      isPackaged: () => true,
+      platform: "darwin",
+      updater,
+    });
+
+    controller.initialize();
+    const state = await controller.checkForUpdates();
+
+    expect(state.isSupported).toBe(false);
+    expect(state.supportReason).toBe(
+      PRIVATE_GITHUB_RELEASES_UNSUPPORTED_REASON,
+    );
     expect(updater.checkCalls).toBe(0);
   });
 

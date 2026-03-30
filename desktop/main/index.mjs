@@ -18,6 +18,7 @@ import * as nodePty from "node-pty";
 
 import { DESKTOP_CHANNELS } from "../shared/channels.mjs";
 import { createDesktopUpdaterController } from "./updater.mjs";
+import { PRIVATE_GITHUB_RELEASES_UNSUPPORTED_REASON } from "./updater.mjs";
 import {
   getOpenFileCommandForTarget,
   getOpenCommandForTarget,
@@ -46,6 +47,8 @@ const terminalSessions = new Map();
 const WINDOWS_TITLE_BAR_HEIGHT = 32;
 const desktopUpdater = createDesktopUpdaterController({
   appVersion: () => app.getVersion(),
+  backgroundUpdatesEnabled: false,
+  backgroundUpdatesSupportReason: PRIVATE_GITHUB_RELEASES_UNSUPPORTED_REASON,
   isPackaged: () => app.isPackaged,
   logger: console,
   platform: process.platform,

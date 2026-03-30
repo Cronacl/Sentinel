@@ -153,9 +153,11 @@ export default function UpdatesSettingsPage() {
 
   const currentVersion = state?.currentVersion ?? "Desktop runtime";
   const latestVersion =
-    state?.status === "up_to_date"
-      ? state.currentVersion
-      : (state?.availableVersion ?? "Checking in background");
+    state && !state.isSupported
+      ? "Manual release installs"
+      : state?.status === "up_to_date"
+        ? state.currentVersion
+        : (state?.availableVersion ?? "Checking in background");
   const isProgressVisible =
     state?.status === "available" ||
     state?.status === "downloading" ||
@@ -169,7 +171,7 @@ export default function UpdatesSettingsPage() {
   if (!desktop) {
     return (
       <SettingsPageWrapper
-        subtitle="Background desktop updates powered by GitHub releases."
+        subtitle="Desktop releases distributed through GitHub Releases."
         title="Updates"
       >
         <section className="border-separator/20 bg-surface rounded-2xl border p-5">
@@ -195,7 +197,7 @@ export default function UpdatesSettingsPage() {
 
   return (
     <SettingsPageWrapper
-      subtitle="Background desktop updates powered by GitHub releases."
+      subtitle="Desktop releases distributed through GitHub Releases."
       title="Updates"
     >
       {actionError ? (
@@ -229,8 +231,8 @@ export default function UpdatesSettingsPage() {
                   </h2>
                 </div>
                 <p className="text-muted max-w-2xl text-sm">
-                  Check for new stable releases, let the app download them in
-                  the background, and restart when the update is ready.
+                  Review the latest desktop release information and install new
+                  builds when they become available.
                 </p>
               </div>
               <Chip
@@ -305,35 +307,36 @@ export default function UpdatesSettingsPage() {
               ) : null}
 
               <div className="flex flex-wrap gap-3">
-                <Button
-                  isDisabled={!state.isSupported}
-                  isPending={isPrimaryPending}
-                  onPress={handlePrimaryAction}
-                  size="sm"
-                >
-                  {({ isPending }) => (
-                    <>
-                      {isPending ? (
-                        <Spinner color="current" size="sm" />
-                      ) : state.status === "downloaded" ? (
-                        <HugeiconsIcon
-                          color="currentColor"
-                          icon={Rocket01Icon}
-                          size={15}
-                          strokeWidth={1.5}
-                        />
-                      ) : (
-                        <HugeiconsIcon
-                          color="currentColor"
-                          icon={RefreshIcon}
-                          size={15}
-                          strokeWidth={1.5}
-                        />
-                      )}
-                      {getUpdatePrimaryActionLabel(state)}
-                    </>
-                  )}
-                </Button>
+                {state.isSupported ? (
+                  <Button
+                    isPending={isPrimaryPending}
+                    onPress={handlePrimaryAction}
+                    size="sm"
+                  >
+                    {({ isPending }) => (
+                      <>
+                        {isPending ? (
+                          <Spinner color="current" size="sm" />
+                        ) : state.status === "downloaded" ? (
+                          <HugeiconsIcon
+                            color="currentColor"
+                            icon={Rocket01Icon}
+                            size={15}
+                            strokeWidth={1.5}
+                          />
+                        ) : (
+                          <HugeiconsIcon
+                            color="currentColor"
+                            icon={RefreshIcon}
+                            size={15}
+                            strokeWidth={1.5}
+                          />
+                        )}
+                        {getUpdatePrimaryActionLabel(state)}
+                      </>
+                    )}
+                  </Button>
+                ) : null}
                 <Button
                   onPress={handleOpenRelease}
                   size="sm"
