@@ -209,7 +209,7 @@ function getTerminalShellArgs(shellPath) {
 }
 
 function ensureNodePtySpawnHelperExecutable() {
-  if (process.platform === "win32") {
+  if (process.platform !== "darwin") {
     return;
   }
 

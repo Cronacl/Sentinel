@@ -83,7 +83,7 @@ function getNodePtySpawnHelperCandidates() {
 }
 
 function hasNodePtySpawnHelper() {
-  if (process.platform === "win32") {
+  if (process.platform !== "darwin") {
     return true;
   }
 
@@ -110,7 +110,7 @@ function ensureNodePtySpawnHelperExecutable() {
 for (const moduleName of NATIVE_MODULES) {
   const needsNodePtySourceRebuild =
     moduleName === "node-pty" &&
-    process.platform !== "win32" &&
+    process.platform === "darwin" &&
     !hasNodePtySpawnHelper();
 
   if (!canLoadNativeModule(moduleName) || needsNodePtySourceRebuild) {
@@ -132,7 +132,11 @@ for (const moduleName of NATIVE_MODULES) {
     );
   }
 
-  if (moduleName === "node-pty" && !hasNodePtySpawnHelper()) {
+  if (
+    moduleName === "node-pty" &&
+    process.platform === "darwin" &&
+    !hasNodePtySpawnHelper()
+  ) {
     throw new Error(
       `node-pty is loadable, but spawn-helper is still missing for ${process.platform}-${process.arch}.`,
     );
