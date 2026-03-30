@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.4](https://github.com/chaqchase/Sentinel/compare/v0.0.3...v0.0.4) (2026-03-30)
+
+
+### Bug Fixes
+
+* **release:** set repo for fallback publish dispatch ([f81a516](https://github.com/chaqchase/Sentinel/commit/f81a51606c1d21c68beac0e779fbb4ec72f2020d))
+
 ## [0.0.3](https://github.com/chaqchase/Sentinel/compare/v0.0.2...v0.0.3) (2026-03-30)
 
 
