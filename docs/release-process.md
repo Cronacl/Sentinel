@@ -56,6 +56,12 @@ Use the `desktop-verify` workflow to test desktop packaging before a tag exists.
 
 `main` is the only release branch.
 
+Before relying on release automation, add a repository secret named `RELEASE_PLEASE_TOKEN`.
+
+- Do not use the default `GITHUB_TOKEN` for `release-please`.
+- Tags created with `GITHUB_TOKEN` do not trigger downstream workflows like `publish-release`.
+- Use a dedicated PAT or fine-grained token that can create release PRs and tags on the repository.
+
 1. Merge pull requests with conventional titles into `main`.
 2. The `release-please` workflow opens or updates the release PR.
 3. Merging the release PR updates `package.json`, `.release-please-manifest.json`, and `CHANGELOG.md`, then creates the matching `vX.Y.Z` tag.
