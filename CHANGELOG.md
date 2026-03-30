@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.3](https://github.com/chaqchase/Sentinel/compare/v0.0.2...v0.0.3) (2026-03-30)
+
+
+### Bug Fixes
+
+* **release:** avoid secrets in workflow condition ([e0ad693](https://github.com/chaqchase/Sentinel/commit/e0ad69380f1b3fdddebe02c3e02fa2ce8f1477dc))
+* **release:** dispatch publish workflow for fallback token ([bcd42ec](https://github.com/chaqchase/Sentinel/commit/bcd42ec83d8134f2e0fb98a5d36cee2489c7c9cc))
+* **release:** require token for publish trigger ([c5fe0eb](https://github.com/chaqchase/Sentinel/commit/c5fe0eb0715d541d1962cc37033e09069de4d031))
+
 ## [0.0.2](https://github.com/chaqchase/Sentinel/compare/v0.0.1...v0.0.2) (2026-03-30)
 
 
