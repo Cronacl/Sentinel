@@ -44,7 +44,23 @@ function getApprovalFromPart(part: ThreadUIMessage["parts"][number]) {
 function isClaudeUserInputPart(
   part: ThreadUIMessage["parts"][number],
 ): part is DynamicToolPart {
-  return part.type === "dynamic-tool" && part.toolName === "claude_user_input";
+  if (part.type !== "dynamic-tool") {
+    return false;
+  }
+
+  const normalized = part.toolName.replace(/[^a-z0-9]+/gi, "").toLowerCase();
+  const withoutClaudePrefix = normalized.startsWith("claude")
+    ? normalized.slice("claude".length)
+    : normalized;
+
+  return (
+    normalized === "claudeuserinput" ||
+    normalized === "claudeaskuserquestion" ||
+    normalized === "clauderequestuserinput" ||
+    withoutClaudePrefix === "userinput" ||
+    withoutClaudePrefix === "askuserquestion" ||
+    withoutClaudePrefix === "requestuserinput"
+  );
 }
 
 function findClaudePromptResponse(

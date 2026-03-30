@@ -488,6 +488,102 @@ describe("resolveRenderer", () => {
     expect(renderer).not.toBe(ClaudeRuntimeTool);
   });
 
+  it("uses the ClaudeUserInputTool renderer for raw Askuserquestion tools", () => {
+    const renderer = resolveRenderer({
+      approval: { id: "approval-ask-user-question" },
+      input: {
+        questions: [
+          {
+            header: "Approach",
+            multiSelect: false,
+            options: [
+              {
+                description: "Start with the highest-priority fixes first.",
+                label: "Implement incrementally",
+              },
+              {
+                description: "Plan everything before making changes.",
+                label: "Comprehensive refactoring plan",
+              },
+            ],
+            question:
+              "Would you like me to implement improvements incrementally or create a comprehensive refactoring plan?",
+          },
+        ],
+      },
+      state: "approval-requested",
+      toolCallId: "tool-call-ask-user-question",
+      toolName: "Askuserquestion",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(ClaudeUserInputTool);
+    expect(renderer).not.toBe(ClaudeRuntimeTool);
+  });
+
+  it("uses the ClaudeUserInputTool renderer for claude_askuserquestion tools", () => {
+    const renderer = resolveRenderer({
+      approval: { id: "approval-claude-ask-user-question" },
+      input: {
+        questions: [
+          {
+            header: "Approach",
+            multiSelect: false,
+            options: [
+              {
+                description: "Start with the highest-priority fixes first.",
+                label: "Implement incrementally",
+              },
+              {
+                description: "Plan everything before making changes.",
+                label: "Comprehensive refactoring plan",
+              },
+            ],
+            question:
+              "Would you like me to implement improvements incrementally or create a comprehensive refactoring plan?",
+          },
+        ],
+      },
+      state: "approval-requested",
+      toolCallId: "tool-call-claude-ask-user-question",
+      toolName: "claude_askuserquestion",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(ClaudeUserInputTool);
+    expect(renderer).not.toBe(ClaudeRuntimeTool);
+  });
+
+  it("uses the ClaudeUserInputTool renderer for static AskUserQuestion tool parts", () => {
+    const renderer = resolveRenderer({
+      approval: { id: "approval-static-ask-user-question" },
+      input: {
+        questions: [
+          {
+            header: "Priority Focus",
+            multiSelect: false,
+            options: [
+              {
+                description: "Address stability issues first.",
+                label: "Critical fixes",
+              },
+              {
+                description: "Focus on UX and polish first.",
+                label: "UI improvements",
+              },
+            ],
+            question: "Which improvements would you like to prioritize first?",
+          },
+        ],
+      },
+      state: "approval-requested",
+      toolCallId: "tool-call-static-ask-user-question",
+      type: "tool-AskUserQuestion",
+    } as any);
+
+    expect(renderer).toBe(ClaudeUserInputTool);
+  });
+
   it("keeps the specialized Claude approval renderer for claude_bash", () => {
     const renderer = resolveRenderer({
       approval: { id: "approval-claude-bash", reason: "Needs permission" },

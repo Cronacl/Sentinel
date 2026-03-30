@@ -111,6 +111,32 @@ describe("extractClaudePromptResponse", () => {
     });
   });
 
+  it("treats AskUserQuestion aliases as Claude user input responses", () => {
+    const response = extractClaudePromptResponse([
+      {
+        id: "assistant-1",
+        metadata: {},
+        parts: [
+          {
+            approval: { id: "question-2", response: "Critical fixes" } as any,
+            input: { questions: [] },
+            state: "approval-responded",
+            toolCallId: "tool-2",
+            toolName: "claude_askuserquestion",
+            type: "dynamic-tool",
+          } as any,
+        ],
+        role: "assistant",
+      },
+    ]);
+
+    expect(response).toEqual({
+      approvalId: "question-2",
+      kind: "user-input",
+      response: "Critical fixes",
+    });
+  });
+
   it("ignores pending Claude approvals without a response", () => {
     const response = extractClaudePromptResponse([
       {
@@ -181,6 +207,39 @@ describe("extractClaudePromptResponse", () => {
       approvalId: "question-1",
       kind: "user-input",
       response: "continue",
+    });
+  });
+
+  it("resolves explicit Claude user input payloads for AskUserQuestion aliases", () => {
+    const response = resolveClaudePromptResponse({
+      messages: [
+        {
+          id: "assistant-1",
+          metadata: {},
+          parts: [
+            {
+              approval: { id: "question-2" },
+              input: { questions: [] },
+              state: "approval-requested",
+              toolCallId: "tool-2",
+              toolName: "claude_askuserquestion",
+              type: "dynamic-tool",
+            } as any,
+          ],
+          role: "assistant",
+        },
+      ],
+      toolApprovalResponse: {
+        approved: true,
+        id: "question-2",
+        response: "Critical fixes",
+      },
+    });
+
+    expect(response).toEqual({
+      approvalId: "question-2",
+      kind: "user-input",
+      response: "Critical fixes",
     });
   });
 });
