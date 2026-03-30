@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.17.0-alpha.1](https://github.com/chaqchase/Sentinel/compare/v0.16.0-alpha.1...v0.17.0-alpha.1) (2026-03-30)
+
+
+### Features
+
+* add disposed state to SkillRegistryEntry and handle disposal in refresh and sync functions ([f251741](https://github.com/chaqchase/Sentinel/commit/f251741f2067935b3ddb44116bd31b355647d9cc))
+
 ## [0.16.0-alpha.1](https://github.com/chaqchase/Sentinel/compare/v0.15.0-alpha.1...v0.16.0-alpha.1) (2026-03-29)
 
 
