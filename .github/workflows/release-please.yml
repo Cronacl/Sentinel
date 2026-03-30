@@ -34,6 +34,7 @@ jobs:
         if: ${{ steps.release.outputs.release_created == 'true' && env.HAS_RELEASE_PLEASE_TOKEN != 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
         run: |
           if [ -z "$RELEASE_TAG" ]; then
