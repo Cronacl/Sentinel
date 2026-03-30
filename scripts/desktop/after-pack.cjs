@@ -75,6 +75,9 @@ async function copyPackageWithDependencies(
   }
 }
 
+/**
+ * @param {{ nodePtyPath: string; platform: string }} options
+ */
 async function pruneNodePtyForPlatform({ nodePtyPath, platform }) {
   await fs.rm(path.join(nodePtyPath, "deps"), { force: true, recursive: true });
   await fs.rm(path.join(nodePtyPath, "src"), { force: true, recursive: true });
