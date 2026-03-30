@@ -161,9 +161,8 @@ jobs:
           APPLE_SIGNING_CERT_PASSWORD_SECRET: ${{ secrets.APPLE_SIGNING_CERT_PASSWORD }}
           APPLE_TEAM_ID_SECRET: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
-
           if [ -z "$APPLE_SIGNING_CERT_BASE64_SECRET" ] || [ -z "$APPLE_SIGNING_CERT_PASSWORD_SECRET" ]; then
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
             {
               echo "### macOS signing"
               echo
@@ -181,6 +180,20 @@ jobs:
             echo "APPLE_SIGNING_CERT_BASE64 or APPLE_SIGNING_CERT_PASSWORD is invalid." >&2
             exit 1
           fi
+
+          CERT_SUBJECT="$(
+            openssl pkcs12 -in "$CERT_PATH" -clcerts -nokeys -passin "pass:$APPLE_SIGNING_CERT_PASSWORD_SECRET" 2>/dev/null \
+              | openssl x509 -noout -subject 2>/dev/null
+          )"
+
+          case "$CERT_SUBJECT" in
+            *"Developer ID Application:"*) ;;
+            *)
+              echo "The macOS signing certificate must be a Developer ID Application certificate." >&2
+              echo "Resolved subject: ${CERT_SUBJECT:-<unknown>}" >&2
+              exit 1
+              ;;
+          esac
 
           echo "CSC_LINK=$CERT_PATH" >> "$GITHUB_ENV"
           echo "CSC_KEY_PASSWORD=$APPLE_SIGNING_CERT_PASSWORD_SECRET" >> "$GITHUB_ENV"

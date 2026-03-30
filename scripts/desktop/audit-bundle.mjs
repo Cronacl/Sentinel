@@ -236,7 +236,7 @@ const hasShellNodePtyEntrypoint = shellNodePtyFiles.some((filePath) =>
 const hasShellNodePtyBinary = shellNodePtyFiles.some((filePath) =>
   normalizePathForMatch(filePath).endsWith("/pty.node"),
 );
-const requiresSpawnHelper = platform === "mac" || platform === "linux";
+const requiresSpawnHelper = platform === "mac";
 const hasShellNodePtySpawnHelper =
   !requiresSpawnHelper ||
   shellNodePtyFiles.some((filePath) =>
