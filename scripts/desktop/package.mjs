@@ -90,6 +90,12 @@ if (platform === "mac") {
   }
 }
 
+await run(process.execPath, [
+  "./scripts/desktop/preflight.mjs",
+  "--platform",
+  platform,
+]);
+
 await run(process.execPath, [electronBuilderCli, ...builderArgs]);
 
 await run(process.execPath, [

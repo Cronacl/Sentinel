@@ -1,0 +1,46 @@
+name: Setup Desktop Build Environment
+description: Set up Bun, install dependencies, and restore desktop build caches.
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/setup-bun
+
+    - id: cache-paths
+      shell: bash
+      run: |
+        case "$RUNNER_OS" in
+          Linux)
+            {
+              echo "electron_cache_paths<<EOF"
+              echo "~/.cache/electron"
+              echo "~/.cache/electron-builder"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            ;;
+          macOS)
+            {
+              echo "electron_cache_paths<<EOF"
+              echo "~/Library/Caches/electron"
+              echo "~/Library/Caches/electron-builder"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            ;;
+          Windows)
+            {
+              echo "electron_cache_paths<<EOF"
+              echo "~\\AppData\\Local\\electron\\Cache"
+              echo "~\\AppData\\Local\\electron-builder\\Cache"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            ;;
+        esac
+
+    - uses: actions/cache@v4
+      with:
+        path: |
+          .next/cache
+          ${{ steps.cache-paths.outputs.electron_cache_paths }}
+        key: ${{ runner.os }}-desktop-build-${{ hashFiles('bun.lock', 'package.json', 'next.config.*') }}
+        restore-keys: |
+          ${{ runner.os }}-desktop-build-

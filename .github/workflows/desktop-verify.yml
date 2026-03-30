@@ -1,0 +1,214 @@
+name: desktop-verify
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: Branch, commit SHA, or tag to verify
+        required: true
+        default: main
+        type: string
+      platforms:
+        description: Platforms to build
+        required: true
+        default: linux
+        type: choice
+        options:
+          - linux
+          - mac
+          - windows
+          - all
+
+concurrency:
+  group: desktop-verify-${{ github.event.inputs.git_ref }}-${{ github.event.inputs.platforms }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  ENCRYPTION_KEY: "1111111111111111111111111111111111111111111111111111111111111111"
+  NODE_OPTIONS: "--max-old-space-size=4096"
+  SENTINEL_DB_PATH: ${{ github.workspace }}/.sentinel-ci/sentinel.db
+  SENTINEL_SKIP_STARTUP_TASKS: "1"
+  SENTINEL_STATE_PATH: ${{ github.workspace }}/.sentinel-ci/state.json
+  SKIP_ENV_VALIDATION: "1"
+
+jobs:
+  prepare:
+    name: prepare
+    runs-on: ubuntu-24.04
+    outputs:
+      git_ref: ${{ steps.resolve.outputs.git_ref }}
+      platform_matrix: ${{ steps.resolve.outputs.platform_matrix }}
+      platforms_label: ${{ steps.resolve.outputs.platforms_label }}
+    steps:
+      - id: resolve
+        env:
+          GIT_REF: ${{ github.event.inputs.git_ref }}
+          PLATFORMS: ${{ github.event.inputs.platforms }}
+        run: |
+          if [ -z "$GIT_REF" ]; then
+            echo "git_ref is required" >&2
+            exit 1
+          fi
+
+          case "$PLATFORMS" in
+            linux)
+              MATRIX='[{"platform":"linux","runner":"ubuntu-24.04"}]'
+              LABEL='linux'
+              ;;
+            mac)
+              MATRIX='[{"platform":"mac","runner":"macos-latest"}]'
+              LABEL='mac'
+              ;;
+            windows)
+              MATRIX='[{"platform":"windows","runner":"windows-latest"}]'
+              LABEL='windows'
+              ;;
+            all)
+              MATRIX='[{"platform":"linux","runner":"ubuntu-24.04"},{"platform":"mac","runner":"macos-latest"},{"platform":"windows","runner":"windows-latest"}]'
+              LABEL='linux, mac, windows'
+              ;;
+            *)
+              echo "Unsupported platforms value: $PLATFORMS" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "git_ref=$GIT_REF" >> "$GITHUB_OUTPUT"
+          echo "platform_matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "platforms_label=$LABEL" >> "$GITHUB_OUTPUT"
+
+      - name: Summarize verify inputs
+        run: |
+          {
+            echo "## Desktop verify"
+            echo
+            echo "- Ref: \`${{ steps.resolve.outputs.git_ref }}\`"
+            echo "- Platforms: ${{ steps.resolve.outputs.platforms_label }}"
+            echo "- GitHub Release publication: disabled"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: build-${{ matrix.platform }}
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.prepare.outputs.platform_matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.prepare.outputs.git_ref }}
+
+      - uses: ./.github/actions/setup-desktop-build
+
+      - id: build-config
+        shell: bash
+        run: |
+          case "${{ matrix.platform }}" in
+            linux)
+              echo "script=build:desktop:linux" >> "$GITHUB_OUTPUT"
+              echo "artifact_name=desktop-verify-linux" >> "$GITHUB_OUTPUT"
+              {
+                echo "artifact_paths<<EOF"
+                echo "dist/*.AppImage"
+                echo "dist/*.blockmap"
+                echo "dist/latest-linux.yml"
+                echo "EOF"
+              } >> "$GITHUB_OUTPUT"
+              ;;
+            mac)
+              echo "script=build:desktop:mac" >> "$GITHUB_OUTPUT"
+              echo "artifact_name=desktop-verify-mac" >> "$GITHUB_OUTPUT"
+              {
+                echo "artifact_paths<<EOF"
+                echo "dist/*.dmg"
+                echo "dist/*.blockmap"
+                echo "dist/latest-mac.yml"
+                echo "EOF"
+              } >> "$GITHUB_OUTPUT"
+              ;;
+            windows)
+              echo "script=build:desktop:windows" >> "$GITHUB_OUTPUT"
+              echo "artifact_name=desktop-verify-windows" >> "$GITHUB_OUTPUT"
+              {
+                echo "artifact_paths<<EOF"
+                echo "dist/*.exe"
+                echo "dist/*.blockmap"
+                echo "dist/latest.yml"
+                echo "EOF"
+              } >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unsupported platform: ${{ matrix.platform }}" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Configure macOS signing
+        if: ${{ matrix.platform == 'mac' }}
+        env:
+          APPLE_APP_SPECIFIC_PASSWORD_SECRET: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_ID_SECRET: ${{ secrets.APPLE_ID }}
+          APPLE_SIGNING_CERT_BASE64_SECRET: ${{ secrets.APPLE_SIGNING_CERT_BASE64 }}
+          APPLE_SIGNING_CERT_PASSWORD_SECRET: ${{ secrets.APPLE_SIGNING_CERT_PASSWORD }}
+          APPLE_TEAM_ID_SECRET: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$APPLE_SIGNING_CERT_BASE64_SECRET" ] || [ -z "$APPLE_SIGNING_CERT_PASSWORD_SECRET" ]; then
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+            {
+              echo "### macOS signing"
+              echo
+              echo "Signing secrets are not configured. Building an unsigned macOS artifact."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          CERT_PATH="$RUNNER_TEMP/apple-signing-cert.p12"
+          node -e "const fs=require('fs'); fs.writeFileSync(process.argv[1], Buffer.from(process.argv[2], 'base64'))" \
+            "$CERT_PATH" \
+            "$APPLE_SIGNING_CERT_BASE64_SECRET"
+
+          if ! openssl pkcs12 -in "$CERT_PATH" -nokeys -passin "pass:$APPLE_SIGNING_CERT_PASSWORD_SECRET" >/dev/null 2>&1; then
+            echo "APPLE_SIGNING_CERT_BASE64 or APPLE_SIGNING_CERT_PASSWORD is invalid." >&2
+            exit 1
+          fi
+
+          CERT_SUBJECT="$(
+            openssl pkcs12 -in "$CERT_PATH" -clcerts -nokeys -passin "pass:$APPLE_SIGNING_CERT_PASSWORD_SECRET" 2>/dev/null \
+              | openssl x509 -noout -subject 2>/dev/null
+          )"
+
+          case "$CERT_SUBJECT" in
+            *"Developer ID Application:"*) ;;
+            *)
+              echo "The macOS signing certificate must be a Developer ID Application certificate." >&2
+              echo "Resolved subject: ${CERT_SUBJECT:-<unknown>}" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "CSC_LINK=$CERT_PATH" >> "$GITHUB_ENV"
+          echo "CSC_KEY_PASSWORD=$APPLE_SIGNING_CERT_PASSWORD_SECRET" >> "$GITHUB_ENV"
+
+          if [ -n "$APPLE_ID_SECRET" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD_SECRET" ] && [ -n "$APPLE_TEAM_ID_SECRET" ]; then
+            echo "APPLE_ID=$APPLE_ID_SECRET" >> "$GITHUB_ENV"
+            echo "APPLE_APP_SPECIFIC_PASSWORD=$APPLE_APP_SPECIFIC_PASSWORD_SECRET" >> "$GITHUB_ENV"
+            echo "APPLE_TEAM_ID=$APPLE_TEAM_ID_SECRET" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build ${{ matrix.platform }} desktop artifact
+        run: bun run ${{ steps.build-config.outputs.script }}
+
+      - name: Upload ${{ matrix.platform }} artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          if-no-files-found: error
+          name: ${{ steps.build-config.outputs.artifact_name }}
+          path: ${{ steps.build-config.outputs.artifact_paths }}
+          retention-days: 5

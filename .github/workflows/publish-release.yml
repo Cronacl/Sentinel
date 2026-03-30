@@ -10,23 +10,9 @@ on:
         description: Release tag to publish, for example v0.2.5-alpha.1
         required: true
         type: string
-      git_ref:
-        description: Optional git ref to build from. Defaults to the release tag.
-        required: false
-        type: string
-  workflow_call:
-    inputs:
-      release_tag:
-        description: Release tag to publish, for example v0.2.5-alpha.1
-        required: true
-        type: string
-      git_ref:
-        description: Optional git ref to build from. Defaults to the release tag.
-        required: false
-        type: string
 
 concurrency:
-  group: publish-release-${{ inputs.release_tag || github.event.inputs.release_tag || github.ref_name || github.sha }}
+  group: publish-release-${{ github.event.inputs.release_tag || github.ref_name || github.sha }}
   cancel-in-progress: true
 
 permissions:
@@ -45,27 +31,27 @@ jobs:
     name: prepare
     runs-on: ubuntu-24.04
     outputs:
-      git_ref: ${{ steps.resolve.outputs.git_ref }}
       prerelease: ${{ steps.resolve.outputs.prerelease }}
       release_tag: ${{ steps.resolve.outputs.release_tag }}
       target_commitish: ${{ steps.resolve.outputs.target_commitish }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch tags
+        run: git fetch --force --tags origin
+
       - id: resolve
         env:
           EVENT_NAME: ${{ github.event_name }}
-          EVENT_SHA: ${{ github.sha }}
-          INPUT_GIT_REF: ${{ inputs.git_ref || github.event.inputs.git_ref }}
-          INPUT_RELEASE_TAG: ${{ inputs.release_tag || github.event.inputs.release_tag }}
+          INPUT_RELEASE_TAG: ${{ github.event.inputs.release_tag }}
           REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ "$EVENT_NAME" = "workflow_dispatch" ] || [ "$EVENT_NAME" = "workflow_call" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             RELEASE_TAG="$INPUT_RELEASE_TAG"
-            GIT_REF="${INPUT_GIT_REF:-$RELEASE_TAG}"
-            TARGET_COMMITISH="${INPUT_GIT_REF:-$RELEASE_TAG}"
           else
             RELEASE_TAG="$REF_NAME"
-            GIT_REF="$REF_NAME"
-            TARGET_COMMITISH="$EVENT_SHA"
           fi
 
           if [ -z "$RELEASE_TAG" ]; then
@@ -81,6 +67,13 @@ jobs:
               ;;
           esac
 
+          if ! git rev-parse --verify --quiet "refs/tags/$RELEASE_TAG" >/dev/null; then
+            echo "Release tag $RELEASE_TAG does not exist." >&2
+            exit 1
+          fi
+
+          TARGET_COMMITISH="$(git rev-list -n 1 "refs/tags/$RELEASE_TAG")"
+
           if [[ "$RELEASE_TAG" == *-* ]]; then
             PRERELEASE=true
           else
@@ -88,7 +81,6 @@ jobs:
           fi
 
           echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-          echo "git_ref=$GIT_REF" >> "$GITHUB_OUTPUT"
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
           echo "target_commitish=$TARGET_COMMITISH" >> "$GITHUB_OUTPUT"
 
@@ -104,7 +96,7 @@ jobs:
             echo "## Publish release"
             echo
             echo "- Tag: \`${{ steps.resolve.outputs.release_tag }}\`"
-            echo "- Ref: \`${{ steps.resolve.outputs.git_ref }}\`"
+            echo "- Commit: \`${{ steps.resolve.outputs.target_commitish }}\`"
             echo "- Mode: $MODE"
             echo "- Platforms: mac, windows, linux"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -148,9 +140,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ needs.prepare.outputs.git_ref }}
+          ref: refs/tags/${{ needs.prepare.outputs.release_tag }}
 
-      - uses: ./.github/actions/setup-bun
+      - uses: ./.github/actions/setup-desktop-build
 
       - name: Configure macOS signing
         if: ${{ matrix.platform == 'mac' }}
@@ -229,6 +221,7 @@ jobs:
           if-no-files-found: error
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_paths }}
+          retention-days: 3
 
   publish:
     name: publish
