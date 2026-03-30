@@ -18,7 +18,7 @@ permissions:
 jobs:
   release-please:
     name: release-please
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       releases_created: ${{ steps.release.outputs.releases_created }}
@@ -102,7 +102,7 @@ jobs:
       - release-please
       - build
     if: ${{ needs.release-please.outputs.release_created == 'true' || needs.release-please.outputs.releases_created == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: write
