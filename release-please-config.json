@@ -1,12 +1,12 @@
 {
   "packages": {
     ".": {
+      "bump-minor-pre-major": false,
+      "bump-patch-for-minor-pre-major": true,
       "changelog-path": "CHANGELOG.md",
       "include-component-in-tag": false,
       "include-v-in-tag": true,
       "package-name": "Sentinel",
-      "prerelease": true,
-      "prerelease-type": "alpha",
       "release-type": "node"
     }
   }
