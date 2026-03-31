@@ -671,7 +671,7 @@ export function ThreadRepoActions({
       threadId,
       workspaceId,
     });
-    rightSidebar.open(<RepoDiffSidebar />, {
+    rightSidebar.open(<RepoDiffSidebar key={`${threadId}:${workspaceId}`} />, {
       panelId: "repo-diff",
       size: "wide",
     });

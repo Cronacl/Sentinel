@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { PageWrapper } from "@/components/shell";
 import { api } from "@/trpc/react";
 
+import { closeRepoDiffSidebarForThreadChange } from "./repo-diff-sidebar-store";
 import { ThreadScreen } from "./thread-screen";
 import { buildThreadQueryOptions } from "./thread-query-options";
 
@@ -23,6 +24,12 @@ export function ThreadRouteScreen({ threadId }: { threadId: string }) {
       router.replace("/");
     }
   }, [router, threadQuery.error?.data?.code, threadQuery.data]);
+
+  useEffect(() => {
+    return () => {
+      closeRepoDiffSidebarForThreadChange(threadId);
+    };
+  }, [threadId]);
 
   if (
     threadQuery.error &&

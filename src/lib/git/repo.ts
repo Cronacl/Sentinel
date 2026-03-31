@@ -485,70 +485,6 @@ async function resolveBranchDiffSpec(repoRoot: string) {
   };
 }
 
-async function hydrateDiffFilesWithContents(
-  repoRoot: string,
-  mode: RepoDiffMode,
-  files: RepoDiffFile[],
-  options?: {
-    branchBaseRef?: string | null;
-    untrackedPaths?: Set<string>;
-  },
-) {
-  return await Promise.all(
-    files.map(async (file) => {
-      if (!file.patch.includes("@@")) {
-        return file;
-      }
-
-      if (mode === "unstaged") {
-        const isUntracked =
-          options?.untrackedPaths?.has(file.path) ?? file.isUntracked;
-        const [oldContents, newContents] = await Promise.all([
-          isUntracked
-            ? Promise.resolve("")
-            : readGitTextFile(repoRoot, `:${file.path}`),
-          readWorktreeTextFile(repoRoot, file.path),
-        ]);
-
-        return {
-          ...file,
-          newContents: newContents ?? "",
-          oldContents: oldContents ?? "",
-        };
-      }
-
-      if (mode === "staged") {
-        const [oldContents, newContents] = await Promise.all([
-          readGitTextFile(repoRoot, `HEAD:${file.path}`),
-          readGitTextFile(repoRoot, `:${file.path}`),
-        ]);
-
-        return {
-          ...file,
-          newContents: newContents ?? "",
-          oldContents: oldContents ?? "",
-        };
-      }
-
-      const baseRef = options?.branchBaseRef?.trim();
-      if (!baseRef) {
-        return file;
-      }
-
-      const [oldContents, newContents] = await Promise.all([
-        readGitTextFile(repoRoot, `${baseRef}:${file.path}`),
-        readGitTextFile(repoRoot, `HEAD:${file.path}`),
-      ]);
-
-      return {
-        ...file,
-        newContents: newContents ?? "",
-        oldContents: oldContents ?? "",
-      };
-    }),
-  );
-}
-
 export function buildFallbackCommitMessage(changes: RepoFileChange[]) {
   if (changes.length === 0) {
     return "Update repository";
@@ -1120,7 +1056,6 @@ export async function getRepoDiffPanelData(
   let sourceLabel =
     mode === "unstaged" ? "Unstaged" : mode === "staged" ? "Staged" : "Branch";
   let disabledReason: string | null = null;
-  let branchBaseRef: string | null = null;
   let untrackedPaths = new Set<string>();
 
   if (mode === "unstaged") {
@@ -1162,7 +1097,6 @@ export async function getRepoDiffPanelData(
     patch = patchResult.stdout.trim();
   } else {
     const branchSpec = await resolveBranchDiffSpec(repoRoot);
-    branchBaseRef = branchSpec.baseRef ?? null;
     sourceLabel = branchSpec.sourceLabel;
     disabledReason = branchSpec.disabledReason;
 
@@ -1189,15 +1123,7 @@ export async function getRepoDiffPanelData(
     patch = patchResult.stdout.trim();
   }
 
-  const files = await hydrateDiffFilesWithContents(
-    repoRoot,
-    mode,
-    splitPatchIntoFiles(patch, { untrackedPaths }),
-    {
-      branchBaseRef,
-      untrackedPaths,
-    },
-  );
+  const files = splitPatchIntoFiles(patch, { untrackedPaths });
   const totals = files.reduce(
     (acc, file) => ({
       additions: acc.additions + file.additions,

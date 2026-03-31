@@ -13,11 +13,17 @@ import {
   useState,
 } from "react";
 
+import { closeRepoDiffSidebarState } from "@/components/chat/repo-diff-sidebar-store";
 import { useMediaQuery } from "@/hooks/use-media-query";
 
+import {
+  clearRightSidebarState,
+  DEFAULT_RIGHT_SIDEBAR_STATE,
+  type RightSidebarPanelId,
+  type RightSidebarSize,
+} from "./right-sidebar-state";
+
 const RIGHT_SIDEBAR_DRAWER_BREAKPOINT = "(max-width: 1024px)";
-export type RightSidebarSize = "narrow" | "wide";
-export type RightSidebarPanelId = "repo-diff" | null;
 
 type RightSidebarOptions = {
   panelId?: RightSidebarPanelId;
@@ -50,35 +56,62 @@ export function ShellProvider({ children }: PropsWithChildren) {
   const initialPathRef = useRef(pathname);
 
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(false);
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(
+    DEFAULT_RIGHT_SIDEBAR_STATE.open,
+  );
   const [rightSidebarContent, setRightSidebarContent] =
-    useState<ReactNode | null>(null);
+    useState<ReactNode | null>(DEFAULT_RIGHT_SIDEBAR_STATE.content);
   const [rightSidebarPanelId, setRightSidebarPanelId] =
-    useState<RightSidebarPanelId>(null);
-  const [rightSidebarSize, setRightSidebarSize] =
-    useState<RightSidebarSize>("narrow");
+    useState<RightSidebarPanelId>(DEFAULT_RIGHT_SIDEBAR_STATE.panelId);
+  const [rightSidebarSize, setRightSidebarSize] = useState<RightSidebarSize>(
+    DEFAULT_RIGHT_SIDEBAR_STATE.size,
+  );
   const rightSidebarDrawerMode = useMediaQuery(RIGHT_SIDEBAR_DRAWER_BREAKPOINT);
+
+  const closeRightSidebar = useCallback(() => {
+    const nextState = clearRightSidebarState({
+      content: rightSidebarContent,
+      open: rightSidebarOpen,
+      panelId: rightSidebarPanelId,
+      size: rightSidebarSize,
+    });
+
+    closeRepoDiffSidebarState();
+    setRightSidebarOpen(nextState.open);
+    setRightSidebarContent(nextState.content);
+    setRightSidebarPanelId(nextState.panelId);
+    setRightSidebarSize(nextState.size);
+  }, [
+    rightSidebarContent,
+    rightSidebarOpen,
+    rightSidebarPanelId,
+    rightSidebarSize,
+  ]);
 
   useEffect(() => {
     if (pathname !== initialPathRef.current) {
-      setRightSidebarOpen(false);
+      closeRightSidebar();
     }
     initialPathRef.current = pathname;
-  }, [pathname]);
+  }, [closeRightSidebar, pathname]);
 
   const toggleLeftSidebar = useCallback(
     () => setLeftSidebarOpen((prev) => !prev),
     [],
   );
 
-  const toggleRightSidebar = useCallback(
-    () =>
-      setRightSidebarOpen((prev) => {
-        if (!prev && !rightSidebarContent) return false;
-        return !prev;
-      }),
-    [rightSidebarContent],
-  );
+  const toggleRightSidebar = useCallback(() => {
+    if (rightSidebarOpen) {
+      closeRightSidebar();
+      return;
+    }
+
+    if (!rightSidebarContent) {
+      return;
+    }
+
+    setRightSidebarOpen(true);
+  }, [closeRightSidebar, rightSidebarContent, rightSidebarOpen]);
 
   const openRightSidebar = useCallback(
     (content: ReactNode, options?: RightSidebarOptions) => {
@@ -107,10 +140,6 @@ export function ShellProvider({ children }: PropsWithChildren) {
     },
     [],
   );
-
-  const closeRightSidebar = useCallback(() => {
-    setRightSidebarOpen(false);
-  }, []);
 
   const value = useMemo<ShellContextValue>(
     () => ({
