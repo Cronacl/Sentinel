@@ -56,6 +56,8 @@ type ActiveCodexRunControl = {
   runId: string;
   threadId: string;
   unsubscribe: () => void;
+  userId: string;
+  workspaceId: string;
 };
 
 type CodexMirrorToolState =
@@ -1136,6 +1138,58 @@ async function emitLatestSnapshot(runId: string, threadId: string) {
   });
 }
 
+async function drainQueuedCodexFollowUp(
+  request: Pick<ThreadChatRequest, "threadId" | "userId" | "workspaceId">,
+) {
+  const thread = await persist.loadThread(request.threadId);
+
+  if (!thread) {
+    return;
+  }
+
+  if (thread.activeStreamId || thread.status === "streaming") {
+    return;
+  }
+
+  if (thread.status === "awaiting_approval") {
+    return;
+  }
+
+  persist.resetProcessingThreadFollowUps(request.threadId);
+  const nextFollowUp = persist.claimNextThreadFollowUp(request.threadId);
+
+  if (!nextFollowUp) {
+    return;
+  }
+
+  try {
+    await runCodexThreadChat(
+      {
+        message: {
+          id: nextFollowUp.id,
+          metadata: {},
+          parts: nextFollowUp.parts,
+          role: "user",
+        },
+        modelId: nextFollowUp.modelId,
+        ...(nextFollowUp.reasoningEffort
+          ? { reasoningEffort: nextFollowUp.reasoningEffort }
+          : {}),
+        threadId: request.threadId,
+        threadMode: nextFollowUp.threadMode,
+        trigger: "submit-user-message",
+        userId: request.userId,
+        workspaceId: request.workspaceId,
+      },
+      thread,
+    );
+    persist.deleteThreadFollowUp(request.threadId, nextFollowUp.id);
+  } catch (error) {
+    persist.requeueThreadFollowUp(request.threadId, nextFollowUp.id);
+    throw error;
+  }
+}
+
 async function finalizeCodexRun(input: {
   errorMessage?: string | null;
   messageStatus: "cancelled" | "completed" | "error";
@@ -1198,6 +1252,21 @@ async function finalizeCodexRun(input: {
   control.eventChannel.close();
   control.unsubscribe();
   activeCodexRunControls.delete(input.runId);
+
+  if (input.threadStatus === "idle" && input.messageStatus !== "error") {
+    try {
+      await drainQueuedCodexFollowUp({
+        threadId: input.state.threadId,
+        userId: control.userId,
+        workspaceId: control.workspaceId,
+      });
+    } catch (error) {
+      log.error("codex_follow_up_drain_failed", {
+        error,
+        threadId: input.state.threadId,
+      });
+    }
+  }
 }
 
 async function handleCodexServerEvent(
@@ -1564,6 +1633,15 @@ export async function stopCodexThreadRun(
     activeCodexRunControls.delete(activeRunId);
   }
 
+  try {
+    await drainQueuedCodexFollowUp(request);
+  } catch (error) {
+    log.error("codex_follow_up_drain_failed", {
+      error,
+      threadId: request.threadId,
+    });
+  }
+
   return new Response(null, { status: 204 });
 }
 
@@ -1762,6 +1840,8 @@ export async function runCodexThreadChat(
       runId,
       threadId: request.threadId,
       unsubscribe,
+      userId: request.userId,
+      workspaceId: request.workspaceId,
     });
 
     const initialSnapshot = await loadThreadSessionSnapshot(request.threadId);

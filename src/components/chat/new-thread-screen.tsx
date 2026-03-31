@@ -487,10 +487,9 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         text,
         threadMode,
       });
-      await utils.threads.get.invalidate({ threadId: draftThreadId });
       void utils.threads.list.invalidate();
     },
-    [draftThreadId, queueFollowUp, utils.threads.get, utils.threads.list],
+    [queueFollowUp, utils.threads.list],
   );
 
   const handleSteerFollowUp = useCallback(
@@ -521,10 +520,9 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         text,
         threadMode,
       });
-      await utils.threads.get.invalidate({ threadId: draftThreadId });
       void utils.threads.list.invalidate();
     },
-    [draftThreadId, steerFollowUp, utils.threads.get, utils.threads.list],
+    [steerFollowUp, utils.threads.list],
   );
 
   const handleStartPlanImplementation = useCallback(() => {

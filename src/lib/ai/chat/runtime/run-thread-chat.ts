@@ -233,11 +233,26 @@ async function handleFollowUpAction(
     const latestAssistantId = await persist.getLatestAssistantMessageId(
       request.threadId,
     );
-    return handleStopStream({
+    const stopRequest = {
       ...request,
       ...(latestAssistantId ? { messageId: latestAssistantId } : {}),
       trigger: "stop-stream",
-    });
+    } satisfies ThreadChatRequest;
+    const engine =
+      latestThread?.chatEngine ??
+      existingThread?.chatEngine ??
+      request.engine ??
+      "sentinel";
+
+    if (engine === "codex") {
+      return stopCodexThreadRun(stopRequest, latestThread);
+    }
+
+    if (engine === "claude") {
+      return stopClaudeThreadRun(stopRequest, latestThread);
+    }
+
+    return handleStopStream(stopRequest);
   }
 
   await drainFollowUpQueue(request);
