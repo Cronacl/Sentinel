@@ -657,6 +657,48 @@ describe("enginesRouter.models", () => {
       }),
     ]);
   });
+
+  it("keeps cached Codex models connected when auth is temporarily unavailable", async () => {
+    getStatus.mockImplementationOnce(async () => ({
+      account: null,
+      authReady: false,
+      availableModels: [
+        {
+          defaultReasoningEffort: "medium",
+          description: "Codex model",
+          displayName: "GPT-5 Codex",
+          id: "gpt-5-codex",
+          inputModalities: ["text"],
+          model: "gpt-5-codex",
+          supportedReasoningEfforts: [{ effort: "medium" }],
+        },
+      ],
+      cliDetected: true,
+      cliVersion: "codex-cli 0.98.0",
+      error: "Authentication temporarily unavailable.",
+      isDesktopRuntime: true,
+      lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
+      requiresOpenaiAuth: true,
+      serverReachable: true,
+      state: "auth_unavailable",
+      usedCachedStatus: true,
+    }));
+
+    const result = await enginesRouter.models({
+      ctx: {
+        db: {},
+        session: { user: { id: "user-1" } },
+      },
+      input: { engine: "codex" },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        isConnected: true,
+        modelId: "gpt-5-codex",
+      }),
+    ]);
+  });
 });
 
 describe("enginesRouter.refreshStatus", () => {

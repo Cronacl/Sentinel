@@ -39,6 +39,7 @@ function renderExternalEngineIcon(
 
 type ModelSelectorProps = {
   availableModels: ChatComposerModel[];
+  isLoading?: boolean;
   onSelectModel: (modelKey: string) => void;
   onSelectReasoningEffort: (effort: ReasoningEffort) => void;
   selectedModel: ChatComposerModel | null;
@@ -49,6 +50,7 @@ type ModelSelectorProps = {
 
 export function ModelSelector({
   availableModels,
+  isLoading = false,
   onSelectModel,
   onSelectReasoningEffort,
   selectedModel,
@@ -66,7 +68,7 @@ export function ModelSelector({
       <Popover.Root isOpen={modelOpen} onOpenChange={setModelOpen}>
         <Popover.Trigger>
           <Button
-            className="h-8 gap-1 rounded-xl border border-border/50 bg-background px-2.5 text-[13px] text-muted shadow-none hover:bg-default hover:text-foreground disabled:opacity-30"
+            className="h-8 justify-between gap-1 rounded-xl border border-border/50 bg-background px-2.5 text-[13px] text-muted shadow-none hover:bg-default hover:text-foreground disabled:opacity-30"
             isDisabled={!hasModels}
             size="sm"
             variant="ghost"
@@ -81,7 +83,7 @@ export function ModelSelector({
                 renderExternalEngineIcon(selectedModel?.engine, "size-3")
               )}
               <span className="max-w-[160px] truncate">
-                {selectedModel?.displayName ?? selectedModelKey ?? "No model"}
+                {selectedModel?.displayName ?? selectedModelKey ?? "Model"}
               </span>
             </span>
             <HugeiconsIcon

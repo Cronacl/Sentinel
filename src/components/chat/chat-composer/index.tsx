@@ -11,10 +11,6 @@ import {
   hasComposerContext,
 } from "@/lib/composer-context/extract";
 import { api } from "@/trpc/react";
-import {
-  getClaudeComposerUnavailableMessage,
-  getCodexComposerUnavailableMessage,
-} from "@/components/settings/runtime-status";
 
 import { AttachmentManager } from "../attachment-manager";
 import { ComposerToolbar } from "../composer-toolbar";
@@ -30,6 +26,8 @@ import { usePersistSelection } from "./use-persist-selection";
 import { usePlanMode } from "./use-plan-mode";
 
 export type { ChatComposerProps } from "./types";
+
+let hasComposerBootstrappedThisSession = false;
 
 export function ChatComposer({
   activeWorkspace,
@@ -306,33 +304,13 @@ export function ChatComposer({
   };
 
   const disabledMessage =
-    !modelsQuery.isLoading && !hasModels ? (
+    selectedEngine === "sentinel" && !modelsQuery.isLoading && !hasModels ? (
       <>
-        {selectedEngine !== "sentinel" ? (
-          <>
-            {selectedEngine === "codex"
-              ? getCodexComposerUnavailableMessage(selectedEngineStatus?.status)
-              : getClaudeComposerUnavailableMessage(
-                  selectedEngineStatus?.status,
-                )}{" "}
-            Open{" "}
-            <Link className="text-foreground underline" href="/settings/models">
-              Settings
-            </Link>{" "}
-            to reload the runtime.
-          </>
-        ) : (
-          <>
-            Connect a provider in{" "}
-            <Link
-              className="text-foreground underline"
-              href="/settings/providers"
-            >
-              Settings
-            </Link>
-            .
-          </>
-        )}
+        Connect a provider in{" "}
+        <Link className="text-foreground underline" href="/settings/providers">
+          Settings
+        </Link>
+        .
       </>
     ) : null;
 
@@ -344,9 +322,25 @@ export function ChatComposer({
       label: engine.label,
     })) ?? [];
   const showEngineSelector = !canPersistThreadSelection;
+  const isModelUiReady =
+    Boolean(selectedModelKey) ||
+    (!modelsQuery.isLoading && !globalSelectionQuery.isLoading);
+  const isComposerReady = Boolean(editor) && hasWorkspace && isModelUiReady;
+  const [hideUntilReady, setHideUntilReady] = useState(
+    () => !hasComposerBootstrappedThisSession,
+  );
 
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const dragCounterRef = useRef(0);
+
+  useEffect(() => {
+    if (!hideUntilReady || !isComposerReady) {
+      return;
+    }
+
+    hasComposerBootstrappedThisSession = true;
+    setHideUntilReady(false);
+  }, [hideUntilReady, isComposerReady]);
 
   useEffect(() => {
     if (isLocked) return;
@@ -421,7 +415,14 @@ export function ChatComposer({
         </div>
       ) : null}
 
-      <div className="pointer-events-auto w-full rounded-[24px] border border-border/50 bg-background shadow-[0_0_10px_rgba(0,0,0,0.05)] dark:border-border/20 dark:bg-surface">
+      <div
+        aria-hidden={hideUntilReady ? true : undefined}
+        className="pointer-events-auto w-full rounded-[24px] border border-border/50 bg-background shadow-[0_0_10px_rgba(0,0,0,0.05)] transition-opacity duration-150 dark:border-border/20 dark:bg-surface"
+        style={{
+          opacity: hideUntilReady ? 0 : 1,
+          visibility: hideUntilReady ? "hidden" : "visible",
+        }}
+      >
         <div className="px-2.5 py-2">
           <AttachmentManager
             attachmentError={attachmentError}
@@ -456,7 +457,7 @@ export function ChatComposer({
           />
 
           <div className="px-2">
-            <div className="min-h-[20px]">
+            <div className="min-h-[32px]">
               {!editor ? (
                 <div className="pointer-events-none py-1 text-[14px] text-muted/50">
                   {placeholderText}
@@ -501,6 +502,9 @@ export function ChatComposer({
             modelSelector={
               <ModelSelector
                 availableModels={availableModels}
+                isLoading={
+                  modelsQuery.isLoading && availableModels.length === 0
+                }
                 onSelectModel={handleSelectModel}
                 onSelectReasoningEffort={handleSelectReasoningEffort}
                 selectedModel={selectedModel}
