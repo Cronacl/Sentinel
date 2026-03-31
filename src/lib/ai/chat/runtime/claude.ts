@@ -31,12 +31,23 @@ import { streamContext } from "@/lib/streams";
 
 import * as persist from "../persistence";
 import {
+  beginThreadRepoCheckpointRun,
+  clearThreadRepoCheckpointRun,
+  finalizeThreadRepoCheckpointRun,
+  getThreadCheckpointAnchorMessageId,
+} from "../repo-checkpoints";
+import {
   loadThreadSessionSnapshot,
   serializeThreadStreamEvent,
 } from "../session-server";
 import type { ThreadStreamEvent } from "../session-types";
 import type { ThreadChatRequest } from "../types";
-import { buildActiveThreadMessages, getFirstUserText } from "./transcript";
+import {
+  buildActiveThreadMessages,
+  getFirstUserText,
+  getUserParentMessageId,
+  truncateTranscriptAtMessage,
+} from "./transcript";
 import {
   type ClaudePromptResponse,
   extractClaudePromptResponseById,
@@ -364,6 +375,9 @@ function buildUserMessage(
     ...request.message,
     metadata: mergeThreadMessageMetadata(request.message.metadata, {
       branchId: request.message.id,
+      ...(request.trigger === "edit-user-message" && request.messageId
+        ? { editedFromMessageId: request.messageId }
+        : {}),
       isActive: true,
       parentMessageId,
       runId,
@@ -812,6 +826,7 @@ async function emitAssistantMessageUpdate(
   status: "pending" | "streaming" | "completed" | "error" | "cancelled",
   finishReason?: string | null,
   errorMessage?: string | null,
+  options?: { repoCheckpointId?: string | null },
 ) {
   persist.upsertMessage(state.threadId, {
     id: state.assistantId,
@@ -824,6 +839,9 @@ async function emitAssistantMessageUpdate(
         requestedModelId: state.requestedModelId ?? undefined,
         responseModelId: state.responseModelId ?? undefined,
       },
+      ...(options?.repoCheckpointId
+        ? { repoCheckpointId: options.repoCheckpointId }
+        : {}),
       runId,
       status,
       usage: state.usage ?? undefined,
@@ -1218,6 +1236,15 @@ async function finishClaudeRun(
     control.pendingQuestions.delete(id);
   }
 
+  const repoCheckpointId =
+    input.status === "completed" && input.threadStatus === "idle"
+      ? await finalizeThreadRepoCheckpointRun({
+          assistantMessageId: control.assistantId,
+          runId: control.runId,
+          threadId: control.threadId,
+        })
+      : (await clearThreadRepoCheckpointRun(control.runId), null);
+
   persist.clearActiveStream(control.threadId);
   persist.setThreadStatus(control.threadId, input.threadStatus);
 
@@ -1227,6 +1254,7 @@ async function finishClaudeRun(
     input.status === "cancelled" ? "cancelled" : input.status,
     input.finishReason,
     input.errorMessage,
+    { repoCheckpointId },
   );
   await emitThreadSnapshot(control.threadId, control.eventChannel);
   if (input.status === "cancelled") {
@@ -1469,18 +1497,30 @@ export async function runClaudeThreadChat(
     return new Response(null, { status: 204 });
   }
 
-  if (request.trigger !== "submit-user-message") {
+  if (
+    request.trigger !== "submit-user-message" &&
+    request.trigger !== "edit-user-message"
+  ) {
     throw new Error(
       `The Claude engine does not support "${request.trigger}" yet.`,
     );
   }
 
   const allRecords = await persist.loadThreadMessages(request.threadId);
-  const transcript = buildActiveThreadMessages(allRecords);
+  const checkpointAnchorMessageId =
+    getThreadCheckpointAnchorMessageId(existingThread);
+  const transcript = truncateTranscriptAtMessage(
+    buildActiveThreadMessages(allRecords),
+    checkpointAnchorMessageId,
+  );
   const threadMode = normalizeThreadMode(
     request.threadMode ?? existingThread?.mode,
   );
-  const userParentMessageId = transcript.at(-1)?.id ?? null;
+  const userParentMessageId = getUserParentMessageId(
+    request,
+    transcript,
+    allRecords,
+  );
   const assistantParentMessageId = request.message?.id ?? userParentMessageId;
   const fallbackTitle =
     getFirstUserText(request.message ? [request.message] : [])?.slice(0, 100) ??
@@ -1536,6 +1576,11 @@ export async function runClaudeThreadChat(
     if (persistedUser) {
       persist.upsertMessage(request.threadId, persistedUser);
       await persist.setActiveMessage(request.threadId, persistedUser.id);
+      if (checkpointAnchorMessageId) {
+        persist.updateThreadRepoState(request.threadId, {
+          checkpointAnchorMessageId: null,
+        });
+      }
     }
 
     persist.upsertMessage(
@@ -1556,6 +1601,11 @@ export async function runClaudeThreadChat(
       modelId: request.modelId ?? existingClaudeState?.modelId ?? null,
       mode: threadMode,
       reasoningEffort: request.reasoningEffort ?? null,
+    });
+    await beginThreadRepoCheckpointRun({
+      projectPath: workspaceRoot,
+      runId,
+      thread: existingThread,
     });
     persist.updateClaudeThreadState(
       request.threadId,
@@ -1676,6 +1726,7 @@ export async function runClaudeThreadChat(
       { status: 202 },
     );
   } catch (error) {
+    await clearThreadRepoCheckpointRun(runId);
     persist.clearActiveStream(request.threadId);
     persist.setThreadStatus(request.threadId, "idle");
     inputQueue.close();

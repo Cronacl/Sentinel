@@ -115,6 +115,24 @@ const generateGitCommitMessage = mock(async () => ({
 }));
 const findGithubIntegration = mock(async () => null);
 const getValidAccessToken = mock(async () => "github-token");
+const toggleThreadRepoCheckpoint = mock(async () => ({
+  changed: true,
+  checkpointCursorId: "checkpoint-1",
+  checkpointLatestId: "checkpoint-2",
+}));
+const resetThreadRepoCheckpoint = mock(async () => ({
+  changed: true,
+  checkpointAnchorMessageId: "message-1",
+  checkpointCursorId: null,
+  checkpointLatestId: null,
+}));
+const getThreadCheckpointAnchorMessageId = mock(
+  (thread?: {
+    chatEngineState?: { repo?: { checkpointAnchorMessageId?: string | null } };
+  }) => thread?.chatEngineState?.repo?.checkpointAnchorMessageId ?? null,
+);
+const persistenceNoopAsync = mock(async () => undefined);
+const persistenceNoopSync = mock(() => undefined);
 const updateThreadRepoState = mock(() => undefined);
 const githubCreatePr = mock(async (input: any) => ({
   additions: 10,
@@ -219,7 +237,27 @@ mock.module("@/lib/git/commit-message", () => ({
 }));
 
 mock.module("@/lib/ai/chat/persistence", () => ({
+  clearActiveStream: persistenceNoopSync,
+  ensureThread: persistenceNoopAsync,
+  loadThreadMessages: mock(async () => []),
+  setActiveMessage: persistenceNoopAsync,
+  setActiveStream: persistenceNoopSync,
+  setThreadStatus: persistenceNoopSync,
+  updateClaudeThreadState: persistenceNoopSync,
+  updateCodexThreadState: persistenceNoopSync,
+  updateMessageMetadata: persistenceNoopAsync,
+  updateThreadChatSettings: persistenceNoopAsync,
   updateThreadRepoState,
+  upsertMessage: persistenceNoopSync,
+}));
+
+mock.module("@/lib/ai/chat/repo-checkpoints", () => ({
+  beginThreadRepoCheckpointRun: mock(async () => false),
+  clearThreadRepoCheckpointRun: mock(async () => {}),
+  finalizeThreadRepoCheckpointRun: mock(async () => null),
+  getThreadCheckpointAnchorMessageId,
+  resetThreadRepoCheckpoint,
+  toggleThreadRepoCheckpoint,
 }));
 
 mock.module("@/lib/integrations/oauth/token-manager", () => ({
@@ -262,6 +300,9 @@ beforeEach(() => {
   generateGitCommitMessage.mockClear();
   findGithubIntegration.mockClear();
   getValidAccessToken.mockClear();
+  getThreadCheckpointAnchorMessageId.mockClear();
+  resetThreadRepoCheckpoint.mockClear();
+  toggleThreadRepoCheckpoint.mockClear();
   updateThreadRepoState.mockClear();
   githubCreatePr.mockClear();
   githubGetActivePullRequestStatus.mockClear();
@@ -1088,6 +1129,74 @@ describe("repoRouter workspace PR status queries", () => {
     );
   });
 
+  it("matches checkpoint availability against the thread project path instead of the repo root", async () => {
+    getOwnedThreadOrThrow.mockImplementationOnce(async () => ({
+      chatEngine: "codex",
+      chatEngineState: {
+        repo: {
+          checkpointProjectPath: "/tmp/workspace",
+          projectMode: "local",
+        },
+      },
+      chatModelId: "gpt-5.4",
+      chatReasoningEffort: "high",
+      id: "thread-1",
+      workspaceId: "workspace-1",
+    }));
+    resolveRepoContext.mockImplementationOnce(async () => ({
+      aheadCount: 0,
+      branch: "feature/test",
+      changedFileCount: 0,
+      deletions: 0,
+      githubRemote: {
+        defaultBranch: "main",
+        owner: "openai",
+        pullRequestUrl:
+          "https://github.com/openai/sentinel/compare/main...feature/test?expand=1",
+        pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+        remoteName: "origin",
+        remoteUrl: "git@github.com:openai/sentinel.git",
+        repo: "sentinel",
+        repositoryUrl: "https://github.com/openai/sentinel",
+      },
+      hasChanges: false,
+      hasCommits: true,
+      hasRemotes: true,
+      hasUpstream: true,
+      insertions: 0,
+      isDefaultBranch: false,
+      isGitRepo: true,
+      pushRemoteName: "origin",
+      repoRoot: "/tmp/workspace/apps/web",
+    }));
+
+    const result = await repoRouter.getContext({
+      ctx: {
+        db: {
+          query: {
+            integrations: {
+              findFirst: findGithubIntegration,
+            },
+          },
+        },
+        session: { user: { id: "user-checkpoint" } },
+        user: {
+          defaultChatModelId: null,
+          id: "user-checkpoint",
+          lastProjectOpenTargetId: null,
+        },
+      },
+      input: {
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(result.checkpointPathMatches).toBe(true);
+    expect(result.effectiveProjectPath).toBe("/tmp/workspace");
+    expect(result.effectiveRootPath).toBe("/tmp/workspace/apps/web");
+  });
+
   it("reports blocked branch resume when the thread branch differs and the local project is dirty", async () => {
     getOwnedThreadOrThrow.mockImplementationOnce(async () => ({
       chatEngine: "codex",
@@ -1375,6 +1484,73 @@ describe("repoRouter.diff panel", () => {
     );
     expect(revertResult.diff).toMatchObject({
       mode: "unstaged",
+    });
+  });
+
+  it("toggles a thread checkpoint and refreshes repo context", async () => {
+    const result = await repoRouter.toggleCheckpoint({
+      ctx: {
+        session: { user: { id: "user-1" } },
+        user: {
+          id: "user-1",
+          lastProjectOpenTargetId: "cursor",
+        },
+      },
+      input: {
+        checkpointId: "checkpoint-1",
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(toggleThreadRepoCheckpoint).toHaveBeenCalledWith({
+      checkpointId: "checkpoint-1",
+      projectPath: "/tmp/workspace",
+      thread: expect.objectContaining({
+        id: "thread-1",
+      }),
+      threadId: "thread-1",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      repoContext: expect.objectContaining({
+        preferredOpenTargetId: "cursor",
+      }),
+    });
+  });
+
+  it("resets a thread checkpoint from a user message and refreshes repo context", async () => {
+    const result = await repoRouter.resetCheckpoint({
+      ctx: {
+        session: { user: { id: "user-1" } },
+        user: {
+          id: "user-1",
+          lastProjectOpenTargetId: "cursor",
+        },
+      },
+      input: {
+        checkpointId: "checkpoint-1",
+        threadId: "thread-1",
+        userMessageId: "message-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(resetThreadRepoCheckpoint).toHaveBeenCalledWith({
+      checkpointId: "checkpoint-1",
+      projectPath: "/tmp/workspace",
+      thread: expect.objectContaining({
+        id: "thread-1",
+      }),
+      threadId: "thread-1",
+      userMessageId: "message-1",
+    });
+    expect(result).toMatchObject({
+      changed: true,
+      ok: true,
+      repoContext: expect.objectContaining({
+        preferredOpenTargetId: "cursor",
+      }),
     });
   });
 });

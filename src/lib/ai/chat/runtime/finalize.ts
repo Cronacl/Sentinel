@@ -8,11 +8,13 @@ export function buildPersistedAssistantMessage({
   errorMessage,
   finalAssistant,
   placeholder,
+  repoCheckpointId,
 }: {
   assistantId: string;
   errorMessage?: string;
   finalAssistant?: ThreadUIMessage;
   placeholder: ThreadUIMessage;
+  repoCheckpointId?: string | null;
 }): ThreadUIMessage {
   const merged = finalAssistant ?? placeholder;
   const placeholderMetadata = placeholder.metadata ?? {};
@@ -29,6 +31,7 @@ export function buildPersistedAssistantMessage({
         finishReason: merged.metadata?.finishReason,
         isActive: true,
         parentMessageId: placeholderMetadata.parentMessageId ?? null,
+        ...(repoCheckpointId ? { repoCheckpointId } : {}),
         statusLabel: null,
         status: errorMessage ? "error" : "completed",
       },

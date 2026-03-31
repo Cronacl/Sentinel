@@ -77,6 +77,10 @@ export const repoProjectModeSchema = z.enum(["local", "worktree"]);
 
 export const repoThreadStateSchema = z.object({
   activeBranch: z.string().nullish(),
+  checkpointAnchorMessageId: z.string().nullish(),
+  checkpointCursorId: z.string().nullish(),
+  checkpointLatestId: z.string().nullish(),
+  checkpointProjectPath: z.string().nullish(),
   lastPullRequest: repoLastPullRequestSchema.nullish(),
   projectMode: repoProjectModeSchema.nullish(),
   worktreePath: z.string().nullish(),

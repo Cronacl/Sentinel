@@ -90,6 +90,7 @@ export async function loadThread(threadId: string) {
       id: true,
       mode: true,
       status: true,
+      title: true,
       userId: true,
       workspaceId: true,
     },

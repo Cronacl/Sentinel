@@ -233,6 +233,7 @@ const setThreadStatus = mock(
   },
 );
 const updateThreadChatSettings = mock(() => {});
+const updateThreadRepoState = mock(() => {});
 const updateThreadContextCompactionCheckpoint = mock(
   (_threadId, checkpoint) => {
     contextCompactionCheckpointVersion += 1;
@@ -669,6 +670,7 @@ mock.module("./persistence", () => ({
   updateMessageMetadata,
   updateThreadChatSettings,
   updateThreadContextCompactionCheckpoint,
+  updateThreadRepoState,
   updateThreadTitle,
   upsertMessage,
 }));
@@ -695,6 +697,7 @@ mock.module("@/lib/ai/chat/persistence", () => ({
   updateMessageMetadata,
   updateThreadChatSettings,
   updateThreadContextCompactionCheckpoint,
+  updateThreadRepoState,
   updateThreadTitle,
   upsertMessage,
 }));
@@ -1033,6 +1036,7 @@ beforeEach(async () => {
     updateMessageMetadata,
     updateThreadChatSettings,
     updateThreadContextCompactionCheckpoint,
+    updateThreadRepoState,
     updateThreadTitle,
     upsertMessage,
   }));
@@ -1058,6 +1062,7 @@ beforeEach(async () => {
     updateMessageMetadata,
     updateThreadChatSettings,
     updateThreadContextCompactionCheckpoint,
+    updateThreadRepoState,
     updateThreadTitle,
     upsertMessage,
   }));
@@ -1262,10 +1267,48 @@ describe("runThreadChat title generation", () => {
       archivedAt: null,
       id: "thread-1",
       mode: "chat",
+      title: "Existing conversation",
     }));
     loadThreadMessages.mockImplementation(async () => [
       createPersistedUserMessage("Existing conversation"),
     ]);
+
+    await runThreadChat(createSubmitRequest(), "user-1");
+    await flushAsyncWork();
+
+    expect(resolveThreadTitleModel).not.toHaveBeenCalled();
+    expect(generateThreadTitle).not.toHaveBeenCalled();
+    expect(updateThreadTitle).not.toHaveBeenCalled();
+  });
+
+  it("generates a title for placeholder draft threads created before the first message", async () => {
+    loadThread.mockImplementation(async () => ({
+      archivedAt: null,
+      id: "thread-1",
+      mode: "chat",
+      title: "New thread",
+    }));
+    loadThreadMessages.mockImplementation(async () => []);
+
+    await runThreadChat(createSubmitRequest(), "user-1");
+    await flushAsyncWork();
+
+    expect(resolveThreadTitleModel).toHaveBeenCalledWith({
+      providerId: "openai",
+      userId: "user-1",
+    });
+    expect(generateThreadTitle).toHaveBeenCalledTimes(1);
+    expect(updateThreadTitle).toHaveBeenCalledWith("thread-1", "Fast title");
+  });
+
+  it("does not overwrite a custom draft title before the first message", async () => {
+    loadThread.mockImplementation(async () => ({
+      archivedAt: null,
+      id: "thread-1",
+      mode: "chat",
+      title: "Investigate sidebar bug",
+    }));
+    loadThreadMessages.mockImplementation(async () => []);
 
     await runThreadChat(createSubmitRequest(), "user-1");
     await flushAsyncWork();

@@ -288,7 +288,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   });
 
   useEffect(() => {
-    if (status === "streaming") {
+    if (status === "submitted" || status === "streaming") {
       applyThreadStatusCacheUpdate({
         status: "streaming",
         threadId: draftThreadId,

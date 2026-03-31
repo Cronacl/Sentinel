@@ -37,6 +37,10 @@ import type {
   RepoPullRequestStatus,
 } from "@/lib/git/pull-request-status";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import {
+  resetThreadRepoCheckpoint,
+  toggleThreadRepoCheckpoint,
+} from "@/lib/ai/chat/repo-checkpoints";
 import { updateThreadRepoState } from "@/lib/ai/chat/persistence";
 import { GitHubService } from "@/lib/integrations/providers/github/service";
 import { getValidAccessToken } from "@/lib/integrations/oauth/token-manager";
@@ -66,6 +70,13 @@ const repoDiffFilesInputSchema = workspaceThreadInputSchema.extend({
 });
 const repoDiffMutationInputSchema = repoDiffFilesInputSchema.extend({
   mode: repoDiffModeSchema,
+});
+const repoCheckpointToggleInputSchema = workspaceThreadInputSchema.extend({
+  checkpointId: z.string().min(1),
+});
+const repoCheckpointResetInputSchema = workspaceThreadInputSchema.extend({
+  checkpointId: z.string().min(1),
+  userMessageId: z.string().min(1),
 });
 const openTargetPreferenceSchema = z.object({
   targetId: z.string().trim().min(1).max(255),
@@ -171,6 +182,10 @@ function normalizeThreadRepoState(
   const state = getRepoThreadState(thread?.chatEngineState);
   return {
     activeBranch: state?.activeBranch ?? state?.lastPullRequest?.head ?? null,
+    checkpointAnchorMessageId: state?.checkpointAnchorMessageId ?? null,
+    checkpointCursorId: state?.checkpointCursorId ?? null,
+    checkpointLatestId: state?.checkpointLatestId ?? null,
+    checkpointProjectPath: state?.checkpointProjectPath ?? null,
     lastPullRequest: state?.lastPullRequest ?? null,
     projectMode: state?.projectMode ?? "local",
     worktreePath: state?.worktreePath ?? null,
@@ -218,6 +233,10 @@ function areRepoThreadStatesEquivalent(
 ) {
   return (
     left.activeBranch === right.activeBranch &&
+    left.checkpointAnchorMessageId === right.checkpointAnchorMessageId &&
+    left.checkpointCursorId === right.checkpointCursorId &&
+    left.checkpointLatestId === right.checkpointLatestId &&
+    left.checkpointProjectPath === right.checkpointProjectPath &&
     left.projectMode === right.projectMode &&
     left.worktreePath === right.worktreePath &&
     arePullRequestsEquivalent(
@@ -382,6 +401,19 @@ async function buildRepoContextResponse(input: {
     updateThreadRepoState(input.thread.id, nextThreadState);
   }
 
+  const effectiveProjectPath =
+    nextThreadState.projectMode === "worktree" && worktreeStatus === "ready"
+      ? nextThreadState.worktreePath
+      : (input.pathValue ?? null);
+  const effectiveRootPath =
+    effectiveRepoContext.repoRoot ??
+    nextThreadState.worktreePath ??
+    input.pathValue ??
+    null;
+  const checkpointPathMatches =
+    !nextThreadState.checkpointProjectPath ||
+    nextThreadState.checkpointProjectPath === effectiveProjectPath;
+
   const responseGitHubRemote = resolvedGitHubRemote
     ? buildThreadGithubRemote(resolvedGitHubRemote, pullRequestBranch)
     : null;
@@ -390,11 +422,14 @@ async function buildRepoContextResponse(input: {
     ...effectiveRepoContext,
     branchResumeReason,
     branchResumeStatus,
-    effectiveRootPath:
-      effectiveRepoContext.repoRoot ??
-      nextThreadState.worktreePath ??
-      input.pathValue ??
-      null,
+    checkpointCursorId: nextThreadState.checkpointCursorId ?? null,
+    checkpointAnchorMessageId:
+      nextThreadState.checkpointAnchorMessageId ?? null,
+    checkpointLatestId: nextThreadState.checkpointLatestId ?? null,
+    checkpointPathMatches,
+    checkpointProjectPath: nextThreadState.checkpointProjectPath ?? null,
+    effectiveProjectPath,
+    effectiveRootPath,
     githubRemote: responseGitHubRemote,
     lastPullRequest: nextThreadState.lastPullRequest,
     preferredOpenTargetId: input.preferredOpenTargetId,
@@ -867,6 +902,77 @@ export const repoRouter = createTRPCRouter({
           pathValue: rootPath,
           preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
           thread,
+          userId: ctx.session.user.id,
+          workspaceId: workspace.id,
+        }),
+      };
+    }),
+
+  toggleCheckpoint: protectedProcedure
+    .input(repoCheckpointToggleInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const thread = await getOwnedThreadForWorkspace(ctx, input);
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const projectPath = await resolveThreadProjectPath({
+        thread,
+        workspaceRootPath: rootPath,
+      });
+      const githubService = await resolveGitHubService(ctx);
+
+      const toggleResult = await toggleThreadRepoCheckpoint({
+        checkpointId: input.checkpointId,
+        projectPath,
+        thread,
+        threadId: input.threadId,
+      });
+
+      const updatedThread = await getOwnedThreadOrThrow(ctx, input.threadId);
+
+      return {
+        changed: toggleResult.changed,
+        ok: true,
+        repoContext: await buildRepoContextResponse({
+          githubService,
+          pathValue: rootPath,
+          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+          thread: updatedThread,
+          userId: ctx.session.user.id,
+          workspaceId: workspace.id,
+        }),
+      };
+    }),
+
+  resetCheckpoint: protectedProcedure
+    .input(repoCheckpointResetInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const thread = await getOwnedThreadForWorkspace(ctx, input);
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const projectPath = await resolveThreadProjectPath({
+        thread,
+        workspaceRootPath: rootPath,
+      });
+      const githubService = await resolveGitHubService(ctx);
+
+      const resetResult = await resetThreadRepoCheckpoint({
+        checkpointId: input.checkpointId,
+        projectPath,
+        thread,
+        threadId: input.threadId,
+        userMessageId: input.userMessageId,
+      });
+
+      const updatedThread = await getOwnedThreadOrThrow(ctx, input.threadId);
+
+      return {
+        changed: resetResult.changed,
+        ok: true,
+        repoContext: await buildRepoContextResponse({
+          githubService,
+          pathValue: rootPath,
+          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+          thread: updatedThread,
           userId: ctx.session.user.id,
           workspaceId: workspace.id,
         }),
