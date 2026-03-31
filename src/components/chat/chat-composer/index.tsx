@@ -39,10 +39,12 @@ export function ChatComposer({
   onRemoveQueuedFollowUp,
   onSelectionChange,
   onSend,
+  onEnsureRepoThread,
   onStop,
   onSteerFollowUp,
   onSteerQueuedFollowUp,
   persistThreadSelection,
+  repoThreadId,
   promptSeed,
   promptSeedKey,
   queuedFollowUps = [],
@@ -56,6 +58,7 @@ export function ChatComposer({
 
   const hasWorkspace = Boolean(activeWorkspace);
   const isBusy = status === "submitted" || status === "streaming";
+  const [isRepoSetupPending, setIsRepoSetupPending] = useState(false);
   const canPersistThreadSelection = Boolean(
     threadId && threadSelection && (persistThreadSelection ?? true),
   );
@@ -135,7 +138,11 @@ export function ChatComposer({
 
   const hasModels = availableModels.length > 0;
   const isLocked = !hasWorkspace;
-  const canSend = hasWorkspace && hasModels && Boolean(selectedModelKey);
+  const canSend =
+    hasWorkspace &&
+    hasModels &&
+    Boolean(selectedModelKey) &&
+    !isRepoSetupPending;
 
   const skillsQuery = api.skills.list.useQuery(
     activeWorkspace?.id ? { workspaceId: activeWorkspace.id } : undefined,
@@ -531,8 +538,10 @@ export function ChatComposer({
           <div className="overflow-hidden rounded-b-[24px] border-t border-border/25">
             <ComposerWorkspaceBar
               activeWorkspace={activeWorkspace}
+              onEnsureThread={onEnsureRepoThread}
+              onSetupPendingChange={setIsRepoSetupPending}
+              repoThreadId={repoThreadId}
               showBranchSwitcher={showBranchSwitcher}
-              threadId={threadId}
             />
           </div>
         ) : null}

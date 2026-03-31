@@ -46,6 +46,7 @@ export type ChatComposerProps = {
   status?: "submitted" | "streaming" | "ready" | "error";
   draftMode?: "chat" | "plan" | null;
   persistThreadSelection?: boolean;
+  repoThreadId?: string;
   threadId?: string;
   threadSelection?: {
     engine?: ChatEngine;
@@ -53,4 +54,5 @@ export type ChatComposerProps = {
     mode?: "chat" | "plan";
     reasoningEffort?: ReasoningEffort | null;
   } | null;
+  onEnsureRepoThread?: () => Promise<string | null>;
 };

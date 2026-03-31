@@ -942,13 +942,29 @@ export const repoRouter = createTRPCRouter({
         thread,
         workspaceRootPath: rootPath,
       });
+      const githubService = await resolveGitHubService(ctx);
       const result = await checkoutBranch(projectPath, input.branchName);
+      const nextThread = thread
+        ? withUpdatedThreadRepoState(thread, {
+            activeBranch: result.branch,
+          })
+        : thread;
       if (thread) {
         updateThreadRepoState(thread.id, {
           activeBranch: result.branch,
         });
       }
-      return result;
+      return {
+        ...result,
+        repoContext: await buildRepoContextResponse({
+          githubService,
+          pathValue: rootPath,
+          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+          thread: nextThread,
+          userId: ctx.session.user.id,
+          workspaceId: workspace.id,
+        }),
+      };
     }),
 
   generateCommitMessage: protectedProcedure

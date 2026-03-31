@@ -39,6 +39,7 @@ import {
   applyThreadSnapshotCacheUpdate,
   applyThreadSettingsCacheUpdate,
   applyThreadStatusCacheUpdate,
+  applyThreadTitleCacheUpdate,
   applyOptimisticThreadPinUpdate,
   restoreOptimisticThreadPinUpdate,
 } from "@/lib/threads/cache";
@@ -219,6 +220,12 @@ export function ThreadScreen({
   const renameThread = api.threads.rename.useMutation({
     onSuccess: (nextThread) => {
       setThreadTitle(nextThread.title);
+      applyThreadTitleCacheUpdate({
+        threadId: thread.id,
+        title: nextThread.title,
+        utils,
+        workspaceId: workspace.id,
+      });
       void utils.threads.list.invalidate();
       void utils.threads.get.invalidate({ threadId: thread.id });
     },
@@ -942,6 +949,7 @@ export function ThreadScreen({
               promptSeed={editingPromptSeed}
               promptSeedKey={editingMessage?.id}
               queuedFollowUps={liveQueuedFollowUps}
+              repoThreadId={thread.id}
               showBranchSwitcher
               status={status}
               threadId={thread.id}

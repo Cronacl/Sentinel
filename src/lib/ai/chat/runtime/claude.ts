@@ -1419,6 +1419,7 @@ export async function runClaudeThreadChat(
   const workspaceRoot = await getWorkspaceRootPath(
     request.workspaceId,
     request.userId,
+    request.threadId,
   );
   const workspacePermissionMode = await getToolPermissionMode(
     request.userId,

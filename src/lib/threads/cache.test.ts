@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
-import { applyThreadSettingsCacheUpdate } from "./cache";
+import {
+  applyThreadSettingsCacheUpdate,
+  applyThreadTitleCacheUpdate,
+} from "./cache";
 
 function createUtils() {
   const threadData = {
@@ -175,4 +178,29 @@ describe("applyThreadSettingsCacheUpdate", () => {
       mode: "plan",
     });
   });
+});
+
+it("updates thread title across thread and list caches", () => {
+  const utils = createUtils();
+
+  applyThreadTitleCacheUpdate({
+    threadId: "thread-1",
+    title: "Renamed thread",
+    utils: utils as never,
+    workspaceId: "workspace-1",
+  });
+
+  expect(
+    utils.threads.get.getData({ threadId: "thread-1" })?.thread.title,
+  ).toBe("Renamed thread");
+  expect(
+    utils.threads.list.getData({
+      organizeBy: "chronological",
+      sortBy: "updated",
+    })?.items[0]?.title,
+  ).toBe("Renamed thread");
+  expect(
+    utils.threads.list.getData({ organizeBy: "workspace", sortBy: "updated" })
+      ?.groups[0]?.threads[0]?.title,
+  ).toBe("Renamed thread");
 });

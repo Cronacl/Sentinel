@@ -58,6 +58,9 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   const [draftThreadId, setDraftThreadId] = useState(
     () => threadId ?? crypto.randomUUID(),
   );
+  const [draftThreadInitialized, setDraftThreadInitialized] = useState(() =>
+    Boolean(threadId),
+  );
   const {
     buttonDirection,
     composerDockRef,
@@ -69,6 +72,9 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
   const hasHandedOffRef = useRef(false);
   const startPlanImplementationLockRef = useRef(false);
+  const ensureDraftThreadPromiseRef = useRef<Promise<string | null> | null>(
+    null,
+  );
 
   const selectWorkspace = api.workspaces.select.useMutation({
     onMutate: async ({ workspaceId }) => {
@@ -154,6 +160,42 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         ];
       });
       setIsCreateOpen(false);
+    },
+  });
+  const createDraftThread = api.threads.create.useMutation({
+    onSuccess: (thread) => {
+      setDraftThreadInitialized(true);
+      utils.threads.get.setData(
+        { threadId: thread.id },
+        {
+          messages: [],
+          queuedFollowUps: [],
+          thread: {
+            activeRunId: null,
+            archivedAt: thread.archivedAt,
+            chatEngine: thread.chatEngine,
+            chatModelId: thread.chatModelId,
+            chatReasoningEffort: thread.chatReasoningEffort,
+            createdAt: thread.createdAt,
+            id: thread.id,
+            linkedPullRequest: null,
+            mode: thread.mode,
+            pinnedAt: thread.pinnedAt,
+            status: thread.status,
+            summary: thread.summary,
+            title: thread.title,
+            updatedAt: thread.updatedAt,
+          },
+          workspace: thread.workspace,
+        },
+      );
+      void utils.threads.list.invalidate();
+    },
+  });
+  const archiveDraftThread = api.threads.archive.useMutation({
+    onSuccess: (_result, variables) => {
+      utils.threads.get.setData({ threadId: variables.threadId }, undefined);
+      void utils.threads.list.invalidate();
     },
   });
 
@@ -332,15 +374,13 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         text,
         threadMode,
       });
-      if (!threadId && !hasHandedOffRef.current) {
-        hasHandedOffRef.current = true;
-        window.history.replaceState(null, "", `/thread/${draftThreadId}`);
-        router.replace(`/thread/${draftThreadId}`);
-        void pendingBootstrap.catch(() => {});
-        return;
-      }
-      const bootstrap = await pendingBootstrap;
-      if (bootstrap?.snapshot) {
+      const applyBootstrapSnapshot = (
+        bootstrap: Awaited<ReturnType<typeof sendMessage>> | null | undefined,
+      ) => {
+        if (!bootstrap?.snapshot) {
+          return;
+        }
+
         const current = utils.threads.get.getData({ threadId: draftThreadId });
         applyThreadSnapshotCacheUpdate({
           snapshot: {
@@ -358,7 +398,16 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
           workspace: current?.workspace,
           workspaceId: selectedWorkspace?.id,
         });
+      };
+      if (!threadId && !hasHandedOffRef.current) {
+        hasHandedOffRef.current = true;
+        window.history.replaceState(null, "", `/thread/${draftThreadId}`);
+        router.replace(`/thread/${draftThreadId}`);
+        void pendingBootstrap.then(applyBootstrapSnapshot).catch(() => {});
+        return;
       }
+      const bootstrap = await pendingBootstrap;
+      applyBootstrapSnapshot(bootstrap);
     },
     [
       draftThreadId,
@@ -596,6 +645,93 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     [draftThreadMode],
   );
 
+  const ensureDraftThread = useCallback(async () => {
+    if (threadId || draftThreadInitialized) {
+      return draftThreadId;
+    }
+    if (!selectedWorkspace?.id) {
+      setChatError("Select a workspace before configuring this thread.");
+      return null;
+    }
+    if (ensureDraftThreadPromiseRef.current) {
+      return await ensureDraftThreadPromiseRef.current;
+    }
+
+    const globalSelection = utils.chatPreferences.get.getData();
+    const draftPromise = createDraftThread
+      .mutateAsync({
+        engine:
+          draftThreadSelection?.engine ?? globalSelection?.engine ?? "sentinel",
+        mode:
+          draftThreadSelection?.mode ??
+          draftThreadMode ??
+          globalSelection?.mode ??
+          "chat",
+        summary: "",
+        threadId: draftThreadId,
+        title: "New thread",
+        workspaceId: selectedWorkspace.id,
+      })
+      .then((thread) => thread.id)
+      .finally(() => {
+        ensureDraftThreadPromiseRef.current = null;
+      });
+
+    ensureDraftThreadPromiseRef.current = draftPromise;
+    return await draftPromise;
+  }, [
+    createDraftThread,
+    draftThreadId,
+    draftThreadInitialized,
+    draftThreadMode,
+    draftThreadSelection,
+    selectedWorkspace?.id,
+    threadId,
+    utils.chatPreferences,
+  ]);
+
+  const handleWorkspaceSelect = useCallback(
+    async (workspaceId: string) => {
+      if (workspaceId === selectedWorkspace?.id) {
+        setIsWorkspaceMenuOpen(false);
+        return;
+      }
+
+      setIsWorkspaceMenuOpen(false);
+
+      if (!threadId && draftThreadInitialized) {
+        const previousDraftThreadId = draftThreadId;
+        ensureDraftThreadPromiseRef.current = null;
+        setDraftThreadId(crypto.randomUUID());
+        setDraftThreadInitialized(false);
+
+        try {
+          await archiveDraftThread.mutateAsync({
+            threadId: previousDraftThreadId,
+          });
+        } catch {
+          utils.threads.get.setData(
+            { threadId: previousDraftThreadId },
+            undefined,
+          );
+          void utils.threads.list.invalidate();
+        }
+      }
+
+      await selectWorkspace.mutateAsync({ workspaceId });
+    },
+    [
+      archiveDraftThread,
+      draftThreadId,
+      draftThreadInitialized,
+      selectedWorkspace?.id,
+      selectWorkspace,
+      threadId,
+      utils.threads.get,
+      utils.threads.list,
+    ],
+  );
+
   useEffect(() => {
     if (threadId) return;
     router.prefetch(`/thread/${draftThreadId}`);
@@ -604,7 +740,9 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   useEffect(() => {
     if (!threadId) return;
     hasHandedOffRef.current = false;
+    ensureDraftThreadPromiseRef.current = null;
     setDraftThreadId(threadId);
+    setDraftThreadInitialized(true);
   }, [threadId]);
 
   useEffect(() => {
@@ -612,10 +750,12 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
 
     const handleNewThread = () => {
       hasHandedOffRef.current = false;
+      ensureDraftThreadPromiseRef.current = null;
       setChatError(null);
       setDraftThreadMode(utils.chatPreferences.get.getData()?.mode ?? null);
       setDraftThreadSelection(null);
       setDraftThreadId(crypto.randomUUID());
+      setDraftThreadInitialized(false);
     };
 
     window.addEventListener("sentinel:new-thread", handleNewThread);
@@ -713,6 +853,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
               <ChatComposer
                 activeWorkspace={selectedWorkspace}
                 draftMode={resolvedThreadSelection?.mode ?? draftThreadMode}
+                onEnsureRepoThread={ensureDraftThread}
                 onQueueFollowUp={handleQueueFollowUp}
                 onRemoveQueuedFollowUp={async (id) => {
                   await removeQueuedFollowUp.mutateAsync({
@@ -730,8 +871,13 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                     threadId: draftThreadId,
                   });
                 }}
-                persistThreadSelection={Boolean(threadDetailsQuery.data)}
+                persistThreadSelection={
+                  draftThreadInitialized || Boolean(threadDetailsQuery.data)
+                }
                 queuedFollowUps={queuedFollowUps}
+                repoThreadId={
+                  draftThreadInitialized || threadId ? draftThreadId : undefined
+                }
                 showBranchSwitcher
                 status={status}
                 threadId={draftThreadId}
@@ -767,7 +913,11 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             <div className="relative" ref={workspaceMenuRef}>
               <button
                 className="flex cursor-pointer items-center gap-1.5 disabled:opacity-40"
-                disabled={selectWorkspace.isPending}
+                disabled={
+                  archiveDraftThread.isPending ||
+                  createDraftThread.isPending ||
+                  selectWorkspace.isPending
+                }
                 onClick={() => setIsWorkspaceMenuOpen((open) => !open)}
                 type="button"
               >
@@ -815,10 +965,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                           }`}
                           key={workspace.id}
                           onClick={() => {
-                            void selectWorkspace.mutateAsync({
-                              workspaceId: workspace.id,
-                            });
-                            setIsWorkspaceMenuOpen(false);
+                            void handleWorkspaceSelect(workspace.id);
                           }}
                           type="button"
                         >
@@ -874,6 +1021,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             <ChatComposer
               activeWorkspace={selectedWorkspace}
               draftMode={draftThreadMode}
+              onEnsureRepoThread={ensureDraftThread}
               onQueueFollowUp={handleQueueFollowUp}
               onRemoveQueuedFollowUp={async (id) => {
                 await removeQueuedFollowUp.mutateAsync({
@@ -891,8 +1039,9 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                   threadId: draftThreadId,
                 });
               }}
-              persistThreadSelection={false}
+              persistThreadSelection={draftThreadInitialized}
               queuedFollowUps={queuedFollowUps}
+              repoThreadId={draftThreadInitialized ? draftThreadId : undefined}
               showBranchSwitcher
               status={status}
               threadId={draftThreadId}

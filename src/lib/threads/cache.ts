@@ -138,6 +138,35 @@ function updateThreadSettingsInListData<T extends ThreadListData | undefined>(
   } as T;
 }
 
+function updateThreadTitleInListData<T extends ThreadListData | undefined>(
+  data: T,
+  threadId: string,
+  title: string,
+): T {
+  if (!data) {
+    return data;
+  }
+
+  if ("groups" in data) {
+    return {
+      ...data,
+      groups: (data.groups ?? []).map((group) => ({
+        ...group,
+        threads: group.threads.map((thread) =>
+          thread.id === threadId ? { ...thread, title } : thread,
+        ),
+      })),
+    } as T;
+  }
+
+  return {
+    ...data,
+    items: (data.items ?? []).map((item) =>
+      item.id === threadId ? { ...item, title } : item,
+    ),
+  } as T;
+}
+
 export function applyOptimisticThreadPinUpdate({
   pinnedAt,
   threadId,
@@ -442,6 +471,36 @@ export function applyThreadSettingsCacheUpdate({
   for (const input of getThreadListInputs(workspaceId)) {
     utils.threads.list.setData(input, (current) =>
       updateThreadSettingsInListData(current, threadId, patch),
+    );
+  }
+}
+
+export function applyThreadTitleCacheUpdate({
+  threadId,
+  title,
+  utils,
+  workspaceId,
+}: {
+  threadId: string;
+  title: string;
+  utils: TrpcUtils;
+  workspaceId?: string;
+}) {
+  utils.threads.get.setData({ threadId }, (current) =>
+    current
+      ? {
+          ...current,
+          thread: {
+            ...current.thread,
+            title,
+          },
+        }
+      : current,
+  );
+
+  for (const input of getThreadListInputs(workspaceId)) {
+    utils.threads.list.setData(input, (current) =>
+      updateThreadTitleInListData(current, threadId, title),
     );
   }
 }

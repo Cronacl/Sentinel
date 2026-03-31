@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { getRepoThreadState } from "@/lib/ai/chat/engines/types";
 
 import {
   buildToolApprovalOverrideMap,
@@ -39,6 +40,7 @@ import {
   searchSettings,
   memorySettings,
   toolApprovalPolicies,
+  threads,
   users,
   workspaces,
 } from "@/server/db/schema";
@@ -65,6 +67,10 @@ type BootstrapWorkspaceRecord = {
   rootPath: string | null;
 };
 
+type BootstrapThreadRecord = {
+  chatEngineState: unknown;
+};
+
 const THREAD_RUNTIME_BOOTSTRAP_CACHE_TTL_MS = 5_000;
 const threadRuntimeBootstrapCache = new Map<
   string,
@@ -88,11 +94,13 @@ export type ThreadRuntimeBootstrap = {
 async function loadThreadRuntimeBootstrapRows(
   userId: string,
   workspaceId?: string | null,
+  threadId?: string | null,
 ): Promise<{
+  thread: BootstrapThreadRecord | null;
   user: BootstrapUserRecord | null;
   workspace: BootstrapWorkspaceRecord | null;
 }> {
-  const [user, workspace] = await Promise.all([
+  const [user, workspace, thread] = await Promise.all([
     db.query.users.findFirst({
       where: eq(users.id, userId),
       columns: {
@@ -124,9 +132,22 @@ async function loadThreadRuntimeBootstrapRows(
           },
         })
       : Promise.resolve(null),
+    threadId
+      ? db.query.threads.findFirst({
+          where: and(
+            eq(threads.id, threadId),
+            eq(threads.userId, userId),
+            ...(workspaceId ? [eq(threads.workspaceId, workspaceId)] : []),
+          ),
+          columns: {
+            chatEngineState: true,
+          },
+        })
+      : Promise.resolve(null),
   ]);
 
   return {
+    thread: thread ?? null,
     user: user ?? null,
     workspace: workspace ?? null,
   };
@@ -135,18 +156,26 @@ async function loadThreadRuntimeBootstrapRows(
 export async function getThreadRuntimeBootstrap(
   userId: string,
   workspaceId?: string | null,
+  threadId?: string | null,
 ): Promise<ThreadRuntimeBootstrap> {
-  const cacheKey = `${userId}:${workspaceId ?? "__none__"}`;
+  const cacheKey = `${userId}:${workspaceId ?? "__none__"}:${threadId ?? "__none__"}`;
   const cached = threadRuntimeBootstrapCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     return await cached.promise;
   }
 
   const pending = (async () => {
-    const { user, workspace } = await loadThreadRuntimeBootstrapRows(
+    const { thread, user, workspace } = await loadThreadRuntimeBootstrapRows(
       userId,
       workspaceId,
+      threadId,
     );
+    const repoThreadState = getRepoThreadState(thread?.chatEngineState);
+    const effectiveWorkspaceRoot =
+      repoThreadState?.projectMode === "worktree" &&
+      repoThreadState.worktreePath
+        ? repoThreadState.worktreePath
+        : (workspace?.rootPath ?? null);
 
     return {
       contextCompactionSettings: {
@@ -176,7 +205,7 @@ export async function getThreadRuntimeBootstrap(
       skillsBasePath: user?.skillsBasePath ?? null,
       webFetchSettings: normalizeWebFetchSettings(user),
       workspaceRoot: await resolveAvailableWorkspaceRootPath(
-        workspace?.rootPath,
+        effectiveWorkspaceRoot,
       ),
     } satisfies ThreadRuntimeBootstrap;
   })().catch((error) => {
@@ -198,12 +227,19 @@ export async function getThreadRuntimeBootstrap(
 export async function getWorkspaceRootPath(
   workspaceId: string,
   userId: string,
+  threadId?: string | null,
 ) {
-  const { workspace } = await loadThreadRuntimeBootstrapRows(
+  const { thread, workspace } = await loadThreadRuntimeBootstrapRows(
     userId,
     workspaceId,
+    threadId,
   );
-  return await resolveAvailableWorkspaceRootPath(workspace?.rootPath);
+  const repoThreadState = getRepoThreadState(thread?.chatEngineState);
+  return await resolveAvailableWorkspaceRootPath(
+    repoThreadState?.projectMode === "worktree" && repoThreadState.worktreePath
+      ? repoThreadState.worktreePath
+      : workspace?.rootPath,
+  );
 }
 
 export async function getToolPermissionMode(

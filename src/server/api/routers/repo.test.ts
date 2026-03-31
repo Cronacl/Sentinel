@@ -1408,7 +1408,10 @@ describe("repoRouter.branch actions", () => {
     });
 
     expect(checkoutBranch).toHaveBeenCalledWith("/tmp/workspace", "main");
-    expect(result).toEqual({ branch: "main" });
+    expect(result).toMatchObject({
+      branch: "main",
+      repoContext: expect.any(Object),
+    });
   });
 
   it("creates a thread worktree and switches the thread into it", async () => {
