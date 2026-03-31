@@ -1682,6 +1682,7 @@ export async function runCodexThreadChat(
   const workspaceRoot = await getWorkspaceRootPath(
     request.workspaceId,
     request.userId,
+    request.threadId,
   );
   const permissionMode = await getToolPermissionMode(
     request.userId,

@@ -3,6 +3,7 @@
 import {
   AlertDialog,
   Button,
+  cn,
   Dropdown,
   Form,
   Input,
@@ -39,6 +40,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CreateWorkspaceModal } from "@/components/workspaces/create-workspace-modal";
 import type { RepoLastPullRequest } from "@/lib/ai/chat/engines/types";
 import {
+  applyThreadTitleCacheUpdate,
   applyOptimisticThreadPinUpdate,
   restoreOptimisticThreadPinUpdate,
 } from "@/lib/threads/cache";
@@ -347,7 +349,7 @@ function threadPullRequestToneClass(
   pullRequest: RepoLastPullRequest | null | undefined,
 ) {
   if (!pullRequest) {
-    return "text-foreground/45";
+    return "text-foreground/50";
   }
 
   if (pullRequest.kind === "compare") {
@@ -355,16 +357,16 @@ function threadPullRequestToneClass(
   }
 
   if (pullRequest.draft) {
-    return "text-warning/85";
+    return "text-foreground/62";
   }
 
   switch (pullRequest.state.toLowerCase()) {
     case "merged":
-      return "text-success/85";
+      return "text-foreground/62";
     case "closed":
-      return "text-danger/85";
+      return "text-foreground/58";
     default:
-      return "text-foreground/55";
+      return "text-foreground/62";
   }
 }
 
@@ -376,7 +378,7 @@ function formatThreadPullRequestLabel(
   }
 
   if (pullRequest.kind === "compare") {
-    return "Open compare";
+    return null;
   }
 
   if (pullRequest.draft) {
@@ -394,10 +396,32 @@ function formatThreadPullRequestLabel(
   return `PR #${pullRequest.number} Open`;
 }
 
+function threadPullRequestIconClass(
+  pullRequest: RepoLastPullRequest | null | undefined,
+) {
+  if (!pullRequest || pullRequest.kind === "compare") {
+    return "text-foreground/35";
+  }
+
+  if (pullRequest.draft) {
+    return "text-warning drop-shadow-[0_0_6px_rgba(245,158,11,0.28)]";
+  }
+
+  switch (pullRequest.state.toLowerCase()) {
+    case "merged":
+      return "text-success drop-shadow-[0_0_6px_rgba(34,197,94,0.28)]";
+    case "closed":
+      return "text-danger drop-shadow-[0_0_6px_rgba(239,68,68,0.24)]";
+    default:
+      return "text-green-500 ";
+  }
+}
+
 function PinnedThreadsList({
   threads,
   selectedThreadId,
   onPressThread,
+  onRenameThread,
   onWarmThread,
   onPin,
   onArchive,
@@ -405,6 +429,7 @@ function PinnedThreadsList({
   onArchive: (threadId: string) => void;
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
+  onRenameThread: (threadId: string) => void;
   onWarmThread: (workspaceId: string, threadId: string) => void;
   selectedThreadId: string | null;
   threads: Array<{
@@ -434,6 +459,11 @@ function PinnedThreadsList({
               onFocus={() => onWarmThread(thread.workspace.id, thread.id)}
               onMouseEnter={() => onWarmThread(thread.workspace.id, thread.id)}
               onClick={() => onPressThread(thread.workspace.id, thread.id)}
+              onDoubleClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onRenameThread(thread.id);
+              }}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => {
@@ -513,6 +543,7 @@ function ThreadRow({
   onArchive,
   onPin,
   onPressThread,
+  onRenameThread,
   onWarmThread,
   selectedThreadId,
   thread,
@@ -522,6 +553,7 @@ function ThreadRow({
   onArchive: (threadId: string) => void;
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
+  onRenameThread: (threadId: string) => void;
   onWarmThread: (workspaceId: string, threadId: string) => void;
   selectedThreadId: string | null;
   thread: {
@@ -549,6 +581,11 @@ function ThreadRow({
       onFocus={() => onWarmThread(workspaceId, thread.id)}
       onMouseEnter={() => onWarmThread(workspaceId, thread.id)}
       onClick={() => onPressThread(workspaceId, thread.id)}
+      onDoubleClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onRenameThread(thread.id);
+      }}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
@@ -580,13 +617,17 @@ function ThreadRow({
             <span
               className={`mt-0.5 flex items-center gap-1 text-[11px] ${threadPullRequestToneClass(thread.linkedPullRequest)}`}
             >
-              <HugeiconsIcon
-                className="shrink-0"
-                color="currentColor"
-                icon={GitPullRequestIcon}
-                size={10}
-                strokeWidth={1.5}
-              />
+              <span className={`flex shrink-0 items-center `}>
+                <HugeiconsIcon
+                  className={cn(
+                    "shrink-0",
+                    threadPullRequestIconClass(thread.linkedPullRequest),
+                  )}
+                  icon={GitPullRequestIcon}
+                  size={10}
+                  strokeWidth={1.5}
+                />
+              </span>
               <span className="truncate">{pullRequestLabel}</span>
             </span>
           ) : null}
@@ -612,6 +653,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
   onPin,
   onPressThread,
   onPressWorkspace,
+  onRenameThread,
   onRenameWorkspace,
   onToggleWorkspace,
   onWarmThread,
@@ -624,6 +666,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
   onPressWorkspace: (workspaceId: string) => void;
+  onRenameThread: (threadId: string) => void;
   onRenameWorkspace: (workspaceId: string) => void;
   onToggleWorkspace: (workspaceId: string) => void;
   onWarmThread: (workspaceId: string, threadId: string) => void;
@@ -701,6 +744,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
                   onArchive={onArchive}
                   onPin={onPin}
                   onPressThread={onPressThread}
+                  onRenameThread={onRenameThread}
                   onWarmThread={onWarmThread}
                   selectedThreadId={selectedThreadId}
                   thread={thread}
@@ -741,6 +785,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
                           onArchive={onArchive}
                           onPin={onPin}
                           onPressThread={onPressThread}
+                          onRenameThread={onRenameThread}
                           onWarmThread={onWarmThread}
                           selectedThreadId={selectedThreadId}
                           thread={thread}
@@ -768,6 +813,7 @@ const ThreadList = memo(function ThreadList({
   onArchiveWorkspace,
   onPressThread,
   onPressWorkspace,
+  onRenameThread,
   onRenameWorkspace,
   expandedWorkspaceIds,
   onPin,
@@ -783,6 +829,7 @@ const ThreadList = memo(function ThreadList({
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
   onPressWorkspace: (workspaceId: string) => void;
+  onRenameThread: (threadId: string) => void;
   onRenameWorkspace: (workspaceId: string) => void;
   selectedThreadId: string | null;
   onToggleWorkspace: (workspaceId: string) => void;
@@ -801,6 +848,7 @@ const ThreadList = memo(function ThreadList({
             onPin={onPin}
             onPressThread={onPressThread}
             onPressWorkspace={onPressWorkspace}
+            onRenameThread={onRenameThread}
             onRenameWorkspace={onRenameWorkspace}
             onToggleWorkspace={onToggleWorkspace}
             onWarmThread={onWarmThread}
@@ -815,6 +863,7 @@ const ThreadList = memo(function ThreadList({
 const ChronologicalThreadList = memo(function ChronologicalThreadList({
   items,
   onPressThread,
+  onRenameThread,
   onWarmThread,
   selectedThreadId,
   onPin,
@@ -824,6 +873,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
   onArchive: (threadId: string) => void;
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
+  onRenameThread: (threadId: string) => void;
   onWarmThread: (workspaceId: string, threadId: string) => void;
   selectedThreadId: string | null;
 }) {
@@ -841,6 +891,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
             onArchive={onArchive}
             onPin={onPin}
             onPressThread={onPressThread}
+            onRenameThread={onRenameThread}
             onWarmThread={onWarmThread}
             selectedThreadId={selectedThreadId}
             thread={item}
@@ -878,6 +929,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
                     onArchive={onArchive}
                     onPin={onPin}
                     onPressThread={onPressThread}
+                    onRenameThread={onRenameThread}
                     onWarmThread={onWarmThread}
                     selectedThreadId={selectedThreadId}
                     thread={item}
@@ -940,6 +992,7 @@ export function WorkspaceSidebar() {
   const [renameWorkspaceId, setRenameWorkspaceId] = useState<string | null>(
     null,
   );
+  const [renameThreadId, setRenameThreadId] = useState<string | null>(null);
   const [deleteWorkspaceId, setDeleteWorkspaceId] = useState<string | null>(
     null,
   );
@@ -956,6 +1009,13 @@ export function WorkspaceSidebar() {
     onOpenChange: (isOpen) => {
       if (!isOpen) {
         setRenameWorkspaceId(null);
+      }
+    },
+  });
+  const renameThreadState = useOverlayState({
+    onOpenChange: (isOpen) => {
+      if (!isOpen) {
+        setRenameThreadId(null);
       }
     },
   });
@@ -1108,6 +1168,33 @@ export function WorkspaceSidebar() {
       }
     },
   });
+  const renameThread = api.threads.rename.useMutation({
+    onSuccess: (nextThread) => {
+      const threadState =
+        findThreadState(nextThread.id, groups, items) ??
+        (() => {
+          const thread = utils.threads.get.getData({
+            threadId: nextThread.id,
+          })?.thread;
+          return thread
+            ? {
+                pinnedAt: thread.pinnedAt,
+                workspaceId: currentWorkspace.data?.id,
+              }
+            : null;
+        })();
+
+      applyThreadTitleCacheUpdate({
+        threadId: nextThread.id,
+        title: nextThread.title,
+        utils,
+        workspaceId: threadState?.workspaceId,
+      });
+      void utils.threads.list.invalidate();
+      void utils.threads.get.invalidate({ threadId: nextThread.id });
+      renameThreadState.close();
+    },
+  });
 
   const handlePin = useCallback(
     (threadId: string) => {
@@ -1159,11 +1246,57 @@ export function WorkspaceSidebar() {
     return null;
   }, [archiveThreadId, groups, items]);
 
+  const renameTargetThread = useMemo(() => {
+    if (!renameThreadId) return null;
+    for (const group of groups) {
+      const thread = group.threads.find((t) => t.id === renameThreadId);
+      if (thread) {
+        return {
+          id: thread.id,
+          title: thread.title,
+          workspaceId: group.workspace.id,
+        };
+      }
+    }
+    for (const item of items) {
+      if (item.id === renameThreadId) {
+        return {
+          id: item.id,
+          title: item.title,
+          workspaceId: item.workspace.id,
+        };
+      }
+    }
+    const thread = renameThreadId
+      ? utils.threads.get.getData({ threadId: renameThreadId })?.thread
+      : null;
+    if (!thread) return null;
+    return {
+      id: thread.id,
+      title: thread.title,
+      workspaceId: currentWorkspace.data?.id ?? "",
+    };
+  }, [
+    currentWorkspace.data?.id,
+    groups,
+    items,
+    renameThreadId,
+    utils.threads.get,
+  ]);
+
   const handleConfirmArchiveThread = useCallback(() => {
     if (!archiveThreadId) return;
     void archiveThread.mutate({ threadId: archiveThreadId });
     archiveThreadState.close();
   }, [archiveThread, archiveThreadId, archiveThreadState]);
+
+  const handleOpenRenameThread = useCallback(
+    (threadId: string) => {
+      setRenameThreadId(threadId);
+      renameThreadState.open();
+    },
+    [renameThreadState],
+  );
 
   const createWorkspace = api.workspaces.create.useMutation({
     onSuccess: (workspace) => {
@@ -1507,6 +1640,27 @@ export function WorkspaceSidebar() {
     [renameTargetWorkspace, renameWorkspace],
   );
 
+  const handleRenameThreadSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (!renameTargetThread) {
+        return;
+      }
+
+      const formData = new FormData(event.currentTarget);
+      const title = String(formData.get("title") ?? "").trim();
+      if (!title) {
+        return;
+      }
+
+      void renameThread.mutate({
+        threadId: renameTargetThread.id,
+        title,
+      });
+    },
+    [renameTargetThread, renameThread],
+  );
+
   const handleConfirmDeleteWorkspace = useCallback(() => {
     if (!deleteTargetWorkspace) {
       return;
@@ -1667,7 +1821,7 @@ export function WorkspaceSidebar() {
 
       <div className="min-h-0 flex-1">
         <ScrollShadow
-          className="sentinel-scroll-shell h-full"
+          className="sentinel-scroll-shell h-full pb-4"
           orientation="vertical"
         >
           <div className="sentinel-scroll-area h-full">
@@ -1678,6 +1832,7 @@ export function WorkspaceSidebar() {
                 onArchive={handleArchiveThread}
                 onPin={handlePin}
                 onPressThread={handlePressThread}
+                onRenameThread={handleOpenRenameThread}
                 onWarmThread={handleWarmThread}
                 selectedThreadId={selectedThreadId}
                 threads={pinnedThreads}
@@ -1695,6 +1850,7 @@ export function WorkspaceSidebar() {
                 onPin={handlePin}
                 onPressThread={handlePressThread}
                 onPressWorkspace={handlePressWorkspace}
+                onRenameThread={handleOpenRenameThread}
                 onRenameWorkspace={handleOpenRenameWorkspace}
                 onWarmThread={handleWarmThread}
                 selectedThreadId={selectedThreadId}
@@ -1710,6 +1866,7 @@ export function WorkspaceSidebar() {
                 onArchive={handleArchiveThread}
                 onPin={handlePin}
                 onPressThread={handlePressThread}
+                onRenameThread={handleOpenRenameThread}
                 onWarmThread={handleWarmThread}
                 selectedThreadId={selectedThreadId}
               />
@@ -1801,6 +1958,47 @@ export function WorkspaceSidebar() {
                     Cancel
                   </Button>
                   <Button isPending={renameWorkspace.isPending} type="submit">
+                    Rename
+                  </Button>
+                </Modal.Footer>
+              </Form>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal.Root>
+
+      <Modal.Root state={renameThreadState}>
+        <Modal.Backdrop>
+          <Modal.Container placement="center" size="sm">
+            <Modal.Dialog className="border-separator w-full border sm:max-w-[400px]">
+              <Form className="contents" onSubmit={handleRenameThreadSubmit}>
+                <Modal.Header className="items-start justify-between gap-4">
+                  <Modal.Heading className="text-base">
+                    Rename thread
+                  </Modal.Heading>
+                  <Modal.CloseTrigger />
+                </Modal.Header>
+                <Modal.Body className="p-2">
+                  <TextField.Root
+                    autoFocus
+                    defaultValue={renameTargetThread?.title ?? ""}
+                    isRequired
+                    key={renameTargetThread?.id ?? "thread-rename"}
+                    name="title"
+                  >
+                    <Label>Thread title</Label>
+                    <Input.Root />
+                  </TextField.Root>
+                </Modal.Body>
+                <Modal.Footer>
+                  <Button
+                    onPress={() => renameThreadState.close()}
+                    type="button"
+                    variant="ghost"
+                  >
+                    Cancel
+                  </Button>
+                  <Button isPending={renameThread.isPending} type="submit">
                     Rename
                   </Button>
                 </Modal.Footer>

@@ -772,6 +772,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
     const runtimeBootstrapPromise = getThreadRuntimeBootstrap(
       run.request.userId,
       run.request.workspaceId,
+      run.request.threadId,
     );
 
     const [

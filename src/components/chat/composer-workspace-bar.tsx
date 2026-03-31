@@ -3,7 +3,6 @@
 import {
   Add01Icon,
   ArrowDown01Icon,
-  FolderRemoveIcon,
   FolderTreeIcon,
   GitBranchIcon,
   LaptopProgrammingIcon,
@@ -30,8 +29,10 @@ type ComposerWorkspaceBarProps = {
     permissionModeOverride?: PermissionMode | null;
     rootPath?: string | null;
   };
+  onEnsureThread?: () => Promise<string | null>;
+  onSetupPendingChange?: (isPending: boolean) => void;
+  repoThreadId?: string;
   showBranchSwitcher: boolean;
-  threadId?: string;
 };
 
 function getPermissionModeLabel(value: PermissionMode) {
@@ -43,8 +44,10 @@ function getPermissionModeLabel(value: PermissionMode) {
 
 export function ComposerWorkspaceBar({
   activeWorkspace,
+  onEnsureThread,
+  onSetupPendingChange,
+  repoThreadId,
   showBranchSwitcher,
-  threadId,
 }: ComposerWorkspaceBarProps) {
   const utils = api.useUtils();
   const [permissionPopoverOpen, setPermissionPopoverOpen] = useState(false);
@@ -60,8 +63,8 @@ export function ComposerWorkspaceBar({
   const [branchError, setBranchError] = useState("");
 
   const securityQuery = api.security.get.useQuery();
-  const repoContextInput = threadId
-    ? { threadId, workspaceId: activeWorkspace.id }
+  const repoContextInput = repoThreadId
+    ? { threadId: repoThreadId, workspaceId: activeWorkspace.id }
     : { workspaceId: activeWorkspace.id };
   const repoContextQuery = api.repo.getContext.useQuery(repoContextInput, {
     enabled: showBranchSwitcher && Boolean(activeWorkspace.rootPath),
@@ -80,6 +83,18 @@ export function ComposerWorkspaceBar({
   useEffect(() => {
     setPermissionOverride(activeWorkspace.permissionModeOverride ?? null);
   }, [activeWorkspace.id, activeWorkspace.permissionModeOverride]);
+
+  const applyRepoContext = useCallback(
+    (nextThreadId: string | null | undefined, repoContext: unknown) => {
+      utils.repo.getContext.setData(
+        nextThreadId
+          ? { threadId: nextThreadId, workspaceId: activeWorkspace.id }
+          : { workspaceId: activeWorkspace.id },
+        repoContext as never,
+      );
+    },
+    [activeWorkspace.id, utils.repo.getContext],
+  );
 
   const updatePermissionOverrideMutation =
     api.workspaces.updatePermissionOverride.useMutation({
@@ -147,50 +162,12 @@ export function ComposerWorkspaceBar({
     });
 
   const checkoutBranchMutation = api.repo.checkoutBranch.useMutation({
-    onSuccess: async (result) => {
-      setBranchError("");
-      setBranchPopoverOpen(false);
-      setBranchSearch("");
-      sileo.success({
-        description: `Switched to ${result.branch}.`,
-        title: "Branch updated",
-      });
-      await utils.repo.getContext.invalidate({
-        ...(threadId ? { threadId } : {}),
-        workspaceId: activeWorkspace.id,
-      });
-      await utils.repo.listBranches.invalidate({
-        ...(threadId ? { threadId } : {}),
-        workspaceId: activeWorkspace.id,
-      });
-      await utils.threads.list.invalidate();
-    },
     onError: (error) => {
       setBranchError(getErrorMessage(error, "Unable to switch branches."));
     },
   });
 
   const createBranchMutation = api.repo.createBranch.useMutation({
-    onSuccess: async (result) => {
-      setBranchError("");
-      setBranchName("");
-      setBranchSearch("");
-      setBranchMode("list");
-      setBranchPopoverOpen(false);
-      sileo.success({
-        description: `Switched to ${result.branch}.`,
-        title: "Branch created",
-      });
-      await utils.repo.getContext.invalidate({
-        ...(threadId ? { threadId } : {}),
-        workspaceId: activeWorkspace.id,
-      });
-      await utils.repo.listBranches.invalidate({
-        ...(threadId ? { threadId } : {}),
-        workspaceId: activeWorkspace.id,
-      });
-      await utils.threads.list.invalidate();
-    },
     onError: (error) => {
       setBranchError(getErrorMessage(error, "Unable to create branch."));
     },
@@ -201,18 +178,6 @@ export function ComposerWorkspaceBar({
   const useLocalProjectMutation = api.repo.useLocalProject.useMutation();
   const removeThreadWorktreeMutation =
     api.repo.removeThreadWorktree.useMutation();
-
-  const refreshRepoState = useCallback(async () => {
-    await utils.repo.getContext.invalidate({
-      ...(threadId ? { threadId } : {}),
-      workspaceId: activeWorkspace.id,
-    });
-    await utils.repo.listBranches.invalidate({
-      ...(threadId ? { threadId } : {}),
-      workspaceId: activeWorkspace.id,
-    });
-    await utils.threads.list.invalidate();
-  }, [activeWorkspace.id, threadId, utils]);
 
   const effectivePermissionMode =
     permissionOverride ??
@@ -225,7 +190,10 @@ export function ComposerWorkspaceBar({
     activeWorkspace.rootPath &&
     repoContextQuery.data?.isGitRepo,
   );
-  const projectModeSwitcherVisible = Boolean(threadId && branchSwitcherVisible);
+  const canConfigureThreadEnvironment = Boolean(repoThreadId || onEnsureThread);
+  const projectModeSwitcherVisible = Boolean(
+    canConfigureThreadEnvironment && branchSwitcherVisible,
+  );
   const threadBranch =
     repoContextQuery.data?.threadBranch ??
     repoContextQuery.data?.branch ??
@@ -262,6 +230,40 @@ export function ComposerWorkspaceBar({
       branch.name.toLowerCase().includes(query),
     );
   }, [branchSearch, listBranchesQuery.data?.branches]);
+  const isBranchMutating =
+    checkoutBranchMutation.isPending || createBranchMutation.isPending;
+  const isSetupPending = isProjectModeLoading || isBranchMutating;
+
+  useEffect(() => {
+    onSetupPendingChange?.(isSetupPending);
+  }, [isSetupPending, onSetupPendingChange]);
+
+  const syncRepoContext = useCallback(
+    async (
+      nextThreadId: string | null | undefined,
+      repoContext: unknown,
+      options?: { invalidateBranches?: boolean },
+    ) => {
+      applyRepoContext(nextThreadId, repoContext);
+
+      await Promise.all([
+        options?.invalidateBranches
+          ? utils.repo.listBranches.invalidate(
+              nextThreadId
+                ? { threadId: nextThreadId, workspaceId: activeWorkspace.id }
+                : { workspaceId: activeWorkspace.id },
+            )
+          : Promise.resolve(),
+        utils.threads.list.invalidate(),
+      ]);
+    },
+    [
+      activeWorkspace.id,
+      applyRepoContext,
+      utils.repo.listBranches,
+      utils.threads.list,
+    ],
+  );
 
   const handlePermissionChange = useCallback(
     (nextValue: PermissionMode | null) => {
@@ -282,35 +284,67 @@ export function ComposerWorkspaceBar({
   );
 
   const handleCreateBranch = useCallback(() => {
-    const trimmedBranchName = branchName.trim();
-    if (!trimmedBranchName) {
-      setBranchError("Enter a branch name.");
-      return;
-    }
+    void (async () => {
+      const trimmedBranchName = branchName.trim();
+      if (!trimmedBranchName) {
+        setBranchError("Enter a branch name.");
+        return;
+      }
 
-    setBranchError("");
-    createBranchMutation.mutate({
-      branchName: trimmedBranchName,
-      ...(threadId ? { threadId } : {}),
-      workspaceId: activeWorkspace.id,
-    });
-  }, [activeWorkspace.id, branchName, createBranchMutation, threadId]);
-
-  const isBranchMutating =
-    checkoutBranchMutation.isPending || createBranchMutation.isPending;
+      const resolvedThreadId =
+        repoThreadId ?? (await onEnsureThread?.()) ?? null;
+      setBranchError("");
+      try {
+        const result = await createBranchMutation.mutateAsync({
+          branchName: trimmedBranchName,
+          ...(resolvedThreadId ? { threadId: resolvedThreadId } : {}),
+          workspaceId: activeWorkspace.id,
+        });
+        setBranchName("");
+        setBranchSearch("");
+        setBranchMode("list");
+        setBranchPopoverOpen(false);
+        applyRepoContext(resolvedThreadId, result.repoContext);
+        await utils.repo.listBranches.invalidate(
+          resolvedThreadId
+            ? { threadId: resolvedThreadId, workspaceId: activeWorkspace.id }
+            : { workspaceId: activeWorkspace.id },
+        );
+        await utils.threads.list.invalidate();
+        sileo.success({
+          description: `Switched to ${result.branch}.`,
+          title: "Branch created",
+        });
+      } catch {
+        /* handled by mutation */
+      }
+    })();
+  }, [
+    activeWorkspace.id,
+    applyRepoContext,
+    branchName,
+    createBranchMutation,
+    onEnsureThread,
+    repoThreadId,
+    utils.repo.listBranches,
+    utils.threads.list,
+  ]);
 
   const handleResumeThreadBranch = useCallback(async () => {
-    if (!threadId) {
+    setProjectModePopoverOpen(false);
+    const resolvedThreadId = repoThreadId ?? (await onEnsureThread?.()) ?? null;
+    if (!resolvedThreadId) {
       return;
     }
 
     try {
       const result = await resumeThreadBranchMutation.mutateAsync({
-        threadId,
+        threadId: resolvedThreadId,
         workspaceId: activeWorkspace.id,
       });
-      setProjectModePopoverOpen(false);
-      await refreshRepoState();
+      await syncRepoContext(resolvedThreadId, result.repoContext, {
+        invalidateBranches: true,
+      });
       if (!result.ok) {
         sileo.warning({
           description:
@@ -339,24 +373,26 @@ export function ComposerWorkspaceBar({
     }
   }, [
     activeWorkspace.id,
-    refreshRepoState,
+    onEnsureThread,
     resumeThreadBranchMutation,
+    repoThreadId,
+    syncRepoContext,
     threadBranch,
-    threadId,
   ]);
 
   const handleEnableThreadWorktree = useCallback(async () => {
-    if (!threadId) {
+    setProjectModePopoverOpen(false);
+    const resolvedThreadId = repoThreadId ?? (await onEnsureThread?.()) ?? null;
+    if (!resolvedThreadId) {
       return;
     }
 
     try {
       const result = await enableThreadWorktreeMutation.mutateAsync({
-        threadId,
+        threadId: resolvedThreadId,
         workspaceId: activeWorkspace.id,
       });
-      setProjectModePopoverOpen(false);
-      await refreshRepoState();
+      await syncRepoContext(resolvedThreadId, result.repoContext);
       sileo.success({
         description: result.branch
           ? `This thread now runs in a worktree on ${result.branch}.`
@@ -375,22 +411,28 @@ export function ComposerWorkspaceBar({
   }, [
     activeWorkspace.id,
     enableThreadWorktreeMutation,
-    refreshRepoState,
-    threadId,
+    onEnsureThread,
+    repoThreadId,
+    syncRepoContext,
   ]);
 
   const handleUseLocalProject = useCallback(async () => {
-    if (!threadId) {
+    setProjectModePopoverOpen(false);
+    if (!repoThreadId && !isUsingWorktree) {
+      return;
+    }
+
+    const resolvedThreadId = repoThreadId ?? (await onEnsureThread?.()) ?? null;
+    if (!resolvedThreadId) {
       return;
     }
 
     try {
-      await useLocalProjectMutation.mutateAsync({
-        threadId,
+      const result = await useLocalProjectMutation.mutateAsync({
+        threadId: resolvedThreadId,
         workspaceId: activeWorkspace.id,
       });
-      setProjectModePopoverOpen(false);
-      await refreshRepoState();
+      await syncRepoContext(resolvedThreadId, result.repoContext);
       sileo.success({
         description: "This thread is back on the local project checkout.",
         title: "Using local project",
@@ -404,20 +446,28 @@ export function ComposerWorkspaceBar({
         title: "Switch project failed",
       });
     }
-  }, [activeWorkspace.id, refreshRepoState, threadId, useLocalProjectMutation]);
+  }, [
+    activeWorkspace.id,
+    isUsingWorktree,
+    onEnsureThread,
+    repoThreadId,
+    syncRepoContext,
+    useLocalProjectMutation,
+  ]);
 
   const handleRemoveThreadWorktree = useCallback(async () => {
-    if (!threadId) {
+    setProjectModePopoverOpen(false);
+    const resolvedThreadId = repoThreadId ?? (await onEnsureThread?.()) ?? null;
+    if (!resolvedThreadId) {
       return;
     }
 
     try {
       const result = await removeThreadWorktreeMutation.mutateAsync({
-        threadId,
+        threadId: resolvedThreadId,
         workspaceId: activeWorkspace.id,
       });
-      setProjectModePopoverOpen(false);
-      await refreshRepoState();
+      await syncRepoContext(resolvedThreadId, result.repoContext);
       sileo.success({
         description: result.removed
           ? "Removed this thread's worktree."
@@ -435,9 +485,10 @@ export function ComposerWorkspaceBar({
     }
   }, [
     activeWorkspace.id,
-    refreshRepoState,
+    onEnsureThread,
     removeThreadWorktreeMutation,
-    threadId,
+    repoThreadId,
+    syncRepoContext,
   ]);
 
   return (
@@ -506,12 +557,6 @@ export function ComposerWorkspaceBar({
                       size="sm"
                       variant="secondary"
                     >
-                      <HugeiconsIcon
-                        color="currentColor"
-                        icon={GitBranchIcon}
-                        size={14}
-                        strokeWidth={1.5}
-                      />
                       Resume branch
                     </Button>
                   </div>
@@ -522,27 +567,14 @@ export function ComposerWorkspaceBar({
                   onClick={() => void handleUseLocalProject()}
                   type="button"
                 >
-                  <div className="flex min-w-0 items-start gap-2">
-                    <HugeiconsIcon
-                      color="currentColor"
-                      icon={LaptopProgrammingIcon}
-                      size={15}
-                      strokeWidth={1.5}
-                    />
-                    <div className="min-w-0">
-                      <p>Local project</p>
-                      <p className="text-xs text-muted">
-                        Use the workspace checkout for this thread
-                      </p>
-                    </div>
+                  <div className="min-w-0">
+                    <p>Local project</p>
+                    <p className="text-xs text-muted">
+                      Use the workspace checkout for this thread
+                    </p>
                   </div>
                   {!isUsingWorktree ? (
-                    <HugeiconsIcon
-                      color="currentColor"
-                      icon={Tick02Icon}
-                      size={16}
-                      strokeWidth={1.5}
-                    />
+                    <span className="text-xs text-muted">Current</span>
                   ) : null}
                 </button>
 
@@ -551,29 +583,14 @@ export function ComposerWorkspaceBar({
                   onClick={() => void handleEnableThreadWorktree()}
                   type="button"
                 >
-                  <div className="flex min-w-0 items-start gap-2">
-                    <HugeiconsIcon
-                      color="currentColor"
-                      icon={FolderTreeIcon}
-                      size={15}
-                      strokeWidth={1.5}
-                    />
-                    <div className="min-w-0">
-                      <p>
-                        {hasReadyWorktree ? "Use worktree" : "New worktree"}
-                      </p>
-                      <p className="text-xs text-muted">
-                        Give this thread an isolated checkout
-                      </p>
-                    </div>
+                  <div className="min-w-0">
+                    <p>{hasReadyWorktree ? "Use worktree" : "New worktree"}</p>
+                    <p className="text-xs text-muted">
+                      Give this thread an isolated checkout
+                    </p>
                   </div>
                   {isUsingWorktree ? (
-                    <HugeiconsIcon
-                      color="currentColor"
-                      icon={Tick02Icon}
-                      size={16}
-                      strokeWidth={1.5}
-                    />
+                    <span className="text-xs text-muted">Current</span>
                   ) : null}
                 </button>
 
@@ -583,19 +600,11 @@ export function ComposerWorkspaceBar({
                     onClick={() => void handleRemoveThreadWorktree()}
                     type="button"
                   >
-                    <div className="flex min-w-0 items-start gap-2">
-                      <HugeiconsIcon
-                        color="currentColor"
-                        icon={FolderRemoveIcon}
-                        size={15}
-                        strokeWidth={1.5}
-                      />
-                      <div className="min-w-0">
-                        <p>Remove worktree</p>
-                        <p className="text-xs text-muted">
-                          Delete this thread's isolated checkout
-                        </p>
-                      </div>
+                    <div className="min-w-0">
+                      <p>Remove worktree</p>
+                      <p className="text-xs text-muted">
+                        Delete this thread's isolated checkout
+                      </p>
                     </div>
                   </button>
                 ) : null}
@@ -794,12 +803,44 @@ export function ComposerWorkspaceBar({
                                 return;
                               }
 
-                              setBranchError("");
-                              checkoutBranchMutation.mutate({
-                                branchName: branch.name,
-                                ...(threadId ? { threadId } : {}),
-                                workspaceId: activeWorkspace.id,
-                              });
+                              void (async () => {
+                                const resolvedThreadId =
+                                  repoThreadId ??
+                                  (await onEnsureThread?.()) ??
+                                  null;
+                                setBranchError("");
+                                try {
+                                  const result =
+                                    await checkoutBranchMutation.mutateAsync({
+                                      branchName: branch.name,
+                                      ...(resolvedThreadId
+                                        ? { threadId: resolvedThreadId }
+                                        : {}),
+                                      workspaceId: activeWorkspace.id,
+                                    });
+                                  setBranchPopoverOpen(false);
+                                  setBranchSearch("");
+                                  applyRepoContext(
+                                    resolvedThreadId,
+                                    result.repoContext,
+                                  );
+                                  await utils.repo.listBranches.invalidate(
+                                    resolvedThreadId
+                                      ? {
+                                          threadId: resolvedThreadId,
+                                          workspaceId: activeWorkspace.id,
+                                        }
+                                      : { workspaceId: activeWorkspace.id },
+                                  );
+                                  await utils.threads.list.invalidate();
+                                  sileo.success({
+                                    description: `Switched to ${result.branch}.`,
+                                    title: "Branch updated",
+                                  });
+                                } catch {
+                                  /* handled by mutation */
+                                }
+                              })();
                             }}
                             type="button"
                           >
