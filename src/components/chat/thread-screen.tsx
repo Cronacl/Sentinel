@@ -865,6 +865,7 @@ export function ThreadScreen({
       <div className="sentinel-scroll-shell relative h-full min-h-0">
         <ScrollShadow
           ref={scrollAreaRef}
+          visibility="top"
           className="sentinel-scroll-area flex h-full flex-col"
         >
           <div className="mx-auto w-full max-w-2xl flex-1 px-6 pt-4 pb-20">

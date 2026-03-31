@@ -14,6 +14,7 @@ import {
   threadTogglePinSchema,
   threadUpdateMetaSchema,
 } from "@/schemas/workspace-thread.schema";
+import { getRepoThreadState } from "@/lib/ai/chat/engines/types";
 import { runThreadChat } from "@/lib/ai/chat";
 import {
   getLatestAssistantMessageId,
@@ -37,6 +38,7 @@ import {
 const threadSelect = {
   archivedAt: true,
   chatEngine: true,
+  chatEngineState: true,
   chatModelId: true,
   chatReasoningEffort: true,
   createdAt: true,
@@ -58,6 +60,16 @@ const workspaceSelect = {
   rootPath: true,
   updatedAt: true,
 } as const;
+
+function withLinkedPullRequest<T extends { chatEngineState?: unknown }>(
+  thread: T,
+) {
+  return {
+    ...thread,
+    linkedPullRequest:
+      getRepoThreadState(thread.chatEngineState)?.lastPullRequest ?? null,
+  };
+}
 
 export const threadsRouter = createTRPCRouter({
   list: protectedProcedure
@@ -103,7 +115,7 @@ export const threadsRouter = createTRPCRouter({
 
         return {
           groups: allWorkspaces.map((workspace) => ({
-            threads: workspace.threads,
+            threads: workspace.threads.map(withLinkedPullRequest),
             workspace: {
               createdAt: workspace.createdAt,
               description: workspace.description,
@@ -141,7 +153,7 @@ export const threadsRouter = createTRPCRouter({
       });
 
       return {
-        items,
+        items: items.map(withLinkedPullRequest),
         organizeBy: settings.organizeBy,
         sortBy: settings.sortBy,
       };
@@ -217,6 +229,8 @@ export const threadsRouter = createTRPCRouter({
           chatReasoningEffort: thread.chatReasoningEffort,
           createdAt: thread.createdAt,
           id: thread.id,
+          linkedPullRequest:
+            getRepoThreadState(thread.chatEngineState)?.lastPullRequest ?? null,
           mode: thread.mode,
           pinnedAt: thread.pinnedAt,
           status: thread.status,

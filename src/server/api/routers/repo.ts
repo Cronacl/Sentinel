@@ -3,16 +3,19 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import {
+  buildGitHubRemoteUrls,
   buildFallbackCommitMessage,
   checkoutBranch,
   commitAllChanges,
   createAndCheckoutBranch,
+  ensureThreadWorktree,
   getCommitMessageContext,
   getRepoDiffPanelData,
   getHeadCommitMessage,
   initializeRepository,
   listBranches,
   pushCurrentBranch,
+  removeThreadWorktree,
   revertFiles,
   resolveRepoContext,
   stageFiles,
@@ -25,8 +28,14 @@ import {
 } from "@/lib/git/commit-message";
 import {
   getRepoThreadState,
+  parseThreadChatEngineState,
   type RepoLastPullRequest,
+  type RepoThreadState,
 } from "@/lib/ai/chat/engines/types";
+import type {
+  RepoIntegrationStatus,
+  RepoPullRequestStatus,
+} from "@/lib/git/pull-request-status";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import { updateThreadRepoState } from "@/lib/ai/chat/persistence";
 import { GitHubService } from "@/lib/integrations/providers/github/service";
@@ -45,6 +54,9 @@ const workspaceInputSchema = z.object({
 const workspaceOptionalThreadInputSchema = workspaceInputSchema.extend({
   threadId: z.string().min(1).optional(),
 });
+const workspaceStatusesInputSchema = z.object({
+  workspaceIds: z.array(z.string().min(1)).min(1).max(100),
+});
 const workspaceThreadInputSchema = workspaceInputSchema.extend({
   threadId: z.string().min(1),
 });
@@ -58,6 +70,24 @@ const repoDiffMutationInputSchema = repoDiffFilesInputSchema.extend({
 const openTargetPreferenceSchema = z.object({
   targetId: z.string().trim().min(1).max(255),
 });
+const threadEnvironmentInputSchema = workspaceThreadInputSchema;
+
+type RepoBranchResumeStatus =
+  | "blocked_dirty"
+  | "matched"
+  | "missing_branch"
+  | "needs_checkout";
+type RepoWorktreeStatus = "creating" | "error" | "missing" | "none" | "ready";
+
+const PULL_REQUEST_STATUS_TTL_MS = 15_000;
+const pullRequestStatusCache = new Map<
+  string,
+  {
+    expiresAt: number;
+    pullRequestIntegrationStatus: RepoIntegrationStatus;
+    pullRequestStatus: RepoPullRequestStatus | null;
+  }
+>();
 
 async function generateWorkspaceCommitMessage({
   includeUnstaged,
@@ -135,31 +165,257 @@ async function getOwnedThreadForWorkspace(
   return thread;
 }
 
-function getLastPullRequest(thread: { chatEngineState?: unknown } | null) {
-  return getRepoThreadState(thread?.chatEngineState)?.lastPullRequest ?? null;
+function normalizeThreadRepoState(
+  thread: { chatEngineState?: unknown } | null,
+): RepoThreadState {
+  const state = getRepoThreadState(thread?.chatEngineState);
+  return {
+    activeBranch: state?.activeBranch ?? state?.lastPullRequest?.head ?? null,
+    lastPullRequest: state?.lastPullRequest ?? null,
+    projectMode: state?.projectMode ?? "local",
+    worktreePath: state?.worktreePath ?? null,
+  };
+}
+
+function arePullRequestsEquivalent(
+  left: RepoLastPullRequest | null,
+  right: RepoLastPullRequest | null,
+) {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  if (
+    left.kind !== right.kind ||
+    left.url !== right.url ||
+    left.head !== right.head ||
+    left.base !== right.base ||
+    left.repoFullName !== right.repoFullName
+  ) {
+    return false;
+  }
+
+  if (left.kind === "compare" || right.kind === "compare") {
+    return left.kind === right.kind;
+  }
+
+  return (
+    left.number === right.number &&
+    left.state === right.state &&
+    left.title === right.title &&
+    left.draft === right.draft &&
+    left.updatedAt === right.updatedAt
+  );
+}
+
+function areRepoThreadStatesEquivalent(
+  left: RepoThreadState,
+  right: RepoThreadState,
+) {
+  return (
+    left.activeBranch === right.activeBranch &&
+    left.projectMode === right.projectMode &&
+    left.worktreePath === right.worktreePath &&
+    arePullRequestsEquivalent(
+      left.lastPullRequest ?? null,
+      right.lastPullRequest ?? null,
+    )
+  );
+}
+
+function buildThreadGithubRemote(
+  githubRemote: NonNullable<
+    Awaited<ReturnType<typeof resolveRepoContext>>["githubRemote"]
+  >,
+  branch: string | null,
+) {
+  const urls = buildGitHubRemoteUrls(
+    githubRemote.owner,
+    githubRemote.repo,
+    branch,
+    githubRemote.defaultBranch,
+  );
+
+  return {
+    ...githubRemote,
+    pullRequestUrl: urls.pullRequestUrl,
+    pullRequestsUrl: urls.pullRequestsUrl,
+    repositoryUrl: urls.repositoryUrl,
+  };
+}
+
+function withUpdatedThreadRepoState<
+  T extends { chatEngineState?: unknown; id: string } | null,
+>(thread: T, patch: Partial<RepoThreadState>): T {
+  if (!thread) {
+    return thread;
+  }
+
+  const parsed = parseThreadChatEngineState(thread.chatEngineState) ?? {};
+  const repoState = {
+    ...normalizeThreadRepoState(thread),
+    ...patch,
+  } satisfies RepoThreadState;
+
+  return {
+    ...thread,
+    chatEngineState: {
+      ...parsed,
+      repo: repoState,
+    },
+  };
 }
 
 async function buildRepoContextResponse(input: {
+  githubService: GitHubService | null;
   pathValue: string | null;
   preferredOpenTargetId: string | null;
-  thread?: { chatEngineState?: unknown } | null;
+  thread?: { chatEngineState?: unknown; id: string } | null;
   lastPullRequest?: RepoLastPullRequest | null;
+  pullRequestIntegrationStatus?: RepoIntegrationStatus;
+  pullRequestStatus?: RepoPullRequestStatus | null;
+  userId: string;
+  workspaceId: string;
 }) {
-  const repoContext = await resolveRepoContext(input.pathValue);
+  const baseRepoContext = await resolveRepoContext(input.pathValue);
+  const currentThreadState = normalizeThreadRepoState(input.thread ?? null);
+  const nextThreadState: RepoThreadState = {
+    ...currentThreadState,
+    ...(input.lastPullRequest === undefined
+      ? {}
+      : { lastPullRequest: input.lastPullRequest }),
+  };
+
+  if (!nextThreadState.activeBranch && baseRepoContext.branch) {
+    nextThreadState.activeBranch = baseRepoContext.branch;
+  }
+
+  let effectiveRepoContext = baseRepoContext;
+  let worktreeStatus: RepoWorktreeStatus = nextThreadState.worktreePath
+    ? "missing"
+    : "none";
+
+  if (nextThreadState.worktreePath) {
+    const worktreeRepoContext = await resolveRepoContext(
+      nextThreadState.worktreePath,
+    ).catch(() => null);
+    if (worktreeRepoContext?.isGitRepo) {
+      worktreeStatus = "ready";
+      if (nextThreadState.projectMode === "worktree") {
+        effectiveRepoContext = worktreeRepoContext;
+        nextThreadState.activeBranch =
+          worktreeRepoContext.branch ?? nextThreadState.activeBranch;
+      }
+    }
+  }
+
+  const threadBranch = nextThreadState.activeBranch;
+  const branchResumeStatus: RepoBranchResumeStatus =
+    nextThreadState.projectMode === "worktree" && worktreeStatus === "ready"
+      ? "matched"
+      : !threadBranch
+        ? "missing_branch"
+        : baseRepoContext.branch === threadBranch
+          ? "matched"
+          : baseRepoContext.hasChanges
+            ? "blocked_dirty"
+            : "needs_checkout";
+  const branchResumeReason =
+    branchResumeStatus === "blocked_dirty"
+      ? "Switching branches is blocked because the local project has uncommitted changes."
+      : branchResumeStatus === "missing_branch"
+        ? "No branch is currently linked to this thread."
+        : branchResumeStatus === "needs_checkout" && threadBranch
+          ? `This thread is linked to ${threadBranch}, but the local project is on ${baseRepoContext.branch ?? "another branch"}.`
+          : null;
+
+  const resolvedGitHubRemote =
+    effectiveRepoContext.githubRemote ?? baseRepoContext.githubRemote;
+  const pullRequestBranch =
+    threadBranch ?? effectiveRepoContext.branch ?? baseRepoContext.branch;
+  const livePullRequestState = await resolvePullRequestStatus({
+    githubService: input.githubService,
+    repoContext:
+      pullRequestBranch && resolvedGitHubRemote
+        ? {
+            ...effectiveRepoContext,
+            branch: pullRequestBranch,
+            githubRemote: resolvedGitHubRemote,
+          }
+        : effectiveRepoContext,
+    userId: input.userId,
+  });
+  const effectivePullRequestIntegrationStatus =
+    input.pullRequestIntegrationStatus ??
+    livePullRequestState.pullRequestIntegrationStatus;
+  const effectivePullRequestStatus =
+    input.pullRequestStatus === undefined
+      ? livePullRequestState.pullRequestStatus
+      : input.pullRequestStatus;
+
+  if (pullRequestBranch && resolvedGitHubRemote?.defaultBranch) {
+    nextThreadState.lastPullRequest = effectivePullRequestStatus
+      ? buildGitHubPullRequestMetadataFromStatus({
+          owner: resolvedGitHubRemote.owner,
+          pullRequestStatus: effectivePullRequestStatus,
+          repo: resolvedGitHubRemote.repo,
+        })
+      : buildComparePullRequestMetadata({
+          base: resolvedGitHubRemote.defaultBranch,
+          branch: pullRequestBranch,
+          owner: resolvedGitHubRemote.owner,
+          repo: resolvedGitHubRemote.repo,
+          url:
+            buildThreadGithubRemote(resolvedGitHubRemote, pullRequestBranch)
+              .pullRequestUrl ?? resolvedGitHubRemote.pullRequestsUrl,
+        });
+  }
+
+  if (
+    input.thread &&
+    !areRepoThreadStatesEquivalent(currentThreadState, nextThreadState)
+  ) {
+    updateThreadRepoState(input.thread.id, nextThreadState);
+  }
+
+  const responseGitHubRemote = resolvedGitHubRemote
+    ? buildThreadGithubRemote(resolvedGitHubRemote, pullRequestBranch)
+    : null;
+
   return {
-    ...repoContext,
-    lastPullRequest:
-      input.lastPullRequest === undefined
-        ? getLastPullRequest(input.thread ?? null)
-        : input.lastPullRequest,
+    ...effectiveRepoContext,
+    branchResumeReason,
+    branchResumeStatus,
+    effectiveRootPath:
+      effectiveRepoContext.repoRoot ??
+      nextThreadState.worktreePath ??
+      input.pathValue ??
+      null,
+    githubRemote: responseGitHubRemote,
+    lastPullRequest: nextThreadState.lastPullRequest,
     preferredOpenTargetId: input.preferredOpenTargetId,
+    pullRequestIntegrationStatus: effectivePullRequestIntegrationStatus,
+    pullRequestStatus: effectivePullRequestStatus,
+    threadBranch,
+    threadProjectMode: nextThreadState.projectMode,
+    worktreeStatus,
   };
 }
 
 async function resolveGitHubService(
   ctx: Parameters<typeof getOwnedWorkspaceOrThrow>[0],
 ) {
-  const integration = await ctx.db.query.integrations.findFirst({
+  const integrationsQuery = ctx.db?.query?.integrations;
+  const findIntegration = integrationsQuery?.findFirst?.bind(integrationsQuery);
+  if (!findIntegration) {
+    return null;
+  }
+
+  const integration = await findIntegration({
     where: and(
       eq(integrations.userId, ctx.session.user.id),
       eq(integrations.provider, "github"),
@@ -177,6 +433,22 @@ async function resolveGitHubService(
   }
 
   return new GitHubService(token);
+}
+
+async function resolveThreadProjectPath(input: {
+  thread?: { chatEngineState?: unknown } | null;
+  workspaceRootPath: string;
+}) {
+  const threadState = normalizeThreadRepoState(input.thread ?? null);
+  if (
+    threadState.projectMode === "worktree" &&
+    threadState.worktreePath &&
+    (await resolveRepoContext(threadState.worktreePath)).isGitRepo
+  ) {
+    return threadState.worktreePath;
+  }
+
+  return input.workspaceRootPath;
 }
 
 async function resolvePullRequestMessage(input: {
@@ -236,17 +508,201 @@ function buildGitHubPullRequestMetadata(input: {
   };
 }
 
+function buildGitHubPullRequestMetadataFromStatus(input: {
+  owner: string;
+  pullRequestStatus: RepoPullRequestStatus;
+  repo: string;
+}): RepoLastPullRequest {
+  return {
+    base: input.pullRequestStatus.baseBranch ?? "",
+    createdAt: input.pullRequestStatus.createdAt ?? new Date().toISOString(),
+    draft: input.pullRequestStatus.state === "draft",
+    head: input.pullRequestStatus.branch,
+    kind: "github",
+    number: input.pullRequestStatus.number,
+    repoFullName: `${input.owner}/${input.repo}`,
+    state: input.pullRequestStatus.state,
+    title: input.pullRequestStatus.title,
+    updatedAt: input.pullRequestStatus.updatedAt ?? new Date().toISOString(),
+    url: input.pullRequestStatus.url,
+  };
+}
+
+function buildPullRequestStatusCacheKey(input: {
+  branch: string;
+  owner: string;
+  repo: string;
+  userId: string;
+}) {
+  return `${input.userId}:${input.owner}/${input.repo}:${input.branch}`;
+}
+
+function getCachedPullRequestStatus(input: {
+  branch: string;
+  owner: string;
+  repo: string;
+  userId: string;
+}) {
+  const key = buildPullRequestStatusCacheKey(input);
+  const cached = pullRequestStatusCache.get(key);
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAt <= Date.now()) {
+    pullRequestStatusCache.delete(key);
+    return null;
+  }
+
+  return cached;
+}
+
+function setCachedPullRequestStatus(input: {
+  branch: string;
+  owner: string;
+  pullRequestIntegrationStatus: RepoIntegrationStatus;
+  pullRequestStatus: RepoPullRequestStatus | null;
+  repo: string;
+  userId: string;
+}) {
+  pullRequestStatusCache.set(buildPullRequestStatusCacheKey(input), {
+    expiresAt: Date.now() + PULL_REQUEST_STATUS_TTL_MS,
+    pullRequestIntegrationStatus: input.pullRequestIntegrationStatus,
+    pullRequestStatus: input.pullRequestStatus,
+  });
+}
+
+async function resolvePullRequestStatus(input: {
+  githubService: GitHubService | null;
+  repoContext: Awaited<ReturnType<typeof resolveRepoContext>>;
+  userId: string;
+}) {
+  if (!input.repoContext.isGitRepo) {
+    return {
+      pullRequestIntegrationStatus: "local_only" as const,
+      pullRequestStatus: null,
+    };
+  }
+
+  if (!input.repoContext.githubRemote) {
+    return {
+      pullRequestIntegrationStatus: input.repoContext.hasRemotes
+        ? ("unsupported_remote" as const)
+        : ("local_only" as const),
+      pullRequestStatus: null,
+    };
+  }
+
+  if (!input.repoContext.branch) {
+    return {
+      pullRequestIntegrationStatus: input.githubService
+        ? ("connected" as const)
+        : ("needs_github" as const),
+      pullRequestStatus: null,
+    };
+  }
+
+  if (!input.githubService) {
+    return {
+      pullRequestIntegrationStatus: "needs_github" as const,
+      pullRequestStatus: null,
+    };
+  }
+
+  const { branch, githubRemote } = input.repoContext;
+  const cached = getCachedPullRequestStatus({
+    branch,
+    owner: githubRemote.owner,
+    repo: githubRemote.repo,
+    userId: input.userId,
+  });
+  if (cached) {
+    return cached;
+  }
+
+  const pullRequestStatus = await input.githubService
+    .getActivePullRequestStatus({
+      branch,
+      owner: githubRemote.owner,
+      repo: githubRemote.repo,
+    })
+    .catch(() => null);
+
+  const result = {
+    pullRequestIntegrationStatus: "connected" as const,
+    pullRequestStatus,
+  };
+
+  setCachedPullRequestStatus({
+    branch,
+    owner: githubRemote.owner,
+    pullRequestIntegrationStatus: result.pullRequestIntegrationStatus,
+    pullRequestStatus: result.pullRequestStatus,
+    repo: githubRemote.repo,
+    userId: input.userId,
+  });
+
+  return result;
+}
+
+async function buildWorkspaceRepoStatus(input: {
+  githubService: GitHubService | null;
+  pathValue: string | null;
+  userId: string;
+  workspaceId: string;
+}) {
+  const repoContext = await resolveRepoContext(input.pathValue);
+  const pullRequestState = await resolvePullRequestStatus({
+    githubService: input.githubService,
+    repoContext,
+    userId: input.userId,
+  });
+
+  return {
+    ...repoContext,
+    pullRequestIntegrationStatus: pullRequestState.pullRequestIntegrationStatus,
+    pullRequestStatus: pullRequestState.pullRequestStatus,
+    workspaceId: input.workspaceId,
+  };
+}
+
 export const repoRouter = createTRPCRouter({
   getContext: protectedProcedure
     .input(workspaceOptionalThreadInputSchema)
     .query(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOwnedThreadForWorkspace(ctx, input);
+      const githubService = await resolveGitHubService(ctx);
       return await buildRepoContextResponse({
+        githubService,
         pathValue: workspace.rootPath,
         preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
         thread,
+        userId: ctx.session.user.id,
+        workspaceId: workspace.id,
       });
+    }),
+
+  listWorkspaceStatuses: protectedProcedure
+    .input(workspaceStatusesInputSchema)
+    .query(async ({ ctx, input }) => {
+      const githubService = await resolveGitHubService(ctx);
+      const workspaces = await Promise.all(
+        input.workspaceIds.map((workspaceId) =>
+          getOwnedWorkspaceOrThrow(ctx, workspaceId),
+        ),
+      );
+
+      return await Promise.all(
+        workspaces.map((workspace) =>
+          buildWorkspaceRepoStatus({
+            githubService,
+            pathValue: workspace.rootPath,
+            userId: ctx.session.user.id,
+            workspaceId: workspace.id,
+          }),
+        ),
+      );
     }),
 
   setPreferredOpenTarget: protectedProcedure
@@ -275,13 +731,21 @@ export const repoRouter = createTRPCRouter({
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOwnedThreadForWorkspace(ctx, input);
       const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const projectPath = await resolveThreadProjectPath({
+        thread,
+        workspaceRootPath: rootPath,
+      });
+      const githubService = await resolveGitHubService(ctx);
 
       return {
-        diff: await getRepoDiffPanelData(rootPath, input.mode),
+        diff: await getRepoDiffPanelData(projectPath, input.mode),
         repoContext: await buildRepoContextResponse({
+          githubService,
           pathValue: rootPath,
           preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
           thread,
+          userId: ctx.session.user.id,
+          workspaceId: workspace.id,
         }),
       };
     }),
@@ -297,8 +761,13 @@ export const repoRouter = createTRPCRouter({
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOwnedThreadForWorkspace(ctx, input);
       const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const projectPath = await resolveThreadProjectPath({
+        thread,
+        workspaceRootPath: rootPath,
+      });
+      const githubService = await resolveGitHubService(ctx);
       const result = await commitAllChanges(
-        rootPath,
+        projectPath,
         input.message,
         input.includeUnstaged ?? true,
       );
@@ -306,9 +775,12 @@ export const repoRouter = createTRPCRouter({
       return {
         ...result,
         repoContext: await buildRepoContextResponse({
+          githubService,
           pathValue: rootPath,
           preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
           thread,
+          userId: ctx.session.user.id,
+          workspaceId: workspace.id,
         }),
       };
     }),
@@ -319,16 +791,24 @@ export const repoRouter = createTRPCRouter({
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOwnedThreadForWorkspace(ctx, input);
       const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const projectPath = await resolveThreadProjectPath({
+        thread,
+        workspaceRootPath: rootPath,
+      });
+      const githubService = await resolveGitHubService(ctx);
 
-      await stageFiles(rootPath, input.paths);
+      await stageFiles(projectPath, input.paths);
 
       return {
-        diff: await getRepoDiffPanelData(rootPath, input.mode),
+        diff: await getRepoDiffPanelData(projectPath, input.mode),
         paths: input.paths,
         repoContext: await buildRepoContextResponse({
+          githubService,
           pathValue: rootPath,
           preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
           thread,
+          userId: ctx.session.user.id,
+          workspaceId: workspace.id,
         }),
       };
     }),
@@ -339,16 +819,24 @@ export const repoRouter = createTRPCRouter({
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOwnedThreadForWorkspace(ctx, input);
       const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const projectPath = await resolveThreadProjectPath({
+        thread,
+        workspaceRootPath: rootPath,
+      });
+      const githubService = await resolveGitHubService(ctx);
 
-      await unstageFiles(rootPath, input.paths);
+      await unstageFiles(projectPath, input.paths);
 
       return {
-        diff: await getRepoDiffPanelData(rootPath, input.mode),
+        diff: await getRepoDiffPanelData(projectPath, input.mode),
         paths: input.paths,
         repoContext: await buildRepoContextResponse({
+          githubService,
           pathValue: rootPath,
           preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
           thread,
+          userId: ctx.session.user.id,
+          workspaceId: workspace.id,
         }),
       };
     }),
@@ -363,16 +851,24 @@ export const repoRouter = createTRPCRouter({
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOwnedThreadForWorkspace(ctx, input);
       const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const projectPath = await resolveThreadProjectPath({
+        thread,
+        workspaceRootPath: rootPath,
+      });
+      const githubService = await resolveGitHubService(ctx);
 
-      await revertFiles(rootPath, input.paths, input.mode);
+      await revertFiles(projectPath, input.paths, input.mode);
 
       return {
-        diff: await getRepoDiffPanelData(rootPath, input.mode),
+        diff: await getRepoDiffPanelData(projectPath, input.mode),
         paths: input.paths,
         repoContext: await buildRepoContextResponse({
+          githubService,
           pathValue: rootPath,
           preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
           thread,
+          userId: ctx.session.user.id,
+          workspaceId: workspace.id,
         }),
       };
     }),
@@ -387,36 +883,72 @@ export const repoRouter = createTRPCRouter({
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOwnedThreadForWorkspace(ctx, input);
       const rootPath = assertWorkspaceRootPath(workspace.rootPath);
-      const result = await createAndCheckoutBranch(rootPath, input.branchName);
+      const projectPath = await resolveThreadProjectPath({
+        thread,
+        workspaceRootPath: rootPath,
+      });
+      const githubService = await resolveGitHubService(ctx);
+      const result = await createAndCheckoutBranch(
+        projectPath,
+        input.branchName,
+      );
+      const nextThread = thread
+        ? withUpdatedThreadRepoState(thread, {
+            activeBranch: result.branch,
+          })
+        : thread;
+      if (thread) {
+        updateThreadRepoState(thread.id, {
+          activeBranch: result.branch,
+        });
+      }
       return {
         ...result,
         repoContext: await buildRepoContextResponse({
+          githubService,
           pathValue: rootPath,
           preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
-          thread,
+          thread: nextThread,
+          userId: ctx.session.user.id,
+          workspaceId: workspace.id,
         }),
       };
     }),
 
   listBranches: protectedProcedure
-    .input(workspaceInputSchema)
+    .input(workspaceOptionalThreadInputSchema)
     .query(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
-      return await listBranches(assertWorkspaceRootPath(workspace.rootPath));
+      const thread = await getOwnedThreadForWorkspace(ctx, input);
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const projectPath = await resolveThreadProjectPath({
+        thread,
+        workspaceRootPath: rootPath,
+      });
+      return await listBranches(projectPath);
     }),
 
   checkoutBranch: protectedProcedure
     .input(
-      workspaceInputSchema.extend({
+      workspaceOptionalThreadInputSchema.extend({
         branchName: z.string().trim().min(1).max(255),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
-      return await checkoutBranch(
-        assertWorkspaceRootPath(workspace.rootPath),
-        input.branchName,
-      );
+      const thread = await getOwnedThreadForWorkspace(ctx, input);
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const projectPath = await resolveThreadProjectPath({
+        thread,
+        workspaceRootPath: rootPath,
+      });
+      const result = await checkoutBranch(projectPath, input.branchName);
+      if (thread) {
+        updateThreadRepoState(thread.id, {
+          activeBranch: result.branch,
+        });
+      }
+      return result;
     }),
 
   generateCommitMessage: protectedProcedure
@@ -429,9 +961,13 @@ export const repoRouter = createTRPCRouter({
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOwnedThreadForWorkspace(ctx, input);
       const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const projectPath = await resolveThreadProjectPath({
+        thread,
+        workspaceRootPath: rootPath,
+      });
       return await generateWorkspaceCommitMessage({
         includeUnstaged: input.includeUnstaged ?? true,
-        rootPath,
+        rootPath: projectPath,
         thread: {
           chatEngine: thread!.chatEngine,
           chatModelId: thread!.chatModelId,
@@ -454,9 +990,13 @@ export const repoRouter = createTRPCRouter({
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOwnedThreadForWorkspace(ctx, input);
       const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const projectPath = await resolveThreadProjectPath({
+        thread,
+        workspaceRootPath: rootPath,
+      });
       const includeUnstaged = input.includeUnstaged ?? true;
 
-      let repoContext = await resolveRepoContext(rootPath);
+      let repoContext = await resolveRepoContext(projectPath);
       if (!repoContext.isGitRepo || !repoContext.githubRemote) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -478,7 +1018,7 @@ export const repoRouter = createTRPCRouter({
         }
 
         const created = await createAndCheckoutBranch(
-          rootPath,
+          projectPath,
           input.branchName,
         );
         createdBranch = created.branch;
@@ -491,7 +1031,7 @@ export const repoRouter = createTRPCRouter({
           (
             await generateWorkspaceCommitMessage({
               includeUnstaged,
-              rootPath,
+              rootPath: projectPath,
               thread: {
                 chatEngine: thread!.chatEngine,
                 chatModelId: thread!.chatModelId,
@@ -500,23 +1040,23 @@ export const repoRouter = createTRPCRouter({
               user: ctx.user,
             })
           ).message;
-        await commitAllChanges(rootPath, commitMessage, includeUnstaged);
+        await commitAllChanges(projectPath, commitMessage, includeUnstaged);
         repoChanged = true;
       }
 
       if (repoChanged) {
-        repoContext = await resolveRepoContext(rootPath);
+        repoContext = await resolveRepoContext(projectPath);
       }
 
       const shouldPush =
         !repoContext.hasUpstream || (repoContext.aheadCount ?? 0) > 0;
       if (shouldPush) {
-        await pushCurrentBranch(rootPath);
+        await pushCurrentBranch(projectPath);
         repoChanged = true;
       }
 
       if (repoChanged) {
-        repoContext = await resolveRepoContext(rootPath);
+        repoContext = await resolveRepoContext(projectPath);
       }
 
       if (!repoContext.githubRemote) {
@@ -540,7 +1080,9 @@ export const repoRouter = createTRPCRouter({
       }
 
       let lastPullRequest: RepoLastPullRequest;
+      let pullRequestStatus: RepoPullRequestStatus | null = null;
       let pullRequestUrl: string;
+      let linkedExistingPullRequest = false;
 
       if (
         githubService &&
@@ -549,31 +1091,80 @@ export const repoRouter = createTRPCRouter({
       ) {
         const message = await resolvePullRequestMessage({
           commitMessage: commitMessage ?? input.message?.trim() ?? null,
-          rootPath,
+          rootPath: projectPath,
         });
         const { body, subject } = parseCommitMessage(message);
-        const pullRequest = await githubService.createPr({
-          base: repoContext.githubRemote.defaultBranch,
-          body: body || undefined,
-          draft: input.draft ?? false,
-          head: repoContext.branch,
+        try {
+          const pullRequest = await githubService.createPr({
+            base: repoContext.githubRemote.defaultBranch,
+            body: body || undefined,
+            draft: input.draft ?? false,
+            head: repoContext.branch,
+            owner: repoContext.githubRemote.owner,
+            repo: repoContext.githubRemote.repo,
+            title: subject,
+          });
+          pullRequestUrl = pullRequest.htmlUrl;
+          lastPullRequest = buildGitHubPullRequestMetadata({
+            base: pullRequest.base,
+            createdAt: pullRequest.createdAt,
+            draft: pullRequest.draft,
+            head: pullRequest.head,
+            number: pullRequest.number,
+            owner: repoContext.githubRemote.owner,
+            repo: repoContext.githubRemote.repo,
+            state: pullRequest.state,
+            title: pullRequest.title,
+            updatedAt: pullRequest.updatedAt,
+            url: pullRequest.htmlUrl,
+          });
+          pullRequestStatus = {
+            additions: pullRequest.additions,
+            baseBranch: pullRequest.base,
+            branch: pullRequest.head,
+            changedFiles: pullRequest.changedFiles,
+            checks: null,
+            comments: pullRequest.comments,
+            createdAt: pullRequest.createdAt,
+            deletions: pullRequest.deletions,
+            mergeStatus: pullRequest.draft ? "draft" : "unknown",
+            number: pullRequest.number,
+            provider: "github",
+            reviewDecision: null,
+            state: pullRequest.draft ? "draft" : "open",
+            title: pullRequest.title,
+            updatedAt: pullRequest.updatedAt,
+            url: pullRequest.htmlUrl,
+          };
+        } catch (error) {
+          const existingPullRequest =
+            await githubService.getActivePullRequestStatus({
+              branch: repoContext.branch,
+              owner: repoContext.githubRemote.owner,
+              repo: repoContext.githubRemote.repo,
+            });
+
+          if (!existingPullRequest) {
+            throw error;
+          }
+
+          linkedExistingPullRequest = true;
+          pullRequestStatus = existingPullRequest;
+          pullRequestUrl = existingPullRequest.url;
+          lastPullRequest = buildGitHubPullRequestMetadataFromStatus({
+            owner: repoContext.githubRemote.owner,
+            pullRequestStatus: existingPullRequest,
+            repo: repoContext.githubRemote.repo,
+          });
+        }
+
+        setCachedPullRequestStatus({
+          branch: pullRequestStatus.branch,
           owner: repoContext.githubRemote.owner,
+          pullRequestIntegrationStatus: "connected",
+          pullRequestStatus,
           repo: repoContext.githubRemote.repo,
-          title: subject,
-        });
-        pullRequestUrl = pullRequest.htmlUrl;
-        lastPullRequest = buildGitHubPullRequestMetadata({
-          base: pullRequest.base,
-          createdAt: pullRequest.createdAt,
-          draft: pullRequest.draft,
-          head: pullRequest.head,
-          number: pullRequest.number,
-          owner: repoContext.githubRemote.owner,
-          repo: repoContext.githubRemote.repo,
-          state: pullRequest.state,
-          title: pullRequest.title,
-          updatedAt: pullRequest.updatedAt,
-          url: pullRequest.htmlUrl,
+          userId: ctx.session.user.id,
         });
       } else {
         pullRequestUrl =
@@ -588,18 +1179,212 @@ export const repoRouter = createTRPCRouter({
         });
       }
 
-      updateThreadRepoState(thread!.id, { lastPullRequest });
+      const nextThread = withUpdatedThreadRepoState(thread, {
+        activeBranch: repoContext.branch,
+        lastPullRequest,
+      });
+      updateThreadRepoState(thread!.id, {
+        activeBranch: repoContext.branch,
+        lastPullRequest,
+      });
 
       return {
         branch: repoContext.branch,
         commitMessage,
         createdBranch,
+        linkedExistingPullRequest,
         pullRequestUrl,
         repoContext: await buildRepoContextResponse({
+          githubService,
           lastPullRequest,
           pathValue: rootPath,
           preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
-          thread,
+          pullRequestIntegrationStatus: githubService ? "connected" : undefined,
+          pullRequestStatus,
+          thread: nextThread,
+          userId: ctx.session.user.id,
+          workspaceId: workspace.id,
+        }),
+      };
+    }),
+
+  resumeThreadBranch: protectedProcedure
+    .input(threadEnvironmentInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const thread = await getOwnedThreadForWorkspace(ctx, input);
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const githubService = await resolveGitHubService(ctx);
+      const threadState = normalizeThreadRepoState(thread);
+      const currentRepoContext = await resolveRepoContext(rootPath);
+      const targetBranch =
+        threadState.activeBranch ?? currentRepoContext.branch;
+
+      if (!targetBranch) {
+        return {
+          ok: false,
+          repoContext: await buildRepoContextResponse({
+            githubService,
+            pathValue: rootPath,
+            preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+            thread,
+            userId: ctx.session.user.id,
+            workspaceId: workspace.id,
+          }),
+        };
+      }
+
+      if (
+        currentRepoContext.branch !== targetBranch &&
+        currentRepoContext.hasChanges
+      ) {
+        return {
+          ok: false,
+          repoContext: await buildRepoContextResponse({
+            githubService,
+            pathValue: rootPath,
+            preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+            thread,
+            userId: ctx.session.user.id,
+            workspaceId: workspace.id,
+          }),
+        };
+      }
+
+      if (currentRepoContext.branch !== targetBranch) {
+        await checkoutBranch(rootPath, targetBranch);
+      }
+
+      const nextThread = withUpdatedThreadRepoState(thread, {
+        activeBranch: targetBranch,
+        projectMode: "local",
+      });
+      updateThreadRepoState(thread!.id, {
+        activeBranch: targetBranch,
+        projectMode: "local",
+      });
+
+      return {
+        branch: targetBranch,
+        ok: true,
+        repoContext: await buildRepoContextResponse({
+          githubService,
+          pathValue: rootPath,
+          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+          thread: nextThread,
+          userId: ctx.session.user.id,
+          workspaceId: workspace.id,
+        }),
+      };
+    }),
+
+  enableThreadWorktree: protectedProcedure
+    .input(threadEnvironmentInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const thread = await getOwnedThreadForWorkspace(ctx, input);
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const githubService = await resolveGitHubService(ctx);
+      const currentRepoContext = await resolveRepoContext(rootPath);
+      const threadState = normalizeThreadRepoState(thread);
+      const targetBranch =
+        threadState.activeBranch ?? currentRepoContext.branch;
+
+      if (!targetBranch) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "This thread does not have a branch to move into a worktree.",
+        });
+      }
+
+      const result = await ensureThreadWorktree(
+        rootPath,
+        thread!.id,
+        targetBranch,
+      );
+      const nextThread = withUpdatedThreadRepoState(thread, {
+        activeBranch: targetBranch,
+        projectMode: "worktree",
+        worktreePath: result.path,
+      });
+      updateThreadRepoState(thread!.id, {
+        activeBranch: targetBranch,
+        projectMode: "worktree",
+        worktreePath: result.path,
+      });
+
+      return {
+        branch: targetBranch,
+        created: result.created,
+        repoContext: await buildRepoContextResponse({
+          githubService,
+          pathValue: rootPath,
+          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+          thread: nextThread,
+          userId: ctx.session.user.id,
+          workspaceId: workspace.id,
+        }),
+        worktreePath: result.path,
+      };
+    }),
+
+  useLocalProject: protectedProcedure
+    .input(threadEnvironmentInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const thread = await getOwnedThreadForWorkspace(ctx, input);
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const githubService = await resolveGitHubService(ctx);
+
+      const nextThread = withUpdatedThreadRepoState(thread, {
+        projectMode: "local",
+      });
+      updateThreadRepoState(thread!.id, {
+        projectMode: "local",
+      });
+
+      return {
+        ok: true,
+        repoContext: await buildRepoContextResponse({
+          githubService,
+          pathValue: rootPath,
+          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+          thread: nextThread,
+          userId: ctx.session.user.id,
+          workspaceId: workspace.id,
+        }),
+      };
+    }),
+
+  removeThreadWorktree: protectedProcedure
+    .input(threadEnvironmentInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const thread = await getOwnedThreadForWorkspace(ctx, input);
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const githubService = await resolveGitHubService(ctx);
+
+      const removed = await removeThreadWorktree(rootPath, thread!.id);
+      const nextThread = withUpdatedThreadRepoState(thread, {
+        projectMode: "local",
+        worktreePath: null,
+      });
+      updateThreadRepoState(thread!.id, {
+        projectMode: "local",
+        worktreePath: null,
+      });
+
+      return {
+        ok: true,
+        removed: removed.removed,
+        repoContext: await buildRepoContextResponse({
+          githubService,
+          pathValue: rootPath,
+          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+          thread: nextThread,
+          userId: ctx.session.user.id,
+          workspaceId: workspace.id,
         }),
       };
     }),
@@ -619,13 +1404,21 @@ export const repoRouter = createTRPCRouter({
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOwnedThreadForWorkspace(ctx, input);
       const rootPath = assertWorkspaceRootPath(workspace.rootPath);
-      const result = await pushCurrentBranch(rootPath);
+      const projectPath = await resolveThreadProjectPath({
+        thread,
+        workspaceRootPath: rootPath,
+      });
+      const githubService = await resolveGitHubService(ctx);
+      const result = await pushCurrentBranch(projectPath);
       return {
         ...result,
         repoContext: await buildRepoContextResponse({
+          githubService,
           pathValue: rootPath,
           preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
           thread,
+          userId: ctx.session.user.id,
+          workspaceId: workspace.id,
         }),
       };
     }),

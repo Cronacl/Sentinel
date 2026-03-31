@@ -10,13 +10,17 @@ import {
   checkoutBranch,
   commitAllChanges,
   createAndCheckoutBranch,
+  ensureThreadWorktree,
   getHeadCommitMessage,
   getCommitMessageContext,
   getRepoDiffPanelData,
   initializeRepository,
+  isWorktreeClean,
   listBranches,
+  listWorktrees,
   parseShortStat,
   pushCurrentBranch,
+  removeThreadWorktree,
   revertFiles,
   resolveRepoContext,
   stageFiles,
@@ -438,5 +442,61 @@ describe("repo actions", () => {
     expect(result.sourceLabel).toBe("feature/branch-diff -> origin/main");
     expect(result.files).toHaveLength(1);
     expect(result.files[0]?.path).toBe("file.ts");
+  });
+
+  it("creates, reuses, lists, and removes thread worktrees", async () => {
+    const repoRoot = await createRepo();
+    await createAndCheckoutBranch(repoRoot, "feature/worktree");
+    await checkoutBranch(repoRoot, "main");
+
+    const created = await ensureThreadWorktree(
+      repoRoot,
+      "thread-1",
+      "feature/worktree",
+    );
+    const reused = await ensureThreadWorktree(
+      repoRoot,
+      "thread-1",
+      "feature/worktree",
+    );
+    const worktrees = await listWorktrees(repoRoot);
+
+    expect(created.created).toBe(true);
+    expect(reused.created).toBe(false);
+    expect(created.path).toBe(reused.path);
+    expect(worktrees.worktrees).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          branch: "feature/worktree",
+          detached: false,
+          path: created.path,
+        }),
+      ]),
+    );
+    await expect(isWorktreeClean(created.path)).resolves.toBe(true);
+
+    const removed = await removeThreadWorktree(repoRoot, "thread-1");
+    expect(removed.removed).toBe(true);
+  });
+
+  it("refuses to remove a dirty thread worktree", async () => {
+    const repoRoot = await createRepo();
+    await createAndCheckoutBranch(repoRoot, "feature/dirty-worktree");
+    await checkoutBranch(repoRoot, "main");
+
+    const worktree = await ensureThreadWorktree(
+      repoRoot,
+      "thread-2",
+      "feature/dirty-worktree",
+    );
+    await writeFile(
+      path.join(worktree.path, "file.ts"),
+      "export const value = 99;\n",
+    );
+
+    await expect(isWorktreeClean(worktree.path)).resolves.toBe(false);
+    await expect(removeThreadWorktree(repoRoot, "thread-2")).rejects.toThrow(
+      "This worktree has uncommitted changes. Clean it up before removing it.",
+    );
   });
 });

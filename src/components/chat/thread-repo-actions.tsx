@@ -41,6 +41,7 @@ import { getDesktopApi, isDesktopRuntime } from "@/lib/desktop/client";
 import type { DesktopOpenTarget } from "@/lib/desktop/contracts";
 import { getErrorMessage } from "@/lib/errors";
 import { api } from "@/trpc/react";
+import { RepoPullRequestSidebar } from "./repo-pr-sidebar";
 import { RepoDiffSidebar } from "./repo-diff-sidebar";
 import {
   closeRepoDiffSidebarState,
@@ -53,6 +54,8 @@ import {
   formatRepoActionErrorMessage,
   getActivePullRequestUrl,
   getGeneratedCommitPromptValue,
+  getLinkedPullRequestStatus,
+  getThreadLinkedPullRequest,
 } from "./thread-repo-actions.helpers";
 
 type ThreadRepoActionsProps = {
@@ -152,9 +155,15 @@ export function ThreadRepoActions({
   });
 
   const repoContext = repoContextQuery.data;
-  const launchPath = repoContext?.repoRoot ?? workspaceRootPath ?? null;
+  const launchPath =
+    repoContext?.effectiveRootPath ??
+    repoContext?.repoRoot ??
+    workspaceRootPath ??
+    null;
 
   const snapshotRef = useRef(repoContext);
+  const syncedPullRequestKeyRef = useRef<string | null>(null);
+  const autoResumeKeyRef = useRef<string | null>(null);
   if (!anyModalOpen) {
     snapshotRef.current = repoContext;
   }
@@ -177,11 +186,13 @@ export function ThreadRepoActions({
 
   const refreshContext = useCallback(async () => {
     await utils.repo.getContext.invalidate(repoContextQueryInput);
+    await utils.repo.listWorkspaceStatuses.invalidate();
   }, [repoContextQueryInput, utils]);
 
   const applyRepoContext = useCallback(
     (nextRepoContext: typeof repoContext) => {
       utils.repo.getContext.setData(repoContextQueryInput, nextRepoContext);
+      void utils.repo.listWorkspaceStatuses.invalidate();
     },
     [repoContextQueryInput, utils],
   );
@@ -230,6 +241,9 @@ export function ThreadRepoActions({
       }
     },
   });
+  const resumeThreadBranchMutation = api.repo.resumeThreadBranch.useMutation();
+  const enableThreadWorktreeMutation =
+    api.repo.enableThreadWorktree.useMutation();
 
   const initMutation = api.repo.init.useMutation({
     onSuccess: async () => {
@@ -269,6 +283,37 @@ export function ThreadRepoActions({
     setPreferredLaunchTargetId(repoContext?.preferredOpenTargetId ?? null);
   }, [repoContext?.preferredOpenTargetId]);
 
+  const syncedPullRequestKey = useMemo(() => {
+    if (!repoContext) {
+      return null;
+    }
+
+    const branchKey = repoContext.threadBranch ?? repoContext.branch ?? "";
+    if (repoContext.lastPullRequest) {
+      return [
+        branchKey,
+        repoContext.lastPullRequest.kind,
+        repoContext.lastPullRequest.url,
+      ].join(":");
+    }
+
+    return `branch:${branchKey}:none`;
+  }, [repoContext]);
+
+  useEffect(() => {
+    if (!threadId || !syncedPullRequestKey) {
+      return;
+    }
+
+    if (syncedPullRequestKeyRef.current === syncedPullRequestKey) {
+      return;
+    }
+
+    syncedPullRequestKeyRef.current = syncedPullRequestKey;
+    void utils.threads.get.invalidate({ threadId });
+    void utils.threads.list.invalidate();
+  }, [syncedPullRequestKey, threadId, utils]);
+
   useEffect(() => {
     if (!isRepoVisible || !launchPath || !desktop) {
       setLaunchTargets([]);
@@ -303,6 +348,119 @@ export function ThreadRepoActions({
       cancelled = true;
     };
   }, [desktop, isRepoVisible, launchPath]);
+
+  const threadBranch = repoContext?.threadBranch ?? repoContext?.branch ?? null;
+  const isUsingWorktree = repoContext?.threadProjectMode === "worktree";
+  const branchResumeStatus = repoContext?.branchResumeStatus ?? "matched";
+  const branchResumeReason = repoContext?.branchResumeReason ?? null;
+  const needsBranchResume =
+    !isUsingWorktree && branchResumeStatus === "needs_checkout";
+  const isBranchResumeBlocked =
+    !isUsingWorktree && branchResumeStatus === "blocked_dirty";
+  const isThreadContextMisaligned =
+    !isUsingWorktree && branchResumeStatus !== "matched";
+  const projectModeBusy =
+    resumeThreadBranchMutation.isPending ||
+    enableThreadWorktreeMutation.isPending;
+
+  const handleResumeThreadBranch = useCallback(
+    async (options?: { silent?: boolean }) => {
+      try {
+        const result = await resumeThreadBranchMutation.mutateAsync({
+          threadId,
+          workspaceId,
+        });
+        applyRepoContext(result.repoContext);
+        await utils.threads.list.invalidate();
+        if (!result.ok && !options?.silent) {
+          sileo.warning({
+            description:
+              result.repoContext.branchResumeReason ??
+              "This thread can't switch branches until the local project is clean.",
+            title: threadBranch
+              ? `Resume on ${threadBranch} is blocked`
+              : "Resume blocked",
+          });
+        }
+      } catch (error) {
+        if (!options?.silent) {
+          sileo.error({
+            description: formatRepoActionErrorMessage(
+              getErrorMessage(error, "Unable to resume this thread branch."),
+            ),
+            title: "Resume branch failed",
+          });
+        }
+      }
+    },
+    [
+      applyRepoContext,
+      resumeThreadBranchMutation,
+      threadBranch,
+      threadId,
+      utils.threads.list,
+      workspaceId,
+    ],
+  );
+
+  const handleEnableThreadWorktree = useCallback(async () => {
+    try {
+      const result = await enableThreadWorktreeMutation.mutateAsync({
+        threadId,
+        workspaceId,
+      });
+      applyRepoContext(result.repoContext);
+      await utils.threads.list.invalidate();
+      sileo.success({
+        description: result.branch
+          ? `This thread now runs in a worktree on ${result.branch}.`
+          : "This thread now runs in its own worktree.",
+        title: result.created ? "Worktree created" : "Worktree ready",
+      });
+    } catch (error) {
+      sileo.error({
+        description: formatRepoActionErrorMessage(
+          getErrorMessage(
+            error,
+            "Unable to create a worktree for this thread.",
+          ),
+        ),
+        title: "Worktree failed",
+      });
+    }
+  }, [
+    applyRepoContext,
+    enableThreadWorktreeMutation,
+    threadId,
+    utils.threads.list,
+    workspaceId,
+  ]);
+
+  useEffect(() => {
+    if (!needsBranchResume || projectModeBusy || !threadBranch) {
+      return;
+    }
+
+    const key = `${threadId}:${threadBranch}`;
+    if (autoResumeKeyRef.current === key) {
+      return;
+    }
+
+    autoResumeKeyRef.current = key;
+    void handleResumeThreadBranch({ silent: true });
+  }, [
+    handleResumeThreadBranch,
+    needsBranchResume,
+    projectModeBusy,
+    threadBranch,
+    threadId,
+  ]);
+
+  useEffect(() => {
+    if (!needsBranchResume) {
+      autoResumeKeyRef.current = null;
+    }
+  }, [needsBranchResume]);
 
   const handleLaunchTarget = useCallback(
     async (target: DesktopOpenTarget) => {
@@ -403,14 +561,21 @@ export function ThreadRepoActions({
         applyRepoContext(result.repoContext);
         commitModalState.close();
         setCommitMessage("");
+        void utils.threads.list.invalidate();
         if (desktop) {
           await desktop.openExternal(result.pullRequestUrl).catch(() => {});
         }
         sileo.success({
-          description: result.branch
-            ? `Created PR from ${result.branch}.`
-            : "Created PR.",
-          title: "Pull request ready",
+          description: result.linkedExistingPullRequest
+            ? result.branch
+              ? `Linked the existing PR for ${result.branch}.`
+              : "Linked the existing PR for this branch."
+            : result.branch
+              ? `Created PR from ${result.branch}.`
+              : "Created PR.",
+          title: result.linkedExistingPullRequest
+            ? "Pull request linked"
+            : "Pull request ready",
         });
       } catch {
         /* onError handler shows the toast */
@@ -571,14 +736,21 @@ export function ThreadRepoActions({
         applyRepoContext(result.repoContext);
         prBranchModalState.close();
         setPrBranchName("");
+        void utils.threads.list.invalidate();
         if (desktop) {
           await desktop.openExternal(result.pullRequestUrl).catch(() => {});
         }
         sileo.success({
-          description: result.createdBranch
-            ? `Created PR from ${result.createdBranch}.`
-            : "Created PR.",
-          title: "Pull request ready",
+          description: result.linkedExistingPullRequest
+            ? (result.createdBranch ?? result.branch)
+              ? `Linked the existing PR for ${result.createdBranch ?? result.branch}.`
+              : "Linked the existing PR for this branch."
+            : result.createdBranch
+              ? `Created PR from ${result.createdBranch}.`
+              : "Created PR.",
+          title: result.linkedExistingPullRequest
+            ? "Pull request linked"
+            : "Pull request ready",
         });
       } catch {
         /* onError handler sets prBranchError */
@@ -619,14 +791,21 @@ export function ThreadRepoActions({
           buildCreatePullRequestInput({ threadId, workspaceId }),
         );
         applyRepoContext(result.repoContext);
+        void utils.threads.list.invalidate();
         if (desktop) {
           await desktop.openExternal(result.pullRequestUrl).catch(() => {});
         }
         sileo.success({
-          description: result.branch
-            ? `Created PR from ${result.branch}.`
-            : "Created PR.",
-          title: "Pull request ready",
+          description: result.linkedExistingPullRequest
+            ? result.branch
+              ? `Linked the existing PR for ${result.branch}.`
+              : "Linked the existing PR for this branch."
+            : result.branch
+              ? `Created PR from ${result.branch}.`
+              : "Created PR.",
+          title: result.linkedExistingPullRequest
+            ? "Pull request linked"
+            : "Pull request ready",
         });
       } catch {
         /* onError handler shows the toast */
@@ -676,6 +855,16 @@ export function ThreadRepoActions({
       size: "wide",
     });
   }, [isRepoDiffSidebarActive, rightSidebar, threadId, workspaceId]);
+
+  const handleOpenPullRequestSidebar = useCallback(() => {
+    rightSidebar.open(
+      <RepoPullRequestSidebar threadId={threadId} workspaceId={workspaceId} />,
+      {
+        panelId: "repo-pr",
+        size: "narrow",
+      },
+    );
+  }, [rightSidebar, threadId, workspaceId]);
 
   if (!isDesktop || !workspaceRootPath) {
     return null;
@@ -740,24 +929,41 @@ export function ThreadRepoActions({
 
   const hasChanges = Boolean(repoContext?.hasChanges);
   const hasPushableCommits = Boolean(
-    repoContext?.branch &&
+    threadBranch &&
     repoContext?.hasCommits &&
     repoContext?.pushRemoteName &&
     (repoContext.hasUpstream ? (repoContext.aheadCount ?? 0) > 0 : true),
   );
   const hasGithubRemote = Boolean(repoContext?.githubRemote);
-  const activePullRequestUrl = getActivePullRequestUrl({
-    branch: repoContext?.branch,
+  const linkedPullRequest = getThreadLinkedPullRequest({
+    branch: threadBranch,
     lastPullRequest: repoContext?.lastPullRequest,
   });
+  const pullRequestStatus = getLinkedPullRequestStatus({
+    branch: threadBranch,
+    lastPullRequest: repoContext?.lastPullRequest,
+    pullRequestStatus: repoContext?.pullRequestStatus ?? null,
+  });
+  const activePullRequestUrl = getActivePullRequestUrl({
+    branch: threadBranch,
+    lastPullRequest: linkedPullRequest,
+    pullRequestStatus,
+  });
+  const pullRequestOpenUrl =
+    activePullRequestUrl ??
+    (!linkedPullRequest
+      ? (repoContext?.githubRemote?.pullRequestUrl ?? null)
+      : null);
+  const isRepoActionDisabled =
+    isGitBusy || projectModeBusy || isThreadContextMisaligned;
 
   const handleViewPullRequest = async () => {
-    if (!desktop || !activePullRequestUrl) {
+    if (!desktop || !pullRequestOpenUrl) {
       return;
     }
 
     try {
-      await desktop.openExternal(activePullRequestUrl);
+      await desktop.openExternal(pullRequestOpenUrl);
     } catch (error) {
       const description = formatRepoActionErrorMessage(
         getErrorMessage(error, "Unable to open PR."),
@@ -881,12 +1087,46 @@ export function ThreadRepoActions({
           </Dropdown>
         </ButtonGroup>
 
+        {isThreadContextMisaligned ? (
+          <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-content1/40 px-2 py-1.5">
+            <span className="text-xs text-muted">
+              {threadBranch
+                ? isBranchResumeBlocked
+                  ? `Resume on ${threadBranch}`
+                  : `Switching to ${threadBranch}`
+                : "Thread branch"}
+            </span>
+            <Button
+              className="h-6 rounded-lg px-2"
+              isDisabled={projectModeBusy}
+              isPending={resumeThreadBranchMutation.isPending}
+              onPress={() => void handleResumeThreadBranch()}
+              size="sm"
+              variant="ghost"
+            >
+              Resume
+            </Button>
+            {isBranchResumeBlocked ? (
+              <Button
+                className="h-6 rounded-lg px-2"
+                isDisabled={projectModeBusy}
+                isPending={enableThreadWorktreeMutation.isPending}
+                onPress={() => void handleEnableThreadWorktree()}
+                size="sm"
+                variant="secondary"
+              >
+                Use worktree
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="flex items-center">
           <Button
             aria-label="Commit changes"
             className="max-h-7 pl-2 pr-3 rounded-r-none"
             variant="tertiary"
-            isDisabled={!hasChanges || isGitBusy}
+            isDisabled={!hasChanges || isRepoActionDisabled}
             isPending={isGitBusy}
             onPress={handleOpenCommitModal}
             {...{ [BUTTON_GROUP_CHILD]: true }}
@@ -915,7 +1155,7 @@ export function ThreadRepoActions({
           <Dropdown>
             <Button
               className="max-h-7 max-w-6 rounded-l-none"
-              isDisabled={isGitBusy}
+              isDisabled={isGitBusy || projectModeBusy}
               isIconOnly
               {...{ [BUTTON_GROUP_CHILD]: true }}
               variant="tertiary"
@@ -934,7 +1174,9 @@ export function ThreadRepoActions({
                   if (key === "commit") handleOpenCommitModal();
                   if (key === "push") handleOpenPushModal();
                   if (key === "pull-request") {
-                    if (activePullRequestUrl) {
+                    if (pullRequestStatus) {
+                      handleOpenPullRequestSidebar();
+                    } else if (pullRequestOpenUrl) {
                       void handleViewPullRequest();
                     } else {
                       handleCreatePullRequest();
@@ -945,7 +1187,7 @@ export function ThreadRepoActions({
               >
                 <Dropdown.Item
                   id="commit"
-                  isDisabled={!hasChanges}
+                  isDisabled={!hasChanges || isThreadContextMisaligned}
                   textValue="Commit"
                 >
                   <HugeiconsIcon
@@ -958,7 +1200,7 @@ export function ThreadRepoActions({
                 </Dropdown.Item>
                 <Dropdown.Item
                   id="push"
-                  isDisabled={!hasPushableCommits}
+                  isDisabled={!hasPushableCommits || isThreadContextMisaligned}
                   textValue="Push"
                 >
                   <HugeiconsIcon
@@ -971,8 +1213,16 @@ export function ThreadRepoActions({
                 </Dropdown.Item>
                 <Dropdown.Item
                   id="pull-request"
-                  isDisabled={!hasGithubRemote}
-                  textValue={activePullRequestUrl ? "View PR" : "Create PR"}
+                  isDisabled={!hasGithubRemote || isThreadContextMisaligned}
+                  textValue={
+                    pullRequestStatus
+                      ? "PR details"
+                      : linkedPullRequest?.kind === "github"
+                        ? "Open linked PR"
+                        : pullRequestOpenUrl
+                          ? "Open compare"
+                          : "Create PR"
+                  }
                 >
                   <HugeiconsIcon
                     color="currentColor"
@@ -981,10 +1231,20 @@ export function ThreadRepoActions({
                     strokeWidth={1.5}
                   />
                   <Label>
-                    {activePullRequestUrl ? "View PR" : "Create PR"}
+                    {pullRequestStatus
+                      ? "PR details"
+                      : linkedPullRequest?.kind === "github"
+                        ? "Open linked PR"
+                        : pullRequestOpenUrl
+                          ? "Open compare"
+                          : "Create PR"}
                   </Label>
                 </Dropdown.Item>
-                <Dropdown.Item id="branch" textValue="Create branch">
+                <Dropdown.Item
+                  id="branch"
+                  isDisabled={isThreadContextMisaligned}
+                  textValue="Create branch"
+                >
                   <HugeiconsIcon
                     color="currentColor"
                     icon={GitBranchIcon}
@@ -997,9 +1257,18 @@ export function ThreadRepoActions({
             </Dropdown.Popover>
           </Dropdown>
         </div>
+        {branchResumeReason && !isThreadContextMisaligned ? (
+          <span className="max-w-52 truncate text-xs text-muted">
+            {branchResumeReason}
+          </span>
+        ) : null}
         <Button
           className="max-h-7 rounded-xl px-3"
-          isDisabled={repoContextQuery.isLoading || !repoContext?.isGitRepo}
+          isDisabled={
+            repoContextQuery.isLoading ||
+            !repoContext?.isGitRepo ||
+            isThreadContextMisaligned
+          }
           onPress={handleToggleRepoDiffSidebar}
           size="sm"
           isIconOnly
@@ -1046,7 +1315,9 @@ export function ThreadRepoActions({
                         size={14}
                         strokeWidth={1.5}
                       />
-                      {modalContext?.branch ?? "—"}
+                      {modalContext?.threadBranch ??
+                        modalContext?.branch ??
+                        "—"}
                     </span>
                   </div>
 
@@ -1154,7 +1425,7 @@ export function ThreadRepoActions({
                     </p>
                   )}
                   {commitError && (
-                    <p className="mt-1.5 text-xs leading-relaxed text-danger whitespace-pre-wrap break-words">
+                    <p className="mt-1.5 text-xs text-danger whitespace-pre-wrap break-words">
                       {commitError}
                     </p>
                   )}
@@ -1410,7 +1681,7 @@ export function ThreadRepoActions({
                     value={prBranchName}
                   />
                   {prBranchError && (
-                    <p className="mt-1.5 text-xs leading-relaxed text-danger whitespace-pre-wrap break-words">
+                    <p className="mt-1.5 text-xs text-danger whitespace-pre-wrap break-words">
                       {prBranchError}
                     </p>
                   )}

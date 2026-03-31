@@ -22,6 +22,7 @@ import {
   FilterMailIcon,
   Folder03Icon,
   FolderAddIcon,
+  GitPullRequestIcon,
   MoreHorizontalIcon,
   PencilEdit02Icon,
   PinIcon,
@@ -36,6 +37,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CreateWorkspaceModal } from "@/components/workspaces/create-workspace-modal";
+import type { RepoLastPullRequest } from "@/lib/ai/chat/engines/types";
 import {
   applyOptimisticThreadPinUpdate,
   restoreOptimisticThreadPinUpdate,
@@ -341,6 +343,57 @@ function WorkspaceItemActions({
   );
 }
 
+function threadPullRequestToneClass(
+  pullRequest: RepoLastPullRequest | null | undefined,
+) {
+  if (!pullRequest) {
+    return "text-foreground/45";
+  }
+
+  if (pullRequest.kind === "compare") {
+    return "text-foreground/50";
+  }
+
+  if (pullRequest.draft) {
+    return "text-warning/85";
+  }
+
+  switch (pullRequest.state.toLowerCase()) {
+    case "merged":
+      return "text-success/85";
+    case "closed":
+      return "text-danger/85";
+    default:
+      return "text-foreground/55";
+  }
+}
+
+function formatThreadPullRequestLabel(
+  pullRequest: RepoLastPullRequest | null | undefined,
+) {
+  if (!pullRequest) {
+    return null;
+  }
+
+  if (pullRequest.kind === "compare") {
+    return "Open compare";
+  }
+
+  if (pullRequest.draft) {
+    return `PR #${pullRequest.number} Draft`;
+  }
+
+  if (pullRequest.state.toLowerCase() === "merged") {
+    return `PR #${pullRequest.number} Merged`;
+  }
+
+  if (pullRequest.state.toLowerCase() === "closed") {
+    return `PR #${pullRequest.number} Closed`;
+  }
+
+  return `PR #${pullRequest.number} Open`;
+}
+
 function PinnedThreadsList({
   threads,
   selectedThreadId,
@@ -473,6 +526,7 @@ function ThreadRow({
   selectedThreadId: string | null;
   thread: {
     id: string;
+    linkedPullRequest?: RepoLastPullRequest | null;
     pinnedAt: Date | null;
     status: ThreadStatusValue;
     title: string;
@@ -481,6 +535,9 @@ function ThreadRow({
   workspaceId: string;
 }) {
   const isActive = selectedThreadId === thread.id;
+  const pullRequestLabel = formatThreadPullRequestLabel(
+    thread.linkedPullRequest ?? null,
+  );
 
   return (
     <div
@@ -501,20 +558,38 @@ function ThreadRow({
         }
       }}
     >
-      <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-        {thread.status !== "idle" ? (
-          <ThreadStatusIndicator status={thread.status} />
-        ) : thread.pinnedAt != null ? (
-          <HugeiconsIcon
-            className="shrink-0 text-foreground/40"
-            color="currentColor"
-            icon={PinIcon}
-            size={11}
-            strokeWidth={1.5}
-          />
-        ) : null}
-        <span className="min-w-0 truncate text-sm" title={thread.title}>
-          {thread.title}
+      <span className="flex min-w-0 flex-1 items-start gap-1.5 overflow-hidden">
+        <span className="pt-0.5">
+          {thread.status !== "idle" ? (
+            <ThreadStatusIndicator status={thread.status} />
+          ) : thread.pinnedAt != null ? (
+            <HugeiconsIcon
+              className="shrink-0 text-foreground/40"
+              color="currentColor"
+              icon={PinIcon}
+              size={11}
+              strokeWidth={1.5}
+            />
+          ) : null}
+        </span>
+        <span className="min-w-0">
+          <span className="block min-w-0 truncate text-sm" title={thread.title}>
+            {thread.title}
+          </span>
+          {pullRequestLabel ? (
+            <span
+              className={`mt-0.5 flex items-center gap-1 text-[11px] ${threadPullRequestToneClass(thread.linkedPullRequest)}`}
+            >
+              <HugeiconsIcon
+                className="shrink-0"
+                color="currentColor"
+                icon={GitPullRequestIcon}
+                size={10}
+                strokeWidth={1.5}
+              />
+              <span className="truncate">{pullRequestLabel}</span>
+            </span>
+          ) : null}
         </span>
       </span>
       <ThreadItemTrailing
@@ -616,7 +691,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
       </div>
 
       <SidebarCollapsible isOpen={isExpanded}>
-        <div className="mt-1 flex flex-col gap-0.5 pl-2">
+        <div className="mt-1 flex flex-col gap-0.5 pl-1">
           {visibleThreads.length > 0 ? (
             <>
               {visibleThreads.map((thread) => (
@@ -694,12 +769,12 @@ const ThreadList = memo(function ThreadList({
   onPressThread,
   onPressWorkspace,
   onRenameWorkspace,
-  selectedThreadId,
   expandedWorkspaceIds,
   onPin,
   onArchive,
   onToggleWorkspace,
   onWarmThread,
+  selectedThreadId,
 }: {
   expandedWorkspaceIds: Set<string>;
   groups: ThreadGroup;
@@ -714,7 +789,7 @@ const ThreadList = memo(function ThreadList({
   onWarmThread: (workspaceId: string, threadId: string) => void;
 }) {
   return (
-    <ScrollShadow className="max-h-full px-3 py-1 pb-4" orientation="vertical">
+    <ScrollShadow className="max-h-full px-1 py-1 pb-4" orientation="vertical">
       <div className="flex flex-col gap-1">
         {groups.map((group) => (
           <WorkspaceThreadSection
@@ -757,7 +832,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
   const overflowItems = items.slice(THREADS_PER_PAGE);
 
   return (
-    <ScrollShadow className="max-h-full px-4 py-1" orientation="vertical">
+    <ScrollShadow className="max-h-full px-1.5 py-1" orientation="vertical">
       <div className="flex flex-col gap-1">
         {visibleItems.map((item) => (
           <ThreadRow
@@ -1127,6 +1202,7 @@ export function WorkspaceSidebar() {
         ];
       });
       void utils.threads.list.invalidate();
+      void utils.repo.listWorkspaceStatuses.invalidate();
     },
   });
 
@@ -1157,6 +1233,7 @@ export function WorkspaceSidebar() {
           : current,
       );
       void utils.threads.list.invalidate();
+      void utils.repo.listWorkspaceStatuses.invalidate();
       renameWorkspaceState.close();
     },
   });
@@ -1187,6 +1264,7 @@ export function WorkspaceSidebar() {
         toCurrentWorkspace(nextSelectedWorkspace),
       );
       void utils.threads.list.invalidate();
+      void utils.repo.listWorkspaceStatuses.invalidate();
 
       if (
         (selectedThreadState?.workspaceId === workspaceId ||
@@ -1439,13 +1517,13 @@ export function WorkspaceSidebar() {
 
   const isEmpty =
     organizeBy === "workspace" ? groups.length === 0 : items.length === 0;
-  const showSidebarLoading =
-    (!threads.data && threads.isPending) ||
-    (!preferences.data && preferences.isPending);
+  const showSidebarLoading = threads.isPending || preferences.isPending;
+  const showSidebarRefreshing =
+    !showSidebarLoading && (threads.isFetching || preferences.isFetching);
 
   return (
     <div className="flex h-full flex-col">
-      <div className="shrink-0 px-3 pt-1 pb-3">
+      <div className="shrink-0 px-1 pt-1 pb-3">
         <nav className="flex flex-col gap-1">
           {PRIMARY_NAV.map((item) => {
             const isActive =
@@ -1490,8 +1568,11 @@ export function WorkspaceSidebar() {
 
       <div className="flex shrink-0 items-center gap-1 px-4">
         <div className="min-w-0 flex-1">
-          <h2 className="text-foreground/45 px-2 text-xs font-medium">
-            Threads
+          <h2 className="text-foreground/45 flex items-center gap-1.5 text-xs font-medium">
+            <span>Threads</span>
+            {showSidebarRefreshing ? (
+              <Spinner className="size-3 min-w-3" color="current" size="sm" />
+            ) : null}
           </h2>
         </div>
 
@@ -1592,7 +1673,7 @@ export function WorkspaceSidebar() {
           <div className="sentinel-scroll-area h-full">
             {showSidebarLoading ? <WorkspaceSidebarLoadingState /> : null}
 
-            {pinnedThreads.length > 0 ? (
+            {!showSidebarLoading && pinnedThreads.length > 0 ? (
               <PinnedThreadsList
                 onArchive={handleArchiveThread}
                 onPin={handlePin}
@@ -1603,7 +1684,9 @@ export function WorkspaceSidebar() {
               />
             ) : null}
 
-            {organizeBy === "workspace" && groups.length > 0 ? (
+            {!showSidebarLoading &&
+            organizeBy === "workspace" &&
+            groups.length > 0 ? (
               <ThreadList
                 expandedWorkspaceIds={expandedWorkspaceIds}
                 groups={groups}
@@ -1619,7 +1702,9 @@ export function WorkspaceSidebar() {
               />
             ) : null}
 
-            {organizeBy === "chronological" && items.length > 0 ? (
+            {!showSidebarLoading &&
+            organizeBy === "chronological" &&
+            items.length > 0 ? (
               <ChronologicalThreadList
                 items={items}
                 onArchive={handleArchiveThread}
@@ -1630,7 +1715,7 @@ export function WorkspaceSidebar() {
               />
             ) : null}
 
-            {!threads.isLoading && !preferences.isLoading && isEmpty ? (
+            {!showSidebarLoading && isEmpty ? (
               <div className="px-6 py-4">
                 <div className="border-separator bg-background rounded-2xl border p-4">
                   <p className="text-foreground text-sm font-medium">

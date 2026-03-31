@@ -302,6 +302,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             chatReasoningEffort: reasoningEffort ?? null,
             createdAt: current?.thread.createdAt ?? now,
             id: draftThreadId,
+            linkedPullRequest: current?.thread.linkedPullRequest ?? null,
             mode: threadMode,
             pinnedAt: current?.thread.pinnedAt ?? null,
             status: current?.thread.status ?? "idle",

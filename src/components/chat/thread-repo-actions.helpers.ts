@@ -1,4 +1,5 @@
 import type { RepoLastPullRequest } from "@/lib/ai/chat/engines/types";
+import type { RepoPullRequestStatus } from "@/lib/git/pull-request-status";
 
 function extractErrorMessagesFromPayload(payload: unknown): string[] {
   if (typeof payload === "string") {
@@ -98,7 +99,18 @@ export function formatRepoActionErrorMessage(message: string) {
 export function getActivePullRequestUrl(input: {
   branch: string | null | undefined;
   lastPullRequest: RepoLastPullRequest | null | undefined;
+  pullRequestStatus?: RepoPullRequestStatus | null | undefined;
 }) {
+  if (
+    input.branch &&
+    input.pullRequestStatus &&
+    input.pullRequestStatus.branch === input.branch &&
+    (input.pullRequestStatus.state === "open" ||
+      input.pullRequestStatus.state === "draft")
+  ) {
+    return input.pullRequestStatus.url;
+  }
+
   if (!input.branch || !input.lastPullRequest) {
     return null;
   }
@@ -115,4 +127,54 @@ export function getActivePullRequestUrl(input: {
   }
 
   return input.lastPullRequest.url;
+}
+
+export function getThreadLinkedPullRequest(input: {
+  branch: string | null | undefined;
+  lastPullRequest: RepoLastPullRequest | null | undefined;
+}) {
+  if (!input.branch || !input.lastPullRequest) {
+    return null;
+  }
+
+  if (input.lastPullRequest.head !== input.branch) {
+    return null;
+  }
+
+  if (
+    input.lastPullRequest.kind === "github" &&
+    input.lastPullRequest.state.toLowerCase() !== "open"
+  ) {
+    return null;
+  }
+
+  return input.lastPullRequest;
+}
+
+export function getLinkedPullRequestStatus(input: {
+  branch: string | null | undefined;
+  lastPullRequest: RepoLastPullRequest | null | undefined;
+  pullRequestStatus?: RepoPullRequestStatus | null | undefined;
+}) {
+  const linkedPullRequest = getThreadLinkedPullRequest(input);
+  if (!linkedPullRequest || linkedPullRequest.kind !== "github") {
+    return null;
+  }
+
+  if (
+    !input.pullRequestStatus ||
+    input.pullRequestStatus.branch !== input.branch
+  ) {
+    return null;
+  }
+
+  if (
+    input.pullRequestStatus.number !== linkedPullRequest.number ||
+    (input.pullRequestStatus.state !== "open" &&
+      input.pullRequestStatus.state !== "draft")
+  ) {
+    return null;
+  }
+
+  return input.pullRequestStatus;
 }
