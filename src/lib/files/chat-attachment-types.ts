@@ -446,42 +446,42 @@ export function getAttachmentTone(displayType: AttachmentDisplayType) {
   switch (displayType) {
     case "pdf":
       return {
-        backgroundClassName: "bg-red-500/10",
-        textClassName: "text-red-200/80",
+        backgroundClassName: "bg-red-100 dark:bg-red-500/10",
+        textClassName: "text-red-600 dark:text-red-200/80",
       };
     case "doc":
     case "docx":
       return {
-        backgroundClassName: "bg-sky-500/10",
-        textClassName: "text-sky-200/80",
+        backgroundClassName: "bg-sky-100 dark:bg-sky-500/10",
+        textClassName: "text-sky-600 dark:text-sky-200/80",
       };
     case "xls":
     case "xlsx":
     case "csv":
       return {
-        backgroundClassName: "bg-emerald-500/10",
-        textClassName: "text-emerald-200/80",
+        backgroundClassName: "bg-emerald-100 dark:bg-emerald-500/10",
+        textClassName: "text-emerald-600 dark:text-emerald-200/80",
       };
     case "ppt":
     case "pptx":
       return {
-        backgroundClassName: "bg-amber-500/10",
-        textClassName: "text-amber-200/80",
+        backgroundClassName: "bg-amber-100 dark:bg-amber-500/10",
+        textClassName: "text-amber-600 dark:text-amber-200/80",
       };
     case "md":
     case "text":
       return {
-        backgroundClassName: "bg-white/5",
+        backgroundClassName: "bg-foreground/5",
         textClassName: "text-foreground/60",
       };
     case "code":
       return {
-        backgroundClassName: "bg-violet-500/10",
-        textClassName: "text-violet-200/80",
+        backgroundClassName: "bg-violet-100 dark:bg-violet-500/10",
+        textClassName: "text-violet-600 dark:text-violet-200/80",
       };
     default:
       return {
-        backgroundClassName: "bg-white/5",
+        backgroundClassName: "bg-foreground/5",
         textClassName: "text-foreground/60",
       };
   }

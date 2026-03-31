@@ -75,7 +75,7 @@ export const FilePart = memo(function FilePart({
   if (variant === "grid") {
     return (
       <a
-        className="flex aspect-square w-[9.5rem] flex-col justify-between rounded-[1.45rem] bg-white/[0.045] p-3.5 text-left transition-colors hover:bg-white/[0.06] sm:w-[10.5rem]"
+        className="flex aspect-square w-[9.5rem] flex-col justify-between rounded-[1.45rem] bg-foreground/[0.045] p-3.5 text-left transition-colors hover:bg-foreground/[0.06] sm:w-[10.5rem]"
         download={part.filename}
         href={part.url}
         rel="noreferrer"

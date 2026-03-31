@@ -73,8 +73,13 @@ export const repoLastPullRequestSchema = z.discriminatedUnion("kind", [
   repoGithubPullRequestSchema,
 ]);
 
+export const repoProjectModeSchema = z.enum(["local", "worktree"]);
+
 export const repoThreadStateSchema = z.object({
+  activeBranch: z.string().nullish(),
   lastPullRequest: repoLastPullRequestSchema.nullish(),
+  projectMode: repoProjectModeSchema.nullish(),
+  worktreePath: z.string().nullish(),
 });
 
 export const threadChatEngineStateSchema = z
@@ -98,6 +103,7 @@ export type CodexSandboxMode = z.infer<typeof codexSandboxModeSchema>;
 export type CodexThreadState = z.infer<typeof codexThreadStateSchema>;
 export type ClaudeThreadState = z.infer<typeof claudeThreadStateSchema>;
 export type RepoLastPullRequest = z.infer<typeof repoLastPullRequestSchema>;
+export type RepoProjectMode = z.infer<typeof repoProjectModeSchema>;
 export type RepoThreadState = z.infer<typeof repoThreadStateSchema>;
 export type ThreadChatEngineState = z.infer<typeof threadChatEngineStateSchema>;
 

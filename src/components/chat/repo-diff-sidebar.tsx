@@ -355,7 +355,10 @@ export function RepoDiffSidebar() {
     staleTime: 15_000,
   });
 
-  const repoRoot = diffPanelQuery.data?.repoContext.repoRoot ?? null;
+  const repoRoot =
+    diffPanelQuery.data?.repoContext.effectiveRootPath ??
+    diffPanelQuery.data?.repoContext.repoRoot ??
+    null;
   const preferredOpenTargetId =
     diffPanelQuery.data?.repoContext.preferredOpenTargetId ?? null;
 

@@ -3,7 +3,10 @@
 import {
   Add01Icon,
   ArrowDown01Icon,
+  FolderRemoveIcon,
+  FolderTreeIcon,
   GitBranchIcon,
+  LaptopProgrammingIcon,
   Shield01Icon,
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
@@ -28,6 +31,7 @@ type ComposerWorkspaceBarProps = {
     rootPath?: string | null;
   };
   showBranchSwitcher: boolean;
+  threadId?: string;
 };
 
 function getPermissionModeLabel(value: PermissionMode) {
@@ -40,9 +44,11 @@ function getPermissionModeLabel(value: PermissionMode) {
 export function ComposerWorkspaceBar({
   activeWorkspace,
   showBranchSwitcher,
+  threadId,
 }: ComposerWorkspaceBarProps) {
   const utils = api.useUtils();
   const [permissionPopoverOpen, setPermissionPopoverOpen] = useState(false);
+  const [projectModePopoverOpen, setProjectModePopoverOpen] = useState(false);
   const [permissionOverride, setPermissionOverride] =
     useState<PermissionMode | null>(
       activeWorkspace.permissionModeOverride ?? null,
@@ -54,25 +60,22 @@ export function ComposerWorkspaceBar({
   const [branchError, setBranchError] = useState("");
 
   const securityQuery = api.security.get.useQuery();
-  const repoContextQuery = api.repo.getContext.useQuery(
-    { workspaceId: activeWorkspace.id },
-    {
-      enabled: showBranchSwitcher && Boolean(activeWorkspace.rootPath),
-      refetchInterval:
-        showBranchSwitcher && activeWorkspace.rootPath ? 2500 : false,
-      refetchOnWindowFocus: true,
-    },
-  );
-  const listBranchesQuery = api.repo.listBranches.useQuery(
-    { workspaceId: activeWorkspace.id },
-    {
-      enabled: Boolean(
-        showBranchSwitcher &&
-        activeWorkspace.rootPath &&
-        repoContextQuery.data?.isGitRepo,
-      ),
-    },
-  );
+  const repoContextInput = threadId
+    ? { threadId, workspaceId: activeWorkspace.id }
+    : { workspaceId: activeWorkspace.id };
+  const repoContextQuery = api.repo.getContext.useQuery(repoContextInput, {
+    enabled: showBranchSwitcher && Boolean(activeWorkspace.rootPath),
+    refetchInterval:
+      showBranchSwitcher && activeWorkspace.rootPath ? 2500 : false,
+    refetchOnWindowFocus: true,
+  });
+  const listBranchesQuery = api.repo.listBranches.useQuery(repoContextInput, {
+    enabled: Boolean(
+      showBranchSwitcher &&
+      activeWorkspace.rootPath &&
+      repoContextQuery.data?.isGitRepo,
+    ),
+  });
 
   useEffect(() => {
     setPermissionOverride(activeWorkspace.permissionModeOverride ?? null);
@@ -153,11 +156,14 @@ export function ComposerWorkspaceBar({
         title: "Branch updated",
       });
       await utils.repo.getContext.invalidate({
+        ...(threadId ? { threadId } : {}),
         workspaceId: activeWorkspace.id,
       });
       await utils.repo.listBranches.invalidate({
+        ...(threadId ? { threadId } : {}),
         workspaceId: activeWorkspace.id,
       });
+      await utils.threads.list.invalidate();
     },
     onError: (error) => {
       setBranchError(getErrorMessage(error, "Unable to switch branches."));
@@ -176,16 +182,37 @@ export function ComposerWorkspaceBar({
         title: "Branch created",
       });
       await utils.repo.getContext.invalidate({
+        ...(threadId ? { threadId } : {}),
         workspaceId: activeWorkspace.id,
       });
       await utils.repo.listBranches.invalidate({
+        ...(threadId ? { threadId } : {}),
         workspaceId: activeWorkspace.id,
       });
+      await utils.threads.list.invalidate();
     },
     onError: (error) => {
       setBranchError(getErrorMessage(error, "Unable to create branch."));
     },
   });
+  const resumeThreadBranchMutation = api.repo.resumeThreadBranch.useMutation();
+  const enableThreadWorktreeMutation =
+    api.repo.enableThreadWorktree.useMutation();
+  const useLocalProjectMutation = api.repo.useLocalProject.useMutation();
+  const removeThreadWorktreeMutation =
+    api.repo.removeThreadWorktree.useMutation();
+
+  const refreshRepoState = useCallback(async () => {
+    await utils.repo.getContext.invalidate({
+      ...(threadId ? { threadId } : {}),
+      workspaceId: activeWorkspace.id,
+    });
+    await utils.repo.listBranches.invalidate({
+      ...(threadId ? { threadId } : {}),
+      workspaceId: activeWorkspace.id,
+    });
+    await utils.threads.list.invalidate();
+  }, [activeWorkspace.id, threadId, utils]);
 
   const effectivePermissionMode =
     permissionOverride ??
@@ -198,6 +225,27 @@ export function ComposerWorkspaceBar({
     activeWorkspace.rootPath &&
     repoContextQuery.data?.isGitRepo,
   );
+  const projectModeSwitcherVisible = Boolean(threadId && branchSwitcherVisible);
+  const threadBranch =
+    repoContextQuery.data?.threadBranch ??
+    repoContextQuery.data?.branch ??
+    null;
+  const isUsingWorktree =
+    repoContextQuery.data?.threadProjectMode === "worktree";
+  const hasReadyWorktree = repoContextQuery.data?.worktreeStatus === "ready";
+  const branchResumeStatus =
+    repoContextQuery.data?.branchResumeStatus ?? "matched";
+  const branchResumeReason = repoContextQuery.data?.branchResumeReason ?? null;
+  const projectModeLabel = isUsingWorktree ? "Worktree" : "Local";
+  const projectModeIcon = isUsingWorktree
+    ? FolderTreeIcon
+    : LaptopProgrammingIcon;
+  const isProjectModeLoading =
+    repoContextQuery.isLoading ||
+    resumeThreadBranchMutation.isPending ||
+    enableThreadWorktreeMutation.isPending ||
+    useLocalProjectMutation.isPending ||
+    removeThreadWorktreeMutation.isPending;
   const isBranchLoading =
     repoContextQuery.isLoading ||
     listBranchesQuery.isLoading ||
@@ -243,100 +291,381 @@ export function ComposerWorkspaceBar({
     setBranchError("");
     createBranchMutation.mutate({
       branchName: trimmedBranchName,
+      ...(threadId ? { threadId } : {}),
       workspaceId: activeWorkspace.id,
     });
-  }, [activeWorkspace.id, branchName, createBranchMutation]);
+  }, [activeWorkspace.id, branchName, createBranchMutation, threadId]);
 
   const isBranchMutating =
     checkoutBranchMutation.isPending || createBranchMutation.isPending;
 
+  const handleResumeThreadBranch = useCallback(async () => {
+    if (!threadId) {
+      return;
+    }
+
+    try {
+      const result = await resumeThreadBranchMutation.mutateAsync({
+        threadId,
+        workspaceId: activeWorkspace.id,
+      });
+      setProjectModePopoverOpen(false);
+      await refreshRepoState();
+      if (!result.ok) {
+        sileo.warning({
+          description:
+            result.repoContext.branchResumeReason ??
+            "Clean the local project before switching this thread back to its branch.",
+          title: threadBranch
+            ? `Resume on ${threadBranch} is blocked`
+            : "Resume blocked",
+        });
+        return;
+      }
+      sileo.success({
+        description: result.branch
+          ? `Switched the local project back to ${result.branch}.`
+          : "Switched the local project back to this thread branch.",
+        title: "Thread resumed",
+      });
+    } catch (error) {
+      sileo.error({
+        description: getErrorMessage(
+          error,
+          "Unable to resume this thread branch.",
+        ),
+        title: "Resume branch failed",
+      });
+    }
+  }, [
+    activeWorkspace.id,
+    refreshRepoState,
+    resumeThreadBranchMutation,
+    threadBranch,
+    threadId,
+  ]);
+
+  const handleEnableThreadWorktree = useCallback(async () => {
+    if (!threadId) {
+      return;
+    }
+
+    try {
+      const result = await enableThreadWorktreeMutation.mutateAsync({
+        threadId,
+        workspaceId: activeWorkspace.id,
+      });
+      setProjectModePopoverOpen(false);
+      await refreshRepoState();
+      sileo.success({
+        description: result.branch
+          ? `This thread now runs in a worktree on ${result.branch}.`
+          : "This thread now runs in its own worktree.",
+        title: result.created ? "Worktree created" : "Worktree ready",
+      });
+    } catch (error) {
+      sileo.error({
+        description: getErrorMessage(
+          error,
+          "Unable to create a worktree for this thread.",
+        ),
+        title: "Worktree failed",
+      });
+    }
+  }, [
+    activeWorkspace.id,
+    enableThreadWorktreeMutation,
+    refreshRepoState,
+    threadId,
+  ]);
+
+  const handleUseLocalProject = useCallback(async () => {
+    if (!threadId) {
+      return;
+    }
+
+    try {
+      await useLocalProjectMutation.mutateAsync({
+        threadId,
+        workspaceId: activeWorkspace.id,
+      });
+      setProjectModePopoverOpen(false);
+      await refreshRepoState();
+      sileo.success({
+        description: "This thread is back on the local project checkout.",
+        title: "Using local project",
+      });
+    } catch (error) {
+      sileo.error({
+        description: getErrorMessage(
+          error,
+          "Unable to switch this thread back to local.",
+        ),
+        title: "Switch project failed",
+      });
+    }
+  }, [activeWorkspace.id, refreshRepoState, threadId, useLocalProjectMutation]);
+
+  const handleRemoveThreadWorktree = useCallback(async () => {
+    if (!threadId) {
+      return;
+    }
+
+    try {
+      const result = await removeThreadWorktreeMutation.mutateAsync({
+        threadId,
+        workspaceId: activeWorkspace.id,
+      });
+      setProjectModePopoverOpen(false);
+      await refreshRepoState();
+      sileo.success({
+        description: result.removed
+          ? "Removed this thread's worktree."
+          : "Cleared the saved worktree for this thread.",
+        title: "Worktree removed",
+      });
+    } catch (error) {
+      sileo.error({
+        description: getErrorMessage(
+          error,
+          "Unable to remove this thread worktree.",
+        ),
+        title: "Remove worktree failed",
+      });
+    }
+  }, [
+    activeWorkspace.id,
+    refreshRepoState,
+    removeThreadWorktreeMutation,
+    threadId,
+  ]);
+
   return (
     <div className="flex min-h-9 items-center justify-between gap-2 bg-transparent px-2.5 py-1">
-      <Popover.Root
-        isOpen={permissionPopoverOpen}
-        onOpenChange={setPermissionPopoverOpen}
-      >
-        <Popover.Trigger>
-          <Button
-            className="h-7 max-w-full justify-start gap-1.5 px-2 text-muted"
-            isPending={isPermissionLoading}
-            size="sm"
-            variant="ghost"
+      <div className="flex min-w-0 items-center gap-1">
+        {projectModeSwitcherVisible ? (
+          <Popover.Root
+            isOpen={projectModePopoverOpen}
+            onOpenChange={setProjectModePopoverOpen}
           >
-            {({ isPending }) => (
-              <>
-                {isPending ? (
-                  <Spinner
-                    className="size-3.5 min-w-3.5"
-                    color="current"
-                    size="sm"
-                  />
-                ) : (
+            <Popover.Trigger>
+              <Button
+                className="h-7 max-w-full justify-start gap-1.5 px-2 text-muted"
+                isPending={isProjectModeLoading}
+                size="sm"
+                variant="ghost"
+              >
+                {({ isPending }) => (
+                  <>
+                    {isPending ? (
+                      <Spinner
+                        className="size-3.5 min-w-3.5"
+                        color="current"
+                        size="sm"
+                      />
+                    ) : (
+                      <HugeiconsIcon
+                        color="currentColor"
+                        icon={projectModeIcon}
+                        size={15}
+                        strokeWidth={1.5}
+                      />
+                    )}
+                    <span className="truncate text-[12px]">
+                      {projectModeLabel}
+                    </span>
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={ArrowDown01Icon}
+                      size={13}
+                      strokeWidth={1.5}
+                    />
+                  </>
+                )}
+              </Button>
+            </Popover.Trigger>
+
+            <Popover.Content
+              className="w-64 border border-border/60 bg-overlay shadow-overlay"
+              placement="top start"
+            >
+              <Popover.Dialog className="flex flex-col gap-1 p-1">
+                {threadBranch && branchResumeStatus !== "matched" ? (
+                  <div className="rounded-xl border border-border/60 bg-default/60 px-2.5 py-2">
+                    <p className="text-sm text-foreground">
+                      Resume on {threadBranch}
+                    </p>
+                    {branchResumeReason ? (
+                      <p className="mt-1 text-xs text-muted">
+                        {branchResumeReason}
+                      </p>
+                    ) : null}
+                    <Button
+                      className="mt-2 h-7 justify-start px-2"
+                      onPress={() => void handleResumeThreadBranch()}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      <HugeiconsIcon
+                        color="currentColor"
+                        icon={GitBranchIcon}
+                        size={14}
+                        strokeWidth={1.5}
+                      />
+                      Resume branch
+                    </Button>
+                  </div>
+                ) : null}
+
+                <button
+                  className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
+                  onClick={() => void handleUseLocalProject()}
+                  type="button"
+                >
+                  <div className="flex min-w-0 items-start gap-2">
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={LaptopProgrammingIcon}
+                      size={15}
+                      strokeWidth={1.5}
+                    />
+                    <div className="min-w-0">
+                      <p>Local project</p>
+                      <p className="text-xs text-muted">
+                        Use the workspace checkout for this thread
+                      </p>
+                    </div>
+                  </div>
+                  {!isUsingWorktree ? (
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={Tick02Icon}
+                      size={16}
+                      strokeWidth={1.5}
+                    />
+                  ) : null}
+                </button>
+
+                <button
+                  className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
+                  onClick={() => void handleEnableThreadWorktree()}
+                  type="button"
+                >
+                  <div className="flex min-w-0 items-start gap-2">
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={FolderTreeIcon}
+                      size={15}
+                      strokeWidth={1.5}
+                    />
+                    <div className="min-w-0">
+                      <p>
+                        {hasReadyWorktree ? "Use worktree" : "New worktree"}
+                      </p>
+                      <p className="text-xs text-muted">
+                        Give this thread an isolated checkout
+                      </p>
+                    </div>
+                  </div>
+                  {isUsingWorktree ? (
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={Tick02Icon}
+                      size={16}
+                      strokeWidth={1.5}
+                    />
+                  ) : null}
+                </button>
+
+                {hasReadyWorktree ? (
+                  <button
+                    className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
+                    onClick={() => void handleRemoveThreadWorktree()}
+                    type="button"
+                  >
+                    <div className="flex min-w-0 items-start gap-2">
+                      <HugeiconsIcon
+                        color="currentColor"
+                        icon={FolderRemoveIcon}
+                        size={15}
+                        strokeWidth={1.5}
+                      />
+                      <div className="min-w-0">
+                        <p>Remove worktree</p>
+                        <p className="text-xs text-muted">
+                          Delete this thread's isolated checkout
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                ) : null}
+              </Popover.Dialog>
+            </Popover.Content>
+          </Popover.Root>
+        ) : null}
+
+        <Popover.Root
+          isOpen={permissionPopoverOpen}
+          onOpenChange={setPermissionPopoverOpen}
+        >
+          <Popover.Trigger>
+            <Button
+              className="h-7 max-w-full justify-start gap-1.5 px-2 text-muted"
+              isPending={isPermissionLoading}
+              size="sm"
+              variant="ghost"
+            >
+              {({ isPending }) => (
+                <>
+                  {isPending ? (
+                    <Spinner
+                      className="size-3.5 min-w-3.5"
+                      color="current"
+                      size="sm"
+                    />
+                  ) : (
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={Shield01Icon}
+                      size={15}
+                      strokeWidth={1.5}
+                    />
+                  )}
+                  <span className="truncate text-[12px]">
+                    {getPermissionModeLabel(effectivePermissionMode)}
+                  </span>
                   <HugeiconsIcon
                     color="currentColor"
-                    icon={Shield01Icon}
-                    size={15}
+                    icon={ArrowDown01Icon}
+                    size={13}
                     strokeWidth={1.5}
                   />
-                )}
-                <span className="truncate text-[12px]">
-                  {getPermissionModeLabel(effectivePermissionMode)}
-                </span>
-                <HugeiconsIcon
-                  color="currentColor"
-                  icon={ArrowDown01Icon}
-                  size={13}
-                  strokeWidth={1.5}
-                />
-              </>
-            )}
-          </Button>
-        </Popover.Trigger>
+                </>
+              )}
+            </Button>
+          </Popover.Trigger>
 
-        <Popover.Content
-          className="w-56 border border-border/60 bg-overlay shadow-overlay"
-          placement="top start"
-        >
-          <Popover.Dialog className="flex flex-col gap-1 p-1">
-            <button
-              className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
-              onClick={() => handlePermissionChange(null)}
-              type="button"
-            >
-              <div className="min-w-0">
-                <p>Use global</p>
-                <p className="text-xs text-muted">
-                  Currently{" "}
-                  {getPermissionModeLabel(
-                    securityQuery.data?.permissionMode ??
-                      DEFAULT_PERMISSION_MODE,
-                  )}
-                </p>
-              </div>
-              {permissionOverride == null ? (
-                <HugeiconsIcon
-                  color="currentColor"
-                  icon={Tick02Icon}
-                  size={16}
-                  strokeWidth={1.5}
-                />
-              ) : null}
-            </button>
-
-            {PERMISSION_MODE_OPTIONS.map((option) => (
+          <Popover.Content
+            className="w-56 border border-border/60 bg-overlay shadow-overlay"
+            placement="top start"
+          >
+            <Popover.Dialog className="flex flex-col gap-1 p-1">
               <button
                 className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
-                key={option.value}
-                onClick={() =>
-                  handlePermissionChange(option.value as PermissionMode)
-                }
+                onClick={() => handlePermissionChange(null)}
                 type="button"
               >
                 <div className="min-w-0">
-                  <p>{option.label}</p>
-                  <p className="text-xs text-muted">{option.description}</p>
+                  <p>Use global</p>
+                  <p className="text-xs text-muted">
+                    Currently{" "}
+                    {getPermissionModeLabel(
+                      securityQuery.data?.permissionMode ??
+                        DEFAULT_PERMISSION_MODE,
+                    )}
+                  </p>
                 </div>
-                {permissionOverride === option.value ? (
+                {permissionOverride == null ? (
                   <HugeiconsIcon
                     color="currentColor"
                     icon={Tick02Icon}
@@ -345,10 +674,34 @@ export function ComposerWorkspaceBar({
                   />
                 ) : null}
               </button>
-            ))}
-          </Popover.Dialog>
-        </Popover.Content>
-      </Popover.Root>
+
+              {PERMISSION_MODE_OPTIONS.map((option) => (
+                <button
+                  className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
+                  key={option.value}
+                  onClick={() =>
+                    handlePermissionChange(option.value as PermissionMode)
+                  }
+                  type="button"
+                >
+                  <div className="min-w-0">
+                    <p>{option.label}</p>
+                    <p className="text-xs text-muted">{option.description}</p>
+                  </div>
+                  {permissionOverride === option.value ? (
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={Tick02Icon}
+                      size={16}
+                      strokeWidth={1.5}
+                    />
+                  ) : null}
+                </button>
+              ))}
+            </Popover.Dialog>
+          </Popover.Content>
+        </Popover.Root>
+      </div>
 
       <div className="flex min-w-0 items-center justify-end gap-2">
         {branchSwitcherVisible ? (
@@ -389,7 +742,9 @@ export function ComposerWorkspaceBar({
                       />
                     )}
                     <span className="truncate text-[12px]">
-                      {repoContextQuery.data?.branch ?? "Branch"}
+                      {repoContextQuery.data?.threadBranch ??
+                        repoContextQuery.data?.branch ??
+                        "Branch"}
                     </span>
                     <HugeiconsIcon
                       color="currentColor"
@@ -442,6 +797,7 @@ export function ComposerWorkspaceBar({
                               setBranchError("");
                               checkoutBranchMutation.mutate({
                                 branchName: branch.name,
+                                ...(threadId ? { threadId } : {}),
                                 workspaceId: activeWorkspace.id,
                               });
                             }}

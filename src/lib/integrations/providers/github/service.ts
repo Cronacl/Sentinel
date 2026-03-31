@@ -2,6 +2,12 @@ import "server-only";
 
 import { Octokit } from "@octokit/rest";
 
+import type {
+  RepoPullRequestChecks,
+  RepoPullRequestReviewDecision,
+  RepoPullRequestStatus,
+} from "@/lib/git/pull-request-status";
+
 export type GHRepo = {
   id: number;
   name: string;
@@ -56,6 +62,47 @@ export type GHPullRequest = {
   additions: number;
   deletions: number;
   changedFiles: number;
+};
+
+type GraphQLStatusContextNode =
+  | {
+      __typename: "CheckRun";
+      conclusion: string | null;
+      status: string | null;
+    }
+  | {
+      __typename: "StatusContext";
+      state: string | null;
+    };
+
+type GraphQLPullRequestNode = {
+  additions: number | null;
+  baseRefName: string | null;
+  changedFiles: number | null;
+  comments: { totalCount: number } | null;
+  commits: {
+    nodes: Array<{
+      commit: {
+        statusCheckRollup: {
+          contexts: {
+            nodes: GraphQLStatusContextNode[];
+          } | null;
+          state: string | null;
+        } | null;
+      } | null;
+    }>;
+  } | null;
+  createdAt: string | null;
+  deletions: number | null;
+  isDraft: boolean;
+  mergeStateStatus: string | null;
+  mergeable: string | null;
+  number: number;
+  reviewDecision: RepoPullRequestReviewDecision;
+  state: string;
+  title: string;
+  updatedAt: string | null;
+  url: string;
 };
 
 export type GHBranch = {
@@ -169,6 +216,150 @@ function parsePR(p: Record<string, unknown>): GHPullRequest {
     additions: (p.additions as number) ?? 0,
     deletions: (p.deletions as number) ?? 0,
     changedFiles: (p.changed_files as number) ?? 0,
+  };
+}
+
+function summarizeStatusCheckRollup(
+  rollup:
+    | {
+        contexts: {
+          nodes: GraphQLStatusContextNode[];
+        } | null;
+        state: string | null;
+      }
+    | null
+    | undefined,
+): RepoPullRequestChecks | null {
+  if (!rollup?.contexts?.nodes?.length) {
+    return rollup?.state
+      ? {
+          failingCount: 0,
+          passingCount: 0,
+          pendingCount: 0,
+          state:
+            rollup.state === "FAILURE"
+              ? "failure"
+              : rollup.state === "PENDING"
+                ? "pending"
+                : rollup.state === "SUCCESS"
+                  ? "success"
+                  : "unknown",
+          totalCount: 0,
+        }
+      : null;
+  }
+
+  let failingCount = 0;
+  let passingCount = 0;
+  let pendingCount = 0;
+
+  for (const node of rollup.contexts.nodes) {
+    if (node.__typename === "CheckRun") {
+      if (node.status && node.status !== "COMPLETED") {
+        pendingCount += 1;
+        continue;
+      }
+
+      const conclusion = node.conclusion ?? "";
+      if (
+        conclusion === "SUCCESS" ||
+        conclusion === "NEUTRAL" ||
+        conclusion === "SKIPPED"
+      ) {
+        passingCount += 1;
+      } else if (conclusion) {
+        failingCount += 1;
+      } else {
+        pendingCount += 1;
+      }
+      continue;
+    }
+
+    const state = node.state ?? "";
+    if (state === "SUCCESS") {
+      passingCount += 1;
+    } else if (state === "PENDING" || state === "EXPECTED") {
+      pendingCount += 1;
+    } else if (state) {
+      failingCount += 1;
+    }
+  }
+
+  const totalCount = failingCount + passingCount + pendingCount;
+  return {
+    failingCount,
+    passingCount,
+    pendingCount,
+    state:
+      failingCount > 0
+        ? "failure"
+        : pendingCount > 0
+          ? "pending"
+          : totalCount > 0
+            ? "success"
+            : "unknown",
+    totalCount,
+  };
+}
+
+function mapGraphQLPullRequestStatus(
+  branch: string,
+  node: GraphQLPullRequestNode,
+): RepoPullRequestStatus {
+  const checks = summarizeStatusCheckRollup(
+    node.commits?.nodes.at(-1)?.commit?.statusCheckRollup,
+  );
+
+  let mergeStatus: RepoPullRequestStatus["mergeStatus"] = "unknown";
+  if (node.state === "MERGED") {
+    mergeStatus = "merged";
+  } else if (node.state === "CLOSED") {
+    mergeStatus = "closed";
+  } else if (node.isDraft) {
+    mergeStatus = "draft";
+  } else if (
+    node.mergeable === "CONFLICTING" ||
+    node.mergeStateStatus === "DIRTY"
+  ) {
+    mergeStatus = "conflicts";
+  } else if (node.reviewDecision === "CHANGES_REQUESTED") {
+    mergeStatus = "changes_requested";
+  } else if (checks?.state === "failure") {
+    mergeStatus = "checks_failed";
+  } else if (checks?.state === "pending") {
+    mergeStatus = "checks_pending";
+  } else if (node.reviewDecision === "REVIEW_REQUIRED") {
+    mergeStatus = "awaiting_review";
+  } else if (node.mergeStateStatus === "BLOCKED") {
+    mergeStatus = "blocked";
+  } else if (node.mergeable === "MERGEABLE") {
+    mergeStatus = "ready";
+  }
+
+  return {
+    additions: node.additions,
+    baseBranch: node.baseRefName,
+    branch,
+    changedFiles: node.changedFiles,
+    checks,
+    comments: node.comments?.totalCount ?? 0,
+    createdAt: node.createdAt,
+    deletions: node.deletions,
+    mergeStatus,
+    number: node.number,
+    provider: "github",
+    reviewDecision: node.reviewDecision,
+    state:
+      node.state === "MERGED"
+        ? "merged"
+        : node.state === "CLOSED"
+          ? "closed"
+          : node.isDraft
+            ? "draft"
+            : "open",
+    title: node.title,
+    updatedAt: node.updatedAt,
+    url: node.url,
   };
 }
 
@@ -349,6 +540,90 @@ export class GitHubService {
       pull_number: prNumber,
     });
     return parsePR(data as unknown as Record<string, unknown>);
+  }
+
+  async getActivePullRequestStatus(params: {
+    branch: string;
+    owner: string;
+    repo: string;
+  }): Promise<RepoPullRequestStatus | null> {
+    const data = await this.octokit.graphql<{
+      repository: {
+        pullRequests: {
+          nodes: GraphQLPullRequestNode[];
+        };
+      } | null;
+    }>(
+      `
+        query ActiveBranchPullRequest(
+          $headRefName: String!
+          $owner: String!
+          $repo: String!
+        ) {
+          repository(owner: $owner, name: $repo) {
+            pullRequests(
+              first: 10
+              headRefName: $headRefName
+              states: OPEN
+              orderBy: { field: UPDATED_AT, direction: DESC }
+            ) {
+              nodes {
+                additions
+                baseRefName
+                changedFiles
+                comments {
+                  totalCount
+                }
+                commits(last: 1) {
+                  nodes {
+                    commit {
+                      statusCheckRollup {
+                        state
+                        contexts(first: 100) {
+                          nodes {
+                            __typename
+                            ... on CheckRun {
+                              conclusion
+                              status
+                            }
+                            ... on StatusContext {
+                              state
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                createdAt
+                deletions
+                isDraft
+                mergeStateStatus
+                mergeable
+                number
+                reviewDecision
+                state
+                title
+                updatedAt
+                url
+              }
+            }
+          }
+        }
+      `,
+      {
+        headRefName: params.branch,
+        owner: params.owner,
+        repo: params.repo,
+      },
+    );
+
+    const node = data.repository?.pullRequests.nodes[0];
+    if (!node) {
+      return null;
+    }
+
+    return mapGraphQLPullRequestStatus(params.branch, node);
   }
 
   async createPr(params: {

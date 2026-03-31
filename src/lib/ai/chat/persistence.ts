@@ -180,10 +180,30 @@ export function updateThreadChatEngineState(
 
 export function updateThreadRepoState(
   threadId: string,
-  state: RepoThreadState | null,
+  state: Partial<RepoThreadState> | null,
 ) {
+  if (state === null) {
+    updateThreadChatEngineState(threadId, {
+      repo: null,
+    });
+    return;
+  }
+
+  const existing = db
+    .select({
+      chatEngineState: threads.chatEngineState,
+    })
+    .from(threads)
+    .where(eq(threads.id, threadId))
+    .get();
+  const existingRepoState =
+    parseThreadChatEngineState(existing?.chatEngineState)?.repo ?? null;
+
   updateThreadChatEngineState(threadId, {
-    repo: state,
+    repo: {
+      ...(existingRepoState ?? {}),
+      ...state,
+    } satisfies RepoThreadState,
   });
 }
 

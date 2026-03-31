@@ -1,5 +1,5 @@
 import path from "node:path";
-import { readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, rm, stat } from "node:fs/promises";
 
 import { runCommand } from "@/lib/process/run-command";
 
@@ -58,6 +58,12 @@ export type RepoDiffPanelData = {
   sourceLabel: string;
   totalAdditions: number;
   totalDeletions: number;
+};
+
+export type RepoWorktree = {
+  branch: string | null;
+  detached: boolean;
+  path: string;
 };
 
 type RepoFileChange = {
@@ -531,12 +537,82 @@ async function ensureDirectory(pathValue: string | null | undefined) {
 }
 
 async function resolveRepoRoot(pathValue: string) {
-  const result = await runGit(["rev-parse", "--show-toplevel"], pathValue);
+  const directory = await ensureDirectory(pathValue);
+  if (!directory) {
+    return null;
+  }
+
+  const result = await runGit(["rev-parse", "--show-toplevel"], directory);
   if (result.code !== 0 || !result.stdout.trim()) {
     return null;
   }
 
   return result.stdout.trim();
+}
+
+function getThreadWorktreePath(repoRoot: string, threadId: string) {
+  return path.join(
+    path.dirname(repoRoot),
+    ".sentinel-worktrees",
+    path.basename(repoRoot),
+    threadId,
+  );
+}
+
+function parseWorktreeList(output: string): RepoWorktree[] {
+  const worktrees: RepoWorktree[] = [];
+  let current: Partial<RepoWorktree> | null = null;
+
+  const flush = () => {
+    if (!current?.path) {
+      current = null;
+      return;
+    }
+
+    worktrees.push({
+      branch: current.branch ?? null,
+      detached: current.detached ?? false,
+      path: current.path,
+    });
+    current = null;
+  };
+
+  for (const line of output.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flush();
+      continue;
+    }
+
+    if (trimmed.startsWith("worktree ")) {
+      flush();
+      current = {
+        detached: false,
+        path: trimmed.slice("worktree ".length).trim(),
+      };
+      continue;
+    }
+
+    if (!current) {
+      continue;
+    }
+
+    if (trimmed === "detached") {
+      current.detached = true;
+      current.branch = null;
+      continue;
+    }
+
+    if (trimmed.startsWith("branch ")) {
+      const value = trimmed.slice("branch ".length).trim();
+      current.branch = value.startsWith("refs/heads/")
+        ? value.slice("refs/heads/".length)
+        : value;
+    }
+  }
+
+  flush();
+  return worktrees;
 }
 
 function normalizeBranch(value: string | null | undefined) {
@@ -548,7 +624,7 @@ function normalizeBranch(value: string | null | undefined) {
   return trimmed;
 }
 
-function buildGitHubRemoteUrls(
+export function buildGitHubRemoteUrls(
   owner: string,
   repo: string,
   branch: string | null,
@@ -1008,6 +1084,122 @@ export async function checkoutBranch(
   }
 
   return { branch: trimmedName };
+}
+
+export async function listWorktrees(
+  pathValue: string | null | undefined,
+): Promise<{ repoRoot: string; worktrees: RepoWorktree[] }> {
+  const repoRoot = await resolveRepoRootOrThrow(pathValue);
+  const result = await runGit(["worktree", "list", "--porcelain"], repoRoot);
+  if (result.code !== 0) {
+    throw new Error(result.stderr || "Failed to list worktrees.");
+  }
+
+  return {
+    repoRoot,
+    worktrees: parseWorktreeList(result.stdout),
+  };
+}
+
+export async function isWorktreeClean(
+  pathValue: string | null | undefined,
+): Promise<boolean> {
+  const repoRoot = await resolveRepoRootOrThrow(pathValue);
+  const statusResult = await runGit(["status", "--porcelain=v1"], repoRoot);
+  if (statusResult.code !== 0) {
+    throw new Error(statusResult.stderr || "Failed to inspect worktree state.");
+  }
+
+  return !Boolean(statusResult.stdout.trim());
+}
+
+export async function ensureThreadWorktree(
+  pathValue: string | null | undefined,
+  threadId: string,
+  branchName: string,
+) {
+  const repoRoot = await resolveRepoRootOrThrow(pathValue);
+  const trimmedBranchName = branchName.trim();
+  if (!trimmedBranchName) {
+    throw new Error("Branch name is required.");
+  }
+
+  const validation = await runGit(
+    ["check-ref-format", "--branch", trimmedBranchName],
+    repoRoot,
+  );
+  if (validation.code !== 0) {
+    throw new Error(validation.stderr || "Enter a valid branch name.");
+  }
+
+  const targetPath = getThreadWorktreePath(repoRoot, threadId);
+  const existingRepoRoot = await resolveRepoRoot(targetPath);
+  if (existingRepoRoot) {
+    const existingContext = await resolveRepoContext(existingRepoRoot);
+    return {
+      branch: existingContext.branch ?? trimmedBranchName,
+      created: false,
+      path: existingRepoRoot,
+    };
+  }
+
+  await rm(targetPath, { force: true, recursive: true }).catch(() => undefined);
+  await mkdir(path.dirname(targetPath), { recursive: true });
+
+  const addResult = await runGit(
+    ["worktree", "add", "--force", targetPath, trimmedBranchName],
+    repoRoot,
+  );
+  if (addResult.code !== 0) {
+    throw new Error(addResult.stderr || "Failed to create worktree.");
+  }
+
+  return {
+    branch: trimmedBranchName,
+    created: true,
+    path: targetPath,
+  };
+}
+
+export async function removeThreadWorktree(
+  pathValue: string | null | undefined,
+  threadId: string,
+) {
+  const repoRoot = await resolveRepoRootOrThrow(pathValue);
+  const targetPath = getThreadWorktreePath(repoRoot, threadId);
+  const existingRepoRoot = await resolveRepoRoot(targetPath);
+
+  if (!existingRepoRoot) {
+    await rm(targetPath, { force: true, recursive: true }).catch(
+      () => undefined,
+    );
+    return {
+      path: targetPath,
+      removed: false,
+    };
+  }
+
+  const clean = await isWorktreeClean(existingRepoRoot);
+  if (!clean) {
+    throw new Error(
+      "This worktree has uncommitted changes. Clean it up before removing it.",
+    );
+  }
+
+  const removeResult = await runGit(
+    ["worktree", "remove", "--force", existingRepoRoot],
+    repoRoot,
+  );
+  if (removeResult.code !== 0) {
+    throw new Error(removeResult.stderr || "Failed to remove worktree.");
+  }
+
+  await rm(targetPath, { force: true, recursive: true }).catch(() => undefined);
+
+  return {
+    path: targetPath,
+    removed: true,
+  };
 }
 
 export async function pushCurrentBranch(pathValue: string | null | undefined) {

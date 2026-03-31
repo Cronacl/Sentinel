@@ -532,6 +532,7 @@ export function ChatComposer({
             <ComposerWorkspaceBar
               activeWorkspace={activeWorkspace}
               showBranchSwitcher={showBranchSwitcher}
+              threadId={threadId}
             />
           </div>
         ) : null}

@@ -87,6 +87,11 @@ const checkoutBranch = mock(async (_rootPath, branchName) => ({
 const createAndCheckoutBranch = mock(async (_rootPath, branchName) => ({
   branch: branchName,
 }));
+const ensureThreadWorktree = mock(async (_rootPath, threadId, branchName) => ({
+  branch: branchName,
+  created: true,
+  path: `/tmp/.sentinel-worktrees/sentinel/${threadId}`,
+}));
 const initializeRepository = mock(async () => ({ repoRoot: "/tmp/workspace" }));
 const listBranches = mock(async () => ({
   branch: "feature/test",
@@ -96,6 +101,10 @@ const listBranches = mock(async () => ({
   ],
 }));
 const pushCurrentBranch = mock(async () => ({ branch: "feature/test" }));
+const removeThreadWorktreeAtPath = mock(async (_rootPath, threadId) => ({
+  path: `/tmp/.sentinel-worktrees/sentinel/${threadId}`,
+  removed: true,
+}));
 const revertFiles = mock(async () => ({ paths: ["file.ts"] }));
 const stageFiles = mock(async () => ({ paths: ["file.ts"] }));
 const unstageFiles = mock(async () => ({ paths: ["file.ts"] }));
@@ -129,6 +138,7 @@ const githubCreatePr = mock(async (input: any) => ({
   title: input.title,
   updatedAt: "2026-03-28T10:05:00.000Z",
 }));
+const githubGetActivePullRequestStatus = mock(async () => null);
 
 mock.module("@/server/api/trpc", () => ({
   createTRPCRouter: (routes: Record<string, any>) => routes,
@@ -159,16 +169,34 @@ mock.module("@/server/db/schema", () => ({
 }));
 
 mock.module("@/lib/git/repo", () => ({
+  buildGitHubRemoteUrls: (
+    owner: string,
+    repo: string,
+    branch: string | null,
+    defaultBranch: string | null,
+  ) => {
+    const repositoryUrl = `https://github.com/${owner}/${repo}`;
+    return {
+      pullRequestUrl:
+        branch && defaultBranch
+          ? `${repositoryUrl}/compare/${defaultBranch}...${branch}?expand=1`
+          : null,
+      pullRequestsUrl: `${repositoryUrl}/pulls`,
+      repositoryUrl,
+    };
+  },
   buildFallbackCommitMessage,
   checkoutBranch,
   commitAllChanges,
   createAndCheckoutBranch,
+  ensureThreadWorktree,
   getCommitMessageContext,
   getRepoDiffPanelData,
   getHeadCommitMessage,
   initializeRepository,
   listBranches,
   pushCurrentBranch,
+  removeThreadWorktree: removeThreadWorktreeAtPath,
   revertFiles,
   resolveRepoContext,
   stageFiles,
@@ -203,6 +231,10 @@ mock.module("@/lib/integrations/providers/github/service", () => ({
     createPr(input: any) {
       return githubCreatePr(input);
     }
+
+    getActivePullRequestStatus(input: any) {
+      return githubGetActivePullRequestStatus(input);
+    }
   },
 }));
 
@@ -219,9 +251,11 @@ beforeEach(() => {
   checkoutBranch.mockClear();
   commitAllChanges.mockClear();
   createAndCheckoutBranch.mockClear();
+  ensureThreadWorktree.mockClear();
   initializeRepository.mockClear();
   listBranches.mockClear();
   pushCurrentBranch.mockClear();
+  removeThreadWorktreeAtPath.mockClear();
   revertFiles.mockClear();
   stageFiles.mockClear();
   unstageFiles.mockClear();
@@ -230,6 +264,7 @@ beforeEach(() => {
   getValidAccessToken.mockClear();
   updateThreadRepoState.mockClear();
   githubCreatePr.mockClear();
+  githubGetActivePullRequestStatus.mockClear();
   run.mockClear();
   where.mockClear();
   set.mockClear();
@@ -277,6 +312,7 @@ beforeEach(() => {
     message: "Latest subject\n\n- latest body",
     subject: "Latest subject",
   }));
+  githubGetActivePullRequestStatus.mockImplementation(async () => null);
 });
 
 describe("repoRouter.createPullRequest", () => {
@@ -404,13 +440,17 @@ describe("repoRouter.createPullRequest", () => {
       userId: "user-1",
     });
     expect(result.pullRequestUrl).toContain("/compare/main...feature/test");
-    expect(updateThreadRepoState).toHaveBeenCalledWith("thread-1", {
-      lastPullRequest: expect.objectContaining({
-        kind: "compare",
-        repoFullName: "openai/sentinel",
-        url: expect.stringContaining("/compare/main...feature/test"),
+    expect(updateThreadRepoState).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        activeBranch: "feature/test",
+        lastPullRequest: expect.objectContaining({
+          kind: "compare",
+          repoFullName: "openai/sentinel",
+          url: expect.stringContaining("/compare/main...feature/test"),
+        }),
       }),
-    });
+    );
     expect(result.repoContext.lastPullRequest).toMatchObject({
       kind: "compare",
     });
@@ -514,10 +554,10 @@ describe("repoRouter.createPullRequest", () => {
             },
           },
         },
-        session: { user: { id: "user-1" } },
+        session: { user: { id: "user-2" } },
         user: {
           defaultChatModelId: null,
-          id: "user-1",
+          id: "user-2",
         },
       },
       input: {
@@ -538,15 +578,19 @@ describe("repoRouter.createPullRequest", () => {
       repo: "sentinel",
       title: "Ship draft PR",
     });
-    expect(updateThreadRepoState).toHaveBeenCalledWith("thread-1", {
-      lastPullRequest: expect.objectContaining({
-        kind: "github",
-        draft: true,
-        number: 42,
-        repoFullName: "openai/sentinel",
-        url: "https://github.com/openai/sentinel/pull/42",
+    expect(updateThreadRepoState).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        activeBranch: "feature/test",
+        lastPullRequest: expect.objectContaining({
+          kind: "github",
+          draft: true,
+          number: 42,
+          repoFullName: "openai/sentinel",
+          url: "https://github.com/openai/sentinel/pull/42",
+        }),
       }),
-    });
+    );
     expect(result.pullRequestUrl).toBe(
       "https://github.com/openai/sentinel/pull/42",
     );
@@ -554,6 +598,93 @@ describe("repoRouter.createPullRequest", () => {
       kind: "github",
       draft: true,
       number: 42,
+    });
+  });
+
+  it("links an existing branch PR to the thread when GitHub reports one already exists", async () => {
+    findGithubIntegration.mockImplementationOnce(async () => ({
+      id: "integration-1",
+    }));
+    githubCreatePr.mockImplementationOnce(async () => {
+      throw new Error(
+        "Validation Failed: A pull request already exists for openai:feature/test.",
+      );
+    });
+    githubGetActivePullRequestStatus.mockImplementationOnce(async () => ({
+      additions: 12,
+      baseBranch: "main",
+      branch: "feature/test",
+      changedFiles: 3,
+      checks: {
+        failingCount: 0,
+        passingCount: 5,
+        pendingCount: 0,
+        state: "success",
+        totalCount: 5,
+      },
+      comments: 2,
+      createdAt: "2026-03-31T08:00:00.000Z",
+      deletions: 4,
+      mergeStatus: "ready",
+      number: 51,
+      provider: "github",
+      reviewDecision: "APPROVED",
+      state: "open",
+      title: "Existing branch PR",
+      updatedAt: "2026-03-31T08:05:00.000Z",
+      url: "https://github.com/openai/sentinel/pull/51",
+    }));
+
+    const result = await repoRouter.createPullRequest({
+      ctx: {
+        db: {
+          query: {
+            integrations: {
+              findFirst: findGithubIntegration,
+            },
+          },
+        },
+        session: { user: { id: "user-2" } },
+        user: {
+          defaultChatModelId: null,
+          id: "user-2",
+        },
+      },
+      input: {
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(githubGetActivePullRequestStatus).toHaveBeenCalledWith({
+      branch: "feature/test",
+      owner: "openai",
+      repo: "sentinel",
+    });
+    expect(updateThreadRepoState).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        activeBranch: "feature/test",
+        lastPullRequest: expect.objectContaining({
+          kind: "github",
+          number: 51,
+          repoFullName: "openai/sentinel",
+          title: "Existing branch PR",
+          url: "https://github.com/openai/sentinel/pull/51",
+        }),
+      }),
+    );
+    expect(result.linkedExistingPullRequest).toBe(true);
+    expect(result.pullRequestUrl).toBe(
+      "https://github.com/openai/sentinel/pull/51",
+    );
+    expect(result.repoContext.lastPullRequest).toMatchObject({
+      kind: "github",
+      number: 51,
+    });
+    expect(result.repoContext.pullRequestStatus).toMatchObject({
+      number: 51,
+      title: "Existing branch PR",
     });
   });
 
@@ -757,6 +888,272 @@ describe("repoRouter.createPullRequest", () => {
       "Update file",
       true,
     );
+  });
+});
+
+describe("repoRouter workspace PR status queries", () => {
+  it("links the active branch PR to the thread when repo context is loaded", async () => {
+    findGithubIntegration.mockImplementationOnce(async () => ({
+      id: "integration-1",
+    }));
+    githubGetActivePullRequestStatus.mockImplementationOnce(async () => ({
+      additions: 12,
+      baseBranch: "main",
+      branch: "feature/test",
+      changedFiles: 3,
+      checks: {
+        failingCount: 0,
+        passingCount: 5,
+        pendingCount: 0,
+        state: "success",
+        totalCount: 5,
+      },
+      comments: 2,
+      createdAt: "2026-03-31T08:00:00.000Z",
+      deletions: 4,
+      mergeStatus: "ready",
+      number: 42,
+      provider: "github",
+      reviewDecision: "APPROVED",
+      state: "open",
+      title: "Active branch PR",
+      updatedAt: "2026-03-31T08:05:00.000Z",
+      url: "https://github.com/openai/sentinel/pull/42",
+    }));
+
+    const result = await repoRouter.getContext({
+      ctx: {
+        db: {
+          query: {
+            integrations: {
+              findFirst: findGithubIntegration,
+            },
+          },
+        },
+        session: { user: { id: "user-sync" } },
+        user: {
+          defaultChatModelId: null,
+          id: "user-sync",
+        },
+      },
+      input: {
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(result.lastPullRequest).toMatchObject({
+      kind: "github",
+      number: 42,
+      title: "Active branch PR",
+      url: "https://github.com/openai/sentinel/pull/42",
+    });
+    expect(updateThreadRepoState).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        activeBranch: "feature/test",
+        lastPullRequest: expect.objectContaining({
+          kind: "github",
+          number: 42,
+        }),
+      }),
+    );
+    expect(result.threadBranch).toBe("feature/test");
+    expect(result.branchResumeStatus).toBe("matched");
+  });
+
+  it("returns connected workspace PR status when GitHub is available", async () => {
+    findGithubIntegration.mockImplementationOnce(async () => ({
+      id: "integration-1",
+    }));
+    githubGetActivePullRequestStatus.mockImplementationOnce(async () => ({
+      additions: 12,
+      baseBranch: "main",
+      branch: "feature/test",
+      changedFiles: 3,
+      checks: {
+        failingCount: 0,
+        passingCount: 5,
+        pendingCount: 0,
+        state: "success",
+        totalCount: 5,
+      },
+      comments: 2,
+      createdAt: "2026-03-31T08:00:00.000Z",
+      deletions: 4,
+      mergeStatus: "ready",
+      number: 42,
+      provider: "github",
+      reviewDecision: "APPROVED",
+      state: "open",
+      title: "Add workspace PR status",
+      updatedAt: "2026-03-31T08:05:00.000Z",
+      url: "https://github.com/openai/sentinel/pull/42",
+    }));
+
+    const result = await repoRouter.listWorkspaceStatuses({
+      ctx: {
+        db: {
+          query: {
+            integrations: {
+              findFirst: findGithubIntegration,
+            },
+          },
+        },
+        session: { user: { id: "user-1" } },
+        user: {
+          defaultChatModelId: null,
+          id: "user-1",
+        },
+      },
+      input: {
+        workspaceIds: ["workspace-1"],
+      },
+    });
+
+    expect(result[0]).toMatchObject({
+      pullRequestIntegrationStatus: "connected",
+      pullRequestStatus: {
+        mergeStatus: "ready",
+        number: 42,
+        title: "Add workspace PR status",
+      },
+      workspaceId: "workspace-1",
+    });
+    expect(githubGetActivePullRequestStatus).toHaveBeenCalledWith({
+      branch: "feature/test",
+      owner: "openai",
+      repo: "sentinel",
+    });
+  });
+
+  it("reports that GitHub needs to be connected before live PR status is available", async () => {
+    const result = await repoRouter.getContext({
+      ctx: {
+        db: {
+          query: {
+            integrations: {
+              findFirst: findGithubIntegration,
+            },
+          },
+        },
+        session: { user: { id: "user-1" } },
+        user: {
+          defaultChatModelId: null,
+          id: "user-1",
+          lastProjectOpenTargetId: null,
+        },
+      },
+      input: {
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(result.pullRequestIntegrationStatus).toBe("needs_github");
+    expect(result.pullRequestStatus).toBeNull();
+  });
+
+  it("remembers the current branch the first time a thread repo context is loaded", async () => {
+    const result = await repoRouter.getContext({
+      ctx: {
+        db: {
+          query: {
+            integrations: {
+              findFirst: findGithubIntegration,
+            },
+          },
+        },
+        session: { user: { id: "user-bind" } },
+        user: {
+          defaultChatModelId: null,
+          id: "user-bind",
+          lastProjectOpenTargetId: null,
+        },
+      },
+      input: {
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(result.threadBranch).toBe("feature/test");
+    expect(result.branchResumeStatus).toBe("matched");
+    expect(result.threadProjectMode).toBe("local");
+    expect(updateThreadRepoState).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        activeBranch: "feature/test",
+      }),
+    );
+  });
+
+  it("reports blocked branch resume when the thread branch differs and the local project is dirty", async () => {
+    getOwnedThreadOrThrow.mockImplementationOnce(async () => ({
+      chatEngine: "codex",
+      chatEngineState: {
+        repo: {
+          activeBranch: "feature/linked",
+          projectMode: "local",
+        },
+      },
+      chatModelId: "gpt-5.4",
+      chatReasoningEffort: "high",
+      id: "thread-1",
+      workspaceId: "workspace-1",
+    }));
+    resolveRepoContext.mockImplementationOnce(async () => ({
+      aheadCount: 0,
+      branch: "main",
+      changedFileCount: 2,
+      deletions: 0,
+      githubRemote: {
+        defaultBranch: "main",
+        owner: "openai",
+        pullRequestUrl:
+          "https://github.com/openai/sentinel/compare/main...main?expand=1",
+        pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+        remoteName: "origin",
+        remoteUrl: "git@github.com:openai/sentinel.git",
+        repo: "sentinel",
+        repositoryUrl: "https://github.com/openai/sentinel",
+      },
+      hasChanges: true,
+      hasCommits: true,
+      hasRemotes: true,
+      hasUpstream: true,
+      insertions: 4,
+      isDefaultBranch: true,
+      isGitRepo: true,
+      pushRemoteName: "origin",
+      repoRoot: "/tmp/workspace",
+    }));
+
+    const result = await repoRouter.getContext({
+      ctx: {
+        db: {
+          query: {
+            integrations: {
+              findFirst: findGithubIntegration,
+            },
+          },
+        },
+        session: { user: { id: "user-dirty" } },
+        user: {
+          defaultChatModelId: null,
+          id: "user-dirty",
+          lastProjectOpenTargetId: null,
+        },
+      },
+      input: {
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(result.threadBranch).toBe("feature/linked");
+    expect(result.branchResumeStatus).toBe("blocked_dirty");
+    expect(result.branchResumeReason).toContain("uncommitted changes");
   });
 });
 
@@ -1012,5 +1409,149 @@ describe("repoRouter.branch actions", () => {
 
     expect(checkoutBranch).toHaveBeenCalledWith("/tmp/workspace", "main");
     expect(result).toEqual({ branch: "main" });
+  });
+
+  it("creates a thread worktree and switches the thread into it", async () => {
+    getOwnedThreadOrThrow.mockImplementationOnce(async () => ({
+      chatEngine: "codex",
+      chatEngineState: {
+        repo: {
+          activeBranch: "feature/worktree",
+          projectMode: "local",
+        },
+      },
+      chatModelId: "gpt-5.4",
+      chatReasoningEffort: "high",
+      id: "thread-1",
+      workspaceId: "workspace-1",
+    }));
+    resolveRepoContext.mockImplementation((pathValue) =>
+      Promise.resolve(
+        pathValue === "/tmp/.sentinel-worktrees/sentinel/thread-1"
+          ? {
+              aheadCount: 0,
+              branch: "feature/worktree",
+              changedFileCount: 0,
+              deletions: 0,
+              githubRemote: {
+                defaultBranch: "main",
+                owner: "openai",
+                pullRequestUrl:
+                  "https://github.com/openai/sentinel/compare/main...feature/worktree?expand=1",
+                pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+                remoteName: "origin",
+                remoteUrl: "git@github.com:openai/sentinel.git",
+                repo: "sentinel",
+                repositoryUrl: "https://github.com/openai/sentinel",
+              },
+              hasChanges: false,
+              hasCommits: true,
+              hasRemotes: true,
+              hasUpstream: true,
+              insertions: 0,
+              isDefaultBranch: false,
+              isGitRepo: true,
+              pushRemoteName: "origin",
+              repoRoot: "/tmp/.sentinel-worktrees/sentinel/thread-1",
+            }
+          : {
+              aheadCount: 0,
+              branch: "main",
+              changedFileCount: 0,
+              deletions: 0,
+              githubRemote: {
+                defaultBranch: "main",
+                owner: "openai",
+                pullRequestUrl:
+                  "https://github.com/openai/sentinel/compare/main...main?expand=1",
+                pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+                remoteName: "origin",
+                remoteUrl: "git@github.com:openai/sentinel.git",
+                repo: "sentinel",
+                repositoryUrl: "https://github.com/openai/sentinel",
+              },
+              hasChanges: false,
+              hasCommits: true,
+              hasRemotes: true,
+              hasUpstream: true,
+              insertions: 0,
+              isDefaultBranch: true,
+              isGitRepo: true,
+              pushRemoteName: "origin",
+              repoRoot: "/tmp/workspace",
+            },
+      ),
+    );
+
+    const result = await repoRouter.enableThreadWorktree({
+      ctx: {
+        session: { user: { id: "user-1" } },
+        user: { id: "user-1", lastProjectOpenTargetId: null },
+      },
+      input: {
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(ensureThreadWorktree).toHaveBeenCalledWith(
+      "/tmp/workspace",
+      "thread-1",
+      "feature/worktree",
+    );
+    expect(updateThreadRepoState).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        activeBranch: "feature/worktree",
+        projectMode: "worktree",
+        worktreePath: "/tmp/.sentinel-worktrees/sentinel/thread-1",
+      }),
+    );
+    expect(result.repoContext.threadProjectMode).toBe("worktree");
+    expect(result.repoContext.worktreeStatus).toBe("ready");
+    expect(result.repoContext.effectiveRootPath).toBe(
+      "/tmp/.sentinel-worktrees/sentinel/thread-1",
+    );
+  });
+
+  it("removes a thread worktree and returns the thread to local mode", async () => {
+    getOwnedThreadOrThrow.mockImplementationOnce(async () => ({
+      chatEngine: "codex",
+      chatEngineState: {
+        repo: {
+          activeBranch: "feature/worktree",
+          projectMode: "worktree",
+          worktreePath: "/tmp/.sentinel-worktrees/sentinel/thread-1",
+        },
+      },
+      chatModelId: "gpt-5.4",
+      chatReasoningEffort: "high",
+      id: "thread-1",
+      workspaceId: "workspace-1",
+    }));
+
+    const result = await repoRouter.removeThreadWorktree({
+      ctx: {
+        session: { user: { id: "user-1" } },
+        user: { id: "user-1", lastProjectOpenTargetId: null },
+      },
+      input: {
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(removeThreadWorktreeAtPath).toHaveBeenCalledWith(
+      "/tmp/workspace",
+      "thread-1",
+    );
+    expect(updateThreadRepoState).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        projectMode: "local",
+        worktreePath: null,
+      }),
+    );
+    expect(result.repoContext.threadProjectMode).toBe("local");
   });
 });

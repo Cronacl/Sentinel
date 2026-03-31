@@ -212,6 +212,8 @@ function buildThreadListItem(
     chatReasoningEffort: thread.chatReasoningEffort,
     createdAt: thread.createdAt,
     id: thread.id,
+    linkedPullRequest:
+      "linkedPullRequest" in thread ? (thread.linkedPullRequest ?? null) : null,
     mode: thread.mode,
     pinnedAt: thread.pinnedAt,
     status: thread.status,

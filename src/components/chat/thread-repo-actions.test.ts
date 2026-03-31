@@ -6,6 +6,8 @@ import {
   formatRepoActionErrorMessage,
   getActivePullRequestUrl,
   getGeneratedCommitPromptValue,
+  getLinkedPullRequestStatus,
+  getThreadLinkedPullRequest,
 } from "./thread-repo-actions.helpers";
 
 describe("thread repo action helpers", () => {
@@ -72,6 +74,33 @@ describe("thread repo action helpers", () => {
     ).toBe("https://github.com/openai/sentinel/pull/42");
   });
 
+  it("prefers the live pull request status when present", () => {
+    expect(
+      getActivePullRequestUrl({
+        branch: "feature/new-pr",
+        lastPullRequest: null,
+        pullRequestStatus: {
+          additions: 12,
+          baseBranch: "main",
+          branch: "feature/new-pr",
+          changedFiles: 3,
+          checks: null,
+          comments: 0,
+          createdAt: "2026-03-31T08:00:00.000Z",
+          deletions: 1,
+          mergeStatus: "ready",
+          number: 42,
+          provider: "github",
+          reviewDecision: "APPROVED",
+          state: "open",
+          title: "Add PR chip",
+          updatedAt: "2026-03-31T08:05:00.000Z",
+          url: "https://github.com/openai/sentinel/pull/42",
+        },
+      }),
+    ).toBe("https://github.com/openai/sentinel/pull/42");
+  });
+
   it("ignores PR metadata for a different branch or closed PR", () => {
     expect(
       getActivePullRequestUrl({
@@ -102,6 +131,110 @@ describe("thread repo action helpers", () => {
           state: "closed",
           title: "Add PR state",
           updatedAt: "2026-03-28T00:00:00.000Z",
+          url: "https://github.com/openai/sentinel/pull/42",
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("only treats branch PRs as linked when they belong to the thread", () => {
+    expect(
+      getThreadLinkedPullRequest({
+        branch: "feature/new-pr",
+        lastPullRequest: {
+          base: "main",
+          createdAt: "2026-03-28T00:00:00.000Z",
+          draft: false,
+          head: "feature/new-pr",
+          kind: "github",
+          number: 42,
+          repoFullName: "openai/sentinel",
+          state: "open",
+          title: "Add PR state",
+          updatedAt: "2026-03-28T00:00:00.000Z",
+          url: "https://github.com/openai/sentinel/pull/42",
+        },
+      }),
+    ).toEqual({
+      base: "main",
+      createdAt: "2026-03-28T00:00:00.000Z",
+      draft: false,
+      head: "feature/new-pr",
+      kind: "github",
+      number: 42,
+      repoFullName: "openai/sentinel",
+      state: "open",
+      title: "Add PR state",
+      updatedAt: "2026-03-28T00:00:00.000Z",
+      url: "https://github.com/openai/sentinel/pull/42",
+    });
+
+    expect(
+      getThreadLinkedPullRequest({
+        branch: "feature/new-pr",
+        lastPullRequest: null,
+      }),
+    ).toBeNull();
+  });
+
+  it("ignores live PR status when the thread does not link that specific PR", () => {
+    expect(
+      getLinkedPullRequestStatus({
+        branch: "feature/new-pr",
+        lastPullRequest: null,
+        pullRequestStatus: {
+          additions: 12,
+          baseBranch: "main",
+          branch: "feature/new-pr",
+          changedFiles: 3,
+          checks: null,
+          comments: 0,
+          createdAt: "2026-03-31T08:00:00.000Z",
+          deletions: 1,
+          mergeStatus: "ready",
+          number: 42,
+          provider: "github",
+          reviewDecision: "APPROVED",
+          state: "open",
+          title: "Add PR chip",
+          updatedAt: "2026-03-31T08:05:00.000Z",
+          url: "https://github.com/openai/sentinel/pull/42",
+        },
+      }),
+    ).toBeNull();
+
+    expect(
+      getLinkedPullRequestStatus({
+        branch: "feature/new-pr",
+        lastPullRequest: {
+          base: "main",
+          createdAt: "2026-03-28T00:00:00.000Z",
+          draft: false,
+          head: "feature/new-pr",
+          kind: "github",
+          number: 7,
+          repoFullName: "openai/sentinel",
+          state: "open",
+          title: "Older PR",
+          updatedAt: "2026-03-28T00:00:00.000Z",
+          url: "https://github.com/openai/sentinel/pull/7",
+        },
+        pullRequestStatus: {
+          additions: 12,
+          baseBranch: "main",
+          branch: "feature/new-pr",
+          changedFiles: 3,
+          checks: null,
+          comments: 0,
+          createdAt: "2026-03-31T08:00:00.000Z",
+          deletions: 1,
+          mergeStatus: "ready",
+          number: 42,
+          provider: "github",
+          reviewDecision: "APPROVED",
+          state: "open",
+          title: "Different PR",
+          updatedAt: "2026-03-31T08:05:00.000Z",
           url: "https://github.com/openai/sentinel/pull/42",
         },
       }),
