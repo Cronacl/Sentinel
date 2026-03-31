@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.5](https://github.com/chaqchase/Sentinel/compare/v0.0.4...v0.0.5) (2026-03-31)
+
+
+### Features
+
+* **chat:** add loading indicator for streaming messages ([415b3d9](https://github.com/chaqchase/Sentinel/commit/415b3d90c9aed37ee81a4a6a9efd9f5c81efb687))
+* **chat:** enhance chat scroll control and model selection with loading states ([54894b5](https://github.com/chaqchase/Sentinel/commit/54894b57c4acf28dc5a385407f21d0c5e1747b2e))
+* **chat:** implement repo diff sidebar helpers and state management ([c82d721](https://github.com/chaqchase/Sentinel/commit/c82d721eca839d7af14cfddb741ea96e64d6bab5))
+* **chat:** integrate pull request sidebar and enhance thread management with linked PR support ([6779d9d](https://github.com/chaqchase/Sentinel/commit/6779d9d8bc00bd61736d21d7164de268b62e9901))
+
 ## [0.0.4](https://github.com/chaqchase/Sentinel/compare/v0.0.3...v0.0.4) (2026-03-30)
 
 
