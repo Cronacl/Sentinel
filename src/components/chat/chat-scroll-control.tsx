@@ -2,7 +2,13 @@
 
 import { ArrowDown01Icon, ArrowUp01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 type ScrollButtonDirection = "down" | "up";
 
@@ -91,7 +97,17 @@ export function useChatScrollControl(threadKey: string) {
     });
   }, [buttonDirection]);
 
-  useEffect(() => {
+  const syncToBottom = useCallback(() => {
+    const scrollArea = scrollAreaRef.current;
+    if (!scrollArea) {
+      return;
+    }
+
+    scrollArea.scrollTop = scrollArea.scrollHeight;
+    previousScrollTopRef.current = scrollArea.scrollTop;
+  }, []);
+
+  useLayoutEffect(() => {
     const composerDock = composerDockRef.current;
     if (!composerDock) {
       return;
@@ -99,6 +115,10 @@ export function useChatScrollControl(threadKey: string) {
 
     const updateOffset = () => {
       setComposerOffset(composerDock.offsetHeight + 16);
+      if (stickToBottomRef.current) {
+        syncToBottom();
+        syncScrollState();
+      }
     };
 
     updateOffset();
@@ -112,7 +132,7 @@ export function useChatScrollControl(threadKey: string) {
     return () => {
       observer.disconnect();
     };
-  }, [threadKey]);
+  }, [syncScrollState, syncToBottom, threadKey]);
 
   useEffect(() => {
     const scrollArea = scrollAreaRef.current;
@@ -130,24 +150,16 @@ export function useChatScrollControl(threadKey: string) {
     };
   }, [syncScrollState, threadKey]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const scrollArea = scrollAreaRef.current;
     if (!scrollArea) {
       return;
     }
 
-    const frame = window.requestAnimationFrame(() => {
-      scrollArea.scrollTo({
-        top: scrollArea.scrollHeight,
-        behavior: "auto",
-      });
-      previousScrollTopRef.current = scrollArea.scrollTop;
-      stickToBottomRef.current = true;
-      syncScrollState();
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [syncScrollState, threadKey]);
+    stickToBottomRef.current = true;
+    syncToBottom();
+    syncScrollState();
+  }, [syncScrollState, syncToBottom, threadKey]);
 
   useEffect(() => {
     const scrollArea = scrollAreaRef.current;
@@ -162,10 +174,8 @@ export function useChatScrollControl(threadKey: string) {
 
     const observer = new ResizeObserver(() => {
       if (stickToBottomRef.current) {
-        scrollArea.scrollTo({
-          top: scrollArea.scrollHeight,
-          behavior: "auto",
-        });
+        syncToBottom();
+        syncScrollState();
       }
     });
 
@@ -174,7 +184,7 @@ export function useChatScrollControl(threadKey: string) {
     return () => {
       observer.disconnect();
     };
-  }, [threadKey]);
+  }, [syncScrollState, syncToBottom, threadKey]);
 
   return {
     buttonDirection,

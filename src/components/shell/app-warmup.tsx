@@ -60,6 +60,15 @@ export function AppWarmupCoordinator() {
     const cleanups: Array<() => void> = [];
     let cancelled = false;
 
+    // Warm the composer-critical data immediately so the first thread/new-thread
+    // render doesn't become the first place these queries start.
+    void utils.chatPreferences.get.prefetch();
+    void utils.engines.list.prefetch();
+    void utils.engines.models.prefetch({ engine: "sentinel" });
+    void utils.engines.models.prefetch({ engine: "codex" });
+    void utils.engines.models.prefetch({ engine: "claude" });
+    void utils.workspaces.getCurrent.prefetch();
+
     const tasks: Array<() => void> = [
       () => {
         void fetch("/api/startup/warm", {

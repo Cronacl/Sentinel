@@ -16,7 +16,9 @@ export function usePersistSelection({
 }) {
   const utils = api.useUtils();
 
-  const globalSelectionQuery = api.chatPreferences.get.useQuery();
+  const globalSelectionQuery = api.chatPreferences.get.useQuery(undefined, {
+    staleTime: 60_000,
+  });
 
   const updateGlobalSelection = api.chatPreferences.updateGlobal.useMutation({
     onMutate: (input) => {

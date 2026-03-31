@@ -41,20 +41,27 @@ export function useModelSelection({
     reasoningEffort?: ReasoningEffort | null;
   } | null;
 }) {
-  const enginesQuery = api.engines.list.useQuery();
-  const sentinelModelsQuery = api.engines.models.useQuery({
-    engine: "sentinel",
+  const enginesQuery = api.engines.list.useQuery(undefined, {
+    staleTime: 60_000,
   });
-  const codexModelsQuery = api.engines.models.useQuery({
-    engine: "codex",
-  });
-  const claudeModelsQuery = api.engines.models.useQuery({
-    engine: "claude",
-  });
-  const [selectedEngine, setSelectedEngine] = useState<ChatEngine>("sentinel");
-  const [selectedModelKey, setSelectedModelKey] = useState<string | null>(null);
-  const [selectedReasoningEffort, setSelectedReasoningEffort] =
-    useState<ReasoningEffort | null>(null);
+  const sentinelModelsQuery = api.engines.models.useQuery(
+    {
+      engine: "sentinel",
+    },
+    { staleTime: 60_000 },
+  );
+  const codexModelsQuery = api.engines.models.useQuery(
+    {
+      engine: "codex",
+    },
+    { staleTime: 60_000 },
+  );
+  const claudeModelsQuery = api.engines.models.useQuery(
+    {
+      engine: "claude",
+    },
+    { staleTime: 60_000 },
+  );
   const [cachedAvailableModelsByEngine, setCachedAvailableModelsByEngine] =
     useState<Record<ChatEngine, ReturnType<typeof filterSelectableModels>>>({
       claude: [],
@@ -75,6 +82,14 @@ export function useModelSelection({
     ? (threadSelection?.reasoningEffort ?? null)
     : ((globalSelectionQuery.data?.reasoningEffort as ReasoningEffort | null) ??
       null);
+  const [selectedEngine, setSelectedEngine] = useState<ChatEngine>(
+    () => preferredEngine,
+  );
+  const [selectedModelKey, setSelectedModelKey] = useState<string | null>(
+    () => preferredModelId,
+  );
+  const [selectedReasoningEffort, setSelectedReasoningEffort] =
+    useState<ReasoningEffort | null>(() => preferredReasoningEffort);
   const preferencesReady =
     Boolean(threadSelection?.engine) ||
     hasThreadSelection ||

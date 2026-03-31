@@ -681,6 +681,23 @@ export function ThreadRepoActions({
     return null;
   }
 
+  if (repoContextQuery.isLoading && !repoContext) {
+    return (
+      <div className="flex items-center gap-2">
+        <TerminalToggleButton cwd={workspaceRootPath} />
+        <Button
+          isDisabled
+          size="sm"
+          className="max-h-7 min-w-24"
+          variant="tertiary"
+        >
+          <Spinner className="size-3.5 min-w-3.5" color="current" size="sm" />
+          <span>Loading repo</span>
+        </Button>
+      </div>
+    );
+  }
+
   if (!repoContextQuery.isLoading && repoContext && !repoContext.isGitRepo) {
     return (
       <div className="flex items-center gap-2">

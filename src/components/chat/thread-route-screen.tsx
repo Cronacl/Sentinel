@@ -9,6 +9,7 @@ import { api } from "@/trpc/react";
 import { closeRepoDiffSidebarForThreadChange } from "./repo-diff-sidebar-store";
 import { ThreadScreen } from "./thread-screen";
 import { buildThreadQueryOptions } from "./thread-query-options";
+import { Spinner } from "@heroui/react";
 
 export function ThreadRouteScreen({ threadId }: { threadId: string }) {
   const router = useRouter();
@@ -37,10 +38,10 @@ export function ThreadRouteScreen({ threadId }: { threadId: string }) {
     !threadQuery.data
   ) {
     return (
-      <PageWrapper flush title="Thread">
+      <PageWrapper flush>
         <div className="flex h-full items-center justify-center px-4">
           <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground rounded-xl border px-3 py-2.5 text-xs">
-            {threadQuery.error.message}
+            Something went wrong while loading the thread.
           </p>
         </div>
       </PageWrapper>
@@ -49,13 +50,9 @@ export function ThreadRouteScreen({ threadId }: { threadId: string }) {
 
   if (!threadQuery.data) {
     return (
-      <PageWrapper flush title="Thread">
+      <PageWrapper flush>
         <div className="flex h-full items-center justify-center px-4">
-          <div
-            aria-label="Loading"
-            className="h-4 w-4 animate-spin rounded-full border-2 border-muted/25 border-t-foreground"
-            role="status"
-          />
+          <Spinner size="sm" />
         </div>
       </PageWrapper>
     );

@@ -92,6 +92,13 @@ function canUseClaudeFallbackModels(status: ClaudeEngineStatus) {
   );
 }
 
+function shouldExposeRuntimeModels(options: {
+  availableModelsCount: number;
+  isAvailable: boolean;
+}) {
+  return options.isAvailable || options.availableModelsCount > 0;
+}
+
 function buildFallbackClaudeModels() {
   return getModelsForProvider("anthropic").map((model) => ({
     contextWindow: model.contextWindow,
@@ -192,10 +199,13 @@ export const enginesRouter = createTRPCRouter({
 
       if (input.engine === "codex") {
         const status = await runtimeStatuses.codex();
-        const isAvailable = isCodexEngineAvailable(status);
         const models = canUseCodexFallbackModels(status)
           ? buildFallbackCodexModels()
           : status.availableModels;
+        const isConnected = shouldExposeRuntimeModels({
+          availableModelsCount: models.length,
+          isAvailable: isCodexEngineAvailable(status),
+        });
 
         return models.map((model) => ({
           contextWindow: undefined as number | undefined,
@@ -204,7 +214,7 @@ export const enginesRouter = createTRPCRouter({
           displayName: model.displayName,
           engine: "codex" as const,
           inputModalities: model.inputModalities,
-          isConnected: isAvailable,
+          isConnected,
           isEnabled: true,
           modelId: model.id,
           provider: null,
@@ -217,10 +227,13 @@ export const enginesRouter = createTRPCRouter({
 
       if (input.engine === "claude") {
         const status = await runtimeStatuses.claude();
-        const isAvailable = isClaudeEngineAvailable(status);
         const models = canUseClaudeFallbackModels(status)
           ? buildFallbackClaudeModels()
           : status.availableModels;
+        const isConnected = shouldExposeRuntimeModels({
+          availableModelsCount: models.length,
+          isAvailable: isClaudeEngineAvailable(status),
+        });
 
         return models.map((model) => ({
           contextWindow: model.contextWindow,
@@ -229,7 +242,7 @@ export const enginesRouter = createTRPCRouter({
           displayName: model.displayName,
           engine: "claude" as const,
           inputModalities: model.inputModalities,
-          isConnected: isAvailable,
+          isConnected,
           isEnabled: true,
           modelId: model.id,
           provider: null,
