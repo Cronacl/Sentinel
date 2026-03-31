@@ -28,12 +28,14 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 
 import { useRouter } from "next/navigation";
+import { sileo } from "sileo";
 
 import { PageWrapper } from "@/components/shell";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
+import { getErrorMessage } from "@/lib/errors";
 import type { ChatEngine } from "@/server/db/enums";
 import {
   applyThreadSnapshotCacheUpdate,
@@ -106,6 +108,13 @@ export function ThreadScreen({
   const handleError = useCallback((error: Error) => {
     setChatError(error.message);
   }, []);
+  const repoContextQueryInput = useMemo(
+    () => ({
+      threadId: thread.id,
+      workspaceId: workspace.id,
+    }),
+    [thread.id, workspace.id],
+  );
   const handleSnapshot = useCallback(
     (snapshot: {
       activeRunId: string | null;
@@ -143,8 +152,9 @@ export function ThreadScreen({
         workspace: current?.workspace,
         workspaceId: workspace.id,
       });
+      void utils.repo.getContext.invalidate(repoContextQueryInput);
     },
-    [thread.id, utils, workspace.id],
+    [repoContextQueryInput, thread.id, utils, workspace.id],
   );
 
   const currentWorkspace = api.workspaces.getCurrent.useQuery();
@@ -187,6 +197,11 @@ export function ThreadScreen({
   });
 
   const [chatError, setChatError] = useState<string | null>(null);
+  const [busyCheckpointId, setBusyCheckpointId] = useState<string | null>(null);
+  const [pendingCheckpointReset, setPendingCheckpointReset] = useState<{
+    checkpointId: string;
+    message: ThreadUIMessage;
+  } | null>(null);
   const isPinned = thread.pinnedAt != null;
   const pinToggleLockRef = useRef(false);
   const startPlanImplementationLockRef = useRef(false);
@@ -297,12 +312,16 @@ export function ThreadScreen({
     steerFollowUp,
     stopStream,
   } = chat;
+  const repoContextQuery = api.repo.getContext.useQuery(repoContextQueryInput, {
+    enabled: Boolean(workspace.rootPath),
+  });
+  const resetCheckpointMutation = api.repo.resetCheckpoint.useMutation();
 
   const isBusy = status === "submitted" || status === "streaming";
   const visibleChatError = chatError ?? errorMessage;
 
   useEffect(() => {
-    if (status === "streaming") {
+    if (status === "submitted" || status === "streaming") {
       applyThreadStatusCacheUpdate({
         status: "streaming",
         threadId: thread.id,
@@ -512,10 +531,6 @@ export function ThreadScreen({
             ? reasoningEffort
             : current.reasoningEffort,
       }));
-
-      if (engine === "codex") {
-        setEditingMessage(null);
-      }
     },
     [],
   );
@@ -543,6 +558,53 @@ export function ThreadScreen({
         .join("\n\n") ?? undefined,
     [editingMessage],
   );
+  const userMessageCheckpointIds = useMemo(() => {
+    const checkpointIds = new Map<string, string>();
+
+    for (const message of messages) {
+      const repoCheckpointId = message.metadata?.repoCheckpointId ?? null;
+      if (!repoCheckpointId) {
+        continue;
+      }
+
+      if (message.role === "user") {
+        checkpointIds.set(message.id, repoCheckpointId);
+        continue;
+      }
+
+      const parentMessageId = message.metadata?.parentMessageId ?? null;
+      if (parentMessageId && !checkpointIds.has(parentMessageId)) {
+        checkpointIds.set(parentMessageId, repoCheckpointId);
+      }
+    }
+
+    for (let index = 0; index < messages.length - 1; index += 1) {
+      const message = messages[index];
+      if (
+        !message ||
+        message.role !== "user" ||
+        checkpointIds.has(message.id)
+      ) {
+        continue;
+      }
+
+      const nextMessage = messages[index + 1];
+      if (nextMessage?.role !== "assistant") {
+        continue;
+      }
+
+      const nextCheckpointId = nextMessage.metadata?.repoCheckpointId ?? null;
+      const parentMessageId = nextMessage.metadata?.parentMessageId ?? null;
+      if (
+        nextCheckpointId &&
+        (parentMessageId == null || parentMessageId === message.id)
+      ) {
+        checkpointIds.set(message.id, nextCheckpointId);
+      }
+    }
+
+    return checkpointIds;
+  }, [messages]);
 
   const handleEditSubmit = useCallback(
     ({
@@ -577,6 +639,7 @@ export function ThreadScreen({
   );
 
   const confirmArchiveState = useOverlayState({});
+  const confirmResetCheckpointState = useOverlayState({});
   const renameState = useOverlayState({});
   const renameInputRef = useRef<HTMLInputElement>(null);
 
@@ -660,6 +723,104 @@ export function ThreadScreen({
     [setActiveBranch, thread.id],
   );
 
+  const handleOpenResetCheckpoint = useCallback(
+    (message: ThreadUIMessage, checkpointId: string) => {
+      setPendingCheckpointReset({ checkpointId, message });
+      setChatError(null);
+      confirmResetCheckpointState.open();
+    },
+    [confirmResetCheckpointState],
+  );
+
+  const handleConfirmResetCheckpoint = useCallback(async () => {
+    if (!pendingCheckpointReset) {
+      return;
+    }
+
+    const { checkpointId, message } = pendingCheckpointReset;
+    const previousRepoContext =
+      utils.repo.getContext.getData(repoContextQueryInput) ?? null;
+
+    setBusyCheckpointId(checkpointId);
+    setChatError(null);
+
+    if (previousRepoContext) {
+      utils.repo.getContext.setData(repoContextQueryInput, {
+        ...previousRepoContext,
+        checkpointAnchorMessageId: message.id,
+      });
+    }
+
+    try {
+      const result = await resetCheckpointMutation.mutateAsync({
+        checkpointId,
+        threadId: thread.id,
+        userMessageId: message.id,
+        workspaceId: workspace.id,
+      });
+
+      utils.repo.getContext.setData(repoContextQueryInput, result.repoContext);
+      await Promise.all([
+        utils.repo.getDiffPanelData.invalidate({
+          mode: "branch",
+          threadId: thread.id,
+          workspaceId: workspace.id,
+        }),
+        utils.repo.getDiffPanelData.invalidate({
+          mode: "staged",
+          threadId: thread.id,
+          workspaceId: workspace.id,
+        }),
+        utils.repo.getDiffPanelData.invalidate({
+          mode: "unstaged",
+          threadId: thread.id,
+          workspaceId: workspace.id,
+        }),
+      ]);
+
+      setEditingMessage(message);
+      sileo.success({
+        description:
+          "The repo was restored and the composer is now editing this message.",
+        title: "Ready to branch from here",
+      });
+
+      confirmResetCheckpointState.close();
+      setPendingCheckpointReset(null);
+    } catch (error) {
+      if (previousRepoContext) {
+        utils.repo.getContext.setData(
+          repoContextQueryInput,
+          previousRepoContext,
+        );
+      }
+      setChatError(getErrorMessage(error, "Unable to reset to this point."));
+    } finally {
+      setBusyCheckpointId(null);
+      await utils.repo.getContext.invalidate(repoContextQueryInput);
+    }
+  }, [
+    chatEngine,
+    confirmResetCheckpointState,
+    pendingCheckpointReset,
+    repoContextQueryInput,
+    resetCheckpointMutation,
+    thread.id,
+    utils.repo.getContext,
+    utils.repo.getDiffPanelData,
+    workspace.id,
+  ]);
+
+  const handleResetCheckpointOpenChange = useCallback(
+    (isOpen: boolean) => {
+      confirmResetCheckpointState.setOpen(isOpen);
+      if (!isOpen) {
+        setPendingCheckpointReset(null);
+      }
+    },
+    [confirmResetCheckpointState],
+  );
+
   const handleStartPlanImplementation = useCallback(() => {
     if (isBusy || startPlanImplementationLockRef.current) {
       return;
@@ -728,6 +889,8 @@ export function ThreadScreen({
   ]);
 
   const supportsSentinelMessageActions = chatEngine === "sentinel";
+  const isBranchSwitchingDisabled =
+    status === "submitted" || status === "streaming";
 
   useEffect(() => {
     if (
@@ -887,9 +1050,8 @@ export function ThreadScreen({
                   onApproveToolWithDecision={handleApproveToolWithDecision}
                   onAnswerPlanQuestions={handleAnswerPlanQuestions}
                   onDenyTool={handleDenyTool}
-                  onEdit={
-                    supportsSentinelMessageActions ? handleEdit : undefined
-                  }
+                  onEdit={handleEdit}
+                  onResetRepoCheckpoint={handleOpenResetCheckpoint}
                   onStartPlanImplementation={
                     !isBusy &&
                     (idx === messages.length - 1 || idx === messages.length - 2)
@@ -905,6 +1067,19 @@ export function ThreadScreen({
                     supportsSentinelMessageActions ? handleRetry : undefined
                   }
                   onSelectBranch={handleSelectBranch}
+                  disableBranchSwitching={isBranchSwitchingDisabled}
+                  repoCheckpointAnchorMessageId={
+                    repoContextQuery.data?.checkpointAnchorMessageId ?? null
+                  }
+                  repoCheckpointBusyId={busyCheckpointId}
+                  repoCheckpointId={
+                    message.role === "user"
+                      ? (userMessageCheckpointIds.get(message.id) ?? null)
+                      : null
+                  }
+                  repoCheckpointPathMatches={
+                    repoContextQuery.data?.checkpointPathMatches ?? true
+                  }
                   workspaceRootPath={workspace.rootPath}
                 />
               ))}
@@ -945,7 +1120,7 @@ export function ThreadScreen({
                 });
               }}
               promptSeed={editingPromptSeed}
-              promptSeedKey={editingMessage?.id}
+              promptSeedKey={editingMessage?.id ?? "__composer-empty__"}
               queuedFollowUps={liveQueuedFollowUps}
               repoThreadId={thread.id}
               showBranchSwitcher
@@ -1043,6 +1218,52 @@ export function ThreadScreen({
                   <>
                     {isPending ? <Spinner color="current" size="sm" /> : null}
                     Archive
+                  </>
+                )}
+              </Button>
+            </AlertDialog.Footer>
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Backdrop>
+
+      <AlertDialog.Backdrop
+        isOpen={confirmResetCheckpointState.isOpen}
+        onOpenChange={handleResetCheckpointOpenChange}
+      >
+        <AlertDialog.Container placement="center" size="sm">
+          <AlertDialog.Dialog className="border-separator w-full border sm:max-w-[460px]">
+            <AlertDialog.CloseTrigger />
+            <AlertDialog.Header>
+              <AlertDialog.Icon status="warning" />
+              <AlertDialog.Heading>Reset to this message</AlertDialog.Heading>
+            </AlertDialog.Header>
+            <AlertDialog.Body>
+              <p className="text-sm text-foreground">
+                Return to this user message and remove the repo changes that
+                came after it?
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                The repo will be restored to the point before the following
+                response, the composer will open this message in edit mode, and
+                later turns will stay available as an alternate branch.
+              </p>
+            </AlertDialog.Body>
+            <AlertDialog.Footer>
+              <Button
+                onPress={() => handleResetCheckpointOpenChange(false)}
+                variant="tertiary"
+              >
+                Cancel
+              </Button>
+              <Button
+                isPending={resetCheckpointMutation.isPending}
+                onPress={handleConfirmResetCheckpoint}
+                variant="danger"
+              >
+                {({ isPending }) => (
+                  <>
+                    {isPending ? <Spinner color="current" size="sm" /> : null}
+                    Reset to here
                   </>
                 )}
               </Button>

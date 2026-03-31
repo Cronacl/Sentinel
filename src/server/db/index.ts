@@ -394,6 +394,48 @@ export function ensureTables(
     sql`CREATE INDEX IF NOT EXISTS "thread_message_thread_created_idx" ON "thread_message" ("thread_id", "created_at")`,
   );
 
+  db.run(sql`CREATE TABLE IF NOT EXISTS "thread_repo_checkpoint" (
+    "id" text PRIMARY KEY NOT NULL,
+    "thread_id" text NOT NULL,
+    "assistant_message_id" text NOT NULL,
+    "parent_checkpoint_id" text,
+    "run_id" text NOT NULL,
+    "effective_project_path" text NOT NULL,
+    "repo_root" text NOT NULL,
+    "branch_at_capture" text,
+    "head_at_capture" text,
+    "changed_paths" text NOT NULL,
+    "before_tree_hash" text,
+    "after_tree_hash" text,
+    "forward_patch" text NOT NULL,
+    "reverse_patch" text NOT NULL,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "thread_repo_checkpoint_assistant_unique" ON "thread_repo_checkpoint" ("thread_id", "assistant_message_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "thread_repo_checkpoint_thread_created_idx" ON "thread_repo_checkpoint" ("thread_id", "created_at")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "thread_repo_checkpoint_parent_idx" ON "thread_repo_checkpoint" ("parent_checkpoint_id")`,
+  );
+  try {
+    db.run(
+      sql`ALTER TABLE "thread_repo_checkpoint" ADD COLUMN "after_tree_hash" text`,
+    );
+  } catch {
+    // column already exists
+  }
+  try {
+    db.run(
+      sql`ALTER TABLE "thread_repo_checkpoint" ADD COLUMN "before_tree_hash" text`,
+    );
+  } catch {
+    // column already exists
+  }
+
   db.run(sql`CREATE TABLE IF NOT EXISTS "thread_follow_up" (
     "id" text PRIMARY KEY NOT NULL,
     "thread_id" text NOT NULL,

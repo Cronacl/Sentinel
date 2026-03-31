@@ -74,6 +74,7 @@ export const threadMessageMetadataSchema = z
       })
       .partial()
       .optional(),
+    repoCheckpointId: z.string().optional(),
     runId: z.string().optional(),
     statusLabel: z.string().nullable().optional(),
     status: z
@@ -470,6 +471,7 @@ export function getThreadMessageSyncToken(message: ThreadUIMessage) {
     metadata?.isActive ? "1" : "0",
     metadata?.errorMessage ?? "",
     metadata?.finishReason ?? "",
+    metadata?.repoCheckpointId ?? "",
     metadata?.revision ?? "",
     metadata?.runId ?? "",
     metadata?.usage?.contextWindow ?? "",

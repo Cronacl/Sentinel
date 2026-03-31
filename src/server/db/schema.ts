@@ -249,6 +249,7 @@ export const threadsRelations = relations(threads, ({ one, many }) => ({
   }),
   followUps: many(threadFollowUps),
   messages: many(threadMessages),
+  repoCheckpoints: many(threadRepoCheckpoints),
   plans: many(threadPlans),
   planQuestions: many(threadPlanQuestions),
 }));
@@ -332,6 +333,61 @@ export const threadMessagesRelations = relations(threadMessages, ({ one }) => ({
     references: [threads.id],
   }),
 }));
+
+export const threadRepoCheckpoints = sqliteTable(
+  "thread_repo_checkpoint",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    threadId: text("thread_id").notNull(),
+    assistantMessageId: text("assistant_message_id").notNull(),
+    parentCheckpointId: text("parent_checkpoint_id"),
+    runId: text("run_id").notNull(),
+    effectiveProjectPath: text("effective_project_path").notNull(),
+    repoRoot: text("repo_root").notNull(),
+    branchAtCapture: text("branch_at_capture"),
+    headAtCapture: text("head_at_capture"),
+    changedPaths: text("changed_paths", { mode: "json" }).notNull(),
+    beforeTreeHash: text("before_tree_hash"),
+    afterTreeHash: text("after_tree_hash"),
+    forwardPatch: text("forward_patch").notNull(),
+    reversePatch: text("reverse_patch").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("thread_repo_checkpoint_assistant_unique").on(
+      table.threadId,
+      table.assistantMessageId,
+    ),
+    index("thread_repo_checkpoint_thread_created_idx").on(
+      table.threadId,
+      table.createdAt,
+    ),
+    index("thread_repo_checkpoint_parent_idx").on(table.parentCheckpointId),
+  ],
+);
+
+export const threadRepoCheckpointsRelations = relations(
+  threadRepoCheckpoints,
+  ({ one }) => ({
+    thread: one(threads, {
+      fields: [threadRepoCheckpoints.threadId],
+      references: [threads.id],
+    }),
+    parent: one(threadRepoCheckpoints, {
+      fields: [threadRepoCheckpoints.parentCheckpointId],
+      references: [threadRepoCheckpoints.id],
+      relationName: "threadRepoCheckpointParent",
+    }),
+  }),
+);
 
 export const threadPlans = sqliteTable(
   "thread_plan",

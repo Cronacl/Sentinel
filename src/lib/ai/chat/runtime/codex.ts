@@ -25,12 +25,23 @@ import { streamContext } from "@/lib/streams";
 
 import * as persist from "../persistence";
 import {
+  beginThreadRepoCheckpointRun,
+  clearThreadRepoCheckpointRun,
+  finalizeThreadRepoCheckpointRun,
+  getThreadCheckpointAnchorMessageId,
+} from "../repo-checkpoints";
+import {
   loadThreadSessionSnapshot,
   serializeThreadStreamEvent,
 } from "../session-server";
 import type { ThreadStreamEvent } from "../session-types";
 import type { ThreadChatRequest } from "../types";
-import { buildActiveThreadMessages, getFirstUserText } from "./transcript";
+import {
+  buildActiveThreadMessages,
+  getFirstUserText,
+  getUserParentMessageId,
+  truncateTranscriptAtMessage,
+} from "./transcript";
 import {
   buildCodexBootstrapTitle,
   getCodexAssistantParentMessageId,
@@ -497,6 +508,9 @@ function buildUserMessage(
     ...request.message,
     metadata: mergeThreadMessageMetadata(request.message.metadata, {
       branchId: request.message.id,
+      ...(request.trigger === "edit-user-message" && request.messageId
+        ? { editedFromMessageId: request.messageId }
+        : {}),
       isActive: true,
       parentMessageId,
       runId,
@@ -1094,6 +1108,7 @@ function emitAssistantMessageUpdate(
   state: CodexMirrorState,
   runId: string,
   status: "pending" | "streaming" | "completed" | "error" | "cancelled",
+  options?: { repoCheckpointId?: string | null },
 ) {
   const message = persist.upsertMessage(state.threadId, {
     id: state.assistantId,
@@ -1102,6 +1117,9 @@ function emitAssistantMessageUpdate(
         requestedModelId: state.requestedModelId ?? undefined,
         responseModelId: state.responseModelId ?? undefined,
       },
+      ...(options?.repoCheckpointId
+        ? { repoCheckpointId: options.repoCheckpointId }
+        : {}),
       runId,
       status,
       usage: state.usage ?? undefined,
@@ -1202,10 +1220,20 @@ async function finalizeCodexRun(input: {
     return;
   }
 
+  const repoCheckpointId =
+    input.messageStatus === "completed" && input.threadStatus === "idle"
+      ? await finalizeThreadRepoCheckpointRun({
+          assistantMessageId: input.state.assistantId,
+          runId: input.runId,
+          threadId: input.state.threadId,
+        })
+      : (await clearThreadRepoCheckpointRun(input.runId), null);
+
   persist.clearActiveStream(input.state.threadId);
   persist.setThreadStatus(input.state.threadId, input.threadStatus);
   persist.updateMessageMetadata(input.state.threadId, input.state.assistantId, {
     errorMessage: input.errorMessage ?? undefined,
+    ...(repoCheckpointId ? { repoCheckpointId } : {}),
     runId: input.runId,
     status: input.messageStatus,
   });
@@ -1225,6 +1253,7 @@ async function finalizeCodexRun(input: {
       : input.messageStatus === "cancelled"
         ? "cancelled"
         : "completed",
+    { repoCheckpointId },
   );
 
   await emitLatestSnapshot(input.runId, input.state.threadId);
@@ -1695,18 +1724,30 @@ export async function runCodexThreadChat(
     return new Response(null, { status: 204 });
   }
 
-  if (request.trigger !== "submit-user-message") {
+  if (
+    request.trigger !== "submit-user-message" &&
+    request.trigger !== "edit-user-message"
+  ) {
     throw new Error(
       `The Codex engine does not support "${request.trigger}" yet.`,
     );
   }
 
   const allRecords = await persist.loadThreadMessages(request.threadId);
-  const transcript = buildActiveThreadMessages(allRecords);
+  const checkpointAnchorMessageId =
+    getThreadCheckpointAnchorMessageId(existingThread);
+  const transcript = truncateTranscriptAtMessage(
+    buildActiveThreadMessages(allRecords),
+    checkpointAnchorMessageId,
+  );
   const threadMode = normalizeThreadMode(
     request.threadMode ?? existingThread?.mode,
   );
-  const userParentMessageId = transcript.at(-1)?.id ?? null;
+  const userParentMessageId = getUserParentMessageId(
+    request,
+    transcript,
+    allRecords,
+  );
 
   const activeControl = findActiveCodexRunForThread(request.threadId);
   if (activeControl?.codexTurnId) {
@@ -1723,6 +1764,11 @@ export async function runCodexThreadChat(
     if (persistedUser) {
       persist.upsertMessage(request.threadId, persistedUser);
       await persist.setActiveMessage(request.threadId, persistedUser.id);
+      if (checkpointAnchorMessageId) {
+        persist.updateThreadRepoState(request.threadId, {
+          checkpointAnchorMessageId: null,
+        });
+      }
     }
 
     await persist.updateThreadChatSettings(request.threadId, {
@@ -1783,6 +1829,11 @@ export async function runCodexThreadChat(
     if (persistedUser) {
       persist.upsertMessage(request.threadId, persistedUser);
       await persist.setActiveMessage(request.threadId, persistedUser.id);
+      if (checkpointAnchorMessageId) {
+        persist.updateThreadRepoState(request.threadId, {
+          checkpointAnchorMessageId: null,
+        });
+      }
     }
 
     const placeholder = persist.upsertMessage(
@@ -1803,6 +1854,11 @@ export async function runCodexThreadChat(
       modelId: request.modelId ?? existingCodexState?.modelId ?? null,
       mode: threadMode,
       reasoningEffort: request.reasoningEffort ?? null,
+    });
+    await beginThreadRepoCheckpointRun({
+      projectPath: workspaceRoot,
+      runId,
+      thread: existingThread,
     });
 
     const threadStartResponse =
@@ -1914,6 +1970,7 @@ export async function runCodexThreadChat(
       { status: 202 },
     );
   } catch (error) {
+    await clearThreadRepoCheckpointRun(runId);
     persist.clearActiveStream(request.threadId);
     persist.setThreadStatus(request.threadId, "idle");
     const control = activeCodexRunControls.get(runId);

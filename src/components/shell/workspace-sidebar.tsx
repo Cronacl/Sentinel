@@ -260,6 +260,7 @@ function ThreadItemTrailing({
   updatedAt?: Date;
 }) {
   const isActive = threadStatus !== "idle";
+  const showStatusIndicator = !alwaysVisible && isActive;
   const hasTimestamp = !alwaysVisible && !isActive && updatedAt != null;
 
   return (
@@ -271,6 +272,11 @@ function ThreadItemTrailing({
       {hasTimestamp ? (
         <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center text-xs text-foreground/40 transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0">
           {formatRelativeTime(updatedAt)}
+        </span>
+      ) : null}
+      {showStatusIndicator ? (
+        <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center text-foreground/60 transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0">
+          <ThreadStatusIndicator status={threadStatus} />
         </span>
       ) : null}
       <ThreadItemActions
@@ -1724,9 +1730,6 @@ export function WorkspaceSidebar() {
         <div className="min-w-0 flex-1">
           <h2 className="text-foreground/45 flex items-center gap-1.5 text-xs font-medium">
             <span>Threads</span>
-            {showSidebarRefreshing ? (
-              <Spinner className="size-3 min-w-3" color="current" size="sm" />
-            ) : null}
           </h2>
         </div>
 

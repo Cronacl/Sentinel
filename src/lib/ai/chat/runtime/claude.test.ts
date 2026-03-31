@@ -7,6 +7,9 @@ const upsertMessage = mock(() => {});
 const setActiveMessage = mock(async () => {});
 const clearActiveStream = mock(() => {});
 const setThreadStatus = mock(() => {});
+const loadThreadMessages = mock(async () => []);
+const updateThreadRepoState = mock(() => {});
+const beginThreadRepoCheckpointRun = mock(async () => {});
 const loadThreadSessionSnapshot = mock(async (threadId: string) => ({
   activeRunId: "run-1",
   chatEngine: "claude",
@@ -29,13 +32,27 @@ mock.module("@anthropic-ai/claude-agent-sdk", () => ({
 mock.module("../persistence", () => ({
   clearActiveStream,
   ensureThread: mock(async () => ({ created: true })),
-  loadThreadMessages: mock(async () => []),
+  loadThreadMessages,
   setActiveMessage,
   setActiveStream: mock(() => {}),
   setThreadStatus,
   updateClaudeThreadState: mock(() => {}),
+  updateThreadRepoState,
   updateThreadChatSettings: mock(async () => {}),
   upsertMessage,
+}));
+
+mock.module("../repo-checkpoints", () => ({
+  beginThreadRepoCheckpointRun,
+  clearThreadRepoCheckpointRun: mock(async () => {}),
+  finalizeThreadRepoCheckpointRun: mock(async () => null),
+  getThreadCheckpointAnchorMessageId: mock(
+    (thread?: {
+      chatEngineState?: {
+        repo?: { checkpointAnchorMessageId?: string | null };
+      };
+    }) => thread?.chatEngineState?.repo?.checkpointAnchorMessageId ?? null,
+  ),
 }));
 
 mock.module("../session-server", () => ({
@@ -127,9 +144,12 @@ describe("runClaudeThreadChat approvals", () => {
   beforeEach(() => {
     capturedClaudeQueryInput = null;
     clearActiveStream.mockClear();
+    beginThreadRepoCheckpointRun.mockClear();
+    loadThreadMessages.mockClear();
     loadThreadSessionSnapshot.mockClear();
     setActiveMessage.mockClear();
     setThreadStatus.mockClear();
+    updateThreadRepoState.mockClear();
     upsertMessage.mockClear();
     if (!(globalThis as any).__sentinelActiveClaudeRunControls) {
       (globalThis as any).__sentinelActiveClaudeRunControls = new Map();
@@ -508,5 +528,94 @@ describe("runClaudeThreadChat approvals", () => {
     ).rejects.toBeInstanceOf(ThreadChatConflictError);
 
     expect(clearActiveStream).not.toHaveBeenCalled();
+  });
+
+  it("supports editing a restored user message and clears the checkpoint anchor", async () => {
+    loadThreadMessages.mockResolvedValueOnce([
+      {
+        createdAt: new Date(1),
+        id: "db-user-1",
+        messageId: "user-1",
+        metadata: {},
+        parts: [{ text: "first", type: "text" }],
+        role: "user",
+        updatedAt: new Date(1),
+      },
+      {
+        createdAt: new Date(2),
+        id: "db-assistant-1",
+        messageId: "assistant-1",
+        metadata: { parentMessageId: "user-1" },
+        parts: [{ text: "first reply", type: "text" }],
+        role: "assistant",
+        updatedAt: new Date(2),
+      },
+      {
+        createdAt: new Date(3),
+        id: "db-user-2",
+        messageId: "user-2",
+        metadata: { parentMessageId: "assistant-1" },
+        parts: [{ text: "second", type: "text" }],
+        role: "user",
+        updatedAt: new Date(3),
+      },
+      {
+        createdAt: new Date(4),
+        id: "db-assistant-2",
+        messageId: "assistant-2",
+        metadata: { parentMessageId: "user-2" },
+        parts: [{ text: "second reply", type: "text" }],
+        role: "assistant",
+        updatedAt: new Date(4),
+      },
+    ]);
+
+    const response = await runClaudeThreadChat(
+      {
+        message: {
+          id: "user-2-edit",
+          metadata: {},
+          parts: [{ text: "revised second", type: "text" }],
+          role: "user",
+        },
+        messageId: "user-2",
+        threadId: "thread-1",
+        trigger: "edit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      {
+        chatEngineState: {
+          claude: {
+            cwd: "/tmp/workspace",
+            modelId: null,
+            permissionMode: "default",
+            sessionId: "session-1",
+          },
+          repo: {
+            checkpointAnchorMessageId: "user-2",
+          },
+        },
+        mode: "chat",
+        status: "idle",
+      } as any,
+    );
+
+    expect(response.status).toBe(202);
+    expect(upsertMessage).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        id: "user-2-edit",
+        metadata: expect.objectContaining({
+          editedFromMessageId: "user-2",
+          parentMessageId: "assistant-1",
+          status: "completed",
+        }),
+        role: "user",
+      }),
+    );
+    expect(updateThreadRepoState).toHaveBeenCalledWith("thread-1", {
+      checkpointAnchorMessageId: null,
+    });
   });
 });

@@ -4,6 +4,7 @@ import {
   ArrowLeft01Icon,
   ArrowReloadHorizontalIcon,
   ArrowRight01Icon,
+  ArrowTurnBackwardIcon,
   PencilEdit02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -33,7 +34,7 @@ import {
   isToolPart,
   type MessagePart,
 } from "./message-parts/types";
-import { Button } from "@heroui/react";
+import { Button, Spinner } from "@heroui/react";
 import type { ChatEngine } from "@/server/db/enums";
 
 const VARIABLE_TOKEN_REGEX = /(\{\{[^{}]+\}\})/g;
@@ -138,9 +139,11 @@ function MessageActionButton({
   label,
   onClick,
   disabled = false,
+  isLoading = false,
 }: {
   icon?: typeof PencilEdit02Icon;
   disabled?: boolean;
+  isLoading?: boolean;
   label: string;
   onClick: () => void;
 }) {
@@ -155,7 +158,9 @@ function MessageActionButton({
       isDisabled={disabled}
       className="h-6 min-h-6 w-6 min-w-6"
     >
-      {icon ? (
+      {isLoading ? (
+        <Spinner className="size-3 min-w-3" color="current" size="sm" />
+      ) : icon ? (
         <HugeiconsIcon
           color="currentColor"
           icon={icon}
@@ -169,9 +174,11 @@ function MessageActionButton({
 }
 
 function BranchSwitcher({
+  disabled = false,
   onSelect,
   options,
 }: {
+  disabled?: boolean;
   onSelect?: (messageId: string) => void;
   options: NonNullable<ThreadMessageMetadata["branchOptions"]>;
 }) {
@@ -189,7 +196,7 @@ function BranchSwitcher({
   return (
     <div className="inline-flex items-center gap-0.5 text-[11px] text-muted">
       <MessageActionButton
-        disabled={!previous}
+        disabled={disabled || !previous}
         icon={ArrowLeft01Icon}
         label="Previous version"
         onClick={() => {
@@ -202,7 +209,7 @@ function BranchSwitcher({
         {activeIndex + 1}/{options.length}
       </span>
       <MessageActionButton
-        disabled={!next}
+        disabled={disabled || !next}
         icon={ArrowRight01Icon}
         label="Next version"
         onClick={() => {
@@ -396,6 +403,7 @@ function AssistantMessage({
   onRegenerate,
   onRetry,
   onSelectBranch,
+  disableBranchSwitching,
   isStreaming,
   message,
 }: {
@@ -416,6 +424,7 @@ function AssistantMessage({
   onRegenerate?: (messageId: string) => void;
   onRetry?: (messageId: string) => void;
   onSelectBranch?: (messageId: string) => void;
+  disableBranchSwitching?: boolean;
   isStreaming: boolean;
   message: ThreadUIMessage;
 }) {
@@ -602,6 +611,7 @@ function AssistantMessage({
             ) : null}
             {!isStreaming && onSelectBranch ? (
               <BranchSwitcher
+                disabled={disableBranchSwitching}
                 onSelect={onSelectBranch}
                 options={branchOptions}
               />
@@ -653,19 +663,31 @@ function ComposerContextChips({
 }
 
 function UserMessage({
-  chatEngine,
   message,
   onEdit,
+  onResetRepoCheckpoint,
   onSelectBranch,
+  disableBranchSwitching,
+  repoCheckpointAnchorMessageId,
+  repoCheckpointBusyId,
+  repoCheckpointId,
+  repoCheckpointPathMatches,
   workspaceRootPath,
 }: {
-  chatEngine?: ChatEngine;
   message: ThreadUIMessage;
   onEdit?: (message: ThreadUIMessage) => void;
+  onResetRepoCheckpoint?: (
+    message: ThreadUIMessage,
+    checkpointId: string,
+  ) => void;
   onSelectBranch?: (messageId: string) => void;
+  disableBranchSwitching?: boolean;
+  repoCheckpointAnchorMessageId?: string | null;
+  repoCheckpointBusyId?: string | null;
+  repoCheckpointId?: string | null;
+  repoCheckpointPathMatches?: boolean;
   workspaceRootPath?: string | null;
 }) {
-  const supportsSentinelMessageActions = chatEngine === "sentinel";
   const fileParts = message.parts.filter(
     (part): part is Extract<MessagePart, { type: "file" }> =>
       part.type === "file",
@@ -680,6 +702,9 @@ function UserMessage({
   const combinedText = textParts.map((part) => part.text).join("\n\n");
   const isCollapsible = shouldCollapseUserMessage(combinedText);
   const [isExpanded, setIsExpanded] = useState(false);
+  const isCheckpointBusy =
+    repoCheckpointId != null && repoCheckpointBusyId === repoCheckpointId;
+  const isCheckpointAnchor = repoCheckpointAnchorMessageId === message.id;
   const shouldRenderComposerContextRow =
     Boolean(composerContext) && textParts.length === 0;
   const handleOpenMentionedPath = useCallback(
@@ -774,14 +799,36 @@ function UserMessage({
         ) : null}
         <div className="flex flex-wrap items-center gap-1 text-muted">
           <CopyButton text={combinedText} title="Copy prompt" />
-          {supportsSentinelMessageActions && onEdit ? (
+          {repoCheckpointId && onResetRepoCheckpoint ? (
+            <>
+              <MessageActionButton
+                disabled={
+                  isCheckpointBusy || repoCheckpointPathMatches === false
+                }
+                icon={ArrowTurnBackwardIcon}
+                isLoading={isCheckpointBusy}
+                label="Reset to here"
+                onClick={() => onResetRepoCheckpoint(message, repoCheckpointId)}
+              />
+              {isCheckpointAnchor ? (
+                <span className="rounded-full bg-default px-1.5 py-0.5 text-[10px] font-medium text-foreground/70">
+                  Restored
+                </span>
+              ) : null}
+            </>
+          ) : null}
+          {onEdit ? (
             <MessageActionButton
               icon={PencilEdit02Icon}
               label="Edit"
               onClick={() => onEdit(message)}
             />
           ) : null}
-          <BranchSwitcher onSelect={onSelectBranch} options={branchOptions} />
+          <BranchSwitcher
+            disabled={disableBranchSwitching}
+            onSelect={onSelectBranch}
+            options={branchOptions}
+          />
         </div>
       </div>
     </div>
@@ -807,8 +854,17 @@ type ChatMessageProps = {
   isStreaming?: boolean;
   onEdit?: (message: ThreadUIMessage) => void;
   onRegenerate?: (messageId: string) => void;
+  onResetRepoCheckpoint?: (
+    message: ThreadUIMessage,
+    checkpointId: string,
+  ) => void;
   onRetry?: (messageId: string) => void;
   onSelectBranch?: (messageId: string) => void;
+  disableBranchSwitching?: boolean;
+  repoCheckpointAnchorMessageId?: string | null;
+  repoCheckpointBusyId?: string | null;
+  repoCheckpointId?: string | null;
+  repoCheckpointPathMatches?: boolean;
   workspaceRootPath?: string | null;
 };
 
@@ -823,17 +879,28 @@ export const ChatMessage = memo(function ChatMessage({
   onStartPlanImplementation,
   onEdit,
   onRegenerate,
+  onResetRepoCheckpoint,
   onRetry,
   onSelectBranch,
+  disableBranchSwitching,
+  repoCheckpointAnchorMessageId,
+  repoCheckpointBusyId,
+  repoCheckpointId,
+  repoCheckpointPathMatches,
   workspaceRootPath,
 }: ChatMessageProps) {
   if (message.role === "user") {
     return (
       <UserMessage
-        chatEngine={chatEngine}
         message={message}
         onEdit={onEdit}
+        onResetRepoCheckpoint={onResetRepoCheckpoint}
         onSelectBranch={onSelectBranch}
+        disableBranchSwitching={disableBranchSwitching}
+        repoCheckpointAnchorMessageId={repoCheckpointAnchorMessageId}
+        repoCheckpointBusyId={repoCheckpointBusyId}
+        repoCheckpointId={repoCheckpointId}
+        repoCheckpointPathMatches={repoCheckpointPathMatches}
         workspaceRootPath={workspaceRootPath}
       />
     );
@@ -852,6 +919,7 @@ export const ChatMessage = memo(function ChatMessage({
       onRegenerate={onRegenerate}
       onRetry={onRetry}
       onSelectBranch={onSelectBranch}
+      disableBranchSwitching={disableBranchSwitching}
     />
   );
 });

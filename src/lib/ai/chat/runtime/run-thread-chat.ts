@@ -54,7 +54,9 @@ import {
   buildModelTranscript,
   getFirstUserText,
   getParentMessageId,
+  getUserParentMessageId,
   injectComposerContextIntoTranscript,
+  truncateTranscriptAtMessage,
 } from "./transcript";
 import {
   getEnabledIntegrations,
@@ -69,11 +71,18 @@ import {
 } from "../tool-targeting";
 import { loadIntegrationTools } from "@/lib/integrations/registry";
 import {
+  beginThreadRepoCheckpointRun,
+  clearThreadRepoCheckpointRun,
+  finalizeThreadRepoCheckpointRun,
+  getThreadCheckpointAnchorMessageId,
+} from "../repo-checkpoints";
+import {
   getMemoryRuntimeState,
   getMcpServerRuntime,
   getSearchProviderRuntime,
   getSearchSettings,
   getThreadRuntimeBootstrap,
+  getWorkspaceRootPath,
   getToolApprovalPolicies,
 } from "./workspace";
 import { refreshThreadContextCompactionCheckpoint } from "./context-compaction-refresh";
@@ -522,12 +531,14 @@ function launchBackgroundContextCompactionWarmup(input: {
 // ---------------------------------------------------------------------------
 
 function createTitleTask(
-  isNewThread: boolean,
+  shouldGenerateTitle: boolean,
   request: ThreadChatRequest,
   baseMessages: ThreadUIMessage[],
   resolvedModel: ResolvedModel,
 ): Promise<string | null> | null {
-  if (!isNewThread || request.trigger !== "submit-user-message") return null;
+  if (!shouldGenerateTitle || request.trigger !== "submit-user-message") {
+    return null;
+  }
 
   const text = getFirstUserText(baseMessages);
   if (!text?.trim()) return null;
@@ -548,7 +559,7 @@ function createTitleTask(
 function persistUserMessage(
   request: ThreadChatRequest,
   transcript: ThreadUIMessage[],
-  targetMessage: PersistedThreadMessageRecord | undefined,
+  allRecords: PersistedThreadMessageRecord[],
   runId?: string,
 ): string | null {
   if (
@@ -559,11 +570,7 @@ function persistUserMessage(
     return null;
   }
 
-  const parentMessageId = resolveUserParentId(
-    request,
-    transcript,
-    targetMessage,
-  );
+  const parentMessageId = resolveUserParentId(request, transcript, allRecords);
 
   const userMsg: ThreadUIMessage = {
     ...request.message,
@@ -614,19 +621,9 @@ function updatePendingAssistantStatusLabel(
 function resolveUserParentId(
   request: ThreadChatRequest,
   transcript: ThreadUIMessage[],
-  targetMessage: PersistedThreadMessageRecord | undefined,
+  allRecords: PersistedThreadMessageRecord[],
 ): string | null {
-  switch (request.trigger) {
-    case "submit-user-message":
-      return transcript.at(-1)?.id ?? targetMessage?.messageId ?? null;
-    case "edit-user-message":
-      return (
-        transcript.find((m) => m.id === request.messageId)?.metadata
-          ?.parentMessageId ?? null
-      );
-    default:
-      return null;
-  }
+  return getUserParentMessageId(request, transcript, allRecords);
 }
 
 // ---------------------------------------------------------------------------
@@ -662,12 +659,12 @@ type BootstrappedThreadRun = {
   assistantId: string;
   baseMessages: ThreadUIMessage[];
   eventChannel: ThreadEventChannel;
-  isNewThread: boolean;
   modelTranscript: ThreadUIMessage[];
   parentId: string | null;
   placeholderMessage: ThreadUIMessage;
   request: ThreadChatRequest;
   runId: string;
+  shouldGenerateTitle: boolean;
   targetMessage: PersistedThreadMessageRecord | undefined;
   timingStartedAt: number;
   threadMode: ReturnType<typeof normalizeThreadMode>;
@@ -709,6 +706,7 @@ async function failThreadRun(
   const message =
     error instanceof Error ? error.message : String(error ?? "Unknown error");
 
+  await clearThreadRepoCheckpointRun(run.runId);
   persist.clearActiveStream(run.request.threadId);
   persist.setThreadStatus(run.request.threadId, "idle");
   await persist.updateMessageMetadata(run.request.threadId, run.assistantId, {
@@ -743,12 +741,16 @@ async function failThreadRun(
 function launchTitleGeneration(
   run: Pick<
     BootstrappedThreadRun,
-    "baseMessages" | "eventChannel" | "isNewThread" | "request" | "runId"
+    | "baseMessages"
+    | "eventChannel"
+    | "request"
+    | "runId"
+    | "shouldGenerateTitle"
   >,
   resolvedModel: ResolvedModel,
 ): Promise<void> | null {
   const titleTask = createTitleTask(
-    run.isNewThread,
+    run.shouldGenerateTitle,
     run.request,
     run.baseMessages,
     resolvedModel,
@@ -1150,6 +1152,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
       onFinish: async ({ responseMessage }) => {
         await closeMcpTools();
         if (!(await streamStillOwnsThread(run.request.threadId, run.runId))) {
+          await clearThreadRepoCheckpointRun(run.runId);
           eventChannel.close();
           activeRunControls.delete(run.runId);
           return;
@@ -1178,6 +1181,19 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           finalAssistantBase && finalAssistant
             ? [...normalizedFinalized.slice(0, -1), finalAssistant]
             : normalizedFinalized;
+        const hasApprovalPending = (
+          responseMessage as ThreadUIMessage
+        ).parts.some(
+          (part) => "state" in part && part.state === "approval-requested",
+        );
+        const repoCheckpointId =
+          !streamErrorMessage && !hasApprovalPending
+            ? await finalizeThreadRepoCheckpointRun({
+                assistantMessageId: assistantId,
+                runId: run.runId,
+                threadId: run.request.threadId,
+              })
+            : (await clearThreadRepoCheckpointRun(run.runId), null);
         const persistedAssistant = persist.upsertMessage(
           run.request.threadId,
           buildPersistedAssistantMessage({
@@ -1185,6 +1201,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
             ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
             finalAssistant,
             placeholder: run.placeholderMessage,
+            repoCheckpointId,
           }),
         );
         eventChannel.emit({
@@ -1213,12 +1230,6 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
         }
 
         persist.clearActiveStream(run.request.threadId);
-
-        const hasApprovalPending = (
-          responseMessage as ThreadUIMessage
-        ).parts.some(
-          (part) => "state" in part && part.state === "approval-requested",
-        );
         persist.setThreadStatus(
           run.request.threadId,
           hasApprovalPending ? "awaiting_approval" : "idle",
@@ -1269,6 +1280,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           },
         )) {
           if (!(await streamStillOwnsThread(run.request.threadId, run.runId))) {
+            await clearThreadRepoCheckpointRun(run.runId);
             eventChannel.close();
             return;
           }
@@ -1358,11 +1370,18 @@ async function runParsedThreadChat(
   }
 
   const allRecords = await persist.loadThreadMessages(request.threadId);
-  const transcript = buildActiveThreadMessages(allRecords);
+  const checkpointAnchorMessageId =
+    request.trigger === "submit-user-message" ||
+    request.trigger === "edit-user-message"
+      ? getThreadCheckpointAnchorMessageId(existingThread)
+      : null;
+  const transcript = truncateTranscriptAtMessage(
+    buildActiveThreadMessages(allRecords),
+    checkpointAnchorMessageId,
+  );
   const threadMode = normalizeThreadMode(
     request.threadMode ?? existingThread?.mode,
   );
-  const isNewThread = !existingThread;
   const targetMessage = request.messageId
     ? allRecords.find((m) => m.messageId === request.messageId)
     : undefined;
@@ -1377,6 +1396,12 @@ async function runParsedThreadChat(
 
   const fallbackTitle =
     getFirstUserText(baseMessages)?.slice(0, 100) ?? "New thread";
+  const shouldGenerateTitle =
+    request.trigger === "submit-user-message" &&
+    allRecords.length === 0 &&
+    (!existingThread ||
+      !existingThread.title ||
+      existingThread.title === "New thread");
   await persist.ensureThread(
     request.threadId,
     request.userId,
@@ -1422,11 +1447,16 @@ async function runParsedThreadChat(
     const persistedUserId = persistUserMessage(
       request,
       transcript,
-      targetMessage,
+      allRecords,
       runId,
     );
     if (persistedUserId) {
       await persist.setActiveMessage(request.threadId, persistedUserId);
+      if (checkpointAnchorMessageId) {
+        persist.updateThreadRepoState(request.threadId, {
+          checkpointAnchorMessageId: null,
+        });
+      }
     }
     const placeholderMessage = persist.upsertMessage(request.threadId, {
       ...placeholder,
@@ -1444,6 +1474,16 @@ async function runParsedThreadChat(
     });
     persist.setActiveStream(request.threadId, runId);
     persist.setThreadStatus(request.threadId, "streaming");
+    const repoCheckpointProjectPath = await getWorkspaceRootPath(
+      request.workspaceId,
+      request.userId,
+      request.threadId,
+    );
+    await beginThreadRepoCheckpointRun({
+      projectPath: repoCheckpointProjectPath,
+      runId,
+      thread: existingThread,
+    });
     const initialSnapshot = await loadThreadSessionSnapshot(request.threadId);
     if (initialSnapshot) {
       eventChannel.emit({
@@ -1468,12 +1508,12 @@ async function runParsedThreadChat(
       assistantId,
       baseMessages,
       eventChannel,
-      isNewThread,
       modelTranscript,
       parentId,
       placeholderMessage,
       request,
       runId,
+      shouldGenerateTitle,
       targetMessage,
       timingStartedAt,
       threadMode,
@@ -1487,6 +1527,9 @@ async function runParsedThreadChat(
       { status: 202 },
     );
   } catch (error) {
+    if (activeRunId) {
+      await clearThreadRepoCheckpointRun(activeRunId);
+    }
     persist.clearActiveStream(request.threadId);
     persist.setThreadStatus(request.threadId, "idle");
     if (activeRunId && activeRunControls.has(activeRunId)) {

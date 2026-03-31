@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  applyThreadStatusCacheUpdate,
   applyThreadSettingsCacheUpdate,
   applyThreadTitleCacheUpdate,
 } from "./cache";
@@ -203,4 +204,26 @@ it("updates thread title across thread and list caches", () => {
     utils.threads.list.getData({ organizeBy: "workspace", sortBy: "updated" })
       ?.groups[0]?.threads[0]?.title,
   ).toBe("Renamed thread");
+});
+
+it("updates thread status across list caches", () => {
+  const utils = createUtils();
+
+  applyThreadStatusCacheUpdate({
+    status: "streaming",
+    threadId: "thread-1",
+    utils: utils as never,
+    workspaceId: "workspace-1",
+  });
+
+  expect(
+    utils.threads.list.getData({
+      organizeBy: "chronological",
+      sortBy: "updated",
+    })?.items[0]?.status,
+  ).toBe("streaming");
+  expect(
+    utils.threads.list.getData({ organizeBy: "workspace", sortBy: "updated" })
+      ?.groups[0]?.threads[0]?.status,
+  ).toBe("streaming");
 });

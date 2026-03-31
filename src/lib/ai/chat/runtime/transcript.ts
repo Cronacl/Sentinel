@@ -21,6 +21,18 @@ export function getFirstUserText(messages: ThreadUIMessage[]): string | null {
   );
 }
 
+export function truncateTranscriptAtMessage(
+  transcript: ThreadUIMessage[],
+  messageId: string | null | undefined,
+) {
+  if (!messageId) {
+    return transcript;
+  }
+
+  const index = transcript.findIndex((message) => message.id === messageId);
+  return index === -1 ? transcript : transcript.slice(0, index + 1);
+}
+
 export function buildModelTranscript(
   request: ThreadChatRequest,
   transcript: ThreadUIMessage[],
@@ -56,11 +68,11 @@ export function buildModelTranscript(
             branchId: request.message.id,
             editedFromMessageId: request.messageId,
             isActive: true,
-            parentMessageId:
-              sourceTranscript[idx - 1]?.id ??
-              getMessageRecordById(allRecords, request.messageId ?? "")
-                ?.parentMessageId ??
-              null,
+            parentMessageId: getUserParentMessageId(
+              request,
+              sourceTranscript,
+              allRecords,
+            ),
             status: "completed",
           }),
         },
@@ -105,6 +117,27 @@ export function getParentMessageId(
       return (
         getMessageRecordById(allRecords, request.messageId ?? "")
           ?.parentMessageId ?? null
+      );
+    default:
+      return null;
+  }
+}
+
+export function getUserParentMessageId(
+  request: ThreadChatRequest,
+  transcript: ThreadUIMessage[],
+  allRecords: PersistedThreadMessageRecord[],
+): string | null {
+  switch (request.trigger) {
+    case "submit-user-message":
+      return transcript.at(-1)?.id ?? getLatestVisibleMessageId(allRecords);
+    case "edit-user-message":
+      return (
+        transcript.find((message) => message.id === request.messageId)?.metadata
+          ?.parentMessageId ??
+        getMessageRecordById(allRecords, request.messageId ?? "")
+          ?.parentMessageId ??
+        null
       );
     default:
       return null;
