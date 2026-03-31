@@ -123,6 +123,16 @@ export function closeRepoDiffSidebarState() {
   emit();
 }
 
+export function closeRepoDiffSidebarForThreadChange(threadId: string) {
+  if (state.kind !== "thread" || state.threadId !== threadId) {
+    return;
+  }
+
+  state = DEFAULT_STATE;
+  syncSnapshot();
+  emit();
+}
+
 export function updateRepoDiffSidebarPrefs(
   patch: Partial<RepoDiffSidebarPrefs>,
 ) {

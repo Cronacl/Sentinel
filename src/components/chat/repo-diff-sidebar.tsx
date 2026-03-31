@@ -1,7 +1,6 @@
 "use client";
 
-import { parsePatchFiles, processFile } from "@pierre/diffs";
-import { FileDiff, type FileDiffMetadata } from "@pierre/diffs/react";
+import { FileDiff } from "@pierre/diffs/react";
 import {
   ArrowLeftRightIcon,
   ArrowDown01Icon,
@@ -25,7 +24,14 @@ import {
   Spinner,
   Tooltip,
 } from "@heroui/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { sileo } from "sileo";
 
 import { useRightSidebar } from "@/components/shell/shell-context";
@@ -36,6 +42,14 @@ import { useResolvedTheme } from "@/lib/syntax/use-resolved-theme";
 import { api } from "@/trpc/react";
 
 import { formatRepoActionErrorMessage } from "./thread-repo-actions.helpers";
+import {
+  buildRenderableDiffCacheKey,
+  getInitialRenderableFileCount,
+  getNextRenderableFileCount,
+  parseRenderableDiffFile,
+  type RenderableDiffFile,
+  type RepoDiffSourceFile,
+} from "./repo-diff-sidebar.helpers";
 import {
   closeRepoDiffSidebarState,
   updateRepoDiffSidebarPrefs,
@@ -102,68 +116,7 @@ const DIFF_THEME_NAMES = {
   dark: "pierre-dark",
   light: "pierre-light",
 } as const;
-const EMPTY_RENDERABLE_FILES: RenderableDiffFile[] = [];
-
-type RenderableDiffFile = {
-  additions: number;
-  deletions: number;
-  fileDiff: FileDiffMetadata | null;
-  firstChangedLine: number | null;
-  isUntracked: boolean;
-  parseError: string | null;
-  patch: string;
-  path: string;
-};
-
-function buildRenderableFiles(
-  mode: RepoDiffSidebarMode,
-  files: Array<{
-    additions: number;
-    deletions: number;
-    firstChangedLine: number | null;
-    isUntracked: boolean;
-    newContents?: string;
-    oldContents?: string;
-    patch: string;
-    path: string;
-  }>,
-) {
-  return files.map((file) => {
-    try {
-      const fileDiff =
-        file.oldContents !== undefined && file.newContents !== undefined
-          ? (processFile(file.patch, {
-              newFile: {
-                contents: file.newContents,
-                name: file.path,
-              },
-              oldFile: {
-                contents: file.oldContents,
-                name: file.path,
-              },
-              throwOnError: true,
-            }) ?? null)
-          : (parsePatchFiles(
-              file.patch,
-              `repo-diff:${mode}:${file.path}`,
-            ).flatMap((entry) => entry.files)[0] ?? null);
-
-      return {
-        ...file,
-        fileDiff,
-        parseError: fileDiff
-          ? null
-          : "Unsupported diff format. Showing raw patch.",
-      };
-    } catch {
-      return {
-        ...file,
-        fileDiff: null,
-        parseError: "Failed to parse patch. Showing raw patch.",
-      };
-    }
-  });
-}
+const EMPTY_SOURCE_FILES: RepoDiffSourceFile[] = [];
 
 function getPreferredEditorTarget(
   openTargets: DesktopOpenTarget[],
@@ -184,6 +137,48 @@ function getPreferredEditorTarget(
 
 function resolveDiffThemeName(theme: "light" | "dark") {
   return theme === "dark" ? DIFF_THEME_NAMES.dark : DIFF_THEME_NAMES.light;
+}
+
+function DiffRevealTrigger({
+  isActive,
+  onReveal,
+}: {
+  isActive: boolean;
+  onReveal: () => void;
+}) {
+  const triggerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+
+    const element = triggerRef.current;
+    if (!element) {
+      return;
+    }
+
+    if (typeof IntersectionObserver === "undefined") {
+      onReveal();
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          onReveal();
+        }
+      },
+      {
+        rootMargin: "320px 0px",
+      },
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [isActive, onReveal]);
+
+  return <div aria-hidden className="h-px w-full" ref={triggerRef} />;
 }
 
 function IconActionButton({
@@ -307,6 +302,22 @@ function FileHeaderActions({
   );
 }
 
+function getCachedRenderableFile(args: {
+  cache: Map<string, RenderableDiffFile>;
+  file: RepoDiffSourceFile;
+  mode: RepoDiffSidebarMode;
+}) {
+  const cacheKey = buildRenderableDiffCacheKey(args.mode, args.file);
+  const cached = args.cache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const parsed = parseRenderableDiffFile(args.mode, args.file);
+  args.cache.set(cacheKey, parsed);
+  return parsed;
+}
+
 export function RepoDiffSidebar() {
   const desktop = getDesktopApi();
   const isDesktop = isDesktopRuntime();
@@ -316,6 +327,8 @@ export function RepoDiffSidebar() {
   const sidebarState = useRepoDiffSidebarState();
   const [openTargets, setOpenTargets] = useState<DesktopOpenTarget[]>([]);
   const [isLoadingTargets, setIsLoadingTargets] = useState(false);
+  const [visibleFileCount, setVisibleFileCount] = useState(0);
+  const renderableFileCacheRef = useRef(new Map<string, RenderableDiffFile>());
 
   const threadId =
     sidebarState.kind === "thread" ? sidebarState.threadId : null;
@@ -485,13 +498,30 @@ export function RepoDiffSidebar() {
 
   const currentMode = prefs?.mode ?? "unstaged";
   const diff = diffPanelQuery.data?.diff;
-  const renderableFiles = useMemo(
-    () =>
-      diff
-        ? buildRenderableFiles(currentMode, diff.files)
-        : EMPTY_RENDERABLE_FILES,
-    [currentMode, diff],
+  const diffFiles = diff?.files ?? EMPTY_SOURCE_FILES;
+
+  useEffect(() => {
+    setVisibleFileCount(getInitialRenderableFileCount(diffFiles.length));
+  }, [currentMode, diffFiles]);
+
+  const effectiveVisibleFileCount =
+    visibleFileCount === 0 && diffFiles.length > 0
+      ? getInitialRenderableFileCount(diffFiles.length)
+      : visibleFileCount;
+
+  const queuePrefsUpdate = useCallback(
+    (patch: Parameters<typeof updateRepoDiffSidebarPrefs>[0]) => {
+      startTransition(() => {
+        updateRepoDiffSidebarPrefs(patch);
+      });
+    },
+    [],
   );
+  const revealMoreFiles = useCallback(() => {
+    setVisibleFileCount((current) =>
+      getNextRenderableFileCount(current, diffFiles.length),
+    );
+  }, [diffFiles.length]);
 
   if (sidebarState.kind !== "thread" || !prefs || !threadId || !workspaceId) {
     return (
@@ -532,7 +562,7 @@ export function RepoDiffSidebar() {
           <Dropdown.Popover className="min-w-[220px]" placement="bottom start">
             <Dropdown.Menu
               onAction={(key) => {
-                updateRepoDiffSidebarPrefs({
+                queuePrefsUpdate({
                   mode: key as RepoDiffSidebarMode,
                 });
               }}
@@ -597,7 +627,7 @@ export function RepoDiffSidebar() {
             icon={prefs.layout === "split" ? ArrowLeftRightIcon : SplitIcon}
             isActive={prefs.layout === "split"}
             onPress={() =>
-              updateRepoDiffSidebarPrefs({
+              queuePrefsUpdate({
                 layout: prefs.layout === "unified" ? "split" : "unified",
               })
             }
@@ -609,7 +639,7 @@ export function RepoDiffSidebar() {
             icon={TextWrapIcon}
             isActive={prefs.wordWrap}
             onPress={() =>
-              updateRepoDiffSidebarPrefs({
+              queuePrefsUpdate({
                 wordWrap: !prefs.wordWrap,
               })
             }
@@ -621,7 +651,7 @@ export function RepoDiffSidebar() {
             icon={GitCompareIcon}
             isActive={prefs.wordDiffs}
             onPress={() =>
-              updateRepoDiffSidebarPrefs({
+              queuePrefsUpdate({
                 wordDiffs: !prefs.wordDiffs,
               })
             }
@@ -633,7 +663,7 @@ export function RepoDiffSidebar() {
             icon={prefs.expandAll ? CollapseIcon : UnfoldMoreIcon}
             isActive={prefs.expandAll}
             onPress={() =>
-              updateRepoDiffSidebarPrefs({
+              queuePrefsUpdate({
                 expandAll: !prefs.expandAll,
               })
             }
@@ -666,30 +696,98 @@ export function RepoDiffSidebar() {
               {disabledReason}
             </div>
           </div>
-        ) : renderableFiles.length === 0 ? (
+        ) : diffFiles.length === 0 ? (
           <div className="flex h-full items-center justify-center px-6 text-sm text-muted">
             No files in this diff view.
           </div>
         ) : (
           <div className="h-full min-h-0 overflow-auto px-2 pb-2">
-            {renderableFiles.map((file) => {
+            {diffFiles.map((file, index) => {
               const canStage = currentMode === "unstaged";
               const canUnstage = currentMode === "staged";
               const canRevert = currentMode !== "branch";
+              const shouldRenderDiff = index < effectiveVisibleFileCount;
+              const parsedFile = shouldRenderDiff
+                ? getCachedRenderableFile({
+                    cache: renderableFileCacheRef.current,
+                    file,
+                    mode: currentMode,
+                  })
+                : null;
 
               return (
                 <div
                   className="mb-2 overflow-hidden rounded-xl border border-border/40 bg-background/40 first:mt-2 last:mb-0"
+                  data-diff-mounted={
+                    shouldRenderDiff && parsedFile?.fileDiff ? "true" : "false"
+                  }
                   key={`${currentMode}:${file.path}`}
                 >
-                  {file.fileDiff ? (
+                  <div className="flex items-center justify-between gap-3 border-b border-border/20 px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate font-mono text-[11px] text-foreground/75">
+                        {file.path}
+                      </p>
+                      <div className="mt-1 flex items-center gap-2 text-[11px] text-muted">
+                        <span>
+                          +{file.additions} -{file.deletions}
+                        </span>
+                        {parsedFile?.parseError ? (
+                          <span>{parsedFile.parseError}</span>
+                        ) : shouldRenderDiff ? null : (
+                          <span>
+                            Diff body deferred for smoother scrolling.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <FileHeaderActions
+                      canOpenInEditor={canOpenInEditor}
+                      canRevert={canRevert}
+                      canStage={canStage}
+                      canUnstage={canUnstage}
+                      isBusy={isMutating}
+                      onOpenInEditor={() =>
+                        void handleOpenInEditor(
+                          file.path,
+                          file.firstChangedLine,
+                        )
+                      }
+                      onRevert={() => {
+                        if (currentMode === "branch") return;
+                        void revertMutation.mutateAsync({
+                          mode: currentMode,
+                          paths: [file.path],
+                          threadId,
+                          workspaceId,
+                        });
+                      }}
+                      onStage={() =>
+                        void stageMutation.mutateAsync({
+                          mode: currentMode,
+                          paths: [file.path],
+                          threadId,
+                          workspaceId,
+                        })
+                      }
+                      onUnstage={() =>
+                        void unstageMutation.mutateAsync({
+                          mode: currentMode,
+                          paths: [file.path],
+                          threadId,
+                          workspaceId,
+                        })
+                      }
+                    />
+                  </div>
+                  {parsedFile?.fileDiff ? (
                     <FileDiff
-                      disableWorkerPool
-                      fileDiff={file.fileDiff}
+                      fileDiff={parsedFile.fileDiff}
                       options={{
                         collapsedContextThreshold: 8,
                         diffStyle:
                           prefs.layout === "split" ? "split" : "unified",
+                        disableFileHeader: true,
                         expandUnchanged: prefs.expandAll,
                         lineDiffType,
                         overflow: prefs.wordWrap ? "wrap" : "scroll",
@@ -697,104 +795,20 @@ export function RepoDiffSidebar() {
                         themeType: resolvedTheme,
                         unsafeCSS: DIFF_PANEL_UNSAFE_CSS,
                       }}
-                      renderHeaderMetadata={() => (
-                        <FileHeaderActions
-                          canOpenInEditor={canOpenInEditor}
-                          canRevert={canRevert}
-                          canStage={canStage}
-                          canUnstage={canUnstage}
-                          isBusy={isMutating}
-                          onOpenInEditor={() =>
-                            void handleOpenInEditor(
-                              file.path,
-                              file.firstChangedLine,
-                            )
-                          }
-                          onRevert={() => {
-                            if (currentMode === "branch") return;
-                            void revertMutation.mutateAsync({
-                              mode: currentMode,
-                              paths: [file.path],
-                              threadId,
-                              workspaceId,
-                            });
-                          }}
-                          onStage={() =>
-                            void stageMutation.mutateAsync({
-                              mode: currentMode,
-                              paths: [file.path],
-                              threadId,
-                              workspaceId,
-                            })
-                          }
-                          onUnstage={() =>
-                            void unstageMutation.mutateAsync({
-                              mode: currentMode,
-                              paths: [file.path],
-                              threadId,
-                              workspaceId,
-                            })
-                          }
-                        />
-                      )}
                     />
+                  ) : shouldRenderDiff ? (
+                    <pre className="overflow-auto rounded-b-lg bg-background/70 p-3 font-mono text-[11px] leading-relaxed text-foreground/80 whitespace-pre-wrap break-words">
+                      {file.patch}
+                    </pre>
                   ) : (
-                    <div className="space-y-2 p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate font-mono text-[11px] text-foreground/75">
-                            {file.path}
-                          </p>
-                          {file.parseError ? (
-                            <p className="mt-1 text-[11px] text-muted">
-                              {file.parseError}
-                            </p>
-                          ) : null}
-                        </div>
-                        <FileHeaderActions
-                          canOpenInEditor={canOpenInEditor}
-                          canRevert={currentMode !== "branch"}
-                          canStage={currentMode === "unstaged"}
-                          canUnstage={currentMode === "staged"}
-                          isBusy={isMutating}
-                          onOpenInEditor={() =>
-                            void handleOpenInEditor(
-                              file.path,
-                              file.firstChangedLine,
-                            )
-                          }
-                          onRevert={() => {
-                            if (currentMode === "branch") return;
-                            void revertMutation.mutateAsync({
-                              mode: currentMode,
-                              paths: [file.path],
-                              threadId,
-                              workspaceId,
-                            });
-                          }}
-                          onStage={() =>
-                            void stageMutation.mutateAsync({
-                              mode: currentMode,
-                              paths: [file.path],
-                              threadId,
-                              workspaceId,
-                            })
-                          }
-                          onUnstage={() =>
-                            void unstageMutation.mutateAsync({
-                              mode: currentMode,
-                              paths: [file.path],
-                              threadId,
-                              workspaceId,
-                            })
-                          }
-                        />
-                      </div>
-                      <pre className="overflow-auto rounded-lg border border-border/30 bg-background/70 p-3 font-mono text-[11px] leading-relaxed text-foreground/80 whitespace-pre-wrap break-words">
-                        {file.patch}
-                      </pre>
+                    <div className="rounded-b-lg bg-background/60 px-3 py-4 text-[11px] text-muted">
+                      Diff body deferred for smoother scrolling.
                     </div>
                   )}
+                  <DiffRevealTrigger
+                    isActive={index === effectiveVisibleFileCount}
+                    onReveal={revealMoreFiles}
+                  />
                 </div>
               );
             })}

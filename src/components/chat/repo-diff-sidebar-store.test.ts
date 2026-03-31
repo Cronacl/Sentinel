@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 
 import {
+  closeRepoDiffSidebarForThreadChange,
   closeRepoDiffSidebarState,
   getRepoDiffSidebarState,
   setRepoDiffSidebarState,
@@ -70,5 +71,46 @@ describe("repo diff sidebar store", () => {
     const secondSnapshot = getRepoDiffSidebarState();
 
     expect(secondSnapshot).toBe(firstSnapshot);
+  });
+
+  it("closes the active panel when its thread is being replaced", () => {
+    setRepoDiffSidebarState({
+      threadId: "thread-1",
+      workspaceId: "workspace-1",
+    });
+
+    closeRepoDiffSidebarForThreadChange("thread-1");
+
+    expect(getRepoDiffSidebarState()).toEqual({
+      kind: null,
+      sourceKey: null,
+      threadId: null,
+      workspaceId: null,
+    });
+  });
+
+  it("keeps prefs for a thread after thread-change cleanup", () => {
+    setRepoDiffSidebarState({
+      threadId: "thread-1",
+      workspaceId: "workspace-1",
+    });
+    updateRepoDiffSidebarPrefs({
+      expandAll: true,
+      layout: "split",
+    });
+
+    closeRepoDiffSidebarForThreadChange("thread-1");
+    setRepoDiffSidebarState({
+      threadId: "thread-1",
+      workspaceId: "workspace-1",
+    });
+
+    expect(getRepoDiffSidebarState()).toMatchObject({
+      kind: "thread",
+      prefs: {
+        expandAll: true,
+        layout: "split",
+      },
+    });
   });
 });
