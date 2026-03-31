@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, mock } from "bun:test";
 import { __internal, executeWebSearch } from "./websearch";
 
 const originalFetch = globalThis.fetch;
+const originalDateNow = Date.now;
 
 const runtime = {
   providers: {
@@ -38,6 +39,7 @@ const runtime = {
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  Date.now = originalDateNow;
   mock.restore();
 });
 
@@ -183,6 +185,8 @@ describe("executeWebSearch", () => {
   });
 
   it("supports SearXNG with pagination, normalization, and deduped ranking", async () => {
+    Date.now = () => new Date("2026-03-20T12:00:00.000Z").valueOf();
+
     const fetchImpl = mock(async (input: string | URL | Request) => {
       const url = new URL(String(input));
 
