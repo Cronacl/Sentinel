@@ -60,6 +60,12 @@ async function waitForRevision({
   throw new Error("Timed out waiting for skill snapshot revision to change.");
 }
 
+async function settleWatcherSubscriptions() {
+  await new Promise((resolve) =>
+    setTimeout(resolve, __internal.WATCH_DEBOUNCE_MS * 2),
+  );
+}
+
 describe("skills", () => {
   let homeDirectory: string;
   let originalHome: string | undefined;
@@ -200,6 +206,7 @@ describe("skills", () => {
 
   it("updates watched snapshots when skills are added, edited, and deleted", async () => {
     const initialSnapshot = await getSkillSnapshot({ workspaceRoot });
+    await settleWatcherSubscriptions();
 
     await writeSkill({
       baseDirectory: workspaceRoot,
@@ -241,6 +248,7 @@ describe("skills", () => {
 
   it("detects a newly created skills container via parent-directory watching", async () => {
     const initialSnapshot = await getSkillSnapshot({ workspaceRoot });
+    await settleWatcherSubscriptions();
 
     await writeSkill({
       baseDirectory: workspaceRoot,
