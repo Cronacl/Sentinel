@@ -212,6 +212,8 @@ type ActiveClaudeRunControl = {
   sessionId: string;
   state: ClaudeMirrorState;
   threadId: string;
+  userId: string;
+  workspaceId: string;
 };
 
 declare global {
@@ -845,6 +847,58 @@ async function emitThreadSnapshot(
   }
 }
 
+async function drainQueuedClaudeFollowUp(
+  request: Pick<ThreadChatRequest, "threadId" | "userId" | "workspaceId">,
+) {
+  const thread = await persist.loadThread(request.threadId);
+
+  if (!thread) {
+    return;
+  }
+
+  if (thread.activeStreamId || thread.status === "streaming") {
+    return;
+  }
+
+  if (thread.status === "awaiting_approval") {
+    return;
+  }
+
+  persist.resetProcessingThreadFollowUps(request.threadId);
+  const nextFollowUp = persist.claimNextThreadFollowUp(request.threadId);
+
+  if (!nextFollowUp) {
+    return;
+  }
+
+  try {
+    await runClaudeThreadChat(
+      {
+        message: {
+          id: nextFollowUp.id,
+          metadata: {},
+          parts: nextFollowUp.parts,
+          role: "user",
+        },
+        modelId: nextFollowUp.modelId,
+        ...(nextFollowUp.reasoningEffort
+          ? { reasoningEffort: nextFollowUp.reasoningEffort }
+          : {}),
+        threadId: request.threadId,
+        threadMode: nextFollowUp.threadMode,
+        trigger: "submit-user-message",
+        userId: request.userId,
+        workspaceId: request.workspaceId,
+      },
+      thread,
+    );
+    persist.deleteThreadFollowUp(request.threadId, nextFollowUp.id);
+  } catch (error) {
+    persist.requeueThreadFollowUp(request.threadId, nextFollowUp.id);
+    throw error;
+  }
+}
+
 async function applyClaudePromptResponse(
   control: ActiveClaudeRunControl,
   response: ClaudePromptResponse,
@@ -1200,6 +1254,21 @@ async function finishClaudeRun(
   control.inputQueue.close();
   control.query.close();
   activeClaudeRunControls.delete(control.runId);
+
+  if (input.threadStatus === "idle" && input.status !== "error") {
+    try {
+      await drainQueuedClaudeFollowUp({
+        threadId: control.threadId,
+        userId: control.userId,
+        workspaceId: control.workspaceId,
+      });
+    } catch (error) {
+      log.error("claude_follow_up_drain_failed", {
+        error,
+        threadId: control.threadId,
+      });
+    }
+  }
 }
 
 async function consumeClaudeQuery(control: ActiveClaudeRunControl) {
@@ -1312,6 +1381,16 @@ export async function stopClaudeThreadRun(
     if (claudeState) {
       persist.updateClaudeThreadState(request.threadId, claudeState);
     }
+
+    try {
+      await drainQueuedClaudeFollowUp(request);
+    } catch (error) {
+      log.error("claude_follow_up_drain_failed", {
+        error,
+        threadId: request.threadId,
+      });
+    }
+
     return new Response(null, { status: 204 });
   }
 
@@ -1572,6 +1651,8 @@ export async function runClaudeThreadChat(
       sessionId,
       state: mirror,
       threadId: request.threadId,
+      userId: request.userId,
+      workspaceId: request.workspaceId,
     };
 
     activeClaudeRunControls.set(runId, control);

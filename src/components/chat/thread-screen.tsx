@@ -396,10 +396,9 @@ export function ThreadScreen({
         text,
         threadMode: threadMode ?? threadSelectionState.mode,
       });
-      await utils.threads.get.invalidate({ threadId: thread.id });
       void utils.threads.list.invalidate();
     },
-    [queueFollowUp, thread.id, threadSelectionState.mode, utils],
+    [queueFollowUp, threadSelectionState.mode, utils],
   );
 
   const handleSteerFollowUp = useCallback(
@@ -430,10 +429,9 @@ export function ThreadScreen({
         text,
         threadMode: threadMode ?? threadSelectionState.mode,
       });
-      await utils.threads.get.invalidate({ threadId: thread.id });
       void utils.threads.list.invalidate();
     },
-    [steerFollowUp, thread.id, threadSelectionState.mode, utils],
+    [steerFollowUp, threadSelectionState.mode, utils],
   );
 
   const handleApproveTool = useCallback(

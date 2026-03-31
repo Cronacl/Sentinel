@@ -99,6 +99,10 @@ type SessionStore = {
     listener: (snapshot: ThreadSessionSnapshot) => void,
   ): () => void;
   applyLocalMessages(messages: ThreadUIMessage[]): void;
+  applyLocalQueuedFollowUp(
+    followUp: QueuedFollowUpSummary,
+    position: "front" | "tail",
+  ): void;
   beginAction(): void;
   disconnect(): void;
   endAction(): void;
@@ -106,6 +110,7 @@ type SessionStore = {
   getState(): ThreadSessionState;
   hydrate(snapshot: ThreadSessionSnapshot): void;
   markClientTiming(phase: ClientTimingPhase): void;
+  removeLocalQueuedFollowUp(followUpId: string): void;
   refreshSnapshot(options?: { allowMissing?: boolean }): Promise<void>;
   setRequestError(errorMessage: string): void;
   setConnectionState(
@@ -248,6 +253,51 @@ function normalizeQueuedFollowUps(
         ? followUp.createdAt
         : new Date(followUp.createdAt),
   }));
+}
+
+function extractQueuedFollowUpText(message: ThreadUIMessage) {
+  return (
+    message.parts.find(
+      (
+        part,
+      ): part is Extract<ThreadUIMessage["parts"][number], { type: "text" }> =>
+        part.type === "text" && typeof part.text === "string",
+    )?.text ?? ""
+  ).trim();
+}
+
+function summarizeLocalQueuedFollowUp(input: {
+  message: ThreadUIMessage;
+  modelId: string;
+  reasoningEffort?: ReasoningEffort | null;
+  threadMode?: ThreadMode;
+}): QueuedFollowUpSummary {
+  const attachmentCount = input.message.parts.filter(
+    (part) => part.type === "file",
+  ).length;
+
+  return {
+    attachmentCount,
+    createdAt: new Date(),
+    hasFiles: attachmentCount > 0,
+    id: input.message.id,
+    modelId: input.modelId,
+    reasoningEffort: input.reasoningEffort ?? null,
+    text: extractQueuedFollowUpText(input.message),
+    threadMode: input.threadMode ?? "chat",
+  };
+}
+
+function insertQueuedFollowUp(
+  queuedFollowUps: QueuedFollowUpSummary[],
+  followUp: QueuedFollowUpSummary,
+  position: "front" | "tail",
+) {
+  const deduped = queuedFollowUps.filter(
+    (queuedFollowUp) => queuedFollowUp.id !== followUp.id,
+  );
+
+  return position === "front" ? [followUp, ...deduped] : [...deduped, followUp];
 }
 
 function normalizeSnapshot(
@@ -888,6 +938,17 @@ function createSessionStore(
         messages: normalizeThreadUIMessages(messages),
       }));
     },
+    applyLocalQueuedFollowUp(followUp, position) {
+      setState((current) => ({
+        ...current,
+        lastSyncedAt: Date.now(),
+        queuedFollowUps: insertQueuedFollowUp(
+          current.queuedFollowUps,
+          normalizeQueuedFollowUps([followUp])[0]!,
+          position,
+        ),
+      }));
+    },
     beginAction() {
       setState((current) => ({
         ...current,
@@ -927,6 +988,15 @@ function createSessionStore(
       ensureConnected();
     },
     markClientTiming,
+    removeLocalQueuedFollowUp(followUpId) {
+      setState((current) => ({
+        ...current,
+        lastSyncedAt: Date.now(),
+        queuedFollowUps: current.queuedFollowUps.filter(
+          (followUp) => followUp.id !== followUpId,
+        ),
+      }));
+    },
     async refreshSnapshot(options) {
       const snapshot = await fetchThreadSessionSnapshot(threadId, options);
       if (!snapshot) {
@@ -1191,18 +1261,34 @@ export function useThreadChat({
       text,
       threadMode,
     }: SendThreadMessageInput) => {
-      await runAction({
-        engine,
-        id: threadId,
-        message: createUserThreadMessage({ composerContext, files, text }),
-        modelId,
-        ...(reasoningEffort ? { reasoningEffort } : {}),
-        ...(threadMode ? { threadMode } : {}),
-        trigger: "queue-follow-up",
-        workspaceId: workspaceIdRef.current,
-      });
+      const message = createUserThreadMessage({ composerContext, files, text });
+      store.applyLocalQueuedFollowUp(
+        summarizeLocalQueuedFollowUp({
+          message,
+          modelId,
+          reasoningEffort,
+          threadMode,
+        }),
+        "tail",
+      );
+
+      try {
+        await runAction({
+          engine,
+          id: threadId,
+          message,
+          modelId,
+          ...(reasoningEffort ? { reasoningEffort } : {}),
+          ...(threadMode ? { threadMode } : {}),
+          trigger: "queue-follow-up",
+          workspaceId: workspaceIdRef.current,
+        });
+      } catch (error) {
+        store.removeLocalQueuedFollowUp(message.id);
+        throw error;
+      }
     },
-    [runAction, threadId],
+    [runAction, store, threadId],
   );
 
   const steerFollowUp = useCallback(
@@ -1215,18 +1301,34 @@ export function useThreadChat({
       text,
       threadMode,
     }: SendThreadMessageInput) => {
-      await runAction({
-        engine,
-        id: threadId,
-        message: createUserThreadMessage({ composerContext, files, text }),
-        modelId,
-        ...(reasoningEffort ? { reasoningEffort } : {}),
-        ...(threadMode ? { threadMode } : {}),
-        trigger: "steer-follow-up",
-        workspaceId: workspaceIdRef.current,
-      });
+      const message = createUserThreadMessage({ composerContext, files, text });
+      store.applyLocalQueuedFollowUp(
+        summarizeLocalQueuedFollowUp({
+          message,
+          modelId,
+          reasoningEffort,
+          threadMode,
+        }),
+        "front",
+      );
+
+      try {
+        await runAction({
+          engine,
+          id: threadId,
+          message,
+          modelId,
+          ...(reasoningEffort ? { reasoningEffort } : {}),
+          ...(threadMode ? { threadMode } : {}),
+          trigger: "steer-follow-up",
+          workspaceId: workspaceIdRef.current,
+        });
+      } catch (error) {
+        store.removeLocalQueuedFollowUp(message.id);
+        throw error;
+      }
     },
-    [runAction, threadId],
+    [runAction, store, threadId],
   );
 
   const regenerateMessage = useCallback(
