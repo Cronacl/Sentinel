@@ -13,6 +13,7 @@ import {
   useState,
 } from "react";
 
+import { closeBrowserSidebarState } from "@/components/browser/browser-sidebar-store";
 import { closeRepoDiffSidebarState } from "@/components/chat/repo-diff-sidebar-store";
 import { useMediaQuery } from "@/hooks/use-media-query";
 
@@ -76,6 +77,7 @@ export function ShellProvider({ children }: PropsWithChildren) {
       size: rightSidebarSize,
     });
 
+    closeBrowserSidebarState();
     closeRepoDiffSidebarState();
     setRightSidebarOpen(nextState.open);
     setRightSidebarContent(nextState.content);

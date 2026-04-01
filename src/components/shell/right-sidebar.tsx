@@ -7,12 +7,14 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { useShell } from "./shell-context";
 
 const SIDEBAR_WIDTHS = {
+  browser: 620,
   narrow: 380,
   wide: 560,
 } as const;
 const DRAWER_BREAKPOINT = "(max-width: 1024px)";
 const DESKTOP_MIN_WIDTH = 320;
 const DESKTOP_MAX_WIDTH = 920;
+const DESKTOP_BROWSER_MAX_WIDTH = 1180;
 
 export function RightSidebar() {
   const {
@@ -24,6 +26,7 @@ export function RightSidebar() {
   } = useShell();
   const isDrawerMode = useMediaQuery(DRAWER_BREAKPOINT);
   const widthBySizeRef = useRef<Record<keyof typeof SIDEBAR_WIDTHS, number>>({
+    browser: SIDEBAR_WIDTHS.browser,
     narrow: SIDEBAR_WIDTHS.narrow,
     wide: SIDEBAR_WIDTHS.wide,
   });
@@ -33,20 +36,28 @@ export function RightSidebar() {
   const [isResizing, setIsResizing] = useState(false);
 
   const getMinDesktopWidth = useCallback(() => {
-    if (rightSidebarPanelId === "repo-diff") {
-      return 420;
-    }
+    if (rightSidebarPanelId === "browser") return 420;
+    if (rightSidebarPanelId === "repo-diff") return 420;
 
     return DESKTOP_MIN_WIDTH;
   }, [rightSidebarPanelId]);
 
   const getMaxDesktopWidth = useCallback(() => {
     if (typeof window === "undefined") {
-      return DESKTOP_MAX_WIDTH;
+      return rightSidebarPanelId === "browser"
+        ? DESKTOP_BROWSER_MAX_WIDTH
+        : DESKTOP_MAX_WIDTH;
+    }
+
+    if (rightSidebarPanelId === "browser") {
+      return Math.min(
+        DESKTOP_BROWSER_MAX_WIDTH,
+        Math.floor(window.innerWidth * 0.82),
+      );
     }
 
     return Math.min(DESKTOP_MAX_WIDTH, Math.floor(window.innerWidth * 0.72));
-  }, []);
+  }, [rightSidebarPanelId]);
 
   const clampDesktopWidth = useCallback(
     (value: number) =>
@@ -155,7 +166,9 @@ export function RightSidebar() {
           }}
         >
           <div className="flex h-full flex-col">
-            <div className="min-h-0 flex-1">{rightSidebarContent}</div>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {rightSidebarContent}
+            </div>
           </div>
         </aside>
       </>
@@ -179,7 +192,9 @@ export function RightSidebar() {
         <div className="mx-auto h-full w-px bg-border/40" />
       </div>
       <div className="flex h-full flex-col" style={{ width: sidebarWidth }}>
-        <div className="min-h-0 flex-1">{rightSidebarContent}</div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {rightSidebarContent}
+        </div>
       </div>
     </aside>
   );

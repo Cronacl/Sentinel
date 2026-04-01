@@ -65,8 +65,7 @@ const SIDEBAR_SECTION_INSET = "px-2";
 const SIDEBAR_ITEM_INSET = "px-2.5";
 const SIDEBAR_ITEM_ROW = "rounded-xl px-2.5 py-1.5 transition-colors";
 
-const WORKSPACE_TOOLTIP_CLASSNAME =
-  "max-w-[320px] rounded-2xl border border-border/60 bg-overlay px-4 py-3 text-sm shadow-overlay";
+const WORKSPACE_TOOLTIP_CLASSNAME = "max-w-[320px]";
 
 function toCurrentWorkspace(
   workspace:

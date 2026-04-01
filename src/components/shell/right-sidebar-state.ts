@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
-export type RightSidebarSize = "narrow" | "wide";
-export type RightSidebarPanelId = "repo-diff" | "repo-pr" | null;
+export type RightSidebarSize = "browser" | "narrow" | "wide";
+export type RightSidebarPanelId = "browser" | "repo-diff" | "repo-pr" | null;
 
 export type RightSidebarState = {
   content: ReactNode | null;
