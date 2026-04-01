@@ -394,6 +394,18 @@ async function applyThemeToPopupGuest(guestContents, theme) {
   }
 }
 
+function configureBrowserGuestContents(guestContents, theme) {
+  void applyThemeToPopupGuest(guestContents, theme);
+
+  guestContents.setWindowOpenHandler(({ url }) => {
+    if (isExternalUrl(url)) {
+      createBrowserPopup(url);
+    }
+
+    return { action: "deny" };
+  });
+}
+
 function getPopupHtml(targetUrl, appOrigin, theme, platform) {
   const escapedUrl = escapeHtml(targetUrl);
   const escapedAppOrigin = escapeHtml(appOrigin);
@@ -547,7 +559,7 @@ function createBrowserPopup(url) {
   });
 
   popup.webContents.on("did-attach-webview", (_event, guestContents) => {
-    void applyThemeToPopupGuest(guestContents, theme);
+    configureBrowserGuestContents(guestContents, theme);
   });
 
   void popup.loadURL(
@@ -607,6 +619,7 @@ function createWindow() {
       nodeIntegration: false,
       preload: path.join(__dirname, "..", "preload", "index.mjs"),
       sandbox: false,
+      webviewTag: true,
     },
     width: 1440,
     ...getBrowserWindowChromeOptions(resolvedTheme),
@@ -634,12 +647,20 @@ function createWindow() {
     },
   );
 
+  mainWindow.webContents.on("did-attach-webview", (_event, guestContents) => {
+    configureBrowserGuestContents(guestContents, resolvedTheme);
+  });
+
   mainWindow.webContents.on(
     "did-fail-load",
-    async (_event, errorCode, errorDescription, validatedURL) => {
+    async (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
       console.error(
         `[electron] failed to load ${validatedURL}: ${errorCode} ${errorDescription}`,
       );
+
+      if (!isMainFrame || errorCode === -3) {
+        return;
+      }
 
       await mainWindow?.loadURL(
         buildInlineHtml({

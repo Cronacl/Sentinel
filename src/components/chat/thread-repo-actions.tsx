@@ -31,6 +31,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sileo } from "sileo";
 
+import { BrowserToggleButton } from "@/components/browser/browser-toggle-button";
 import {
   OpenTargetGlyph,
   isCustomOpenTargetGlyph,
@@ -847,6 +848,7 @@ export function ThreadRepoActions({
     return (
       <div className="flex items-center gap-2">
         <TerminalToggleButton cwd={workspaceRootPath} />
+        <BrowserToggleButton />
         <Button
           isDisabled
           size="sm"
@@ -864,6 +866,7 @@ export function ThreadRepoActions({
     return (
       <div className="flex items-center gap-2">
         <TerminalToggleButton cwd={launchPath} />
+        <BrowserToggleButton />
         <Button
           isDisabled={initMutation.isPending}
           isPending={initMutation.isPending}
@@ -952,6 +955,7 @@ export function ThreadRepoActions({
     <>
       <div className="flex items-center gap-2">
         <TerminalToggleButton cwd={launchPath} />
+        <BrowserToggleButton />
 
         <ButtonGroup size="sm" variant="tertiary">
           <Button
