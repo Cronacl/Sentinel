@@ -7,6 +7,7 @@ import {
   Dropdown,
   Form,
   Input,
+  Kbd,
   Label,
   Modal,
   ScrollShadow,
@@ -29,6 +30,7 @@ import {
   PencilEdit02Icon,
   PinIcon,
   PinOffIcon,
+  Search01Icon,
   Settings01Icon,
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
@@ -40,6 +42,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sileo } from "sileo";
 
 import { getErrorMessage } from "@/lib/errors";
+import { getDesktopApi } from "@/lib/desktop/client";
 import type { RepoLastPullRequest } from "@/lib/ai/chat/engines/types";
 import {
   applyThreadTitleCacheUpdate,
@@ -51,6 +54,9 @@ import {
   pickWorkspaceDirectory,
 } from "@/lib/workspaces/picker";
 import { api, type RouterOutputs } from "@/trpc/react";
+
+import { SidebarCommandPalette } from "./sidebar-command-palette";
+import { getCommandPaletteShortcutLabel } from "./sidebar-command-palette.helpers";
 
 type OrganizeBy = "chronological" | "workspace";
 type SortBy = "created" | "updated";
@@ -1121,6 +1127,9 @@ function PreferenceMenuItem({
 }
 
 export function WorkspaceSidebar() {
+  const desktop = getDesktopApi();
+  const platform = desktop?.app.platform ?? null;
+  const commandShortcutLabel = getCommandPaletteShortcutLabel(platform);
   const pathname = usePathname();
   const router = useRouter();
   const utils = api.useUtils();
@@ -1132,6 +1141,7 @@ export function WorkspaceSidebar() {
   const [deleteWorkspaceId, setDeleteWorkspaceId] = useState<string | null>(
     null,
   );
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [organizeBy, setOrganizeBy] = useState<OrganizeBy>(
     () => cachedPreferences?.organizeBy ?? "workspace",
@@ -1271,6 +1281,41 @@ export function WorkspaceSidebar() {
         new Date(b.pinnedAt!).getTime() - new Date(a.pinnedAt!).getTime(),
     );
   }, [groups, items, organizeBy]);
+
+  const commandPaletteRecentThreads = useMemo(() => {
+    const recent = new Map<
+      string,
+      {
+        id: string;
+        pinnedAt: Date | null;
+        status: ThreadStatusValue;
+        summary?: string | null;
+        title: string;
+        updatedAt: Date;
+        workspace: { id: string; name: string };
+      }
+    >();
+
+    for (const group of groups) {
+      for (const thread of group.threads) {
+        recent.set(thread.id, {
+          ...thread,
+          workspace: { id: group.workspace.id, name: group.workspace.name },
+        });
+      }
+    }
+
+    for (const item of items) {
+      recent.set(item.id, {
+        ...item,
+        workspace: { id: item.workspace.id, name: item.workspace.name },
+      });
+    }
+
+    return [...recent.values()].sort(
+      (left, right) => right.updatedAt.getTime() - left.updatedAt.getTime(),
+    );
+  }, [groups, items]);
 
   const togglePin = api.threads.togglePin.useMutation({
     onMutate: async ({ pinned, threadId }) => {
@@ -1516,6 +1561,25 @@ export function WorkspaceSidebar() {
       }
     })();
   }, [createWorkspace]);
+
+  const handleStartNewThread = useCallback(() => {
+    window.dispatchEvent(new Event("sentinel:new-thread"));
+    if (pathname !== "/") {
+      router.push("/");
+    }
+  }, [pathname, router]);
+
+  const handleOpenAutomations = useCallback(() => {
+    router.push("/automations");
+  }, [router]);
+
+  const handleOpenSkills = useCallback(() => {
+    router.push("/skills");
+  }, [router]);
+
+  const handleOpenSettings = useCallback(() => {
+    router.push("/settings");
+  }, [router]);
 
   const renameWorkspace = api.workspaces.update.useMutation({
     onSuccess: (workspace) => {
@@ -2082,6 +2146,63 @@ export function WorkspaceSidebar() {
     void archiveWorkspace.mutate({ workspaceId: deleteTargetWorkspace.id });
   }, [archiveWorkspace, deleteTargetWorkspace]);
 
+  const commandPaletteActions = useMemo(
+    () => [
+      {
+        icon: PencilEdit02Icon,
+        id: "new-thread",
+        keywords: ["create", "compose", "chat"],
+        label: "New thread",
+        onSelect: handleStartNewThread,
+        shortcut: platform === "darwin" ? "⌘N" : "Ctrl N",
+        subtitle: "Start a fresh conversation",
+      },
+      {
+        icon: FolderAddIcon,
+        id: "create-workspace",
+        keywords: ["project", "folder", "workspace"],
+        label: "Create workspace",
+        onSelect: handleCreateWorkspace,
+        shortcut: platform === "darwin" ? "⌘O" : "Ctrl O",
+        subtitle: "Pick a project directory and add it to Sentinel",
+      },
+      {
+        icon: Clock01Icon,
+        id: "open-automations",
+        keywords: ["scheduled", "tasks", "automation"],
+        label: "Automations",
+        onSelect: handleOpenAutomations,
+        shortcut: platform === "darwin" ? "⌘A" : "Ctrl A",
+        subtitle: "Jump to recurring tasks and run history",
+      },
+      {
+        icon: AiIdeaIcon,
+        id: "open-skills",
+        keywords: ["agents", "skills", "capabilities"],
+        label: "Skills",
+        onSelect: handleOpenSkills,
+        shortcut: platform === "darwin" ? "⌘K" : "Ctrl K",
+        subtitle: "Browse installed skills and add new ones",
+      },
+      {
+        icon: Settings01Icon,
+        id: "open-settings",
+        keywords: ["preferences", "models", "appearance"],
+        label: "Settings",
+        onSelect: handleOpenSettings,
+        shortcut: platform === "darwin" ? "⌘," : "Ctrl ,",
+        subtitle: "Open Sentinel preferences",
+      },
+    ],
+    [
+      handleCreateWorkspace,
+      handleOpenAutomations,
+      handleOpenSettings,
+      handleOpenSkills,
+      handleStartNewThread,
+    ],
+  );
+
   const isEmpty =
     organizeBy === "workspace" ? groups.length === 0 : items.length === 0;
   const showSidebarLoading = threads.isPending || preferences.isPending;
@@ -2092,7 +2213,47 @@ export function WorkspaceSidebar() {
     <div className="flex h-full flex-col select-none">
       <div className={`shrink-0 ${SIDEBAR_SECTION_INSET} pt-1 pb-3`}>
         <nav className="flex flex-col gap-1">
-          {PRIMARY_NAV.map((item) => {
+          <Button
+            className={`justify-start rounded-xl ${SIDEBAR_ITEM_INSET} ${
+              pathname === "/"
+                ? "bg-default text-foreground"
+                : "text-foreground hover:text-foreground"
+            }`}
+            fullWidth
+            onPress={handleStartNewThread}
+            size="sm"
+            variant="ghost"
+          >
+            <HugeiconsIcon
+              color="currentColor"
+              icon={PencilEdit02Icon}
+              size={16}
+              strokeWidth={1.5}
+            />
+            New thread
+          </Button>
+
+          <Button
+            className={`justify-start rounded-xl ${SIDEBAR_ITEM_INSET} text-foreground hover:text-foreground`}
+            fullWidth
+            onPress={() => setIsCommandPaletteOpen(true)}
+            size="sm"
+            variant="ghost"
+          >
+            <HugeiconsIcon
+              color="currentColor"
+              icon={Search01Icon}
+              size={16}
+              strokeWidth={1.5}
+            />
+            <span className="truncate">Search</span>
+            <span className="flex-1" />
+            <Kbd className="h-5 rounded-md border-none bg-default px-1.5 text-[10px] font-medium text-foreground/55 shadow-none">
+              {commandShortcutLabel}
+            </Kbd>
+          </Button>
+
+          {PRIMARY_NAV.slice(1).map((item) => {
             const isActive =
               item.href === "/"
                 ? pathname === "/"
@@ -2108,14 +2269,7 @@ export function WorkspaceSidebar() {
                 fullWidth
                 key={item.href}
                 onPress={() => {
-                  if (item.href === "/") {
-                    window.dispatchEvent(new Event("sentinel:new-thread"));
-                    if (pathname !== "/") {
-                      router.push("/");
-                    }
-                  } else {
-                    router.push(item.href);
-                  }
+                  router.push(item.href);
                 }}
                 size="sm"
                 variant="ghost"
@@ -2320,7 +2474,7 @@ export function WorkspaceSidebar() {
         <Button
           className={`text-foreground hover:text-foreground justify-start rounded-xl ${SIDEBAR_ITEM_INSET}`}
           fullWidth
-          onPress={() => router.push("/settings")}
+          onPress={handleOpenSettings}
           size="sm"
           variant="ghost"
         >
@@ -2333,6 +2487,15 @@ export function WorkspaceSidebar() {
           Settings
         </Button>
       </div>
+
+      <SidebarCommandPalette
+        actions={commandPaletteActions}
+        onOpenChange={setIsCommandPaletteOpen}
+        onSelectThread={handlePressThread}
+        open={isCommandPaletteOpen}
+        recentThreads={commandPaletteRecentThreads}
+        selectedThreadId={selectedThreadId}
+      />
 
       <Modal.Root state={threadSwitchState}>
         <Modal.Backdrop>

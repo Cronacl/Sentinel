@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, eq, isNull, like } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 
 import {
   threadArchiveSchema,
@@ -34,6 +34,10 @@ import {
   getOwnedWorkspaceOrThrow,
   getThreadListSettings,
 } from "./workspace-thread-helpers";
+import {
+  escapeThreadSearchLikePattern,
+  sortThreadSearchResults,
+} from "./thread-search";
 
 const threadSelect = {
   archivedAt: true,
@@ -253,10 +257,16 @@ export const threadsRouter = createTRPCRouter({
   search: protectedProcedure
     .input(threadSearchSchema)
     .query(async ({ ctx, input }) => {
-      const allThreads = await ctx.db.query.threads.findMany({
+      const normalizedQuery = input.query.trim().toLowerCase();
+      const queryPattern = `%${escapeThreadSearchLikePattern(normalizedQuery)}%`;
+      const matchedThreads = await ctx.db.query.threads.findMany({
         where: and(
           isNull(threads.archivedAt),
           eq(threads.userId, ctx.session.user.id),
+          sql`(
+            lower(${threads.title}) like ${queryPattern} escape '\\'
+            or lower(coalesce(${threads.summary}, '')) like ${queryPattern} escape '\\'
+          )`,
           ...(input.workspaceId
             ? [eq(threads.workspaceId, input.workspaceId)]
             : []),
@@ -268,14 +278,11 @@ export const threadsRouter = createTRPCRouter({
             columns: workspaceSelect,
           },
         },
-        limit: 50,
       });
 
-      const query = input.query.toLowerCase();
-      return allThreads.filter(
-        (t) =>
-          t.title.toLowerCase().includes(query) ||
-          (t.summary && t.summary.toLowerCase().includes(query)),
+      return sortThreadSearchResults(matchedThreads, normalizedQuery).slice(
+        0,
+        50,
       );
     }),
 
