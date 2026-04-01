@@ -717,12 +717,7 @@ function NavButton({
           strokeWidth={1.6}
         />
       </Button>
-      <Tooltip.Content
-        className="rounded-xl border border-border/60 bg-overlay px-2 py-1 text-xs shadow-overlay"
-        offset={10}
-      >
-        {ariaLabel}
-      </Tooltip.Content>
+      <Tooltip.Content offset={10}>{ariaLabel}</Tooltip.Content>
     </Tooltip.Root>
   );
 }
