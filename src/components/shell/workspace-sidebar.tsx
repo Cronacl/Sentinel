@@ -12,6 +12,7 @@ import {
   ScrollShadow,
   Spinner,
   TextField,
+  Tooltip,
   useOverlayState,
 } from "@heroui/react";
 import {
@@ -38,14 +39,17 @@ import { usePathname, useRouter } from "next/navigation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sileo } from "sileo";
 
-import { CreateWorkspaceModal } from "@/components/workspaces/create-workspace-modal";
-import type { RepoLastPullRequest } from "@/lib/ai/chat/engines/types";
 import { getErrorMessage } from "@/lib/errors";
+import type { RepoLastPullRequest } from "@/lib/ai/chat/engines/types";
 import {
   applyThreadTitleCacheUpdate,
   applyOptimisticThreadPinUpdate,
   restoreOptimisticThreadPinUpdate,
 } from "@/lib/threads/cache";
+import {
+  deriveWorkspaceName,
+  pickWorkspaceDirectory,
+} from "@/lib/workspaces/picker";
 import { api, type RouterOutputs } from "@/trpc/react";
 
 type OrganizeBy = "chronological" | "workspace";
@@ -56,6 +60,13 @@ const PRIMARY_NAV = [
   { href: "/automations", icon: Clock01Icon, label: "Automations" },
   { href: "/skills", icon: AiIdeaIcon, label: "Skills" },
 ] as const;
+
+const SIDEBAR_SECTION_INSET = "px-2";
+const SIDEBAR_ITEM_INSET = "px-2.5";
+const SIDEBAR_ITEM_ROW = "rounded-xl px-2.5 py-1.5 transition-colors";
+
+const WORKSPACE_TOOLTIP_CLASSNAME =
+  "max-w-[320px] rounded-2xl border border-border/60 bg-overlay px-4 py-3 text-sm shadow-overlay";
 
 function toCurrentWorkspace(
   workspace:
@@ -502,13 +513,13 @@ const PinnedThreadsList = memo(function PinnedThreadsList({
   if (threads.length === 0) return null;
 
   return (
-    <div className="px-4 pt-2">
+    <div className={`${SIDEBAR_SECTION_INSET} pt-2`}>
       <div className="flex flex-col gap-0.5">
         {threads.map((thread) => {
           const isActive = selectedThreadId === thread.id;
           return (
             <div
-              className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-sm transition-colors ${
+              className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 text-sm ${SIDEBAR_ITEM_ROW} ${
                 isActive
                   ? "bg-default text-foreground"
                   : "text-foreground hover:text-foreground"
@@ -665,7 +676,7 @@ const ThreadRow = memo(function ThreadRow({
 
   return (
     <div
-      className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 rounded-xl px-2 py-1 text-xs transition-colors ${
+      className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 text-xs ${SIDEBAR_ITEM_ROW} ${
         isActive
           ? "bg-default text-foreground"
           : "text-foreground hover:text-foreground"
@@ -787,6 +798,46 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
   const visibleThreads = allThreads.slice(0, THREADS_PER_PAGE);
   const overflowThreads = allThreads.slice(THREADS_PER_PAGE);
 
+  const workspaceButton = (
+    <Button
+      className="text-foreground/50 hover:bg-default/60 hover:text-foreground justify-start rounded-xl pl-2.5 pr-10"
+      fullWidth
+      onPress={() => {
+        onPressWorkspace(group.workspace.id);
+        onToggleWorkspace(group.workspace.id);
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
+      }}
+      size="sm"
+      variant="ghost"
+    >
+      <div className="flex w-full min-w-0 items-center gap-2">
+        <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+          <HugeiconsIcon
+            className="transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0"
+            color="currentColor"
+            icon={Folder03Icon}
+            size={18}
+            strokeWidth={1.5}
+          />
+          <HugeiconsIcon
+            className={`absolute transition-all duration-150 ${
+              isExpanded ? "rotate-0" : "-rotate-90"
+            } opacity-0 group-hover:opacity-100 group-focus-within:opacity-100`}
+            color="currentColor"
+            icon={ArrowDown01Icon}
+            size={16}
+            strokeWidth={1.8}
+          />
+        </span>
+        <span className="truncate text-sm font-normal">
+          {group.workspace.name}
+        </span>
+      </div>
+    </Button>
+  );
+
   useEffect(() => {
     if (!isExpanded) {
       setShowOverflowThreads(false);
@@ -796,43 +847,23 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
   return (
     <section>
       <div className="group relative">
-        <Button
-          className="text-foreground/50 hover:bg-default/60 hover:text-foreground justify-start rounded-xl pr-10"
-          fullWidth
-          onPress={() => {
-            onPressWorkspace(group.workspace.id);
-            onToggleWorkspace(group.workspace.id);
-            if (document.activeElement instanceof HTMLElement) {
-              document.activeElement.blur();
-            }
-          }}
-          size="sm"
-          variant="ghost"
-        >
-          <div className="flex w-full min-w-0 items-center gap-2">
-            <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
-              <HugeiconsIcon
-                className="transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0"
-                color="currentColor"
-                icon={Folder03Icon}
-                size={18}
-                strokeWidth={1.5}
-              />
-              <HugeiconsIcon
-                className={`absolute transition-all duration-150 ${
-                  isExpanded ? "rotate-0" : "-rotate-90"
-                } opacity-0 group-hover:opacity-100 group-focus-within:opacity-100`}
-                color="currentColor"
-                icon={ArrowDown01Icon}
-                size={16}
-                strokeWidth={1.8}
-              />
-            </span>
-            <span className="truncate text-sm font-normal">
-              {group.workspace.name}
-            </span>
-          </div>
-        </Button>
+        {group.workspace.rootPath ? (
+          <Tooltip.Root delay={450}>
+            <Tooltip.Trigger>{workspaceButton}</Tooltip.Trigger>
+            <Tooltip.Content
+              className={WORKSPACE_TOOLTIP_CLASSNAME}
+              offset={12}
+              placement="right"
+            >
+              <p className="text-xs font-medium text-muted">Linked folder</p>
+              <p className="mt-1 break-all font-mono text-xs text-foreground">
+                {group.workspace.rootPath}
+              </p>
+            </Tooltip.Content>
+          </Tooltip.Root>
+        ) : (
+          workspaceButton
+        )}
         <WorkspaceItemActions
           onArchive={() => onArchiveWorkspace(group.workspace.id)}
           onRename={() => onRenameWorkspace(group.workspace.id)}
@@ -862,7 +893,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
               {overflowThreads.length > 0 ? (
                 <>
                   <button
-                    className="flex w-full items-center gap-1 px-2 py-1.5 text-left text-sm text-foreground/40 transition-colors hover:text-foreground"
+                    className={`flex w-full items-center gap-1 text-left text-sm text-foreground/40 hover:text-foreground ${SIDEBAR_ITEM_INSET} py-1.5 transition-colors`}
                     onClick={() =>
                       setShowOverflowThreads((current) => !current)
                     }
@@ -943,7 +974,7 @@ const ThreadList = memo(function ThreadList({
   onWarmThread: WarmThreadHandler;
 }) {
   return (
-    <ScrollShadow className="max-h-full px-1 py-1 pb-4" orientation="vertical">
+    <ScrollShadow className="max-h-full px-2 py-1 pb-4" orientation="vertical">
       <div className="flex flex-col gap-1">
         {groups.map((group) => (
           <WorkspaceThreadSection
@@ -989,7 +1020,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
   const overflowItems = items.slice(THREADS_PER_PAGE);
 
   return (
-    <ScrollShadow className="max-h-full px-1.5 py-1" orientation="vertical">
+    <ScrollShadow className="max-h-full px-2 py-1" orientation="vertical">
       <div className="flex flex-col gap-1">
         {visibleItems.map((item) => (
           <ThreadRow
@@ -1008,7 +1039,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
         {overflowItems.length > 0 ? (
           <>
             <button
-              className="flex w-full items-center gap-1 px-3 py-1.5 text-left text-sm text-foreground/40 transition-colors hover:text-foreground"
+              className={`flex w-full items-center gap-1 text-left text-sm text-foreground/40 hover:text-foreground ${SIDEBAR_ITEM_INSET} py-1.5 transition-colors`}
               onClick={() => setShowOverflowThreads((current) => !current)}
               type="button"
             >
@@ -1095,7 +1126,6 @@ export function WorkspaceSidebar() {
   const router = useRouter();
   const utils = api.useUtils();
   const cachedPreferences = utils.workspaces.getPreferences.getData();
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [renameWorkspaceId, setRenameWorkspaceId] = useState<string | null>(
     null,
   );
@@ -1465,6 +1495,28 @@ export function WorkspaceSidebar() {
       void utils.repo.listWorkspaceStatuses.invalidate();
     },
   });
+
+  const handleCreateWorkspace = useCallback(() => {
+    void (async () => {
+      try {
+        const directory = await pickWorkspaceDirectory();
+
+        if (!directory) {
+          return;
+        }
+
+        await createWorkspace.mutateAsync({
+          name: deriveWorkspaceName(directory),
+          rootPath: directory.path,
+        });
+      } catch (error) {
+        sileo.error({
+          description: getErrorMessage(error, "Unable to add that project."),
+          title: "Project creation failed",
+        });
+      }
+    })();
+  }, [createWorkspace]);
 
   const renameWorkspace = api.workspaces.update.useMutation({
     onSuccess: (workspace) => {
@@ -2038,8 +2090,8 @@ export function WorkspaceSidebar() {
     !showSidebarLoading && (threads.isFetching || preferences.isFetching);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="shrink-0 px-1 pt-1 pb-3">
+    <div className="flex h-full flex-col select-none">
+      <div className={`shrink-0 ${SIDEBAR_SECTION_INSET} pt-1 pb-3`}>
         <nav className="flex flex-col gap-1">
           {PRIMARY_NAV.map((item) => {
             const isActive =
@@ -2049,7 +2101,7 @@ export function WorkspaceSidebar() {
 
             return (
               <Button
-                className={`justify-start rounded-lg ${
+                className={`justify-start rounded-xl ${SIDEBAR_ITEM_INSET} ${
                   isActive
                     ? "bg-default text-foreground"
                     : "text-foreground hover:text-foreground"
@@ -2082,7 +2134,9 @@ export function WorkspaceSidebar() {
         </nav>
       </div>
 
-      <div className="flex shrink-0 items-center gap-1 px-4">
+      <div
+        className={`flex shrink-0 items-center gap-1 ${SIDEBAR_SECTION_INSET}`}
+      >
         <div className="min-w-0 flex-1">
           <h2 className="text-foreground/45 flex items-center gap-1.5 text-xs font-medium">
             <span>Threads</span>
@@ -2091,7 +2145,8 @@ export function WorkspaceSidebar() {
 
         <Button
           isIconOnly
-          onPress={() => setIsCreateOpen(true)}
+          isDisabled={createWorkspace.isPending}
+          onPress={handleCreateWorkspace}
           size="sm"
           className="h-6 w-6 min-w-6"
           variant="ghost"
@@ -2247,7 +2302,8 @@ export function WorkspaceSidebar() {
                   {organizeBy === "workspace" ? (
                     <Button
                       className="mt-4"
-                      onPress={() => setIsCreateOpen(true)}
+                      isDisabled={createWorkspace.isPending}
+                      onPress={handleCreateWorkspace}
                       size="sm"
                       variant="secondary"
                     >
@@ -2261,9 +2317,9 @@ export function WorkspaceSidebar() {
         </ScrollShadow>
       </div>
 
-      <div className="shrink-0 px-3 pb-3">
+      <div className={`shrink-0 ${SIDEBAR_SECTION_INSET} pb-3`}>
         <Button
-          className="text-foreground hover:text-foreground justify-start rounded-lg"
+          className={`text-foreground hover:text-foreground justify-start rounded-xl ${SIDEBAR_ITEM_INSET}`}
           fullWidth
           onPress={() => router.push("/settings")}
           size="sm"
@@ -2278,12 +2334,6 @@ export function WorkspaceSidebar() {
           Settings
         </Button>
       </div>
-
-      <CreateWorkspaceModal
-        isOpen={isCreateOpen}
-        onCreate={(values) => createWorkspace.mutateAsync(values)}
-        onOpenChange={setIsCreateOpen}
-      />
 
       <Modal.Root state={threadSwitchState}>
         <Modal.Backdrop>
