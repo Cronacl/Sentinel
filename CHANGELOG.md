@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.9](https://github.com/chaqchase/Sentinel/compare/v0.0.8...v0.0.9) (2026-04-01)
+
+
+### Features
+
+* **skills:** add retry mechanism for watcher refres ([6823502](https://github.com/chaqchase/Sentinel/commit/6823502c6768b50b327194d84a1eb463a48d5802))
+
 ## [0.0.8](https://github.com/chaqchase/Sentinel/compare/v0.0.7...v0.0.8) (2026-04-01)
 
 
