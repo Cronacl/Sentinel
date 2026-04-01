@@ -380,7 +380,7 @@ function BrowserTabButton({
         ) : null}
         <button
           aria-selected={isActive}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-[12px] px-2 py-0.5 text-left"
+          className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-[12px] px-2 py-0.5 text-center"
           onClick={onSelect}
           style={{ fontFamily: "var(--font-display)" }}
           type="button"

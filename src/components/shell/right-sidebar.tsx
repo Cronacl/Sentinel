@@ -184,12 +184,12 @@ export function RightSidebar() {
     >
       <div
         aria-hidden
-        className={`absolute top-0 left-0 h-full w-2 -translate-x-1/2 cursor-col-resize transition-opacity ${
+        className={`absolute inset-y-0 left-0 z-20 w-3 cursor-col-resize transition-opacity ${
           rightSidebarOpen ? "opacity-100" : "pointer-events-none opacity-0"
         } ${isDrawerMode ? "pointer-events-none opacity-0" : ""}`}
         {...resizeHandleProps}
       >
-        <div className="mx-auto h-full w-px bg-border/40" />
+        <div className="h-full w-px scale-x-50 bg-border/40 origin-left" />
       </div>
       <div className="flex h-full flex-col" style={{ width: sidebarWidth }}>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
