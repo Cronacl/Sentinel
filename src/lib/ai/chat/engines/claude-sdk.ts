@@ -938,7 +938,7 @@ async function probeClaudeStatus(input: {
         env: input.runtime.env,
         includePartialMessages: false,
         maxTurns: 1,
-        pathToClaudeCodeExecutable: input.runtime.executablePath,
+        pathToClaudeCodeExecutable: input.runtime.executablePath ?? undefined,
         persistSession: false,
       }),
     });

@@ -15,6 +15,7 @@ import {
   readCodexCliVersion,
   resolveCodexCli,
   spawnCodexCli,
+  type ResolvedCodexCli,
 } from "./codex-cli";
 
 const log = createLogger("CodexAppServer");
