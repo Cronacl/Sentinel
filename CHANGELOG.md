@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.7](https://github.com/chaqchase/Sentinel/compare/v0.0.6...v0.0.7) (2026-04-01)
+
+
+### Features
+
+* **appearance:** update code themes and palettes, adding new themes and modifying existing ones ([4e9553c](https://github.com/chaqchase/Sentinel/commit/4e9553c267c066f19d6f47940e9f9f8271985380))
+
 ## [0.0.6](https://github.com/chaqchase/Sentinel/compare/v0.0.5...v0.0.6) (2026-04-01)
 
 
