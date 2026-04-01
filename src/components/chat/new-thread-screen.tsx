@@ -1,6 +1,6 @@
 "use client";
 
-import { Spinner } from "@heroui/react";
+import { ScrollShadow, Spinner } from "@heroui/react";
 import {
   ArrowUp01Icon,
   Folder01Icon,
@@ -12,20 +12,20 @@ import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { PageWrapper } from "@/components/shell";
 import { SentinelLogoBadge } from "@/components/shared/logo";
+import { PageWrapper } from "@/components/shell";
+import { CreateWorkspaceModal } from "@/components/workspaces/create-workspace-modal";
 import { useOutsideClick } from "@/hooks/use-outside-click";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
-import type { ChatEngine } from "@/server/db/enums";
 import {
-  applyThreadSnapshotCacheUpdate,
   applyThreadSettingsCacheUpdate,
+  applyThreadSnapshotCacheUpdate,
   applyThreadStatusCacheUpdate,
 } from "@/lib/threads/cache";
-import { CreateWorkspaceModal } from "@/components/workspaces/create-workspace-modal";
+import type { ChatEngine } from "@/server/db/enums";
 import { api } from "@/trpc/react";
 import type { FileUIPart } from "ai";
 
@@ -851,7 +851,6 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
               <ChatComposer
                 activeWorkspace={selectedWorkspace}
                 draftMode={resolvedThreadSelection?.mode ?? draftThreadMode}
-                onEnsureRepoThread={ensureDraftThread}
                 onQueueFollowUp={handleQueueFollowUp}
                 onRemoveQueuedFollowUp={async (id) => {
                   await removeQueuedFollowUp.mutateAsync({
@@ -939,7 +938,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                 {isWorkspaceMenuOpen && (
                   <motion.div
                     animate={{ opacity: 1, scale: 1, y: 0 }}
-                    className="absolute left-1/2 top-10 z-[200] max-h-64 w-[220px] -translate-x-1/2 overflow-y-auto rounded-2xl border border-border/50 bg-surface p-1.5 shadow-overlay"
+                    className="absolute left-1/2 top-10 z-[200] max-h-64 w-[220px] -translate-x-1/2 overflow-y-auto rounded-3xl border border-separator/50 bg-surface p-1.5 shadow-overlay"
                     exit={{ opacity: 0, scale: 0.97, y: -6 }}
                     initial={{ opacity: 0, scale: 0.97, y: -6 }}
                     transition={{
@@ -950,45 +949,47 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                     <p className="px-2.5 pb-1.5 pt-1 text-xs text-muted">
                       Select your project
                     </p>
+                    <ScrollShadow className="max-h-40 pb-2">
+                      {(workspaces.data ?? []).map((workspace) => {
+                        const isSelected =
+                          workspace.id === selectedWorkspace?.id;
 
-                    {(workspaces.data ?? []).map((workspace) => {
-                      const isSelected = workspace.id === selectedWorkspace?.id;
-
-                      return (
-                        <button
-                          className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-sm transition-colors ${
-                            isSelected
-                              ? "text-foreground"
-                              : "text-muted hover:bg-default hover:text-foreground"
-                          }`}
-                          key={workspace.id}
-                          onClick={() => {
-                            void handleWorkspaceSelect(workspace.id);
-                          }}
-                          type="button"
-                        >
-                          <HugeiconsIcon
-                            className="shrink-0"
-                            color="currentColor"
-                            icon={Folder01Icon}
-                            size={16}
-                            strokeWidth={1.5}
-                          />
-                          <span className="min-w-0 truncate">
-                            {workspace.name}
-                          </span>
-                          {isSelected && (
+                        return (
+                          <button
+                            className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-sm transition-colors ${
+                              isSelected
+                                ? "text-foreground"
+                                : "text-muted hover:bg-default hover:text-foreground"
+                            }`}
+                            key={workspace.id}
+                            onClick={() => {
+                              void handleWorkspaceSelect(workspace.id);
+                            }}
+                            type="button"
+                          >
                             <HugeiconsIcon
-                              className="ml-auto shrink-0 text-foreground"
+                              className="shrink-0"
                               color="currentColor"
-                              icon={Tick02Icon}
+                              icon={Folder01Icon}
                               size={16}
-                              strokeWidth={2}
+                              strokeWidth={1.5}
                             />
-                          )}
-                        </button>
-                      );
-                    })}
+                            <span className="min-w-0 truncate">
+                              {workspace.name}
+                            </span>
+                            {isSelected && (
+                              <HugeiconsIcon
+                                className="ml-auto shrink-0 text-foreground"
+                                color="currentColor"
+                                icon={Tick02Icon}
+                                size={16}
+                                strokeWidth={2}
+                              />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </ScrollShadow>
 
                     <div className="mx-2 my-1 h-px bg-separator" />
 
@@ -1019,7 +1020,6 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             <ChatComposer
               activeWorkspace={selectedWorkspace}
               draftMode={draftThreadMode}
-              onEnsureRepoThread={ensureDraftThread}
               onQueueFollowUp={handleQueueFollowUp}
               onRemoveQueuedFollowUp={async (id) => {
                 await removeQueuedFollowUp.mutateAsync({

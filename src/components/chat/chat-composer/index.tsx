@@ -39,7 +39,6 @@ export function ChatComposer({
   onRemoveQueuedFollowUp,
   onSelectionChange,
   onSend,
-  onEnsureRepoThread,
   onStop,
   onSteerFollowUp,
   onSteerQueuedFollowUp,
@@ -97,13 +96,12 @@ export function ChatComposer({
 
   const {
     availableModels,
-    enginesQuery,
+    engineOptions,
     handleSelectEngine,
     handleSelectModel,
     handleSelectReasoningEffort,
     modelsQuery,
     selectedEngine,
-    selectedEngineStatus,
     selectedModel,
     selectedModelKey,
     selectedReasoningEffort,
@@ -320,14 +318,6 @@ export function ChatComposer({
         .
       </>
     ) : null;
-
-  const engineOptions =
-    enginesQuery.data?.map((engine) => ({
-      engine: engine.engine,
-      error: engine.error,
-      isAvailable: engine.isAvailable,
-      label: engine.label,
-    })) ?? [];
   const showEngineSelector = !canPersistThreadSelection;
   const isModelUiReady =
     Boolean(selectedModelKey) ||
@@ -538,7 +528,6 @@ export function ChatComposer({
           <div className="overflow-hidden rounded-b-[24px] border-t border-border/25">
             <ComposerWorkspaceBar
               activeWorkspace={activeWorkspace}
-              onEnsureThread={onEnsureRepoThread}
               onSetupPendingChange={setIsRepoSetupPending}
               repoThreadId={repoThreadId}
               showBranchSwitcher={showBranchSwitcher}

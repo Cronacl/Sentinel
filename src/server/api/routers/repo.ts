@@ -18,6 +18,7 @@ import {
   removeThreadWorktree,
   revertFiles,
   resolveRepoContext,
+  stashChanges,
   stageFiles,
   unstageFiles,
 } from "@/lib/git/repo";
@@ -82,6 +83,15 @@ const openTargetPreferenceSchema = z.object({
   targetId: z.string().trim().min(1).max(255),
 });
 const threadEnvironmentInputSchema = workspaceThreadInputSchema;
+const threadSwitchInspectInputSchema = workspaceInputSchema.extend({
+  sourceThreadId: z.string().min(1),
+  targetThreadId: z.string().min(1),
+});
+const threadSwitchStrategySchema = z.enum(["migrate", "stash"]);
+const threadSwitchHandoffInputSchema = threadSwitchInspectInputSchema.extend({
+  stashName: z.string().trim().min(1).max(255).optional(),
+  strategy: threadSwitchStrategySchema.optional(),
+});
 
 type RepoBranchResumeStatus =
   | "blocked_dirty"
@@ -484,6 +494,69 @@ async function resolveThreadProjectPath(input: {
   }
 
   return input.workspaceRootPath;
+}
+
+async function inspectThreadSwitchState(input: {
+  rootPath: string;
+  sourceThread: { chatEngineState?: unknown; id: string };
+  targetThread: { chatEngineState?: unknown; id: string };
+}) {
+  const currentRepoContext = await resolveRepoContext(input.rootPath);
+  const sourceProjectPath = await resolveThreadProjectPath({
+    thread: input.sourceThread,
+    workspaceRootPath: input.rootPath,
+  });
+  const targetProjectPath = await resolveThreadProjectPath({
+    thread: input.targetThread,
+    workspaceRootPath: input.rootPath,
+  });
+  const sourceState = normalizeThreadRepoState(input.sourceThread);
+  const targetState = normalizeThreadRepoState(input.targetThread);
+  const sourceProjectMode =
+    sourceProjectPath === input.rootPath ? "local" : "worktree";
+  const targetProjectMode =
+    targetProjectPath === input.rootPath ? "local" : "worktree";
+  const sourceBranch = sourceState.activeBranch ?? currentRepoContext.branch;
+  const targetBranch =
+    targetProjectMode === "local"
+      ? (targetState.activeBranch ?? currentRepoContext.branch)
+      : targetState.activeBranch;
+  const requiresBranchSwitch =
+    targetProjectMode === "local" &&
+    Boolean(targetBranch) &&
+    currentRepoContext.branch !== targetBranch;
+  const isDirty =
+    sourceProjectMode === "local" &&
+    targetProjectMode === "local" &&
+    currentRepoContext.hasChanges;
+
+  return {
+    currentBranch: currentRepoContext.branch,
+    isDirty,
+    requiresBranchSwitch,
+    shouldPrompt: requiresBranchSwitch && isDirty,
+    sourceBranch,
+    sourceProjectMode,
+    sourceThreadId: input.sourceThread.id,
+    targetBranch,
+    targetProjectMode,
+    targetThreadId: input.targetThread.id,
+  } as const;
+}
+
+function buildThreadSwitchStashMessage(input: {
+  sourceBranch: string | null;
+  sourceThreadId: string;
+  stashName: string;
+}) {
+  return `thread:${input.sourceThreadId}:${input.sourceBranch ?? "unknown"}:${input.stashName.trim()}`;
+}
+
+function extractCheckedOutWorktreePath(message: string) {
+  const match = message.match(
+    /Branch .+ is already checked out at (.+?)\. Switch this thread /,
+  );
+  return match?.[1]?.trim() ?? null;
 }
 
 async function resolvePullRequestMessage(input: {
@@ -1044,24 +1117,266 @@ export const repoRouter = createTRPCRouter({
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOwnedThreadForWorkspace(ctx, input);
       const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const githubService = await resolveGitHubService(ctx);
+      const trimmedBranchName = input.branchName.trim();
+      const threadState = normalizeThreadRepoState(thread);
+      const rootRepoContext = await resolveRepoContext(rootPath);
+      const shouldSwitchWorktreeToLocal =
+        threadState.projectMode === "worktree" &&
+        Boolean(thread) &&
+        rootRepoContext.branch === trimmedBranchName;
       const projectPath = await resolveThreadProjectPath({
         thread,
         workspaceRootPath: rootPath,
       });
-      const githubService = await resolveGitHubService(ctx);
-      const result = await checkoutBranch(projectPath, input.branchName);
+      let result:
+        | {
+            branch: string;
+            reusedExistingWorktree: boolean;
+            switchedToLocalProject: boolean;
+            worktreePath?: string | null;
+          }
+        | undefined;
+
+      if (shouldSwitchWorktreeToLocal) {
+        result = {
+          branch: trimmedBranchName,
+          reusedExistingWorktree: false,
+          switchedToLocalProject: true,
+          worktreePath: null,
+        };
+      } else {
+        try {
+          result = {
+            ...(await checkoutBranch(projectPath, trimmedBranchName)),
+            reusedExistingWorktree: false,
+            switchedToLocalProject: false,
+          };
+        } catch (error) {
+          const existingWorktreePath = extractCheckedOutWorktreePath(
+            error instanceof Error ? error.message : "",
+          );
+          const existingWorktreeContext = existingWorktreePath
+            ? await resolveRepoContext(existingWorktreePath).catch(() => null)
+            : null;
+
+          if (!thread || !existingWorktreeContext?.isGitRepo) {
+            throw error;
+          }
+
+          result = {
+            branch: trimmedBranchName,
+            reusedExistingWorktree: existingWorktreePath !== rootPath,
+            switchedToLocalProject: existingWorktreePath === rootPath,
+            worktreePath:
+              existingWorktreePath === rootPath ? null : existingWorktreePath,
+          };
+        }
+      }
       const nextThread = thread
         ? withUpdatedThreadRepoState(thread, {
             activeBranch: result.branch,
+            ...(result.switchedToLocalProject
+              ? { projectMode: "local" as const }
+              : result.reusedExistingWorktree
+                ? {
+                    projectMode: "worktree" as const,
+                    worktreePath: result.worktreePath ?? null,
+                  }
+                : {}),
           })
         : thread;
       if (thread) {
         updateThreadRepoState(thread.id, {
           activeBranch: result.branch,
+          ...(result.switchedToLocalProject
+            ? { projectMode: "local" as const }
+            : result.reusedExistingWorktree
+              ? {
+                  projectMode: "worktree" as const,
+                  worktreePath: result.worktreePath ?? null,
+                }
+              : {}),
         });
       }
       return {
         ...result,
+        repoContext: await buildRepoContextResponse({
+          githubService,
+          pathValue: rootPath,
+          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+          thread: nextThread,
+          userId: ctx.session.user.id,
+          workspaceId: workspace.id,
+        }),
+      };
+    }),
+
+  inspectThreadSwitch: protectedProcedure
+    .input(threadSwitchInspectInputSchema)
+    .query(async ({ ctx, input }) => {
+      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const sourceThread = await getOwnedThreadForWorkspace(ctx, {
+        threadId: input.sourceThreadId,
+        workspaceId: input.workspaceId,
+      });
+      const targetThread = await getOwnedThreadForWorkspace(ctx, {
+        threadId: input.targetThreadId,
+        workspaceId: input.workspaceId,
+      });
+      if (!sourceThread || !targetThread) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Both source and target threads are required.",
+        });
+      }
+
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      return await inspectThreadSwitchState({
+        rootPath,
+        sourceThread,
+        targetThread,
+      });
+    }),
+
+  handoffThreadSwitch: protectedProcedure
+    .input(threadSwitchHandoffInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const sourceThread = await getOwnedThreadForWorkspace(ctx, {
+        threadId: input.sourceThreadId,
+        workspaceId: input.workspaceId,
+      });
+      const targetThread = await getOwnedThreadForWorkspace(ctx, {
+        threadId: input.targetThreadId,
+        workspaceId: input.workspaceId,
+      });
+      if (!sourceThread || !targetThread) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Both source and target threads are required.",
+        });
+      }
+
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const githubService = await resolveGitHubService(ctx);
+      const inspection = await inspectThreadSwitchState({
+        rootPath,
+        sourceThread,
+        targetThread,
+      });
+
+      if (
+        !inspection.requiresBranchSwitch ||
+        inspection.targetProjectMode !== "local"
+      ) {
+        return {
+          action: "noop" as const,
+          branch: inspection.currentBranch,
+          repoContext: await buildRepoContextResponse({
+            githubService,
+            pathValue: rootPath,
+            preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+            thread: targetThread,
+            userId: ctx.session.user.id,
+            workspaceId: workspace.id,
+          }),
+        };
+      }
+
+      if (!inspection.isDirty) {
+        await checkoutBranch(rootPath, inspection.targetBranch!);
+        const nextThread = withUpdatedThreadRepoState(targetThread, {
+          activeBranch: inspection.targetBranch!,
+          projectMode: "local",
+        });
+        updateThreadRepoState(targetThread.id, {
+          activeBranch: inspection.targetBranch!,
+          projectMode: "local",
+        });
+        return {
+          action: "checkout" as const,
+          branch: inspection.targetBranch!,
+          repoContext: await buildRepoContextResponse({
+            githubService,
+            pathValue: rootPath,
+            preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+            thread: nextThread,
+            userId: ctx.session.user.id,
+            workspaceId: workspace.id,
+          }),
+        };
+      }
+
+      if (!input.strategy) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Dirty thread switches require choosing how to hand off the changes.",
+        });
+      }
+
+      if (input.strategy === "stash") {
+        const stashName = input.stashName?.trim();
+        if (!stashName) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "A stash name is required to stash the current thread changes.",
+          });
+        }
+
+        await stashChanges(
+          rootPath,
+          buildThreadSwitchStashMessage({
+            sourceBranch: inspection.currentBranch,
+            sourceThreadId: sourceThread.id,
+            stashName,
+          }),
+        );
+        await checkoutBranch(rootPath, inspection.targetBranch!);
+        const nextThread = withUpdatedThreadRepoState(targetThread, {
+          activeBranch: inspection.targetBranch!,
+          projectMode: "local",
+        });
+        updateThreadRepoState(targetThread.id, {
+          activeBranch: inspection.targetBranch!,
+          projectMode: "local",
+        });
+        return {
+          action: "stash" as const,
+          branch: inspection.targetBranch!,
+          repoContext: await buildRepoContextResponse({
+            githubService,
+            pathValue: rootPath,
+            preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+            thread: nextThread,
+            userId: ctx.session.user.id,
+            workspaceId: workspace.id,
+          }),
+        };
+      }
+
+      if (!inspection.currentBranch) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "The current branch could not be determined for this handoff.",
+        });
+      }
+
+      const nextThread = withUpdatedThreadRepoState(targetThread, {
+        activeBranch: inspection.currentBranch,
+        projectMode: "local",
+      });
+      updateThreadRepoState(targetThread.id, {
+        activeBranch: inspection.currentBranch,
+        projectMode: "local",
+      });
+
+      return {
+        action: "migrate" as const,
+        branch: inspection.currentBranch,
         repoContext: await buildRepoContextResponse({
           githubService,
           pathValue: rootPath,

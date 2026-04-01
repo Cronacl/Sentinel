@@ -54,5 +54,4 @@ export type ChatComposerProps = {
     mode?: "chat" | "plan";
     reasoningEffort?: ReasoningEffort | null;
   } | null;
-  onEnsureRepoThread?: () => Promise<string | null>;
 };

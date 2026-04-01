@@ -1,6 +1,13 @@
 import type { AIProvider, ChatEngine } from "@/server/db/enums";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 
+export type ChatComposerEngineOption = {
+  engine: ChatEngine;
+  error: string | null;
+  isAvailable: boolean;
+  label: string;
+};
+
 export type ChatComposerModel = {
   contextWindow?: number;
   defaultReasoningEffort: ReasoningEffort | null;
@@ -16,8 +23,50 @@ export type ChatComposerModel = {
   supportedReasoningEfforts: ReasoningEffort[];
 };
 
+export const FALLBACK_CHAT_ENGINE_OPTIONS: ChatComposerEngineOption[] = [
+  {
+    engine: "sentinel",
+    error: null,
+    isAvailable: true,
+    label: "Sentinel",
+  },
+  {
+    engine: "codex",
+    error: null,
+    isAvailable: true,
+    label: "Codex",
+  },
+  {
+    engine: "claude",
+    error: null,
+    isAvailable: true,
+    label: "Claude",
+  },
+];
+
 export function filterSelectableModels(models: ChatComposerModel[]) {
   return models.filter((model) => model.isConnected && model.isEnabled);
+}
+
+export function haveSameEngineOptionSet(
+  currentOptions: ChatComposerEngineOption[],
+  nextOptions: ChatComposerEngineOption[],
+) {
+  if (currentOptions.length !== nextOptions.length) {
+    return false;
+  }
+
+  return currentOptions.every((option, index) => {
+    const nextOption = nextOptions[index];
+
+    return (
+      nextOption != null &&
+      option.engine === nextOption.engine &&
+      option.error === nextOption.error &&
+      option.isAvailable === nextOption.isAvailable &&
+      option.label === nextOption.label
+    );
+  });
 }
 
 export function haveSameSelectableModelSet(
@@ -48,6 +97,13 @@ export function resolveStableSelectableModels(
   const selectableLiveModels = filterSelectableModels(liveModels);
 
   return selectableLiveModels.length > 0 ? selectableLiveModels : cachedModels;
+}
+
+export function resolveStableEngineOptions(
+  liveOptions: ChatComposerEngineOption[],
+  cachedOptions: ChatComposerEngineOption[],
+) {
+  return liveOptions.length > 0 ? liveOptions : cachedOptions;
 }
 
 export function getReasoningEffortLabel(effort: ReasoningEffort) {

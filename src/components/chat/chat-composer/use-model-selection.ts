@@ -5,10 +5,14 @@ import type { ChatEngine } from "@/server/db/enums";
 import { api } from "@/trpc/react";
 
 import {
+  FALLBACK_CHAT_ENGINE_OPTIONS,
   filterSelectableModels,
+  haveSameEngineOptionSet,
   haveSameSelectableModelSet,
+  resolveStableEngineOptions,
   resolveReasoningEffort,
   resolveStableSelectableModels,
+  type ChatComposerEngineOption,
 } from "../chat-composer-helpers";
 
 import type { usePersistSelection } from "./use-persist-selection";
@@ -41,33 +45,69 @@ export function useModelSelection({
     reasoningEffort?: ReasoningEffort | null;
   } | null;
 }) {
+  const utils = api.useUtils();
+  const cachedEngines = utils.engines.list.getData() ?? [];
+  const cachedEngineData = cachedEngines.map((engine) => ({
+    engine: engine.engine,
+    error: engine.error,
+    isAvailable: engine.isAvailable,
+    label: engine.label,
+  }));
+  const cachedSentinelModels =
+    utils.engines.models.getData({ engine: "sentinel" }) ?? [];
+  const cachedCodexModels =
+    utils.engines.models.getData({ engine: "codex" }) ?? [];
+  const cachedClaudeModels =
+    utils.engines.models.getData({ engine: "claude" }) ?? [];
+
   const enginesQuery = api.engines.list.useQuery(undefined, {
+    initialData: cachedEngines.length > 0 ? cachedEngines : undefined,
     staleTime: 60_000,
   });
   const sentinelModelsQuery = api.engines.models.useQuery(
     {
       engine: "sentinel",
     },
-    { staleTime: 60_000 },
+    {
+      initialData:
+        cachedSentinelModels.length > 0 ? cachedSentinelModels : undefined,
+      staleTime: 60_000,
+    },
   );
   const codexModelsQuery = api.engines.models.useQuery(
     {
       engine: "codex",
     },
-    { staleTime: 60_000 },
+    {
+      initialData: cachedCodexModels.length > 0 ? cachedCodexModels : undefined,
+      staleTime: 60_000,
+    },
   );
   const claudeModelsQuery = api.engines.models.useQuery(
     {
       engine: "claude",
     },
-    { staleTime: 60_000 },
+    {
+      initialData:
+        cachedClaudeModels.length > 0 ? cachedClaudeModels : undefined,
+      staleTime: 60_000,
+    },
+  );
+  const [cachedEngineOptions, setCachedEngineOptions] = useState<
+    ChatComposerEngineOption[]
+  >(() =>
+    cachedEngineData.length > 0
+      ? cachedEngineData
+      : [...FALLBACK_CHAT_ENGINE_OPTIONS],
   );
   const [cachedAvailableModelsByEngine, setCachedAvailableModelsByEngine] =
-    useState<Record<ChatEngine, ReturnType<typeof filterSelectableModels>>>({
-      claude: [],
-      codex: [],
-      sentinel: [],
-    });
+    useState<Record<ChatEngine, ReturnType<typeof filterSelectableModels>>>(
+      () => ({
+        claude: filterSelectableModels(cachedClaudeModels),
+        codex: filterSelectableModels(cachedCodexModels),
+        sentinel: filterSelectableModels(cachedSentinelModels),
+      }),
+    );
   const initializedSelectionScopeRef = useRef<string | null>(null);
   const threadPersistenceReadyRef = useRef(false);
   const manualEngineSelectionRef = useRef<ChatEngine | null>(null);
@@ -95,7 +135,20 @@ export function useModelSelection({
     hasThreadSelection ||
     !globalSelectionQuery.isLoading;
 
-  const engineOptions = enginesQuery.data ?? [];
+  const liveEngineOptions = useMemo(
+    () =>
+      (enginesQuery.data ?? []).map((engine) => ({
+        engine: engine.engine,
+        error: engine.error,
+        isAvailable: engine.isAvailable,
+        label: engine.label,
+      })),
+    [enginesQuery.data],
+  );
+  const engineOptions = useMemo(
+    () => resolveStableEngineOptions(liveEngineOptions, cachedEngineOptions),
+    [cachedEngineOptions, liveEngineOptions],
+  );
   const selectedEngineStatus =
     engineOptions.find((engine) => engine.engine === selectedEngine) ?? null;
   const modelsByEngine = {
@@ -158,6 +211,19 @@ export function useModelSelection({
       threadPersistenceReadyRef.current = false;
     }
   }, [selectionScopeKey]);
+
+  useEffect(() => {
+    setCachedEngineOptions((currentCache) => {
+      if (
+        liveEngineOptions.length === 0 ||
+        haveSameEngineOptionSet(currentCache, liveEngineOptions)
+      ) {
+        return currentCache;
+      }
+
+      return liveEngineOptions;
+    });
+  }, [liveEngineOptions]);
 
   useEffect(() => {
     setCachedAvailableModelsByEngine((currentCache) => {
@@ -491,6 +557,7 @@ export function useModelSelection({
 
   return {
     availableModels,
+    engineOptions,
     enginesQuery,
     handleSelectEngine,
     handleSelectModel,
