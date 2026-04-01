@@ -31,7 +31,13 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sileo } from "sileo";
 
+import { BrowserSidebar } from "@/components/browser/browser-sidebar";
 import { BrowserToggleButton } from "@/components/browser/browser-toggle-button";
+import {
+  closeBrowserSidebarState,
+  openBrowserSidebar,
+  useBrowserSidebarState,
+} from "@/components/browser/browser-sidebar-store";
 import {
   OpenTargetGlyph,
   isCustomOpenTargetGlyph,
@@ -41,7 +47,9 @@ import { TerminalToggleButton } from "@/components/terminal/terminal-toggle-butt
 import { getDesktopApi, isDesktopRuntime } from "@/lib/desktop/client";
 import type { DesktopOpenTarget } from "@/lib/desktop/contracts";
 import { getErrorMessage } from "@/lib/errors";
+import { useShortcutAction } from "@/lib/shortcuts/provider";
 import { api } from "@/trpc/react";
+import { openOrCreateTerminalSession } from "../terminal/terminal-store";
 import { RepoPullRequestSidebar } from "./repo-pr-sidebar";
 import { RepoDiffSidebar } from "./repo-diff-sidebar";
 import {
@@ -107,6 +115,7 @@ export function ThreadRepoActions({
   const isDesktop = isDesktopRuntime();
   const utils = api.useUtils();
   const rightSidebar = useRightSidebar();
+  const browserState = useBrowserSidebarState();
   const [launchTargets, setLaunchTargets] = useState<DesktopOpenTarget[]>([]);
   const [isLoadingTargets, setIsLoadingTargets] = useState(false);
   const [launchingTargetId, setLaunchingTargetId] = useState<string | null>(
@@ -161,6 +170,45 @@ export function ThreadRepoActions({
     repoContext?.repoRoot ??
     workspaceRootPath ??
     null;
+  const isBrowserSidebarActive =
+    rightSidebar.isOpen &&
+    rightSidebar.panelId === "browser" &&
+    browserState.tabs.length > 0;
+
+  const handleToggleBrowser = useCallback(() => {
+    if (!isDesktop) {
+      return;
+    }
+
+    if (isBrowserSidebarActive) {
+      closeBrowserSidebarState();
+      rightSidebar.close();
+      return;
+    }
+
+    openBrowserSidebar();
+    rightSidebar.open(<BrowserSidebar />, {
+      panelId: "browser",
+      size: "browser",
+    });
+  }, [isBrowserSidebarActive, isDesktop, rightSidebar]);
+
+  const handleToggleTerminal = useCallback(() => {
+    if (!launchPath) {
+      return;
+    }
+
+    void openOrCreateTerminalSession(launchPath, {
+      toggleIfAlreadyActive: true,
+    });
+  }, [launchPath]);
+
+  useShortcutAction("browser.toggle", handleToggleBrowser, {
+    enabled: isDesktop,
+  });
+  useShortcutAction("terminal.toggle", handleToggleTerminal, {
+    enabled: Boolean(launchPath),
+  });
 
   const snapshotRef = useRef(repoContext);
   const syncedPullRequestKeyRef = useRef<string | null>(null);

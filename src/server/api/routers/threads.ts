@@ -280,10 +280,9 @@ export const threadsRouter = createTRPCRouter({
         },
       });
 
-      return sortThreadSearchResults(matchedThreads, normalizedQuery).slice(
-        0,
-        50,
-      );
+      return sortThreadSearchResults(matchedThreads, normalizedQuery)
+        .map(withLinkedPullRequest)
+        .slice(0, 50);
     }),
 
   rename: protectedProcedure

@@ -8,6 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 import type { PropsWithChildren } from "react";
 
 import { getDesktopApi } from "@/lib/desktop/client";
+import { ShortcutProvider, useShortcutAction } from "@/lib/shortcuts/provider";
 import { api } from "@/trpc/react";
 
 import { SETTINGS_NAV } from "@/components/settings/settings-nav";
@@ -17,7 +18,8 @@ import { WorkspaceSidebar } from "./workspace-sidebar";
 import { LeftSidebar } from "./left-sidebar";
 import { RightSidebar } from "./right-sidebar";
 import { AppWarmupCoordinator } from "./app-warmup";
-import { ShellProvider } from "./shell-context";
+import { ShellProvider, useShell } from "./shell-context";
+import { useAppShortcutActions } from "./use-app-shortcut-actions";
 import {
   DesktopWindowControls,
   SidebarWindowChrome,
@@ -86,40 +88,63 @@ function SidebarContent() {
   return <WorkspaceSidebar />;
 }
 
+function AppShellShortcutBindings() {
+  const { toggleLeftSidebar } = useShell();
+  const {
+    handleCreateWorkspace,
+    handleOpenAutomations,
+    handleOpenSettings,
+    handleOpenSkills,
+    handleStartNewThread,
+  } = useAppShortcutActions();
+
+  useShortcutAction("thread.new", handleStartNewThread);
+  useShortcutAction("workspace.create", handleCreateWorkspace);
+  useShortcutAction("automations.open", handleOpenAutomations);
+  useShortcutAction("skills.open", handleOpenSkills);
+  useShortcutAction("settings.open", handleOpenSettings);
+  useShortcutAction("sidebar.left.toggle", toggleLeftSidebar);
+
+  return null;
+}
+
 export function AppShell({ children }: PropsWithChildren) {
   const desktop = getDesktopApi();
   const platform = desktop?.app.platform ?? null;
   const showDesktopWindowControls = platform === "linux";
 
   return (
-    <ShellProvider>
-      <ShellWarmCache />
-      <AppWarmupCoordinator />
-      <div className="relative flex h-dvh overflow-clip">
-        <LeftSidebar>
-          <div className="flex h-full flex-col">
-            <SidebarWindowChrome />
-            <div className="min-h-0 flex-1">
-              <SidebarContent />
+    <ShortcutProvider>
+      <ShellProvider>
+        <ShellWarmCache />
+        <AppWarmupCoordinator />
+        <AppShellShortcutBindings />
+        <div className="relative flex h-dvh overflow-clip">
+          <LeftSidebar>
+            <div className="flex h-full flex-col">
+              <SidebarWindowChrome />
+              <div className="min-h-0 flex-1">
+                <SidebarContent />
+              </div>
             </div>
-          </div>
-        </LeftSidebar>
+          </LeftSidebar>
 
-        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip">
-          <div className="min-h-0 flex-1">{children}</div>
-          <TerminalPanel />
-        </main>
+          <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip">
+            <div className="min-h-0 flex-1">{children}</div>
+            <TerminalPanel />
+          </main>
 
-        <RightSidebar />
+          <RightSidebar />
 
-        {showDesktopWindowControls ? (
-          <div className="pointer-events-none absolute top-0 right-0 z-30 flex h-14 items-start">
-            <div className="pointer-events-auto app-region-no-drag">
-              <DesktopWindowControls platform={platform} />
+          {showDesktopWindowControls ? (
+            <div className="pointer-events-none absolute top-0 right-0 z-30 flex h-14 items-start">
+              <div className="pointer-events-auto app-region-no-drag">
+                <DesktopWindowControls platform={platform} />
+              </div>
             </div>
-          </div>
-        ) : null}
-      </div>
-    </ShellProvider>
+          ) : null}
+        </div>
+      </ShellProvider>
+    </ShortcutProvider>
   );
 }
