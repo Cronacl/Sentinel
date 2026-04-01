@@ -9,8 +9,10 @@ import { Icon } from "@iconify/react";
 import { createUnifiedDiff } from "@/lib/diff/unified";
 import {
   detectLanguageFromPath,
-  highlightToTokens,
+  highlightToTokensCached,
   languageToVSCodeIcon,
+  tokenLinesToSegments,
+  type SyntaxSegment,
   type ThemedToken,
 } from "@/lib/syntax/highlighter";
 import { useResolvedTheme } from "@/lib/syntax/use-resolved-theme";
@@ -29,8 +31,6 @@ type DiffGroup =
   | { count: number; lines: DiffLine[]; type: "collapsed" };
 
 type WordSegment = { highlight: boolean; text: string };
-
-type SyntaxSegment = { color?: string; text: string };
 
 type HighlightedWordSegment = {
   color?: string;
@@ -246,10 +246,6 @@ function computeWordDiffsForLines(lines: DiffLine[]) {
   return wordDiffByIndex;
 }
 
-function shikiTokensToSegments(tokens: ThemedToken[]): SyntaxSegment[] {
-  return tokens.map((t) => ({ color: t.color, text: t.content }));
-}
-
 function buildSyntaxMaps(
   lines: DiffLine[],
   oldTokenLines: ThemedToken[][] | null,
@@ -263,7 +259,7 @@ function buildSyntaxMaps(
       const line = lines[i]!;
       if (line.kind === "del" || line.kind === "ctx") {
         if (tokenIdx < oldTokenLines.length) {
-          map.set(i, shikiTokensToSegments(oldTokenLines[tokenIdx]!));
+          map.set(i, tokenLinesToSegments([oldTokenLines[tokenIdx]!])[0] ?? []);
         }
         tokenIdx += 1;
       }
@@ -276,7 +272,7 @@ function buildSyntaxMaps(
       const line = lines[i]!;
       if (line.kind === "add" || line.kind === "ctx") {
         if (line.kind === "add" && tokenIdx < newTokenLines.length) {
-          map.set(i, shikiTokensToSegments(newTokenLines[tokenIdx]!));
+          map.set(i, tokenLinesToSegments([newTokenLines[tokenIdx]!])[0] ?? []);
         }
         tokenIdx += 1;
       }
@@ -365,17 +361,47 @@ function CollapsedRegion({
   );
 }
 
+function getDiffTint(kind: DiffLineKind) {
+  if (kind === "add") {
+    return "var(--syntax-token-inserted)";
+  }
+
+  if (kind === "del") {
+    return "var(--syntax-token-deleted)";
+  }
+
+  return null;
+}
+
+function getSegmentStyle(color: string | undefined, kind: DiffLineKind) {
+  const tint = getDiffTint(kind);
+
+  if (!tint) {
+    return color ? { color } : undefined;
+  }
+
+  return {
+    color: color ? `color-mix(in srgb, ${color} 78%, ${tint})` : tint,
+  };
+}
+
 function SyntaxLine({
   segments,
   fallbackText,
+  kind,
   opacity,
 }: {
   fallbackText: string;
+  kind: DiffLineKind;
   opacity?: string;
   segments: SyntaxSegment[] | undefined;
 }) {
   if (!segments) {
-    return <span className={opacity}>{fallbackText}</span>;
+    return (
+      <span className={opacity} style={getSegmentStyle(undefined, kind)}>
+        {fallbackText}
+      </span>
+    );
   }
 
   return (
@@ -384,7 +410,7 @@ function SyntaxLine({
         <span
           key={i}
           className={opacity}
-          style={seg.color ? { color: seg.color } : undefined}
+          style={getSegmentStyle(seg.color, kind)}
         >
           {seg.text}
         </span>
@@ -410,12 +436,12 @@ function HighlightedWordDiffLine({
           <span
             key={i}
             className={hlClass}
-            style={seg.color ? { color: seg.color } : undefined}
+            style={getSegmentStyle(seg.color, kind)}
           >
             {seg.text}
           </span>
         ) : (
-          <span key={i} style={seg.color ? { color: seg.color } : undefined}>
+          <span key={i} style={getSegmentStyle(seg.color, kind)}>
             {seg.text}
           </span>
         ),
@@ -438,11 +464,17 @@ function PlainWordDiffLine({
     <>
       {segments.map((seg, i) =>
         seg.highlight ? (
-          <span key={i} className={hlClass}>
+          <span
+            key={i}
+            className={hlClass}
+            style={getSegmentStyle(undefined, kind)}
+          >
             {seg.text}
           </span>
         ) : (
-          <span key={i}>{seg.text}</span>
+          <span key={i} style={getSegmentStyle(undefined, kind)}>
+            {seg.text}
+          </span>
         ),
       )}
     </>
@@ -540,8 +572,8 @@ export function DiffView({
           .join("\n");
 
         const [oldTokens, newTokens] = await Promise.all([
-          highlightToTokens(oldContent, language, theme),
-          highlightToTokens(newContent, language, theme),
+          highlightToTokensCached(oldContent, language, theme),
+          highlightToTokensCached(newContent, language, theme),
         ]);
 
         if (!cancelled) {
@@ -747,6 +779,7 @@ export function DiffView({
                     ) : (
                       <SyntaxLine
                         fallbackText={line.text}
+                        kind={line.kind}
                         opacity={line.kind === "ctx" ? "opacity-50" : undefined}
                         segments={lineSyntax}
                       />

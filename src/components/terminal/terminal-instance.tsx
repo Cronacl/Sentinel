@@ -4,6 +4,11 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import { useEffect, useRef } from "react";
 
+import {
+  DEFAULT_CODE_FONT_FAMILY,
+  DEFAULT_CODE_FONT_SIZE,
+  readStoredAppearanceSettings,
+} from "@/lib/appearance";
 import { getDesktopApi } from "@/lib/desktop/client";
 import { useResolvedTheme } from "@/lib/syntax/use-resolved-theme";
 
@@ -77,6 +82,28 @@ export function TerminalInstance({
   const fitAddonRef = useRef<FitAddon | null>(null);
   const theme = useResolvedTheme();
 
+  const syncTerminalTypography = () => {
+    const terminal = terminalRef.current;
+    if (!terminal || typeof document === "undefined") {
+      return;
+    }
+
+    const rootStyle = getComputedStyle(document.documentElement);
+    const fallback = readStoredAppearanceSettings();
+    const fontFamily =
+      rootStyle.getPropertyValue("--app-font-mono").trim() ||
+      fallback.codeFontFamily ||
+      DEFAULT_CODE_FONT_FAMILY;
+    const fontSize =
+      Number.parseFloat(rootStyle.getPropertyValue("--app-code-font-size")) ||
+      fallback.codeFontSize ||
+      DEFAULT_CODE_FONT_SIZE;
+
+    terminal.options.fontFamily = fontFamily;
+    terminal.options.fontSize = fontSize;
+    fitAddonRef.current?.fit();
+  };
+
   useEffect(() => {
     const desktop = getDesktopApi();
     const container = containerRef.current;
@@ -90,9 +117,8 @@ export function TerminalInstance({
       cursorBlink: true,
       cursorStyle: "bar",
       cursorWidth: 1,
-      fontFamily:
-        '"SF Mono", "Fira Code", "Menlo", "Monaco", "Consolas", monospace',
-      fontSize: 12.5,
+      fontFamily: readStoredAppearanceSettings().codeFontFamily,
+      fontSize: readStoredAppearanceSettings().codeFontSize,
       letterSpacing: 0,
       lineHeight: 1.35,
       macOptionIsMeta: true,
@@ -141,9 +167,25 @@ export function TerminalInstance({
 
     requestAnimationFrame(fitAndResize);
 
+    const handleAppearanceChange = () => {
+      requestAnimationFrame(() => {
+        syncTerminalTypography();
+        fitAndResize();
+      });
+    };
+
+    window.addEventListener(
+      "sentinel-appearance-change",
+      handleAppearanceChange,
+    );
+
     return () => {
       outputSubscription.unsubscribe();
       resizeObserver.disconnect();
+      window.removeEventListener(
+        "sentinel-appearance-change",
+        handleAppearanceChange,
+      );
       fitAddon.dispose();
       terminal.dispose();
       fitAddonRef.current = null;
@@ -159,6 +201,10 @@ export function TerminalInstance({
 
     terminal.options.theme = getTerminalTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    syncTerminalTypography();
+  }, []);
 
   useEffect(() => {
     if (!isActive) {

@@ -4,16 +4,40 @@
 
 @theme {
   --font-sans:
-    var(--font-satoshi), ui-sans-serif, system-ui, sans-serif,
+    var(
+      --app-font-sans,
+      var(--font-satoshi),
+      ui-sans-serif,
+      system-ui,
+      sans-serif
+    ),
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  --font-display: var(--font-millionaire), var(--font-sans);
-  --font-mono:
-    "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", "Menlo", "Monaco",
-    "Consolas", "Liberation Mono", monospace;
+  --font-display: var(--app-font-display, var(--font-sans));
+  --font-mono: var(
+    --app-font-mono,
+    "SF Mono",
+    "Fira Code",
+    "Fira Mono",
+    "Roboto Mono",
+    "Menlo",
+    "Monaco",
+    "Consolas",
+    "Liberation Mono",
+    monospace
+  );
 }
 
 :root,
 [data-theme="light"] {
+  --app-font-sans:
+    var(--font-satoshi), ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --app-font-display: var(--app-font-sans);
+  --app-font-mono:
+    "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", "Menlo", "Monaco",
+    "Consolas", "Liberation Mono", monospace;
+  --app-ui-font-size: 16px;
+  --app-code-font-size: 12.5px;
   --background: #fff;
   --surface: #f9f9f9;
   --accent: oklch(0% 0 0);
@@ -23,6 +47,36 @@
   --overlay: #f5f5f5;
   --code-bg: #f5f5f5;
   --code-border: #e5e5e5;
+  --syntax-background: var(--code-bg);
+  --syntax-foreground: #111111;
+  --syntax-ansi-black: #111827;
+  --syntax-ansi-red: #cf222e;
+  --syntax-ansi-green: #116329;
+  --syntax-ansi-yellow: #9a6700;
+  --syntax-ansi-blue: #0550ae;
+  --syntax-ansi-magenta: #8250df;
+  --syntax-ansi-cyan: #0f766e;
+  --syntax-ansi-white: #6e7781;
+  --syntax-ansi-bright-black: #6e7781;
+  --syntax-ansi-bright-red: #cf222e;
+  --syntax-ansi-bright-green: #116329;
+  --syntax-ansi-bright-yellow: #9a6700;
+  --syntax-ansi-bright-blue: #0550ae;
+  --syntax-ansi-bright-magenta: #8250df;
+  --syntax-ansi-bright-cyan: #0f766e;
+  --syntax-ansi-bright-white: #111111;
+  --syntax-token-link: #0969da;
+  --syntax-token-string: var(--hljs-string);
+  --syntax-token-comment: var(--hljs-comment);
+  --syntax-token-constant: var(--hljs-number);
+  --syntax-token-keyword: var(--hljs-keyword);
+  --syntax-token-parameter: var(--hljs-variable);
+  --syntax-token-function: var(--hljs-function);
+  --syntax-token-string-expression: var(--hljs-attr);
+  --syntax-token-punctuation: #57606a;
+  --syntax-token-inserted: #116329;
+  --syntax-token-deleted: #cf222e;
+  --syntax-token-changed: #0550ae;
   --hljs-keyword: #cf222e;
   --hljs-string: #0a3069;
   --hljs-number: #0550ae;
@@ -58,6 +112,36 @@
   --overlay: #1c1c1c;
   --code-bg: #0d0d0d;
   --code-border: #262626;
+  --syntax-background: var(--code-bg);
+  --syntax-foreground: #e5e5e5;
+  --syntax-ansi-black: #1a1a1a;
+  --syntax-ansi-red: #ff7b72;
+  --syntax-ansi-green: #7ee787;
+  --syntax-ansi-yellow: #e3b341;
+  --syntax-ansi-blue: #79c0ff;
+  --syntax-ansi-magenta: #d2a8ff;
+  --syntax-ansi-cyan: #39c5cf;
+  --syntax-ansi-white: #8b949e;
+  --syntax-ansi-bright-black: #8b949e;
+  --syntax-ansi-bright-red: #ff7b72;
+  --syntax-ansi-bright-green: #7ee787;
+  --syntax-ansi-bright-yellow: #e3b341;
+  --syntax-ansi-bright-blue: #79c0ff;
+  --syntax-ansi-bright-magenta: #d2a8ff;
+  --syntax-ansi-bright-cyan: #39c5cf;
+  --syntax-ansi-bright-white: #e5e5e5;
+  --syntax-token-link: #58a6ff;
+  --syntax-token-string: var(--hljs-string);
+  --syntax-token-comment: var(--hljs-comment);
+  --syntax-token-constant: var(--hljs-number);
+  --syntax-token-keyword: var(--hljs-keyword);
+  --syntax-token-parameter: var(--hljs-variable);
+  --syntax-token-function: var(--hljs-function);
+  --syntax-token-string-expression: var(--hljs-attr);
+  --syntax-token-punctuation: #c9d1d9;
+  --syntax-token-inserted: #7ee787;
+  --syntax-token-deleted: #ff7b72;
+  --syntax-token-changed: #79c0ff;
   --hljs-keyword: #ff7b72;
   --hljs-string: #a5d6ff;
   --hljs-number: #79c0ff;
@@ -83,14 +167,32 @@
 
 html {
   color-scheme: light dark;
+  font-size: var(--app-ui-font-size);
   overflow: clip;
   height: 100%;
 }
 
 body {
-  font-family: var(--font-sans), sans-serif;
+  font-family: var(--app-font-sans), sans-serif;
   overflow: clip;
   height: 100%;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--app-font-display), var(--app-font-sans), sans-serif;
+}
+
+pre,
+code,
+kbd,
+samp {
+  font-family: var(--app-font-mono), monospace;
+  font-size: var(--app-code-font-size);
 }
 
 .sentinel-scroll-shell {
@@ -153,6 +255,8 @@ button[type="button"] {
   padding: 14px 16px 16px;
   border-radius: 14px;
   background: #0a0a0a;
+  font-family: var(--app-font-mono), monospace;
+  font-size: var(--app-code-font-size);
 }
 
 .sentinel-terminal .xterm-viewport,
@@ -582,9 +686,10 @@ button[type="button"] {
 .sentinel-shiki .shiki {
   margin: 0 !important;
   overflow-x: auto;
-  background: var(--code-bg) !important;
+  background: var(--syntax-background) !important;
+  color: var(--syntax-foreground) !important;
   font-family: var(--font-mono) !important;
-  font-size: 13px;
+  font-size: var(--app-code-font-size);
   line-height: 1.6;
   tab-size: 2;
 }

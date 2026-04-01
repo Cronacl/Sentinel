@@ -10,7 +10,7 @@ import {
   resolveThemePreference,
   type ResolvedTheme,
   type ThemePreference,
-} from "@/lib/theme";
+} from "@/lib/appearance";
 import { TRPCReactProvider } from "@/trpc/react";
 
 type ThemeWindow = Window & {

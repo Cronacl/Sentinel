@@ -546,7 +546,7 @@ export async function executeWebFetch({
   if (input.urls?.length) {
     if (input.urls.length > 1 && !settings.batchEnabled) {
       throw new Error(
-        "Batch web fetch is disabled in General settings. Enable it to fetch multiple URLs at once.",
+        "Batch web fetch is disabled in Search settings. Enable it to fetch multiple URLs at once.",
       );
     }
 

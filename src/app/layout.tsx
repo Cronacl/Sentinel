@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 
 import { Providers } from "@/components/providers";
-import { getThemeInitScript } from "@/lib/theme";
+import { getAppearanceInitScript } from "@/lib/appearance";
 import "@/styles/globals.css";
 
 export const metadata: Metadata = {
@@ -90,7 +90,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: getThemeInitScript(),
+            __html: getAppearanceInitScript(),
           }}
         />
       </head>

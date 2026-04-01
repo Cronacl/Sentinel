@@ -50,3 +50,12 @@ export const generalSettingsFormSchema = z.object({
 export type GeneralSettingsFormValues = z.infer<
   typeof generalSettingsFormSchema
 >;
+
+export const webFetchSettingsFormSchema = generalSettingsFormSchema.pick({
+  webFetchBatchEnabled: true,
+  webFetchBatchLimit: true,
+});
+
+export type WebFetchSettingsFormValues = z.infer<
+  typeof webFetchSettingsFormSchema
+>;
