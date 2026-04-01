@@ -33,23 +33,14 @@ const chatEngineSchema = z.enum(CHAT_ENGINES);
 const runtimeEngineSchema = z.enum(["codex", "claude"]);
 
 function isCodexEngineAvailable(status: CodexEngineStatus) {
-  if (!status.cliDetected) {
-    return false;
-  }
-
-  if (status.serverReachable) {
-    return status.authReady;
-  }
-
-  return !status.requiresOpenaiAuth;
+  return status.state === "ready" || status.state === "timeout_no_cache";
 }
 
 function canUseCodexFallbackModels(status: CodexEngineStatus) {
   return (
-    status.cliDetected &&
-    !status.serverReachable &&
+    status.state === "timeout_no_cache" &&
     status.availableModels.length === 0 &&
-    !status.requiresOpenaiAuth
+    status.cliDetected
   );
 }
 
@@ -87,7 +78,7 @@ function buildFallbackCodexModels() {
 function canUseClaudeFallbackModels(status: ClaudeEngineStatus) {
   return (
     status.binaryDetected &&
-    (status.state === "timeout_no_cache" || status.state === "error") &&
+    status.state === "timeout_no_cache" &&
     status.availableModels.length === 0
   );
 }
