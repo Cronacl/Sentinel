@@ -56,6 +56,14 @@ const resetCodexCliResolutionCache = mock(() => undefined);
 const resetCodexEngineStatusCache = mock(() => undefined);
 const resetClaudeCodeRuntimeCache = mock(() => undefined);
 const resetClaudeEngineStatusCache = mock(() => undefined);
+const resolveCodexCli = mock(async () => ({
+  command: "/Users/test/.local/bin/codex",
+  env: process.env,
+}));
+const readCodexCliVersion = mock(async () => "codex-cli 0.98.0");
+const spawnCodexCli = mock(() => {
+  throw new Error("spawnCodexCli should not be called in router tests");
+});
 const getOwnedThreadOrThrow = mock(async () => ({
   chatEngineState: {
     codex: {
@@ -88,15 +96,16 @@ mock.module("@/lib/ai/chat/engines/codex-app-server", () => ({
 mock.module("@/lib/ai/chat/engines/claude-sdk", () => ({
   getClaudeEngineStatus,
   isClaudeEngineAvailable: (status: any) =>
-    status.binaryDetected &&
-    status.state !== "missing_binary" &&
-    status.state !== "auth_unavailable",
+    status.state === "ready" || status.state === "timeout_no_cache",
   resetClaudeCodeRuntimeCache,
   resetClaudeEngineStatusCache,
 }));
 
 mock.module("@/lib/ai/chat/engines/codex-cli", () => ({
+  readCodexCliVersion,
   resetCodexCliResolutionCache,
+  resolveCodexCli,
+  spawnCodexCli,
 }));
 
 mock.module("@/lib/ai/chat/engines/types", () => ({
@@ -167,12 +176,20 @@ beforeEach(() => {
   resetCodexEngineStatusCache.mockReset();
   resetClaudeCodeRuntimeCache.mockReset();
   resetClaudeEngineStatusCache.mockReset();
+  resolveCodexCli.mockReset();
+  readCodexCliVersion.mockReset();
+  spawnCodexCli.mockReset();
   getOwnedThreadOrThrow.mockReset();
 
   startReview.mockImplementation(async () => ({
     review: { id: "review-1", text: "ok" },
   }));
   reloadRuntime.mockImplementation(async () => undefined);
+  resolveCodexCli.mockImplementation(async () => ({
+    command: "/Users/test/.local/bin/codex",
+    env: process.env,
+  }));
+  readCodexCliVersion.mockImplementation(async () => "codex-cli 0.98.0");
   getStatus.mockImplementation(async () => ({
     authReady: true,
     availableModels: [
@@ -391,10 +408,10 @@ describe("enginesRouter.list", () => {
       binaryDetected: true,
       binaryPath: "/Users/test/.local/bin/claude",
       binaryVersion: "2.1.39 (Claude Code)",
-      error: "Timed out while querying Claude Code runtime.",
+      error: null,
       lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
       sdkDetected: true,
-      state: "timeout_using_cache",
+      state: "ready",
       usedCachedStatus: true,
     }));
 
@@ -404,7 +421,7 @@ describe("enginesRouter.list", () => {
       expect.objectContaining({
         isAvailable: true,
         status: expect.objectContaining({
-          state: "timeout_using_cache",
+          state: "ready",
           usedCachedStatus: true,
         }),
       }),
@@ -466,7 +483,7 @@ describe("enginesRouter.models", () => {
     ]);
   });
 
-  it("marks cached Claude models as connected during degraded mode", async () => {
+  it("marks cached Claude models as connected during snapshot-backed mode", async () => {
     getClaudeEngineStatus.mockImplementationOnce(async () => ({
       authReady: true,
       availableModels: [
@@ -484,10 +501,10 @@ describe("enginesRouter.models", () => {
       binaryDetected: true,
       binaryPath: "/Users/test/.local/bin/claude",
       binaryVersion: "2.1.39 (Claude Code)",
-      error: "Timed out while querying Claude Code runtime.",
+      error: null,
       lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
       sdkDetected: true,
-      state: "timeout_using_cache",
+      state: "ready",
       usedCachedStatus: true,
     }));
 
@@ -612,7 +629,7 @@ describe("enginesRouter.models", () => {
     );
   });
 
-  it("returns cached Codex models during degraded mode", async () => {
+  it("returns cached Codex models during snapshot-backed mode", async () => {
     getStatus.mockImplementationOnce(async () => ({
       account: {
         email: "codex@example.com",
@@ -633,12 +650,12 @@ describe("enginesRouter.models", () => {
       ],
       cliDetected: true,
       cliVersion: "codex-cli 0.98.0",
-      error: "Timed out while querying Codex runtime.",
+      error: null,
       isDesktopRuntime: true,
       lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
       requiresOpenaiAuth: false,
       serverReachable: false,
-      state: "timeout_using_cache",
+      state: "ready",
       usedCachedStatus: true,
     }));
 
@@ -660,8 +677,12 @@ describe("enginesRouter.models", () => {
 
   it("keeps cached Codex models connected when auth is temporarily unavailable", async () => {
     getStatus.mockImplementationOnce(async () => ({
-      account: null,
-      authReady: false,
+      account: {
+        email: "codex@example.com",
+        planType: "plus",
+        type: "chatgpt",
+      },
+      authReady: true,
       availableModels: [
         {
           defaultReasoningEffort: "medium",
@@ -675,12 +696,12 @@ describe("enginesRouter.models", () => {
       ],
       cliDetected: true,
       cliVersion: "codex-cli 0.98.0",
-      error: "Authentication temporarily unavailable.",
+      error: null,
       isDesktopRuntime: true,
       lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
-      requiresOpenaiAuth: true,
-      serverReachable: true,
-      state: "auth_unavailable",
+      requiresOpenaiAuth: false,
+      serverReachable: false,
+      state: "ready",
       usedCachedStatus: true,
     }));
 
@@ -742,7 +763,7 @@ describe("enginesRouter.refreshStatus", () => {
     );
   });
 
-  it("returns degraded cached Codex state after a failed forced probe", async () => {
+  it("returns snapshot-backed ready Codex state after a failed forced probe", async () => {
     getStatus.mockImplementationOnce(async () => ({
       account: {
         email: "codex@example.com",
@@ -763,12 +784,12 @@ describe("enginesRouter.refreshStatus", () => {
       ],
       cliDetected: true,
       cliVersion: "codex-cli 0.98.0",
-      error: "Timed out while querying Codex runtime.",
+      error: null,
       isDesktopRuntime: true,
       lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
       requiresOpenaiAuth: false,
       serverReachable: false,
-      state: "timeout_using_cache",
+      state: "ready",
       usedCachedStatus: true,
     }));
 
@@ -783,7 +804,7 @@ describe("enginesRouter.refreshStatus", () => {
           account: expect.objectContaining({
             email: "codex@example.com",
           }),
-          state: "timeout_using_cache",
+          state: "ready",
           usedCachedStatus: true,
         }),
       }),

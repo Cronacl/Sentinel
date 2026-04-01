@@ -159,8 +159,9 @@ describe("getClaudeEngineStatus", () => {
           binaryDetected: true,
           binaryPath: executablePath,
           binaryVersion: "2.1.39 (Claude Code)",
+          error: null,
           lastSuccessfulProbeAt: readyStatus.lastSuccessfulProbeAt,
-          state: "timeout_using_cache",
+          state: "ready",
           usedCachedStatus: true,
         }),
       );
@@ -168,6 +169,37 @@ describe("getClaudeEngineStatus", () => {
       await rm(tempRoot, { force: true, recursive: true });
     }
   }, 4_500);
+
+  it("returns snapshot-backed status immediately before a background refresh completes", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
+
+    try {
+      const executablePath = await createClaudeExecutable(tempRoot);
+      const readyStatus = await getClaudeEngineStatus({ forceRefresh: true });
+
+      initializationResultFactory = () => new Promise(() => undefined);
+      resetClaudeCodeRuntimeCache();
+      resetClaudeEngineStatusCache();
+
+      const snapshotBackedStatus = await getClaudeEngineStatus();
+
+      expect(snapshotBackedStatus).toEqual(
+        expect.objectContaining({
+          authReady: true,
+          availableModels: readyStatus.availableModels,
+          binaryDetected: true,
+          binaryPath: executablePath,
+          binaryVersion: "2.1.39 (Claude Code)",
+          error: null,
+          lastSuccessfulProbeAt: readyStatus.lastSuccessfulProbeAt,
+          state: "ready",
+          usedCachedStatus: true,
+        }),
+      );
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
 
   it("reports timeout_no_cache when no snapshot is available", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
@@ -194,12 +226,12 @@ describe("getClaudeEngineStatus", () => {
     }
   }, 4_500);
 
-  it("does not reuse cached models when Claude reports as unauthenticated", async () => {
+  it("reuses cached models when Claude reports as unauthenticated", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
 
     try {
       await createClaudeExecutable(tempRoot);
-      await getClaudeEngineStatus({ forceRefresh: true });
+      const readyStatus = await getClaudeEngineStatus({ forceRefresh: true });
 
       initializationResultFactory = async () => ({
         account: null,
@@ -212,11 +244,12 @@ describe("getClaudeEngineStatus", () => {
 
       expect(status).toEqual(
         expect.objectContaining({
-          authReady: false,
-          availableModels: [],
-          error: "Claude Code is not authenticated.",
-          state: "auth_unavailable",
-          usedCachedStatus: false,
+          authReady: true,
+          availableModels: readyStatus.availableModels,
+          error: null,
+          lastSuccessfulProbeAt: readyStatus.lastSuccessfulProbeAt,
+          state: "ready",
+          usedCachedStatus: true,
         }),
       );
     } finally {

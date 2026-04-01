@@ -148,6 +148,7 @@ let cachedRuntime: {
   expiresAt: number;
   promise: Promise<ResolvedClaudeCodeRuntime>;
 } | null = null;
+let backgroundStatusRefresh: Promise<void> | null = null;
 
 function getLocalStateDirectory() {
   return path.join(process.env.HOME?.trim() || os.homedir(), ".sentinel");
@@ -434,7 +435,6 @@ function buildClaudeEngineStatus(input: {
 function buildCachedClaudeStatus(input: {
   binaryPath: string;
   binaryVersion: string | null;
-  error: string;
   snapshot: ClaudeStatusSnapshot;
 }) {
   return buildClaudeEngineStatus({
@@ -444,9 +444,9 @@ function buildCachedClaudeStatus(input: {
     binaryDetected: true,
     binaryPath: input.binaryPath,
     binaryVersion: input.binaryVersion,
-    error: input.error,
+    error: null,
     lastSuccessfulProbeAt: input.snapshot.recordedAt,
-    state: "timeout_using_cache",
+    state: "ready",
     usedCachedStatus: true,
   });
 }
@@ -463,11 +463,7 @@ function isClaudeAuthErrorMessage(message: string) {
 }
 
 export function isClaudeEngineAvailable(status: ClaudeEngineStatus) {
-  return (
-    status.binaryDetected &&
-    status.state !== "missing_binary" &&
-    status.state !== "auth_unavailable"
-  );
+  return status.state === "ready" || status.state === "timeout_no_cache";
 }
 
 function getPreferredPathValue(pathValue?: string | null) {
@@ -874,36 +870,75 @@ export function buildClaudeSdkBaseOptions(options?: Partial<Options>): Options {
 async function readClaudeStatus(options?: {
   forceRefreshRuntime?: boolean;
 }): Promise<ClaudeEngineStatus> {
-  let claudeQuery: ReturnType<typeof query> | null = null;
-  let runtime: ResolvedClaudeCodeRuntime | null = null;
-
-  try {
-    runtime = await resolveClaudeCodeRuntime({
-      forceRefresh: options?.forceRefreshRuntime,
+  const runtime = await resolveClaudeCodeRuntime({
+    forceRefresh: options?.forceRefreshRuntime,
+  });
+  if (!runtime.binaryDetected || !runtime.executablePath) {
+    return buildClaudeEngineStatus({
+      account: null,
+      authReady: false,
+      availableModels: [],
+      binaryDetected: false,
+      binaryPath: null,
+      binaryVersion: null,
+      error: "Claude Code is not installed or not available on PATH.",
+      lastSuccessfulProbeAt: null,
+      state: "missing_binary",
+      usedCachedStatus: false,
     });
-    if (!runtime.binaryDetected || !runtime.executablePath) {
-      return buildClaudeEngineStatus({
-        account: null,
-        authReady: false,
-        availableModels: [],
-        binaryDetected: false,
-        binaryPath: null,
-        binaryVersion: null,
-        error: "Claude Code is not installed or not available on PATH.",
-        lastSuccessfulProbeAt: null,
-        state: "missing_binary",
-        usedCachedStatus: false,
-      });
+  }
+
+  const snapshot = await readClaudeStatusSnapshot({
+    binaryPath: runtime.executablePath,
+  });
+
+  if (!options?.forceRefreshRuntime && snapshot) {
+    if (!backgroundStatusRefresh) {
+      backgroundStatusRefresh = probeClaudeStatus({
+        fallbackSnapshot: snapshot,
+        runtime,
+      })
+        .then((status) => {
+          if (!status.usedCachedStatus && status.state === "ready") {
+            cachedStatus = {
+              expiresAt: Date.now() + CLAUDE_STATUS_CACHE_TTL_MS,
+              promise: Promise.resolve(status),
+            };
+          }
+        })
+        .finally(() => {
+          backgroundStatusRefresh = null;
+        });
     }
 
+    return buildCachedClaudeStatus({
+      binaryPath: runtime.executablePath,
+      binaryVersion: runtime.binaryVersion,
+      snapshot,
+    });
+  }
+
+  return await probeClaudeStatus({
+    fallbackSnapshot: snapshot,
+    runtime,
+  });
+}
+
+async function probeClaudeStatus(input: {
+  fallbackSnapshot: ClaudeStatusSnapshot | null;
+  runtime: ResolvedClaudeCodeRuntime;
+}): Promise<ClaudeEngineStatus> {
+  let claudeQuery: ReturnType<typeof query> | null = null;
+
+  try {
     claudeQuery = query({
       prompt: "",
       options: buildClaudeSdkBaseOptions({
         cwd: process.cwd(),
-        env: runtime.env,
+        env: input.runtime.env,
         includePartialMessages: false,
         maxTurns: 1,
-        pathToClaudeCodeExecutable: runtime.executablePath,
+        pathToClaudeCodeExecutable: input.runtime.executablePath,
         persistSession: false,
       }),
     });
@@ -914,15 +949,11 @@ async function readClaudeStatus(options?: {
     );
 
     if (!initialization) {
-      const snapshot = await readClaudeStatusSnapshot({
-        binaryPath: runtime.executablePath,
-      });
-      if (snapshot) {
+      if (input.fallbackSnapshot) {
         return buildCachedClaudeStatus({
-          binaryPath: runtime.executablePath,
-          binaryVersion: runtime.binaryVersion,
-          error: "Timed out while querying Claude Code runtime.",
-          snapshot,
+          binaryPath: input.runtime.executablePath!,
+          binaryVersion: input.runtime.binaryVersion,
+          snapshot: input.fallbackSnapshot,
         });
       }
 
@@ -931,8 +962,8 @@ async function readClaudeStatus(options?: {
         authReady: false,
         availableModels: [],
         binaryDetected: true,
-        binaryPath: runtime.executablePath,
-        binaryVersion: runtime.binaryVersion,
+        binaryPath: input.runtime.executablePath,
+        binaryVersion: input.runtime.binaryVersion,
         error: "Timed out while querying Claude Code runtime.",
         lastSuccessfulProbeAt: null,
         state: "timeout_no_cache",
@@ -943,13 +974,21 @@ async function readClaudeStatus(options?: {
     const models = initialization.models ?? [];
     const account = initialization.account ?? null;
     if (models.length === 0) {
+      if (input.fallbackSnapshot) {
+        return buildCachedClaudeStatus({
+          binaryPath: input.runtime.executablePath!,
+          binaryVersion: input.runtime.binaryVersion,
+          snapshot: input.fallbackSnapshot,
+        });
+      }
+
       return buildClaudeEngineStatus({
         account,
         authReady: false,
         availableModels: [],
         binaryDetected: true,
-        binaryPath: runtime.executablePath,
-        binaryVersion: runtime.binaryVersion,
+        binaryPath: input.runtime.executablePath,
+        binaryVersion: input.runtime.binaryVersion,
         error: "Claude Code is not authenticated.",
         lastSuccessfulProbeAt: null,
         state: "auth_unavailable",
@@ -962,8 +1001,8 @@ async function readClaudeStatus(options?: {
     await writeClaudeStatusSnapshot({
       account,
       availableModels,
-      binaryPath: runtime.executablePath,
-      binaryVersion: runtime.binaryVersion,
+      binaryPath: input.runtime.executablePath!,
+      binaryVersion: input.runtime.binaryVersion,
       recordedAt,
     });
 
@@ -972,8 +1011,8 @@ async function readClaudeStatus(options?: {
       authReady: true,
       availableModels,
       binaryDetected: true,
-      binaryPath: runtime.executablePath,
-      binaryVersion: runtime.binaryVersion,
+      binaryPath: input.runtime.executablePath,
+      binaryVersion: input.runtime.binaryVersion,
       error: null,
       lastSuccessfulProbeAt: recordedAt,
       state: "ready",
@@ -986,31 +1025,21 @@ async function readClaudeStatus(options?: {
         ? error.message
         : "Claude Code is unavailable in this Sentinel runtime.";
 
-    if (
-      runtime?.binaryDetected &&
-      runtime.executablePath &&
-      !isClaudeAuthErrorMessage(message)
-    ) {
-      const snapshot = await readClaudeStatusSnapshot({
-        binaryPath: runtime.executablePath,
+    if (input.fallbackSnapshot) {
+      return buildCachedClaudeStatus({
+        binaryPath: input.runtime.executablePath!,
+        binaryVersion: input.runtime.binaryVersion,
+        snapshot: input.fallbackSnapshot,
       });
-      if (snapshot) {
-        return buildCachedClaudeStatus({
-          binaryPath: runtime.executablePath,
-          binaryVersion: runtime.binaryVersion,
-          error: message,
-          snapshot,
-        });
-      }
     }
 
     return buildClaudeEngineStatus({
       account: null,
       authReady: false,
       availableModels: [],
-      binaryDetected: runtime?.binaryDetected ?? false,
-      binaryPath: runtime?.executablePath ?? null,
-      binaryVersion: runtime?.binaryVersion ?? null,
+      binaryDetected: input.runtime.binaryDetected,
+      binaryPath: input.runtime.executablePath,
+      binaryVersion: input.runtime.binaryVersion,
       error: message,
       lastSuccessfulProbeAt: null,
       state: isClaudeAuthErrorMessage(message) ? "auth_unavailable" : "error",

@@ -159,8 +159,9 @@ describe("CodexAppServerManager.getStatus", () => {
           availableModels: readyStatus.availableModels,
           cliDetected: true,
           cliVersion: "codex-cli 0.98.0",
+          error: null,
           lastSuccessfulProbeAt: readyStatus.lastSuccessfulProbeAt,
-          state: "timeout_using_cache",
+          state: "ready",
           usedCachedStatus: true,
         }),
       );
@@ -169,7 +170,7 @@ describe("CodexAppServerManager.getStatus", () => {
     }
   }, 2_500);
 
-  it("does not reuse cached data when Codex reports as unauthenticated", async () => {
+  it("returns snapshot-backed status immediately before a background refresh completes", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
 
     try {
@@ -180,7 +181,60 @@ describe("CodexAppServerManager.getStatus", () => {
       }));
 
       const manager = getCodexAppServerManager() as any;
-      await manager.getStatus({ forceRefresh: true });
+      const readyStatus = await manager.getStatus({ forceRefresh: true });
+
+      manager.readAccount.mockImplementation(
+        async () =>
+          await new Promise((resolve) =>
+            setTimeout(
+              () =>
+                resolve({
+                  account: readyStatus.account,
+                  requiresOpenaiAuth: false,
+                }),
+              25,
+            ),
+          ),
+      );
+      manager.listModels.mockImplementation(
+        async () =>
+          await new Promise((resolve) =>
+            setTimeout(() => resolve(readyStatus.availableModels), 25),
+          ),
+      );
+      resetCodexEngineStatusCache();
+
+      const snapshotBackedStatus = await manager.getStatus();
+
+      expect(snapshotBackedStatus).toEqual(
+        expect.objectContaining({
+          account: readyStatus.account,
+          authReady: true,
+          availableModels: readyStatus.availableModels,
+          error: null,
+          lastSuccessfulProbeAt: readyStatus.lastSuccessfulProbeAt,
+          state: "ready",
+          usedCachedStatus: true,
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("reuses cached data when Codex reports as unauthenticated", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
+
+    try {
+      process.env.HOME = tempRoot;
+      resolveCodexCliMock.mockImplementation(async () => ({
+        command: path.join(tempRoot, ".local", "bin", "codex"),
+        env: process.env,
+      }));
+
+      const manager = getCodexAppServerManager() as any;
+      const readyStatus = await manager.getStatus({ forceRefresh: true });
 
       manager.readAccount.mockImplementation(async () => ({
         account: null,
@@ -193,13 +247,15 @@ describe("CodexAppServerManager.getStatus", () => {
 
       expect(status).toEqual(
         expect.objectContaining({
-          account: null,
-          authReady: false,
-          availableModels: [],
-          error: "Codex CLI is not authenticated.",
-          requiresOpenaiAuth: true,
-          state: "auth_unavailable",
-          usedCachedStatus: false,
+          account: expect.objectContaining({
+            email: "codex@example.com",
+          }),
+          authReady: true,
+          availableModels: readyStatus.availableModels,
+          error: null,
+          lastSuccessfulProbeAt: readyStatus.lastSuccessfulProbeAt,
+          state: "ready",
+          usedCachedStatus: true,
         }),
       );
     } finally {

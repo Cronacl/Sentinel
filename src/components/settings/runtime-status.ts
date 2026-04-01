@@ -44,16 +44,8 @@ function getRuntimeBadgeLabel(
     missingState: string;
   },
 ) {
-  if (
-    status?.usedCachedStatus ||
-    (status?.[options.detectedKey] &&
-      status?.state !== "ready" &&
-      status?.state !== "auth_unavailable" &&
-      status?.state !== options.missingState)
-  ) {
-    return "Degraded";
-  }
-
+  void status;
+  void options;
   return isAvailable ? "Ready" : "Setup needed";
 }
 
@@ -75,27 +67,10 @@ function getRuntimeFallbackMessage(
   status: RuntimeStatusLike | null | undefined,
   formatter?: (date: Date) => string,
 ) {
-  if (
-    !status ||
-    (!status.usedCachedStatus && status.state !== "timeout_no_cache")
-  ) {
-    return null;
-  }
-
-  const formattedTimestamp = status.lastSuccessfulProbeAt
-    ? formatRuntimeTimestamp(status.lastSuccessfulProbeAt, formatter)
-    : null;
-  const suffix = formattedTimestamp ? ` from ${formattedTimestamp}` : "";
-
-  if (status.state === "timeout_using_cache") {
-    return `Live ${runtime} probe timed out; using cached models${suffix}.`;
-  }
-
-  if (status.state === "timeout_no_cache") {
-    return `Live ${runtime} probe timed out; using fallback ${runtime} models${suffix}.`;
-  }
-
-  return `Live ${runtime} probe failed; using cached models${suffix}.`;
+  void runtime;
+  void status;
+  void formatter;
+  return null;
 }
 
 function getRuntimeComposerUnavailableMessage(
@@ -119,12 +94,7 @@ function getRuntimeComposerUnavailableMessage(
     return `${runtime} runtime was not detected in this Sentinel session.`;
   }
 
-  if (
-    status.usedCachedStatus ||
-    status.state === "timeout_no_cache" ||
-    status.state === "timeout_using_cache" ||
-    status.state === "error"
-  ) {
+  if (status.state === "error" || status.state === "timeout_using_cache") {
     return `${runtime} is temporarily unavailable in this Sentinel runtime.`;
   }
 
