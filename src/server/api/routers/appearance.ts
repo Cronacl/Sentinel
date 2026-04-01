@@ -1,5 +1,9 @@
 import { eq } from "drizzle-orm";
 
+import {
+  DEFAULT_APPEARANCE_SETTINGS,
+  sanitizeAppearanceSettings,
+} from "@/lib/appearance";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { appearanceFormSchema } from "@/schemas/appearance.schema";
 import { users } from "@/server/db/schema";
@@ -8,12 +12,30 @@ export const appearanceRouter = createTRPCRouter({
   get: protectedProcedure.query(async ({ ctx }) => {
     const user = await ctx.db.query.users.findFirst({
       where: eq(users.id, ctx.session.user.id),
-      columns: { themePreference: true },
+      columns: {
+        codeFontFamily: true,
+        codeFontSize: true,
+        codeTheme: true,
+        themePreference: true,
+        uiFontFamily: true,
+        uiFontSize: true,
+      },
     });
 
-    return {
-      themePreference: user?.themePreference ?? "system",
-    };
+    return sanitizeAppearanceSettings({
+      codeFontFamily:
+        user?.codeFontFamily ?? DEFAULT_APPEARANCE_SETTINGS.codeFontFamily,
+      codeFontSize:
+        user?.codeFontSize ?? DEFAULT_APPEARANCE_SETTINGS.codeFontSize,
+      codeTheme:
+        (user?.codeTheme as typeof DEFAULT_APPEARANCE_SETTINGS.codeTheme) ??
+        DEFAULT_APPEARANCE_SETTINGS.codeTheme,
+      themePreference:
+        user?.themePreference ?? DEFAULT_APPEARANCE_SETTINGS.themePreference,
+      uiFontFamily:
+        user?.uiFontFamily ?? DEFAULT_APPEARANCE_SETTINGS.uiFontFamily,
+      uiFontSize: user?.uiFontSize ?? DEFAULT_APPEARANCE_SETTINGS.uiFontSize,
+    });
   }),
 
   update: protectedProcedure
@@ -21,12 +43,24 @@ export const appearanceRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       ctx.db
         .update(users)
-        .set({ themePreference: input.themePreference })
+        .set({
+          codeFontFamily: input.codeFontFamily,
+          codeFontSize: input.codeFontSize,
+          codeTheme: input.codeTheme,
+          themePreference: input.themePreference,
+          uiFontFamily: input.uiFontFamily,
+          uiFontSize: input.uiFontSize,
+        })
         .where(eq(users.id, ctx.session.user.id))
         .run();
 
-      return {
+      return sanitizeAppearanceSettings({
+        codeFontFamily: input.codeFontFamily,
+        codeFontSize: input.codeFontSize,
+        codeTheme: input.codeTheme,
         themePreference: input.themePreference,
-      };
+        uiFontFamily: input.uiFontFamily,
+        uiFontSize: input.uiFontSize,
+      });
     }),
 });

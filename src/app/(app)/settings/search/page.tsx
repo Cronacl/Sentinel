@@ -12,6 +12,7 @@ import { sileo } from "sileo";
 import {
   ControlledNumberField,
   ControlledSelectField,
+  ControlledSwitchField,
 } from "@/components/forms/controlled-fields";
 import { SearchProviderConfigModal } from "@/components/settings/search-provider-config-modal";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
@@ -27,7 +28,17 @@ import {
   type SearchSettingsFormValues,
   searchSettingsFormSchema,
 } from "@/schemas/search-settings.schema";
+import {
+  type WebFetchSettingsFormValues,
+  webFetchSettingsFormSchema,
+} from "@/schemas/general-settings.schema";
 import { api } from "@/trpc/react";
+import {
+  DEFAULT_WEBFETCH_BATCH_ENABLED,
+  DEFAULT_WEBFETCH_BATCH_LIMIT,
+  MAX_WEBFETCH_BATCH_LIMIT,
+  MIN_WEBFETCH_BATCH_LIMIT,
+} from "@/lib/webfetch";
 
 type SearchProviderKey = "exa" | "searxng";
 
@@ -81,9 +92,11 @@ export default function SearchSettingsPage() {
     name: string;
   } | null>(null);
   const [settingsError, setSettingsError] = useState("");
+  const [webFetchError, setWebFetchError] = useState("");
 
   const searchSettings = api.searchSettings.get.useQuery();
   const searchProviders = api.searchProviders.list.useQuery();
+  const generalSettings = api.generalSettings.get.useQuery();
 
   const form = useForm<SearchSettingsFormValues>({
     defaultValues: {
@@ -94,6 +107,14 @@ export default function SearchSettingsPage() {
     resolver: zodResolver(searchSettingsFormSchema),
   });
 
+  const webFetchForm = useForm<WebFetchSettingsFormValues>({
+    defaultValues: {
+      webFetchBatchEnabled: DEFAULT_WEBFETCH_BATCH_ENABLED,
+      webFetchBatchLimit: DEFAULT_WEBFETCH_BATCH_LIMIT,
+    },
+    resolver: zodResolver(webFetchSettingsFormSchema),
+  });
+
   useEffect(() => {
     if (!searchSettings.data) {
       return;
@@ -101,6 +122,17 @@ export default function SearchSettingsPage() {
 
     form.reset(searchSettings.data);
   }, [form, searchSettings.data]);
+
+  useEffect(() => {
+    if (!generalSettings.data) {
+      return;
+    }
+
+    webFetchForm.reset({
+      webFetchBatchEnabled: generalSettings.data.webFetchBatchEnabled,
+      webFetchBatchLimit: generalSettings.data.webFetchBatchLimit,
+    });
+  }, [generalSettings.data, webFetchForm]);
 
   const updateSearchSettings = api.searchSettings.update.useMutation(
     useOptimisticMutation({
@@ -161,6 +193,35 @@ export default function SearchSettingsPage() {
     },
   });
 
+  const updateWebFetchSettings = api.generalSettings.update.useMutation(
+    useOptimisticMutation({
+      applyOptimisticUpdate: (current, values: WebFetchSettingsFormValues) =>
+        current
+          ? {
+              ...current,
+              webFetchBatchEnabled: values.webFetchBatchEnabled,
+              webFetchBatchLimit: values.webFetchBatchLimit,
+            }
+          : current,
+      getData: () => utils.generalSettings.get.getData(),
+      onError: (error) => {
+        setWebFetchError(error.message);
+      },
+      onSuccess: (data) => {
+        setWebFetchError("");
+        utils.generalSettings.get.setData(undefined, data);
+        webFetchForm.reset({
+          webFetchBatchEnabled: data.webFetchBatchEnabled,
+          webFetchBatchLimit: data.webFetchBatchLimit,
+        });
+        sileo.success({ description: "Web fetch settings saved." });
+      },
+      setData: (value) => {
+        utils.generalSettings.get.setData(undefined, value);
+      },
+    }),
+  );
+
   const handleSubmit = async (values: SearchSettingsFormValues) => {
     setSettingsError("");
 
@@ -171,12 +232,32 @@ export default function SearchSettingsPage() {
     }
   };
 
+  const handleWebFetchSubmit = async (values: WebFetchSettingsFormValues) => {
+    if (!generalSettings.data) {
+      return;
+    }
+
+    setWebFetchError("");
+
+    try {
+      await updateWebFetchSettings.mutateAsync({
+        ...generalSettings.data,
+        ...values,
+      });
+    } catch {
+      // mutation state handles surfacing errors
+    }
+  };
+
   const providersPending = searchProviders.isPending && !searchProviders.data;
   const settingsPending = searchSettings.isPending && !searchSettings.data;
+  const webFetchPending = generalSettings.isPending && !generalSettings.data;
+  const webFetchBatchEnabled = webFetchForm.watch("webFetchBatchEnabled");
+  const webFetchBatchLimit = webFetchForm.watch("webFetchBatchLimit");
 
   return (
     <SettingsPageWrapper
-      subtitle="Manage web search defaults, result limits, and external search providers."
+      subtitle="Manage web search defaults, web fetch behavior, and external search providers."
       title="Search"
     >
       {searchSettings.error ? (
@@ -197,7 +278,13 @@ export default function SearchSettingsPage() {
         </p>
       ) : null}
 
-      {settingsPending || providersPending ? (
+      {webFetchError ? (
+        <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
+          {webFetchError}
+        </p>
+      ) : null}
+
+      {settingsPending || providersPending || webFetchPending ? (
         <SearchSettingsSkeleton />
       ) : (
         <div className="flex flex-col gap-6">
@@ -263,6 +350,68 @@ export default function SearchSettingsPage() {
                     updateSearchSettings.isPending || !form.formState.isDirty
                   }
                   isPending={updateSearchSettings.isPending}
+                  size="sm"
+                  type="submit"
+                >
+                  {({ isPending }) => (
+                    <>
+                      {isPending ? <Spinner color="current" size="sm" /> : null}
+                      Save
+                    </>
+                  )}
+                </Button>
+              </div>
+            </section>
+          </Form>
+
+          <Form onSubmit={webFetchForm.handleSubmit(handleWebFetchSubmit)}>
+            <section className="border-separator/20 bg-surface rounded-2xl border p-5">
+              <div className="mb-5 space-y-1">
+                <h2 className="text-foreground text-base font-medium">
+                  Web fetch
+                </h2>
+                <p className="text-muted text-sm">
+                  Control whether Sentinel can fetch multiple URLs in one
+                  `webfetch` call and how large a batch is allowed.
+                </p>
+              </div>
+
+              <div className="space-y-5">
+                <ControlledSwitchField
+                  control={webFetchForm.control}
+                  description="When enabled, the assistant can fetch several URLs in a single webfetch call."
+                  label="Enable batch web fetch"
+                  name="webFetchBatchEnabled"
+                />
+
+                <ControlledNumberField
+                  control={webFetchForm.control}
+                  description="Maximum number of URLs allowed in one batch webfetch call."
+                  inputProps={{ className: "w-full" }}
+                  label="Batch URL limit"
+                  name="webFetchBatchLimit"
+                  numberFieldProps={{
+                    className: "w-full max-w-xs",
+                    isDisabled: !webFetchBatchEnabled,
+                    maxValue: MAX_WEBFETCH_BATCH_LIMIT,
+                    minValue: MIN_WEBFETCH_BATCH_LIMIT,
+                  }}
+                />
+
+                <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-xs text-muted">
+                  {webFetchBatchEnabled
+                    ? `Batch fetches enabled, up to ${webFetchBatchLimit} URLs per call.`
+                    : "Single-URL fetches only."}
+                </div>
+              </div>
+
+              <div className="mt-5 flex justify-end">
+                <Button
+                  isDisabled={
+                    updateWebFetchSettings.isPending ||
+                    !webFetchForm.formState.isDirty
+                  }
+                  isPending={updateWebFetchSettings.isPending}
                   size="sm"
                   type="submit"
                 >

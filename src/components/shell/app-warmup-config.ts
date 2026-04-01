@@ -3,6 +3,7 @@ export const STATIC_APP_WARMUP_ROUTES = [
   "/automations",
   "/skills",
   "/settings",
+  "/settings/appearance",
   "/settings/data",
   "/settings/integrations",
   "/settings/mcp",

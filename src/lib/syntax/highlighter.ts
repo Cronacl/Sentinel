@@ -2,38 +2,48 @@ import {
   bundledLanguages,
   createHighlighter,
   type BundledLanguage,
+  type ThemeRegistration,
   type ThemedToken,
 } from "shiki";
 
+import {
+  getSentinelCodeThemeName,
+  SENTINEL_DARK_CODE_THEME,
+  SENTINEL_LIGHT_CODE_THEME,
+} from "@/lib/syntax/theme";
+
 export type { ThemedToken };
+export type SyntaxSegment = { color?: string; text: string };
 
 export const highlighterPromise = createHighlighter({
-  themes: ["github-light", "github-dark"],
+  themes: [SENTINEL_LIGHT_CODE_THEME, SENTINEL_DARK_CODE_THEME],
   langs: [],
 });
 
-const highlightedHtmlCache = new Map<string, string>();
+const highlightedTokenCache = new Map<string, ThemedToken[][]>();
 const MAX_HIGHLIGHT_CACHE_SIZE = 200;
 
-export function setCachedHighlightHtml(key: string, value: string) {
-  if (highlightedHtmlCache.has(key)) {
-    highlightedHtmlCache.delete(key);
+export function setCachedHighlightTokens(key: string, value: ThemedToken[][]) {
+  if (highlightedTokenCache.has(key)) {
+    highlightedTokenCache.delete(key);
   }
 
-  highlightedHtmlCache.set(key, value);
+  highlightedTokenCache.set(key, value);
 
-  if (highlightedHtmlCache.size <= MAX_HIGHLIGHT_CACHE_SIZE) {
+  if (highlightedTokenCache.size <= MAX_HIGHLIGHT_CACHE_SIZE) {
     return;
   }
 
-  const oldestKey = highlightedHtmlCache.keys().next().value;
+  const oldestKey = highlightedTokenCache.keys().next().value;
   if (oldestKey) {
-    highlightedHtmlCache.delete(oldestKey);
+    highlightedTokenCache.delete(oldestKey);
   }
 }
 
-export function getCachedHighlightHtml(key: string): string | undefined {
-  return highlightedHtmlCache.get(key);
+export function getCachedHighlightTokens(
+  key: string,
+): ThemedToken[][] | undefined {
+  return highlightedTokenCache.get(key);
 }
 
 export const languageToVSCodeIcon: Record<string, string> = {
@@ -182,7 +192,13 @@ export function resolveTheme(): "light" | "dark" {
 }
 
 export function getShikiThemeName(theme: "light" | "dark") {
-  return theme === "light" ? "github-light" : "github-dark";
+  return getSentinelCodeThemeName(theme);
+}
+
+export function getShikiTheme(theme: "light" | "dark"): ThemeRegistration {
+  return theme === "light"
+    ? SENTINEL_LIGHT_CODE_THEME
+    : SENTINEL_DARK_CODE_THEME;
 }
 
 export async function ensureLanguageLoaded(language: string) {
@@ -216,6 +232,38 @@ export async function highlightToTokens(
 
   return highlighter.codeToTokensBase(code, {
     lang,
-    theme: getShikiThemeName(theme),
+    theme: getShikiTheme(theme),
   });
+}
+
+export async function highlightToTokensCached(
+  code: string,
+  language: string,
+  theme: "light" | "dark",
+) {
+  const cacheKey = `${theme}:${language}:${code}`;
+  const cachedTokens = getCachedHighlightTokens(cacheKey);
+
+  if (cachedTokens) {
+    return cachedTokens;
+  }
+
+  const tokens = await highlightToTokens(code, language, theme);
+  setCachedHighlightTokens(cacheKey, tokens);
+  return tokens;
+}
+
+export function tokenLinesToSegments(
+  tokenLines: ThemedToken[][] | null,
+): SyntaxSegment[][] {
+  if (!tokenLines) {
+    return [];
+  }
+
+  return tokenLines.map((tokens) =>
+    tokens.map((token) => ({
+      color: token.color,
+      text: token.content,
+    })),
+  );
 }

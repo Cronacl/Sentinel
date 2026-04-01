@@ -6,14 +6,13 @@ import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  getCachedHighlightHtml,
-  getShikiThemeName,
-  highlighterPromise,
+  highlightToTokensCached,
+  tokenLinesToSegments,
   isBundledLanguage,
   languageToVSCodeIcon,
   normalizeLanguage,
-  setCachedHighlightHtml,
   ensureLanguageLoaded,
+  type SyntaxSegment,
 } from "@/lib/syntax/highlighter";
 import { useResolvedTheme } from "@/lib/syntax/use-resolved-theme";
 
@@ -49,7 +48,7 @@ export function CodeBlock({
   const trimmedCode = useMemo(() => code.replace(/\n$/, ""), [code]);
   const [copied, setCopied] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null);
+  const [syntaxLines, setSyntaxLines] = useState<SyntaxSegment[][]>([]);
   const [hasBeenVisible, setHasBeenVisible] = useState(!shouldHighlight);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const actualLanguage =
@@ -74,7 +73,7 @@ export function CodeBlock({
   useEffect(() => {
     if (!shouldHighlight) {
       setHasBeenVisible(false);
-      setHighlightedHtml(null);
+      setSyntaxLines([]);
       return;
     }
 
@@ -114,31 +113,19 @@ export function CodeBlock({
     let isCancelled = false;
 
     const highlight = async () => {
-      const cacheKey = `${theme}:${normalizedLanguage}:${displayedCode}`;
-      const cachedHtml = getCachedHighlightHtml(cacheKey);
-      if (cachedHtml) {
-        setHighlightedHtml(cachedHtml);
-        return;
-      }
-
       try {
-        const highlighter = await highlighterPromise;
         await ensureLanguageLoaded(normalizedLanguage);
-
-        const html = highlighter.codeToHtml(displayedCode, {
-          lang: isBundledLanguage(normalizedLanguage)
-            ? normalizedLanguage
-            : "text",
-          theme: getShikiThemeName(theme),
-        });
-
-        setCachedHighlightHtml(cacheKey, html);
+        const tokens = await highlightToTokensCached(
+          displayedCode,
+          normalizedLanguage,
+          theme,
+        );
         if (!isCancelled) {
-          setHighlightedHtml(html);
+          setSyntaxLines(tokenLinesToSegments(tokens));
         }
       } catch {
         if (!isCancelled) {
-          setHighlightedHtml(null);
+          setSyntaxLines([]);
         }
       }
     };
@@ -191,8 +178,25 @@ export function CodeBlock({
       </div>
 
       <div className="sentinel-shiki">
-        {shouldHighlight && hasBeenVisible && highlightedHtml ? (
-          <div dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
+        {shouldHighlight && hasBeenVisible && syntaxLines.length > 0 ? (
+          <div className="overflow-x-auto px-2 py-2">
+            <div className="font-mono text-[11px] leading-[18px]">
+              {displayedCode.split("\n").map((line, index) => (
+                <div className="whitespace-pre" key={`${index}-${line}`}>
+                  {(syntaxLines[index] ?? [{ text: line }]).map(
+                    (seg, segIdx) => (
+                      <span
+                        key={segIdx}
+                        style={seg.color ? { color: seg.color } : undefined}
+                      >
+                        {seg.text}
+                      </span>
+                    ),
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         ) : (
           <pre>
             <code>{displayedCode}</code>

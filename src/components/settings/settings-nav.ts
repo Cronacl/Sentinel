@@ -1,6 +1,7 @@
 import {
   AiIdeaIcon,
   Brain02Icon,
+  BrushIcon,
   Database01Icon,
   GlobalSearchIcon,
   IceCubesIcon,
@@ -15,6 +16,11 @@ import {
 
 export const SETTINGS_NAV = [
   { href: "/settings", label: "General", icon: Settings05Icon },
+  {
+    href: "/settings/appearance",
+    label: "Appearance",
+    icon: BrushIcon,
+  },
   {
     href: "/settings/personalization",
     label: "Personalization",

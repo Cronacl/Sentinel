@@ -38,6 +38,11 @@ import { useRightSidebar } from "@/components/shell/shell-context";
 import { getDesktopApi, isDesktopRuntime } from "@/lib/desktop/client";
 import type { DesktopOpenTarget } from "@/lib/desktop/contracts";
 import { getErrorMessage } from "@/lib/errors";
+import {
+  ensureSentinelDiffThemesRegistered,
+  SENTINEL_DARK_CODE_THEME_NAME,
+  SENTINEL_LIGHT_CODE_THEME_NAME,
+} from "@/lib/syntax/theme";
 import { useResolvedTheme } from "@/lib/syntax/use-resolved-theme";
 import { api } from "@/trpc/react";
 
@@ -68,19 +73,63 @@ const DIFF_PANEL_UNSAFE_CSS = `
   --diffs-dark-bg: color-mix(in srgb, var(--background) 94%, var(--foreground)) !important;
   --diffs-token-light-bg: transparent;
   --diffs-token-dark-bg: transparent;
+  --diffs-addition-color-override: var(--syntax-token-inserted);
+  --diffs-deletion-color-override: var(--syntax-token-deleted);
+  --diffs-fg-number-addition-override: var(--syntax-token-inserted);
+  --diffs-fg-number-deletion-override: var(--syntax-token-deleted);
   --diffs-bg-context-override: color-mix(in srgb, var(--background) 97%, var(--foreground));
   --diffs-bg-hover-override: color-mix(in srgb, var(--background) 94%, var(--foreground));
   --diffs-bg-separator-override: color-mix(in srgb, var(--background) 95%, var(--foreground));
   --diffs-bg-buffer-override: color-mix(in srgb, var(--background) 90%, var(--foreground));
-  --diffs-bg-addition-override: color-mix(in srgb, var(--background) 90%, var(--success));
-  --diffs-bg-addition-number-override: color-mix(in srgb, var(--background) 86%, var(--success));
-  --diffs-bg-addition-hover-override: color-mix(in srgb, var(--background) 82%, var(--success));
-  --diffs-bg-addition-emphasis-override: color-mix(in srgb, var(--background) 76%, var(--success));
-  --diffs-bg-deletion-override: color-mix(in srgb, var(--background) 90%, var(--danger));
-  --diffs-bg-deletion-number-override: color-mix(in srgb, var(--background) 86%, var(--danger));
-  --diffs-bg-deletion-hover-override: color-mix(in srgb, var(--background) 82%, var(--danger));
-  --diffs-bg-deletion-emphasis-override: color-mix(in srgb, var(--background) 76%, var(--danger));
+  --diffs-bg-addition-override: color-mix(in srgb, var(--background) 88%, var(--syntax-token-inserted));
+  --diffs-bg-addition-number-override: color-mix(in srgb, var(--background) 84%, var(--syntax-token-inserted));
+  --diffs-bg-addition-hover-override: color-mix(in srgb, var(--background) 78%, var(--syntax-token-inserted));
+  --diffs-bg-addition-emphasis-override: color-mix(in srgb, var(--background) 70%, var(--syntax-token-inserted));
+  --diffs-bg-deletion-override: color-mix(in srgb, var(--background) 88%, var(--syntax-token-deleted));
+  --diffs-bg-deletion-number-override: color-mix(in srgb, var(--background) 84%, var(--syntax-token-deleted));
+  --diffs-bg-deletion-hover-override: color-mix(in srgb, var(--background) 78%, var(--syntax-token-deleted));
+  --diffs-bg-deletion-emphasis-override: color-mix(in srgb, var(--background) 70%, var(--syntax-token-deleted));
   background-color: var(--diffs-bg) !important;
+}
+
+[data-line-type='change-addition'][data-line] span {
+  color: color-mix(in srgb, currentColor 76%, var(--syntax-token-inserted)) !important;
+}
+
+[data-line-type='change-deletion'][data-line] span {
+  color: color-mix(in srgb, currentColor 76%, var(--syntax-token-deleted)) !important;
+}
+
+[data-line-type='change-addition'][data-line],
+[data-line-type='change-addition'][data-no-newline] {
+  background-color: color-mix(in srgb, var(--background) 82%, var(--syntax-token-inserted)) !important;
+  color: color-mix(in srgb, var(--foreground) 28%, var(--syntax-token-inserted)) !important;
+}
+
+[data-line-type='change-deletion'][data-line],
+[data-line-type='change-deletion'][data-no-newline] {
+  background-color: color-mix(in srgb, var(--background) 82%, var(--syntax-token-deleted)) !important;
+  color: color-mix(in srgb, var(--foreground) 28%, var(--syntax-token-deleted)) !important;
+}
+
+[data-line-type='change-addition'][data-column-number] {
+  background-color: color-mix(in srgb, var(--background) 76%, var(--syntax-token-inserted)) !important;
+  color: var(--syntax-token-inserted) !important;
+}
+
+[data-line-type='change-deletion'][data-column-number] {
+  background-color: color-mix(in srgb, var(--background) 76%, var(--syntax-token-deleted)) !important;
+  color: var(--syntax-token-deleted) !important;
+}
+
+[data-line-type='change-addition'][data-line][data-hovered],
+[data-line-type='change-addition'][data-column-number][data-hovered] {
+  background-color: color-mix(in srgb, var(--background) 74%, var(--syntax-token-inserted)) !important;
+}
+
+[data-line-type='change-deletion'][data-line][data-hovered],
+[data-line-type='change-deletion'][data-column-number][data-hovered] {
+  background-color: color-mix(in srgb, var(--background) 74%, var(--syntax-token-deleted)) !important;
 }
 
 [data-file-info] {
@@ -112,10 +161,7 @@ const MODE_LABELS: Record<RepoDiffSidebarMode, string> = {
   unstaged: "Unstaged",
 };
 
-const DIFF_THEME_NAMES = {
-  dark: "pierre-dark",
-  light: "pierre-light",
-} as const;
+ensureSentinelDiffThemesRegistered();
 const EMPTY_SOURCE_FILES: RepoDiffSourceFile[] = [];
 
 function getPreferredEditorTarget(
@@ -136,7 +182,9 @@ function getPreferredEditorTarget(
 }
 
 function resolveDiffThemeName(theme: "light" | "dark") {
-  return theme === "dark" ? DIFF_THEME_NAMES.dark : DIFF_THEME_NAMES.light;
+  return theme === "dark"
+    ? SENTINEL_DARK_CODE_THEME_NAME
+    : SENTINEL_LIGHT_CODE_THEME_NAME;
 }
 
 function DiffRevealTrigger({
@@ -788,6 +836,7 @@ export function RepoDiffSidebar() {
                       fileDiff={parsedFile.fileDiff}
                       options={{
                         collapsedContextThreshold: 8,
+                        disableBackground: false,
                         diffStyle:
                           prefs.layout === "split" ? "split" : "unified",
                         disableFileHeader: true,

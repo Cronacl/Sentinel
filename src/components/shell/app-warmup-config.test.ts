@@ -12,6 +12,7 @@ describe("app warmup config", () => {
       "/automations",
       "/skills",
       "/settings",
+      "/settings/appearance",
       "/settings/data",
       "/settings/integrations",
       "/settings/mcp",

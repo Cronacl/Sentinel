@@ -8,9 +8,9 @@ import { Icon } from "@iconify/react";
 
 import {
   detectLanguageFromPath,
-  highlightToTokens,
+  highlightToTokensCached,
   languageToVSCodeIcon,
-  type ThemedToken,
+  tokenLinesToSegments,
 } from "@/lib/syntax/highlighter";
 import { useResolvedTheme } from "@/lib/syntax/use-resolved-theme";
 
@@ -18,15 +18,6 @@ type LineData = {
   number: number;
   text: string;
 };
-
-function tokenLinesToSegments(
-  tokenLines: ThemedToken[][] | null,
-): Array<Array<{ color?: string; text: string }>> {
-  if (!tokenLines) return [];
-  return tokenLines.map((tokens) =>
-    tokens.map((t) => ({ color: t.color, text: t.content })),
-  );
-}
 
 function SyntaxLine({
   segments,
@@ -118,7 +109,7 @@ export function CodePreview({
 
     const run = async () => {
       try {
-        const tokens = await highlightToTokens(rawCode, language, theme);
+        const tokens = await highlightToTokensCached(rawCode, language, theme);
         if (!cancelled) {
           setSyntaxLines(tokenLinesToSegments(tokens));
         }

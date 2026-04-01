@@ -2,6 +2,7 @@ import { relations } from "drizzle-orm";
 import {
   index,
   integer,
+  real,
   sqliteTable,
   text,
   uniqueIndex,
@@ -82,6 +83,11 @@ export const users = sqliteTable(
     themePreference: text("theme_preference", { enum: THEME_PREFERENCES })
       .notNull()
       .default("system"),
+    codeTheme: text("code_theme"),
+    uiFontFamily: text("ui_font_family"),
+    codeFontFamily: text("code_font_family"),
+    uiFontSize: real("ui_font_size"),
+    codeFontSize: real("code_font_size"),
     defaultChatEngine: text("default_chat_engine", { enum: CHAT_ENGINES }),
     defaultChatModelId: text("default_chat_model_id"),
     defaultChatMode: text("default_chat_mode", { enum: THREAD_MODES }),
