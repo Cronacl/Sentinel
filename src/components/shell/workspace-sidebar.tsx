@@ -2139,7 +2139,7 @@ export function WorkspaceSidebar() {
       >
         <div className="min-w-0 flex-1">
           <h2 className="text-foreground/45 flex items-center gap-1.5 text-xs font-medium">
-            <span>Threads</span>
+            <span className="px-3">Threads</span>
           </h2>
         </div>
 
