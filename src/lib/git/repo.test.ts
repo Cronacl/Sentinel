@@ -11,6 +11,7 @@ import {
   commitAllChanges,
   createAndCheckoutBranch,
   ensureThreadWorktree,
+  generateThreadBranchName,
   getHeadCommitMessage,
   getCommitMessageContext,
   getRepoDiffPanelData,
@@ -321,6 +322,50 @@ describe("repo actions", () => {
     });
   });
 
+  it("surfaces a helpful message when a branch is already checked out in another worktree", async () => {
+    const repoRoot = await createRepo();
+    await createAndCheckoutBranch(repoRoot, "feature/worktree-target");
+    await checkoutBranch(repoRoot, "main");
+
+    const worktree = await ensureThreadWorktree(
+      repoRoot,
+      "thread-branch-conflict",
+      "feature/worktree-target",
+    );
+
+    await expect(checkoutBranch(worktree.path, "main")).rejects.toThrow(
+      "Switch this thread to the local project",
+    );
+  });
+
+  it("generates a thread branch name with the expected format", async () => {
+    const repoRoot = await createRepo();
+
+    await expect(
+      generateThreadBranchName(repoRoot, {
+        pickName: () => "atlas",
+        pickSuffix: () => "a1b2c3",
+      }),
+    ).resolves.toBe("thread/atlas-a1b2c3");
+  });
+
+  it("retries generated thread branch names until a unique name is found", async () => {
+    const repoRoot = await createRepo();
+    await createAndCheckoutBranch(repoRoot, "thread/atlas-a1b2c3");
+    await checkoutBranch(repoRoot, "main");
+
+    let attempt = 0;
+    const nextName = await generateThreadBranchName(repoRoot, {
+      pickName: () => "atlas",
+      pickSuffix: () => {
+        attempt += 1;
+        return attempt === 1 ? "a1b2c3" : "d4e5f6";
+      },
+    });
+
+    expect(nextName).toBe("thread/atlas-d4e5f6");
+  });
+
   it("pushes the current branch when upstream exists and commits are ahead", async () => {
     const repoRoot = await createRepo();
     const remoteRoot = await createDirectory("sentinel-remote-push-");
@@ -463,11 +508,13 @@ describe("repo actions", () => {
 
     expect(created.created).toBe(true);
     expect(reused.created).toBe(false);
+    expect(created.branch).toMatch(/^thread\/[a-z]+-[0-9a-f]{6}$/);
+    expect(created.branch).not.toBe("feature/worktree");
     expect(created.path).toBe(reused.path);
     expect(worktrees.worktrees).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          branch: "feature/worktree",
+          branch: created.branch,
           detached: false,
           path: created.path,
         }),

@@ -163,7 +163,6 @@ export function ThreadRepoActions({
 
   const snapshotRef = useRef(repoContext);
   const syncedPullRequestKeyRef = useRef<string | null>(null);
-  const autoResumeKeyRef = useRef<string | null>(null);
   if (!anyModalOpen) {
     snapshotRef.current = repoContext;
   }
@@ -435,32 +434,6 @@ export function ThreadRepoActions({
     utils.threads.list,
     workspaceId,
   ]);
-
-  useEffect(() => {
-    if (!needsBranchResume || projectModeBusy || !threadBranch) {
-      return;
-    }
-
-    const key = `${threadId}:${threadBranch}`;
-    if (autoResumeKeyRef.current === key) {
-      return;
-    }
-
-    autoResumeKeyRef.current = key;
-    void handleResumeThreadBranch({ silent: true });
-  }, [
-    handleResumeThreadBranch,
-    needsBranchResume,
-    projectModeBusy,
-    threadBranch,
-    threadId,
-  ]);
-
-  useEffect(() => {
-    if (!needsBranchResume) {
-      autoResumeKeyRef.current = null;
-    }
-  }, [needsBranchResume]);
 
   const handleLaunchTarget = useCallback(
     async (target: DesktopOpenTarget) => {

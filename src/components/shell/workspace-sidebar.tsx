@@ -36,9 +36,11 @@ import { formatDistanceToNowStrict } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import { usePathname, useRouter } from "next/navigation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { sileo } from "sileo";
 
 import { CreateWorkspaceModal } from "@/components/workspaces/create-workspace-modal";
 import type { RepoLastPullRequest } from "@/lib/ai/chat/engines/types";
+import { getErrorMessage } from "@/lib/errors";
 import {
   applyThreadTitleCacheUpdate,
   applyOptimisticThreadPinUpdate,
@@ -156,6 +158,9 @@ type ThreadGroup = NonNullable<
 type ChronologicalThreadItem = NonNullable<
   Extract<RouterOutputs["threads"]["list"], { items: unknown[] }>["items"]
 >;
+type PendingThreadSwitch = RouterOutputs["repo"]["inspectThreadSwitch"] & {
+  workspaceId: string;
+};
 
 function findThreadState(
   threadId: string,
@@ -179,6 +184,32 @@ function findThreadState(
 
   return {
     pinnedAt: item.pinnedAt,
+    workspaceId: item.workspace.id,
+  };
+}
+
+function findThreadListItem(
+  threadId: string,
+  groups: ThreadGroup,
+  items: ChronologicalThreadItem,
+) {
+  for (const group of groups) {
+    const thread = group.threads.find((item) => item.id === threadId);
+    if (thread) {
+      return {
+        title: thread.title,
+        workspaceId: group.workspace.id,
+      };
+    }
+  }
+
+  const item = items.find((entry) => entry.id === threadId);
+  if (!item) {
+    return null;
+  }
+
+  return {
+    title: item.title,
     workspaceId: item.workspace.id,
   };
 }
@@ -1040,6 +1071,23 @@ export function WorkspaceSidebar() {
       }
     },
   });
+  const [pendingThreadSwitch, setPendingThreadSwitch] =
+    useState<PendingThreadSwitch | null>(null);
+  const [threadSwitchAction, setThreadSwitchAction] = useState<
+    "migrate" | "stash" | null
+  >(null);
+  const [threadSwitchStashName, setThreadSwitchStashName] = useState("");
+  const [threadSwitchError, setThreadSwitchError] = useState("");
+  const threadSwitchState = useOverlayState({
+    onOpenChange: (isOpen) => {
+      if (!isOpen) {
+        setPendingThreadSwitch(null);
+        setThreadSwitchAction(null);
+        setThreadSwitchStashName("");
+        setThreadSwitchError("");
+      }
+    },
+  });
 
   const preferences = api.workspaces.getPreferences.useQuery();
   const currentWorkspace = api.workspaces.getCurrent.useQuery();
@@ -1471,6 +1519,7 @@ export function WorkspaceSidebar() {
       );
     },
   });
+  const handoffThreadSwitch = api.repo.handoffThreadSwitch.useMutation();
 
   useEffect(() => {
     if (!preferences.data) {
@@ -1595,7 +1644,7 @@ export function WorkspaceSidebar() {
     [router, selectedThreadId, utils.threads.get],
   );
 
-  const handlePressThread = useCallback(
+  const navigateToThread = useCallback(
     (workspaceId: string, threadId: string) => {
       if (selectedWorkspaceId !== workspaceId) {
         void selectWorkspace.mutate({ workspaceId });
@@ -1605,6 +1654,180 @@ export function WorkspaceSidebar() {
       router.push(`/thread/${threadId}`);
     },
     [handleWarmThread, router, selectWorkspace, selectedWorkspaceId],
+  );
+
+  const finalizeThreadSwitch = useCallback(
+    async (
+      switchState: PendingThreadSwitch,
+      input?: { stashName?: string; strategy?: "migrate" | "stash" },
+    ) => {
+      setThreadSwitchError("");
+      setThreadSwitchAction(input?.strategy ?? null);
+      const result = await handoffThreadSwitch.mutateAsync({
+        sourceThreadId: switchState.sourceThreadId,
+        targetThreadId: switchState.targetThreadId,
+        workspaceId: switchState.workspaceId,
+        ...(input?.stashName ? { stashName: input.stashName } : {}),
+        ...(input?.strategy ? { strategy: input.strategy } : {}),
+      });
+      utils.repo.getContext.setData(
+        {
+          threadId: switchState.targetThreadId,
+          workspaceId: switchState.workspaceId,
+        },
+        result.repoContext as never,
+      );
+      await Promise.all([
+        utils.repo.listWorkspaceStatuses.invalidate(),
+        utils.threads.get.invalidate({ threadId: switchState.targetThreadId }),
+        selectedThreadId
+          ? utils.threads.get.invalidate({ threadId: selectedThreadId })
+          : Promise.resolve(),
+        utils.threads.list.invalidate(),
+      ]);
+      threadSwitchState.close();
+      navigateToThread(switchState.workspaceId, switchState.targetThreadId);
+
+      sileo.success({
+        description:
+          result.action === "migrate"
+            ? `Moved the current changes into ${switchState.targetBranch ?? result.branch ?? "the target thread"}.`
+            : result.action === "stash"
+              ? `Stashed the current changes and switched to ${result.branch ?? switchState.targetBranch ?? "the target thread"}.`
+              : result.action === "checkout"
+                ? `Switched to ${result.branch ?? switchState.targetBranch ?? "the target thread"}.`
+                : "Opened the target thread.",
+        title: "Thread switched",
+      });
+    },
+    [
+      handoffThreadSwitch,
+      navigateToThread,
+      selectedThreadId,
+      threadSwitchState,
+      utils.repo.getContext,
+      utils.repo.listWorkspaceStatuses,
+      utils.threads.get,
+      utils.threads.list,
+    ],
+  );
+
+  const handlePressThread = useCallback(
+    (workspaceId: string, threadId: string) => {
+      void (async () => {
+        if (selectedThreadId === threadId) {
+          return;
+        }
+
+        if (!selectedThreadId || selectedWorkspaceId !== workspaceId) {
+          navigateToThread(workspaceId, threadId);
+          return;
+        }
+
+        try {
+          const inspection = await utils.repo.inspectThreadSwitch.fetch({
+            sourceThreadId: selectedThreadId,
+            targetThreadId: threadId,
+            workspaceId,
+          });
+
+          if (
+            !inspection.requiresBranchSwitch ||
+            inspection.targetProjectMode !== "local"
+          ) {
+            navigateToThread(workspaceId, threadId);
+            return;
+          }
+
+          const nextSwitchState = {
+            ...inspection,
+            workspaceId,
+          } satisfies PendingThreadSwitch;
+
+          if (!inspection.shouldPrompt) {
+            await finalizeThreadSwitch(nextSwitchState);
+            return;
+          }
+
+          setThreadSwitchError("");
+          setThreadSwitchStashName(
+            `${inspection.sourceBranch ?? "thread"}-handoff`,
+          );
+          setPendingThreadSwitch(nextSwitchState);
+          threadSwitchState.open();
+        } catch (error) {
+          sileo.error({
+            description: getErrorMessage(
+              error,
+              "Unable to prepare this thread switch.",
+            ),
+            title: "Thread switch failed",
+          });
+        }
+      })();
+    },
+    [
+      finalizeThreadSwitch,
+      navigateToThread,
+      selectedThreadId,
+      selectedWorkspaceId,
+      threadSwitchState,
+      utils.repo.inspectThreadSwitch,
+    ],
+  );
+
+  const pendingThreadSwitchSource = useMemo(
+    () =>
+      pendingThreadSwitch
+        ? findThreadListItem(pendingThreadSwitch.sourceThreadId, groups, items)
+        : null,
+    [groups, items, pendingThreadSwitch],
+  );
+  const pendingThreadSwitchTarget = useMemo(
+    () =>
+      pendingThreadSwitch
+        ? findThreadListItem(pendingThreadSwitch.targetThreadId, groups, items)
+        : null,
+    [groups, items, pendingThreadSwitch],
+  );
+  const handleConfirmThreadMigration = useCallback(() => {
+    if (!pendingThreadSwitch) {
+      return;
+    }
+
+    void finalizeThreadSwitch(pendingThreadSwitch, {
+      strategy: "migrate",
+    }).catch((error) => {
+      setThreadSwitchAction(null);
+      setThreadSwitchError(
+        getErrorMessage(error, "Unable to move the current changes."),
+      );
+    });
+  }, [finalizeThreadSwitch, pendingThreadSwitch]);
+  const handleConfirmThreadStash = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (!pendingThreadSwitch) {
+        return;
+      }
+
+      const stashName = threadSwitchStashName.trim();
+      if (!stashName) {
+        setThreadSwitchError("Enter a stash name before switching threads.");
+        return;
+      }
+
+      void finalizeThreadSwitch(pendingThreadSwitch, {
+        stashName,
+        strategy: "stash",
+      }).catch((error) => {
+        setThreadSwitchAction(null);
+        setThreadSwitchError(
+          getErrorMessage(error, "Unable to stash the current changes."),
+        );
+      });
+    },
+    [finalizeThreadSwitch, pendingThreadSwitch, threadSwitchStashName],
   );
 
   const handleOpenRenameWorkspace = useCallback(
@@ -1928,6 +2151,114 @@ export function WorkspaceSidebar() {
         onCreate={(values) => createWorkspace.mutateAsync(values)}
         onOpenChange={setIsCreateOpen}
       />
+
+      <Modal.Root state={threadSwitchState}>
+        <Modal.Backdrop>
+          <Modal.Container placement="center" size="sm">
+            <Modal.Dialog className="border-separator w-full border sm:max-w-[460px]">
+              <Modal.Header className="items-start justify-between gap-4">
+                <Modal.Heading className="text-base">
+                  Move or stash changes
+                </Modal.Heading>
+                <Modal.CloseTrigger />
+              </Modal.Header>
+              <Modal.Body className="flex flex-col gap-3 p-2">
+                <p className="text-sm text-foreground">
+                  Switching from{" "}
+                  <span className="font-medium">
+                    {pendingThreadSwitchSource?.title ?? "this thread"}
+                  </span>{" "}
+                  to{" "}
+                  <span className="font-medium">
+                    {pendingThreadSwitchTarget?.title ?? "the selected thread"}
+                  </span>{" "}
+                  needs a branch change from{" "}
+                  <span className="font-medium">
+                    {pendingThreadSwitch?.currentBranch ?? "the current branch"}
+                  </span>{" "}
+                  to{" "}
+                  <span className="font-medium">
+                    {pendingThreadSwitch?.targetBranch ?? "the target branch"}
+                  </span>
+                  .
+                </p>
+                <p className="text-xs text-muted">
+                  The shared local checkout has uncommitted changes. Move them
+                  to the target thread, or stash them on the current thread
+                  before switching.
+                </p>
+                {threadSwitchError ? (
+                  <p className="text-xs text-danger">{threadSwitchError}</p>
+                ) : null}
+
+                <div className="rounded-xl border border-border/60 bg-default/40 p-3">
+                  <p className="text-sm font-medium text-foreground">
+                    Move changes to target thread
+                  </p>
+                  <p className="mt-1 text-xs text-muted">
+                    Keep the current branch and working tree exactly as-is, and
+                    reassign that work to the thread you are opening.
+                  </p>
+                  <Button
+                    className="mt-3"
+                    isPending={
+                      handoffThreadSwitch.isPending &&
+                      threadSwitchAction === "migrate"
+                    }
+                    onPress={() => handleConfirmThreadMigration()}
+                    size="sm"
+                    variant="secondary"
+                  >
+                    Move changes
+                  </Button>
+                </div>
+
+                <Form
+                  className="rounded-xl border border-border/60 bg-default/40 p-3"
+                  onSubmit={handleConfirmThreadStash}
+                >
+                  <p className="text-sm font-medium text-foreground">
+                    Stash on current thread
+                  </p>
+                  <p className="mt-1 text-xs text-muted">
+                    Save the current work with a name, switch to the target
+                    thread branch, and leave those changes behind.
+                  </p>
+                  <TextField.Root className="mt-3" isRequired>
+                    <Label>Stash name</Label>
+                    <Input.Root
+                      autoFocus
+                      onChange={(event) =>
+                        setThreadSwitchStashName(event.currentTarget.value)
+                      }
+                      placeholder="main-handoff"
+                      value={threadSwitchStashName}
+                    />
+                  </TextField.Root>
+                  <div className="mt-3 flex items-center justify-end gap-2">
+                    <Button
+                      onPress={() => threadSwitchState.close()}
+                      type="button"
+                      variant="ghost"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      isPending={
+                        handoffThreadSwitch.isPending &&
+                        threadSwitchAction === "stash"
+                      }
+                      type="submit"
+                    >
+                      Stash and switch
+                    </Button>
+                  </div>
+                </Form>
+              </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal.Root>
 
       <Modal.Root state={renameWorkspaceState}>
         <Modal.Backdrop>

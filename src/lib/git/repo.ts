@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { mkdir, readFile, rm, stat } from "node:fs/promises";
 
@@ -65,6 +66,29 @@ export type RepoWorktree = {
   detached: boolean;
   path: string;
 };
+
+const GENERATED_THREAD_BRANCH_NAMES = [
+  "atlas",
+  "comet",
+  "ember",
+  "fern",
+  "harbor",
+  "iris",
+  "juniper",
+  "kestrel",
+  "lagoon",
+  "marble",
+  "nova",
+  "onyx",
+  "poppy",
+  "quartz",
+  "river",
+  "solstice",
+  "thistle",
+  "vapor",
+  "willow",
+  "zephyr",
+] as const;
 
 type RepoFileChange = {
   path: string;
@@ -557,6 +581,47 @@ function getThreadWorktreePath(repoRoot: string, threadId: string) {
     path.basename(repoRoot),
     threadId,
   );
+}
+
+function pickGeneratedThreadBranchName() {
+  return GENERATED_THREAD_BRANCH_NAMES[
+    Math.floor(Math.random() * GENERATED_THREAD_BRANCH_NAMES.length)
+  ]!;
+}
+
+function pickGeneratedThreadBranchSuffix() {
+  return randomBytes(3).toString("hex");
+}
+
+async function branchExists(repoRoot: string, branchName: string) {
+  const result = await runGit(
+    ["show-ref", "--verify", "--quiet", `refs/heads/${branchName}`],
+    repoRoot,
+  );
+  return result.code === 0;
+}
+
+export async function generateThreadBranchName(
+  pathValue: string | null | undefined,
+  options?: {
+    maxAttempts?: number;
+    pickName?: () => string;
+    pickSuffix?: () => string;
+  },
+) {
+  const repoRoot = await resolveRepoRootOrThrow(pathValue);
+  const maxAttempts = options?.maxAttempts ?? 24;
+  const pickName = options?.pickName ?? pickGeneratedThreadBranchName;
+  const pickSuffix = options?.pickSuffix ?? pickGeneratedThreadBranchSuffix;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const branchName = `thread/${pickName()}-${pickSuffix()}`;
+    if (!(await branchExists(repoRoot, branchName))) {
+      return branchName;
+    }
+  }
+
+  throw new Error("Failed to generate a unique branch name for this thread.");
 }
 
 function parseWorktreeList(output: string): RepoWorktree[] {
@@ -1080,10 +1145,42 @@ export async function checkoutBranch(
 
   const result = await runGit(["checkout", trimmedName], repoRoot);
   if (result.code !== 0) {
+    const branchInUseMatch = result.stderr.match(
+      /'([^']+)' is already used by worktree at '([^']+)'/,
+    );
+    if (branchInUseMatch) {
+      const inUsePath = branchInUseMatch[2];
+      throw new Error(
+        `Branch ${trimmedName} is already checked out at ${inUsePath}. Switch this thread to the local project for that branch, or choose a different branch for this worktree.`,
+      );
+    }
     throw new Error(result.stderr || "Failed to checkout branch.");
   }
 
   return { branch: trimmedName };
+}
+
+export async function stashChanges(
+  pathValue: string | null | undefined,
+  stashName: string,
+) {
+  const repoRoot = await resolveRepoRootOrThrow(pathValue);
+  const trimmedName = stashName.trim();
+  if (!trimmedName) {
+    throw new Error("Stash name is required.");
+  }
+
+  const result = await runGit(
+    ["stash", "push", "--include-untracked", "--message", trimmedName],
+    repoRoot,
+  );
+  if (result.code !== 0) {
+    throw new Error(result.stderr || "Failed to stash changes.");
+  }
+
+  return {
+    message: trimmedName,
+  };
 }
 
 export async function listWorktrees(
@@ -1146,8 +1243,18 @@ export async function ensureThreadWorktree(
   await rm(targetPath, { force: true, recursive: true }).catch(() => undefined);
   await mkdir(path.dirname(targetPath), { recursive: true });
 
+  const nextBranchName = await generateThreadBranchName(repoRoot);
+
   const addResult = await runGit(
-    ["worktree", "add", "--force", targetPath, trimmedBranchName],
+    [
+      "worktree",
+      "add",
+      "--force",
+      "-b",
+      nextBranchName,
+      targetPath,
+      trimmedBranchName,
+    ],
     repoRoot,
   );
   if (addResult.code !== 0) {
@@ -1155,7 +1262,7 @@ export async function ensureThreadWorktree(
   }
 
   return {
-    branch: trimmedBranchName,
+    branch: nextBranchName,
     created: true,
     path: targetPath,
   };

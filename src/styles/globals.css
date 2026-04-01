@@ -151,6 +151,8 @@ button[type="button"] {
 .sentinel-terminal .xterm {
   height: 100%;
   padding: 14px 16px 16px;
+  border-radius: 14px;
+  background: #0a0a0a;
 }
 
 .sentinel-terminal .xterm-viewport,
@@ -160,6 +162,10 @@ button[type="button"] {
 
 .sentinel-terminal .xterm-viewport {
   background: transparent !important;
+}
+
+[data-theme="light"] .sentinel-terminal .xterm {
+  background: #ffffff;
 }
 
 .sentinel-composer-editor.ProseMirror p.is-editor-empty:first-child::before {

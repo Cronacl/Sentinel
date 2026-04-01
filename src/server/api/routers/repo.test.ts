@@ -106,6 +106,9 @@ const removeThreadWorktreeAtPath = mock(async (_rootPath, threadId) => ({
   removed: true,
 }));
 const revertFiles = mock(async () => ({ paths: ["file.ts"] }));
+const stashChanges = mock(async (_rootPath, stashName) => ({
+  message: stashName,
+}));
 const stageFiles = mock(async () => ({ paths: ["file.ts"] }));
 const unstageFiles = mock(async () => ({ paths: ["file.ts"] }));
 const generateGitCommitMessage = mock(async () => ({
@@ -217,6 +220,7 @@ mock.module("@/lib/git/repo", () => ({
   removeThreadWorktree: removeThreadWorktreeAtPath,
   revertFiles,
   resolveRepoContext,
+  stashChanges,
   stageFiles,
   unstageFiles,
 }));
@@ -295,6 +299,7 @@ beforeEach(() => {
   pushCurrentBranch.mockClear();
   removeThreadWorktreeAtPath.mockClear();
   revertFiles.mockClear();
+  stashChanges.mockClear();
   stageFiles.mockClear();
   unstageFiles.mockClear();
   generateGitCommitMessage.mockClear();
@@ -1590,7 +1595,447 @@ describe("repoRouter.branch actions", () => {
     });
   });
 
+  it("reuses an existing worktree when the selected branch is already checked out there", async () => {
+    checkoutBranch.mockImplementationOnce(async () => {
+      throw new Error(
+        "Branch main is already checked out at /tmp/worktrees/thread-main. Switch this thread to the local project for that branch, or choose a different branch for this worktree.",
+      );
+    });
+    resolveRepoContext.mockImplementation((pathValue) =>
+      Promise.resolve(
+        pathValue === "/tmp/worktrees/thread-main"
+          ? {
+              aheadCount: 0,
+              branch: "main",
+              changedFileCount: 0,
+              deletions: 0,
+              githubRemote: {
+                defaultBranch: "main",
+                owner: "openai",
+                pullRequestUrl:
+                  "https://github.com/openai/sentinel/compare/main...main?expand=1",
+                pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+                remoteName: "origin",
+                remoteUrl: "git@github.com:openai/sentinel.git",
+                repo: "sentinel",
+                repositoryUrl: "https://github.com/openai/sentinel",
+              },
+              hasChanges: false,
+              hasCommits: true,
+              hasRemotes: true,
+              hasUpstream: true,
+              insertions: 0,
+              isDefaultBranch: true,
+              isGitRepo: true,
+              pushRemoteName: "origin",
+              repoRoot: "/tmp/worktrees/thread-main",
+            }
+          : {
+              aheadCount: 0,
+              branch: "feature/test",
+              changedFileCount: 0,
+              deletions: 0,
+              githubRemote: {
+                defaultBranch: "main",
+                owner: "openai",
+                pullRequestUrl:
+                  "https://github.com/openai/sentinel/compare/main...feature/test?expand=1",
+                pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+                remoteName: "origin",
+                remoteUrl: "git@github.com:openai/sentinel.git",
+                repo: "sentinel",
+                repositoryUrl: "https://github.com/openai/sentinel",
+              },
+              hasChanges: false,
+              hasCommits: true,
+              hasRemotes: true,
+              hasUpstream: true,
+              insertions: 0,
+              isDefaultBranch: false,
+              isGitRepo: true,
+              pushRemoteName: "origin",
+              repoRoot: "/tmp/workspace",
+            },
+      ),
+    );
+
+    const result = await repoRouter.checkoutBranch({
+      ctx: {
+        session: { user: { id: "user-1" } },
+        user: { id: "user-1", lastProjectOpenTargetId: null },
+      },
+      input: {
+        branchName: "main",
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(updateThreadRepoState).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        activeBranch: "main",
+        projectMode: "worktree",
+        worktreePath: "/tmp/worktrees/thread-main",
+      }),
+    );
+    expect(result.reusedExistingWorktree).toBe(true);
+    expect(result.repoContext.threadProjectMode).toBe("worktree");
+    expect(result.repoContext.effectiveRootPath).toBe(
+      "/tmp/worktrees/thread-main",
+    );
+  });
+
+  it("switches a worktree thread back to the local project when the target branch is already active there", async () => {
+    getOwnedThreadOrThrow.mockImplementationOnce(async () => ({
+      chatEngine: "codex",
+      chatEngineState: {
+        repo: {
+          activeBranch: "feature/worktree",
+          projectMode: "worktree",
+          worktreePath: "/tmp/.sentinel-worktrees/sentinel/thread-1",
+        },
+      },
+      chatModelId: "gpt-5.4",
+      chatReasoningEffort: "high",
+      id: "thread-1",
+      workspaceId: "workspace-1",
+    }));
+    resolveRepoContext.mockImplementation((pathValue) =>
+      Promise.resolve(
+        pathValue === "/tmp/.sentinel-worktrees/sentinel/thread-1"
+          ? {
+              aheadCount: 0,
+              branch: "thread/atlas-a1b2c3",
+              changedFileCount: 0,
+              deletions: 0,
+              githubRemote: {
+                defaultBranch: "main",
+                owner: "openai",
+                pullRequestUrl:
+                  "https://github.com/openai/sentinel/compare/main...thread/atlas-a1b2c3?expand=1",
+                pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+                remoteName: "origin",
+                remoteUrl: "git@github.com:openai/sentinel.git",
+                repo: "sentinel",
+                repositoryUrl: "https://github.com/openai/sentinel",
+              },
+              hasChanges: false,
+              hasCommits: true,
+              hasRemotes: true,
+              hasUpstream: true,
+              insertions: 0,
+              isDefaultBranch: false,
+              isGitRepo: true,
+              pushRemoteName: "origin",
+              repoRoot: pathValue,
+            }
+          : {
+              aheadCount: 0,
+              branch: "main",
+              changedFileCount: 0,
+              deletions: 0,
+              githubRemote: {
+                defaultBranch: "main",
+                owner: "openai",
+                pullRequestUrl:
+                  "https://github.com/openai/sentinel/compare/main...main?expand=1",
+                pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+                remoteName: "origin",
+                remoteUrl: "git@github.com:openai/sentinel.git",
+                repo: "sentinel",
+                repositoryUrl: "https://github.com/openai/sentinel",
+              },
+              hasChanges: false,
+              hasCommits: true,
+              hasRemotes: true,
+              hasUpstream: true,
+              insertions: 0,
+              isDefaultBranch: true,
+              isGitRepo: true,
+              pushRemoteName: "origin",
+              repoRoot: "/tmp/workspace",
+            },
+      ),
+    );
+
+    const result = await repoRouter.checkoutBranch({
+      ctx: {
+        session: { user: { id: "user-1" } },
+        user: { id: "user-1", lastProjectOpenTargetId: null },
+      },
+      input: {
+        branchName: "main",
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(checkoutBranch).not.toHaveBeenCalled();
+    expect(updateThreadRepoState).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        activeBranch: "main",
+        projectMode: "local",
+      }),
+    );
+    expect(result.switchedToLocalProject).toBe(true);
+    expect(result.repoContext.threadProjectMode).toBe("local");
+    expect(result.repoContext.threadBranch).toBe("main");
+  });
+
+  it("inspects a dirty local thread switch that needs a branch change", async () => {
+    getOwnedThreadOrThrow
+      .mockImplementationOnce(async () => ({
+        chatEngine: "codex",
+        chatEngineState: {
+          repo: {
+            activeBranch: "main",
+            projectMode: "local",
+          },
+        },
+        chatModelId: "gpt-5.4",
+        chatReasoningEffort: "high",
+        id: "thread-source",
+        workspaceId: "workspace-1",
+      }))
+      .mockImplementationOnce(async () => ({
+        chatEngine: "codex",
+        chatEngineState: {
+          repo: {
+            activeBranch: "feature/target",
+            projectMode: "local",
+          },
+        },
+        chatModelId: "gpt-5.4",
+        chatReasoningEffort: "high",
+        id: "thread-target",
+        workspaceId: "workspace-1",
+      }));
+    resolveRepoContext.mockImplementation(async () => ({
+      aheadCount: 0,
+      branch: "main",
+      changedFileCount: 2,
+      deletions: 0,
+      githubRemote: {
+        defaultBranch: "main",
+        owner: "openai",
+        pullRequestUrl:
+          "https://github.com/openai/sentinel/compare/main...main?expand=1",
+        pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+        remoteName: "origin",
+        remoteUrl: "git@github.com:openai/sentinel.git",
+        repo: "sentinel",
+        repositoryUrl: "https://github.com/openai/sentinel",
+      },
+      hasChanges: true,
+      hasCommits: true,
+      hasRemotes: true,
+      hasUpstream: true,
+      insertions: 4,
+      isDefaultBranch: true,
+      isGitRepo: true,
+      pushRemoteName: "origin",
+      repoRoot: "/tmp/workspace",
+    }));
+
+    const result = await repoRouter.inspectThreadSwitch({
+      ctx: {
+        session: { user: { id: "user-1" } },
+        user: { id: "user-1" },
+      },
+      input: {
+        sourceThreadId: "thread-source",
+        targetThreadId: "thread-target",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(result).toMatchObject({
+      currentBranch: "main",
+      isDirty: true,
+      requiresBranchSwitch: true,
+      shouldPrompt: true,
+      sourceProjectMode: "local",
+      targetBranch: "feature/target",
+      targetProjectMode: "local",
+    });
+  });
+
+  it("stashes dirty changes before switching to the target thread branch", async () => {
+    getOwnedThreadOrThrow
+      .mockImplementationOnce(async () => ({
+        chatEngine: "codex",
+        chatEngineState: {
+          repo: {
+            activeBranch: "main",
+            projectMode: "local",
+          },
+        },
+        chatModelId: "gpt-5.4",
+        chatReasoningEffort: "high",
+        id: "thread-source",
+        workspaceId: "workspace-1",
+      }))
+      .mockImplementationOnce(async () => ({
+        chatEngine: "codex",
+        chatEngineState: {
+          repo: {
+            activeBranch: "feature/target",
+            projectMode: "local",
+          },
+        },
+        chatModelId: "gpt-5.4",
+        chatReasoningEffort: "high",
+        id: "thread-target",
+        workspaceId: "workspace-1",
+      }));
+    resolveRepoContext.mockImplementation(async () => ({
+      aheadCount: 0,
+      branch: "main",
+      changedFileCount: 2,
+      deletions: 0,
+      githubRemote: {
+        defaultBranch: "main",
+        owner: "openai",
+        pullRequestUrl:
+          "https://github.com/openai/sentinel/compare/main...main?expand=1",
+        pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+        remoteName: "origin",
+        remoteUrl: "git@github.com:openai/sentinel.git",
+        repo: "sentinel",
+        repositoryUrl: "https://github.com/openai/sentinel",
+      },
+      hasChanges: true,
+      hasCommits: true,
+      hasRemotes: true,
+      hasUpstream: true,
+      insertions: 4,
+      isDefaultBranch: true,
+      isGitRepo: true,
+      pushRemoteName: "origin",
+      repoRoot: "/tmp/workspace",
+    }));
+
+    const result = await repoRouter.handoffThreadSwitch({
+      ctx: {
+        session: { user: { id: "user-1" } },
+        user: { id: "user-1", lastProjectOpenTargetId: null },
+      },
+      input: {
+        sourceThreadId: "thread-source",
+        stashName: "keep-main-safe",
+        strategy: "stash",
+        targetThreadId: "thread-target",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(stashChanges).toHaveBeenCalledWith(
+      "/tmp/workspace",
+      "thread:thread-source:main:keep-main-safe",
+    );
+    expect(checkoutBranch).toHaveBeenCalledWith(
+      "/tmp/workspace",
+      "feature/target",
+    );
+    expect(updateThreadRepoState).toHaveBeenCalledWith(
+      "thread-target",
+      expect.objectContaining({
+        activeBranch: "feature/target",
+        projectMode: "local",
+      }),
+    );
+    expect(result.action).toBe("stash");
+  });
+
+  it("moves dirty local changes to the target thread by adopting the current branch", async () => {
+    getOwnedThreadOrThrow
+      .mockImplementationOnce(async () => ({
+        chatEngine: "codex",
+        chatEngineState: {
+          repo: {
+            activeBranch: "main",
+            projectMode: "local",
+          },
+        },
+        chatModelId: "gpt-5.4",
+        chatReasoningEffort: "high",
+        id: "thread-source",
+        workspaceId: "workspace-1",
+      }))
+      .mockImplementationOnce(async () => ({
+        chatEngine: "codex",
+        chatEngineState: {
+          repo: {
+            activeBranch: "feature/target",
+            projectMode: "local",
+          },
+        },
+        chatModelId: "gpt-5.4",
+        chatReasoningEffort: "high",
+        id: "thread-target",
+        workspaceId: "workspace-1",
+      }));
+    resolveRepoContext.mockImplementation(async () => ({
+      aheadCount: 0,
+      branch: "main",
+      changedFileCount: 2,
+      deletions: 0,
+      githubRemote: {
+        defaultBranch: "main",
+        owner: "openai",
+        pullRequestUrl:
+          "https://github.com/openai/sentinel/compare/main...main?expand=1",
+        pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+        remoteName: "origin",
+        remoteUrl: "git@github.com:openai/sentinel.git",
+        repo: "sentinel",
+        repositoryUrl: "https://github.com/openai/sentinel",
+      },
+      hasChanges: true,
+      hasCommits: true,
+      hasRemotes: true,
+      hasUpstream: true,
+      insertions: 4,
+      isDefaultBranch: true,
+      isGitRepo: true,
+      pushRemoteName: "origin",
+      repoRoot: "/tmp/workspace",
+    }));
+
+    const result = await repoRouter.handoffThreadSwitch({
+      ctx: {
+        session: { user: { id: "user-1" } },
+        user: { id: "user-1", lastProjectOpenTargetId: null },
+      },
+      input: {
+        sourceThreadId: "thread-source",
+        strategy: "migrate",
+        targetThreadId: "thread-target",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(stashChanges).not.toHaveBeenCalled();
+    expect(checkoutBranch).not.toHaveBeenCalled();
+    expect(updateThreadRepoState).toHaveBeenCalledWith(
+      "thread-target",
+      expect.objectContaining({
+        activeBranch: "main",
+        projectMode: "local",
+      }),
+    );
+    expect(result.action).toBe("migrate");
+    expect(result.branch).toBe("main");
+  });
+
   it("creates a thread worktree and switches the thread into it", async () => {
+    ensureThreadWorktree.mockImplementationOnce(async () => ({
+      branch: "thread/atlas-a1b2c3",
+      created: true,
+      path: "/tmp/.sentinel-worktrees/sentinel/thread-1",
+    }));
     getOwnedThreadOrThrow.mockImplementationOnce(async () => ({
       chatEngine: "codex",
       chatEngineState: {
@@ -1609,14 +2054,14 @@ describe("repoRouter.branch actions", () => {
         pathValue === "/tmp/.sentinel-worktrees/sentinel/thread-1"
           ? {
               aheadCount: 0,
-              branch: "feature/worktree",
+              branch: "thread/atlas-a1b2c3",
               changedFileCount: 0,
               deletions: 0,
               githubRemote: {
                 defaultBranch: "main",
                 owner: "openai",
                 pullRequestUrl:
-                  "https://github.com/openai/sentinel/compare/main...feature/worktree?expand=1",
+                  "https://github.com/openai/sentinel/compare/main...thread/atlas-a1b2c3?expand=1",
                 pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
                 remoteName: "origin",
                 remoteUrl: "git@github.com:openai/sentinel.git",
@@ -1681,7 +2126,7 @@ describe("repoRouter.branch actions", () => {
     expect(updateThreadRepoState).toHaveBeenCalledWith(
       "thread-1",
       expect.objectContaining({
-        activeBranch: "feature/worktree",
+        activeBranch: "thread/atlas-a1b2c3",
         projectMode: "worktree",
         worktreePath: "/tmp/.sentinel-worktrees/sentinel/thread-1",
       }),

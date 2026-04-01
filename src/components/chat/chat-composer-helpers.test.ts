@@ -2,8 +2,11 @@ import { describe, expect, it } from "bun:test";
 
 import type { ChatComposerModel } from "./chat-composer-helpers";
 import {
+  FALLBACK_CHAT_ENGINE_OPTIONS,
   filterSelectableModels,
+  haveSameEngineOptionSet,
   haveSameSelectableModelSet,
+  resolveStableEngineOptions,
   resolveStableSelectableModels,
 } from "./chat-composer-helpers";
 
@@ -60,6 +63,27 @@ describe("chat composer model helpers", () => {
         [createModel()],
         [createModel({ modelId: "gpt-5.1-codex-mini" })],
       ),
+    ).toBe(false);
+  });
+
+  it("reuses cached engine options when the live response is empty", () => {
+    expect(resolveStableEngineOptions([], FALLBACK_CHAT_ENGINE_OPTIONS)).toBe(
+      FALLBACK_CHAT_ENGINE_OPTIONS,
+    );
+  });
+
+  it("detects when engine options are unchanged", () => {
+    expect(
+      haveSameEngineOptionSet(FALLBACK_CHAT_ENGINE_OPTIONS, [
+        ...FALLBACK_CHAT_ENGINE_OPTIONS,
+      ]),
+    ).toBe(true);
+    expect(
+      haveSameEngineOptionSet(FALLBACK_CHAT_ENGINE_OPTIONS, [
+        FALLBACK_CHAT_ENGINE_OPTIONS[0]!,
+        { ...FALLBACK_CHAT_ENGINE_OPTIONS[1]!, isAvailable: false },
+        FALLBACK_CHAT_ENGINE_OPTIONS[2]!,
+      ]),
     ).toBe(false);
   });
 });
