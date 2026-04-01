@@ -5,6 +5,7 @@ import path from "node:path";
 
 const SKILL_FILENAME = "SKILL.md";
 const WATCH_DEBOUNCE_MS = 150;
+const WATCH_REFRESH_RETRY_COUNT = 4;
 const FILE_SAMPLE_LIMIT = 24;
 const GLOBAL_WORKSPACE_KEY = "__global__";
 const CODEX_SOURCE_KIND = "codex" as const;
@@ -547,24 +548,34 @@ async function syncWatchers(entry: SkillRegistryEntry) {
       continue;
     }
 
-    const watcher = watch(target, { persistent: false }, () => {
-      if (entry.disposed) {
-        return;
+    const watcher = (() => {
+      try {
+        return watch(target, { persistent: false }, () => {
+          if (entry.disposed) {
+            return;
+          }
+
+          if (entry.debounceTimer) {
+            clearTimeout(entry.debounceTimer);
+          }
+
+          entry.debounceTimer = setTimeout(() => {
+            entry.debounceTimer = null;
+            if (entry.disposed) {
+              return;
+            }
+
+            void refreshWatchedEntry(entry);
+          }, WATCH_DEBOUNCE_MS);
+        });
+      } catch {
+        return null;
       }
+    })();
 
-      if (entry.debounceTimer) {
-        clearTimeout(entry.debounceTimer);
-      }
-
-      entry.debounceTimer = setTimeout(() => {
-        entry.debounceTimer = null;
-        if (entry.disposed) {
-          return;
-        }
-
-        void refreshWatchedEntry(entry);
-      }, WATCH_DEBOUNCE_MS);
-    });
+    if (!watcher) {
+      continue;
+    }
 
     watcher.on("error", () => {
       watcher.close();
@@ -581,31 +592,28 @@ async function refreshWatchedEntry(entry: SkillRegistryEntry) {
   }
 
   const startingRevision = entry.snapshot?.revision ?? 0;
+  let attempt = 0;
 
-  await syncWatchers(entry);
-  const snapshot = await refreshEntry(entry);
-  await syncWatchers(entry);
+  while (attempt <= WATCH_REFRESH_RETRY_COUNT) {
+    await syncWatchers(entry);
+    const snapshot = await refreshEntry(entry);
+    await syncWatchers(entry);
 
-  if (entry.disposed) {
-    return;
+    if (entry.disposed || snapshot.revision > startingRevision) {
+      return;
+    }
+
+    attempt += 1;
+
+    if (attempt > WATCH_REFRESH_RETRY_COUNT) {
+      return;
+    }
+
+    // Parent directory notifications can arrive before nested directory and
+    // SKILL.md writes settle, especially on Linux CI when skills containers are
+    // created recursively. A few short follow-up passes keep snapshots stable.
+    await new Promise((resolve) => setTimeout(resolve, WATCH_DEBOUNCE_MS));
   }
-
-  if (snapshot.revision > startingRevision) {
-    return;
-  }
-
-  // Parent directory notifications can arrive before a nested SKILL.md write
-  // lands, especially on Linux CI when a new skills container is created
-  // recursively. A short second pass keeps the watcher behavior deterministic.
-  await new Promise((resolve) => setTimeout(resolve, WATCH_DEBOUNCE_MS));
-
-  if (entry.disposed) {
-    return;
-  }
-
-  await syncWatchers(entry);
-  await refreshEntry(entry);
-  await syncWatchers(entry);
 }
 
 function getOrCreateEntry(
@@ -832,5 +840,6 @@ export const __internal = {
   normalizeSkillName,
   parseSkillFrontmatter,
   stripSkillFrontmatter,
+  WATCH_REFRESH_RETRY_COUNT,
   WATCH_DEBOUNCE_MS,
 };
