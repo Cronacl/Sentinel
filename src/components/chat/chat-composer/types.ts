@@ -3,12 +3,15 @@ import type { FileUIPart } from "ai";
 import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ComposerContext } from "@/lib/composer-context/types";
+import type { RepoThreadState } from "@/lib/ai/chat/engines/types";
 import type { ChatEngine } from "@/server/db/enums";
+import type { DraftProjectMode } from "../draft-thread-project-mode";
 
 export type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 
 export type ComposerSendInput = {
   composerContext?: ComposerContext;
+  draftRepoState?: Partial<RepoThreadState>;
   engine: ChatEngine;
   files?: FileUIPart[];
   modelId: string;
@@ -24,8 +27,18 @@ export type ChatComposerProps = {
     permissionModeOverride?: "default" | "full" | null;
     rootPath?: string | null;
   } | null;
+  draftPreparedWorktree?: {
+    branch: string;
+    path: string;
+  } | null;
+  draftThreadId?: string;
+  draftProjectMode?: DraftProjectMode;
   onQueueFollowUp?: (input: ComposerSendInput) => Promise<void> | void;
   onRemoveQueuedFollowUp?: (id: string) => Promise<void> | void;
+  onDraftPreparedWorktreeChange?: (
+    worktree: { branch: string; path: string } | null,
+  ) => void;
+  onDraftProjectModeChange?: (mode: DraftProjectMode) => void;
   onSelectionChange?: (input: {
     engine?: ChatEngine;
     modelId?: string | null;

@@ -56,6 +56,7 @@ export async function ensureThread(
   title: string,
   mode: ThreadMode = "chat",
   engine: ChatEngine = "sentinel",
+  chatEngineState?: ThreadChatEngineState | null,
 ) {
   const existing = await db.query.threads.findFirst({
     where: eq(threads.id, threadId),
@@ -66,6 +67,7 @@ export async function ensureThread(
     db.insert(threads)
       .values({
         chatEngine: engine,
+        ...(chatEngineState ? { chatEngineState } : {}),
         id: threadId,
         mode,
         title,

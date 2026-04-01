@@ -10,11 +10,14 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, ListBox, Popover, Switch } from "@heroui/react";
-import { useState, type ReactNode } from "react";
+import { memo, useMemo, useState, type ReactNode } from "react";
 
 import type { ChatEngine } from "@/server/db/enums";
 
 import { ContextWindowIndicator } from "./chat-composer/context-window-indicator";
+
+const NO_DISABLED_KEYS: string[] = [];
+const PLAN_MODE_DISABLED_KEYS = ["plan-mode"];
 
 type ComposerToolbarProps = {
   canSend: boolean;
@@ -49,7 +52,7 @@ type ComposerToolbarProps = {
   showEngineSelector: boolean;
 };
 
-export function ComposerToolbar({
+export const ComposerToolbar = memo(function ComposerToolbar({
   canSend,
   contextWindowIndicator,
   engineOptions,
@@ -70,6 +73,17 @@ export function ComposerToolbar({
 }: ComposerToolbarProps) {
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const [engineSubOpen, setEngineSubOpen] = useState(false);
+  const disabledComposerActionKeys = planModeAvailable
+    ? NO_DISABLED_KEYS
+    : PLAN_MODE_DISABLED_KEYS;
+  const disabledEngineKeys = useMemo(
+    () =>
+      engineOptions
+        .filter((engine) => !engine.isAvailable && engine.engine !== "sentinel")
+        .map((engine) => engine.engine),
+    [engineOptions],
+  );
+  const selectedEngineKeys = useMemo(() => [selectedEngine], [selectedEngine]);
 
   return (
     <div className="flex h-8 items-center justify-between px-1.5">
@@ -104,7 +118,7 @@ export function ComposerToolbar({
             <Popover.Dialog className="p-1">
               <ListBox
                 aria-label="Composer actions"
-                disabledKeys={planModeAvailable ? [] : ["plan-mode"]}
+                disabledKeys={disabledComposerActionKeys}
                 selectionMode="none"
                 onAction={(key) => {
                   if (key === "attach-files") {
@@ -175,10 +189,8 @@ export function ComposerToolbar({
                 <div className="mt-1 border-t border-separator pt-1">
                   <ListBox
                     aria-label="Engine"
-                    disabledKeys={engineOptions
-                      .filter((e) => !e.isAvailable && e.engine !== "sentinel")
-                      .map((e) => e.engine)}
-                    selectedKeys={[selectedEngine]}
+                    disabledKeys={disabledEngineKeys}
+                    selectedKeys={selectedEngineKeys}
                     selectionMode="single"
                     onSelectionChange={(keys) => {
                       const key = [...keys][0];
@@ -270,4 +282,4 @@ export function ComposerToolbar({
       </div>
     </div>
   );
-}
+});

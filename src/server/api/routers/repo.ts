@@ -829,6 +829,33 @@ export const repoRouter = createTRPCRouter({
       };
     }),
 
+  prepareThreadWorktree: protectedProcedure
+    .input(workspaceThreadInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const repoContext = await resolveRepoContext(rootPath);
+      const targetBranch = repoContext.branch;
+
+      if (!targetBranch) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "This workspace does not have an active branch to create a worktree from.",
+        });
+      }
+
+      return await ensureThreadWorktree(rootPath, input.threadId, targetBranch);
+    }),
+
+  discardPreparedThreadWorktree: protectedProcedure
+    .input(workspaceThreadInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      return await removeThreadWorktree(rootPath, input.threadId);
+    }),
+
   getDiffPanelData: protectedProcedure
     .input(
       workspaceThreadInputSchema.extend({

@@ -2,7 +2,7 @@
 
 import { EditorContent } from "@tiptap/react";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@heroui/react";
 import { DEFAULT_FOLLOW_UP_BEHAVIOR } from "@/schemas/general-settings.schema";
 import { getExactContextWindowUsage } from "@/lib/ai/chat/context-window";
@@ -32,9 +32,14 @@ let hasComposerBootstrappedThisSession = false;
 export function ChatComposer({
   activeWorkspace,
   attachmentSeed = [],
+  draftPreparedWorktree = null,
+  draftProjectMode = "local",
+  draftThreadId,
   draftMode = null,
   isEditing = false,
   onCancelEdit,
+  onDraftPreparedWorktreeChange,
+  onDraftProjectModeChange,
   onQueueFollowUp,
   onRemoveQueuedFollowUp,
   onSelectionChange,
@@ -141,6 +146,14 @@ export function ChatComposer({
     hasModels &&
     Boolean(selectedModelKey) &&
     !isRepoSetupPending;
+  const draftRepoState =
+    !repoThreadId && draftProjectMode === "worktree" && draftPreparedWorktree
+      ? {
+          activeBranch: draftPreparedWorktree.branch,
+          projectMode: "worktree" as const,
+          worktreePath: draftPreparedWorktree.path,
+        }
+      : undefined;
 
   const skillsQuery = api.skills.list.useQuery(
     activeWorkspace?.id ? { workspaceId: activeWorkspace.id } : undefined,
@@ -260,6 +273,7 @@ export function ChatComposer({
 
       const messagePayload = {
         ...(hasComposerContext(composerContext) ? { composerContext } : {}),
+        ...(draftRepoState ? { draftRepoState } : {}),
         engine: selectedEngine,
         ...(files.length > 0 ? { files } : {}),
         modelId: selectedModelKey,
@@ -288,6 +302,7 @@ export function ChatComposer({
     attachments,
     clearAttachments,
     convertToFileParts,
+    draftRepoState,
     editor,
     followUpBehavior,
     isBusy,
@@ -318,6 +333,52 @@ export function ChatComposer({
         .
       </>
     ) : null;
+  const contextWindowIndicatorProps = useMemo(
+    () =>
+      contextWindowIndicator
+        ? {
+            compactionEnabled:
+              generalSettingsQuery.data?.contextCompactionEnabled ?? false,
+            contextWindowMode: contextWindowIndicator.source,
+            compactionWindowPercent:
+              generalSettingsQuery.data?.contextCompactionWindowPercent ?? 70,
+            contextWindow: contextWindowIndicator.contextWindow,
+            inputTokens: contextWindowIndicator.inputTokens,
+            modelContextWindow: selectedModel?.contextWindow,
+            usedPercent: contextWindowIndicator.usedPercent,
+          }
+        : null,
+    [
+      contextWindowIndicator,
+      generalSettingsQuery.data?.contextCompactionEnabled,
+      generalSettingsQuery.data?.contextCompactionWindowPercent,
+      selectedModel?.contextWindow,
+    ],
+  );
+  const modelSelectorNode = useMemo(
+    () => (
+      <ModelSelector
+        availableModels={availableModels}
+        isLoading={modelsQuery.isLoading && availableModels.length === 0}
+        onSelectModel={handleSelectModel}
+        onSelectReasoningEffort={handleSelectReasoningEffort}
+        selectedModel={selectedModel}
+        selectedModelKey={selectedModelKey}
+        selectedReasoningEffort={selectedReasoningEffort}
+        supportedReasoningEfforts={supportedReasoningEfforts}
+      />
+    ),
+    [
+      availableModels,
+      handleSelectModel,
+      handleSelectReasoningEffort,
+      modelsQuery.isLoading,
+      selectedModel,
+      selectedModelKey,
+      selectedReasoningEffort,
+      supportedReasoningEfforts,
+    ],
+  );
   const showEngineSelector = !canPersistThreadSelection;
   const isModelUiReady =
     Boolean(selectedModelKey) ||
@@ -479,43 +540,10 @@ export function ChatComposer({
             onSelectEngine={handleSelectEngine}
             selectedEngine={selectedEngine}
             showEngineSelector={showEngineSelector}
-            contextWindowIndicator={
-              contextWindowIndicator
-                ? {
-                    compactionEnabled:
-                      generalSettingsQuery.data?.contextCompactionEnabled ??
-                      false,
-                    contextWindowMode: contextWindowIndicator.source,
-                    compactionWindowPercent:
-                      generalSettingsQuery.data
-                        ?.contextCompactionWindowPercent ?? 70,
-                    contextWindow: contextWindowIndicator.contextWindow,
-                    inputTokens: contextWindowIndicator.inputTokens,
-                    modelContextWindow: selectedModel?.contextWindow,
-                    usedPercent: contextWindowIndicator.usedPercent,
-                  }
-                : null
-            }
-            modelSelector={
-              <ModelSelector
-                availableModels={availableModels}
-                isLoading={
-                  modelsQuery.isLoading && availableModels.length === 0
-                }
-                onSelectModel={handleSelectModel}
-                onSelectReasoningEffort={handleSelectReasoningEffort}
-                selectedModel={selectedModel}
-                selectedModelKey={selectedModelKey}
-                selectedReasoningEffort={selectedReasoningEffort}
-                supportedReasoningEfforts={supportedReasoningEfforts}
-              />
-            }
-            onPickFiles={() => {
-              void handlePickFiles();
-            }}
-            onSend={() => {
-              void handleSend();
-            }}
+            contextWindowIndicator={contextWindowIndicatorProps}
+            modelSelector={modelSelectorNode}
+            onPickFiles={handlePickFiles}
+            onSend={handleSend}
             onStop={onStop}
             onTogglePlanMode={handleTogglePlanMode}
             planModeAvailable={planModeAvailable}
@@ -528,6 +556,11 @@ export function ChatComposer({
           <div className="overflow-hidden rounded-b-[24px] border-t border-border/25">
             <ComposerWorkspaceBar
               activeWorkspace={activeWorkspace}
+              draftPreparedWorktree={draftPreparedWorktree}
+              draftProjectMode={draftProjectMode}
+              draftThreadId={draftThreadId}
+              onDraftPreparedWorktreeChange={onDraftPreparedWorktreeChange}
+              onDraftProjectModeChange={onDraftProjectModeChange}
               onSetupPendingChange={setIsRepoSetupPending}
               repoThreadId={repoThreadId}
               showBranchSwitcher={showBranchSwitcher}

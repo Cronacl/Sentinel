@@ -11,7 +11,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, Input, Popover, ScrollShadow, Spinner } from "@heroui/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { sileo } from "sileo";
 
 import { getErrorMessage } from "@/lib/errors";
@@ -21,6 +21,7 @@ import {
   type PermissionMode,
 } from "@/lib/security";
 import { api } from "@/trpc/react";
+import type { DraftProjectMode } from "./draft-thread-project-mode";
 
 type ComposerWorkspaceBarProps = {
   activeWorkspace: {
@@ -29,6 +30,16 @@ type ComposerWorkspaceBarProps = {
     permissionModeOverride?: PermissionMode | null;
     rootPath?: string | null;
   };
+  draftPreparedWorktree?: {
+    branch: string;
+    path: string;
+  } | null;
+  draftProjectMode?: DraftProjectMode;
+  draftThreadId?: string;
+  onDraftPreparedWorktreeChange?: (
+    worktree: { branch: string; path: string } | null,
+  ) => void;
+  onDraftProjectModeChange?: (mode: DraftProjectMode) => void;
   onSetupPendingChange?: (isPending: boolean) => void;
   repoThreadId?: string;
   showBranchSwitcher: boolean;
@@ -41,8 +52,13 @@ function getPermissionModeLabel(value: PermissionMode) {
   );
 }
 
-export function ComposerWorkspaceBar({
+export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
   activeWorkspace,
+  draftPreparedWorktree = null,
+  draftProjectMode = "local",
+  draftThreadId,
+  onDraftPreparedWorktreeChange,
+  onDraftProjectModeChange,
   onSetupPendingChange,
   repoThreadId,
   showBranchSwitcher,
@@ -67,15 +83,20 @@ export function ComposerWorkspaceBar({
   const repoContextQuery = api.repo.getContext.useQuery(repoContextInput, {
     enabled: showBranchSwitcher && Boolean(activeWorkspace.rootPath),
     refetchInterval:
-      showBranchSwitcher && activeWorkspace.rootPath ? 2500 : false,
-    refetchOnWindowFocus: true,
+      showBranchSwitcher && activeWorkspace.rootPath && repoThreadId
+        ? 2500
+        : false,
+    refetchOnWindowFocus: Boolean(repoThreadId),
+    staleTime: repoThreadId ? 2_500 : 15_000,
   });
   const listBranchesQuery = api.repo.listBranches.useQuery(repoContextInput, {
     enabled: Boolean(
+      branchPopoverOpen &&
       showBranchSwitcher &&
       activeWorkspace.rootPath &&
       repoContextQuery.data?.isGitRepo,
     ),
+    staleTime: 30_000,
   });
 
   useEffect(() => {
@@ -178,6 +199,10 @@ export function ComposerWorkspaceBar({
   const resumeThreadBranchMutation = api.repo.resumeThreadBranch.useMutation();
   const enableThreadWorktreeMutation =
     api.repo.enableThreadWorktree.useMutation();
+  const prepareThreadWorktreeMutation =
+    api.repo.prepareThreadWorktree.useMutation();
+  const discardPreparedThreadWorktreeMutation =
+    api.repo.discardPreparedThreadWorktree.useMutation();
   const useLocalProjectMutation = api.repo.useLocalProject.useMutation();
   const removeThreadWorktreeMutation =
     api.repo.removeThreadWorktree.useMutation();
@@ -194,19 +219,26 @@ export function ComposerWorkspaceBar({
     repoContextQuery.data?.isGitRepo,
   );
   const canConfigureThreadEnvironment = Boolean(repoThreadId);
-  const projectModeSwitcherVisible = Boolean(
-    canConfigureThreadEnvironment && branchSwitcherVisible,
+  const hasDraftProjectMode = Boolean(
+    onDraftProjectModeChange && !repoThreadId,
   );
-  const threadBranch =
-    repoContextQuery.data?.threadBranch ??
-    repoContextQuery.data?.branch ??
-    null;
-  const isUsingWorktree =
-    repoContextQuery.data?.threadProjectMode === "worktree";
+  const projectModeSwitcherVisible = Boolean(
+    branchSwitcherVisible &&
+    (canConfigureThreadEnvironment || hasDraftProjectMode),
+  );
+  const threadBranch = repoThreadId
+    ? (repoContextQuery.data?.threadBranch ??
+      repoContextQuery.data?.branch ??
+      null)
+    : (draftPreparedWorktree?.branch ?? repoContextQuery.data?.branch ?? null);
+  const isUsingWorktree = repoThreadId
+    ? repoContextQuery.data?.threadProjectMode === "worktree"
+    : draftProjectMode === "worktree";
   const displayBranch = isUsingWorktree
     ? (threadBranch ?? repoContextQuery.data?.branch ?? null)
     : (repoContextQuery.data?.branch ?? threadBranch ?? null);
-  const hasReadyWorktree = repoContextQuery.data?.worktreeStatus === "ready";
+  const hasReadyWorktree =
+    Boolean(repoThreadId) && repoContextQuery.data?.worktreeStatus === "ready";
   const branchResumeStatus =
     repoContextQuery.data?.branchResumeStatus ?? "matched";
   const branchResumeReason = repoContextQuery.data?.branchResumeReason ?? null;
@@ -218,6 +250,8 @@ export function ComposerWorkspaceBar({
     repoContextQuery.isLoading ||
     resumeThreadBranchMutation.isPending ||
     enableThreadWorktreeMutation.isPending ||
+    prepareThreadWorktreeMutation.isPending ||
+    discardPreparedThreadWorktreeMutation.isPending ||
     useLocalProjectMutation.isPending ||
     removeThreadWorktreeMutation.isPending;
   const isBranchLoading =
@@ -243,6 +277,123 @@ export function ComposerWorkspaceBar({
   useEffect(() => {
     onSetupPendingChange?.(isSetupPending);
   }, [isSetupPending, onSetupPendingChange]);
+
+  const handlePrepareDraftWorktree = useCallback(async () => {
+    if (!draftThreadId || !onDraftProjectModeChange) {
+      return;
+    }
+
+    setProjectModePopoverOpen(false);
+    try {
+      const result = await prepareThreadWorktreeMutation.mutateAsync({
+        threadId: draftThreadId,
+        workspaceId: activeWorkspace.id,
+      });
+      onDraftPreparedWorktreeChange?.({
+        branch: result.branch,
+        path: result.path,
+      });
+      onDraftProjectModeChange("worktree");
+    } catch (error) {
+      onDraftPreparedWorktreeChange?.(null);
+      onDraftProjectModeChange("local");
+      sileo.error({
+        description: getErrorMessage(
+          error,
+          "Unable to prepare a worktree for this thread.",
+        ),
+        title: "Worktree failed",
+      });
+    }
+  }, [
+    activeWorkspace.id,
+    draftThreadId,
+    onDraftPreparedWorktreeChange,
+    onDraftProjectModeChange,
+    prepareThreadWorktreeMutation,
+  ]);
+
+  const handleDiscardDraftWorktree = useCallback(async () => {
+    setProjectModePopoverOpen(false);
+    onDraftProjectModeChange?.("local");
+    onDraftPreparedWorktreeChange?.(null);
+
+    if (!draftThreadId || !draftPreparedWorktree) {
+      return;
+    }
+
+    try {
+      await discardPreparedThreadWorktreeMutation.mutateAsync({
+        threadId: draftThreadId,
+        workspaceId: activeWorkspace.id,
+      });
+    } catch (error) {
+      sileo.error({
+        description: getErrorMessage(
+          error,
+          "Unable to clean up the draft worktree.",
+        ),
+        title: "Worktree cleanup failed",
+      });
+    }
+  }, [
+    activeWorkspace.id,
+    discardPreparedThreadWorktreeMutation,
+    draftPreparedWorktree,
+    draftThreadId,
+    onDraftPreparedWorktreeChange,
+    onDraftProjectModeChange,
+  ]);
+
+  const resyncDraftWorktreeToCurrentBranch = useCallback(async () => {
+    if (
+      !hasDraftProjectMode ||
+      draftProjectMode !== "worktree" ||
+      !draftThreadId
+    ) {
+      return;
+    }
+
+    if (draftPreparedWorktree) {
+      await discardPreparedThreadWorktreeMutation
+        .mutateAsync({
+          threadId: draftThreadId,
+          workspaceId: activeWorkspace.id,
+        })
+        .catch(() => undefined);
+    }
+
+    try {
+      const result = await prepareThreadWorktreeMutation.mutateAsync({
+        threadId: draftThreadId,
+        workspaceId: activeWorkspace.id,
+      });
+      onDraftPreparedWorktreeChange?.({
+        branch: result.branch,
+        path: result.path,
+      });
+    } catch (error) {
+      onDraftPreparedWorktreeChange?.(null);
+      onDraftProjectModeChange?.("local");
+      sileo.error({
+        description: getErrorMessage(
+          error,
+          "Unable to prepare a worktree for this thread.",
+        ),
+        title: "Worktree failed",
+      });
+    }
+  }, [
+    activeWorkspace.id,
+    discardPreparedThreadWorktreeMutation,
+    draftPreparedWorktree,
+    draftProjectMode,
+    draftThreadId,
+    hasDraftProjectMode,
+    onDraftPreparedWorktreeChange,
+    onDraftProjectModeChange,
+    prepareThreadWorktreeMutation,
+  ]);
 
   const syncRepoContext = useCallback(
     async (
@@ -315,6 +466,7 @@ export function ComposerWorkspaceBar({
             ? { threadId: resolvedThreadId, workspaceId: activeWorkspace.id }
             : { workspaceId: activeWorkspace.id },
         );
+        await resyncDraftWorktreeToCurrentBranch();
         await utils.threads.list.invalidate();
         sileo.success({
           description: `Switched to ${result.branch}.`,
@@ -330,6 +482,7 @@ export function ComposerWorkspaceBar({
     branchName,
     createBranchMutation,
     repoThreadId,
+    resyncDraftWorktreeToCurrentBranch,
     utils.repo.listBranches,
     utils.threads.list,
   ]);
@@ -420,12 +573,11 @@ export function ComposerWorkspaceBar({
 
   const handleUseLocalProject = useCallback(async () => {
     setProjectModePopoverOpen(false);
-    if (!repoThreadId && !isUsingWorktree) {
-      return;
-    }
-
     const resolvedThreadId = repoThreadId ?? null;
     if (!resolvedThreadId) {
+      if (!repoThreadId && onDraftProjectModeChange) {
+        await handleDiscardDraftWorktree();
+      }
       return;
     }
 
@@ -450,7 +602,9 @@ export function ComposerWorkspaceBar({
     }
   }, [
     activeWorkspace.id,
+    handleDiscardDraftWorktree,
     isUsingWorktree,
+    onDraftProjectModeChange,
     repoThreadId,
     syncRepoContext,
     useLocalProjectMutation,
@@ -541,7 +695,45 @@ export function ComposerWorkspaceBar({
               placement="top start"
             >
               <Popover.Dialog className="flex flex-col gap-1 p-1">
-                {threadBranch && branchResumeStatus !== "matched" ? (
+                {hasDraftProjectMode ? (
+                  <>
+                    <button
+                      className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
+                      onClick={() => void handleDiscardDraftWorktree()}
+                      type="button"
+                    >
+                      <div className="min-w-0">
+                        <p>Local project</p>
+                        <p className="text-xs text-muted">
+                          Start this thread on the workspace checkout
+                        </p>
+                      </div>
+                      {!isUsingWorktree ? (
+                        <span className="text-xs text-muted">Current</span>
+                      ) : null}
+                    </button>
+
+                    <button
+                      className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
+                      onClick={() => void handlePrepareDraftWorktree()}
+                      type="button"
+                    >
+                      <div className="min-w-0">
+                        <p>Worktree</p>
+                        <p className="text-xs text-muted">
+                          Prepare an isolated checkout before the first message
+                        </p>
+                      </div>
+                      {isUsingWorktree ? (
+                        <span className="text-xs text-muted">Current</span>
+                      ) : null}
+                    </button>
+                  </>
+                ) : null}
+
+                {!hasDraftProjectMode &&
+                threadBranch &&
+                branchResumeStatus !== "matched" ? (
                   <div className="rounded-xl border border-border/60 bg-default/60 px-2.5 py-2">
                     <p className="text-sm text-foreground">
                       Resume on {threadBranch}
@@ -562,39 +754,45 @@ export function ComposerWorkspaceBar({
                   </div>
                 ) : null}
 
-                <button
-                  className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
-                  onClick={() => void handleUseLocalProject()}
-                  type="button"
-                >
-                  <div className="min-w-0">
-                    <p>Local project</p>
-                    <p className="text-xs text-muted">
-                      Use the workspace checkout for this thread
-                    </p>
-                  </div>
-                  {!isUsingWorktree ? (
-                    <span className="text-xs text-muted">Current</span>
-                  ) : null}
-                </button>
+                {!hasDraftProjectMode ? (
+                  <button
+                    className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
+                    onClick={() => void handleUseLocalProject()}
+                    type="button"
+                  >
+                    <div className="min-w-0">
+                      <p>Local project</p>
+                      <p className="text-xs text-muted">
+                        Use the workspace checkout for this thread
+                      </p>
+                    </div>
+                    {!isUsingWorktree ? (
+                      <span className="text-xs text-muted">Current</span>
+                    ) : null}
+                  </button>
+                ) : null}
 
-                <button
-                  className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
-                  onClick={() => void handleEnableThreadWorktree()}
-                  type="button"
-                >
-                  <div className="min-w-0">
-                    <p>{hasReadyWorktree ? "Use worktree" : "New worktree"}</p>
-                    <p className="text-xs text-muted">
-                      Give this thread an isolated checkout
-                    </p>
-                  </div>
-                  {isUsingWorktree ? (
-                    <span className="text-xs text-muted">Current</span>
-                  ) : null}
-                </button>
+                {!hasDraftProjectMode ? (
+                  <button
+                    className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
+                    onClick={() => void handleEnableThreadWorktree()}
+                    type="button"
+                  >
+                    <div className="min-w-0">
+                      <p>
+                        {hasReadyWorktree ? "Use worktree" : "New worktree"}
+                      </p>
+                      <p className="text-xs text-muted">
+                        Give this thread an isolated checkout
+                      </p>
+                    </div>
+                    {isUsingWorktree ? (
+                      <span className="text-xs text-muted">Current</span>
+                    ) : null}
+                  </button>
+                ) : null}
 
-                {hasReadyWorktree ? (
+                {!hasDraftProjectMode && hasReadyWorktree ? (
                   <button
                     className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
                     onClick={() => void handleRemoveThreadWorktree()}
@@ -820,6 +1018,7 @@ export function ComposerWorkspaceBar({
                                     resolvedThreadId,
                                     result.repoContext,
                                   );
+                                  await resyncDraftWorktreeToCurrentBranch();
                                   await utils.repo.listBranches.invalidate(
                                     resolvedThreadId
                                       ? {
@@ -951,4 +1150,4 @@ export function ComposerWorkspaceBar({
       </div>
     </div>
   );
-}
+});

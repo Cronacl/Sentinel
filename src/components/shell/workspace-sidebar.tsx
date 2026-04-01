@@ -124,6 +124,7 @@ function formatRelativeTime(value: Date | string) {
 }
 
 type ThreadStatusValue = "idle" | "streaming" | "awaiting_approval";
+type ThreadWarmStrategy = "hover" | "focus" | "press";
 
 function ThreadStatusIndicator({ status }: { status: ThreadStatusValue }) {
   if (status === "streaming") {
@@ -454,7 +455,27 @@ function threadPullRequestIconClass(
   }
 }
 
-function PinnedThreadsList({
+function getPullRequestMemoKey(
+  pullRequest: RepoLastPullRequest | null | undefined,
+) {
+  if (!pullRequest) {
+    return "none";
+  }
+
+  if (pullRequest.kind === "compare") {
+    return `compare:${pullRequest.base}:${pullRequest.head}:${pullRequest.repoFullName}`;
+  }
+
+  return `pr:${pullRequest.number}:${pullRequest.state}:${pullRequest.draft ? "draft" : "ready"}`;
+}
+
+type WarmThreadHandler = (
+  workspaceId: string,
+  threadId: string,
+  strategy?: ThreadWarmStrategy,
+) => void;
+
+const PinnedThreadsList = memo(function PinnedThreadsList({
   threads,
   selectedThreadId,
   onPressThread,
@@ -467,7 +488,7 @@ function PinnedThreadsList({
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
   onRenameThread: (threadId: string) => void;
-  onWarmThread: (workspaceId: string, threadId: string) => void;
+  onWarmThread: WarmThreadHandler;
   selectedThreadId: string | null;
   threads: Array<{
     id: string;
@@ -493,8 +514,12 @@ function PinnedThreadsList({
                   : "text-foreground hover:text-foreground"
               }`}
               key={thread.id}
-              onFocus={() => onWarmThread(thread.workspace.id, thread.id)}
-              onMouseEnter={() => onWarmThread(thread.workspace.id, thread.id)}
+              onFocus={() =>
+                onWarmThread(thread.workspace.id, thread.id, "focus")
+              }
+              onMouseEnter={() =>
+                onWarmThread(thread.workspace.id, thread.id, "hover")
+              }
               onClick={() => onPressThread(thread.workspace.id, thread.id)}
               onDoubleClick={(event) => {
                 event.preventDefault();
@@ -543,9 +568,11 @@ function PinnedThreadsList({
       </div>
     </div>
   );
-}
+});
 
 const THREADS_PER_PAGE = 6;
+const THREAD_WARM_HOVER_DELAY_MS = 120;
+const MAX_WARMED_THREAD_ENTRIES = 48;
 const SIDEBAR_COLLAPSE_TRANSITION = {
   duration: 0.18,
   ease: [0.22, 1, 0.36, 1],
@@ -575,23 +602,13 @@ const SidebarCollapsible = memo(function SidebarCollapsible({
   );
 });
 
-function ThreadRow({
-  isPinned,
-  onArchive,
-  onPin,
-  onPressThread,
-  onRenameThread,
-  onWarmThread,
-  selectedThreadId,
-  thread,
-  workspaceId,
-}: {
+type ThreadRowProps = {
   isPinned: boolean;
   onArchive: (threadId: string) => void;
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
   onRenameThread: (threadId: string) => void;
-  onWarmThread: (workspaceId: string, threadId: string) => void;
+  onWarmThread: WarmThreadHandler;
   selectedThreadId: string | null;
   thread: {
     id: string;
@@ -602,10 +619,48 @@ function ThreadRow({
     updatedAt: Date;
   };
   workspaceId: string;
-}) {
+};
+
+const ThreadRow = memo(function ThreadRow({
+  isPinned,
+  onArchive,
+  onPin,
+  onPressThread,
+  onRenameThread,
+  onWarmThread,
+  selectedThreadId,
+  thread,
+  workspaceId,
+}: ThreadRowProps) {
   const isActive = selectedThreadId === thread.id;
   const pullRequestLabel = formatThreadPullRequestLabel(
     thread.linkedPullRequest ?? null,
+  );
+  const handleWarmOnFocus = useCallback(() => {
+    onWarmThread(workspaceId, thread.id, "focus");
+  }, [onWarmThread, thread.id, workspaceId]);
+  const handleWarmOnHover = useCallback(() => {
+    onWarmThread(workspaceId, thread.id, "hover");
+  }, [onWarmThread, thread.id, workspaceId]);
+  const handlePress = useCallback(() => {
+    onPressThread(workspaceId, thread.id);
+  }, [onPressThread, thread.id, workspaceId]);
+  const handleDoubleClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onRenameThread(thread.id);
+    },
+    [onRenameThread, thread.id],
+  );
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        onPressThread(workspaceId, thread.id);
+      }
+    },
+    [onPressThread, thread.id, workspaceId],
   );
 
   return (
@@ -615,22 +670,13 @@ function ThreadRow({
           ? "bg-default text-foreground"
           : "text-foreground hover:text-foreground"
       }`}
-      onFocus={() => onWarmThread(workspaceId, thread.id)}
-      onMouseEnter={() => onWarmThread(workspaceId, thread.id)}
-      onClick={() => onPressThread(workspaceId, thread.id)}
-      onDoubleClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onRenameThread(thread.id);
-      }}
+      onFocus={handleWarmOnFocus}
+      onMouseEnter={handleWarmOnHover}
+      onClick={handlePress}
+      onDoubleClick={handleDoubleClick}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onPressThread(workspaceId, thread.id);
-        }
-      }}
+      onKeyDown={handleKeyDown}
     >
       <span className="flex min-w-0 flex-1 items-start gap-1.5 overflow-hidden">
         <span className="pt-0.5">
@@ -680,6 +726,30 @@ function ThreadRow({
       />
     </div>
   );
+}, areThreadRowsEqual);
+
+function areThreadRowsEqual(
+  previous: Readonly<ThreadRowProps>,
+  next: Readonly<ThreadRowProps>,
+) {
+  return (
+    previous.isPinned === next.isPinned &&
+    previous.selectedThreadId === next.selectedThreadId &&
+    previous.workspaceId === next.workspaceId &&
+    previous.thread.id === next.thread.id &&
+    previous.thread.title === next.thread.title &&
+    previous.thread.status === next.thread.status &&
+    previous.thread.updatedAt.getTime() === next.thread.updatedAt.getTime() &&
+    (previous.thread.pinnedAt?.getTime() ?? 0) ===
+      (next.thread.pinnedAt?.getTime() ?? 0) &&
+    getPullRequestMemoKey(previous.thread.linkedPullRequest) ===
+      getPullRequestMemoKey(next.thread.linkedPullRequest) &&
+    previous.onArchive === next.onArchive &&
+    previous.onPin === next.onPin &&
+    previous.onPressThread === next.onPressThread &&
+    previous.onRenameThread === next.onRenameThread &&
+    previous.onWarmThread === next.onWarmThread
+  );
 }
 
 const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
@@ -706,7 +776,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
   onRenameThread: (threadId: string) => void;
   onRenameWorkspace: (workspaceId: string) => void;
   onToggleWorkspace: (workspaceId: string) => void;
-  onWarmThread: (workspaceId: string, threadId: string) => void;
+  onWarmThread: WarmThreadHandler;
   selectedThreadId: string | null;
 }) {
   const [showOverflowThreads, setShowOverflowThreads] = useState(false);
@@ -870,7 +940,7 @@ const ThreadList = memo(function ThreadList({
   onRenameWorkspace: (workspaceId: string) => void;
   selectedThreadId: string | null;
   onToggleWorkspace: (workspaceId: string) => void;
-  onWarmThread: (workspaceId: string, threadId: string) => void;
+  onWarmThread: WarmThreadHandler;
 }) {
   return (
     <ScrollShadow className="max-h-full px-1 py-1 pb-4" orientation="vertical">
@@ -911,7 +981,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
   onRenameThread: (threadId: string) => void;
-  onWarmThread: (workspaceId: string, threadId: string) => void;
+  onWarmThread: WarmThreadHandler;
   selectedThreadId: string | null;
 }) {
   const [showOverflowThreads, setShowOverflowThreads] = useState(false);
@@ -1042,6 +1112,9 @@ export function WorkspaceSidebar() {
   );
   const preferencesRef = useRef<HTMLDivElement | null>(null);
   const pinActionLockRef = useRef(new Set<string>());
+  const warmedThreadIdsRef = useRef(new Set<string>());
+  const hoverWarmTimeoutRef = useRef<number | null>(null);
+  const pendingHoverWarmRef = useRef<string | null>(null);
   const renameWorkspaceState = useOverlayState({
     onOpenChange: (isOpen) => {
       if (!isOpen) {
@@ -1535,6 +1608,14 @@ export function WorkspaceSidebar() {
   }, [preferences.data]);
 
   useEffect(() => {
+    return () => {
+      if (hoverWarmTimeoutRef.current != null) {
+        window.clearTimeout(hoverWarmTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isPreferencesOpen) {
       return;
     }
@@ -1632,10 +1713,22 @@ export function WorkspaceSidebar() {
     [toggleExpanded],
   );
 
-  const handleWarmThread = useCallback(
-    (_workspaceId: string, threadId: string) => {
+  const warmThreadNow = useCallback(
+    (threadId: string) => {
       if (selectedThreadId === threadId) {
         return;
+      }
+
+      if (warmedThreadIdsRef.current.has(threadId)) {
+        return;
+      }
+
+      warmedThreadIdsRef.current.add(threadId);
+      if (warmedThreadIdsRef.current.size > MAX_WARMED_THREAD_ENTRIES) {
+        const oldestThreadId = warmedThreadIdsRef.current.values().next().value;
+        if (oldestThreadId) {
+          warmedThreadIdsRef.current.delete(oldestThreadId);
+        }
       }
 
       void utils.threads.get.prefetch({ threadId });
@@ -1644,13 +1737,53 @@ export function WorkspaceSidebar() {
     [router, selectedThreadId, utils.threads.get],
   );
 
+  const handleWarmThread = useCallback<WarmThreadHandler>(
+    (_workspaceId, threadId, strategy = "hover") => {
+      if (selectedThreadId === threadId) {
+        return;
+      }
+
+      if (strategy !== "hover") {
+        pendingHoverWarmRef.current = null;
+        if (hoverWarmTimeoutRef.current != null) {
+          window.clearTimeout(hoverWarmTimeoutRef.current);
+          hoverWarmTimeoutRef.current = null;
+        }
+        warmThreadNow(threadId);
+        return;
+      }
+
+      if (
+        warmedThreadIdsRef.current.has(threadId) ||
+        pendingHoverWarmRef.current === threadId
+      ) {
+        return;
+      }
+
+      pendingHoverWarmRef.current = threadId;
+      if (hoverWarmTimeoutRef.current != null) {
+        window.clearTimeout(hoverWarmTimeoutRef.current);
+      }
+
+      hoverWarmTimeoutRef.current = window.setTimeout(() => {
+        hoverWarmTimeoutRef.current = null;
+        if (pendingHoverWarmRef.current !== threadId) {
+          return;
+        }
+        pendingHoverWarmRef.current = null;
+        warmThreadNow(threadId);
+      }, THREAD_WARM_HOVER_DELAY_MS);
+    },
+    [selectedThreadId, warmThreadNow],
+  );
+
   const navigateToThread = useCallback(
     (workspaceId: string, threadId: string) => {
       if (selectedWorkspaceId !== workspaceId) {
         void selectWorkspace.mutate({ workspaceId });
       }
 
-      handleWarmThread(workspaceId, threadId);
+      handleWarmThread(workspaceId, threadId, "press");
       router.push(`/thread/${threadId}`);
     },
     [handleWarmThread, router, selectWorkspace, selectedWorkspaceId],

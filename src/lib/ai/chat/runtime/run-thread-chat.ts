@@ -1409,6 +1409,7 @@ async function runParsedThreadChat(
     fallbackTitle,
     threadMode,
     engine,
+    request.draftRepoState ? { repo: request.draftRepoState } : null,
   );
   let activeRunId: string | null = null;
 

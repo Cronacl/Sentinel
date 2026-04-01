@@ -15,6 +15,7 @@ import type {
   ThreadSessionSnapshot,
   ThreadStreamEvent,
 } from "@/lib/ai/chat/session-types";
+import type { RepoThreadState } from "@/lib/ai/chat/engines/types";
 import type { ThreadToolApprovalResponse } from "@/lib/ai/chat/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ComposerContext } from "@/lib/composer-context/types";
@@ -43,6 +44,7 @@ type UseThreadChatOptions = {
 
 type SendThreadMessageInput = {
   composerContext?: ComposerContext;
+  draftRepoState?: Partial<RepoThreadState>;
   engine: ChatEngine;
   files?: FileUIPart[];
   modelId: string;
@@ -1206,6 +1208,7 @@ export function useThreadChat({
   const sendMessage = useCallback(
     async ({
       composerContext,
+      draftRepoState,
       engine,
       files,
       modelId,
@@ -1214,6 +1217,7 @@ export function useThreadChat({
       threadMode,
     }: SendThreadMessageInput) => {
       return runAction({
+        ...(draftRepoState ? { draftRepoState } : {}),
         engine,
         id: threadId,
         message: createUserThreadMessage({ composerContext, files, text }),
@@ -1254,6 +1258,7 @@ export function useThreadChat({
   const queueFollowUp = useCallback(
     async ({
       composerContext,
+      draftRepoState,
       engine,
       files,
       modelId,
@@ -1274,6 +1279,7 @@ export function useThreadChat({
 
       try {
         await runAction({
+          ...(draftRepoState ? { draftRepoState } : {}),
           engine,
           id: threadId,
           message,
@@ -1294,6 +1300,7 @@ export function useThreadChat({
   const steerFollowUp = useCallback(
     async ({
       composerContext,
+      draftRepoState,
       engine,
       files,
       modelId,
@@ -1314,6 +1321,7 @@ export function useThreadChat({
 
       try {
         await runAction({
+          ...(draftRepoState ? { draftRepoState } : {}),
           engine,
           id: threadId,
           message,
