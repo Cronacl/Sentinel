@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.8](https://github.com/chaqchase/Sentinel/compare/v0.0.7...v0.0.8) (2026-04-01)
+
+
+### Features
+
+* **chat:** introduce draft project mode and worktree management in composer components ([97b5d23](https://github.com/chaqchase/Sentinel/commit/97b5d2395f9736072fb28fc69528d7e9ad8c6173))
+
 ## [0.0.7](https://github.com/chaqchase/Sentinel/compare/v0.0.6...v0.0.7) (2026-04-01)
 
 
