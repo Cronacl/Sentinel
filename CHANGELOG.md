@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.6](https://github.com/chaqchase/Sentinel/compare/v0.0.5...v0.0.6) (2026-04-01)
+
+
+### Features
+
+* **chat:** enhance chat composer with engine option management and improve thread handling ([d651910](https://github.com/chaqchase/Sentinel/commit/d651910cbdc99ac5b41d1053500f5fffc8a2aa40))
+* **chat:** enhance thread management with repo context integration and improve branch handling ([638e20e](https://github.com/chaqchase/Sentinel/commit/638e20ea63f49d845e4487003c07f93e74813fe3))
+* **chat:** implement repo checkpoint management and enhance message action handling ([79c1d6c](https://github.com/chaqchase/Sentinel/commit/79c1d6ca3d9d8e921b71bbd90600cf90c263cb5b))
+
 ## [0.0.5](https://github.com/chaqchase/Sentinel/compare/v0.0.4...v0.0.5) (2026-03-31)
 
 
