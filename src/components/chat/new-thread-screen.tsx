@@ -11,20 +11,25 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { sileo } from "sileo";
 
 import { SentinelLogoBadge } from "@/components/shared/logo";
 import { PageWrapper } from "@/components/shell";
-import { CreateWorkspaceModal } from "@/components/workspaces/create-workspace-modal";
 import { useOutsideClick } from "@/hooks/use-outside-click";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import { getErrorMessage } from "@/lib/errors";
 import {
   applyThreadSettingsCacheUpdate,
   applyThreadSnapshotCacheUpdate,
   applyThreadStatusCacheUpdate,
 } from "@/lib/threads/cache";
+import {
+  deriveWorkspaceName,
+  pickWorkspaceDirectory,
+} from "@/lib/workspaces/picker";
 import type { ChatEngine } from "@/server/db/enums";
 import { api } from "@/trpc/react";
 import type { FileUIPart } from "ai";
@@ -49,7 +54,6 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     staleTime: 30_000,
   });
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [draftThreadMode, setDraftThreadMode] = useState<
     "chat" | "plan" | null
@@ -167,7 +171,6 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
           ...withoutWorkspace.map((item) => ({ ...item, isSelected: false })),
         ];
       });
-      setIsCreateOpen(false);
     },
   });
   const archiveDraftThread = api.threads.archive.useMutation({
@@ -178,6 +181,28 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   });
 
   const selectedWorkspace = currentWorkspace.data;
+  const handleCreateWorkspace = useCallback(() => {
+    void (async () => {
+      try {
+        const directory = await pickWorkspaceDirectory();
+
+        if (!directory) {
+          return;
+        }
+
+        await createWorkspace.mutateAsync({
+          name: deriveWorkspaceName(directory),
+          rootPath: directory.path,
+        });
+      } catch (error) {
+        sileo.error({
+          description: getErrorMessage(error, "Unable to add that project."),
+          title: "Project creation failed",
+        });
+      }
+    })();
+  }, [createWorkspace]);
+
   const cachedThreadDetails = utils.threads.get.getData({
     threadId: draftThreadId,
   });
@@ -910,6 +935,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                 className="flex cursor-pointer items-center gap-1.5 disabled:opacity-40"
                 disabled={
                   archiveDraftThread.isPending ||
+                  createWorkspace.isPending ||
                   discardPreparedDraftWorktree.isPending ||
                   selectWorkspace.isPending
                 }
@@ -951,7 +977,6 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                       {(workspaces.data ?? []).map((workspace) => {
                         const isSelected =
                           workspace.id === selectedWorkspace?.id;
-
                         return (
                           <button
                             className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-sm transition-colors ${
@@ -992,10 +1017,11 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                     <div className="mx-2 my-1 h-px bg-separator" />
 
                     <button
-                      className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-sm text-muted transition-colors hover:bg-default hover:text-foreground"
+                      className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-sm text-muted transition-colors hover:bg-default hover:text-foreground disabled:opacity-40"
+                      disabled={createWorkspace.isPending}
                       onClick={() => {
                         setIsWorkspaceMenuOpen(false);
-                        setIsCreateOpen(true);
+                        handleCreateWorkspace();
                       }}
                       type="button"
                     >
@@ -1041,12 +1067,6 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
           </div>
         </div>
       </div>
-
-      <CreateWorkspaceModal
-        isOpen={isCreateOpen}
-        onCreate={(values) => createWorkspace.mutateAsync(values)}
-        onOpenChange={setIsCreateOpen}
-      />
     </PageWrapper>
   );
 }
