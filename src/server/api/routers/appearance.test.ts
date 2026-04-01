@@ -15,7 +15,7 @@ const findFirst = mock(
     ({
       codeFontFamily: '"JetBrains Mono", monospace',
       codeFontSize: 13.5,
-      codeTheme: "catppuccin",
+      codeTheme: "dracula",
       themePreference: "dark",
       uiFontFamily: '"Avenir Next", sans-serif',
       uiFontSize: 17,
@@ -72,7 +72,7 @@ describe("appearanceRouter", () => {
     expect(result).toEqual({
       codeFontFamily: '"JetBrains Mono", monospace',
       codeFontSize: 13.5,
-      codeTheme: "catppuccin",
+      codeTheme: "dracula",
       themePreference: "dark",
       uiFontFamily: '"Avenir Next", sans-serif',
       uiFontSize: 17,
