@@ -5,6 +5,7 @@ import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
 import type { ReasoningEffort } from "../providers/models";
 import type { ThreadUIMessage } from "../messages/types";
 import type { ThreadMode, ThreadPlanAnswer } from "@/lib/plan";
+import type { RepoThreadState } from "@/lib/ai/chat/engines/types";
 
 export type ThreadChatTrigger =
   | "submit-user-message"
@@ -26,6 +27,7 @@ export type ThreadToolApprovalResponse = {
 };
 
 export type ThreadChatRequest = {
+  draftRepoState?: Partial<RepoThreadState>;
   engine?: ChatEngine;
   message?: ThreadUIMessage;
   messages?: ThreadUIMessage[];

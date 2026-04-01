@@ -6,6 +6,7 @@ import {
 import { validateThreadUIMessage } from "@/lib/ai/messages/ui";
 import { type ThreadPlanAnswer } from "@/lib/plan";
 import { CHAT_ENGINES, type ChatEngine } from "@/server/db/enums";
+import { repoThreadStateSchema } from "@/lib/ai/chat/engines/types";
 
 import { InvalidThreadChatRequestError } from "../errors";
 import type {
@@ -95,6 +96,9 @@ export async function parseRequest(
     input.threadMode === "plan" || input.threadMode === "chat"
       ? (input.threadMode as "plan" | "chat")
       : undefined;
+  const draftRepoState = input.draftRepoState
+    ? repoThreadStateSchema.partial().safeParse(input.draftRepoState)
+    : null;
 
   const needsMessage =
     trigger === "submit-user-message" ||
@@ -140,6 +144,7 @@ export async function parseRequest(
   }
 
   return {
+    ...(draftRepoState?.success ? { draftRepoState: draftRepoState.data } : {}),
     ...(message ? { message } : {}),
     ...(messages ? { messages } : {}),
     ...(engine ? { engine } : {}),

@@ -1533,6 +1533,7 @@ export async function runClaudeThreadChat(
     fallbackTitle,
     threadMode,
     "claude",
+    request.draftRepoState ? { repo: request.draftRepoState } : null,
   );
 
   const workspaceRoot = await getWorkspaceRootPath(

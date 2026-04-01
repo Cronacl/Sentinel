@@ -1801,6 +1801,7 @@ export async function runCodexThreadChat(
     fallbackTitle,
     threadMode,
     "codex",
+    request.draftRepoState ? { repo: request.draftRepoState } : null,
   );
 
   const workspaceRoot = await getWorkspaceRootPath(
