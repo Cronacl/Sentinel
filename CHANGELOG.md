@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.9](https://github.com/chaqchase/Sentinel/compare/v0.0.8...v0.0.9) (2026-04-01)
+
+
+### Features
+
+* **browser:** implement browser sidebar with tab management and navigation features ([c314de5](https://github.com/chaqchase/Sentinel/commit/c314de50aa92c380861d9754cf63b619d34a3cd5))
+* **skills:** add retry mechanism for watcher refres ([6823502](https://github.com/chaqchase/Sentinel/commit/6823502c6768b50b327194d84a1eb463a48d5802))
+* Update sidebar padding ([e4a477f](https://github.com/chaqchase/Sentinel/commit/e4a477f06ac9ed4675883ef0f3c603dc4193e859))
+
+
+### Bug Fixes
+
+* resolve engine typecheck regressions ([eed2cac](https://github.com/chaqchase/Sentinel/commit/eed2cac8566608c60caf626b10507e7e193c08ac))
+* **runtime:** stabilize snapshot-backed availability ([18fa212](https://github.com/chaqchase/Sentinel/commit/18fa21254ba14964ea895a1cd89293c66fe30902))
+* simplify workspace picker flow ([5280e2f](https://github.com/chaqchase/Sentinel/commit/5280e2f6824cf2fcf750440b7bfb4567c7a6ae36))
+
 ## [0.0.8](https://github.com/chaqchase/Sentinel/compare/v0.0.7...v0.0.8) (2026-04-01)
 
 
