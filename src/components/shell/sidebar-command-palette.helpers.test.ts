@@ -2,8 +2,6 @@ import { describe, expect, it } from "bun:test";
 
 import {
   buildSidebarCommandPaletteState,
-  getCommandPaletteShortcutLabel,
-  shouldToggleSidebarCommandPaletteShortcut,
   type SidebarCommandPaletteAction,
   type SidebarCommandPaletteThread,
 } from "./sidebar-command-palette.helpers";
@@ -108,62 +106,5 @@ describe("buildSidebarCommandPaletteState", () => {
       "title-match",
       "summary-match",
     ]);
-  });
-});
-
-describe("sidebar command palette shortcuts", () => {
-  it("returns the expected shortcut label per platform", () => {
-    expect(getCommandPaletteShortcutLabel("darwin")).toBe("⌘K");
-    expect(getCommandPaletteShortcutLabel("linux")).toBe("Ctrl K");
-  });
-
-  it("only toggles for Cmd/Ctrl+K without extra modifiers", () => {
-    expect(
-      shouldToggleSidebarCommandPaletteShortcut({
-        altKey: false,
-        ctrlKey: false,
-        defaultPrevented: false,
-        isComposing: false,
-        key: "k",
-        metaKey: true,
-        shiftKey: false,
-      } as KeyboardEvent),
-    ).toBe(true);
-
-    expect(
-      shouldToggleSidebarCommandPaletteShortcut({
-        altKey: false,
-        ctrlKey: true,
-        defaultPrevented: false,
-        isComposing: false,
-        key: "K",
-        metaKey: false,
-        shiftKey: false,
-      } as KeyboardEvent),
-    ).toBe(true);
-
-    expect(
-      shouldToggleSidebarCommandPaletteShortcut({
-        altKey: true,
-        ctrlKey: true,
-        defaultPrevented: false,
-        isComposing: false,
-        key: "k",
-        metaKey: false,
-        shiftKey: false,
-      } as KeyboardEvent),
-    ).toBe(false);
-
-    expect(
-      shouldToggleSidebarCommandPaletteShortcut({
-        altKey: false,
-        ctrlKey: true,
-        defaultPrevented: false,
-        isComposing: true,
-        key: "k",
-        metaKey: false,
-        shiftKey: false,
-      } as KeyboardEvent),
-    ).toBe(false);
   });
 });

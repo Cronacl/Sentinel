@@ -36,6 +36,11 @@ import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import { getErrorMessage } from "@/lib/errors";
+import {
+  useShortcutAction,
+  useShortcutLabel,
+  useShortcutScope,
+} from "@/lib/shortcuts/provider";
 import type { ChatEngine } from "@/server/db/enums";
 import {
   applyThreadSnapshotCacheUpdate,
@@ -203,6 +208,12 @@ export function ThreadScreen({
     message: ThreadUIMessage;
   } | null>(null);
   const isPinned = thread.pinnedAt != null;
+  const threadScope = useShortcutScope({
+    kind: "thread",
+  });
+  const pinShortcutLabel = useShortcutLabel("thread.pinToggle");
+  const renameShortcutLabel = useShortcutLabel("thread.rename");
+  const archiveShortcutLabel = useShortcutLabel("thread.archive");
   const pinToggleLockRef = useRef(false);
   const startPlanImplementationLockRef = useRef(false);
 
@@ -675,6 +686,15 @@ export function ThreadScreen({
   const handleArchive = useCallback(() => {
     confirmArchiveState.open();
   }, [confirmArchiveState]);
+  useShortcutAction("thread.pinToggle", handleTogglePin, {
+    scopeId: threadScope.id,
+  });
+  useShortcutAction("thread.rename", handleOpenRename, {
+    scopeId: threadScope.id,
+  });
+  useShortcutAction("thread.archive", handleArchive, {
+    scopeId: threadScope.id,
+  });
 
   const codexReview = api.engines.codexReview.useMutation();
   const codexRollback = api.engines.codexRollback.useMutation();
@@ -971,7 +991,9 @@ export function ThreadScreen({
                   strokeWidth={1.5}
                 />
                 <Label>{isPinned ? "Unpin thread" : "Pin thread"}</Label>
-                <Kbd slot="keyboard">&#x2325;&#x2318;P</Kbd>
+                {pinShortcutLabel ? (
+                  <Kbd slot="keyboard">{pinShortcutLabel}</Kbd>
+                ) : null}
               </Dropdown.Item>
               <Dropdown.Item id="rename" textValue="Rename thread">
                 <HugeiconsIcon
@@ -981,7 +1003,9 @@ export function ThreadScreen({
                   strokeWidth={1.5}
                 />
                 <Label>Rename thread</Label>
-                <Kbd slot="keyboard">&#x2303;&#x2318;R</Kbd>
+                {renameShortcutLabel ? (
+                  <Kbd slot="keyboard">{renameShortcutLabel}</Kbd>
+                ) : null}
               </Dropdown.Item>
               <Dropdown.Item id="archive" textValue="Archive thread">
                 <HugeiconsIcon
@@ -991,7 +1015,9 @@ export function ThreadScreen({
                   strokeWidth={1.5}
                 />
                 <Label>Archive thread</Label>
-                <Kbd slot="keyboard">&#x21E7;&#x2318;A</Kbd>
+                {archiveShortcutLabel ? (
+                  <Kbd slot="keyboard">{archiveShortcutLabel}</Kbd>
+                ) : null}
               </Dropdown.Item>
               {chatEngine === "codex" && (
                 <>

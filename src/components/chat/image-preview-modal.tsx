@@ -3,7 +3,8 @@
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect } from "react";
+
+import { useShortcutAction, useShortcutScope } from "@/lib/shortcuts/provider";
 
 import type { ComposerAttachment } from "./chat-attachments";
 
@@ -16,16 +17,12 @@ export function ImagePreviewModal({
   attachment,
   onClose,
 }: ImagePreviewModalProps) {
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  const previewScope = useShortcutScope({
+    kind: "overlay",
+  });
+  useShortcutAction("overlay.close", onClose, {
+    scopeId: previewScope.id,
+  });
 
   return (
     <AnimatePresence>

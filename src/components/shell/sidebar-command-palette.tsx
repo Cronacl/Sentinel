@@ -8,21 +8,26 @@ import { formatDistanceToNowStrict } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 
-import { getDesktopApi } from "@/lib/desktop/client";
+import {
+  useShortcutAction,
+  useShortcutScope,
+  useShortcuts,
+} from "@/lib/shortcuts/provider";
+import type { ShortcutActionId } from "@/lib/shortcuts/schema";
 import { api } from "@/trpc/react";
 
 import {
   buildSidebarCommandPaletteState,
-  getCommandPaletteShortcutLabel,
-  shouldToggleSidebarCommandPaletteShortcut,
   type SidebarCommandPaletteAction,
   type SidebarCommandPaletteThread,
 } from "./sidebar-command-palette.helpers";
+import { ThreadPullRequestMeta } from "./thread-pull-request";
 
 type SidebarCommandPaletteActionItem = SidebarCommandPaletteAction & {
   icon: IconSvgElement;
   onSelect: () => void;
   shortcut?: string;
+  shortcutActionId?: ShortcutActionId;
 };
 
 type SidebarCommandPaletteProps = {
@@ -64,11 +69,73 @@ function formatRelativeTime(value: Date) {
 
 function ShortcutPill({ children }: { children: React.ReactNode }) {
   return (
-    <Kbd className="h-5 min-w-5 rounded-md border-none bg-white/[0.05] px-1.5 text-[10px] font-medium text-white/38 shadow-none">
+    <Kbd className="h-5 min-w-5 rounded-md border border-border/40 bg-default/70 px-1.5 text-[10px] font-medium text-foreground/52 shadow-none">
       {children}
     </Kbd>
   );
 }
+
+function splitShortcutLabel(label: string | null | undefined) {
+  if (!label) {
+    return [];
+  }
+
+  if (!label.includes(" ")) {
+    return [...label];
+  }
+
+  return label.split(" ").filter(Boolean);
+}
+
+function ShortcutKeys({ label }: { label: string | null | undefined }) {
+  const keys = splitShortcutLabel(label);
+
+  if (keys.length === 0) {
+    return null;
+  }
+
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      {keys.map((key, index) => (
+        <ShortcutPill key={`${key}-${index}`}>{key}</ShortcutPill>
+      ))}
+    </span>
+  );
+}
+
+function LoadingThreadRows() {
+  return (
+    <Command.Group
+      className="[&>[cmdk-group-heading]]:px-2 [&>[cmdk-group-heading]]:pt-1 [&>[cmdk-group-heading]]:pb-0.5 [&>[cmdk-group-heading]]:text-[11px] [&>[cmdk-group-heading]]:font-medium [&>[cmdk-group-heading]]:text-muted"
+      heading="Threads"
+    >
+      <div className="flex flex-col gap-0.5">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <div
+            className="flex items-center gap-2 rounded-lg px-2 py-[7px]"
+            key={index}
+          >
+            <Spinner
+              className="size-3.5 min-w-3.5 text-foreground/45"
+              color="current"
+              size="sm"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block h-3.5 w-[60%] rounded-full bg-default/80" />
+              <span className="mt-1 block h-2.5 w-[34%] rounded-full bg-default/55" />
+            </span>
+          </div>
+        ))}
+      </div>
+    </Command.Group>
+  );
+}
+
+const PALETTE_ITEM_SELECTED_CLASS =
+  "bg-default/58 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]";
+const PALETTE_ITEM_HOVER_CLASS = "hover:bg-default/70";
+const PALETTE_ITEM_SELECTED_DATA_CLASS =
+  "data-[selected=true]:bg-default/58 data-[selected=true]:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]";
 
 export function SidebarCommandPalette({
   actions,
@@ -78,9 +145,12 @@ export function SidebarCommandPalette({
   recentThreads,
   selectedThreadId,
 }: SidebarCommandPaletteProps) {
-  const desktop = getDesktopApi();
-  const platform = desktop?.app.platform ?? null;
-  const shortcutLabel = getCommandPaletteShortcutLabel(platform);
+  const paletteScope = useShortcutScope({
+    active: open,
+    kind: "commandPalette",
+  });
+  const { getShortcutLabel } = useShortcuts();
+  const shortcutLabel = getShortcutLabel("commandPalette.toggle");
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query.trim());
   const searchQuery = api.threads.search.useQuery(
@@ -107,24 +177,16 @@ export function SidebarCommandPalette({
       setQuery("");
     }
   }, [open]);
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (shouldToggleSidebarCommandPaletteShortcut(event)) {
-        event.preventDefault();
-        onOpenChange(!open);
-        return;
-      }
-
-      if (open && event.key === "Escape") {
-        event.preventDefault();
-        onOpenChange(false);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onOpenChange, open]);
+  useShortcutAction(
+    "overlay.close",
+    () => {
+      onOpenChange(false);
+    },
+    {
+      enabled: open,
+      scopeId: paletteScope.id,
+    },
+  );
 
   const isSearching = paletteState.hasQuery && searchQuery.isFetching;
   const isLoadingRemoteThreads =
@@ -156,10 +218,10 @@ export function SidebarCommandPalette({
               initial={{ opacity: 0, scale: 0.985, y: -10 }}
               transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             >
-              <div className="overflow-hidden rounded-2xl border border-white/8 bg-[#1a1a1a] shadow-xl">
+              <div className="overflow-hidden rounded-2xl border border-border/60 bg-overlay shadow-xl">
                 <Command className="w-full" loop shouldFilter={false}>
-                  <div className="flex items-center gap-2 border-b border-white/6 px-2.5 py-1.5">
-                    <span className="shrink-0 text-white/34">
+                  <div className="flex items-center gap-2 border-b border-border/40 px-2.5 py-1.5">
+                    <span className="shrink-0 text-muted">
                       {isSearching ? (
                         <Spinner
                           className="size-[15px]"
@@ -178,27 +240,28 @@ export function SidebarCommandPalette({
 
                     <Command.Input
                       autoFocus
-                      className="h-6 w-full bg-transparent text-sm text-white/92 outline-none placeholder:text-white/26"
+                      className="h-6 w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted"
                       onValueChange={setQuery}
                       placeholder="Search threads and actions…"
                       value={query}
                     />
 
-                    <ShortcutPill>{shortcutLabel}</ShortcutPill>
+                    <ShortcutKeys label={shortcutLabel} />
                   </div>
 
                   <Command.List className="max-h-[min(52vh,24rem)] overflow-y-auto px-1 py-1">
                     {paletteState.actions.length > 0 ? (
                       <Command.Group
-                        className="[&>[cmdk-group-heading]]:px-2 [&>[cmdk-group-heading]]:pt-1 [&>[cmdk-group-heading]]:pb-0.5 [&>[cmdk-group-heading]]:text-[11px] [&>[cmdk-group-heading]]:font-medium [&>[cmdk-group-heading]]:text-white/28"
+                        className="[&>[cmdk-group-heading]]:px-2 [&>[cmdk-group-heading]]:pt-1 [&>[cmdk-group-heading]]:pb-0.5 [&>[cmdk-group-heading]]:text-[11px] [&>[cmdk-group-heading]]:font-medium [&>[cmdk-group-heading]]:text-muted"
                         heading="Suggested"
                       >
                         <div className="flex flex-col gap-0.5">
                           {paletteState.actions.map((action) => (
                             <Command.Item
                               className={cn(
-                                "flex cursor-pointer items-center gap-2 rounded-lg px-2 py-[5px] text-white outline-none transition-colors",
-                                "data-[selected=true]:bg-white/[0.045]",
+                                "flex cursor-pointer items-center gap-2 rounded-[1rem] px-2 py-[5px] text-foreground outline-none transition-colors",
+                                PALETTE_ITEM_HOVER_CLASS,
+                                PALETTE_ITEM_SELECTED_DATA_CLASS,
                               )}
                               key={action.id}
                               keywords={action.keywords}
@@ -208,7 +271,7 @@ export function SidebarCommandPalette({
                               }}
                               value={action.label}
                             >
-                              <span className="shrink-0 text-white/50">
+                              <span className="shrink-0 text-foreground/50">
                                 <HugeiconsIcon
                                   color="currentColor"
                                   icon={action.icon}
@@ -216,11 +279,19 @@ export function SidebarCommandPalette({
                                   strokeWidth={1.5}
                                 />
                               </span>
-                              <span className="min-w-0 flex-1 truncate text-sm text-white/88">
+                              <span className="min-w-0 flex-1 truncate text-sm text-foreground/88">
                                 {action.label}
                               </span>
-                              {action.shortcut ? (
-                                <ShortcutPill>{action.shortcut}</ShortcutPill>
+                              {action.shortcutActionId || action.shortcut ? (
+                                <ShortcutKeys
+                                  label={
+                                    action.shortcutActionId
+                                      ? getShortcutLabel(
+                                          action.shortcutActionId,
+                                        )
+                                      : action.shortcut
+                                  }
+                                />
                               ) : null}
                             </Command.Item>
                           ))}
@@ -230,7 +301,7 @@ export function SidebarCommandPalette({
 
                     {paletteState.threads.length > 0 ? (
                       <Command.Group
-                        className="[&>[cmdk-group-heading]]:px-2 [&>[cmdk-group-heading]]:pt-1 [&>[cmdk-group-heading]]:pb-0.5 [&>[cmdk-group-heading]]:text-[11px] [&>[cmdk-group-heading]]:font-medium [&>[cmdk-group-heading]]:text-white/28"
+                        className="[&>[cmdk-group-heading]]:px-2 [&>[cmdk-group-heading]]:pt-1 [&>[cmdk-group-heading]]:pb-0.5 [&>[cmdk-group-heading]]:text-[11px] [&>[cmdk-group-heading]]:font-medium [&>[cmdk-group-heading]]:text-muted"
                         heading={paletteState.threadsHeading}
                       >
                         <div className="flex flex-col gap-0.5">
@@ -241,10 +312,11 @@ export function SidebarCommandPalette({
                             return (
                               <Command.Item
                                 className={cn(
-                                  "flex cursor-pointer items-center gap-2 rounded-lg px-2 py-[5px] text-white outline-none transition-colors",
+                                  "flex cursor-pointer items-center gap-2 rounded-[1rem] px-2 py-[5px] text-foreground outline-none transition-colors",
+                                  PALETTE_ITEM_HOVER_CLASS,
                                   isActiveThread
-                                    ? "bg-white/[0.045]"
-                                    : "data-[selected=true]:bg-white/[0.045]",
+                                    ? PALETTE_ITEM_SELECTED_CLASS
+                                    : PALETTE_ITEM_SELECTED_DATA_CLASS,
                                 )}
                                 key={thread.id}
                                 keywords={[
@@ -260,7 +332,12 @@ export function SidebarCommandPalette({
                                 }}
                                 value={`${thread.title} ${thread.workspace.name} ${thread.summary ?? ""}`}
                               >
-                                <span className="shrink-0 pt-0.5 text-white/40">
+                                <span
+                                  className={cn(
+                                    "shrink-0 pt-0.5 text-foreground/40 transition-colors",
+                                    isActiveThread && "text-foreground/65",
+                                  )}
+                                >
                                   {thread.status && thread.status !== "idle" ? (
                                     <span className="relative flex h-2.5 w-2.5">
                                       <span className="absolute inset-0 rounded-full bg-current/24" />
@@ -269,10 +346,27 @@ export function SidebarCommandPalette({
                                   ) : null}
                                 </span>
                                 <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-sm text-white/88">
+                                  <span
+                                    className={cn(
+                                      "block truncate text-sm text-foreground/88",
+                                      isActiveThread && "text-foreground",
+                                    )}
+                                  >
                                     {thread.title}
                                   </span>
-                                  <span className="flex items-center gap-1.5 text-[11px] text-white/28">
+                                  {thread.linkedPullRequest ? (
+                                    <span className="mt-0.5 block">
+                                      <ThreadPullRequestMeta
+                                        pullRequest={thread.linkedPullRequest}
+                                      />
+                                    </span>
+                                  ) : null}
+                                  <span
+                                    className={cn(
+                                      "mt-0.5 flex items-center gap-1.5 text-[11px] text-muted",
+                                      isActiveThread && "text-foreground/55",
+                                    )}
+                                  >
                                     <span className="truncate">
                                       {thread.workspace.name}
                                     </span>
@@ -297,18 +391,10 @@ export function SidebarCommandPalette({
                       </Command.Group>
                     ) : null}
 
-                    {isLoadingRemoteThreads ? (
-                      <div className="flex items-center justify-center px-2 py-3 text-xs text-white/34">
-                        <Spinner
-                          className="size-3.5"
-                          color="current"
-                          size="sm"
-                        />
-                      </div>
-                    ) : null}
+                    {isLoadingRemoteThreads ? <LoadingThreadRows /> : null}
 
                     {isEmpty ? (
-                      <div className="px-2 py-3 text-center text-xs text-white/28">
+                      <div className="px-2 py-3 text-center text-xs text-muted">
                         No results found
                       </div>
                     ) : null}

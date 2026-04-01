@@ -7,6 +7,9 @@ export type SidebarCommandPaletteAction = {
 
 export type SidebarCommandPaletteThread = {
   id: string;
+  linkedPullRequest?:
+    | import("@/lib/ai/chat/engines/types").RepoLastPullRequest
+    | null;
   pinnedAt?: Date | null;
   status?: "idle" | "streaming" | "awaiting_approval";
   summary?: string | null;

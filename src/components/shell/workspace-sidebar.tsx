@@ -42,21 +42,27 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sileo } from "sileo";
 
 import { getErrorMessage } from "@/lib/errors";
-import { getDesktopApi } from "@/lib/desktop/client";
 import type { RepoLastPullRequest } from "@/lib/ai/chat/engines/types";
+import {
+  useShortcutAction,
+  useShortcutLabel,
+  useShortcutScope,
+} from "@/lib/shortcuts/provider";
 import {
   applyThreadTitleCacheUpdate,
   applyOptimisticThreadPinUpdate,
   restoreOptimisticThreadPinUpdate,
 } from "@/lib/threads/cache";
-import {
-  deriveWorkspaceName,
-  pickWorkspaceDirectory,
-} from "@/lib/workspaces/picker";
 import { api, type RouterOutputs } from "@/trpc/react";
 
 import { SidebarCommandPalette } from "./sidebar-command-palette";
-import { getCommandPaletteShortcutLabel } from "./sidebar-command-palette.helpers";
+import {
+  formatThreadPullRequestLabel,
+  getPullRequestMemoKey,
+  threadPullRequestIconClass,
+  threadPullRequestToneClass,
+} from "./thread-pull-request";
+import { useAppShortcutActions } from "./use-app-shortcut-actions";
 
 type OrganizeBy = "chronological" | "workspace";
 type SortBy = "created" | "updated";
@@ -69,7 +75,7 @@ const PRIMARY_NAV = [
 
 const SIDEBAR_SECTION_INSET = "px-2";
 const SIDEBAR_ITEM_INSET = "px-2.5";
-const SIDEBAR_ITEM_ROW = "rounded-xl px-2.5 py-1.5 transition-colors";
+const SIDEBAR_ITEM_ROW = "rounded-xl px-1.5 py-1 transition-colors";
 
 const WORKSPACE_TOOLTIP_CLASSNAME = "max-w-[320px]";
 
@@ -399,92 +405,6 @@ function WorkspaceItemActions({
   );
 }
 
-function threadPullRequestToneClass(
-  pullRequest: RepoLastPullRequest | null | undefined,
-) {
-  if (!pullRequest) {
-    return "text-foreground/50";
-  }
-
-  if (pullRequest.kind === "compare") {
-    return "text-foreground/50";
-  }
-
-  if (pullRequest.draft) {
-    return "text-foreground/62";
-  }
-
-  switch (pullRequest.state.toLowerCase()) {
-    case "merged":
-      return "text-foreground/62";
-    case "closed":
-      return "text-foreground/58";
-    default:
-      return "text-foreground/62";
-  }
-}
-
-function formatThreadPullRequestLabel(
-  pullRequest: RepoLastPullRequest | null | undefined,
-) {
-  if (!pullRequest) {
-    return null;
-  }
-
-  if (pullRequest.kind === "compare") {
-    return null;
-  }
-
-  if (pullRequest.draft) {
-    return `PR #${pullRequest.number} Draft`;
-  }
-
-  if (pullRequest.state.toLowerCase() === "merged") {
-    return `PR #${pullRequest.number} Merged`;
-  }
-
-  if (pullRequest.state.toLowerCase() === "closed") {
-    return `PR #${pullRequest.number} Closed`;
-  }
-
-  return `PR #${pullRequest.number} Open`;
-}
-
-function threadPullRequestIconClass(
-  pullRequest: RepoLastPullRequest | null | undefined,
-) {
-  if (!pullRequest || pullRequest.kind === "compare") {
-    return "text-foreground/35";
-  }
-
-  if (pullRequest.draft) {
-    return "text-warning drop-shadow-[0_0_6px_rgba(245,158,11,0.28)]";
-  }
-
-  switch (pullRequest.state.toLowerCase()) {
-    case "merged":
-      return "text-success drop-shadow-[0_0_6px_rgba(34,197,94,0.28)]";
-    case "closed":
-      return "text-danger drop-shadow-[0_0_6px_rgba(239,68,68,0.24)]";
-    default:
-      return "text-green-500 ";
-  }
-}
-
-function getPullRequestMemoKey(
-  pullRequest: RepoLastPullRequest | null | undefined,
-) {
-  if (!pullRequest) {
-    return "none";
-  }
-
-  if (pullRequest.kind === "compare") {
-    return `compare:${pullRequest.base}:${pullRequest.head}:${pullRequest.repoFullName}`;
-  }
-
-  return `pr:${pullRequest.number}:${pullRequest.state}:${pullRequest.draft ? "draft" : "ready"}`;
-}
-
 type WarmThreadHandler = (
   workspaceId: string,
   threadId: string,
@@ -805,7 +725,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
 
   const workspaceButton = (
     <Button
-      className="text-foreground/50 hover:bg-default/60 hover:text-foreground justify-start rounded-xl pl-2.5 pr-10"
+      className="text-foreground/70 h-7 hover:bg-default/60 hover:text-foreground justify-start rounded-xl pl-2 pr-10"
       fullWidth
       onPress={() => {
         onPressWorkspace(group.workspace.id);
@@ -817,7 +737,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
       size="sm"
       variant="ghost"
     >
-      <div className="flex w-full min-w-0 items-center gap-2">
+      <div className="flex w-full min-w-0 items-center gap-1">
         <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
           <HugeiconsIcon
             className="transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0"
@@ -1127,9 +1047,7 @@ function PreferenceMenuItem({
 }
 
 export function WorkspaceSidebar() {
-  const desktop = getDesktopApi();
-  const platform = desktop?.app.platform ?? null;
-  const commandShortcutLabel = getCommandPaletteShortcutLabel(platform);
+  const commandShortcutLabel = useShortcutLabel("commandPalette.toggle");
   const pathname = usePathname();
   const router = useRouter();
   const utils = api.useUtils();
@@ -1150,10 +1068,22 @@ export function WorkspaceSidebar() {
     () => cachedPreferences?.sortBy ?? "updated",
   );
   const preferencesRef = useRef<HTMLDivElement | null>(null);
+  const preferencesScope = useShortcutScope({
+    active: isPreferencesOpen,
+    kind: "overlay",
+  });
   const pinActionLockRef = useRef(new Set<string>());
   const warmedThreadIdsRef = useRef(new Set<string>());
   const hoverWarmTimeoutRef = useRef<number | null>(null);
   const pendingHoverWarmRef = useRef<string | null>(null);
+  const {
+    handleCreateWorkspace,
+    handleOpenAutomations,
+    handleOpenSettings,
+    handleOpenSkills,
+    handleStartNewThread,
+    isCreatingWorkspace,
+  } = useAppShortcutActions();
   const renameWorkspaceState = useOverlayState({
     onOpenChange: (isOpen) => {
       if (!isOpen) {
@@ -1204,6 +1134,20 @@ export function WorkspaceSidebar() {
   const preferences = api.workspaces.getPreferences.useQuery();
   const currentWorkspace = api.workspaces.getCurrent.useQuery();
   const workspaces = api.workspaces.list.useQuery();
+
+  useShortcutAction("commandPalette.toggle", () => {
+    setIsCommandPaletteOpen((current) => !current);
+  });
+  useShortcutAction(
+    "overlay.close",
+    () => {
+      setIsPreferencesOpen(false);
+    },
+    {
+      enabled: isPreferencesOpen,
+      scopeId: preferencesScope.id,
+    },
+  );
 
   const expandedWorkspaceIds = useMemo(
     () =>
@@ -1499,88 +1443,6 @@ export function WorkspaceSidebar() {
     [renameThreadState],
   );
 
-  const createWorkspace = api.workspaces.create.useMutation({
-    onSuccess: (workspace) => {
-      utils.workspaces.getCurrent.setData(undefined, {
-        createdAt: workspace.createdAt,
-        description: workspace.description,
-        id: workspace.id,
-        isArchived: workspace.isArchived,
-        isExpanded: workspace.isExpanded,
-        name: workspace.name,
-        permissionModeOverride: workspace.permissionModeOverride,
-        rootPath: workspace.rootPath,
-        updatedAt: workspace.updatedAt,
-        userId: workspace.userId,
-      });
-      utils.workspaces.list.setData(undefined, (current) => {
-        const existing = current ?? [];
-        const withoutWorkspace = existing.filter(
-          (item) => item.id !== workspace.id,
-        );
-        return [
-          {
-            createdAt: workspace.createdAt,
-            description: workspace.description,
-            id: workspace.id,
-            isExpanded: workspace.isExpanded,
-            isSelected: true,
-            latestThreadUpdatedAt: null,
-            name: workspace.name,
-            permissionModeOverride: workspace.permissionModeOverride,
-            rootPath: workspace.rootPath,
-            threadCount: 0,
-            updatedAt: workspace.updatedAt,
-          },
-          ...withoutWorkspace.map((item) => ({ ...item, isSelected: false })),
-        ];
-      });
-      void utils.threads.list.invalidate();
-      void utils.repo.listWorkspaceStatuses.invalidate();
-    },
-  });
-
-  const handleCreateWorkspace = useCallback(() => {
-    void (async () => {
-      try {
-        const directory = await pickWorkspaceDirectory();
-
-        if (!directory) {
-          return;
-        }
-
-        await createWorkspace.mutateAsync({
-          name: deriveWorkspaceName(directory),
-          rootPath: directory.path,
-        });
-      } catch (error) {
-        sileo.error({
-          description: getErrorMessage(error, "Unable to add that project."),
-          title: "Project creation failed",
-        });
-      }
-    })();
-  }, [createWorkspace]);
-
-  const handleStartNewThread = useCallback(() => {
-    window.dispatchEvent(new Event("sentinel:new-thread"));
-    if (pathname !== "/") {
-      router.push("/");
-    }
-  }, [pathname, router]);
-
-  const handleOpenAutomations = useCallback(() => {
-    router.push("/automations");
-  }, [router]);
-
-  const handleOpenSkills = useCallback(() => {
-    router.push("/skills");
-  }, [router]);
-
-  const handleOpenSettings = useCallback(() => {
-    router.push("/settings");
-  }, [router]);
-
   const renameWorkspace = api.workspaces.update.useMutation({
     onSuccess: (workspace) => {
       utils.workspaces.list.setData(undefined, (current) =>
@@ -1745,18 +1607,10 @@ export function WorkspaceSidebar() {
       }
     };
 
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsPreferencesOpen(false);
-      }
-    };
-
     document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleEscape);
 
     return () => {
       document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleEscape);
     };
   }, [isPreferencesOpen]);
 
@@ -2154,7 +2008,7 @@ export function WorkspaceSidebar() {
         keywords: ["create", "compose", "chat"],
         label: "New thread",
         onSelect: handleStartNewThread,
-        shortcut: platform === "darwin" ? "⌘N" : "Ctrl N",
+        shortcutActionId: "thread.new" as const,
         subtitle: "Start a fresh conversation",
       },
       {
@@ -2163,7 +2017,7 @@ export function WorkspaceSidebar() {
         keywords: ["project", "folder", "workspace"],
         label: "Create workspace",
         onSelect: handleCreateWorkspace,
-        shortcut: platform === "darwin" ? "⌘O" : "Ctrl O",
+        shortcutActionId: "workspace.create" as const,
         subtitle: "Pick a project directory and add it to Sentinel",
       },
       {
@@ -2172,7 +2026,7 @@ export function WorkspaceSidebar() {
         keywords: ["scheduled", "tasks", "automation"],
         label: "Automations",
         onSelect: handleOpenAutomations,
-        shortcut: platform === "darwin" ? "⌘A" : "Ctrl A",
+        shortcutActionId: "automations.open" as const,
         subtitle: "Jump to recurring tasks and run history",
       },
       {
@@ -2181,7 +2035,7 @@ export function WorkspaceSidebar() {
         keywords: ["agents", "skills", "capabilities"],
         label: "Skills",
         onSelect: handleOpenSkills,
-        shortcut: platform === "darwin" ? "⌘K" : "Ctrl K",
+        shortcutActionId: "skills.open" as const,
         subtitle: "Browse installed skills and add new ones",
       },
       {
@@ -2190,7 +2044,7 @@ export function WorkspaceSidebar() {
         keywords: ["preferences", "models", "appearance"],
         label: "Settings",
         onSelect: handleOpenSettings,
-        shortcut: platform === "darwin" ? "⌘," : "Ctrl ,",
+        shortcutActionId: "settings.open" as const,
         subtitle: "Open Sentinel preferences",
       },
     ],
@@ -2212,7 +2066,7 @@ export function WorkspaceSidebar() {
   return (
     <div className="flex h-full flex-col select-none">
       <div className={`shrink-0 ${SIDEBAR_SECTION_INSET} pt-1 pb-3`}>
-        <nav className="flex flex-col gap-1">
+        <nav className="flex flex-col">
           <Button
             className={`justify-start rounded-xl ${SIDEBAR_ITEM_INSET} ${
               pathname === "/"
@@ -2298,7 +2152,7 @@ export function WorkspaceSidebar() {
 
         <Button
           isIconOnly
-          isDisabled={createWorkspace.isPending}
+          isDisabled={isCreatingWorkspace}
           onPress={handleCreateWorkspace}
           size="sm"
           className="h-6 w-6 min-w-6"
@@ -2455,7 +2309,7 @@ export function WorkspaceSidebar() {
                   {organizeBy === "workspace" ? (
                     <Button
                       className="mt-4"
-                      isDisabled={createWorkspace.isPending}
+                      isDisabled={isCreatingWorkspace}
                       onPress={handleCreateWorkspace}
                       size="sm"
                       variant="secondary"

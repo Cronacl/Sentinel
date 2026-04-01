@@ -35,6 +35,7 @@ import {
   THREAD_PLAN_TASK_STATUSES,
   THREAD_STATUSES,
 } from "./enums";
+import type { ShortcutOverrides } from "@/lib/shortcuts/schema";
 
 export const users = sqliteTable(
   "user",
@@ -92,6 +93,9 @@ export const users = sqliteTable(
     defaultChatModelId: text("default_chat_model_id"),
     defaultChatMode: text("default_chat_mode", { enum: THREAD_MODES }),
     defaultChatReasoningEffort: text("default_chat_reasoning_effort"),
+    shortcutOverrides: text("shortcut_overrides", {
+      mode: "json",
+    }).$type<ShortcutOverrides | null>(),
     followUpBehavior: text("follow_up_behavior", {
       enum: FOLLOW_UP_BEHAVIORS,
     })

@@ -4,10 +4,11 @@ import { Button } from "@heroui/react";
 import { ArrowLeft02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { usePathname, useRouter } from "next/navigation";
-import { type PropsWithChildren, useCallback, useEffect } from "react";
+import { type PropsWithChildren, useCallback } from "react";
 
 import { SETTINGS_NAV } from "@/components/settings/settings-nav";
 import { getDesktopApi } from "@/lib/desktop/client";
+import { useShortcutAction, useShortcutScope } from "@/lib/shortcuts/provider";
 
 export default function SettingsModalLayout({ children }: PropsWithChildren) {
   const router = useRouter();
@@ -16,18 +17,16 @@ export default function SettingsModalLayout({ children }: PropsWithChildren) {
   const desktop = getDesktopApi();
   const platform = desktop?.app.platform ?? null;
   const isMac = platform === "darwin";
+  const settingsScope = useShortcutScope({
+    kind: "overlay",
+  });
 
   const close = useCallback(() => {
     router.back();
   }, [router]);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [close]);
+  useShortcutAction("overlay.close", close, {
+    scopeId: settingsScope.id,
+  });
 
   const isActive = (href: string) =>
     href === "/settings" ? pathname === "/settings" : pathname.startsWith(href);
