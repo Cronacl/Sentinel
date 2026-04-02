@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.11](https://github.com/chaqchase/Sentinel/compare/v0.0.10...v0.0.11) (2026-04-02)
+
+
+### Bug Fixes
+
+* fix plan mode persistence ([3785c96](https://github.com/chaqchase/Sentinel/commit/3785c96428c0b9b7e8f6cdfe5d252956d73b6ca9))
+
 ## [0.0.10](https://github.com/chaqchase/Sentinel/compare/v0.0.9...v0.0.10) (2026-04-01)
 
 
