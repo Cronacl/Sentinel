@@ -55,7 +55,7 @@ export const CodexUserInputTool = memo(function CodexUserInputTool({
       isRunning={false}
       isError={false}
       isExpandable={isWaiting}
-      isExpanded={isWaiting}
+      isExpanded={false}
       onExpandedChange={() => {}}
     >
       {isWaiting && (

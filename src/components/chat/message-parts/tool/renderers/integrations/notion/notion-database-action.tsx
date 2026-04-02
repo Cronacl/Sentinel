@@ -1,12 +1,15 @@
 "use client";
 
 import { Button } from "@heroui/react";
-import { memo, useEffect, useState } from "react";
+import { memo } from "react";
 import { Icon } from "@iconify/react";
 
 import { IntegrationProviderIcon } from "@/components/icons/integration-provider-icon";
 import type { RendererProps } from "../../../renderer";
-import { IntegrationToolLayout } from "../shared/integration-tool-layout";
+import {
+  IntegrationToolLayout,
+  useToolExpansionState,
+} from "../shared/integration-tool-layout";
 import { getIntegrationToolInteractionState } from "../shared/state";
 import type { ToolPart } from "../../../../types";
 import { getToolName } from "../../../../types";
@@ -44,11 +47,11 @@ export const NotionDatabaseActionTool = memo(function NotionDatabaseActionTool({
   const output =
     state.hasOutput && "output" in part ? (part.output as PageOutput) : null;
 
-  const [isExpanded, setIsExpanded] = useState(state.needsApproval);
-
-  useEffect(() => {
-    if (state.needsApproval) setIsExpanded(true);
-  }, [state.needsApproval]);
+  const [isExpanded, setIsExpanded] = useToolExpansionState({
+    toolCallId: part.toolCallId,
+    defaultExpanded: state.needsApproval,
+    autoExpand: state.needsApproval,
+  });
 
   const formatIcon = (icon: string | null) => {
     if (!icon) return "\u{1F4C4}";
