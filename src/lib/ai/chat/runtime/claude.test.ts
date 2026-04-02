@@ -9,6 +9,7 @@ const clearActiveStream = mock(() => {});
 const setThreadStatus = mock(() => {});
 const loadThreadMessages = mock(async () => []);
 const updateThreadRepoState = mock(() => {});
+const updateThreadChatSettings = mock(async () => {});
 const beginThreadRepoCheckpointRun = mock(async () => {});
 const loadThreadSessionSnapshot = mock(async (threadId: string) => ({
   activeRunId: "run-1",
@@ -38,7 +39,7 @@ mock.module("../persistence", () => ({
   setThreadStatus,
   updateClaudeThreadState: mock(() => {}),
   updateThreadRepoState,
-  updateThreadChatSettings: mock(async () => {}),
+  updateThreadChatSettings,
   upsertMessage,
 }));
 
@@ -149,6 +150,7 @@ describe("runClaudeThreadChat approvals", () => {
     loadThreadSessionSnapshot.mockClear();
     setActiveMessage.mockClear();
     setThreadStatus.mockClear();
+    updateThreadChatSettings.mockClear();
     updateThreadRepoState.mockClear();
     upsertMessage.mockClear();
     if (!(globalThis as any).__sentinelActiveClaudeRunControls) {
@@ -616,6 +618,33 @@ describe("runClaudeThreadChat approvals", () => {
     );
     expect(updateThreadRepoState).toHaveBeenCalledWith("thread-1", {
       checkpointAnchorMessageId: null,
+    });
+  });
+
+  it("persists plan mode on submit", async () => {
+    const response = await runClaudeThreadChat(
+      {
+        message: createUserMessage("Help me plan this."),
+        modelId: "claude-sonnet-4-20250514",
+        threadId: "thread-1",
+        threadMode: "plan",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      {
+        chatEngineState: null,
+        mode: "chat",
+        status: "idle",
+      } as any,
+    );
+
+    expect(response.status).toBe(202);
+    expect(updateThreadChatSettings).toHaveBeenCalledWith("thread-1", {
+      engine: "claude",
+      mode: "plan",
+      modelId: "claude-sonnet-4-20250514",
+      reasoningEffort: null,
     });
   });
 });

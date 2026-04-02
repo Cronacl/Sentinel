@@ -24,6 +24,7 @@ import { useComposerEditor } from "./use-composer-editor";
 import { useModelSelection } from "./use-model-selection";
 import { usePersistSelection } from "./use-persist-selection";
 import { usePlanMode } from "./use-plan-mode";
+import { resolveThreadSelectionSyncInput } from "./thread-selection-sync";
 
 export type { ChatComposerProps } from "./types";
 
@@ -122,7 +123,7 @@ export function ChatComposer({
   });
 
   const planModeAvailable = true;
-  const { handleTogglePlanMode, planMode } = usePlanMode({
+  const { handleTogglePlanMode, planMode, planModeReady } = usePlanMode({
     canPersistThreadSelection,
     draftMode,
     globalSelectionQuery,
@@ -224,30 +225,32 @@ export function ChatComposer({
       threadPersistenceReadyRef.current = false;
       return;
     }
-    if (!selectedModelKey || threadPersistenceReadyRef.current) return;
+    const syncInput = resolveThreadSelectionSyncInput({
+      canPersistThreadSelection,
+      planMode,
+      planModeReady,
+      selectedEngine,
+      selectedModelKey,
+      selectedReasoningEffort,
+      threadPersistenceReady: threadPersistenceReadyRef.current,
+      threadSelection,
+    });
 
-    threadPersistenceReadyRef.current = true;
-
-    const persistedReasoningEffort = threadSelection.reasoningEffort ?? null;
-    const selectedMode = planMode ? "plan" : "chat";
-    if (
-      (threadSelection.engine ?? "sentinel") === selectedEngine &&
-      threadSelection.modelId === selectedModelKey &&
-      persistedReasoningEffort === selectedReasoningEffort &&
-      threadSelection.mode === selectedMode
-    ) {
+    if (!syncInput) {
       return;
     }
 
-    persistSelection(selectedModelKey, selectedReasoningEffort, {
-      engine: selectedEngine,
-      mode: selectedMode,
+    threadPersistenceReadyRef.current = true;
+
+    persistSelection(syncInput.modelId, syncInput.reasoningEffort, {
+      engine: syncInput.engine,
+      mode: syncInput.mode,
       skipGlobal: true,
     });
   }, [
     canPersistThreadSelection,
     planMode,
-    planModeAvailable,
+    planModeReady,
     persistSelection,
     selectedEngine,
     selectedModelKey,

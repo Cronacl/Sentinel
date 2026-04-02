@@ -1,11 +1,77 @@
 import type { ChatEngine } from "@/server/db/enums";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import type { ThreadMode } from "@/lib/plan";
 
 import type { usePersistSelection } from "./use-persist-selection";
 
 type PersistSelectionReturn = ReturnType<typeof usePersistSelection>;
+type PlanModeSyncState = {
+  hydratedScopeKey: string | null;
+  lastSyncedThreadMode: ThreadMode | null;
+  planMode: boolean;
+};
+
+export function resolvePreferredPlanMode({
+  draftMode,
+  globalMode,
+  threadMode,
+}: {
+  draftMode?: ThreadMode | null;
+  globalMode?: ThreadMode | null;
+  threadMode?: ThreadMode | null;
+}): ThreadMode {
+  return threadMode ?? draftMode ?? globalMode ?? "chat";
+}
+
+export function syncPlanModeState(
+  state: PlanModeSyncState,
+  input: {
+    draftMode?: ThreadMode | null;
+    globalMode?: ThreadMode | null;
+    planModeAvailable: boolean;
+    preferencesReady: boolean;
+    selectionScopeKey: string;
+    threadMode?: ThreadMode | null;
+  },
+): PlanModeSyncState {
+  if (!input.planModeAvailable) {
+    return {
+      hydratedScopeKey: null,
+      lastSyncedThreadMode: null,
+      planMode: false,
+    };
+  }
+
+  if (!input.preferencesReady) {
+    return state;
+  }
+
+  if (state.hydratedScopeKey !== input.selectionScopeKey) {
+    const preferredMode = resolvePreferredPlanMode({
+      draftMode: input.draftMode,
+      globalMode: input.globalMode,
+      threadMode: input.threadMode,
+    });
+
+    return {
+      hydratedScopeKey: input.selectionScopeKey,
+      lastSyncedThreadMode: input.threadMode ?? null,
+      planMode: preferredMode === "plan",
+    };
+  }
+
+  if (input.threadMode && input.threadMode !== state.lastSyncedThreadMode) {
+    return {
+      ...state,
+      lastSyncedThreadMode: input.threadMode,
+      planMode: input.threadMode === "plan",
+    };
+  }
+
+  return state;
+}
 
 export function usePlanMode({
   canPersistThreadSelection,
@@ -47,44 +113,44 @@ export function usePlanMode({
   updateGlobalSelection: PersistSelectionReturn["updateGlobalSelection"];
   updateThreadSelection: PersistSelectionReturn["updateThreadSelection"];
 }) {
-  const [planMode, setPlanMode] = useState(false);
-  const planModeInitScopeRef = useRef<string | null>(null);
-  const lastSyncedThreadModeRef = useRef<string | null>(null);
   const preferencesReady =
     Boolean(threadSelection?.modelId) || !globalSelectionQuery.isLoading;
+  const [planModeState, setPlanModeState] = useState<PlanModeSyncState>(() =>
+    syncPlanModeState(
+      {
+        hydratedScopeKey: null,
+        lastSyncedThreadMode: null,
+        planMode: false,
+      },
+      {
+        draftMode,
+        globalMode: globalSelectionQuery.data?.mode ?? null,
+        planModeAvailable,
+        preferencesReady,
+        selectionScopeKey,
+        threadMode: threadSelection?.mode ?? null,
+      },
+    ),
+  );
+  const planModeReady =
+    !planModeAvailable ||
+    (preferencesReady && planModeState.hydratedScopeKey === selectionScopeKey);
 
   useEffect(() => {
-    if (!planModeAvailable) {
-      setPlanMode(false);
-      return;
-    }
-
-    if (!preferencesReady) return;
-
-    const currentThreadMode = threadSelection?.mode ?? null;
-
-    if (planModeInitScopeRef.current !== selectionScopeKey) {
-      planModeInitScopeRef.current = selectionScopeKey;
-      lastSyncedThreadModeRef.current = currentThreadMode;
-      const preferredMode = currentThreadMode
-        ? currentThreadMode
-        : draftMode
-          ? draftMode
-          : (globalSelectionQuery.data?.mode ?? "chat");
-      setPlanMode(preferredMode === "plan");
-      return;
-    }
-
-    if (
-      currentThreadMode &&
-      currentThreadMode !== lastSyncedThreadModeRef.current
-    ) {
-      lastSyncedThreadModeRef.current = currentThreadMode;
-      setPlanMode(currentThreadMode === "plan");
-    }
+    setPlanModeState((current) =>
+      syncPlanModeState(current, {
+        draftMode,
+        globalMode: globalSelectionQuery.data?.mode ?? null,
+        planModeAvailable,
+        preferencesReady,
+        selectionScopeKey,
+        threadMode: threadSelection?.mode ?? null,
+      }),
+    );
   }, [
     draftMode,
     globalSelectionQuery.data?.mode,
+    planModeAvailable,
     preferencesReady,
     selectionScopeKey,
     threadSelection?.mode,
@@ -95,8 +161,8 @@ export function usePlanMode({
       return;
     }
 
-    setPlanMode((prev) => {
-      const next = !prev;
+    setPlanModeState((prev) => {
+      const next = !prev.planMode;
       onSelectionChange?.({ mode: next ? "plan" : "chat" });
       if (selectedModelKey) {
         persistSelection(selectedModelKey, selectedReasoningEffort, {
@@ -116,7 +182,12 @@ export function usePlanMode({
           });
         }
       }
-      return next;
+      return {
+        ...prev,
+        hydratedScopeKey: selectionScopeKey,
+        lastSyncedThreadMode: next ? "plan" : "chat",
+        planMode: next,
+      };
     });
   }, [
     canPersistThreadSelection,
@@ -126,6 +197,7 @@ export function usePlanMode({
     selectedEngine,
     selectedModelKey,
     selectedReasoningEffort,
+    selectionScopeKey,
     threadId,
     updateGlobalSelection,
     updateThreadSelection,
@@ -133,6 +205,7 @@ export function usePlanMode({
 
   return {
     handleTogglePlanMode,
-    planMode: planModeAvailable ? planMode : false,
+    planMode: planModeAvailable ? planModeState.planMode : false,
+    planModeReady,
   };
 }
