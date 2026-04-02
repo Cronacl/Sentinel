@@ -211,14 +211,14 @@ export function SidebarCommandPalette({
           <motion.button
             aria-label="Close command palette"
             animate={{ opacity: 1 }}
-            className="fixed inset-0 z-40 bg-black/20"
+            className="fixed inset-0 z-[60] bg-black/20"
             exit={{ opacity: 0 }}
             initial={{ opacity: 0 }}
             onClick={() => onOpenChange(false)}
             type="button"
           />
 
-          <div className="pointer-events-none fixed inset-0 z-50 flex items-start justify-center px-4 pt-[min(9vh,4rem)]">
+          <div className="pointer-events-none fixed inset-0 z-[70] flex items-start justify-center px-4 pt-[min(9vh,4rem)]">
             <motion.div
               animate={{ opacity: 1, scale: 1, y: 0 }}
               className="pointer-events-auto w-full max-w-[30rem]"
