@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.12](https://github.com/chaqchase/Sentinel/compare/v0.0.11...v0.0.12) (2026-04-02)
+
+
+### Features
+
+* **thread-status:** enhance ThreadStatusIndicators ([10d1912](https://github.com/chaqchase/Sentinel/commit/10d1912cb37a0a47a3a83020058a9f1712e19a35))
+
+
+### Bug Fixes
+
+* fix the overlay issue with command palette ([43dc8f1](https://github.com/chaqchase/Sentinel/commit/43dc8f1993943b88d6ef6ac94795d1a3f2ea1f28))
+
 ## [0.0.11](https://github.com/chaqchase/Sentinel/compare/v0.0.10...v0.0.11) (2026-04-02)
 
 
