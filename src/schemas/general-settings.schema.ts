@@ -16,9 +16,11 @@ export const MIN_FIXED_CONTEXT_WINDOW_SIZE = 32_000;
 export const MAX_FIXED_CONTEXT_WINDOW_SIZE = 2_000_000;
 export const DEFAULT_CONTEXT_COMPACTION_USE_FIXED_WINDOW = false;
 export const DEFAULT_FIXED_CONTEXT_WINDOW_SIZE = 128_000;
+export const DEFAULT_BROWSER_SESSION_PERSISTENCE_ENABLED = true;
 
 export const generalSettingsFormSchema = z.object({
   followUpBehavior: z.enum(FOLLOW_UP_BEHAVIOR_OPTIONS),
+  persistBrowserSession: z.boolean(),
   webFetchBatchEnabled: z.boolean(),
   webFetchBatchLimit: z
     .number()

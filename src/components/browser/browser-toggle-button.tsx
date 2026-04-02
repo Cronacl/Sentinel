@@ -9,7 +9,6 @@ import { isDesktopRuntime } from "@/lib/desktop/client";
 
 import { BrowserSidebar } from "./browser-sidebar";
 import {
-  closeBrowserSidebarState,
   openBrowserSidebar,
   useBrowserSidebarState,
 } from "./browser-sidebar-store";
@@ -30,7 +29,6 @@ export function BrowserToggleButton() {
 
   const handleToggle = () => {
     if (isBrowserSidebarActive) {
-      closeBrowserSidebarState();
       rightSidebar.close();
       return;
     }

@@ -5,6 +5,7 @@ import {
   DEFAULT_WEBFETCH_BATCH_LIMIT,
 } from "@/lib/webfetch";
 import {
+  DEFAULT_BROWSER_SESSION_PERSISTENCE_ENABLED,
   DEFAULT_CONTEXT_COMPACTION_ENABLED,
   DEFAULT_CONTEXT_COMPACTION_USE_FIXED_WINDOW,
   DEFAULT_FIXED_CONTEXT_WINDOW_SIZE,
@@ -25,6 +26,7 @@ export const generalSettingsRouter = createTRPCRouter({
         contextCompactionUseFixedWindow: true,
         contextCompactionWindowPercent: true,
         followUpBehavior: true,
+        persistBrowserSession: true,
         webFetchBatchEnabled: true,
         webFetchBatchLimit: true,
         skillsBasePath: true,
@@ -32,6 +34,9 @@ export const generalSettingsRouter = createTRPCRouter({
     });
 
     return {
+      persistBrowserSession:
+        user?.persistBrowserSession ??
+        DEFAULT_BROWSER_SESSION_PERSISTENCE_ENABLED,
       contextCompactionEnabled:
         user?.contextCompactionEnabled ?? DEFAULT_CONTEXT_COMPACTION_ENABLED,
       contextCompactionFixedWindowSize:
@@ -65,6 +70,7 @@ export const generalSettingsRouter = createTRPCRouter({
             input.contextCompactionUseFixedWindow,
           contextCompactionWindowPercent: input.contextCompactionWindowPercent,
           followUpBehavior: input.followUpBehavior,
+          persistBrowserSession: input.persistBrowserSession,
           webFetchBatchEnabled: input.webFetchBatchEnabled,
           webFetchBatchLimit: input.webFetchBatchLimit,
           skillsBasePath: input.skillsBasePath,
@@ -73,6 +79,7 @@ export const generalSettingsRouter = createTRPCRouter({
         .run();
 
       return {
+        persistBrowserSession: input.persistBrowserSession,
         contextCompactionEnabled: input.contextCompactionEnabled,
         contextCompactionFixedWindowSize:
           input.contextCompactionFixedWindowSize,

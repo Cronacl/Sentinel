@@ -32,7 +32,6 @@ import { getDesktopApi } from "@/lib/desktop/client";
 
 import {
   DEFAULT_BROWSER_URL,
-  closeBrowserSidebarState,
   closeBrowserTab,
   createBrowserTab,
   setActiveBrowserTab,
@@ -369,18 +368,18 @@ function BrowserTabButton({
       transition={TAB_MOTION_TRANSITION}
     >
       <div
-        className={`group relative flex min-w-0 max-w-52 items-center gap-1 rounded-[14px] px-0.5 py-0.5 transition ${
+        className={`group relative flex min-w-0 max-w-40 items-center rounded-[14px] px-0.5 py-0.5 transition-[max-width,background-color,color] duration-200 ease-out hover:max-w-52 focus-within:max-w-52 ${
           isActive
-            ? "bg-surface/50 text-foreground"
-            : "bg-transparent text-muted hover:bg-content1/50 hover:text-foreground"
+            ? "bg-default dark:bg-surface/70 text-foreground"
+            : "bg-transparent text-muted hover:bg-content1/50 hover:text-foreground dark:hover:bg-surface/20"
         }`}
       >
         {isActive ? (
-          <div className="pointer-events-none absolute inset-y-1 left-0 w-px bg-primary/60" />
+          <div className="pointer-events-none absolute inset-y-1 left-0 w-px bg-default dark:bg-surface/70" />
         ) : null}
         <button
           aria-selected={isActive}
-          className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-[12px] px-2 py-0.5 text-center"
+          className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-[12px] px-2 py-0.5 pr-2 text-center transition-[padding] duration-200 ease-out group-hover:pr-7 group-focus-within:pr-7"
           onClick={onSelect}
           style={{ fontFamily: "var(--font-display)" }}
           type="button"
@@ -402,7 +401,7 @@ function BrowserTabButton({
         </button>
         <button
           aria-label={`Close tab ${getTabTitle(tab)}`}
-          className="shrink-0 rounded-sm p-1 text-muted opacity-0 transition hover:bg-content2 hover:text-foreground group-hover:opacity-100"
+          className="absolute top-1/2 right-1 translate-x-1 -translate-y-1/2 rounded-sm p-1 text-muted opacity-0 transition-[opacity,transform,background-color,color] duration-200 ease-out hover:bg-content2 hover:text-foreground group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100"
           onClick={onClose}
           type="button"
         >
@@ -448,7 +447,6 @@ export function BrowserSidebar() {
   );
 
   const handleClose = useCallback(() => {
-    closeBrowserSidebarState();
     rightSidebar.close();
   }, [rightSidebar]);
 

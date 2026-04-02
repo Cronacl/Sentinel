@@ -14,6 +14,7 @@ import {
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { useOptimisticMutation } from "@/hooks/use-optimistic-mutation";
 import {
+  DEFAULT_BROWSER_SESSION_PERSISTENCE_ENABLED,
   DEFAULT_CONTEXT_COMPACTION_ENABLED,
   DEFAULT_CONTEXT_COMPACTION_USE_FIXED_WINDOW,
   DEFAULT_FIXED_CONTEXT_WINDOW_SIZE,
@@ -57,6 +58,7 @@ export default function GeneralSettingsPage() {
 
   const generalSettingsForm = useForm<GeneralSettingsFormValues>({
     defaultValues: {
+      persistBrowserSession: DEFAULT_BROWSER_SESSION_PERSISTENCE_ENABLED,
       contextCompactionEnabled: DEFAULT_CONTEXT_COMPACTION_ENABLED,
       contextCompactionFixedWindowSize: DEFAULT_FIXED_CONTEXT_WINDOW_SIZE,
       contextCompactionUseFixedWindow:
@@ -203,6 +205,46 @@ export default function GeneralSettingsPage() {
             )}
             className="flex flex-col gap-6"
           >
+            <section className="border-separator/20 bg-surface rounded-2xl border p-5">
+              <div className="mb-5 space-y-1">
+                <h2 className="text-foreground text-base font-medium">
+                  Browser session
+                </h2>
+                <p className="text-muted text-sm">
+                  Keep built-in browser tabs and the active page available after
+                  the browser panel is closed.
+                </p>
+              </div>
+
+              <div className="space-y-5">
+                <ControlledSwitchField
+                  control={generalSettingsForm.control}
+                  description="When enabled, browser tabs are restored after closing the panel and after restarting Sentinel. Turn this off if you want browser sessions cleared when the browser is closed."
+                  label="Persist browser session"
+                  name="persistBrowserSession"
+                />
+              </div>
+
+              <div className="mt-5 flex justify-end">
+                <Button
+                  isDisabled={
+                    updateGeneralSettings.isPending ||
+                    !generalSettingsForm.formState.isDirty
+                  }
+                  isPending={updateGeneralSettings.isPending}
+                  size="sm"
+                  type="submit"
+                >
+                  {({ isPending }) => (
+                    <>
+                      {isPending ? <Spinner color="current" size="sm" /> : null}
+                      Save
+                    </>
+                  )}
+                </Button>
+              </div>
+            </section>
+
             <section className="border-separator/20 bg-surface rounded-2xl border p-5">
               <div className="mb-5 space-y-1">
                 <h2 className="text-foreground text-base font-medium">

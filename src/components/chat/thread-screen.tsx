@@ -322,6 +322,7 @@ export function ThreadScreen({
     status,
     steerFollowUp,
     stopStream,
+    threadStatus,
   } = chat;
   const repoContextQuery = api.repo.getContext.useQuery(repoContextQueryInput, {
     enabled: Boolean(workspace.rootPath),
@@ -342,6 +343,10 @@ export function ThreadScreen({
       void utils.threads.list.invalidate();
     }
   }, [status, thread.id, utils, workspace.id]);
+
+  useEffect(() => {
+    void utils.threads.search.invalidate();
+  }, [threadStatus, utils.threads.search]);
 
   useEffect(() => {
     if (!isBusy) {
