@@ -34,7 +34,6 @@ import { sileo } from "sileo";
 import { BrowserSidebar } from "@/components/browser/browser-sidebar";
 import { BrowserToggleButton } from "@/components/browser/browser-toggle-button";
 import {
-  closeBrowserSidebarState,
   openBrowserSidebar,
   useBrowserSidebarState,
 } from "@/components/browser/browser-sidebar-store";
@@ -181,7 +180,6 @@ export function ThreadRepoActions({
     }
 
     if (isBrowserSidebarActive) {
-      closeBrowserSidebarState();
       rightSidebar.close();
       return;
     }

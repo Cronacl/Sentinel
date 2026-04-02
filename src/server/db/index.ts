@@ -67,6 +67,7 @@ export function ensureTables(
     "personality_preset" text DEFAULT 'pragmatic' NOT NULL,
     "custom_instructions" text,
     "permission_mode" text DEFAULT 'default' NOT NULL,
+    "persist_browser_session" integer DEFAULT true NOT NULL,
     "webfetch_batch_enabled" integer DEFAULT false NOT NULL,
     "webfetch_batch_limit" integer DEFAULT 10 NOT NULL,
     "context_compaction_enabled" integer,
@@ -153,6 +154,14 @@ export function ensureTables(
   try {
     db.run(
       sql`ALTER TABLE "user" ADD COLUMN "permission_mode" text DEFAULT 'default' NOT NULL`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(
+      sql`ALTER TABLE "user" ADD COLUMN "persist_browser_session" integer DEFAULT true NOT NULL`,
     );
   } catch {
     // column already exists

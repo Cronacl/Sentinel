@@ -265,6 +265,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     status,
     steerFollowUp,
     stopStream,
+    threadStatus,
   } = chat;
 
   const hasMessages = messages.length > 0;
@@ -319,6 +320,10 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       void utils.threads.list.invalidate();
     }
   }, [draftThreadId, selectedWorkspace?.id, status, utils]);
+
+  useEffect(() => {
+    void utils.threads.search.invalidate();
+  }, [threadStatus, utils.threads.search]);
 
   useEffect(() => {
     if (!isBusy) {

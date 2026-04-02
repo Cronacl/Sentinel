@@ -16,6 +16,8 @@ import {
 import { closeBrowserSidebarState } from "@/components/browser/browser-sidebar-store";
 import { closeRepoDiffSidebarState } from "@/components/chat/repo-diff-sidebar-store";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { DEFAULT_BROWSER_SESSION_PERSISTENCE_ENABLED } from "@/schemas/general-settings.schema";
+import { api } from "@/trpc/react";
 
 import {
   clearRightSidebarState,
@@ -23,6 +25,7 @@ import {
   type RightSidebarPanelId,
   type RightSidebarSize,
 } from "./right-sidebar-state";
+import { setBrowserSessionPersistenceEnabled } from "@/components/browser/browser-sidebar-store";
 
 const RIGHT_SIDEBAR_DRAWER_BREAKPOINT = "(max-width: 1024px)";
 
@@ -55,6 +58,7 @@ const ShellContext = createContext<ShellContextValue | null>(null);
 export function ShellProvider({ children }: PropsWithChildren) {
   const pathname = usePathname();
   const initialPathRef = useRef(pathname);
+  const generalSettings = api.generalSettings.get.useQuery();
 
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(true);
   const [rightSidebarOpen, setRightSidebarOpen] = useState(
@@ -69,6 +73,13 @@ export function ShellProvider({ children }: PropsWithChildren) {
   );
   const rightSidebarDrawerMode = useMediaQuery(RIGHT_SIDEBAR_DRAWER_BREAKPOINT);
 
+  useEffect(() => {
+    setBrowserSessionPersistenceEnabled(
+      generalSettings.data?.persistBrowserSession ??
+        DEFAULT_BROWSER_SESSION_PERSISTENCE_ENABLED,
+    );
+  }, [generalSettings.data?.persistBrowserSession]);
+
   const closeRightSidebar = useCallback(() => {
     const nextState = clearRightSidebarState({
       content: rightSidebarContent,
@@ -77,8 +88,14 @@ export function ShellProvider({ children }: PropsWithChildren) {
       size: rightSidebarSize,
     });
 
-    closeBrowserSidebarState();
-    closeRepoDiffSidebarState();
+    if (rightSidebarPanelId === "browser") {
+      closeBrowserSidebarState();
+    }
+
+    if (rightSidebarPanelId === "repo-diff") {
+      closeRepoDiffSidebarState();
+    }
+
     setRightSidebarOpen(nextState.open);
     setRightSidebarContent(nextState.content);
     setRightSidebarPanelId(nextState.panelId);

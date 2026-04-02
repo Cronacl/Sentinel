@@ -7,9 +7,9 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { useShell } from "./shell-context";
 
 const SIDEBAR_WIDTHS = {
-  browser: 620,
+  browser: 540,
   narrow: 380,
-  wide: 560,
+  wide: 500,
 } as const;
 const DRAWER_BREAKPOINT = "(max-width: 1024px)";
 const DESKTOP_MIN_WIDTH = 320;

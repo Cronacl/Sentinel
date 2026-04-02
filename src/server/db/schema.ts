@@ -59,6 +59,11 @@ export const users = sqliteTable(
     permissionMode: text("permission_mode", { enum: PERMISSION_MODES })
       .notNull()
       .default("default"),
+    persistBrowserSession: integer("persist_browser_session", {
+      mode: "boolean",
+    })
+      .notNull()
+      .default(true),
     webFetchBatchEnabled: integer("webfetch_batch_enabled", {
       mode: "boolean",
     })

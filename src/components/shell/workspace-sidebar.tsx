@@ -21,17 +21,22 @@ import {
   AiIdeaIcon,
   Archive02Icon,
   ArrowDown01Icon,
+  BrushIcon,
   Clock01Icon,
+  ComputerIcon,
   FilterMailIcon,
   Folder03Icon,
   FolderAddIcon,
   GitPullRequestIcon,
+  LayoutLeftIcon,
   MoreHorizontalIcon,
+  Moon02Icon,
   PencilEdit02Icon,
   PinIcon,
   PinOffIcon,
   Search01Icon,
   Settings01Icon,
+  Sun03Icon,
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -42,6 +47,12 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sileo } from "sileo";
 
 import { getErrorMessage } from "@/lib/errors";
+import {
+  DEFAULT_APPEARANCE_SETTINGS,
+  applyAppearanceSettings,
+  resolveThemePreference,
+  type ThemePreference,
+} from "@/lib/appearance";
 import type { RepoLastPullRequest } from "@/lib/ai/chat/engines/types";
 import {
   useShortcutAction,
@@ -57,11 +68,16 @@ import { api, type RouterOutputs } from "@/trpc/react";
 
 import { SidebarCommandPalette } from "./sidebar-command-palette";
 import {
+  ThreadStatusIndicator,
+  type ThreadStatusValue,
+} from "./thread-status-indicator";
+import {
   formatThreadPullRequestLabel,
   getPullRequestMemoKey,
   threadPullRequestIconClass,
   threadPullRequestToneClass,
 } from "./thread-pull-request";
+import { useShell } from "./shell-context";
 import { useAppShortcutActions } from "./use-app-shortcut-actions";
 
 type OrganizeBy = "chronological" | "workspace";
@@ -78,6 +94,11 @@ const SIDEBAR_ITEM_INSET = "px-2.5";
 const SIDEBAR_ITEM_ROW = "rounded-xl px-1.5 py-1 transition-colors";
 
 const WORKSPACE_TOOLTIP_CLASSNAME = "max-w-[320px]";
+const THEME_ACTION_ICONS = {
+  dark: Moon02Icon,
+  light: Sun03Icon,
+  system: ComputerIcon,
+} as const;
 
 function toCurrentWorkspace(
   workspace:
@@ -145,27 +166,20 @@ function formatRelativeTime(value: Date | string) {
   );
 }
 
-type ThreadStatusValue = "idle" | "streaming" | "awaiting_approval";
-type ThreadWarmStrategy = "hover" | "focus" | "press";
-
-function ThreadStatusIndicator({ status }: { status: ThreadStatusValue }) {
-  if (status === "streaming") {
-    return <Spinner className="size-3 min-w-3" color="current" size="sm" />;
+function dispatchAppearanceEvents() {
+  if (typeof window === "undefined") {
+    return;
   }
 
-  if (status === "awaiting_approval") {
-    return (
-      <span
-        className="relative flex h-2.5 w-2.5 shrink-0"
-        title="Awaiting approval"
-      >
-        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-accent" />
-      </span>
-    );
-  }
-
-  return null;
+  window.dispatchEvent(new Event("sentinel-appearance-change"));
+  window.dispatchEvent(new Event("sentinel-theme-change"));
 }
+
+function getToggledThemePreference(themePreference: ThemePreference) {
+  return resolveThemePreference(themePreference) === "dark" ? "light" : "dark";
+}
+
+type ThreadWarmStrategy = "hover" | "focus" | "press";
 
 function WorkspaceSidebarLoadingState() {
   return (
@@ -1047,6 +1061,7 @@ function PreferenceMenuItem({
 }
 
 export function WorkspaceSidebar() {
+  const { leftSidebarOpen, toggleLeftSidebar } = useShell();
   const commandShortcutLabel = useShortcutLabel("commandPalette.toggle");
   const pathname = usePathname();
   const router = useRouter();
@@ -1132,8 +1147,10 @@ export function WorkspaceSidebar() {
   });
 
   const preferences = api.workspaces.getPreferences.useQuery();
+  const appearance = api.appearance.get.useQuery();
   const currentWorkspace = api.workspaces.getCurrent.useQuery();
   const workspaces = api.workspaces.list.useQuery();
+  const updateAppearance = api.appearance.update.useMutation();
 
   useShortcutAction("commandPalette.toggle", () => {
     setIsCommandPaletteOpen((current) => !current);
@@ -1651,6 +1668,65 @@ export function WorkspaceSidebar() {
     [effectiveOrganizeBy, effectiveSortBy, updatePreferences],
   );
 
+  const currentAppearance =
+    appearance.data ??
+    utils.appearance.get.getData() ??
+    DEFAULT_APPEARANCE_SETTINGS;
+  const currentThemePreference = currentAppearance.themePreference;
+  const resolvedTheme = resolveThemePreference(currentThemePreference);
+
+  const handleSetThemePreference = useCallback(
+    async (nextThemePreference: ThemePreference) => {
+      if (
+        nextThemePreference === currentThemePreference ||
+        updateAppearance.isPending
+      ) {
+        return;
+      }
+
+      const previousAppearance = currentAppearance;
+      const nextAppearance = {
+        ...currentAppearance,
+        themePreference: nextThemePreference,
+      };
+
+      utils.appearance.get.setData(undefined, nextAppearance);
+      applyAppearanceSettings(nextAppearance);
+      dispatchAppearanceEvents();
+
+      try {
+        const savedAppearance =
+          await updateAppearance.mutateAsync(nextAppearance);
+        utils.appearance.get.setData(undefined, savedAppearance);
+        applyAppearanceSettings(savedAppearance);
+        dispatchAppearanceEvents();
+      } catch (error) {
+        utils.appearance.get.setData(undefined, previousAppearance);
+        applyAppearanceSettings(previousAppearance);
+        dispatchAppearanceEvents();
+        sileo.error({
+          description: getErrorMessage(
+            error,
+            "Unable to update the theme right now.",
+          ),
+          title: "Theme update failed",
+        });
+      }
+    },
+    [
+      currentAppearance,
+      currentThemePreference,
+      updateAppearance,
+      utils.appearance.get,
+    ],
+  );
+
+  const handleToggleTheme = useCallback(() => {
+    void handleSetThemePreference(
+      getToggledThemePreference(currentThemePreference),
+    );
+  }, [currentThemePreference, handleSetThemePreference]);
+
   const toggleExpanded = api.workspaces.toggleExpanded.useMutation({
     onMutate: async ({ workspaceId }) => {
       const previous = utils.workspaces.list.getData();
@@ -2047,13 +2123,82 @@ export function WorkspaceSidebar() {
         shortcutActionId: "settings.open" as const,
         subtitle: "Open Sentinel preferences",
       },
+      {
+        icon: BrushIcon,
+        id: "open-appearance-settings",
+        keywords: ["theme", "appearance", "fonts", "display"],
+        label: "Appearance",
+        onSelect: () => {
+          router.push("/settings/appearance");
+        },
+        subtitle: "Open theme, font, and display settings",
+      },
+      {
+        icon: LayoutLeftIcon,
+        id: "toggle-sidebar",
+        keywords: ["sidebar", "panel", "left", "show", "hide"],
+        label: leftSidebarOpen ? "Hide sidebar" : "Show sidebar",
+        onSelect: toggleLeftSidebar,
+        shortcutActionId: "sidebar.left.toggle" as const,
+        subtitle: leftSidebarOpen
+          ? "Collapse the left sidebar"
+          : "Expand the left sidebar",
+      },
+      {
+        icon: THEME_ACTION_ICONS[currentThemePreference],
+        id: "toggle-theme",
+        keywords: ["theme", "dark", "light", "appearance", "mode"],
+        label: "Toggle theme",
+        onSelect: handleToggleTheme,
+        subtitle:
+          currentThemePreference === "system"
+            ? `Following system appearance (${resolvedTheme})`
+            : `Currently using the ${currentThemePreference} theme`,
+      },
+      {
+        icon: Sun03Icon,
+        id: "theme-light",
+        keywords: ["theme", "appearance", "light", "day"],
+        label: "Light theme",
+        onSelect: () => {
+          void handleSetThemePreference("light");
+        },
+        subtitle: "Switch Sentinel to the light theme",
+      },
+      {
+        icon: Moon02Icon,
+        id: "theme-dark",
+        keywords: ["theme", "appearance", "dark", "night"],
+        label: "Dark theme",
+        onSelect: () => {
+          void handleSetThemePreference("dark");
+        },
+        subtitle: "Switch Sentinel to the dark theme",
+      },
+      {
+        icon: ComputerIcon,
+        id: "theme-system",
+        keywords: ["theme", "appearance", "system", "auto"],
+        label: "System theme",
+        onSelect: () => {
+          void handleSetThemePreference("system");
+        },
+        subtitle: "Match your device appearance automatically",
+      },
     ],
     [
+      currentThemePreference,
       handleCreateWorkspace,
       handleOpenAutomations,
       handleOpenSettings,
       handleOpenSkills,
+      handleSetThemePreference,
       handleStartNewThread,
+      handleToggleTheme,
+      leftSidebarOpen,
+      resolvedTheme,
+      router,
+      toggleLeftSidebar,
     ],
   );
 
@@ -2344,6 +2489,8 @@ export function WorkspaceSidebar() {
 
       <SidebarCommandPalette
         actions={commandPaletteActions}
+        isThreadsLoading={showSidebarLoading}
+        isThreadsRefreshing={showSidebarRefreshing}
         onOpenChange={setIsCommandPaletteOpen}
         onSelectThread={handlePressThread}
         open={isCommandPaletteOpen}

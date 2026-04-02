@@ -22,6 +22,7 @@ import {
   type SidebarCommandPaletteThread,
 } from "./sidebar-command-palette.helpers";
 import { ThreadPullRequestMeta } from "./thread-pull-request";
+import { ThreadStatusIndicator } from "./thread-status-indicator";
 
 type SidebarCommandPaletteActionItem = SidebarCommandPaletteAction & {
   icon: IconSvgElement;
@@ -32,6 +33,8 @@ type SidebarCommandPaletteActionItem = SidebarCommandPaletteAction & {
 
 type SidebarCommandPaletteProps = {
   actions: SidebarCommandPaletteActionItem[];
+  isThreadsLoading?: boolean;
+  isThreadsRefreshing?: boolean;
   onOpenChange: (open: boolean) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
   open: boolean;
@@ -103,11 +106,11 @@ function ShortcutKeys({ label }: { label: string | null | undefined }) {
   );
 }
 
-function LoadingThreadRows() {
+function LoadingThreadRows({ heading }: { heading: string }) {
   return (
     <Command.Group
       className="[&>[cmdk-group-heading]]:px-2 [&>[cmdk-group-heading]]:pt-1 [&>[cmdk-group-heading]]:pb-0.5 [&>[cmdk-group-heading]]:text-[11px] [&>[cmdk-group-heading]]:font-medium [&>[cmdk-group-heading]]:text-muted"
-      heading="Threads"
+      heading={heading}
     >
       <div className="flex flex-col gap-0.5">
         {Array.from({ length: 3 }).map((_, index) => (
@@ -131,14 +134,14 @@ function LoadingThreadRows() {
   );
 }
 
-const PALETTE_ITEM_SELECTED_CLASS =
-  "bg-default/58 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]";
-const PALETTE_ITEM_HOVER_CLASS = "hover:bg-default/70";
+const PALETTE_ITEM_HOVER_CLASS = "hover:bg-background dark:hover:bg-surface/20";
 const PALETTE_ITEM_SELECTED_DATA_CLASS =
-  "data-[selected=true]:bg-default/58 data-[selected=true]:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]";
+  "data-[selected=true]:bg-background dark:data-[selected=true]:bg-surface/20 ";
 
 export function SidebarCommandPalette({
   actions,
+  isThreadsLoading = false,
+  isThreadsRefreshing = false,
   onOpenChange,
   onSelectThread,
   open,
@@ -191,8 +194,13 @@ export function SidebarCommandPalette({
   const isSearching = paletteState.hasQuery && searchQuery.isFetching;
   const isLoadingRemoteThreads =
     isSearching && (searchQuery.data?.length ?? 0) === 0;
+  const isLoadingRecentThreads =
+    !paletteState.hasQuery &&
+    isThreadsLoading &&
+    paletteState.threads.length === 0;
   const isEmpty =
     !isLoadingRemoteThreads &&
+    !isLoadingRecentThreads &&
     paletteState.actions.length === 0 &&
     paletteState.threads.length === 0;
 
@@ -299,10 +307,18 @@ export function SidebarCommandPalette({
                       </Command.Group>
                     ) : null}
 
-                    {paletteState.threads.length > 0 ? (
+                    {isLoadingRecentThreads ? (
+                      <LoadingThreadRows
+                        heading={paletteState.threadsHeading}
+                      />
+                    ) : paletteState.threads.length > 0 ? (
                       <Command.Group
                         className="[&>[cmdk-group-heading]]:px-2 [&>[cmdk-group-heading]]:pt-1 [&>[cmdk-group-heading]]:pb-0.5 [&>[cmdk-group-heading]]:text-[11px] [&>[cmdk-group-heading]]:font-medium [&>[cmdk-group-heading]]:text-muted"
-                        heading={paletteState.threadsHeading}
+                        heading={
+                          isThreadsRefreshing && !paletteState.hasQuery
+                            ? `${paletteState.threadsHeading} · syncing`
+                            : paletteState.threadsHeading
+                        }
                       >
                         <div className="flex flex-col gap-0.5">
                           {paletteState.threads.map((thread) => {
@@ -314,9 +330,7 @@ export function SidebarCommandPalette({
                                 className={cn(
                                   "flex cursor-pointer items-center gap-2 rounded-[1rem] px-2 py-[5px] text-foreground outline-none transition-colors",
                                   PALETTE_ITEM_HOVER_CLASS,
-                                  isActiveThread
-                                    ? PALETTE_ITEM_SELECTED_CLASS
-                                    : PALETTE_ITEM_SELECTED_DATA_CLASS,
+                                  PALETTE_ITEM_SELECTED_DATA_CLASS,
                                 )}
                                 key={thread.id}
                                 keywords={[
@@ -334,15 +348,14 @@ export function SidebarCommandPalette({
                               >
                                 <span
                                   className={cn(
-                                    "shrink-0 pt-0.5 text-foreground/40 transition-colors",
-                                    isActiveThread && "text-foreground/65",
+                                    "flex h-4 w-4 shrink-0 items-center justify-center text-foreground/70 transition-colors",
+                                    isActiveThread && "text-foreground/85",
                                   )}
                                 >
                                   {thread.status && thread.status !== "idle" ? (
-                                    <span className="relative flex h-2.5 w-2.5">
-                                      <span className="absolute inset-0 rounded-full bg-current/24" />
-                                      <span className="relative h-2.5 w-2.5 rounded-full bg-current" />
-                                    </span>
+                                    <ThreadStatusIndicator
+                                      status={thread.status}
+                                    />
                                   ) : null}
                                 </span>
                                 <span className="min-w-0 flex-1">
@@ -391,7 +404,9 @@ export function SidebarCommandPalette({
                       </Command.Group>
                     ) : null}
 
-                    {isLoadingRemoteThreads ? <LoadingThreadRows /> : null}
+                    {isLoadingRemoteThreads ? (
+                      <LoadingThreadRows heading="Threads" />
+                    ) : null}
 
                     {isEmpty ? (
                       <div className="px-2 py-3 text-center text-xs text-muted">
