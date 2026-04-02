@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.10](https://github.com/chaqchase/Sentinel/compare/v0.0.9...v0.0.10) (2026-04-01)
+
+
+### Features
+
+* **command-palette:** add sidebar command palette with search functionality and keyboard shortcuts ([0703bfb](https://github.com/chaqchase/Sentinel/commit/0703bfb1ac18d17889809773c21ef59d210e6229))
+* **shortcuts:** integrate shortcut management system ([d3d315c](https://github.com/chaqchase/Sentinel/commit/d3d315c60d9f48ac5614bb90bb631c746f959ab1))
+
 ## [0.0.9](https://github.com/chaqchase/Sentinel/compare/v0.0.8...v0.0.9) (2026-04-01)
 
 
