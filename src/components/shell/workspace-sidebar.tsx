@@ -266,10 +266,10 @@ function ThreadItemActions({
 }) {
   return (
     <span
-      className={`thread-actions absolute inset-y-0 right-0 flex items-center gap-0.5 transition-opacity duration-150 ${
+      className={`thread-actions flex items-center gap-0.5 transition-opacity duration-150 ${
         alwaysVisible
           ? "pointer-events-auto opacity-100"
-          : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+          : "pointer-events-none absolute inset-y-0 right-0 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
       }`}
     >
       <button
@@ -328,8 +328,38 @@ function ThreadItemTrailing({
   updatedAt?: Date;
 }) {
   const isActive = threadStatus !== "idle";
+  const indicator = isActive ? (
+    <ThreadStatusIndicator size="compact" status={threadStatus} />
+  ) : isPinned ? (
+    <HugeiconsIcon
+      className="shrink-0 text-foreground/40"
+      color="currentColor"
+      icon={PinIcon}
+      size={11}
+      strokeWidth={1.5}
+    />
+  ) : null;
   const showStatusIndicator = !alwaysVisible && isActive;
-  const hasTimestamp = !alwaysVisible && !isActive && updatedAt != null;
+  const showPinnedIndicator = !alwaysVisible && !isActive && isPinned;
+  const hasTimestamp =
+    !alwaysVisible && !isActive && !isPinned && updatedAt != null;
+
+  if (alwaysVisible) {
+    return (
+      <span className="flex h-6 shrink-0 items-center gap-1.5 pl-1 text-foreground/60">
+        {indicator ? (
+          <span className="flex items-center">{indicator}</span>
+        ) : null}
+        <ThreadItemActions
+          alwaysVisible={alwaysVisible}
+          isPinned={isPinned}
+          onArchive={onArchive}
+          onPin={onPin}
+          threadId={threadId}
+        />
+      </span>
+    );
+  }
 
   return (
     <span
@@ -342,9 +372,9 @@ function ThreadItemTrailing({
           {formatRelativeTime(updatedAt)}
         </span>
       ) : null}
-      {showStatusIndicator ? (
+      {showStatusIndicator || showPinnedIndicator ? (
         <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center text-foreground/60 transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0">
-          <ThreadStatusIndicator status={threadStatus} />
+          {indicator}
         </span>
       ) : null}
       <ThreadItemActions
@@ -486,17 +516,6 @@ const PinnedThreadsList = memo(function PinnedThreadsList({
               }}
             >
               <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-                {thread.status !== "idle" ? (
-                  <ThreadStatusIndicator status={thread.status} />
-                ) : (
-                  <HugeiconsIcon
-                    className="shrink-0 text-foreground/40"
-                    color="currentColor"
-                    icon={PinIcon}
-                    size={12}
-                    strokeWidth={1.5}
-                  />
-                )}
                 <span
                   className="min-w-0 max-w-[9rem] truncate"
                   title={thread.title}
@@ -629,19 +648,6 @@ const ThreadRow = memo(function ThreadRow({
       onKeyDown={handleKeyDown}
     >
       <span className="flex min-w-0 flex-1 items-start gap-1.5 overflow-hidden">
-        <span className="pt-0.5">
-          {thread.status !== "idle" ? (
-            <ThreadStatusIndicator status={thread.status} />
-          ) : thread.pinnedAt != null ? (
-            <HugeiconsIcon
-              className="shrink-0 text-foreground/40"
-              color="currentColor"
-              icon={PinIcon}
-              size={11}
-              strokeWidth={1.5}
-            />
-          ) : null}
-        </span>
         <span className="min-w-0">
           <span className="block min-w-0 truncate text-sm" title={thread.title}>
             {thread.title}
