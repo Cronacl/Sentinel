@@ -210,4 +210,36 @@ describe("runCodexThreadChat editing", () => {
       checkpointAnchorMessageId: null,
     });
   });
+
+  it("persists plan mode on submit", async () => {
+    const response = await runCodexThreadChat(
+      {
+        message: {
+          id: "user-1",
+          metadata: {},
+          parts: [{ text: "Plan the rollout", type: "text" }],
+          role: "user",
+        },
+        modelId: "gpt-5.4",
+        threadId: "thread-2",
+        threadMode: "plan",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      {
+        chatEngineState: null,
+        mode: "chat",
+        status: "idle",
+      } as any,
+    );
+
+    expect(response.status).toBe(202);
+    expect(updateThreadChatSettings).toHaveBeenCalledWith("thread-2", {
+      engine: "codex",
+      mode: "plan",
+      modelId: "gpt-5.4",
+      reasoningEffort: null,
+    });
+  });
 });
