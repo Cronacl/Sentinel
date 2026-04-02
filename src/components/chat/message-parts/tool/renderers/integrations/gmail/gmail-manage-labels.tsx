@@ -1,11 +1,14 @@
 "use client";
 
 import { Button } from "@heroui/react";
-import { memo, useEffect, useState } from "react";
+import { memo } from "react";
 import { Icon } from "@iconify/react";
 
 import type { RendererProps } from "../../../renderer";
-import { IntegrationToolLayout } from "../shared/integration-tool-layout";
+import {
+  IntegrationToolLayout,
+  useToolExpansionState,
+} from "../shared/integration-tool-layout";
 import { getIntegrationToolInteractionState } from "../shared/state";
 import { IntegrationProviderIcon } from "@/components/icons/integration-provider-icon";
 import type { ToolPart } from "../../../../types";
@@ -29,11 +32,11 @@ export const GmailManageLabelsTool = memo(function GmailManageLabelsTool({
     onApprove,
     onDeny,
   });
-  const [isExpanded, setIsExpanded] = useState(state.needsApproval);
-
-  useEffect(() => {
-    if (state.needsApproval) setIsExpanded(true);
-  }, [part.toolCallId, state.needsApproval]);
+  const [isExpanded, setIsExpanded] = useToolExpansionState({
+    toolCallId: part.toolCallId,
+    defaultExpanded: state.needsApproval,
+    autoExpand: state.needsApproval,
+  });
 
   const input = "input" in part ? (part.input as ManageLabelsInput) : null;
   const output =

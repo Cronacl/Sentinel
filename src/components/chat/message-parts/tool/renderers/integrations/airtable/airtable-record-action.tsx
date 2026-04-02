@@ -1,12 +1,15 @@
 "use client";
 
 import { Button } from "@heroui/react";
-import { memo, useEffect, useState } from "react";
+import { memo } from "react";
 import { Icon } from "@iconify/react";
 
 import { IntegrationProviderIcon } from "@/components/icons/integration-provider-icon";
 import type { RendererProps } from "../../../renderer";
-import { IntegrationToolLayout } from "../shared/integration-tool-layout";
+import {
+  IntegrationToolLayout,
+  useToolExpansionState,
+} from "../shared/integration-tool-layout";
 import { getIntegrationToolInteractionState } from "../shared/state";
 import type { ToolPart } from "../../../../types";
 import { getToolName } from "../../../../types";
@@ -64,11 +67,11 @@ export const AirtableRecordActionTool = memo(function AirtableRecordActionTool({
       ? (part.output as RecordsResult | DeleteResult)
       : null;
 
-  const [isExpanded, setIsExpanded] = useState(state.needsApproval);
-
-  useEffect(() => {
-    if (state.needsApproval) setIsExpanded(true);
-  }, [state.needsApproval]);
+  const [isExpanded, setIsExpanded] = useToolExpansionState({
+    toolCallId: part.toolCallId,
+    defaultExpanded: state.needsApproval,
+    autoExpand: state.needsApproval,
+  });
 
   const resultCount = output
     ? "records" in output

@@ -1,13 +1,16 @@
 "use client";
 
 import { Button } from "@heroui/react";
-import { memo, useEffect, useState } from "react";
+import { memo } from "react";
 import { Icon } from "@iconify/react";
 
 import type { RendererProps } from "../../../renderer";
 import type { ToolPart } from "../../../../types";
 import { getToolName } from "../../../../types";
-import { IntegrationToolLayout } from "../shared/integration-tool-layout";
+import {
+  IntegrationToolLayout,
+  useToolExpansionState,
+} from "../shared/integration-tool-layout";
 import { getIntegrationToolInteractionState } from "../shared/state";
 import { IntegrationProviderIcon } from "@/components/icons/integration-provider-icon";
 
@@ -81,11 +84,11 @@ export const GHIssueActionTool = memo(function GHIssueActionTool({
     (state.needsApproval && input) || (state.hasOutput && output),
   );
 
-  const [isExpanded, setIsExpanded] = useState(state.needsApproval);
-
-  useEffect(() => {
-    if (state.needsApproval) setIsExpanded(true);
-  }, [part.toolCallId, state.needsApproval]);
+  const [isExpanded, setIsExpanded] = useToolExpansionState({
+    toolCallId: part.toolCallId,
+    defaultExpanded: state.needsApproval,
+    autoExpand: state.needsApproval,
+  });
 
   const summary = state.needsApproval
     ? `${meta.label} \u2014 awaiting approval`

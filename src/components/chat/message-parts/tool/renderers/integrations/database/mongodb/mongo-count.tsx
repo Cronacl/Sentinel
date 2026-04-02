@@ -1,12 +1,15 @@
 "use client";
 
-import { memo, useEffect, useState } from "react";
+import { memo } from "react";
 import { Chip } from "@heroui/react";
 
 import type { RendererProps } from "../../../../renderer";
 import type { ToolPart } from "../../../../../types";
 import { getToolName } from "../../../../../types";
-import { IntegrationToolLayout } from "../../shared/integration-tool-layout";
+import {
+  IntegrationToolLayout,
+  useToolExpansionState,
+} from "../../shared/integration-tool-layout";
 import { IntegrationProviderIcon } from "@/components/icons/integration-provider-icon";
 import { getIntegrationToolInteractionState } from "../../shared/state";
 
@@ -24,11 +27,10 @@ export const MongoCountTool = memo(function MongoCountTool({
     onApprove,
     onDeny,
   });
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  useEffect(() => {
-    if (state.hasOutput) setIsExpanded(true);
-  }, [state.hasOutput]);
+  const [isExpanded, setIsExpanded] = useToolExpansionState({
+    toolCallId: part.toolCallId,
+    defaultExpanded: false,
+  });
 
   const input =
     "input" in part

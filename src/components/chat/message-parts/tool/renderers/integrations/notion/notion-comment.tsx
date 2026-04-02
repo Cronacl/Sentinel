@@ -1,12 +1,15 @@
 "use client";
 
 import { Button } from "@heroui/react";
-import { memo, useEffect, useState } from "react";
+import { memo } from "react";
 import { Icon } from "@iconify/react";
 
 import { IntegrationProviderIcon } from "@/components/icons/integration-provider-icon";
 import type { RendererProps } from "../../../renderer";
-import { IntegrationToolLayout } from "../shared/integration-tool-layout";
+import {
+  IntegrationToolLayout,
+  useToolExpansionState,
+} from "../shared/integration-tool-layout";
 import { getIntegrationToolInteractionState } from "../shared/state";
 import type { ToolPart } from "../../../../types";
 import { getToolName } from "../../../../types";
@@ -48,13 +51,11 @@ export const NotionCommentTool = memo(function NotionCommentTool({
       : [output as CommentOutput]
     : [];
 
-  const [isExpanded, setIsExpanded] = useState(
-    isCreate ? state.needsApproval : false,
-  );
-
-  useEffect(() => {
-    if (isCreate && state.needsApproval) setIsExpanded(true);
-  }, [isCreate, state.needsApproval]);
+  const [isExpanded, setIsExpanded] = useToolExpansionState({
+    toolCallId: part.toolCallId,
+    defaultExpanded: isCreate && state.needsApproval,
+    autoExpand: isCreate && state.needsApproval,
+  });
 
   const summary = state.needsApproval
     ? "Notion: Create Comment \u2014 awaiting approval"

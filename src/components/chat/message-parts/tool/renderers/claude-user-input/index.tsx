@@ -249,7 +249,7 @@ export const ClaudeUserInputTool = memo(function ClaudeUserInputTool({
       isRunning={false}
       isError={false}
       isExpandable={isWaiting}
-      isExpanded={isWaiting}
+      isExpanded={false}
       onExpandedChange={() => {}}
     >
       {isWaiting && (
