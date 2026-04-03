@@ -26,6 +26,7 @@ import { shortcutsRouter } from "@/server/api/routers/shortcuts";
 import { threadsRouter } from "@/server/api/routers/threads";
 import { createCallerFactory, createTRPCRouter } from "@/server/api/trpc";
 import { videoSettingsRouter } from "@/server/api/routers/video-settings";
+import { voiceSettingsRouter } from "@/server/api/routers/voice-settings";
 import { workspaceFilesRouter } from "@/server/api/routers/workspace-files";
 import { workspacesRouter } from "@/server/api/routers/workspaces";
 
@@ -62,6 +63,7 @@ export const appRouter = createTRPCRouter({
   shortcuts: shortcutsRouter,
   threads: threadsRouter,
   videoSettings: videoSettingsRouter,
+  voiceSettings: voiceSettingsRouter,
   workspaceFiles: workspaceFilesRouter,
   workspaces: workspacesRouter,
 });

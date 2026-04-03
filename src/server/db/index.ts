@@ -80,6 +80,9 @@ export function ensureTables(
     "default_chat_model_id" text,
     "default_chat_mode" text,
     "default_chat_reasoning_effort" text,
+    "voice_input_enabled" integer DEFAULT false,
+    "voice_input_provider" text,
+    "voice_input_model_id" text,
     "follow_up_behavior" text DEFAULT 'queue' NOT NULL,
     "selected_workspace_id" text,
     "last_project_open_target_id" text,
@@ -241,6 +244,26 @@ export function ensureTables(
 
   try {
     db.run(sql`ALTER TABLE "user" ADD COLUMN "default_chat_mode" text`);
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(
+      sql`ALTER TABLE "user" ADD COLUMN "voice_input_enabled" integer DEFAULT false`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(sql`ALTER TABLE "user" ADD COLUMN "voice_input_provider" text`);
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(sql`ALTER TABLE "user" ADD COLUMN "voice_input_model_id" text`);
   } catch {
     // column already exists
   }

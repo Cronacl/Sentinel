@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@heroui/react";
+import { Button, ScrollShadow } from "@heroui/react";
 import { ArrowLeft02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
@@ -45,7 +45,7 @@ function SidebarContent() {
         : pathname.startsWith(href);
 
     return (
-      <div className="flex h-full flex-col">
+      <div className="flex h-full min-h-0 flex-col">
         <div className="shrink-0 px-3 pt-3 pb-1">
           <Link
             className="text-muted hover:text-foreground inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors"
@@ -61,26 +61,32 @@ function SidebarContent() {
           </Link>
         </div>
 
-        <nav className="flex flex-col gap-0.5 px-3 pt-1">
-          {SETTINGS_NAV.map((item) => (
-            <Button
-              key={item.href}
-              size="sm"
-              fullWidth
-              variant={isActive(item.href) ? "tertiary" : "ghost"}
-              className="justify-start rounded-lg"
-              onPress={() => router.push(item.href)}
-            >
-              <HugeiconsIcon
-                color="currentColor"
-                icon={item.icon}
-                size={15}
-                strokeWidth={1.5}
-              />
-              {item.label}
-            </Button>
-          ))}
-        </nav>
+        <ScrollShadow
+          className="min-h-0 flex-1 px-3 pt-1 pb-3"
+          hideScrollBar
+          orientation="vertical"
+        >
+          <nav className="flex flex-col gap-0.5">
+            {SETTINGS_NAV.map((item) => (
+              <Button
+                key={item.href}
+                size="sm"
+                fullWidth
+                variant={isActive(item.href) ? "tertiary" : "ghost"}
+                className="justify-start rounded-lg"
+                onPress={() => router.push(item.href)}
+              >
+                <HugeiconsIcon
+                  color="currentColor"
+                  icon={item.icon}
+                  size={15}
+                  strokeWidth={1.5}
+                />
+                {item.label}
+              </Button>
+            ))}
+          </nav>
+        </ScrollShadow>
       </div>
     );
   }

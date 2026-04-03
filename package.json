@@ -176,6 +176,9 @@
     "mac": {
       "artifactName": "${productName}-${version}-${arch}.${ext}",
       "category": "public.app-category.developer-tools",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Sentinel uses the microphone to record voice prompts and transcribe them into the composer."
+      },
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.inherit.plist",
       "gatekeeperAssess": false,

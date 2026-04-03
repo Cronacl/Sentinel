@@ -18,6 +18,7 @@ import { ComposerWorkspaceBar } from "../composer-workspace-bar";
 import { ModelSelector } from "../model-selector";
 import { QueuedMessages } from "../queued-messages";
 import { shouldClearComposerAfterSendError } from "../chat-composer-helpers";
+import { VoiceRecorderPanel } from "./voice-recorder-panel";
 
 import type { ChatComposerProps, ComposerSendInput } from "./types";
 import { useAttachments } from "./use-attachments";
@@ -25,6 +26,8 @@ import { useComposerEditor } from "./use-composer-editor";
 import { useModelSelection } from "./use-model-selection";
 import { usePersistSelection } from "./use-persist-selection";
 import { usePlanMode } from "./use-plan-mode";
+import { useVoiceInput } from "./use-voice-input";
+import { shouldShowVoiceInputControl } from "./voice-input.helpers";
 import { resolveThreadSelectionSyncInput } from "./thread-selection-sync";
 
 export type { ChatComposerProps } from "./types";
@@ -71,6 +74,7 @@ export function ChatComposer({
   const selectionScopeKey = threadId ?? "__global__";
 
   const generalSettingsQuery = api.generalSettings.get.useQuery();
+  const voiceSettingsQuery = api.voiceSettings.get.useQuery();
   const followUpBehavior =
     generalSettingsQuery.data?.followUpBehavior ?? DEFAULT_FOLLOW_UP_BEHAVIOR;
 
@@ -205,6 +209,7 @@ export function ChatComposer({
     promptSeedKey,
     selectedEngine,
   });
+  const voiceInput = useVoiceInput({ editor });
 
   const threadMessages =
     threadId != null
@@ -399,6 +404,18 @@ export function ChatComposer({
     ],
   );
   const showEngineSelector = !canPersistThreadSelection;
+  const selectedVoiceProviderLabel =
+    voiceSettingsQuery.data?.providers.find(
+      (provider) => provider.id === voiceSettingsQuery.data?.voiceInputProvider,
+    )?.displayName ?? "voice provider";
+  const showVoiceInput = shouldShowVoiceInputControl({
+    browserSupported: voiceInput.isSupported,
+    voiceInputAvailable:
+      Boolean(voiceSettingsQuery.data?.isAvailable) && !isLocked,
+  });
+  const handleStartVoiceInput = useCallback(() => {
+    void voiceInput.start(selectedVoiceProviderLabel);
+  }, [selectedVoiceProviderLabel, voiceInput.start]);
   const isModelUiReady =
     Boolean(selectedModelKey) ||
     (!modelsQuery.isLoading && !globalSelectionQuery.isLoading);
@@ -550,25 +567,48 @@ export function ChatComposer({
             </div>
           )}
 
-          <ComposerToolbar
-            canSend={canSend}
-            engineOptions={engineOptions}
-            hasWorkspace={hasWorkspace}
-            isBusy={isBusy}
-            isLocked={isLocked}
-            onSelectEngine={handleSelectEngine}
-            selectedEngine={selectedEngine}
-            showEngineSelector={showEngineSelector}
-            contextWindowIndicator={contextWindowIndicatorProps}
-            modelSelector={modelSelectorNode}
-            onPickFiles={handlePickFiles}
-            onSend={handleSend}
-            onStop={onStop}
-            onTogglePlanMode={handleTogglePlanMode}
-            planModeAvailable={planModeAvailable}
-            planMode={planMode}
-            selectedModelKey={selectedModelKey}
-          />
+          {!voiceInput.isActive && voiceInput.errorMessage ? (
+            <div className="px-3 pb-1">
+              <p className="text-xs text-danger-soft-foreground">
+                {voiceInput.errorMessage}
+              </p>
+            </div>
+          ) : null}
+
+          {voiceInput.isActive ? (
+            <VoiceRecorderPanel
+              elapsedSeconds={voiceInput.elapsedSeconds}
+              errorMessage={voiceInput.errorMessage}
+              level={voiceInput.level}
+              onCancel={voiceInput.cancel}
+              onStop={voiceInput.stop}
+              phase={voiceInput.isRecording ? "recording" : "transcribing"}
+              providerLabel={selectedVoiceProviderLabel}
+            />
+          ) : (
+            <ComposerToolbar
+              canSend={canSend}
+              contextWindowIndicator={contextWindowIndicatorProps}
+              engineOptions={engineOptions}
+              hasWorkspace={hasWorkspace}
+              isBusy={isBusy}
+              isLocked={isLocked}
+              modelSelector={modelSelectorNode}
+              onPickFiles={handlePickFiles}
+              onSelectEngine={handleSelectEngine}
+              onSend={handleSend}
+              onStartVoiceInput={handleStartVoiceInput}
+              onStop={onStop}
+              onTogglePlanMode={handleTogglePlanMode}
+              planMode={planMode}
+              planModeAvailable={planModeAvailable}
+              selectedEngine={selectedEngine}
+              selectedModelKey={selectedModelKey}
+              showEngineSelector={showEngineSelector}
+              showVoiceInput={showVoiceInput}
+              voiceInputDisabled={!editor}
+            />
+          )}
         </div>
 
         {activeWorkspace ? (

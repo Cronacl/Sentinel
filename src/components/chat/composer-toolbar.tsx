@@ -7,6 +7,7 @@ import {
   ArrowUp02Icon,
   Attachment01Icon,
   DashboardSquare01Icon,
+  Mic01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, ListBox, Popover, Switch } from "@heroui/react";
@@ -44,11 +45,14 @@ type ComposerToolbarProps = {
   onSelectEngine: (engine: ChatEngine) => void;
   onSend: () => void;
   onStop?: () => void;
+  onStartVoiceInput?: () => void;
   onTogglePlanMode: () => void;
   planModeAvailable: boolean;
   planMode: boolean;
   selectedEngine: ChatEngine;
   selectedModelKey: string | null;
+  showVoiceInput?: boolean;
+  voiceInputDisabled?: boolean;
   showEngineSelector: boolean;
 };
 
@@ -64,11 +68,14 @@ export const ComposerToolbar = memo(function ComposerToolbar({
   onSelectEngine,
   onSend,
   onStop,
+  onStartVoiceInput,
   onTogglePlanMode,
   planModeAvailable,
   planMode,
   selectedEngine,
   selectedModelKey,
+  showVoiceInput = false,
+  voiceInputDisabled = false,
   showEngineSelector,
 }: ComposerToolbarProps) {
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
@@ -252,6 +259,22 @@ export const ComposerToolbar = memo(function ComposerToolbar({
             isDisabled={isLocked || !selectedModelKey}
             usedPercent={contextWindowIndicator.usedPercent}
           />
+        ) : null}
+
+        {showVoiceInput ? (
+          <button
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-default text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+            disabled={voiceInputDisabled}
+            onClick={onStartVoiceInput}
+            type="button"
+          >
+            <HugeiconsIcon
+              color="currentColor"
+              icon={Mic01Icon}
+              size={16}
+              strokeWidth={1.5}
+            />
+          </button>
         ) : null}
 
         {isBusy ? (

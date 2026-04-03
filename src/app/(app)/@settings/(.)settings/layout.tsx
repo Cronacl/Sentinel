@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@heroui/react";
+import { Button, ScrollShadow } from "@heroui/react";
 import { ArrowLeft02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { usePathname, useRouter } from "next/navigation";
@@ -36,7 +36,7 @@ export default function SettingsModalLayout({ children }: PropsWithChildren) {
   return (
     <div className="bg-surface fixed inset-0 z-50 flex">
       <aside
-        className="border-separator bg-surface flex h-full shrink-0 flex-col border-r"
+        className="border-separator bg-surface flex h-full min-h-0 shrink-0 flex-col border-r"
         style={{ width: SETTINGS_SIDEBAR_WIDTH }}
       >
         <div
@@ -60,26 +60,32 @@ export default function SettingsModalLayout({ children }: PropsWithChildren) {
           </button>
         </div>
 
-        <nav className="flex flex-col gap-0.5 px-3 pt-1">
-          {SETTINGS_NAV.map((item) => (
-            <Button
-              key={item.href}
-              size="sm"
-              fullWidth
-              variant={isActive(item.href) ? "tertiary" : "ghost"}
-              className="justify-start rounded-lg"
-              onPress={() => router.replace(item.href)}
-            >
-              <HugeiconsIcon
-                color="currentColor"
-                icon={item.icon}
-                size={15}
-                strokeWidth={1.5}
-              />
-              {item.label}
-            </Button>
-          ))}
-        </nav>
+        <ScrollShadow
+          className="min-h-0 flex-1 px-3 pt-1 pb-3"
+          hideScrollBar
+          orientation="vertical"
+        >
+          <nav className="flex flex-col gap-0.5">
+            {SETTINGS_NAV.map((item) => (
+              <Button
+                key={item.href}
+                size="sm"
+                fullWidth
+                variant={isActive(item.href) ? "tertiary" : "ghost"}
+                className="justify-start rounded-lg"
+                onPress={() => router.replace(item.href)}
+              >
+                <HugeiconsIcon
+                  color="currentColor"
+                  icon={item.icon}
+                  size={15}
+                  strokeWidth={1.5}
+                />
+                {item.label}
+              </Button>
+            ))}
+          </nav>
+        </ScrollShadow>
       </aside>
 
       <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip bg-background">

@@ -805,6 +805,49 @@ function getRuntimePaths() {
   });
 }
 
+function isTrustedAppOrigin(candidateUrl) {
+  if (!candidateUrl) {
+    return false;
+  }
+
+  try {
+    const origin = new URL(candidateUrl).origin;
+    const allowedOrigins = [
+      serverState?.url,
+      process.env.SENTINEL_APP_URL,
+      "http://localhost:3232",
+      "http://127.0.0.1:3232",
+    ]
+      .filter(Boolean)
+      .map((value) => {
+        try {
+          return new URL(value).origin;
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+
+    return allowedOrigins.includes(origin);
+  } catch {
+    return false;
+  }
+}
+
+function configureMediaPermissionRequests(targetSession) {
+  targetSession.setPermissionRequestHandler(
+    (webContents, permission, callback, details) => {
+      if (permission !== "media" && permission !== "microphone") {
+        callback(false);
+        return;
+      }
+
+      const requestUrl = details?.requestingUrl || webContents.getURL();
+      callback(isTrustedAppOrigin(requestUrl));
+    },
+  );
+}
+
 async function prepareDevSession() {
   if (app.isPackaged) {
     return;
@@ -1246,6 +1289,7 @@ app.whenReady().then(async () => {
     app.setAppUserModelId("app.sentinel.desktop");
   }
 
+  configureMediaPermissionRequests(session.defaultSession);
   registerIpc();
   await applyDevAppIcon();
   await prepareDevSession();
