@@ -6,6 +6,7 @@ export const STATIC_APP_WARMUP_ROUTES = [
   "/settings/appearance",
   "/settings/data",
   "/settings/integrations",
+  "/settings/images",
   "/settings/mcp",
   "/settings/mcp/new",
   "/settings/memory",

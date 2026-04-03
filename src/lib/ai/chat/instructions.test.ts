@@ -10,6 +10,11 @@ function createPromptContext(overrides: Record<string, unknown> = {}) {
     allowedMutationRoot: "/tmp/workspace",
     availableSkills: [],
     enabledIntegrations: [],
+    imageGeneration: {
+      available: false,
+      defaultProvider: null,
+      enabledProviders: [],
+    },
     enabledMcpServers: [],
     latestUserText: "Inspect the workspace and fix the issue.",
     latentToolSummary: {
@@ -111,6 +116,16 @@ describe("buildThreadAgentInstructions", () => {
           retrievalLimit: 6,
         },
       },
+      imageGeneration: {
+        available: true,
+        defaultProvider: "openai",
+        enabledProviders: [
+          {
+            modelId: "gpt-image-1",
+            provider: "openai",
+          },
+        ],
+      },
       skillRoots: ["/tmp/workspace/.sentinel/skills/helpful-skill"],
     });
 
@@ -131,6 +146,7 @@ describe("buildThreadAgentInstructions", () => {
         "search_memory",
         "websearch",
         "webfetch",
+        "generate_image",
         "load_skill",
         "mcp_server__list_files",
       ],
@@ -150,6 +166,7 @@ describe("buildThreadAgentInstructions", () => {
         "search_memory",
         "websearch",
         "webfetch",
+        "generate_image",
         "load_skill",
         "mcp_server__list_files",
       ],
@@ -165,6 +182,9 @@ describe("buildThreadAgentInstructions", () => {
       '\".\" means the active tool base for that call, not the filesystem root.',
     );
     expect(instructions).toContain("Long-term memory: enabled");
+    expect(instructions).toContain(
+      "Image generation: enabled via openai:gpt-image-1. Default provider: openai.",
+    );
     expect(instructions).toContain("## Capability Manifest");
     expect(instructions).toContain(
       "Workspace and web baseline tools stay active in chat mode.",

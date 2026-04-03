@@ -120,7 +120,7 @@ export function TerminalPanel() {
       {isOpen ? (
         <motion.section
           animate={{ height: panelHeight, opacity: 1 }}
-          className="pointer-events-auto relative z-20 shrink-0 overflow-hidden border-t border-separator/40 bg-background dark:bg-[#0a0a0a]"
+          className="pointer-events-auto relative z-20 shrink-0 overflow-hidden border-t border-separator/40 bg-background"
           exit={{ height: 0, opacity: 0 }}
           initial={{ height: 0, opacity: 0 }}
           transition={

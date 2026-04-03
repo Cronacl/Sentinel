@@ -13,7 +13,11 @@ import {
   encrypt,
 } from "@/lib/ai/providers/encrypt";
 import { PROVIDER_LIST } from "@/lib/ai/providers/registry";
-import { modelPreferences, providerCredentials } from "@/server/db/schema";
+import {
+  imageGenerationProviderSettings,
+  modelPreferences,
+  providerCredentials,
+} from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
 import { AI_PROVIDERS } from "@/server/db/enums";
@@ -141,6 +145,15 @@ export const providersRouter = createTRPCRouter({
             and(
               eq(modelPreferences.userId, userId),
               eq(modelPreferences.provider, input.provider),
+            ),
+          )
+          .run();
+
+        tx.delete(imageGenerationProviderSettings)
+          .where(
+            and(
+              eq(imageGenerationProviderSettings.userId, userId),
+              eq(imageGenerationProviderSettings.provider, input.provider),
             ),
           )
           .run();

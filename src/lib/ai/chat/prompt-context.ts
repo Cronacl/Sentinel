@@ -1,5 +1,9 @@
 import type { MemoryRuntimeState } from "@/lib/memory";
-import type { IntegrationProvider, MCPTransportId } from "@/server/db/enums";
+import type {
+  AIProvider,
+  IntegrationProvider,
+  MCPTransportId,
+} from "@/server/db/enums";
 import type { ThreadMode, ThreadPlanAudience } from "@/lib/plan";
 import type { PermissionMode } from "@/lib/security";
 import type { SearchSettings } from "@/lib/search";
@@ -49,11 +53,21 @@ export type ThreadPromptMcpServer = {
   transport: MCPTransportId;
 };
 
+export type ThreadPromptImageGeneration = {
+  available: boolean;
+  defaultProvider: AIProvider | null;
+  enabledProviders: Array<{
+    modelId: string;
+    provider: AIProvider;
+  }>;
+};
+
 export type ThreadPromptContext = {
   availableSkills: SkillMetadata[];
   allowedInspectionRoots: string[];
   allowedMutationRoot: string | null;
   enabledIntegrations: ThreadPromptIntegration[];
+  imageGeneration: ThreadPromptImageGeneration;
   enabledMcpServers: ThreadPromptMcpServer[];
   latestUserText: string | null;
   latentToolSummary: ThreadPromptLatentToolSummary;
@@ -111,6 +125,20 @@ export function buildThreadPromptContext(
           sensitivity: "base",
         }),
       ),
+    imageGeneration: {
+      available: Boolean(input.imageGeneration?.available),
+      defaultProvider: input.imageGeneration?.defaultProvider ?? null,
+      enabledProviders: [...(input.imageGeneration?.enabledProviders ?? [])]
+        .filter(
+          (entry) =>
+            entry.provider.trim().length > 0 && entry.modelId.trim().length > 0,
+        )
+        .sort((left, right) =>
+          left.provider.localeCompare(right.provider, undefined, {
+            sensitivity: "base",
+          }),
+        ),
+    },
     enabledMcpServers: [...(input.enabledMcpServers ?? [])]
       .map((server) => ({
         ...server,

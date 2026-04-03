@@ -392,6 +392,12 @@ const answerThreadPlanQuestionSet = mock(async () => ({
   questionSetId: "question-set-1",
   status: "answered",
 }));
+const generateImage = mock(async () => ({
+  images: [],
+  providerMetadata: {},
+  responses: [],
+  warnings: [],
+}));
 const generateText = mock(async () => ({ text: "{}" }));
 
 mock.module("ai", () => ({
@@ -400,6 +406,7 @@ mock.module("ai", () => ({
   createGateway,
   createUIMessageStream,
   createUIMessageStreamResponse,
+  generateImage,
   generateText,
   generateId,
   hasToolCall,

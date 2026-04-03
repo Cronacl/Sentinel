@@ -202,47 +202,72 @@ export function ControlledSelectField<
     <Controller
       control={control}
       name={name}
-      render={({ field, fieldState }) => (
-        <Select.Root
-          {...selectProps}
-          isInvalid={fieldState.invalid}
-          name={field.name}
-          onSelectionChange={(key) => field.onChange(String(key))}
-          selectedKey={field.value ? String(field.value) : null}
-        >
-          <Label>{label}</Label>
-          <Select.Trigger>
-            <Select.Value>{placeholder}</Select.Value>
-            <Select.Indicator />
-          </Select.Trigger>
-          <Select.Popover>
-            <ListBox>
-              {options.map((option) => (
-                <ListBox.Item
-                  id={option.value}
-                  isDisabled={option.isDisabled}
-                  key={option.value}
-                  textValue={String(option.label)}
-                >
-                  <div className="flex items-center justify-between gap-3">
+      render={({ field, fieldState }) => {
+        const currentValue = field.value ? String(field.value) : null;
+        const selectedOption =
+          currentValue === null
+            ? null
+            : (options.find((option) => option.value === currentValue) ?? null);
+
+        return (
+          <Select.Root
+            {...selectProps}
+            isInvalid={fieldState.invalid}
+            name={field.name}
+            onSelectionChange={(key) =>
+              field.onChange(key == null ? null : String(key))
+            }
+            selectedKey={selectedOption?.value ?? null}
+          >
+            <Label>{label}</Label>
+            <Select.Trigger>
+              <Select.Value>
+                {() =>
+                  selectedOption ? (
                     <div className="space-y-0.5">
-                      <div>{option.label}</div>
-                      {option.description ? (
+                      <div>{selectedOption.label}</div>
+                      {selectedOption.description ? (
                         <p className="text-muted text-xs">
-                          {option.description}
+                          {selectedOption.description}
                         </p>
                       ) : null}
                     </div>
-                    <ListBox.ItemIndicator />
-                  </div>
-                </ListBox.Item>
-              ))}
-            </ListBox>
-          </Select.Popover>
-          {description ? <Description>{description}</Description> : null}
-          <FieldError error={fieldState.error?.message} />
-        </Select.Root>
-      )}
+                  ) : (
+                    <span className="text-muted">{placeholder}</span>
+                  )
+                }
+              </Select.Value>
+              <Select.Indicator />
+            </Select.Trigger>
+            <Select.Popover>
+              <ListBox>
+                {options.map((option) => (
+                  <ListBox.Item
+                    id={option.value}
+                    isDisabled={option.isDisabled}
+                    key={option.value}
+                    textValue={String(option.label)}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="space-y-0.5">
+                        <div>{option.label}</div>
+                        {option.description ? (
+                          <p className="text-muted text-xs">
+                            {option.description}
+                          </p>
+                        ) : null}
+                      </div>
+                      <ListBox.ItemIndicator />
+                    </div>
+                  </ListBox.Item>
+                ))}
+              </ListBox>
+            </Select.Popover>
+            {description ? <Description>{description}</Description> : null}
+            <FieldError error={fieldState.error?.message} />
+          </Select.Root>
+        );
+      }}
     />
   );
 }

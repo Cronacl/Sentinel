@@ -93,6 +93,9 @@ function buildRuntimeSnapshot(
     configuredSearchProviders.length > 0
       ? `Web search: enabled via ${configuredSearchProviders.join(", ")}. Default provider: ${promptContext.searchSettings.defaultProvider}.`
       : "Web search: configured with no enabled providers.",
+    promptContext.imageGeneration.available
+      ? `Image generation: enabled via ${promptContext.imageGeneration.enabledProviders.map((entry) => `${entry.provider}:${entry.modelId}`).join(", ")}. Default provider: ${promptContext.imageGeneration.defaultProvider ?? "none"}.`
+      : "Image generation: unavailable.",
     promptContext.webFetchSettings.batchEnabled
       ? `Webfetch batching: enabled (up to ${promptContext.webFetchSettings.batchLimit} URLs per call).`
       : "Webfetch batching: disabled.",

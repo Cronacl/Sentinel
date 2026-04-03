@@ -13,6 +13,7 @@ import {
   diffDescription,
   editDescription,
   forgetMemoryDescription,
+  generateImageDescription,
   gitDescription,
   globDescription,
   grepDescription,
@@ -129,6 +130,12 @@ import {
   updatePlanInputSchema,
   updatePlanOutputSchema,
 } from "./update-plan";
+import {
+  executeGenerateImage,
+  generateImageInputSchema,
+  generateImageOutputSchema,
+  toGenerateImageModelOutput,
+} from "./generate-image";
 import {
   executeWebFetch,
   webFetchInputSchema,
@@ -611,6 +618,7 @@ function buildMemoryTools(options: ThreadAgentCallOptions) {
 
 function buildWebTools(options: ThreadAgentCallOptions) {
   const {
+    imageGenerationRuntime,
     searchProviders,
     searchSettings,
     toolApprovalPolicies,
@@ -672,6 +680,26 @@ function buildWebTools(options: ThreadAgentCallOptions) {
       execute: async (input, { abortSignal }) =>
         executeWebFetch({ abortSignal, input, settings: webFetchSettings }),
     }),
+    ...(Object.keys(imageGenerationRuntime.providers).length > 0
+      ? {
+          generate_image: tool({
+            description: generateImageDescription,
+            inputSchema: generateImageInputSchema,
+            needsApproval: () => toolApprovalPolicies.generate_image,
+            outputSchema: generateImageOutputSchema,
+            toModelOutput: ({ output }) => ({
+              type: "json" as const,
+              value: toGenerateImageModelOutput(output),
+            }),
+            execute: async (input, { abortSignal }) =>
+              executeGenerateImage({
+                abortSignal,
+                input,
+                runtime: { imageGeneration: imageGenerationRuntime },
+              }),
+          }),
+        }
+      : {}),
   };
 }
 
