@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.13](https://github.com/chaqchase/Sentinel/compare/v0.0.12...v0.0.13) (2026-04-03)
+
+
+### Features
+
+* add experimental video generation and UI message validation ([6c629a9](https://github.com/chaqchase/Sentinel/commit/6c629a9a7964157ec8f83b21bb52f1df751e7801))
+* add image settings page and integrate image generation provider functionality ([65a3cac](https://github.com/chaqchase/Sentinel/commit/65a3cacddf2b9c2eafd30b0882787fe041604f86))
+* add mock functions for image and video generation runtimes ([8f272d5](https://github.com/chaqchase/Sentinel/commit/8f272d502c0d48d6a0295e14f0e8d39d1e63909b))
+* add mock functions for video generation and UI message validation ([1f1e7ad](https://github.com/chaqchase/Sentinel/commit/1f1e7ad145566fe3a8886c6ef6efb94f156473f3))
+* add new video settings route to app warmup configuration ([2bc8a27](https://github.com/chaqchase/Sentinel/commit/2bc8a279a6352db2c32f70a45719b0f91bf493cc))
+* add video generation capabilities and enhance desktop build process ([765a88c](https://github.com/chaqchase/Sentinel/commit/765a88c7840eb5555be87eda687c4b51bfdc2c85))
+* add video generation runtime configuration to agent preparation ([8303c8e](https://github.com/chaqchase/Sentinel/commit/8303c8eeffc66b9af056f63490c735c169cd52e8))
+* implement voice input functionality and settings page ([fb0f6dc](https://github.com/chaqchase/Sentinel/commit/fb0f6dce19662a972dd90d462f7cf6dc509065aa))
+
 ## [0.0.12](https://github.com/chaqchase/Sentinel/compare/v0.0.11...v0.0.12) (2026-04-03)
 
 
