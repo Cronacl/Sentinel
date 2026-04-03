@@ -7,16 +7,24 @@ import {
 } from "shiki";
 
 import {
+  DEFAULT_CODE_THEME,
+  getActiveCodeThemeName,
+  type CodeThemeName,
+  type ResolvedTheme,
+} from "@/lib/appearance";
+import {
   getSentinelCodeThemeName,
-  SENTINEL_DARK_CODE_THEME,
-  SENTINEL_LIGHT_CODE_THEME,
+  getSentinelCodeThemeRegistration,
 } from "@/lib/syntax/theme";
 
 export type { ThemedToken };
 export type SyntaxSegment = { color?: string; text: string };
 
 export const highlighterPromise = createHighlighter({
-  themes: [SENTINEL_LIGHT_CODE_THEME, SENTINEL_DARK_CODE_THEME],
+  themes: [
+    getSentinelCodeThemeRegistration(DEFAULT_CODE_THEME, "light"),
+    getSentinelCodeThemeRegistration(DEFAULT_CODE_THEME, "dark"),
+  ],
   langs: [],
 });
 
@@ -192,13 +200,29 @@ export function resolveTheme(): "light" | "dark" {
 }
 
 export function getShikiThemeName(theme: "light" | "dark") {
-  return getSentinelCodeThemeName(theme);
+  const codeTheme = getActiveCodeThemeName();
+  return getSentinelCodeThemeName(codeTheme, theme);
 }
 
 export function getShikiTheme(theme: "light" | "dark"): ThemeRegistration {
-  return theme === "light"
-    ? SENTINEL_LIGHT_CODE_THEME
-    : SENTINEL_DARK_CODE_THEME;
+  const codeTheme = getActiveCodeThemeName();
+  return getSentinelCodeThemeRegistration(codeTheme, theme);
+}
+
+async function ensureThemeLoaded(
+  codeTheme: CodeThemeName,
+  resolvedTheme: ResolvedTheme,
+) {
+  const highlighter = await highlighterPromise;
+  const themeName = getSentinelCodeThemeName(codeTheme, resolvedTheme);
+
+  if (highlighter.getLoadedThemes().includes(themeName)) {
+    return;
+  }
+
+  await highlighter.loadTheme(
+    getSentinelCodeThemeRegistration(codeTheme, resolvedTheme),
+  );
 }
 
 export async function ensureLanguageLoaded(language: string) {
@@ -224,7 +248,10 @@ export async function highlightToTokens(
   theme: "light" | "dark",
 ): Promise<ThemedToken[][]> {
   const highlighter = await highlighterPromise;
+  const codeTheme = getActiveCodeThemeName();
+
   await ensureLanguageLoaded(language);
+  await ensureThemeLoaded(codeTheme, theme);
 
   const lang = isBundledLanguage(language)
     ? (language as BundledLanguage)
@@ -232,7 +259,7 @@ export async function highlightToTokens(
 
   return highlighter.codeToTokensBase(code, {
     lang,
-    theme: getShikiTheme(theme),
+    theme: getSentinelCodeThemeRegistration(codeTheme, theme),
   });
 }
 
@@ -241,7 +268,8 @@ export async function highlightToTokensCached(
   language: string,
   theme: "light" | "dark",
 ) {
-  const cacheKey = `${theme}:${language}:${code}`;
+  const codeTheme = getActiveCodeThemeName();
+  const cacheKey = `${codeTheme}:${theme}:${language}:${code}`;
   const cachedTokens = getCachedHighlightTokens(cacheKey);
 
   if (cachedTokens) {

@@ -1,18 +1,94 @@
+import ayuDarkTheme from "@shikijs/themes/ayu-dark";
+import ayuLightTheme from "@shikijs/themes/ayu-light";
+import catppuccinLatteTheme from "@shikijs/themes/catppuccin-latte";
+import catppuccinMochaTheme from "@shikijs/themes/catppuccin-mocha";
+import everforestDarkTheme from "@shikijs/themes/everforest-dark";
+import everforestLightTheme from "@shikijs/themes/everforest-light";
+import githubDarkTheme from "@shikijs/themes/github-dark";
+import githubLightTheme from "@shikijs/themes/github-light";
+import nightOwlTheme from "@shikijs/themes/night-owl";
+import nightOwlLightTheme from "@shikijs/themes/night-owl-light";
+import solarizedDarkTheme from "@shikijs/themes/solarized-dark";
+import solarizedLightTheme from "@shikijs/themes/solarized-light";
+import vitesseDarkTheme from "@shikijs/themes/vitesse-dark";
+import vitesseLightTheme from "@shikijs/themes/vitesse-light";
+import type { ThemeRegistration } from "shiki";
+
 export const THEME_PREFERENCE_VALUES = ["light", "dark", "system"] as const;
 export const CODE_THEME_VALUES = [
-  "default",
   "github",
-  "cursor",
-  "vercel",
-  "nord",
-  "dracula",
-  "rose-pine",
+  "ayu",
+  "catppuccin",
+  "everforest",
   "night-owl",
+  "solarized",
+  "vitesse",
 ] as const;
 
 export type ThemePreference = (typeof THEME_PREFERENCE_VALUES)[number];
 export type CodeThemeName = (typeof CODE_THEME_VALUES)[number];
 export type ResolvedTheme = Exclude<ThemePreference, "system">;
+
+type ThemeTokenSetting = {
+  scope?: string | string[];
+  settings?: {
+    background?: string;
+    foreground?: string;
+  };
+};
+
+type ShikiThemeSource = ThemeRegistration & {
+  colors?: Record<string, string | string[] | undefined>;
+  tokenColors?: ThemeTokenSetting[];
+};
+
+export type CodeThemePalette = {
+  background: string;
+  foreground: string;
+  "ansi-black": string;
+  "ansi-red": string;
+  "ansi-green": string;
+  "ansi-yellow": string;
+  "ansi-blue": string;
+  "ansi-magenta": string;
+  "ansi-cyan": string;
+  "ansi-white": string;
+  "ansi-bright-black": string;
+  "ansi-bright-red": string;
+  "ansi-bright-green": string;
+  "ansi-bright-yellow": string;
+  "ansi-bright-blue": string;
+  "ansi-bright-magenta": string;
+  "ansi-bright-cyan": string;
+  "ansi-bright-white": string;
+  "token-changed": string;
+  "token-comment": string;
+  "token-constant": string;
+  "token-deleted": string;
+  "token-function": string;
+  "token-inserted": string;
+  "token-keyword": string;
+  "token-link": string;
+  "token-parameter": string;
+  "token-punctuation": string;
+  "token-string": string;
+  "token-string-expression": string;
+};
+
+type CodeThemeFamily = {
+  dark: {
+    id: string;
+    theme: ShikiThemeSource;
+  };
+  description: string;
+  label: string;
+  light: {
+    id: string;
+    theme: ShikiThemeSource;
+  };
+};
+
+type CodeThemeDefinition = Record<ResolvedTheme, CodeThemePalette>;
 
 export const DEFAULT_THEME_PREFERENCE: ThemePreference = "system";
 export const THEME_PREFERENCE_STORAGE_KEY = "sentinel.theme-preference";
@@ -29,348 +105,456 @@ export const MAX_UI_FONT_SIZE = 18;
 export const MIN_CODE_FONT_SIZE = 11;
 export const MAX_CODE_FONT_SIZE = 16;
 export const FONT_SIZE_STEP = 0.5;
-export const DEFAULT_CODE_THEME: CodeThemeName = "default";
+export const DEFAULT_CODE_THEME: CodeThemeName = "github";
 
-export const CODE_THEME_OPTIONS = [
-  {
-    description: "Current Sentinel palette.",
-    label: "Default",
-    value: "default",
+export const CODE_THEME_FAMILIES: Record<CodeThemeName, CodeThemeFamily> = {
+  ayu: {
+    dark: {
+      id: "ayu-dark",
+      theme: ayuDarkTheme as ShikiThemeSource,
+    },
+    description: "Warm contrast with crisp editor colors from Ayu.",
+    label: "Ayu",
+    light: {
+      id: "ayu-light",
+      theme: ayuLightTheme as ShikiThemeSource,
+    },
   },
-  {
-    description: "GitHub's familiar light and dark code colors.",
+  catppuccin: {
+    dark: {
+      id: "catppuccin-mocha",
+      theme: catppuccinMochaTheme as ShikiThemeSource,
+    },
+    description: "Creamy, pastel-rich Catppuccin pairing for day and night.",
+    label: "Catppuccin",
+    light: {
+      id: "catppuccin-latte",
+      theme: catppuccinLatteTheme as ShikiThemeSource,
+    },
+  },
+  everforest: {
+    dark: {
+      id: "everforest-dark",
+      theme: everforestDarkTheme as ShikiThemeSource,
+    },
+    description:
+      "Muted woodland tones with soft contrast and calm diff colors.",
+    label: "Everforest",
+    light: {
+      id: "everforest-light",
+      theme: everforestLightTheme as ShikiThemeSource,
+    },
+  },
+  github: {
+    dark: {
+      id: "github-dark",
+      theme: githubDarkTheme as ShikiThemeSource,
+    },
+    description:
+      "GitHub's classic code colors with familiar light and dark variants.",
     label: "GitHub",
-    value: "github",
+    light: {
+      id: "github-light",
+      theme: githubLightTheme as ShikiThemeSource,
+    },
   },
-  {
-    description: "The minimal, precision-focused Cursor editor palette.",
-    label: "Cursor",
-    value: "cursor",
-  },
-  {
-    description: "Vercel's clean, monochrome-accented design language.",
-    label: "Vercel",
-    value: "vercel",
-  },
-  {
-    description: "Arctic, north-bluish palette inspired by polar landscapes.",
-    label: "Nord",
-    value: "nord",
-  },
-  {
-    description: "The iconic dark palette with vibrant pastel accents.",
-    label: "Dracula",
-    value: "dracula",
-  },
-  {
-    description: "Soft, muted tones inspired by pine and dawn.",
-    label: "Rosé Pine",
-    value: "rose-pine",
-  },
-  {
-    description: "A theme fine-tuned for late-night coding sessions.",
+  "night-owl": {
+    dark: {
+      id: "night-owl",
+      theme: nightOwlTheme as ShikiThemeSource,
+    },
+    description:
+      "High-contrast nocturnal palette tuned for long coding sessions.",
     label: "Night Owl",
-    value: "night-owl",
+    light: {
+      id: "night-owl-light",
+      theme: nightOwlLightTheme as ShikiThemeSource,
+    },
   },
-] as const satisfies ReadonlyArray<{
+  solarized: {
+    dark: {
+      id: "solarized-dark",
+      theme: solarizedDarkTheme as ShikiThemeSource,
+    },
+    description:
+      "The iconic Solarized balance with gentle light and dark pairings.",
+    label: "Solarized",
+    light: {
+      id: "solarized-light",
+      theme: solarizedLightTheme as ShikiThemeSource,
+    },
+  },
+  vitesse: {
+    dark: {
+      id: "vitesse-dark",
+      theme: vitesseDarkTheme as ShikiThemeSource,
+    },
+    description:
+      "A modern Vitesse pairing with vibrant accents and sharp contrast.",
+    label: "Vitesse",
+    light: {
+      id: "vitesse-light",
+      theme: vitesseLightTheme as ShikiThemeSource,
+    },
+  },
+};
+
+export const CODE_THEME_OPTIONS = CODE_THEME_VALUES.map((value) => ({
+  description: CODE_THEME_FAMILIES[value].description,
+  label: CODE_THEME_FAMILIES[value].label,
+  value,
+})) as ReadonlyArray<{
   description: string;
   label: string;
   value: CodeThemeName;
 }>;
 
-type CodeThemePalette = {
-  background: string;
-  foreground: string;
-  "token-changed": string;
-  "token-comment": string;
-  "token-constant": string;
-  "token-deleted": string;
-  "token-function": string;
-  "token-inserted": string;
-  "token-keyword": string;
-  "token-link": string;
-  "token-parameter": string;
-  "token-punctuation": string;
-  "token-string": string;
-  "token-string-expression": string;
+const LEGACY_CODE_THEME_ALIASES: Record<string, CodeThemeName> = {
+  ayu: "ayu",
+  catppuccin: "catppuccin",
+  cursor: "vitesse",
+  default: "github",
+  dracula: "catppuccin",
+  everforest: "everforest",
+  github: "github",
+  "night-owl": "night-owl",
+  nord: "everforest",
+  "rose-pine": "catppuccin",
+  solarized: "solarized",
+  vercel: "vitesse",
+  vitesse: "vitesse",
 };
 
-type CodeThemeDefinition = Record<ResolvedTheme, CodeThemePalette>;
-
-const CODE_THEME_PALETTES: Record<CodeThemeName, CodeThemeDefinition> = {
-  cursor: {
-    dark: {
-      background: "#1e1e1e",
-      foreground: "#cccccc",
-      "token-changed": "#4fc1ff",
-      "token-comment": "#6a9955",
-      "token-constant": "#4fc1ff",
-      "token-deleted": "#f44747",
-      "token-function": "#dcdcaa",
-      "token-inserted": "#b5cea8",
-      "token-keyword": "#c586c0",
-      "token-link": "#4fc1ff",
-      "token-parameter": "#9cdcfe",
-      "token-punctuation": "#d4d4d4",
-      "token-string": "#ce9178",
-      "token-string-expression": "#d7ba7d",
-    },
-    light: {
-      background: "#ffffff",
-      foreground: "#333333",
-      "token-changed": "#0451a5",
-      "token-comment": "#008000",
-      "token-constant": "#0000ff",
-      "token-deleted": "#a31515",
-      "token-function": "#795e26",
-      "token-inserted": "#098658",
-      "token-keyword": "#af00db",
-      "token-link": "#0451a5",
-      "token-parameter": "#001080",
-      "token-punctuation": "#393a34",
-      "token-string": "#a31515",
-      "token-string-expression": "#811f3f",
-    },
+const DEFAULT_CODE_THEME_PALETTES: Record<ResolvedTheme, CodeThemePalette> = {
+  dark: {
+    background: "#24292e",
+    foreground: "#e1e4e8",
+    "ansi-black": "#586069",
+    "ansi-red": "#ea4a5a",
+    "ansi-green": "#34d058",
+    "ansi-yellow": "#ffea7f",
+    "ansi-blue": "#2188ff",
+    "ansi-magenta": "#b392f0",
+    "ansi-cyan": "#39c5cf",
+    "ansi-white": "#d1d5da",
+    "ansi-bright-black": "#959da5",
+    "ansi-bright-red": "#f97583",
+    "ansi-bright-green": "#85e89d",
+    "ansi-bright-yellow": "#ffea7f",
+    "ansi-bright-blue": "#79b8ff",
+    "ansi-bright-magenta": "#b392f0",
+    "ansi-bright-cyan": "#56d4dd",
+    "ansi-bright-white": "#fafbfc",
+    "token-changed": "#2188ff",
+    "token-comment": "#6a737d",
+    "token-constant": "#79b8ff",
+    "token-deleted": "#ea4a5a",
+    "token-function": "#b392f0",
+    "token-inserted": "#34d058",
+    "token-keyword": "#f97583",
+    "token-link": "#2188ff",
+    "token-parameter": "#e1e4e8",
+    "token-punctuation": "#e1e4e8",
+    "token-string": "#9ecbff",
+    "token-string-expression": "#79b8ff",
   },
-  default: {
-    dark: {
-      background: "#0d0d0d",
-      foreground: "#e5e5e5",
-      "token-changed": "#79c0ff",
-      "token-comment": "#8b949e",
-      "token-constant": "#79c0ff",
-      "token-deleted": "#ff7b72",
-      "token-function": "#d2a8ff",
-      "token-inserted": "#7ee787",
-      "token-keyword": "#ff7b72",
-      "token-link": "#58a6ff",
-      "token-parameter": "#ffa657",
-      "token-punctuation": "#c9d1d9",
-      "token-string": "#a5d6ff",
-      "token-string-expression": "#7ee787",
-    },
-    light: {
-      background: "#f5f5f5",
-      foreground: "#111111",
-      "token-changed": "#0550ae",
-      "token-comment": "#6e7781",
-      "token-constant": "#0550ae",
-      "token-deleted": "#cf222e",
-      "token-function": "#8250df",
-      "token-inserted": "#116329",
-      "token-keyword": "#cf222e",
-      "token-link": "#0969da",
-      "token-parameter": "#953800",
-      "token-punctuation": "#57606a",
-      "token-string": "#0a3069",
-      "token-string-expression": "#116329",
-    },
-  },
-  dracula: {
-    dark: {
-      background: "#282a36",
-      foreground: "#f8f8f2",
-      "token-changed": "#8be9fd",
-      "token-comment": "#6272a4",
-      "token-constant": "#bd93f9",
-      "token-deleted": "#ff5555",
-      "token-function": "#50fa7b",
-      "token-inserted": "#50fa7b",
-      "token-keyword": "#ff79c6",
-      "token-link": "#8be9fd",
-      "token-parameter": "#ffb86c",
-      "token-punctuation": "#f8f8f2",
-      "token-string": "#f1fa8c",
-      "token-string-expression": "#50fa7b",
-    },
-    light: {
-      background: "#f8f8f2",
-      foreground: "#282a36",
-      "token-changed": "#0e7fc0",
-      "token-comment": "#9ea8c7",
-      "token-constant": "#7c3aed",
-      "token-deleted": "#dc2626",
-      "token-function": "#16803c",
-      "token-inserted": "#16803c",
-      "token-keyword": "#d946a8",
-      "token-link": "#0e7fc0",
-      "token-parameter": "#c2590a",
-      "token-punctuation": "#44475a",
-      "token-string": "#8b7500",
-      "token-string-expression": "#16803c",
-    },
-  },
-  github: {
-    dark: {
-      background: "#0d1117",
-      foreground: "#c9d1d9",
-      "token-changed": "#58a6ff",
-      "token-comment": "#8b949e",
-      "token-constant": "#79c0ff",
-      "token-deleted": "#f85149",
-      "token-function": "#d2a8ff",
-      "token-inserted": "#3fb950",
-      "token-keyword": "#ff7b72",
-      "token-link": "#58a6ff",
-      "token-parameter": "#ffa657",
-      "token-punctuation": "#c9d1d9",
-      "token-string": "#a5d6ff",
-      "token-string-expression": "#7ee787",
-    },
-    light: {
-      background: "#ffffff",
-      foreground: "#24292f",
-      "token-changed": "#0969da",
-      "token-comment": "#6e7781",
-      "token-constant": "#0550ae",
-      "token-deleted": "#cf222e",
-      "token-function": "#8250df",
-      "token-inserted": "#1a7f37",
-      "token-keyword": "#cf222e",
-      "token-link": "#0969da",
-      "token-parameter": "#953800",
-      "token-punctuation": "#57606a",
-      "token-string": "#0a3069",
-      "token-string-expression": "#1a7f37",
-    },
-  },
-  "night-owl": {
-    dark: {
-      background: "#011627",
-      foreground: "#d6deeb",
-      "token-changed": "#80cbc4",
-      "token-comment": "#637777",
-      "token-constant": "#82aaff",
-      "token-deleted": "#ef5350",
-      "token-function": "#82aaff",
-      "token-inserted": "#addb67",
-      "token-keyword": "#c792ea",
-      "token-link": "#80cbc4",
-      "token-parameter": "#d7dbe0",
-      "token-punctuation": "#7fdbca",
-      "token-string": "#ecc48d",
-      "token-string-expression": "#addb67",
-    },
-    light: {
-      background: "#fbfbfb",
-      foreground: "#403f53",
-      "token-changed": "#2aa298",
-      "token-comment": "#989fb1",
-      "token-constant": "#4876d6",
-      "token-deleted": "#bc3f3c",
-      "token-function": "#4876d6",
-      "token-inserted": "#4876d6",
-      "token-keyword": "#994cc3",
-      "token-link": "#2aa298",
-      "token-parameter": "#403f53",
-      "token-punctuation": "#0c969b",
-      "token-string": "#c96765",
-      "token-string-expression": "#4876d6",
-    },
-  },
-  nord: {
-    dark: {
-      background: "#2e3440",
-      foreground: "#d8dee9",
-      "token-changed": "#ebcb8b",
-      "token-comment": "#616e88",
-      "token-constant": "#b48ead",
-      "token-deleted": "#bf616a",
-      "token-function": "#88c0d0",
-      "token-inserted": "#a3be8c",
-      "token-keyword": "#81a1c1",
-      "token-link": "#88c0d0",
-      "token-parameter": "#d8dee9",
-      "token-punctuation": "#eceff4",
-      "token-string": "#a3be8c",
-      "token-string-expression": "#8fbcbb",
-    },
-    light: {
-      background: "#eceff4",
-      foreground: "#2e3440",
-      "token-changed": "#b58900",
-      "token-comment": "#8c96a4",
-      "token-constant": "#9b4dca",
-      "token-deleted": "#bf616a",
-      "token-function": "#2e7d9f",
-      "token-inserted": "#637832",
-      "token-keyword": "#5e81ac",
-      "token-link": "#2e7d9f",
-      "token-parameter": "#3b4252",
-      "token-punctuation": "#4c566a",
-      "token-string": "#637832",
-      "token-string-expression": "#2e8b7a",
-    },
-  },
-  "rose-pine": {
-    dark: {
-      background: "#191724",
-      foreground: "#e0def4",
-      "token-changed": "#f6c177",
-      "token-comment": "#6e6a86",
-      "token-constant": "#c4a7e7",
-      "token-deleted": "#eb6f92",
-      "token-function": "#9ccfd8",
-      "token-inserted": "#31748f",
-      "token-keyword": "#eb6f92",
-      "token-link": "#9ccfd8",
-      "token-parameter": "#f6c177",
-      "token-punctuation": "#908caa",
-      "token-string": "#f6c177",
-      "token-string-expression": "#31748f",
-    },
-    light: {
-      background: "#faf4ed",
-      foreground: "#575279",
-      "token-changed": "#ea9d34",
-      "token-comment": "#9893a5",
-      "token-constant": "#907aa9",
-      "token-deleted": "#b4637a",
-      "token-function": "#56949f",
-      "token-inserted": "#286983",
-      "token-keyword": "#b4637a",
-      "token-link": "#56949f",
-      "token-parameter": "#ea9d34",
-      "token-punctuation": "#797593",
-      "token-string": "#ea9d34",
-      "token-string-expression": "#286983",
-    },
-  },
-  vercel: {
-    dark: {
-      background: "#111111",
-      foreground: "#ededed",
-      "token-changed": "#52a8ff",
-      "token-comment": "#666666",
-      "token-constant": "#52a8ff",
-      "token-deleted": "#ee5d5d",
-      "token-function": "#ededed",
-      "token-inserted": "#42b883",
-      "token-keyword": "#ee5d5d",
-      "token-link": "#52a8ff",
-      "token-parameter": "#cba6f7",
-      "token-punctuation": "#888888",
-      "token-string": "#42b883",
-      "token-string-expression": "#52a8ff",
-    },
-    light: {
-      background: "#fafafa",
-      foreground: "#171717",
-      "token-changed": "#0070f3",
-      "token-comment": "#999999",
-      "token-constant": "#0070f3",
-      "token-deleted": "#e00",
-      "token-function": "#171717",
-      "token-inserted": "#067a46",
-      "token-keyword": "#e00",
-      "token-link": "#0070f3",
-      "token-parameter": "#7928ca",
-      "token-punctuation": "#666666",
-      "token-string": "#067a46",
-      "token-string-expression": "#0070f3",
-    },
+  light: {
+    background: "#fff",
+    foreground: "#24292e",
+    "ansi-black": "#24292e",
+    "ansi-red": "#d73a49",
+    "ansi-green": "#28a745",
+    "ansi-yellow": "#dbab09",
+    "ansi-blue": "#0366d6",
+    "ansi-magenta": "#6f42c1",
+    "ansi-cyan": "#1b7c83",
+    "ansi-white": "#6a737d",
+    "ansi-bright-black": "#586069",
+    "ansi-bright-red": "#cb2431",
+    "ansi-bright-green": "#22863a",
+    "ansi-bright-yellow": "#b08800",
+    "ansi-bright-blue": "#005cc5",
+    "ansi-bright-magenta": "#5a32a3",
+    "ansi-bright-cyan": "#176f7a",
+    "ansi-bright-white": "#1b1f23",
+    "token-changed": "#0366d6",
+    "token-comment": "#6a737d",
+    "token-constant": "#005cc5",
+    "token-deleted": "#d73a49",
+    "token-function": "#6f42c1",
+    "token-inserted": "#22863a",
+    "token-keyword": "#d73a49",
+    "token-link": "#0366d6",
+    "token-parameter": "#24292e",
+    "token-punctuation": "#24292e",
+    "token-string": "#032f62",
+    "token-string-expression": "#005cc5",
   },
 };
+
+const TOKEN_SCOPE_MATCHERS = {
+  "token-changed": [
+    "markup.changed",
+    "punctuation.definition.changed",
+    "meta.diff.header",
+  ],
+  "token-comment": ["comment"],
+  "token-constant": [
+    "entity.name.constant",
+    "variable.other.constant",
+    "variable.other.enummember",
+    "variable.language",
+    "constant",
+  ],
+  "token-deleted": ["markup.deleted", "punctuation.definition.deleted"],
+  "token-function": [
+    "entity.name.function",
+    "support.function",
+    "meta.function-call",
+  ],
+  "token-inserted": ["markup.inserted", "punctuation.definition.inserted"],
+  "token-keyword": ["keyword", "storage"],
+  "token-link": [
+    "constant.other.reference.link",
+    "string.other.link",
+    "markup.link",
+  ],
+  "token-parameter": ["variable.parameter"],
+  "token-punctuation": ["punctuation", "delimiter", "meta.separator"],
+  "token-string": ["string"],
+  "token-string-expression": [
+    "string variable",
+    "meta.interpolation",
+    "variable.interpolation",
+    "punctuation.definition.template-expression",
+  ],
+} as const satisfies Record<
+  Exclude<
+    keyof CodeThemePalette,
+    | "background"
+    | "foreground"
+    | "ansi-black"
+    | "ansi-red"
+    | "ansi-green"
+    | "ansi-yellow"
+    | "ansi-blue"
+    | "ansi-magenta"
+    | "ansi-cyan"
+    | "ansi-white"
+    | "ansi-bright-black"
+    | "ansi-bright-red"
+    | "ansi-bright-green"
+    | "ansi-bright-yellow"
+    | "ansi-bright-blue"
+    | "ansi-bright-magenta"
+    | "ansi-bright-cyan"
+    | "ansi-bright-white"
+  >,
+  readonly string[]
+>;
+
+function pickThemeColor(
+  theme: ShikiThemeSource,
+  key: string,
+): string | undefined {
+  const value = theme.colors?.[key];
+
+  if (typeof value === "string" && value.trim()) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.find(
+      (entry): entry is string =>
+        typeof entry === "string" && entry.trim().length > 0,
+    );
+  }
+
+  return undefined;
+}
+
+function normalizeTokenScopes(scope?: string | string[]) {
+  if (!scope) {
+    return [];
+  }
+
+  return Array.isArray(scope) ? scope : [scope];
+}
+
+function findTokenColor(
+  theme: ShikiThemeSource,
+  patterns: readonly string[],
+): string | undefined {
+  for (const token of theme.tokenColors ?? []) {
+    const scopes = normalizeTokenScopes(token.scope);
+    if (
+      scopes.length > 0 &&
+      scopes.some((scope) =>
+        patterns.some(
+          (pattern) => scope === pattern || scope.includes(pattern),
+        ),
+      )
+    ) {
+      const foreground = token.settings?.foreground;
+      if (typeof foreground === "string" && foreground.trim()) {
+        return foreground;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function withOpacity(color: string, alpha: string) {
+  if (/^#[0-9a-f]{6}$/i.test(color)) {
+    return `${color}${alpha}`;
+  }
+
+  if (/^#[0-9a-f]{3}$/i.test(color)) {
+    const [, r, g, b] = color;
+    return `#${r}${r}${g}${g}${b}${b}${alpha}`;
+  }
+
+  return color;
+}
+
+function extractCodeThemePalette(
+  theme: ShikiThemeSource,
+  resolvedTheme: ResolvedTheme,
+): CodeThemePalette {
+  const fallback = DEFAULT_CODE_THEME_PALETTES[resolvedTheme];
+  const foreground =
+    pickThemeColor(theme, "editor.foreground") ??
+    pickThemeColor(theme, "foreground") ??
+    fallback.foreground;
+  const background =
+    pickThemeColor(theme, "editor.background") ??
+    pickThemeColor(theme, "background") ??
+    fallback.background;
+
+  const ansiBlack =
+    pickThemeColor(theme, "terminal.ansiBlack") ?? fallback["ansi-black"];
+  const ansiRed =
+    pickThemeColor(theme, "terminal.ansiRed") ?? fallback["ansi-red"];
+  const ansiGreen =
+    pickThemeColor(theme, "terminal.ansiGreen") ?? fallback["ansi-green"];
+  const ansiYellow =
+    pickThemeColor(theme, "terminal.ansiYellow") ?? fallback["ansi-yellow"];
+  const ansiBlue =
+    pickThemeColor(theme, "terminal.ansiBlue") ?? fallback["ansi-blue"];
+  const ansiMagenta =
+    pickThemeColor(theme, "terminal.ansiMagenta") ?? fallback["ansi-magenta"];
+  const ansiCyan =
+    pickThemeColor(theme, "terminal.ansiCyan") ?? fallback["ansi-cyan"];
+  const ansiWhite =
+    pickThemeColor(theme, "terminal.ansiWhite") ??
+    pickThemeColor(theme, "terminal.foreground") ??
+    foreground;
+  const ansiBrightBlack =
+    pickThemeColor(theme, "terminal.ansiBrightBlack") ??
+    fallback["ansi-bright-black"];
+  const ansiBrightRed =
+    pickThemeColor(theme, "terminal.ansiBrightRed") ??
+    fallback["ansi-bright-red"];
+  const ansiBrightGreen =
+    pickThemeColor(theme, "terminal.ansiBrightGreen") ??
+    fallback["ansi-bright-green"];
+  const ansiBrightYellow =
+    pickThemeColor(theme, "terminal.ansiBrightYellow") ??
+    fallback["ansi-bright-yellow"];
+  const ansiBrightBlue =
+    pickThemeColor(theme, "terminal.ansiBrightBlue") ??
+    fallback["ansi-bright-blue"];
+  const ansiBrightMagenta =
+    pickThemeColor(theme, "terminal.ansiBrightMagenta") ??
+    fallback["ansi-bright-magenta"];
+  const ansiBrightCyan =
+    pickThemeColor(theme, "terminal.ansiBrightCyan") ??
+    fallback["ansi-bright-cyan"];
+  const ansiBrightWhite =
+    pickThemeColor(theme, "terminal.ansiBrightWhite") ??
+    foreground ??
+    fallback["ansi-bright-white"];
+
+  return {
+    background,
+    foreground,
+    "ansi-black": ansiBlack,
+    "ansi-red": ansiRed,
+    "ansi-green": ansiGreen,
+    "ansi-yellow": ansiYellow,
+    "ansi-blue": ansiBlue,
+    "ansi-magenta": ansiMagenta,
+    "ansi-cyan": ansiCyan,
+    "ansi-white": ansiWhite,
+    "ansi-bright-black": ansiBrightBlack,
+    "ansi-bright-red": ansiBrightRed,
+    "ansi-bright-green": ansiBrightGreen,
+    "ansi-bright-yellow": ansiBrightYellow,
+    "ansi-bright-blue": ansiBrightBlue,
+    "ansi-bright-magenta": ansiBrightMagenta,
+    "ansi-bright-cyan": ansiBrightCyan,
+    "ansi-bright-white": ansiBrightWhite,
+    "token-changed":
+      findTokenColor(theme, TOKEN_SCOPE_MATCHERS["token-changed"]) ??
+      pickThemeColor(theme, "gitDecoration.modifiedResourceForeground") ??
+      ansiBlue,
+    "token-comment":
+      findTokenColor(theme, TOKEN_SCOPE_MATCHERS["token-comment"]) ??
+      fallback["token-comment"],
+    "token-constant":
+      findTokenColor(theme, TOKEN_SCOPE_MATCHERS["token-constant"]) ??
+      fallback["token-constant"],
+    "token-deleted":
+      findTokenColor(theme, TOKEN_SCOPE_MATCHERS["token-deleted"]) ??
+      pickThemeColor(theme, "gitDecoration.deletedResourceForeground") ??
+      ansiRed,
+    "token-function":
+      findTokenColor(theme, TOKEN_SCOPE_MATCHERS["token-function"]) ??
+      fallback["token-function"],
+    "token-inserted":
+      findTokenColor(theme, TOKEN_SCOPE_MATCHERS["token-inserted"]) ??
+      pickThemeColor(theme, "gitDecoration.addedResourceForeground") ??
+      ansiGreen,
+    "token-keyword":
+      findTokenColor(theme, TOKEN_SCOPE_MATCHERS["token-keyword"]) ??
+      fallback["token-keyword"],
+    "token-link":
+      findTokenColor(theme, TOKEN_SCOPE_MATCHERS["token-link"]) ??
+      pickThemeColor(theme, "textLink.foreground") ??
+      ansiBlue,
+    "token-parameter":
+      findTokenColor(theme, TOKEN_SCOPE_MATCHERS["token-parameter"]) ??
+      foreground,
+    "token-punctuation":
+      findTokenColor(theme, TOKEN_SCOPE_MATCHERS["token-punctuation"]) ??
+      foreground,
+    "token-string":
+      findTokenColor(theme, TOKEN_SCOPE_MATCHERS["token-string"]) ??
+      fallback["token-string"],
+    "token-string-expression":
+      findTokenColor(theme, TOKEN_SCOPE_MATCHERS["token-string-expression"]) ??
+      findTokenColor(theme, TOKEN_SCOPE_MATCHERS["token-string"]) ??
+      fallback["token-string-expression"],
+  };
+}
+
+const CODE_THEME_PALETTES: Record<CodeThemeName, CodeThemeDefinition> =
+  Object.fromEntries(
+    CODE_THEME_VALUES.map((value) => [
+      value,
+      {
+        dark: extractCodeThemePalette(
+          CODE_THEME_FAMILIES[value].dark.theme,
+          "dark",
+        ),
+        light: extractCodeThemePalette(
+          CODE_THEME_FAMILIES[value].light.theme,
+          "light",
+        ),
+      },
+    ]),
+  ) as Record<CodeThemeName, CodeThemeDefinition>;
 
 export type AppearanceSettings = {
   codeFontFamily: string;
@@ -424,6 +608,53 @@ export function resolveThemePreference(
     : "light";
 }
 
+export function resolveCodeThemeName(value?: string | null): CodeThemeName {
+  if (!value) {
+    return DEFAULT_CODE_THEME;
+  }
+
+  const normalized = LEGACY_CODE_THEME_ALIASES[value];
+  if (normalized) {
+    return normalized;
+  }
+
+  return CODE_THEME_VALUES.includes(value as CodeThemeName)
+    ? (value as CodeThemeName)
+    : DEFAULT_CODE_THEME;
+}
+
+export function getCodeThemeThemeId(
+  codeTheme: CodeThemeName,
+  resolvedTheme: ResolvedTheme,
+) {
+  return CODE_THEME_FAMILIES[codeTheme][resolvedTheme].id;
+}
+
+export function getCodeThemeThemeSource(
+  codeTheme: CodeThemeName,
+  resolvedTheme: ResolvedTheme,
+) {
+  return CODE_THEME_FAMILIES[codeTheme][resolvedTheme].theme;
+}
+
+export function getSentinelCodeThemeRegistrationName(
+  codeTheme: CodeThemeName,
+  resolvedTheme: ResolvedTheme,
+) {
+  return `sentinel-code-${codeTheme}-${resolvedTheme}`;
+}
+
+export function getActiveCodeThemeName(): CodeThemeName {
+  if (typeof document !== "undefined") {
+    const codeTheme = document.documentElement.getAttribute("data-code-theme");
+    if (codeTheme) {
+      return resolveCodeThemeName(codeTheme);
+    }
+  }
+
+  return readStoredAppearanceSettings().codeTheme;
+}
+
 export function sanitizeAppearanceSettings(
   value?: Partial<AppearanceSettings> | null,
 ): AppearanceSettings {
@@ -441,10 +672,7 @@ export function sanitizeAppearanceSettings(
       typeof value?.codeFontFamily === "string" && value.codeFontFamily.trim()
         ? value.codeFontFamily.trim()
         : DEFAULT_CODE_FONT_FAMILY,
-    codeTheme:
-      value?.codeTheme && CODE_THEME_VALUES.includes(value.codeTheme)
-        ? value.codeTheme
-        : DEFAULT_CODE_THEME,
+    codeTheme: resolveCodeThemeName(value?.codeTheme),
     uiFontSize:
       typeof value?.uiFontSize === "number" &&
       Number.isFinite(value.uiFontSize) &&
@@ -553,7 +781,9 @@ export function getAppearanceInitScript() {
     THEME_PREFERENCE_STORAGE_KEY,
   )};var ak=${JSON.stringify(APPEARANCE_STORAGE_KEY)};var d=${JSON.stringify(
     DEFAULT_APPEARANCE_SETTINGS,
-  )};var p=${JSON.stringify(CODE_THEME_PALETTES)};var a=d;try{var raw=window.localStorage.getItem(ak);if(raw){a=Object.assign({},d,JSON.parse(raw));}}catch{}try{var tp=window.localStorage.getItem(tk);if(tp==="light"||tp==="dark"||tp==="system"){a.themePreference=tp;}}catch{}var root=document.documentElement;var theme=a.themePreference==="system"?(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):a.themePreference;var codeTheme=(a.codeTheme&&p[a.codeTheme])?a.codeTheme:d.codeTheme;var palette=p[codeTheme][theme]||p[d.codeTheme][theme];root.setAttribute("data-theme",theme);root.classList.toggle("dark",theme==="dark");root.setAttribute("data-code-theme",codeTheme);root.style.setProperty("--app-font-sans",a.uiFontFamily||d.uiFontFamily);root.style.setProperty("--app-font-display",a.uiFontFamily||d.uiFontFamily);root.style.setProperty("--app-font-mono",a.codeFontFamily||d.codeFontFamily);root.style.setProperty("--app-ui-font-size",(a.uiFontSize||d.uiFontSize)+"px");root.style.setProperty("--app-code-font-size",(a.codeFontSize||d.codeFontSize)+"px");for(var key in palette){root.style.setProperty("--syntax-"+key,palette[key]);}window.__sentinelThemePreference=a.themePreference||d.themePreference;window.__sentinelAppearance=Object.assign({},a,{codeTheme:codeTheme});})();`;
+  )};var p=${JSON.stringify(CODE_THEME_PALETTES)};var m=${JSON.stringify(
+    LEGACY_CODE_THEME_ALIASES,
+  )};var a=d;try{var raw=window.localStorage.getItem(ak);if(raw){a=Object.assign({},d,JSON.parse(raw));}}catch{}try{var tp=window.localStorage.getItem(tk);if(tp==="light"||tp==="dark"||tp==="system"){a.themePreference=tp;}}catch{}var root=document.documentElement;var theme=a.themePreference==="system"?(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):a.themePreference;var rawCodeTheme=typeof a.codeTheme==="string"?a.codeTheme:"";var normalizedCodeTheme=(m[rawCodeTheme]||rawCodeTheme);var codeTheme=p[normalizedCodeTheme]?normalizedCodeTheme:d.codeTheme;var palette=p[codeTheme][theme]||p[d.codeTheme][theme];root.setAttribute("data-theme",theme);root.classList.toggle("dark",theme==="dark");root.setAttribute("data-code-theme",codeTheme);root.style.setProperty("--app-font-sans",a.uiFontFamily||d.uiFontFamily);root.style.setProperty("--app-font-display",a.uiFontFamily||d.uiFontFamily);root.style.setProperty("--app-font-mono",a.codeFontFamily||d.codeFontFamily);root.style.setProperty("--app-ui-font-size",(a.uiFontSize||d.uiFontSize)+"px");root.style.setProperty("--app-code-font-size",(a.codeFontSize||d.codeFontSize)+"px");for(var key in palette){root.style.setProperty("--syntax-"+key,palette[key]);}window.__sentinelThemePreference=a.themePreference||d.themePreference;window.__sentinelAppearance=Object.assign({},a,{codeTheme:codeTheme});})();`;
 }
 
 export function getCodeThemePalette(
@@ -561,4 +791,39 @@ export function getCodeThemePalette(
   resolvedTheme: ResolvedTheme,
 ) {
   return CODE_THEME_PALETTES[codeTheme][resolvedTheme];
+}
+
+export function getTerminalThemePalette(
+  codeTheme: CodeThemeName,
+  resolvedTheme: ResolvedTheme,
+) {
+  const palette = getCodeThemePalette(codeTheme, resolvedTheme);
+
+  return {
+    background: palette.background,
+    brightBlack: palette["ansi-bright-black"],
+    brightBlue: palette["ansi-bright-blue"],
+    brightCyan: palette["ansi-bright-cyan"],
+    brightGreen: palette["ansi-bright-green"],
+    brightMagenta: palette["ansi-bright-magenta"],
+    brightRed: palette["ansi-bright-red"],
+    brightWhite: palette["ansi-bright-white"],
+    brightYellow: palette["ansi-bright-yellow"],
+    black: palette["ansi-black"],
+    blue: palette["ansi-blue"],
+    cursor: palette.foreground,
+    cursorAccent: palette.background,
+    cyan: palette["ansi-cyan"],
+    foreground: palette.foreground,
+    green: palette["ansi-green"],
+    magenta: palette["ansi-magenta"],
+    red: palette["ansi-red"],
+    selectionBackground:
+      resolvedTheme === "dark"
+        ? withOpacity(palette.foreground, "1f")
+        : withOpacity(palette.foreground, "24"),
+    selectionForeground: palette.foreground,
+    white: palette["ansi-white"],
+    yellow: palette["ansi-yellow"],
+  };
 }
