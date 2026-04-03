@@ -31,6 +31,33 @@ type SkillListItem = {
   target: string;
 };
 
+function getSkillMatchScore(skill: SkillListItem, normalizedQuery: string) {
+  if (!normalizedQuery) {
+    return 0;
+  }
+
+  const name = skill.name.toLowerCase();
+  const description = skill.description.toLowerCase();
+
+  if (name.startsWith(normalizedQuery)) {
+    return 0;
+  }
+
+  if (name.includes(normalizedQuery)) {
+    return 1;
+  }
+
+  if (description.startsWith(normalizedQuery)) {
+    return 2;
+  }
+
+  if (description.includes(normalizedQuery)) {
+    return 3;
+  }
+
+  return null;
+}
+
 function getSkillEngineSourceRank(skill: SkillListItem, engine: ChatEngine) {
   switch (engine) {
     case "claude":
@@ -127,6 +154,7 @@ function createSuggestionRenderer() {
             clientRect: props.clientRect,
             command: props.command,
             items: props.items,
+            variant: "path",
           },
         });
       },
@@ -139,6 +167,7 @@ function createSuggestionRenderer() {
           clientRect: props.clientRect,
           command: props.command,
           items: props.items,
+          variant: "path",
         });
       },
       onKeyDown: ({ event }: { event: KeyboardEvent }) => {
@@ -177,6 +206,7 @@ function createSkillSuggestionRenderer(selectedEngineRef: {
             command: props.command,
             items: props.items,
             title: getSkillSuggestionTitle(selectedEngineRef.current),
+            variant: "skill",
           },
         });
       },
@@ -190,6 +220,7 @@ function createSkillSuggestionRenderer(selectedEngineRef: {
           command: props.command,
           items: props.items,
           title: getSkillSuggestionTitle(selectedEngineRef.current),
+          variant: "skill",
         });
       },
       onKeyDown: ({ event }: { event: KeyboardEvent }) => {
@@ -288,14 +319,23 @@ export function useComposerEditor({
       const normalizedQuery = query.toLowerCase().trim();
 
       return filtered
-        .filter(
-          (s) =>
-            !normalizedQuery ||
-            s.name.toLowerCase().includes(normalizedQuery) ||
-            s.description.toLowerCase().includes(normalizedQuery),
-        )
-        .slice(0, 15)
         .map((skill) => ({
+          score: getSkillMatchScore(skill, normalizedQuery),
+          skill,
+        }))
+        .filter(
+          (entry): entry is { score: number; skill: SkillListItem } =>
+            entry.score != null,
+        )
+        .sort((left, right) => {
+          if (left.score !== right.score) {
+            return left.score - right.score;
+          }
+
+          return left.skill.name.localeCompare(right.skill.name);
+        })
+        .slice(0, 15)
+        .map(({ skill }) => ({
           description: skill.description,
           directory: skill.directory,
           engine: selectedEngineRef.current,

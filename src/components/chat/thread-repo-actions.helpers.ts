@@ -1,5 +1,27 @@
 import type { RepoLastPullRequest } from "@/lib/ai/chat/engines/types";
+import type { RepoDiffMode } from "@/lib/git/repo";
 import type { RepoPullRequestStatus } from "@/lib/git/pull-request-status";
+
+type RepoDiffPreloadContext = {
+  branch?: string | null;
+  changedFileCount?: number;
+  deletions?: number;
+  effectiveProjectPath?: string | null;
+  effectiveRootPath?: string | null;
+  hasChanges?: boolean;
+  insertions?: number;
+  isGitRepo?: boolean;
+  repoRoot?: string | null;
+  threadBranch?: string | null;
+  threadProjectMode?: string | null;
+  worktreeStatus?: string | null;
+};
+
+export const REPO_DIFF_PRELOAD_MODES: RepoDiffMode[] = [
+  "unstaged",
+  "staged",
+  "branch",
+];
 
 function extractErrorMessagesFromPayload(payload: unknown): string[] {
   if (typeof payload === "string") {
@@ -32,6 +54,32 @@ export function buildGenerateCommitMessageInput(input: {
     threadId: input.threadId,
     workspaceId: input.workspaceId,
   };
+}
+
+export function buildRepoDiffPreloadKey(
+  input: RepoDiffPreloadContext | null | undefined,
+) {
+  if (!input?.isGitRepo) {
+    return null;
+  }
+
+  const projectPath =
+    input.effectiveProjectPath ?? input.effectiveRootPath ?? input.repoRoot;
+  if (!projectPath) {
+    return null;
+  }
+
+  return JSON.stringify({
+    branch: input.branch ?? null,
+    changedFileCount: input.changedFileCount ?? 0,
+    deletions: input.deletions ?? 0,
+    hasChanges: input.hasChanges ?? false,
+    insertions: input.insertions ?? 0,
+    projectPath,
+    threadBranch: input.threadBranch ?? null,
+    threadProjectMode: input.threadProjectMode ?? null,
+    worktreeStatus: input.worktreeStatus ?? null,
+  });
 }
 
 export function buildCreatePullRequestInput(input: {
