@@ -398,7 +398,14 @@ const generateImage = mock(async () => ({
   responses: [],
   warnings: [],
 }));
+const experimental_generateVideo = mock(async () => ({
+  providerMetadata: {},
+  responses: [],
+  videos: [],
+  warnings: [],
+}));
 const generateText = mock(async () => ({ text: "{}" }));
+const validateUIMessages = mock(async ({ messages }) => messages);
 
 mock.module("ai", () => ({
   Output,
@@ -406,6 +413,7 @@ mock.module("ai", () => ({
   createGateway,
   createUIMessageStream,
   createUIMessageStreamResponse,
+  experimental_generateVideo,
   generateImage,
   generateText,
   generateId,
@@ -415,6 +423,7 @@ mock.module("ai", () => ({
   stepCountIs,
   tool,
   ToolLoopAgent: MockToolLoopAgent,
+  validateUIMessages,
 }));
 
 mock.module("server-only", () => ({}));
