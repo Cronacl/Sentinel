@@ -66,6 +66,7 @@ Use the `desktop-verify` workflow to test desktop packaging before a tag exists.
 2. The `release-please` workflow opens or updates the release PR.
 3. Merging the release PR updates `package.json`, `.release-please-manifest.json`, and `CHANGELOG.md`, then creates the matching `vX.Y.Z` tag.
 4. The `publish-release` workflow starts automatically from that tag, builds macOS, Windows, and Linux desktop artifacts, and updates the GitHub Release using the matching `CHANGELOG.md` section as the release body.
+5. macOS releases publish separate `arm64` and `x64` DMG assets so Apple Silicon and Intel users can download the correct build directly.
 
 `CHANGELOG.md` is automation-managed by `release-please`, but it is also the release-summary source of truth. Review the changelog entry in the release PR carefully before merging.
 

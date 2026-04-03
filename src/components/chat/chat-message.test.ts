@@ -154,4 +154,63 @@ describe("ChatMessage", () => {
     expect(markup).not.toContain("Retry");
     expect(markup).toContain('aria-busy="true"');
   });
+
+  it("does not repeat the same failure text when a rendered tool part already shows it", () => {
+    const errorText =
+      'Reference image attachment "placeholder.png" was not found.';
+    const markup = renderToStaticMarkup(
+      createElement(ChatMessage, {
+        chatEngine: "sentinel",
+        message: {
+          id: "assistant-tool-error",
+          metadata: {
+            errorMessage: errorText,
+            status: "error",
+          },
+          parts: [
+            {
+              errorText,
+              input: {
+                mode: "single",
+                prompt: "Generate 5-second video of Socrates in Athens",
+              },
+              state: "output-error",
+              toolCallId: "tool-call-1",
+              toolName: "generate_video",
+              type: "dynamic-tool",
+            } as any,
+          ],
+          role: "assistant",
+        },
+        onRetry: () => {},
+      }),
+    );
+
+    expect(markup.match(/placeholder\.png/g)?.length ?? 0).toBe(1);
+    expect(markup).toContain("Retry");
+    expect(markup).not.toContain("Run failed");
+  });
+
+  it("uses a lighter inline failure treatment when other content is present", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ChatMessage, {
+        chatEngine: "sentinel",
+        message: {
+          id: "assistant-partial-error",
+          metadata: {
+            errorMessage: "Provider request failed.",
+            status: "error",
+          },
+          parts: [{ text: "Partial answer", type: "text" }],
+          role: "assistant",
+        },
+        onRetry: () => {},
+      }),
+    );
+
+    expect(markup).toContain("Partial answer");
+    expect(markup).toContain("Run failed");
+    expect(markup).toContain("Provider request failed.");
+    expect(markup).toContain("bg-danger/5");
+  });
 });

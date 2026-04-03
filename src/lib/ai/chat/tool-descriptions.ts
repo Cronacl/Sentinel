@@ -275,6 +275,21 @@ export const generateImageDescription = lines(
   ].join("\n"),
 );
 
+export const generateVideoDescription = lines(
+  "Generate new videos from text or a reference image using configured video providers.",
+  [
+    "- Uses AI SDK video models exposed by your configured providers.",
+    "- Supports single-provider generation and multi-model fan-out across enabled providers.",
+    "- Supports text-to-video and image-to-video using a reference image attachment from the current thread.",
+    "- Only provide referenceImageFilename when the user actually attached an image in this thread; never invent placeholder or guessed filenames.",
+    "- Returns structured per-provider results with playable videos, warnings, and errors.",
+    "- Accepts optional count, aspect ratio, resolution, duration, fps, and seed controls.",
+    "- Requires at least one configured video-capable provider with a valid selected model in Settings > Videos.",
+    "- Use single mode when one provider/model is enough.",
+    "- Use multi_model mode to compare outputs across providers.",
+  ].join("\n"),
+);
+
 export const webfetchDescription = lines(
   "Fetch a web page or image and return its contents as markdown, text, or HTML.",
   [

@@ -9,6 +9,7 @@ import {
 } from "ai";
 import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
 import type { ImageGenerationRuntime } from "@/lib/ai/providers/images";
+import type { VideoGenerationRuntime } from "@/lib/ai/providers/videos";
 import type { PermissionMode } from "@/lib/security";
 import type { SearchProviderRuntimeMap } from "@/lib/search/providers/runtime";
 import type { SearchSettings } from "@/lib/search";
@@ -54,6 +55,7 @@ const threadAgentCallOptionsSchema = z.object({
   toolApprovalPolicies: z.custom<ToolApprovalPolicyMap>(),
   toolsEnabled: z.boolean(),
   userId: z.string(),
+  videoGenerationRuntime: z.custom<VideoGenerationRuntime>(),
   webFetchSettings: z.custom<WebFetchSettings>(),
   workspaceId: z.string().nullable().optional(),
 });

@@ -37,6 +37,7 @@ import {
   ClaudeWebSearchTool,
 } from "./renderers/claude-web";
 import { SkillTool } from "./renderers/skill";
+import { GenerateVideoTool } from "./renderers/generate-video";
 import { GCalCreateEventTool } from "./renderers/integrations/gcal/gcal-create-event";
 import { IntegrationGenericTool } from "./renderers/integrations/shared/generic";
 
@@ -106,6 +107,26 @@ describe("resolveRenderer", () => {
     } as any);
 
     expect(renderer).toBe(CodexShellTool);
+  });
+
+  it("uses the GenerateVideoTool renderer for generate_video", () => {
+    const renderer = resolveRenderer({
+      input: { prompt: "a calm ocean shot" },
+      output: {
+        failureCount: 0,
+        mode: "single",
+        prompt: "a calm ocean shot",
+        requestedCount: 1,
+        successCount: 1,
+        targets: [],
+      },
+      state: "output-available",
+      toolCallId: "tool-call-video-1",
+      toolName: "generate_video",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(GenerateVideoTool);
   });
 
   it("uses the CodexFileChangeTool renderer for codex_file_change", () => {

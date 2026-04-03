@@ -13,6 +13,7 @@ import {
   TestTubeIcon,
   UserCircleIcon,
   ValidationApprovalIcon,
+  Video01Icon,
 } from "@hugeicons/core-free-icons";
 
 export const SETTINGS_NAV = [
@@ -41,6 +42,11 @@ export const SETTINGS_NAV = [
     href: "/settings/images",
     label: "Images",
     icon: Image01Icon,
+  },
+  {
+    href: "/settings/videos",
+    label: "Videos",
+    icon: Video01Icon,
   },
   { href: "/settings/integrations", label: "Integrations", icon: IceCubesIcon },
   { href: "/settings/mcp", label: "MCP Servers", icon: McpServerIcon },

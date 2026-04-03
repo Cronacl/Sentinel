@@ -15,6 +15,11 @@ function createPromptContext(overrides: Record<string, unknown> = {}) {
       defaultProvider: null,
       enabledProviders: [],
     },
+    videoGeneration: {
+      available: false,
+      defaultProvider: null,
+      enabledProviders: [],
+    },
     enabledMcpServers: [],
     latestUserText: "Inspect the workspace and fix the issue.",
     latentToolSummary: {
@@ -126,6 +131,16 @@ describe("buildThreadAgentInstructions", () => {
           },
         ],
       },
+      videoGeneration: {
+        available: true,
+        defaultProvider: "google_vertex",
+        enabledProviders: [
+          {
+            modelId: "veo-3.1-fast-generate-preview",
+            provider: "google_vertex",
+          },
+        ],
+      },
       skillRoots: ["/tmp/workspace/.sentinel/skills/helpful-skill"],
     });
 
@@ -184,6 +199,9 @@ describe("buildThreadAgentInstructions", () => {
     expect(instructions).toContain("Long-term memory: enabled");
     expect(instructions).toContain(
       "Image generation: enabled via openai:gpt-image-1. Default provider: openai.",
+    );
+    expect(instructions).toContain(
+      "Video generation: enabled via google_vertex:veo-3.1-fast-generate-preview. Default provider: google_vertex.",
     );
     expect(instructions).toContain("## Capability Manifest");
     expect(instructions).toContain(

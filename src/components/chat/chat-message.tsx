@@ -106,6 +106,24 @@ export function getAssistantFailureText({
   return null;
 }
 
+function normalizeInlineErrorText(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function partIncludesFailureText(part: MessagePart, failureText: string) {
+  const normalizedFailureText = normalizeInlineErrorText(failureText);
+
+  if (part.type === "text") {
+    return normalizeInlineErrorText(part.text) === normalizedFailureText;
+  }
+
+  if ("errorText" in part && typeof part.errorText === "string") {
+    return normalizeInlineErrorText(part.errorText) === normalizedFailureText;
+  }
+
+  return false;
+}
+
 function PendingAssistantStatus({
   messageStatus,
   statusLabel,
@@ -146,7 +164,24 @@ function PendingAssistantStatus({
   );
 }
 
-function FailedAssistantStatus({ errorText }: { errorText: string }) {
+function FailedAssistantStatus({
+  errorText,
+  variant = "standalone",
+}: {
+  errorText: string;
+  variant?: "inline" | "standalone";
+}) {
+  if (variant === "inline") {
+    return (
+      <div className="rounded-md border border-danger/15 bg-danger/5 px-3 py-2">
+        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-danger/75">
+          Run failed
+        </p>
+        <p className="mt-1 text-[11px] leading-5 text-danger/85">{errorText}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-lg border border-danger-soft-hover bg-danger-soft px-3 py-2.5">
       <p className="text-xs text-danger-soft-foreground">{errorText}</p>
@@ -535,10 +570,14 @@ function AssistantMessage({
     errorMessage: metadata?.errorMessage,
     messageStatus: status,
   });
+  const failureAlreadyVisible =
+    Boolean(failureText) &&
+    message.parts.some((part) => partIncludesFailureText(part, failureText!));
   const shouldRenderFailureState =
     !isStreaming &&
     Boolean(failureText) &&
-    (status === "error" || status === "cancelled");
+    (status === "error" || status === "cancelled") &&
+    !failureAlreadyVisible;
 
   const stableOnAnswerPlanQuestions = useCallback(
     (input: {
@@ -635,7 +674,10 @@ function AssistantMessage({
         ))}
 
         {shouldRenderFailureState ? (
-          <FailedAssistantStatus errorText={failureText!} />
+          <FailedAssistantStatus
+            errorText={failureText!}
+            variant={hasVisibleParts ? "inline" : "standalone"}
+          />
         ) : null}
 
         {isStreaming && hasVisibleParts ? (

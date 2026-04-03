@@ -60,7 +60,7 @@ jobs:
               ;;
             mac)
               MATRIX='[{"platform":"mac","runner":"macos-latest"}]'
-              LABEL='mac'
+              LABEL='mac (arm64 + x64)'
               ;;
             windows)
               MATRIX='[{"platform":"windows","runner":"windows-latest"}]'
@@ -68,7 +68,7 @@ jobs:
               ;;
             all)
               MATRIX='[{"platform":"linux","runner":"ubuntu-24.04"},{"platform":"mac","runner":"macos-latest"},{"platform":"windows","runner":"windows-latest"}]'
-              LABEL='linux, mac, windows'
+              LABEL='linux, mac (arm64 + x64), windows'
               ;;
             *)
               echo "Unsupported platforms value: $PLATFORMS" >&2

@@ -18,7 +18,9 @@
     "build": "node ./scripts/rebuild-node-native.mjs && node ./scripts/next-build.mjs",
     "build:desktop": "bun run build:desktop:mac",
     "build:desktop:linux": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform linux --target AppImage",
-    "build:desktop:mac": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform mac --target dmg",
+    "build:desktop:mac": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform mac --target dmg --arch arm64",
+    "build:desktop:mac:arm64": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform mac --target dmg --arch arm64",
+    "build:desktop:mac:x64": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform mac --target dmg --arch x64",
     "build:desktop:prepare": "bun run ./scripts/desktop/clean.mjs && bun run ./scripts/desktop/normalize-node-module-manifests.mjs && bun run build && bun run ./scripts/desktop/prepare-production.mjs && bun run ./scripts/desktop/rebuild-standalone-native.mjs && bun run ./scripts/desktop/prune-server.mjs && bun run ./scripts/desktop/prepare-shell.mjs",
     "build:desktop:windows": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform win --target nsis",
     "audit:desktop-bundle": "node ./scripts/desktop/audit-bundle.mjs",
@@ -101,6 +103,7 @@
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.71.2",
     "react-markdown": "^10.1.0",
+    "react-video-kit": "^3.0.0",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
     "resumable-stream": "^2.2.10",
@@ -171,6 +174,7 @@
       "!**/*.map"
     ],
     "mac": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
       "category": "public.app-category.developer-tools",
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.inherit.plist",

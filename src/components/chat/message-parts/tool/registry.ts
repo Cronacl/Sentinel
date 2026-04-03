@@ -14,6 +14,7 @@ import { SkillTool } from "./renderers/skill";
 import { WebSearchTool } from "./renderers/websearch";
 import { WebFetchTool } from "./renderers/webfetch";
 import { GenerateImageTool } from "./renderers/generate-image";
+import { GenerateVideoTool } from "./renderers/generate-video";
 import { WorkspaceTool } from "./renderers/workspace";
 import { GmailSearchTool } from "./renderers/integrations/gmail/gmail-search";
 import { GmailEmailTool } from "./renderers/integrations/gmail/gmail-email";
@@ -168,6 +169,7 @@ const renderers: Record<string, Renderer> = {
   websearch: WebSearchTool,
   webfetch: WebFetchTool,
   generate_image: GenerateImageTool,
+  generate_video: GenerateVideoTool,
 
   gmail_search: GmailSearchTool,
   gmail_get_email: GmailEmailTool,
