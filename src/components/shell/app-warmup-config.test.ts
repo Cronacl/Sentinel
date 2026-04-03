@@ -24,6 +24,7 @@ describe("app warmup config", () => {
       "/settings/providers",
       "/settings/search",
       "/settings/security",
+      "/settings/videos",
       "/settings/approvals",
     ]);
 
