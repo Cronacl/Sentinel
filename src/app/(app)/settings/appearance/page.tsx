@@ -166,7 +166,8 @@ export default function AppearanceSettingsPage() {
   const selectedCodeTheme =
     CODE_THEME_OPTIONS.find(
       (option) => option.value === appearanceValues.codeTheme,
-    ) ?? CODE_THEME_OPTIONS[0];
+    ) ??
+    CODE_THEME_OPTIONS.find((option) => option.value === DEFAULT_CODE_THEME)!;
 
   const resetField = <TField extends keyof AppearanceFormValues>(
     field: TField,
@@ -369,7 +370,8 @@ export default function AppearanceSettingsPage() {
                       Code theme
                     </h2>
                     <p className="text-muted mt-1 text-sm">
-                      Pick the palette used for code blocks and diffs.
+                      Pick the Shiki theme family used for code blocks, diffs,
+                      and terminals.
                     </p>
                   </div>
                   <Button
@@ -384,7 +386,7 @@ export default function AppearanceSettingsPage() {
                 <div className="grid gap-5 lg:grid-cols-[minmax(0,260px)_minmax(0,1fr)] lg:items-start">
                   <ControlledSelectField
                     control={form.control}
-                    description="Applies to code blocks and diff views."
+                    description="Applies across code blocks, diff views, and terminal surfaces."
                     label="Theme"
                     name="codeTheme"
                     options={CODE_THEME_OPTIONS}

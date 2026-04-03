@@ -7,6 +7,8 @@ import { useEffect, useRef } from "react";
 import {
   DEFAULT_CODE_FONT_FAMILY,
   DEFAULT_CODE_FONT_SIZE,
+  getActiveCodeThemeName,
+  getTerminalThemePalette,
   readStoredAppearanceSettings,
 } from "@/lib/appearance";
 import { getDesktopApi } from "@/lib/desktop/client";
@@ -20,57 +22,7 @@ type TerminalInstanceProps = {
 };
 
 function getTerminalTheme(theme: "light" | "dark") {
-  if (theme === "light") {
-    return {
-      background: "#ffffff",
-      foreground: "#111827",
-      cursor: "#111827",
-      cursorAccent: "#ffffff",
-      selectionBackground: "rgba(17, 24, 39, 0.14)",
-      selectionForeground: "#111827",
-      black: "#111827",
-      red: "#b42318",
-      green: "#166534",
-      yellow: "#a16207",
-      blue: "#1d4ed8",
-      magenta: "#7c3aed",
-      cyan: "#0f766e",
-      white: "#4b5563",
-      brightBlack: "#6b7280",
-      brightRed: "#912018",
-      brightGreen: "#14532d",
-      brightYellow: "#854d0e",
-      brightBlue: "#1e40af",
-      brightMagenta: "#6d28d9",
-      brightCyan: "#115e59",
-      brightWhite: "#0f172a",
-    };
-  }
-
-  return {
-    background: "#0a0a0a",
-    foreground: "#e5e5e5",
-    cursor: "#e5e5e5",
-    cursorAccent: "#0a0a0a",
-    selectionBackground: "rgba(255, 255, 255, 0.12)",
-    selectionForeground: "#e5e5e5",
-    black: "#1a1a1a",
-    red: "#f87171",
-    green: "#4ade80",
-    yellow: "#fbbf24",
-    blue: "#60a5fa",
-    magenta: "#c084fc",
-    cyan: "#22d3ee",
-    white: "#d4d4d4",
-    brightBlack: "#737373",
-    brightRed: "#fca5a5",
-    brightGreen: "#86efac",
-    brightYellow: "#fde68a",
-    brightBlue: "#93c5fd",
-    brightMagenta: "#d8b4fe",
-    brightCyan: "#67e8f9",
-    brightWhite: "#fafafa",
-  };
+  return getTerminalThemePalette(getActiveCodeThemeName(), theme);
 }
 
 export function TerminalInstance({

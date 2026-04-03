@@ -72,7 +72,7 @@ describe("appearanceRouter", () => {
     expect(result).toEqual({
       codeFontFamily: '"JetBrains Mono", monospace',
       codeFontSize: 13.5,
-      codeTheme: "dracula",
+      codeTheme: "catppuccin",
       themePreference: "dark",
       uiFontFamily: '"Avenir Next", sans-serif',
       uiFontSize: 17,
@@ -152,7 +152,7 @@ describe("appearanceFormSchema", () => {
     const parsed = appearanceFormSchema.safeParse({
       codeFontFamily: "   ",
       codeFontSize: 12.5,
-      codeTheme: "default",
+      codeTheme: "github",
       themePreference: "system",
       uiFontFamily: "",
       uiFontSize: 16,
@@ -165,10 +165,23 @@ describe("appearanceFormSchema", () => {
     const parsed = appearanceFormSchema.safeParse({
       codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
       codeFontSize: 10.5,
-      codeTheme: "default",
+      codeTheme: "github",
       themePreference: "system",
       uiFontFamily: DEFAULT_UI_FONT_FAMILY,
       uiFontSize: 15.25,
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects unsupported code theme families", () => {
+    const parsed = appearanceFormSchema.safeParse({
+      codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
+      codeFontSize: DEFAULT_CODE_FONT_SIZE,
+      codeTheme: "dracula",
+      themePreference: "system",
+      uiFontFamily: DEFAULT_UI_FONT_FAMILY,
+      uiFontSize: DEFAULT_UI_FONT_SIZE,
     });
 
     expect(parsed.success).toBe(false);

@@ -34,14 +34,14 @@ import {
 } from "react";
 import { sileo } from "sileo";
 
+import { getActiveCodeThemeName } from "@/lib/appearance";
 import { useRightSidebar } from "@/components/shell/shell-context";
 import { getDesktopApi, isDesktopRuntime } from "@/lib/desktop/client";
 import type { DesktopOpenTarget } from "@/lib/desktop/contracts";
 import { getErrorMessage } from "@/lib/errors";
 import {
   ensureSentinelDiffThemesRegistered,
-  SENTINEL_DARK_CODE_THEME_NAME,
-  SENTINEL_LIGHT_CODE_THEME_NAME,
+  getSentinelCodeThemeName,
 } from "@/lib/syntax/theme";
 import { useResolvedTheme } from "@/lib/syntax/use-resolved-theme";
 import { api } from "@/trpc/react";
@@ -182,9 +182,7 @@ function getPreferredEditorTarget(
 }
 
 function resolveDiffThemeName(theme: "light" | "dark") {
-  return theme === "dark"
-    ? SENTINEL_DARK_CODE_THEME_NAME
-    : SENTINEL_LIGHT_CODE_THEME_NAME;
+  return getSentinelCodeThemeName(getActiveCodeThemeName(), theme);
 }
 
 function DiffRevealTrigger({
