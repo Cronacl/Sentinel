@@ -93,6 +93,7 @@ export function AppWarmupCoordinator() {
       () => {
         void utils.appearance.get.prefetch();
         void utils.generalSettings.get.prefetch();
+        void utils.voiceSettings.get.prefetch();
       },
       () => {
         void utils.backup.list.prefetch();

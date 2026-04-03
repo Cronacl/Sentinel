@@ -7,6 +7,7 @@ import {
   IceCubesIcon,
   Image01Icon,
   McpServerIcon,
+  Mic01Icon,
   RefreshIcon,
   Settings05Icon,
   ShieldUserIcon,
@@ -59,5 +60,6 @@ export const SETTINGS_NAV = [
   { href: "/settings/updates", label: "Updates", icon: RefreshIcon },
   { href: "/settings/providers", label: "Providers", icon: TestTubeIcon },
   { href: "/settings/models", label: "Models", icon: Brain02Icon },
+  { href: "/settings/voice", label: "Voice", icon: Mic01Icon },
   { href: "/settings/data", label: "Data", icon: Database01Icon },
 ] as const;
