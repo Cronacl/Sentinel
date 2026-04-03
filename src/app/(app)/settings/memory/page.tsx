@@ -56,6 +56,7 @@ const MEMORIES_PER_PAGE = 10;
 
 type MemoryProfileOption = {
   description: string;
+  isDisabled?: boolean;
   label: string;
   value: MemorySettingsFormValues["memoryProfileId"];
 };
@@ -291,44 +292,41 @@ export default function MemorySettingsPage() {
     [providerStatuses.data],
   );
 
-  const availableProfileOptions = useMemo(
-    () =>
-      MEMORY_EMBEDDING_PROFILES.filter((profile) =>
-        activeProviderIds.has(profile.provider),
-      ).map((profile) => ({
-        description: `${profile.provider} • ${profile.dimensions} dims`,
-        label: profile.displayName,
-        value: profile.id,
-      })),
+  const isProfileAvailable = useMemo(
+    () => (profileId: MemorySettingsFormValues["memoryProfileId"]) => {
+      const profile = MEMORY_EMBEDDING_PROFILES.find(
+        (candidate) => candidate.id === profileId,
+      );
+
+      return profile ? activeProviderIds.has(profile.provider) : false;
+    },
     [activeProviderIds],
   );
 
-  const hasEligibleMemoryProvider = availableProfileOptions.length > 0;
+  const hasEligibleMemoryProvider = useMemo(
+    () =>
+      MEMORY_EMBEDDING_PROFILES.some((profile) =>
+        activeProviderIds.has(profile.provider),
+      ),
+    [activeProviderIds],
+  );
 
   const profileOptions = useMemo(() => {
-    const currentProfile = memorySettings.data
-      ? getMemoryEmbeddingProfile(
-          memorySettings.data.memoryProvider,
-          memorySettings.data.memoryModel,
-        )
-      : null;
+    return MEMORY_EMBEDDING_PROFILES.map((profile) => {
+      const available = activeProviderIds.has(profile.provider);
 
-    const options: MemoryProfileOption[] = [...availableProfileOptions];
-
-    if (
-      currentProfile &&
-      !options.some((option) => option.value === currentProfile.id)
-    ) {
-      options.unshift({
-        description:
-          "Current profile is not available until its provider is active.",
-        label: `${currentProfile.displayName} (Unavailable)`,
-        value: currentProfile.id,
-      });
-    }
-
-    return options;
-  }, [availableProfileOptions, memorySettings.data]);
+      return {
+        description: available
+          ? `${profile.provider} • ${profile.dimensions} dims`
+          : `${profile.provider} • ${profile.dimensions} dims • Activate this provider to use this profile`,
+        isDisabled: !available,
+        label: available
+          ? profile.displayName
+          : `${profile.displayName} (Unavailable)`,
+        value: profile.id,
+      } satisfies MemoryProfileOption;
+    });
+  }, [activeProviderIds]);
 
   useEffect(() => {
     if (!memorySettings.data) {
@@ -345,14 +343,15 @@ export default function MemorySettingsPage() {
       autoSaveEnabled: memorySettings.data.autoSaveEnabled,
       autoSavePerTurnLimit: memorySettings.data.autoSavePerTurnLimit,
       defaultScope: memorySettings.data.defaultScope,
-      enabled: memorySettings.data.enabled && hasEligibleMemoryProvider,
+      enabled: memorySettings.data.enabled && isProfileAvailable(profile.id),
       memoryProfileId: profile.id,
       retrievalLimit: memorySettings.data.retrievalLimit,
     });
-  }, [form, hasEligibleMemoryProvider, memorySettings.data]);
+  }, [form, isProfileAvailable, memorySettings.data]);
 
   useEffect(() => {
-    if (hasEligibleMemoryProvider || !form.getValues("enabled")) {
+    const selectedProfileId = form.getValues("memoryProfileId");
+    if (isProfileAvailable(selectedProfileId) || !form.getValues("enabled")) {
       return;
     }
 
@@ -361,7 +360,7 @@ export default function MemorySettingsPage() {
       shouldTouch: false,
       shouldValidate: true,
     });
-  }, [form, hasEligibleMemoryProvider]);
+  }, [form, isProfileAvailable]);
 
   const updateSettings = api.memorySettings.update.useMutation({
     onSuccess: (data) => {
@@ -445,11 +444,7 @@ export default function MemorySettingsPage() {
     setActionError("");
     await updateSettings.mutateAsync({
       ...values,
-      enabled:
-        values.enabled &&
-        availableProfileOptions.some(
-          (option) => option.value === values.memoryProfileId,
-        ),
+      enabled: values.enabled && isProfileAvailable(values.memoryProfileId),
     });
   };
 
@@ -499,8 +494,10 @@ export default function MemorySettingsPage() {
     MEMORY_EMBEDDING_PROFILES.find(
       (profile) => profile.id === form.watch("memoryProfileId"),
     ) ?? null;
-  const memoryEnabled = form.watch("enabled") && hasEligibleMemoryProvider;
-  const canSubmitSettings = hasEligibleMemoryProvider || !form.watch("enabled");
+  const selectedProfileAvailable =
+    selectedProfile !== null && activeProviderIds.has(selectedProfile.provider);
+  const memoryEnabled = form.watch("enabled") && selectedProfileAvailable;
+  const canSubmitSettings = selectedProfileAvailable || !form.watch("enabled");
   const currentProfile = memorySettings.data
     ? getMemoryEmbeddingProfile(
         memorySettings.data.memoryProvider,
@@ -546,8 +543,8 @@ export default function MemorySettingsPage() {
                   Memory settings
                 </h2>
                 <p className="text-muted text-sm">
-                  Memory works only when a supported AI provider is configured
-                  and active.
+                  Memory works only when the selected embedding provider is
+                  configured and active.
                 </p>
               </div>
 
@@ -555,14 +552,14 @@ export default function MemorySettingsPage() {
                 <ControlledSwitchField
                   control={form.control}
                   description={
-                    hasEligibleMemoryProvider
+                    selectedProfileAvailable
                       ? "Allow Sentinel to retrieve and use long-term memory during chat."
-                      : "Configure and enable a provider with a supported embedding profile before turning memory on."
+                      : "Select an embedding profile from a configured and active provider before turning memory on."
                   }
                   label="Enable memory"
                   name="enabled"
                   switchProps={{
-                    isDisabled: isBusy || !hasEligibleMemoryProvider,
+                    isDisabled: isBusy || !selectedProfileAvailable,
                     size: "sm",
                   }}
                 />
@@ -622,15 +619,13 @@ export default function MemorySettingsPage() {
                   control={form.control}
                   description={
                     hasEligibleMemoryProvider
-                      ? "Embedding profiles come from your configured AI providers."
-                      : "No supported embedding providers are active yet. Configure OpenAI in Settings > Providers."
+                      ? "Profiles from inactive providers stay visible, but you can only select profiles whose provider is active."
+                      : "No supported embedding providers are active yet. Configure a supported provider in Settings > Providers."
                   }
                   label="Embedding profile"
                   name="memoryProfileId"
                   options={profileOptions}
-                  selectProps={{
-                    isDisabled: isBusy || !hasEligibleMemoryProvider,
-                  }}
+                  selectProps={{ isDisabled: isBusy }}
                 />
 
                 {selectedProfile ? (

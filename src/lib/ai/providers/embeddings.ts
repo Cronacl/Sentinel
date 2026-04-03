@@ -50,6 +50,9 @@ export async function embedTextForMemory({
     const { embedding } = await embed({
       abortSignal,
       model,
+      ...(profile.providerOptions
+        ? { providerOptions: profile.providerOptions }
+        : {}),
       value: text,
     });
 
@@ -90,6 +93,9 @@ export async function embedTextsForMemory({
   try {
     const { embeddings } = await embedMany({
       abortSignal,
+      ...(profile.providerOptions
+        ? { providerOptions: profile.providerOptions }
+        : {}),
       model,
       values: texts,
     });

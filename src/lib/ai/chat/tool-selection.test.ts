@@ -14,6 +14,11 @@ function createPromptContext(overrides: Record<string, unknown> = {}) {
     allowedMutationRoot: "/tmp/workspace",
     availableSkills: [],
     enabledIntegrations: [],
+    imageGeneration: {
+      available: false,
+      defaultProvider: null,
+      enabledProviders: [],
+    },
     enabledMcpServers: [],
     latestUserText: "install zig and run the tests",
     latentToolSummary: {
@@ -83,6 +88,7 @@ describe("tool selection baselines", () => {
     "apply_patch",
     "websearch",
     "webfetch",
+    "generate_image",
     "search_memory",
   ];
 
@@ -115,6 +121,7 @@ describe("tool selection baselines", () => {
         "apply_patch",
         "websearch",
         "webfetch",
+        "generate_image",
       ]),
     );
   });
@@ -141,6 +148,7 @@ describe("tool selection baselines", () => {
         "apply_patch",
         "websearch",
         "webfetch",
+        "generate_image",
       ]),
     );
   });
@@ -165,6 +173,7 @@ describe("tool selection baselines", () => {
         "edit",
         "websearch",
         "webfetch",
+        "generate_image",
       ]),
     );
   });

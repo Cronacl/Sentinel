@@ -21,6 +21,7 @@ export const TOOL_APPROVAL_TOOL_NAMES = [
   "forget_memory",
   "websearch",
   "webfetch",
+  "generate_image",
   "gmail_search",
   "gmail_get_email",
   "gmail_send",
@@ -553,6 +554,13 @@ export const TOOL_APPROVAL_METADATA: Record<
     label: "Web fetch",
     riskSummary:
       "Sentinel can access remote URLs immediately, including user-shared documentation and external pages.",
+  },
+  generate_image: {
+    defaultRequireApproval: true,
+    description: "Generate new images with configured remote providers.",
+    label: "Generate image",
+    riskSummary:
+      "Sentinel can generate new images through configured remote AI providers immediately.",
   },
   gmail_search: {
     defaultRequireApproval: false,

@@ -7,6 +7,11 @@ import {
   type ToolApprovalPolicyMap,
 } from "@/lib/ai/chat/tool-approval-policy";
 import {
+  buildImageGenerationProviderEntries,
+  buildImageGenerationRuntime,
+  type ImageGenerationRuntime,
+} from "@/lib/ai/providers/images";
+import {
   buildMcpServerRuntimeEntries,
   type McpServerRuntimeEntry,
 } from "@/lib/mcp/runtime";
@@ -14,6 +19,10 @@ import {
   buildSearchProviderRuntimeMap,
   type SearchProviderRuntimeMap,
 } from "@/lib/search/providers/runtime";
+import {
+  normalizeImageGenerationSettings,
+  type ImageGenerationSettings,
+} from "@/lib/image-generation";
 import { normalizeSearchSettings, type SearchSettings } from "@/lib/search";
 import {
   normalizeMemorySettings,
@@ -35,7 +44,10 @@ import {
 import type { PermissionMode } from "@/server/db/enums";
 import { db } from "@/server/db";
 import {
+  imageGenerationProviderSettings,
+  imageGenerationSettings,
   mcpServerConfigs,
+  providerCredentials,
   searchProviderConfigs,
   searchSettings,
   memorySettings,
@@ -328,6 +340,54 @@ export async function getSearchProviderRuntime(
   });
 
   return buildSearchProviderRuntimeMap(rows);
+}
+
+export async function getImageGenerationSettings(
+  userId: string,
+): Promise<ImageGenerationSettings> {
+  const row = await db.query.imageGenerationSettings.findFirst({
+    where: eq(imageGenerationSettings.userId, userId),
+    columns: {
+      defaultProvider: true,
+    },
+  });
+
+  return normalizeImageGenerationSettings(row ?? null);
+}
+
+export async function getImageGenerationRuntime(
+  userId: string,
+): Promise<ImageGenerationRuntime> {
+  const [credentials, providerSettingRows, settings] = await Promise.all([
+    db.query.providerCredentials.findMany({
+      where: eq(providerCredentials.userId, userId),
+      columns: {
+        encryptedConfig: true,
+        isEnabled: true,
+        provider: true,
+      },
+    }),
+    db.query.imageGenerationProviderSettings.findMany({
+      where: eq(imageGenerationProviderSettings.userId, userId),
+      columns: {
+        isCustom: true,
+        isEnabled: true,
+        modelId: true,
+        provider: true,
+      },
+    }),
+    getImageGenerationSettings(userId),
+  ]);
+
+  const providerEntries = buildImageGenerationProviderEntries({
+    credentials,
+    providerSettings: providerSettingRows,
+  });
+
+  return buildImageGenerationRuntime({
+    providerEntries,
+    settings,
+  });
 }
 
 export async function getMcpServerRuntime(

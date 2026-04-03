@@ -131,4 +131,27 @@ describe("ChatMessage", () => {
     expect(markup).toContain("Provider request failed.");
     expect(markup).toContain("Retry");
   });
+
+  it("keeps the pending state visible while the assistant is still streaming", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ChatMessage, {
+        chatEngine: "sentinel",
+        isStreaming: true,
+        message: {
+          id: "assistant-streaming-error",
+          metadata: {
+            errorMessage: "Provider request failed.",
+            status: "error",
+          },
+          parts: [{ text: " ", type: "text" }],
+          role: "assistant",
+        },
+        onRetry: () => {},
+      }),
+    );
+
+    expect(markup).not.toContain("Provider request failed.");
+    expect(markup).not.toContain("Retry");
+    expect(markup).toContain('aria-busy="true"');
+  });
 });

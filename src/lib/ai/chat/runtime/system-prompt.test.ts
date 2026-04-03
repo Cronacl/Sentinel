@@ -10,6 +10,11 @@ function createPromptContext(memoryPromptLines: string[] = []) {
     allowedMutationRoot: "/tmp/workspace",
     availableSkills: [],
     enabledIntegrations: [],
+    imageGeneration: {
+      available: false,
+      defaultProvider: null,
+      enabledProviders: [],
+    },
     enabledMcpServers: [],
     latestUserText: "Inspect the workspace and fix the issue.",
     latentToolSummary: {

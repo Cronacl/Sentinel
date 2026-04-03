@@ -262,6 +262,19 @@ export const websearchDescription = lines(
   ].join("\n"),
 );
 
+export const generateImageDescription = lines(
+  "Generate new images from a text prompt using configured image providers.",
+  [
+    "- Uses AI SDK image models exposed by your configured providers.",
+    "- Supports single-provider generation and multi-model fan-out across enabled providers.",
+    "- Returns structured per-provider results with image previews, warnings, and errors.",
+    "- Accepts optional count, size, aspect ratio, and seed controls.",
+    "- Requires at least one configured image-capable provider with a valid selected model in Settings > Images.",
+    "- Use single mode when one provider/model is enough.",
+    "- Use multi_model mode to compare outputs across providers.",
+  ].join("\n"),
+);
+
 export const webfetchDescription = lines(
   "Fetch a web page or image and return its contents as markdown, text, or HTML.",
   [

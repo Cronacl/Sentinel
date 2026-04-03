@@ -536,7 +536,9 @@ function AssistantMessage({
     messageStatus: status,
   });
   const shouldRenderFailureState =
-    Boolean(failureText) && (status === "error" || status === "cancelled");
+    !isStreaming &&
+    Boolean(failureText) &&
+    (status === "error" || status === "cancelled");
 
   const stableOnAnswerPlanQuestions = useCallback(
     (input: {

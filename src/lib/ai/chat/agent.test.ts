@@ -75,6 +75,15 @@ const executeLoadSkillMock = mock(async () => ({
 const aiTestState = ((globalThis as any).__sentinelAiTestState ??= {
   agentConfig: null,
 });
+const generateImage = mock(async () => ({
+  images: [],
+  providerMetadata: {},
+  responses: [],
+  warnings: [],
+}));
+const createGateway = mock(() => ({
+  imageModel: () => ({}),
+}));
 
 class MockToolLoopAgent {
   constructor(config) {
@@ -84,12 +93,16 @@ class MockToolLoopAgent {
 
 mock.module("ai", () => ({
   Output,
+  createGateway,
+  generateImage,
   generateText,
   hasToolCall,
   stepCountIs,
   tool,
   ToolLoopAgent: MockToolLoopAgent,
 }));
+
+mock.module("server-only", () => ({}));
 
 mock.module("@/lib/ai/providers/resolver", () => ({
   getEnabledModels: getEnabledModelsMock,
@@ -340,6 +353,11 @@ async function prepareWith(options) {
       : [...(options.skillRoots ?? [])],
     allowedMutationRoot: options.defaultDirectory ?? null,
     availableSkills: options.availableSkills ?? [],
+    imageGeneration: options.imageGeneration ?? {
+      available: false,
+      defaultProvider: null,
+      enabledProviders: [],
+    },
     enabledMcpServers: options.enabledMcpServers ?? [],
     latestUserText:
       options.latestUserText ?? "Inspect the workspace and fix the issue.",
@@ -370,6 +388,12 @@ async function prepareWith(options) {
   return aiTestState.agentConfig.prepareCall({
     options: {
       availableSkills: [],
+      imageGenerationRuntime:
+        options.imageGenerationRuntime ??
+        ({
+          defaultProvider: null,
+          providers: {},
+        } as const),
       promptContext,
       resolvedModelId: options.resolvedModelId ?? "gpt-5.2",
       resolvedProviderId: options.resolvedProviderId ?? "openai",

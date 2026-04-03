@@ -11,3 +11,4 @@ export { RunTaskTool } from "./renderers/run-task";
 export { ShellTool } from "./renderers/shell";
 export { WebSearchTool } from "./renderers/websearch";
 export { WebFetchTool } from "./renderers/webfetch";
+export { GenerateImageTool } from "./renderers/generate-image";

@@ -63,8 +63,9 @@ export function AttachmentManager({
 
       {previewAttachment?.previewUrl ? (
         <ImagePreviewModal
-          attachment={previewAttachment}
+          alt={previewAttachment.name}
           onClose={onPreviewClose}
+          src={previewAttachment.previewUrl}
         />
       ) : null}
     </>

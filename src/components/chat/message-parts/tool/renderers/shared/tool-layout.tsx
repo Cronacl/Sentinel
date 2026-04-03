@@ -27,7 +27,7 @@ export function useToolExpansionState({
   defaultExpanded,
   autoExpand = false,
 }: UseToolExpansionStateOptions) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const lastToolCallIdRef = useRef(toolCallId);
   const previousAutoExpandRef = useRef(autoExpand);
 

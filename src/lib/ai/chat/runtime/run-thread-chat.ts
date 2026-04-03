@@ -79,6 +79,7 @@ import {
 } from "../repo-checkpoints";
 import {
   getMemoryRuntimeState,
+  getImageGenerationRuntime,
   getMcpServerRuntime,
   getSearchProviderRuntime,
   getSearchSettings,
@@ -838,6 +839,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
       resolvedModel,
       runtimeBootstrap,
       memoryRuntime,
+      imageGenerationRuntime,
       mcpServers,
       searchSettings,
       searchProviders,
@@ -848,6 +850,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
       resolvedModelPromise,
       runtimeBootstrapPromise,
       getMemoryRuntimeState(run.request.userId),
+      getImageGenerationRuntime(run.request.userId),
       getMcpServerRuntime(run.request.userId),
       getSearchSettings(run.request.userId),
       getSearchProviderRuntime(run.request.userId),
@@ -1011,6 +1014,17 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
               enabledIntegrations,
               integrationToolNames,
             ),
+            imageGeneration: {
+              available:
+                Object.keys(imageGenerationRuntime.providers).length > 0,
+              defaultProvider: imageGenerationRuntime.defaultProvider,
+              enabledProviders: Object.values(
+                imageGenerationRuntime.providers,
+              ).map((entry) => ({
+                modelId: entry.modelId,
+                provider: entry.provider,
+              })),
+            },
             enabledMcpServers: mcpServers
               .filter((entry) => entry.isEnabled)
               .map((entry) => {
@@ -1141,6 +1155,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
               availableSkills: skillSnapshot.skills,
               ...(workspaceRoot ? { defaultDirectory: workspaceRoot } : {}),
               globalSkillsBasePath: skillsBasePath,
+              imageGenerationRuntime,
               integrationTools,
               mcpTools: mcpRuntime.tools,
               memoryRuntime,

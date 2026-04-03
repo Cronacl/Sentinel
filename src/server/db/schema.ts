@@ -674,6 +674,82 @@ export const searchSettingsRelations = relations(searchSettings, ({ one }) => ({
   }),
 }));
 
+export const imageGenerationSettings = sqliteTable(
+  "image_generation_setting",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    userId: text("user_id").notNull(),
+    defaultProvider: text("default_provider", {
+      enum: AI_PROVIDERS,
+    }),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("image_generation_setting_user_unique").on(table.userId),
+    index("image_generation_setting_user_id_idx").on(table.userId),
+  ],
+);
+
+export const imageGenerationSettingsRelations = relations(
+  imageGenerationSettings,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [imageGenerationSettings.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const imageGenerationProviderSettings = sqliteTable(
+  "image_generation_provider_setting",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    userId: text("user_id").notNull(),
+    provider: text("provider", { enum: AI_PROVIDERS }).notNull(),
+    modelId: text("model_id"),
+    isCustom: integer("is_custom", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    isEnabled: integer("is_enabled", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("image_generation_provider_setting_user_provider_unique").on(
+      table.userId,
+      table.provider,
+    ),
+    index("image_generation_provider_setting_user_id_idx").on(table.userId),
+  ],
+);
+
+export const imageGenerationProviderSettingsRelations = relations(
+  imageGenerationProviderSettings,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [imageGenerationProviderSettings.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
 export const memorySettings = sqliteTable(
   "memory_setting",
   {

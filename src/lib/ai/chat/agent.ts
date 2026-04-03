@@ -8,6 +8,7 @@ import {
   type Experimental_DownloadFunction,
 } from "ai";
 import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
+import type { ImageGenerationRuntime } from "@/lib/ai/providers/images";
 import type { PermissionMode } from "@/lib/security";
 import type { SearchProviderRuntimeMap } from "@/lib/search/providers/runtime";
 import type { SearchSettings } from "@/lib/search";
@@ -32,6 +33,7 @@ import { buildThreadAgentInstructions } from "./instructions";
 const threadAgentCallOptionsSchema = z.object({
   defaultDirectory: z.string().optional(),
   globalSkillsBasePath: z.string().nullable().optional(),
+  imageGenerationRuntime: z.custom<ImageGenerationRuntime>(),
   integrationTools: z.custom<ToolSet>().optional(),
   memoryRuntime: z.custom<MemoryRuntimeState>(),
   mcpTools: z.custom<ToolSet>().optional(),

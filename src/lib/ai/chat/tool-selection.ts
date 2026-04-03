@@ -89,7 +89,11 @@ function selectMutationTools(activeTools: string[], availableTools: string[]) {
 }
 
 function selectWebTools(activeTools: string[], availableTools: string[]) {
-  appendMatchingTools(activeTools, availableTools, ["websearch", "webfetch"]);
+  appendMatchingTools(activeTools, availableTools, [
+    "websearch",
+    "webfetch",
+    "generate_image",
+  ]);
 }
 
 export function selectAlwaysOnChatTools({
