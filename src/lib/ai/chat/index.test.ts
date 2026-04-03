@@ -383,6 +383,14 @@ const getWebFetchSettings = mock(async () => ({
   batchEnabled: false,
   batchLimit: 10,
 }));
+const getImageGenerationRuntime = mock(async () => ({
+  defaultProvider: null,
+  providers: {},
+}));
+const getVideoGenerationRuntime = mock(async () => ({
+  defaultProvider: null,
+  providers: {},
+}));
 const getThreadPlanState = mock(async () => ({
   pendingQuestionSet: null,
   plan: null,
@@ -755,6 +763,7 @@ mock.module("@/lib/plan/service", () => ({
 
 mock.module("./runtime/workspace", () => ({
   getContextCompactionSettings,
+  getImageGenerationRuntime,
   getMemoryRuntimeState,
   getMcpServerRuntime,
   getSearchProviderRuntime,
@@ -763,6 +772,7 @@ mock.module("./runtime/workspace", () => ({
   getThreadRuntimeBootstrap,
   getToolApprovalPolicies,
   getToolPermissionMode,
+  getVideoGenerationRuntime,
   getWebFetchSettings,
   getWorkspaceRootPath,
 }));
