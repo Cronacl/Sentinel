@@ -62,7 +62,7 @@ function ArticleDetailView({ article }: { article: PubMedArticle }) {
     <ScrollShadow className="h-full" orientation="vertical">
       <div className="space-y-4 px-4 py-3">
         <div>
-          <h3 className="text-[14px] font-semibold leading-snug text-foreground">
+          <h3 className="text-[14px] font-medium leading-snug text-foreground">
             {article.title}
           </h3>
           <p className="mt-1.5 text-[11.5px] text-foreground/50">

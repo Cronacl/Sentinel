@@ -47,7 +47,7 @@ function DataTable({
             {columns.map((col) => (
               <th
                 key={col}
-                className="whitespace-nowrap px-3 py-2 text-[11px] font-semibold text-foreground/50"
+                className="whitespace-nowrap px-3 py-2 text-[11px] font-medium text-foreground/50"
               >
                 {col}
               </th>
@@ -111,7 +111,7 @@ function DocumentTable({
             {columns.map((col) => (
               <th
                 key={col}
-                className="whitespace-nowrap px-3 py-2 text-[11px] font-semibold text-foreground/50"
+                className="whitespace-nowrap px-3 py-2 text-[11px] font-medium text-foreground/50"
               >
                 {col}
               </th>

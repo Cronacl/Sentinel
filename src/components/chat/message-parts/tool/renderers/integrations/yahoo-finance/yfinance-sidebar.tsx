@@ -100,7 +100,7 @@ function QuoteCard({
       onClick={() => onSelect(quote)}
       className="group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-foreground/4"
     >
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-[11px] font-semibold text-foreground/60">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-[11px] font-medium text-foreground/60">
         {quote.symbol.slice(0, 3)}
       </div>
 
@@ -142,7 +142,7 @@ function QuoteDetailView({ quote }: { quote: QuoteResult }) {
       <div className="space-y-4 px-4 py-3">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-[15px] font-semibold text-foreground">
+            <h3 className="text-[15px] font-medium text-foreground">
               {quote.symbol}
             </h3>
             <Chip
@@ -159,7 +159,7 @@ function QuoteDetailView({ quote }: { quote: QuoteResult }) {
         </div>
 
         <div>
-          <p className="text-[22px] font-semibold tabular-nums text-foreground">
+          <p className="text-[22px] font-medium tabular-nums text-foreground">
             {formatPrice(quote.regularMarketPrice, quote.currency)}
           </p>
           <div className="mt-0.5 flex items-center gap-1.5">
@@ -310,7 +310,7 @@ export const YFinanceSearchSidebar = memo(function YFinanceSearchSidebar({
             {results.map((result, index) => (
               <div key={result.symbol}>
                 <div className="flex items-center gap-3 rounded-lg px-3 py-2.5">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-[11px] font-semibold text-foreground/60">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 text-[11px] font-medium text-foreground/60">
                     {result.symbol.slice(0, 3)}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -425,7 +425,7 @@ export const YFinanceChartSidebar = memo(function YFinanceChartSidebar({
 
       <div className="shrink-0 px-4 py-3 space-y-1">
         {last ? (
-          <p className="text-[18px] font-semibold tabular-nums text-foreground">
+          <p className="text-[18px] font-medium tabular-nums text-foreground">
             {formatPrice(last.close)}
           </p>
         ) : null}

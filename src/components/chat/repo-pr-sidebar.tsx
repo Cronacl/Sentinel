@@ -190,7 +190,7 @@ export function RepoPullRequestSidebar({
       <div className="flex items-start justify-between gap-3 border-b border-border/60 px-4 py-4">
         <div className="min-w-0">
           <p className="text-xs text-muted/80">Pull request</p>
-          <h2 className="mt-1 truncate text-sm font-semibold text-foreground">
+          <h2 className="mt-1 truncate text-sm font-medium text-foreground">
             {repoContext?.pullRequestStatus?.title ?? workspaceName ?? "Repo"}
           </h2>
           <p className="mt-1 text-xs text-muted">{summary}</p>

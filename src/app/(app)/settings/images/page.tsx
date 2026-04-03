@@ -113,7 +113,7 @@ function ProviderRow({ provider }: { provider: ImageProviderRow }) {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-sm font-semibold text-foreground">
+            <h2 className="text-sm font-medium text-foreground">
               {provider.displayName}
             </h2>
             <Chip
@@ -320,7 +320,7 @@ export default function ImagesSettingsPage() {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-sm font-semibold text-foreground">
+                  <h2 className="text-sm font-medium text-foreground">
                     Default routing
                   </h2>
                   <Chip color="success" size="sm" variant="soft">
@@ -379,7 +379,7 @@ export default function ImagesSettingsPage() {
             <section className="overflow-hidden rounded-2xl border border-separator/30 bg-surface">
               <div className="border-separator/20 flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
                 <div className="space-y-1">
-                  <h2 className="text-sm font-semibold text-foreground">
+                  <h2 className="text-sm font-medium text-foreground">
                     Provider targets
                   </h2>
                   <p className="text-muted text-xs">

@@ -79,7 +79,7 @@ export const LinearTeamTool = memo(function LinearTeamTool({
         {teams.map((t) => (
           <div key={t.id} className="flex items-center gap-2.5 rounded-lg p-2">
             <div
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[10px] font-bold text-white"
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-[10px] font-medium text-white"
               style={{ backgroundColor: t.color || "#5e6ad2" }}
             >
               {t.key}
