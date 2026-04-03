@@ -119,38 +119,43 @@ function SkillIcon({ name, size = 16 }: { name: string; size?: number }) {
 
 function DetailSkeleton() {
   return (
-    <div className="flex flex-col gap-6">
-      <section className="bg-surface/50 rounded-3xl border border-border/50 p-4">
-        <div className="flex items-start gap-3">
-          <Skeleton className="h-10 w-10 shrink-0 rounded-xl" />
+    <div className="flex flex-col gap-5">
+      <div className="border-separator/20 bg-surface rounded-2xl border p-2.5">
+        <div className="flex items-center gap-2.5">
+          <Skeleton className="h-8 w-8 shrink-0 rounded-xl" />
           <div className="min-w-0 flex-1 space-y-2">
             <Skeleton className="h-5 w-40 rounded-md" />
-            <Skeleton className="h-4 w-full rounded-md" />
-            <Skeleton className="h-4 w-4/5 rounded-md" />
+            <Skeleton className="h-3 w-full rounded-md" />
           </div>
         </div>
-      </section>
+      </div>
 
-      <section className="bg-surface/50 rounded-3xl border border-border/50 p-4">
-        <div className="space-y-2">
-          <Skeleton className="h-5 w-24 rounded-md" />
-          <Skeleton className="h-4 w-56 rounded-md" />
-        </div>
+      <div className="border-separator/20 bg-surface rounded-2xl border p-4">
+        <Skeleton className="h-5 w-24 rounded-md" />
         <div className="mt-4 space-y-2">
           <Skeleton className="h-4 w-full rounded-md" />
           <Skeleton className="h-4 w-full rounded-md" />
           <Skeleton className="h-4 w-5/6 rounded-md" />
           <Skeleton className="h-20 w-full rounded-xl" />
         </div>
-      </section>
+      </div>
 
-      <section className="bg-surface/50 rounded-3xl border border-border/50 p-4">
+      <div className="border-separator/20 bg-surface rounded-2xl border p-4">
         <Skeleton className="h-5 w-20 rounded-md" />
         <div className="mt-3 space-y-2">
-          <Skeleton className="h-4 w-full rounded-md" />
-          <Skeleton className="h-4 w-3/4 rounded-md" />
+          <Skeleton className="h-10 w-full rounded-xl" />
+          <Skeleton className="h-10 w-full rounded-xl" />
         </div>
-      </section>
+      </div>
+
+      <div className="border-separator/20 bg-surface rounded-2xl border p-4">
+        <Skeleton className="h-5 w-16 rounded-md" />
+        <div className="mt-3 flex flex-wrap gap-2">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton className="h-5 w-20 rounded-full" key={index} />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -188,21 +193,25 @@ export function SkillDetailScreen({
   return (
     <SettingsPageWrapper
       title={
-        <div>
+        <div className="flex items-center gap-2">
           {!leftSidebarOpen ? <SidebarToggle /> : null}
+          <Link
+            href="/skills"
+            className="text-muted hover:text-foreground transition-colors"
+          >
+            <HugeiconsIcon
+              color="currentColor"
+              icon={ArrowLeft01Icon}
+              size={20}
+              strokeWidth={1.5}
+            />
+          </Link>
           {formatSkillTitle(resolvedName)}
         </div>
       }
-      subtitle={
-        <Link href="/skills">
-          <span className="text-sm text-muted underline hover:text-foreground">
-            Back to skills
-          </span>
-        </Link>
-      }
     >
       {skill.error ? (
-        <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
+        <p className="border-danger-soft-hover bg-danger-soft text-danger-soft-foreground mb-4 rounded-2xl border px-3 py-2.5 text-xs">
           {skill.error.message}
         </p>
       ) : null}
@@ -210,9 +219,9 @@ export function SkillDetailScreen({
       {skill.isPending && !skill.data ? (
         <DetailSkeleton />
       ) : !loadedSkill ? (
-        <section className="bg-surface/50 rounded-3xl border border-border/50 p-4">
-          <div className="flex items-start gap-3">
-            <div className="border-separator bg-background flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border">
+        <div className="border-separator/20 bg-surface rounded-2xl border p-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-separator bg-background text-foreground">
               <HugeiconsIcon
                 color="currentColor"
                 icon={CubeIcon}
@@ -224,67 +233,62 @@ export function SkillDetailScreen({
               <h2 className="text-foreground text-sm font-medium">
                 Skill not found
               </h2>
-              <p className="text-muted mt-1 text-sm">
+              <p className="text-muted mt-0.5 text-xs">
                 The requested skill is no longer available in the current
                 workspace.
               </p>
             </div>
           </div>
-        </section>
+        </div>
       ) : (
-        <div className="flex flex-col gap-6">
-          <section className="bg-surface/50 rounded-3xl border border-border/50 p-4">
-            <div className="flex items-start gap-3">
-              <div className="border-border/50 bg-background/80 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border text-foreground/80">
-                <SkillIcon name={resolvedName} size={18} />
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <h2 className="text-foreground text-base font-medium">
-                  {formatSkillTitle(loadedSkill.name)}
-                </h2>
-                <p className="text-muted text-sm">{loadedSkill.description}</p>
-              </div>
+        <div className="flex flex-col gap-5">
+          {/* Skill identity banner */}
+          <div className="border-separator/20 bg-surface flex items-center gap-2.5 rounded-2xl border p-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-separator bg-background text-foreground">
+              <SkillIcon name={resolvedName} size={16} />
             </div>
-
-            <div className="mt-4 flex flex-wrap gap-2 border-t border-border/30 pt-4">
-              <Chip
-                className="border border-border/50 bg-background/80 text-foreground/75"
-                size="sm"
-                variant="tertiary"
-              >
-                {SOURCE_LABEL[loadedSkill.sourceKind]}
-              </Chip>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="text-foreground truncate text-sm font-medium">
+                  {formatSkillTitle(loadedSkill.name)}
+                </span>
+                <Chip
+                  size="sm"
+                  className="bg-warning-soft text-warning-soft-foreground"
+                >
+                  {SOURCE_LABEL[loadedSkill.sourceKind]}
+                </Chip>
+              </div>
+              <p className="text-muted mt-0.5 truncate text-xs">
+                {loadedSkill.description}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
               <Button
                 onPress={() => void handleCopy(loadedSkill.name, "name")}
                 size="sm"
                 variant="tertiary"
-                className="border border-border/50"
+                className="h-7 px-2 rounded-[10px]"
               >
-                {copiedLabel === "name" ? "Copied name" : "Copy name"}
+                {copiedLabel === "name" ? "Copied" : "Copy name"}
               </Button>
               <Button
                 onPress={() => void handleCopy(loadedSkill.skillFile, "path")}
                 size="sm"
                 variant="tertiary"
-                className="border border-border/50"
+                className="h-7 px-2 rounded-[10px]"
               >
-                {copiedLabel === "path" ? "Copied path" : "Copy path"}
+                {copiedLabel === "path" ? "Copied" : "Copy path"}
               </Button>
             </div>
-          </section>
+          </div>
 
-          <section className="bg-surface/50 rounded-3xl border border-border/50 p-4">
-            <div className="space-y-0.5">
-              <h2 className="text-foreground text-base font-medium">
-                Overview
-              </h2>
-              <p className="text-muted text-sm">
-                Full instructions and runtime guidance for this skill.
-              </p>
-            </div>
-
-            <div className="mt-4">
+          {/* Overview */}
+          <section>
+            <h2 className="text-foreground mb-3 px-3 text-sm font-medium">
+              Overview
+            </h2>
+            <div className="border-separator/20 bg-surface rounded-2xl border p-4">
               <ScrollShadow className="max-h-[48vh]" orientation="vertical">
                 <div className="pr-2 [&_.sentinel-prose]:max-w-none [&_.sentinel-prose]:text-sm [&_.sentinel-prose_h1]:text-base [&_.sentinel-prose_h1]:font-medium [&_.sentinel-prose_h2]:text-sm [&_.sentinel-prose_h2]:font-medium [&_.sentinel-prose_li]:text-sm [&_.sentinel-prose_p]:text-sm">
                   <MarkdownContent
@@ -295,45 +299,49 @@ export function SkillDetailScreen({
             </div>
           </section>
 
-          <section className="bg-surface/50 rounded-3xl border border-border/50 p-4">
-            <h2 className="text-foreground text-base font-medium">Location</h2>
-            <div className="mt-3 space-y-2">
-              <div className="rounded-xl border border-border/60 bg-background/70 p-2 px-3">
-                <p className="text-foreground text-xs">Skill file</p>
-                <p className="mt-1 break-all font-mono text-xs text-foreground/50">
+          {/* Location */}
+          <section>
+            <h2 className="text-foreground mb-3 px-3 text-sm font-medium">
+              Location
+            </h2>
+            <div className="grid grid-cols-1 gap-1">
+              <div className="border-separator/20 bg-surface rounded-2xl border p-2.5 px-3">
+                <p className="text-foreground text-xs font-medium">
+                  Skill file
+                </p>
+                <p className="mt-0.5 break-all font-mono text-xs text-muted">
                   {loadedSkill.skillFile}
                 </p>
               </div>
-              <div className="rounded-xl border border-border/60 bg-background/70 p-2 px-3">
-                <p className="text-foreground text-xs">Directory</p>
-                <p className="mt-1 break-all font-mono text-xs text-foreground/50">
+              <div className="border-separator/20 bg-surface rounded-2xl border p-2.5 px-3">
+                <p className="text-foreground text-xs font-medium">Directory</p>
+                <p className="mt-0.5 break-all font-mono text-xs text-muted">
                   {loadedSkill.directory}
                 </p>
               </div>
             </div>
           </section>
 
-          <section className="bg-surface/50 rounded-3xl border border-border/50 p-4">
-            <h2 className="text-foreground text-base font-medium">Files</h2>
-            <p className="text-muted mt-1 text-sm">
-              Bundled assets discovered alongside SKILL.md.
-            </p>
-            <div className="mt-3">
+          {/* Files */}
+          <section>
+            <h2 className="text-foreground mb-3 px-3 text-sm font-medium">
+              Files
+            </h2>
+            <div className="border-separator/20 bg-surface rounded-2xl border p-4">
               {loadedSkill.files.length ? (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {loadedSkill.files.slice(0, 12).map((file) => (
                     <Chip
                       key={file}
                       size="sm"
-                      variant="tertiary"
-                      className="border border-border/50 bg-background/80 text-foreground/75"
+                      className="bg-warning-soft text-warning-soft-foreground"
                     >
                       {file}
                     </Chip>
                   ))}
                 </div>
               ) : (
-                <p className="text-muted text-sm">
+                <p className="text-muted text-xs">
                   No bundled files were discovered for this skill.
                 </p>
               )}

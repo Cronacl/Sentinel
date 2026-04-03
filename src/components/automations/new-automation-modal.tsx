@@ -517,7 +517,7 @@ export function NewAutomationModal({
     <Modal.Root state={state}>
       <Modal.Backdrop>
         <Modal.Container placement="center" size="lg">
-          <Modal.Dialog className="border-separator w-full border sm:max-w-[520px]">
+          <Modal.Dialog>
             <Form
               className="contents"
               onSubmit={form.handleSubmit(handleCreate)}
