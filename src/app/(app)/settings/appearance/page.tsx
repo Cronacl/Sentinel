@@ -15,8 +15,8 @@ import { sileo } from "sileo";
 import {
   ControlledNumberField,
   ControlledSelectField,
-  ControlledTextField,
 } from "@/components/forms/controlled-fields";
+import { FontFamilySelector } from "@/components/settings/font-family-selector";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { useOptimisticMutation } from "@/hooks/use-optimistic-mutation";
 import {
@@ -309,16 +309,13 @@ export default function AppearanceSettingsPage() {
 
                 <div className="grid gap-5 lg:grid-cols-2">
                   <div className="space-y-3">
-                    <ControlledTextField
+                    <FontFamilySelector
                       control={form.control}
                       description="Used for non-code interface text."
-                      inputProps={{
-                        className: "w-full text-sm",
-                        placeholder: DEFAULT_UI_FONT_FAMILY,
-                      }}
                       label="UI font family"
+                      mode="ui"
                       name="uiFontFamily"
-                      textFieldProps={{ className: "w-full" }}
+                      placeholder="Choose a UI font stack"
                     />
 
                     <div className="flex items-center justify-between gap-3 text-xs text-muted">
@@ -338,16 +335,13 @@ export default function AppearanceSettingsPage() {
                   </div>
 
                   <div className="space-y-3">
-                    <ControlledTextField
+                    <FontFamilySelector
                       control={form.control}
                       description="Used for terminals, code blocks, and inline code."
-                      inputProps={{
-                        className: "w-full text-sm",
-                        placeholder: DEFAULT_CODE_FONT_FAMILY,
-                      }}
                       label="Code font family"
+                      mode="code"
                       name="codeFontFamily"
-                      textFieldProps={{ className: "w-full" }}
+                      placeholder="Choose a code font stack"
                     />
 
                     <div className="flex items-center justify-between gap-3 text-xs text-muted">

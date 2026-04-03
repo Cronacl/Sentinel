@@ -3,6 +3,7 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  nativeImage,
   nativeTheme,
   session,
   shell,
@@ -45,6 +46,8 @@ let isQuitting = false;
 let resolvedTheme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
 const terminalSessions = new Map();
 const WINDOWS_TITLE_BAR_HEIGHT = 32;
+let systemFontFamiliesCache = null;
+let systemFontFamiliesPromise = null;
 const desktopUpdater = createDesktopUpdaterController({
   appVersion: () => app.getVersion(),
   backgroundUpdatesEnabled: false,
@@ -54,6 +57,188 @@ const desktopUpdater = createDesktopUpdaterController({
   platform: process.platform,
   updater: autoUpdater,
 });
+
+function normalizeFontFamilies(fontFamilies) {
+  const seen = new Set();
+
+  return fontFamilies
+    .map((fontFamily) => String(fontFamily ?? "").trim())
+    .filter((fontFamily) => fontFamily.length > 0)
+    .filter((fontFamily) => {
+      const key = fontFamily.toLocaleLowerCase();
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    })
+    .sort((left, right) =>
+      left.localeCompare(right, undefined, {
+        sensitivity: "base",
+      }),
+    );
+}
+
+function collectStringValuesByKey(value, expectedKey, bucket) {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectStringValuesByKey(item, expectedKey, bucket);
+    }
+
+    return;
+  }
+
+  if (!value || typeof value !== "object") {
+    return;
+  }
+
+  for (const [key, nestedValue] of Object.entries(value)) {
+    if (key === expectedKey && typeof nestedValue === "string") {
+      bucket.push(nestedValue);
+    }
+
+    collectStringValuesByKey(nestedValue, expectedKey, bucket);
+  }
+}
+
+function parseMacSystemProfilerFonts(output) {
+  try {
+    const parsed = JSON.parse(output);
+    const families = [];
+    const fallbackNames = [];
+
+    collectStringValuesByKey(parsed, "family", families);
+    collectStringValuesByKey(parsed, "_name", fallbackNames);
+
+    return normalizeFontFamilies(
+      families.length > 0 ? families : fallbackNames,
+    );
+  } catch (error) {
+    console.warn("Failed to parse macOS system font output", error);
+    return [];
+  }
+}
+
+function parseLinuxFontConfigFonts(output) {
+  return normalizeFontFamilies(
+    output
+      .split(/\r?\n/)
+      .flatMap((line) => line.split(","))
+      .map((fontFamily) => fontFamily.trim()),
+  );
+}
+
+function parseWindowsRegistryFonts(output) {
+  return normalizeFontFamilies(
+    output
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => line.replace(/\s+\((?:TrueType|OpenType)\)$/i, "")),
+  );
+}
+
+function runDesktopCommand(command, args, { timeoutMs = 30_000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      child.kill("SIGTERM");
+      reject(new Error(`Timed out running ${command}.`));
+    }, timeoutMs);
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on("error", (error) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timer);
+      reject(error);
+    });
+
+    child.on("close", (code) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timer);
+
+      if (code === 0) {
+        resolve(stdout);
+        return;
+      }
+
+      reject(new Error(stderr.trim() || `Command exited with code ${code}.`));
+    });
+  });
+}
+
+async function listSystemFontFamilies() {
+  if (systemFontFamiliesCache) {
+    return systemFontFamiliesCache;
+  }
+
+  if (systemFontFamiliesPromise) {
+    return systemFontFamiliesPromise;
+  }
+
+  systemFontFamiliesPromise = (async () => {
+    try {
+      let fontFamilies = [];
+
+      if (process.platform === "darwin") {
+        const output = await runDesktopCommand("system_profiler", [
+          "SPFontsDataType",
+          "-json",
+        ]);
+        fontFamilies = parseMacSystemProfilerFonts(output);
+      } else if (process.platform === "linux") {
+        const output = await runDesktopCommand("fc-list", [":", "family"]);
+        fontFamilies = parseLinuxFontConfigFonts(output);
+      } else if (process.platform === "win32") {
+        const output = await runDesktopCommand("powershell.exe", [
+          "-NoProfile",
+          "-Command",
+          "(Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts').PSObject.Properties | Select-Object -ExpandProperty Name",
+        ]);
+        fontFamilies = parseWindowsRegistryFonts(output);
+      }
+
+      systemFontFamiliesCache = fontFamilies.map((family) => ({ family }));
+      return systemFontFamiliesCache;
+    } catch (error) {
+      console.warn("Failed to list system fonts", error);
+      systemFontFamiliesCache = [];
+      return systemFontFamiliesCache;
+    } finally {
+      systemFontFamiliesPromise = null;
+    }
+  })();
+
+  return systemFontFamiliesPromise;
+}
 
 // GPU acceleration is required for smooth backdrop-blur, shadows, and animations.
 // Only disable if a specific driver issue is confirmed on a target platform.
@@ -169,15 +354,51 @@ function getWindowBackgroundColor(theme) {
 }
 
 function resolveWindowIconPath() {
-  if (process.platform !== "win32") {
-    return undefined;
-  }
-
   const candidates = app.isPackaged
-    ? [path.join(process.resourcesPath, "server", "public", "favicon.ico")]
-    : [path.resolve(__dirname, "..", "..", "public", "favicon.ico")];
+    ? process.platform === "win32"
+      ? [path.join(process.resourcesPath, "server", "public", "favicon.ico")]
+      : []
+    : process.platform === "darwin"
+      ? [path.resolve(__dirname, "..", "..", "assets", "icon-dev.icns")]
+      : [path.resolve(__dirname, "..", "..", "assets", "icon-dev.png")];
 
   return candidates.find((candidate) => existsSync(candidate));
+}
+
+async function applyDevAppIcon() {
+  if (app.isPackaged || process.platform !== "darwin") {
+    return;
+  }
+
+  const icnsPath = path.resolve(
+    __dirname,
+    "..",
+    "..",
+    "assets",
+    "icon-dev.icns",
+  );
+  if (existsSync(icnsPath)) {
+    const icnsIcon = nativeImage.createFromPath(icnsPath);
+    if (!icnsIcon.isEmpty()) {
+      app.dock?.setIcon(icnsIcon);
+      return;
+    }
+  }
+
+  const pngPath = path.resolve(__dirname, "..", "..", "assets", "icon-dev.png");
+  if (!existsSync(pngPath)) {
+    return;
+  }
+
+  const icon = nativeImage
+    .createFromPath(pngPath)
+    .resize({ height: 512, quality: "best", width: 512 });
+
+  if (icon.isEmpty()) {
+    return;
+  }
+
+  app.dock?.setIcon(icon);
 }
 
 function getTerminalShell() {
@@ -785,6 +1006,9 @@ async function runOpenCommand(command, args) {
 }
 
 function registerIpc() {
+  ipcMain.handle(DESKTOP_CHANNELS.APP_LIST_SYSTEM_FONTS, async () =>
+    listSystemFontFamilies(),
+  );
   ipcMain.handle(DESKTOP_CHANNELS.PICK_DIRECTORY, async () => {
     const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
       properties: ["openDirectory"],
@@ -1022,6 +1246,7 @@ app.whenReady().then(async () => {
     app.setAppUserModelId("app.sentinel.desktop");
   }
 
+  await applyDevAppIcon();
   await prepareDevSession();
   createWindow();
   desktopUpdater.subscribe(sendDesktopUpdateState);
