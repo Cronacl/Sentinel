@@ -81,9 +81,16 @@ const generateImage = mock(async () => ({
   responses: [],
   warnings: [],
 }));
+const experimental_generateVideo = mock(async () => ({
+  providerMetadata: {},
+  responses: [],
+  videos: [],
+  warnings: [],
+}));
 const createGateway = mock(() => ({
   imageModel: () => ({}),
 }));
+const validateUIMessages = mock(async ({ messages }) => messages);
 
 class MockToolLoopAgent {
   constructor(config) {
@@ -94,12 +101,14 @@ class MockToolLoopAgent {
 mock.module("ai", () => ({
   Output,
   createGateway,
+  experimental_generateVideo,
   generateImage,
   generateText,
   hasToolCall,
   stepCountIs,
   tool,
   ToolLoopAgent: MockToolLoopAgent,
+  validateUIMessages,
 }));
 
 mock.module("server-only", () => ({}));
@@ -110,6 +119,7 @@ mock.module("@/lib/ai/providers/resolver", () => ({
 }));
 
 mock.module("@/lib/ai/providers/models", () => ({
+  REASONING_EFFORTS: ["minimal", "low", "medium", "high"],
   getReasoningProviderOptions: getReasoningProviderOptionsMock,
   toCompositeModelId: (provider: string, model: string) =>
     `${provider}:${model}`,
