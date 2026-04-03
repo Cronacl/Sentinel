@@ -164,6 +164,8 @@ The app runs at `http://localhost:3232`.
 bun run build:desktop:mac
 ```
 
+This produces both `arm64` and `x64` DMG artifacts. For a single-architecture package, use `bun run build:desktop:mac:arm64` or `bun run build:desktop:mac:x64`.
+
 For signed macOS builds, see [`docs/macos-signing.md`](docs/macos-signing.md).
 
 ### Windows

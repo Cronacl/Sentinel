@@ -17,6 +17,7 @@ import {
   imageGenerationProviderSettings,
   modelPreferences,
   providerCredentials,
+  videoGenerationProviderSettings,
 } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
@@ -154,6 +155,15 @@ export const providersRouter = createTRPCRouter({
             and(
               eq(imageGenerationProviderSettings.userId, userId),
               eq(imageGenerationProviderSettings.provider, input.provider),
+            ),
+          )
+          .run();
+
+        tx.delete(videoGenerationProviderSettings)
+          .where(
+            and(
+              eq(videoGenerationProviderSettings.userId, userId),
+              eq(videoGenerationProviderSettings.provider, input.provider),
             ),
           )
           .run();

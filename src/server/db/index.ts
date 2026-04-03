@@ -579,6 +579,39 @@ export function ensureTables(
     sql`CREATE INDEX IF NOT EXISTS "search_setting_user_id_idx" ON "search_setting" ("user_id")`,
   );
 
+  db.run(sql`CREATE TABLE IF NOT EXISTS "video_generation_setting" (
+    "id" text PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL,
+    "default_provider" text,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "video_generation_setting_user_unique" ON "video_generation_setting" ("user_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "video_generation_setting_user_id_idx" ON "video_generation_setting" ("user_id")`,
+  );
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS "video_generation_provider_setting" (
+    "id" text PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL,
+    "provider" text NOT NULL,
+    "model_id" text,
+    "is_custom" integer DEFAULT false NOT NULL,
+    "is_enabled" integer DEFAULT true NOT NULL,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "video_generation_provider_setting_user_provider_unique" ON "video_generation_provider_setting" ("user_id", "provider")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "video_generation_provider_setting_user_id_idx" ON "video_generation_provider_setting" ("user_id")`,
+  );
+
   db.run(sql`CREATE TABLE IF NOT EXISTS "memory_setting" (
     "id" text PRIMARY KEY NOT NULL,
     "user_id" text NOT NULL,

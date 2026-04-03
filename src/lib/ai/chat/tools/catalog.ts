@@ -133,6 +133,11 @@ export const TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     category: "web",
     label: "the generate_image tool",
   },
+  generate_video: {
+    capability: "to generate videos from text prompts or reference images",
+    category: "web",
+    label: "the generate_video tool",
+  },
   load_skill: {
     capability: "to load specialized skill instructions on demand",
     category: "skill",

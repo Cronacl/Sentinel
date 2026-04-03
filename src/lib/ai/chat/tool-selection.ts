@@ -93,6 +93,7 @@ function selectWebTools(activeTools: string[], availableTools: string[]) {
     "websearch",
     "webfetch",
     "generate_image",
+    "generate_video",
   ]);
 }
 

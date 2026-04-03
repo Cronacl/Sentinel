@@ -84,6 +84,7 @@ import {
   getSearchProviderRuntime,
   getSearchSettings,
   getThreadRuntimeBootstrap,
+  getVideoGenerationRuntime,
   getWorkspaceRootPath,
   getToolApprovalPolicies,
 } from "./workspace";
@@ -840,6 +841,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
       runtimeBootstrap,
       memoryRuntime,
       imageGenerationRuntime,
+      videoGenerationRuntime,
       mcpServers,
       searchSettings,
       searchProviders,
@@ -851,6 +853,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
       runtimeBootstrapPromise,
       getMemoryRuntimeState(run.request.userId),
       getImageGenerationRuntime(run.request.userId),
+      getVideoGenerationRuntime(run.request.userId),
       getMcpServerRuntime(run.request.userId),
       getSearchSettings(run.request.userId),
       getSearchProviderRuntime(run.request.userId),
@@ -1025,6 +1028,17 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
                 provider: entry.provider,
               })),
             },
+            videoGeneration: {
+              available:
+                Object.keys(videoGenerationRuntime.providers).length > 0,
+              defaultProvider: videoGenerationRuntime.defaultProvider,
+              enabledProviders: Object.values(
+                videoGenerationRuntime.providers,
+              ).map((entry) => ({
+                modelId: entry.modelId,
+                provider: entry.provider,
+              })),
+            },
             enabledMcpServers: mcpServers
               .filter((entry) => entry.isEnabled)
               .map((entry) => {
@@ -1175,6 +1189,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
               toolApprovalPolicies,
               toolsEnabled,
               userId: run.request.userId,
+              videoGenerationRuntime,
               webFetchSettings,
               workspaceId: run.request.workspaceId,
             },

@@ -22,6 +22,23 @@ function getArgValue(flag) {
   return process.argv[index + 1] ?? null;
 }
 
+function getArgValues(flag) {
+  const values = [];
+
+  for (let index = 0; index < process.argv.length; index += 1) {
+    if (process.argv[index] !== flag) {
+      continue;
+    }
+
+    const value = process.argv[index + 1];
+    if (value) {
+      values.push(value);
+    }
+  }
+
+  return values;
+}
+
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -65,6 +82,7 @@ if (!platform || !Object.hasOwn(PLATFORM_CONFIG, platform)) {
 
 const target =
   getArgValue("--target") ?? PLATFORM_CONFIG[platform].defaultTarget;
+const archs = [...new Set(getArgValues("--arch"))];
 
 const electronBuilderCli = path.join(
   process.cwd(),
@@ -79,6 +97,22 @@ const builderArgs = [
   "--publish",
   "never",
 ];
+
+for (const arch of archs) {
+  switch (arch) {
+    case "arm64":
+    case "armv7l":
+    case "ia32":
+    case "universal":
+    case "x64":
+      builderArgs.push(`--${arch}`);
+      break;
+    default:
+      throw new Error(
+        `Unsupported "--arch" value "${arch}". Expected one of: arm64, armv7l, ia32, universal, x64.`,
+      );
+  }
+}
 
 if (platform === "mac") {
   if (!hasMacSigningCredentials()) {

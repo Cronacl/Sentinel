@@ -84,7 +84,7 @@ jobs:
             echo "- Tag: \`${{ steps.resolve.outputs.release_tag }}\`"
             echo "- Commit: \`${{ steps.resolve.outputs.target_commitish }}\`"
             echo "- Mode: release"
-            echo "- Platforms: mac, windows, linux"
+            echo "- Platforms: mac (arm64 + x64), windows, linux"
           } >> "$GITHUB_STEP_SUMMARY"
 
   build:

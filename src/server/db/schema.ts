@@ -750,6 +750,82 @@ export const imageGenerationProviderSettingsRelations = relations(
   }),
 );
 
+export const videoGenerationSettings = sqliteTable(
+  "video_generation_setting",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    userId: text("user_id").notNull(),
+    defaultProvider: text("default_provider", {
+      enum: AI_PROVIDERS,
+    }),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("video_generation_setting_user_unique").on(table.userId),
+    index("video_generation_setting_user_id_idx").on(table.userId),
+  ],
+);
+
+export const videoGenerationSettingsRelations = relations(
+  videoGenerationSettings,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [videoGenerationSettings.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const videoGenerationProviderSettings = sqliteTable(
+  "video_generation_provider_setting",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    userId: text("user_id").notNull(),
+    provider: text("provider", { enum: AI_PROVIDERS }).notNull(),
+    modelId: text("model_id"),
+    isCustom: integer("is_custom", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    isEnabled: integer("is_enabled", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("video_generation_provider_setting_user_provider_unique").on(
+      table.userId,
+      table.provider,
+    ),
+    index("video_generation_provider_setting_user_id_idx").on(table.userId),
+  ],
+);
+
+export const videoGenerationProviderSettingsRelations = relations(
+  videoGenerationProviderSettings,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [videoGenerationProviderSettings.userId],
+      references: [users.id],
+    }),
+  }),
+);
+
 export const memorySettings = sqliteTable(
   "memory_setting",
   {

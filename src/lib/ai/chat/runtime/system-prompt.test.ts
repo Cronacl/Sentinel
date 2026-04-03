@@ -15,6 +15,11 @@ function createPromptContext(memoryPromptLines: string[] = []) {
       defaultProvider: null,
       enabledProviders: [],
     },
+    videoGeneration: {
+      available: false,
+      defaultProvider: null,
+      enabledProviders: [],
+    },
     enabledMcpServers: [],
     latestUserText: "Inspect the workspace and fix the issue.",
     latentToolSummary: {

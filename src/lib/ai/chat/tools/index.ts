@@ -14,6 +14,7 @@ import {
   editDescription,
   forgetMemoryDescription,
   generateImageDescription,
+  generateVideoDescription,
   gitDescription,
   globDescription,
   grepDescription,
@@ -136,6 +137,12 @@ import {
   generateImageOutputSchema,
   toGenerateImageModelOutput,
 } from "./generate-image";
+import {
+  executeGenerateVideo,
+  generateVideoInputSchema,
+  generateVideoOutputSchema,
+  toGenerateVideoModelOutput,
+} from "./generate-video";
 import {
   executeWebFetch,
   webFetchInputSchema,
@@ -621,7 +628,11 @@ function buildWebTools(options: ThreadAgentCallOptions) {
     imageGenerationRuntime,
     searchProviders,
     searchSettings,
+    sourceMessageId,
+    threadId,
     toolApprovalPolicies,
+    userId,
+    videoGenerationRuntime,
     webFetchSettings,
   } = options;
 
@@ -696,6 +707,31 @@ function buildWebTools(options: ThreadAgentCallOptions) {
                 abortSignal,
                 input,
                 runtime: { imageGeneration: imageGenerationRuntime },
+              }),
+          }),
+        }
+      : {}),
+    ...(Object.keys(videoGenerationRuntime.providers).length > 0
+      ? {
+          generate_video: tool({
+            description: generateVideoDescription,
+            inputSchema: generateVideoInputSchema,
+            needsApproval: () => toolApprovalPolicies.generate_video,
+            outputSchema: generateVideoOutputSchema,
+            toModelOutput: ({ output }) => ({
+              type: "json" as const,
+              value: toGenerateVideoModelOutput(output),
+            }),
+            execute: async (input, { abortSignal }) =>
+              executeGenerateVideo({
+                abortSignal,
+                input,
+                runtime: {
+                  sourceMessageId,
+                  threadId,
+                  userId,
+                  videoGeneration: videoGenerationRuntime,
+                },
               }),
           }),
         }

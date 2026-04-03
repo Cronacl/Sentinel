@@ -22,6 +22,7 @@ export const TOOL_APPROVAL_TOOL_NAMES = [
   "websearch",
   "webfetch",
   "generate_image",
+  "generate_video",
   "gmail_search",
   "gmail_get_email",
   "gmail_send",
@@ -561,6 +562,13 @@ export const TOOL_APPROVAL_METADATA: Record<
     label: "Generate image",
     riskSummary:
       "Sentinel can generate new images through configured remote AI providers immediately.",
+  },
+  generate_video: {
+    defaultRequireApproval: true,
+    description: "Generate new videos with configured remote providers.",
+    label: "Generate video",
+    riskSummary:
+      "Sentinel can generate new videos through configured remote AI providers immediately.",
   },
   gmail_search: {
     defaultRequireApproval: false,

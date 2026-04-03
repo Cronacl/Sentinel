@@ -62,12 +62,22 @@ export type ThreadPromptImageGeneration = {
   }>;
 };
 
+export type ThreadPromptVideoGeneration = {
+  available: boolean;
+  defaultProvider: AIProvider | null;
+  enabledProviders: Array<{
+    modelId: string;
+    provider: AIProvider;
+  }>;
+};
+
 export type ThreadPromptContext = {
   availableSkills: SkillMetadata[];
   allowedInspectionRoots: string[];
   allowedMutationRoot: string | null;
   enabledIntegrations: ThreadPromptIntegration[];
   imageGeneration: ThreadPromptImageGeneration;
+  videoGeneration: ThreadPromptVideoGeneration;
   enabledMcpServers: ThreadPromptMcpServer[];
   latestUserText: string | null;
   latentToolSummary: ThreadPromptLatentToolSummary;
@@ -129,6 +139,20 @@ export function buildThreadPromptContext(
       available: Boolean(input.imageGeneration?.available),
       defaultProvider: input.imageGeneration?.defaultProvider ?? null,
       enabledProviders: [...(input.imageGeneration?.enabledProviders ?? [])]
+        .filter(
+          (entry) =>
+            entry.provider.trim().length > 0 && entry.modelId.trim().length > 0,
+        )
+        .sort((left, right) =>
+          left.provider.localeCompare(right.provider, undefined, {
+            sensitivity: "base",
+          }),
+        ),
+    },
+    videoGeneration: {
+      available: Boolean(input.videoGeneration?.available),
+      defaultProvider: input.videoGeneration?.defaultProvider ?? null,
+      enabledProviders: [...(input.videoGeneration?.enabledProviders ?? [])]
         .filter(
           (entry) =>
             entry.provider.trim().length > 0 && entry.modelId.trim().length > 0,

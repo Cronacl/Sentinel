@@ -12,6 +12,11 @@ import {
   type ImageGenerationRuntime,
 } from "@/lib/ai/providers/images";
 import {
+  buildVideoGenerationProviderEntries,
+  buildVideoGenerationRuntime,
+  type VideoGenerationRuntime,
+} from "@/lib/ai/providers/videos";
+import {
   buildMcpServerRuntimeEntries,
   type McpServerRuntimeEntry,
 } from "@/lib/mcp/runtime";
@@ -23,6 +28,10 @@ import {
   normalizeImageGenerationSettings,
   type ImageGenerationSettings,
 } from "@/lib/image-generation";
+import {
+  normalizeVideoGenerationSettings,
+  type VideoGenerationSettings,
+} from "@/lib/video-generation";
 import { normalizeSearchSettings, type SearchSettings } from "@/lib/search";
 import {
   normalizeMemorySettings,
@@ -54,6 +63,8 @@ import {
   toolApprovalPolicies,
   threads,
   users,
+  videoGenerationProviderSettings,
+  videoGenerationSettings,
   workspaces,
 } from "@/server/db/schema";
 import { resolveAvailableWorkspaceRootPath } from "./workspace-path";
@@ -385,6 +396,54 @@ export async function getImageGenerationRuntime(
   });
 
   return buildImageGenerationRuntime({
+    providerEntries,
+    settings,
+  });
+}
+
+export async function getVideoGenerationSettings(
+  userId: string,
+): Promise<VideoGenerationSettings> {
+  const row = await db.query.videoGenerationSettings.findFirst({
+    where: eq(videoGenerationSettings.userId, userId),
+    columns: {
+      defaultProvider: true,
+    },
+  });
+
+  return normalizeVideoGenerationSettings(row ?? null);
+}
+
+export async function getVideoGenerationRuntime(
+  userId: string,
+): Promise<VideoGenerationRuntime> {
+  const [credentials, providerSettingRows, settings] = await Promise.all([
+    db.query.providerCredentials.findMany({
+      where: eq(providerCredentials.userId, userId),
+      columns: {
+        encryptedConfig: true,
+        isEnabled: true,
+        provider: true,
+      },
+    }),
+    db.query.videoGenerationProviderSettings.findMany({
+      where: eq(videoGenerationProviderSettings.userId, userId),
+      columns: {
+        isCustom: true,
+        isEnabled: true,
+        modelId: true,
+        provider: true,
+      },
+    }),
+    getVideoGenerationSettings(userId),
+  ]);
+
+  const providerEntries = buildVideoGenerationProviderEntries({
+    credentials,
+    providerSettings: providerSettingRows,
+  });
+
+  return buildVideoGenerationRuntime({
     providerEntries,
     settings,
   });

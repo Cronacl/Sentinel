@@ -96,6 +96,9 @@ function buildRuntimeSnapshot(
     promptContext.imageGeneration.available
       ? `Image generation: enabled via ${promptContext.imageGeneration.enabledProviders.map((entry) => `${entry.provider}:${entry.modelId}`).join(", ")}. Default provider: ${promptContext.imageGeneration.defaultProvider ?? "none"}.`
       : "Image generation: unavailable.",
+    promptContext.videoGeneration.available
+      ? `Video generation: enabled via ${promptContext.videoGeneration.enabledProviders.map((entry) => `${entry.provider}:${entry.modelId}`).join(", ")}. Default provider: ${promptContext.videoGeneration.defaultProvider ?? "none"}.`
+      : "Video generation: unavailable.",
     promptContext.webFetchSettings.batchEnabled
       ? `Webfetch batching: enabled (up to ${promptContext.webFetchSettings.batchLimit} URLs per call).`
       : "Webfetch batching: disabled.",

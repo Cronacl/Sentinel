@@ -19,6 +19,11 @@ function createPromptContext(overrides: Record<string, unknown> = {}) {
       defaultProvider: null,
       enabledProviders: [],
     },
+    videoGeneration: {
+      available: false,
+      defaultProvider: null,
+      enabledProviders: [],
+    },
     enabledMcpServers: [],
     latestUserText: "install zig and run the tests",
     latentToolSummary: {
@@ -89,6 +94,7 @@ describe("tool selection baselines", () => {
     "websearch",
     "webfetch",
     "generate_image",
+    "generate_video",
     "search_memory",
   ];
 
@@ -122,6 +128,7 @@ describe("tool selection baselines", () => {
         "websearch",
         "webfetch",
         "generate_image",
+        "generate_video",
       ]),
     );
   });
@@ -149,6 +156,7 @@ describe("tool selection baselines", () => {
         "websearch",
         "webfetch",
         "generate_image",
+        "generate_video",
       ]),
     );
   });
@@ -174,6 +182,7 @@ describe("tool selection baselines", () => {
         "websearch",
         "webfetch",
         "generate_image",
+        "generate_video",
       ]),
     );
   });

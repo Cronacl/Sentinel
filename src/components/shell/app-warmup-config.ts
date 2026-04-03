@@ -15,6 +15,7 @@ export const STATIC_APP_WARMUP_ROUTES = [
   "/settings/providers",
   "/settings/search",
   "/settings/security",
+  "/settings/videos",
   "/settings/approvals",
 ] as const;
 

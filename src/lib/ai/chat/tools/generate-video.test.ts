@@ -1,0 +1,299 @@
+import { afterEach, describe, expect, it, mock } from "bun:test";
+
+mock.module("server-only", () => ({}));
+
+const generateVideoMock = mock(
+  async ({
+    model,
+    prompt,
+  }: {
+    model: { modelId: string };
+    prompt: string | { image: Uint8Array; text: string };
+  }) => {
+    if (model.modelId === "broken-model") {
+      throw new Error("Provider failed");
+    }
+
+    return {
+      providerMetadata: {
+        provider: {
+          quality: "high",
+        },
+      },
+      responses: [
+        {
+          modelId: model.modelId,
+          timestamp: new Date("2026-04-03T12:00:00.000Z"),
+        },
+      ],
+      videos: [
+        {
+          mediaType: "video/mp4",
+          uint8Array:
+            typeof prompt === "string"
+              ? Uint8Array.from([1, 2, 3])
+              : Uint8Array.from([prompt.image.length, 9, 9]),
+        },
+      ],
+      warnings: [{ details: "seed ignored", type: "unsupported-setting" }],
+    };
+  },
+);
+
+const writeGeneratedMediaArtifactMock = mock(
+  async ({
+    targetId,
+    threadId,
+    userId,
+  }: {
+    mediaType: string;
+    targetId: string;
+    threadId: string;
+    userId: string;
+  }) => ({
+    absolutePath: `/tmp/${targetId}.mp4`,
+    artifactPath: `${userId}/${threadId}/${targetId}.mp4`,
+  }),
+);
+
+const loadThreadMessagesMock = mock(async () => []);
+
+mock.module("ai", () => ({
+  experimental_generateVideo: generateVideoMock,
+}));
+
+mock.module("@/lib/ai/providers/factory", () => ({
+  createProviderInstance: mock((_provider: string, _config: unknown) => ({
+    videoModel: (modelId: string) => ({ modelId }),
+  })),
+}));
+
+mock.module("@/lib/generated-media", () => ({
+  writeGeneratedMediaArtifact: writeGeneratedMediaArtifactMock,
+}));
+
+mock.module("@/lib/ai/chat/persistence", () => ({
+  loadThreadMessages: loadThreadMessagesMock,
+}));
+
+mock.module("@/lib/ai/messages/branches", () => ({
+  buildActiveThreadMessages: (records: Array<any>) =>
+    records.map((record) => ({
+      id: record.messageId,
+      metadata: {},
+      parts: record.parts,
+      role: record.role,
+    })),
+}));
+
+const { __internal, executeGenerateVideo, toGenerateVideoModelOutput } =
+  await import("./generate-video");
+
+afterEach(() => {
+  generateVideoMock.mockClear();
+  writeGeneratedMediaArtifactMock.mockClear();
+  loadThreadMessagesMock.mockReset();
+  mock.restore();
+});
+
+const runtime = {
+  sourceMessageId: "message-1",
+  threadId: "thread-1",
+  userId: "user-1",
+  videoGeneration: {
+    defaultProvider: "google_vertex" as const,
+    providers: {
+      google_vertex: {
+        config: { apiKey: "vertex-key" },
+        displayName: "Google Vertex",
+        isCustom: false,
+        modelId: "veo-3.1-fast-generate-preview",
+        provider: "google_vertex" as const,
+      },
+      xai: {
+        config: { apiKey: "xai-key" },
+        displayName: "xAI",
+        isCustom: false,
+        modelId: "broken-model",
+        provider: "xai" as const,
+      },
+    },
+  },
+};
+
+function toDataUrl(value: Buffer, mediaType: string) {
+  return `data:${mediaType};base64,${value.toString("base64")}`;
+}
+
+describe("executeGenerateVideo", () => {
+  it("generates videos for a single provider", async () => {
+    const result = await executeGenerateVideo({
+      input: {
+        count: 1,
+        mode: "single",
+        prompt: "a quiet camera push through a bookshop",
+      },
+      runtime,
+    });
+
+    expect(result.successCount).toBe(1);
+    expect(result.failureCount).toBe(0);
+    expect(result.targets[0]).toMatchObject({
+      modelId: "veo-3.1-fast-generate-preview",
+      provider: "google_vertex",
+      status: "success",
+    });
+  });
+
+  it("supports image-to-video using the current source message attachment", async () => {
+    loadThreadMessagesMock.mockResolvedValueOnce([
+      {
+        messageId: "message-1",
+        parts: [
+          {
+            filename: "reference.png",
+            mediaType: "image/png",
+            type: "file",
+            url: toDataUrl(Buffer.from("reference-image"), "image/png"),
+          },
+        ],
+        role: "user",
+      },
+    ]);
+
+    const result = await executeGenerateVideo({
+      input: {
+        count: 1,
+        mode: "single",
+        prompt: "animate this image into a slow cinematic move",
+        referenceImageFilename: "reference.png",
+      },
+      runtime,
+    });
+
+    expect(loadThreadMessagesMock).toHaveBeenCalledWith("thread-1");
+    expect(generateVideoMock).toHaveBeenCalled();
+    expect(result.successCount).toBe(1);
+  });
+
+  it("treats placeholder reference image values as absent", async () => {
+    const result = await executeGenerateVideo({
+      input: {
+        count: 1,
+        mode: "single",
+        prompt: "a short cinematic video of Socrates in Athens",
+        referenceImageFilename: "none" as any,
+      },
+      runtime,
+    });
+
+    expect(loadThreadMessagesMock).not.toHaveBeenCalled();
+    expect(generateVideoMock).toHaveBeenCalled();
+    expect(result.successCount).toBe(1);
+  });
+
+  it("ignores invented reference filenames when the source message has no image attachments", async () => {
+    loadThreadMessagesMock.mockResolvedValueOnce([
+      {
+        messageId: "message-1",
+        parts: [],
+        role: "user",
+      },
+    ]);
+
+    const result = await executeGenerateVideo({
+      input: {
+        count: 1,
+        mode: "single",
+        prompt: "a short cinematic video of Socrates in Athens",
+        referenceImageFilename: "reference.png",
+      },
+      runtime,
+    });
+
+    expect(loadThreadMessagesMock).toHaveBeenCalledWith("thread-1");
+    expect(generateVideoMock).toHaveBeenCalled();
+    expect(result.successCount).toBe(1);
+  });
+
+  it("supports multi-model fan-out with partial failures", async () => {
+    const result = await executeGenerateVideo({
+      input: {
+        count: 1,
+        mode: "multi_model",
+        prompt: "a bright aerial sweep over the coastline",
+        providers: ["google_vertex", "xai"],
+      },
+      runtime,
+    });
+
+    expect(result.successCount).toBe(1);
+    expect(result.failureCount).toBe(1);
+    expect(result.targets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provider: "google_vertex",
+          status: "success",
+        }),
+        expect.objectContaining({
+          error: "Provider failed",
+          provider: "xai",
+          status: "error",
+        }),
+      ]),
+    );
+  });
+
+  it("rejects invalid single-provider model overrides", async () => {
+    await expect(
+      executeGenerateVideo({
+        input: {
+          count: 1,
+          mode: "single",
+          modelId: "not-a-real-video-model",
+          prompt: "invalid model",
+          provider: "google_vertex",
+        },
+        runtime,
+      }),
+    ).rejects.toThrow(/not a valid video model override/i);
+  });
+
+  it("omits artifact paths from model output", () => {
+    const sanitized = toGenerateVideoModelOutput({
+      failureCount: 0,
+      mode: "single",
+      prompt: "test",
+      requestedCount: 1,
+      successCount: 1,
+      targets: [
+        {
+          modelId: "veo-3.1-fast-generate-preview",
+          provider: "google_vertex",
+          providerMetadataSummary: null,
+          responseModelId: "veo-3.1-fast-generate-preview",
+          status: "success",
+          videos: [
+            {
+              artifactPath: "user-1/thread-1/google_vertex.mp4",
+              mediaType: "video/mp4",
+            },
+          ],
+          warnings: [],
+        },
+      ],
+    });
+
+    expect(
+      (sanitized.targets[0] as { videos: Array<{ artifactPath: string }> })
+        .videos[0]?.artifactPath,
+    ).toBe(__internal.VIDEO_ARTIFACT_PATH_PLACEHOLDER);
+  });
+
+  it("normalizes nullish optional reference values in the schema", () => {
+    expect(__internal.normalizeOptionalInputString(" none ")).toBeUndefined();
+    expect(__internal.normalizeOptionalInputString("reference.png")).toBe(
+      "reference.png",
+    );
+  });
+});

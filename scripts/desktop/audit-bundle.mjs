@@ -155,25 +155,28 @@ function getAsarTopLevelEntries(paths) {
   return [...entries].sort();
 }
 
-function findInstallerFile(files, extension) {
-  return files.find(
+function findInstallerFiles(files, extension) {
+  return files.filter(
     (filePath) =>
       path.dirname(filePath) === distRoot && filePath.endsWith(extension),
   );
 }
 
-function findUnpackedApp(directories, platform) {
+function findUnpackedApps(directories, platform) {
   switch (platform) {
     case "mac":
-      return directories.find((directoryPath) =>
-        directoryPath.endsWith(".app"),
+      return directories.filter(
+        (directoryPath) =>
+          directoryPath.endsWith(".app") &&
+          path.basename(path.dirname(directoryPath)).startsWith("mac") &&
+          path.dirname(path.dirname(directoryPath)) === distRoot,
       );
     case "win":
-      return directories.find((directoryPath) =>
+      return directories.filter((directoryPath) =>
         path.basename(directoryPath).startsWith("win-unpacked"),
       );
     case "linux":
-      return directories.find((directoryPath) =>
+      return directories.filter((directoryPath) =>
         path.basename(directoryPath).startsWith("linux-unpacked"),
       );
     default:
@@ -183,116 +186,131 @@ function findUnpackedApp(directories, platform) {
 
 const platform = getArgValue("--platform") ?? inferPlatform();
 const { directories, files } = await findArtifacts(distRoot);
-const unpackedAppPath = findUnpackedApp(directories, platform);
+const unpackedAppPaths = findUnpackedApps(directories, platform);
 
-if (!unpackedAppPath) {
+if (unpackedAppPaths.length === 0) {
   throw new Error(
     `No unpacked app bundle was found for platform "${platform}".`,
   );
 }
 
-const installerPath =
+const installerPaths =
   platform === "mac"
-    ? findInstallerFile(files, ".dmg")
+    ? findInstallerFiles(files, ".dmg")
     : platform === "win"
-      ? findInstallerFile(files, ".exe")
-      : findInstallerFile(files, ".AppImage");
+      ? findInstallerFiles(files, ".exe")
+      : findInstallerFiles(files, ".AppImage");
 
-if (!installerPath) {
+if (installerPaths.length === 0) {
   throw new Error(
     `No installer artifact was found for platform "${platform}".`,
   );
 }
 
-const resourcesPath =
-  platform === "mac"
-    ? path.join(unpackedAppPath, "Contents", "Resources")
-    : path.join(unpackedAppPath, "resources");
-const appAsarPath = path.join(resourcesPath, "app.asar");
-const appAsarUnpackedPath = path.join(resourcesPath, "app.asar.unpacked");
-const shellNodePtyPath = path.join(resourcesPath, "node_modules", "node-pty");
-const serverPath = path.join(resourcesPath, "server");
-
-const appAsarEntries = listPackage(appAsarPath);
-const asarTopLevelEntries = getAsarTopLevelEntries(appAsarEntries);
-const unexpectedAsarEntries = asarTopLevelEntries.filter(
-  (entry) => !ALLOWED_ASAR_TOP_LEVEL.has(entry),
-);
-
-const unpackedFiles = (await pathExists(appAsarUnpackedPath))
-  ? await collectFiles(appAsarUnpackedPath)
-  : [];
-const denylistedUnpackedFiles = unpackedFiles.filter((filePath) =>
-  UNPACKED_DENYLIST.some((pattern) =>
-    normalizePathForMatch(filePath).includes(pattern),
-  ),
-);
-const shellNodePtyFiles = (await pathExists(shellNodePtyPath))
-  ? await collectFiles(shellNodePtyPath)
-  : [];
-const hasShellNodePtyEntrypoint = shellNodePtyFiles.some((filePath) =>
-  normalizePathForMatch(filePath).endsWith("/lib/index.js"),
-);
-const hasShellNodePtyBinary = shellNodePtyFiles.some((filePath) =>
-  normalizePathForMatch(filePath).endsWith("/pty.node"),
-);
 const requiresSpawnHelper = platform === "mac";
-const hasShellNodePtySpawnHelper =
-  !requiresSpawnHelper ||
-  shellNodePtyFiles.some((filePath) =>
-    normalizePathForMatch(filePath).endsWith("/spawn-helper"),
-  );
-
-const reportRows = [
-  ["app.asar", appAsarPath],
-  ["app.asar.unpacked", appAsarUnpackedPath],
-  ["shell node-pty", shellNodePtyPath],
-  ["server", serverPath],
-  ["unpacked app", unpackedAppPath],
-  ["installer", installerPath],
-];
-
-console.log("[desktop] bundle size audit");
-for (const [label, targetPath] of reportRows) {
-  const exists = await pathExists(targetPath);
-  const formattedSize = exists
-    ? formatBytes(await getSizeBytes(targetPath))
-    : "missing";
-  console.log(`  ${label.padEnd(18)} ${formattedSize}`);
-}
-console.log(
-  `  ${"app.asar top-level".padEnd(18)} ${asarTopLevelEntries.join(", ") || "(empty)"}`,
-);
-
 const failures = [];
 
-if (unexpectedAsarEntries.length > 0) {
-  failures.push(
-    `Unexpected top-level entries in app.asar: ${unexpectedAsarEntries.join(", ")}`,
+console.log("[desktop] bundle size audit");
+
+for (const unpackedAppPath of unpackedAppPaths) {
+  const resourcesPath =
+    platform === "mac"
+      ? path.join(unpackedAppPath, "Contents", "Resources")
+      : path.join(unpackedAppPath, "resources");
+  const appAsarPath = path.join(resourcesPath, "app.asar");
+  const appAsarUnpackedPath = path.join(resourcesPath, "app.asar.unpacked");
+  const shellNodePtyPath = path.join(resourcesPath, "node_modules", "node-pty");
+  const serverPath = path.join(resourcesPath, "server");
+
+  const appAsarEntries = listPackage(appAsarPath);
+  const asarTopLevelEntries = getAsarTopLevelEntries(appAsarEntries);
+  const unexpectedAsarEntries = asarTopLevelEntries.filter(
+    (entry) => !ALLOWED_ASAR_TOP_LEVEL.has(entry),
   );
+
+  const unpackedFiles = (await pathExists(appAsarUnpackedPath))
+    ? await collectFiles(appAsarUnpackedPath)
+    : [];
+  const denylistedUnpackedFiles = unpackedFiles.filter((filePath) =>
+    UNPACKED_DENYLIST.some((pattern) =>
+      normalizePathForMatch(filePath).includes(pattern),
+    ),
+  );
+  const shellNodePtyFiles = (await pathExists(shellNodePtyPath))
+    ? await collectFiles(shellNodePtyPath)
+    : [];
+  const hasShellNodePtyEntrypoint = shellNodePtyFiles.some((filePath) =>
+    normalizePathForMatch(filePath).endsWith("/lib/index.js"),
+  );
+  const hasShellNodePtyBinary = shellNodePtyFiles.some((filePath) =>
+    normalizePathForMatch(filePath).endsWith("/pty.node"),
+  );
+  const hasShellNodePtySpawnHelper =
+    !requiresSpawnHelper ||
+    shellNodePtyFiles.some((filePath) =>
+      normalizePathForMatch(filePath).endsWith("/spawn-helper"),
+    );
+
+  const reportRows = [
+    ["app.asar", appAsarPath],
+    ["app.asar.unpacked", appAsarUnpackedPath],
+    ["shell node-pty", shellNodePtyPath],
+    ["server", serverPath],
+    ["unpacked app", unpackedAppPath],
+  ];
+
+  console.log(
+    `  bundle             ${path.basename(path.dirname(unpackedAppPath))}`,
+  );
+  for (const [label, targetPath] of reportRows) {
+    const exists = await pathExists(targetPath);
+    const formattedSize = exists
+      ? formatBytes(await getSizeBytes(targetPath))
+      : "missing";
+    console.log(`  ${label.padEnd(18)} ${formattedSize}`);
+  }
+  console.log(
+    `  ${"app.asar top-level".padEnd(18)} ${asarTopLevelEntries.join(", ") || "(empty)"}`,
+  );
+
+  if (unexpectedAsarEntries.length > 0) {
+    failures.push(
+      `${unpackedAppPath}: unexpected top-level entries in app.asar: ${unexpectedAsarEntries.join(", ")}`,
+    );
+  }
+
+  if (denylistedUnpackedFiles.length > 0) {
+    failures.push(
+      `${unpackedAppPath}: unexpected shell-native payload in app.asar.unpacked:\n${denylistedUnpackedFiles.join("\n")}`,
+    );
+  }
+
+  if (!hasShellNodePtyEntrypoint) {
+    failures.push(
+      `${unpackedAppPath}: desktop shell dependency is missing node-pty/lib/index.js at ${shellNodePtyPath}.`,
+    );
+  }
+
+  if (!hasShellNodePtyBinary) {
+    failures.push(
+      `${unpackedAppPath}: desktop shell dependency is missing a packaged node-pty native binary at ${shellNodePtyPath}.`,
+    );
+  }
+
+  if (!hasShellNodePtySpawnHelper) {
+    failures.push(
+      `${unpackedAppPath}: desktop shell dependency is missing spawn-helper at ${shellNodePtyPath}.`,
+    );
+  }
 }
 
-if (denylistedUnpackedFiles.length > 0) {
-  failures.push(
-    `Unexpected shell-native payload in app.asar.unpacked:\n${denylistedUnpackedFiles.join("\n")}`,
-  );
-}
-
-if (!hasShellNodePtyEntrypoint) {
-  failures.push(
-    `Desktop shell dependency is missing node-pty/lib/index.js at ${shellNodePtyPath}.`,
-  );
-}
-
-if (!hasShellNodePtyBinary) {
-  failures.push(
-    `Desktop shell dependency is missing a packaged node-pty native binary at ${shellNodePtyPath}.`,
-  );
-}
-
-if (!hasShellNodePtySpawnHelper) {
-  failures.push(
-    `Desktop shell dependency is missing spawn-helper at ${shellNodePtyPath}.`,
+for (const installerPath of installerPaths) {
+  const installerLabel =
+    installerPaths.length === 1
+      ? "installer"
+      : `installer (${path.basename(installerPath)})`;
+  console.log(
+    `  ${installerLabel.padEnd(18)} ${formatBytes(await getSizeBytes(installerPath))}`,
   );
 }
 
