@@ -12,6 +12,8 @@ import {
   TimeField,
 } from "@heroui/react";
 import {
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
   Delete02Icon,
   PlayIcon,
   PauseIcon,
@@ -204,19 +206,27 @@ const DAY_OPTIONS: readonly SelectOption[] = [
 
 function DetailSkeleton() {
   return (
-    <div className="flex flex-col gap-6">
-      <section className="bg-surface rounded-3xl border border-border/50 p-4">
+    <div className="flex flex-col gap-5">
+      <div className="border-separator/20 bg-surface rounded-2xl border p-4">
         <Skeleton className="h-6 w-48 rounded-md" />
         <Skeleton className="mt-3 h-28 w-full rounded-xl" />
-      </section>
-      <section className="bg-surface rounded-3xl border border-border/50 p-4">
+      </div>
+      <div className="border-separator/20 bg-surface rounded-2xl border p-4">
         <Skeleton className="h-5 w-32 rounded-md" />
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {Array.from({ length: 4 }).map((_, index) => (
             <Skeleton className="h-16 w-full rounded-xl" key={index} />
           ))}
         </div>
-      </section>
+      </div>
+      <div className="border-separator/20 bg-surface rounded-2xl border p-4">
+        <Skeleton className="h-5 w-32 rounded-md" />
+        <div className="mt-3 space-y-1">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <Skeleton className="h-12 w-full rounded-xl" key={index} />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -550,18 +560,22 @@ export function AutomationDetailScreen({
   const isDirty = form.formState.isDirty;
   const isSaving = form.formState.isSubmitting || updateMutation.isPending;
 
+  const visibleRuns = useMemo(
+    () => (automation?.runs ?? []).filter((r) => !r.thread?.archivedAt),
+    [automation?.runs],
+  );
+
   return (
     <SettingsPageWrapper
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <AlertDialog>
-            <Button isPending={runNowMutation.isPending} size="sm">
-              <HugeiconsIcon
-                color="currentColor"
-                icon={Rocket01Icon}
-                size={16}
-                strokeWidth={1.5}
-              />
+            <Button
+              isPending={runNowMutation.isPending}
+              size="sm"
+              variant="primary"
+              className="h-7 px-2 rounded-[10px]"
+            >
               Run now
             </Button>
             <AlertDialog.Backdrop>
@@ -608,14 +622,8 @@ export function AutomationDetailScreen({
             <Button
               isPending={toggleMutation.isPending}
               size="sm"
-              variant="secondary"
+              className="h-7 px-2 rounded-[10px] bg-warning-soft text-warning-soft-foreground"
             >
-              <HugeiconsIcon
-                color="currentColor"
-                icon={isActive ? PauseIcon : PlayIcon}
-                size={16}
-                strokeWidth={1.5}
-              />
               {isActive ? "Pause" : "Resume"}
             </Button>
             <AlertDialog.Backdrop>
@@ -667,15 +675,16 @@ export function AutomationDetailScreen({
             <Button
               isPending={deleteMutation.isPending}
               size="sm"
-              variant="danger-soft"
+              variant="tertiary"
+              className="h-7 px-2 rounded-[10px] text-danger-soft-foreground bg-danger-soft"
+              isIconOnly
             >
               <HugeiconsIcon
                 color="currentColor"
                 icon={Delete02Icon}
-                size={16}
+                size={14}
                 strokeWidth={1.5}
               />
-              Delete
             </Button>
             <AlertDialog.Backdrop>
               <AlertDialog.Container>
@@ -720,21 +729,25 @@ export function AutomationDetailScreen({
         </div>
       }
       title={
-        <div>
+        <div className="flex items-center gap-2">
           {!leftSidebarOpen ? <SidebarToggle /> : null}
+          <Link
+            href="/automations"
+            className="text-muted hover:text-foreground transition-colors"
+          >
+            <HugeiconsIcon
+              color="currentColor"
+              icon={ArrowLeft01Icon}
+              size={20}
+              strokeWidth={1.5}
+            />
+          </Link>
           {automation?.title ?? "Automation details"}
         </div>
       }
-      subtitle={
-        <Link href="/automations">
-          <span className="text-sm text-muted underline hover:text-foreground">
-            Back to automations
-          </span>
-        </Link>
-      }
     >
       {automationQuery.error ? (
-        <p className="border-danger-soft-hover bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
+        <p className="border-danger-soft-hover bg-danger-soft text-danger-soft-foreground mb-4 rounded-2xl border px-3 py-2.5 text-xs">
           {automationQuery.error.message}
         </p>
       ) : null}
@@ -742,97 +755,151 @@ export function AutomationDetailScreen({
       {automationQuery.isPending && !automation ? (
         <DetailSkeleton />
       ) : !automation ? (
-        <section className="border-separator/20 bg-surface rounded-2xl border p-5">
+        <div className="border-separator/20 bg-surface rounded-2xl border p-4">
           <h2 className="text-foreground text-sm font-medium">
             Automation not found
           </h2>
           <p className="text-muted mt-1 text-sm">
             This automation is no longer available.
           </p>
-        </section>
+        </div>
       ) : (
         <Form
-          className="flex flex-col gap-6"
+          className="flex flex-col gap-5"
           onSubmit={form.handleSubmit(handleSave)}
         >
           {submitError ? (
-            <p className="border-danger-soft-hover bg-danger-soft text-danger-soft-foreground rounded-xl border px-3 py-2.5 text-xs">
+            <p className="border-danger-soft-hover bg-danger-soft text-danger-soft-foreground rounded-2xl border px-3 py-2.5 text-xs">
               {submitError}
             </p>
           ) : null}
 
-          <section className="bg-surface rounded-3xl border border-border/50 p-4">
-            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
-              <h2 className="text-foreground text-sm font-medium">
-                Automation
-              </h2>
-              <Chip color={statusTone} size="sm" variant="soft">
-                {automation.status === "active" ? "Active" : "Paused"}
-              </Chip>
-              <span
-                className="text-muted text-xs"
-                title={formatDateTime(automation.nextRunAt)}
-              >
-                Next run {formatRelative(automation.nextRunAt)}
-              </span>
-              {automation.lastRanAt ? (
+          {/* Status banner */}
+          <div className="border-separator/20 bg-surface flex items-center gap-2.5 rounded-2xl border p-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-separator bg-background text-foreground">
+              <HugeiconsIcon
+                color="currentColor"
+                icon={isActive ? Rocket01Icon : PauseIcon}
+                size={16}
+                strokeWidth={1.5}
+              />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <Chip color={statusTone} size="sm" variant="soft">
+                  {isActive ? "Active" : "Paused"}
+                </Chip>
+                <span className="text-muted text-xs truncate">
+                  {formatSchedule(automation)}
+                </span>
+              </div>
+              <div className="flex items-center gap-3 mt-0.5">
                 <span
                   className="text-muted text-xs"
-                  title={formatDateTime(automation.lastRanAt)}
+                  title={formatDateTime(automation.nextRunAt)}
                 >
-                  Last ran {formatRelative(automation.lastRanAt)}
+                  Next run {formatRelative(automation.nextRunAt)}
                 </span>
-              ) : null}
+                {automation.lastRanAt ? (
+                  <span
+                    className="text-muted text-xs"
+                    title={formatDateTime(automation.lastRanAt)}
+                  >
+                    Last ran {formatRelative(automation.lastRanAt)}
+                  </span>
+                ) : null}
+              </div>
             </div>
+          </div>
 
-            <div className="flex flex-col gap-5">
-              <ControlledTextField
-                control={form.control}
-                description="Visible name used in the automations list and run history."
-                inputProps={{ placeholder: "Performance audit" }}
-                label="Title"
-                name="title"
-                textFieldProps={{ isRequired: true }}
-              />
+          {/* Automation fields */}
+          <section>
+            <h2 className="text-foreground mb-3 px-2 text-sm font-medium">
+              Automation
+            </h2>
+            <div className="border-separator/20 bg-surface rounded-2xl border p-4">
+              <div className="flex flex-col gap-5">
+                <ControlledTextField
+                  control={form.control}
+                  description="Visible name used in the automations list and run history."
+                  inputProps={{ placeholder: "Performance audit" }}
+                  label="Title"
+                  name="title"
+                  textFieldProps={{ isRequired: true }}
+                />
 
-              <ControlledTextAreaField
-                control={form.control}
-                description="Main prompt the automation sends when it runs."
-                label="Prompt"
-                name="prompt"
-                textAreaProps={{
-                  placeholder:
-                    "Audit performance regressions and propose fixes.",
-                  rows: 5,
-                }}
-                textFieldProps={{ isRequired: true }}
-              />
+                <ControlledTextAreaField
+                  control={form.control}
+                  description="Main prompt the automation sends when it runs."
+                  label="Prompt"
+                  name="prompt"
+                  textAreaProps={{
+                    placeholder:
+                      "Audit performance regressions and propose fixes.",
+                    rows: 5,
+                  }}
+                  textFieldProps={{ isRequired: true }}
+                />
+              </div>
             </div>
           </section>
 
-          <section className="bg-surface rounded-3xl border border-border/50 p-4">
-            <h2 className="text-foreground mb-3 text-sm font-medium">
+          {/* Schedule */}
+          <section>
+            <h2 className="text-foreground mb-3 px-2 text-sm font-medium">
               Schedule
             </h2>
+            <div className="border-separator/20 bg-surface rounded-2xl border p-4">
+              <div className="flex flex-col gap-5">
+                <ControlledSelectField
+                  control={form.control}
+                  description="How often this automation should run."
+                  label="Frequency"
+                  name="scheduleType"
+                  options={SCHEDULE_OPTIONS}
+                />
 
-            <div className="flex flex-col gap-5">
-              <ControlledSelectField
-                control={form.control}
-                description="How often this automation should run."
-                label="Frequency"
-                name="scheduleType"
-                options={SCHEDULE_OPTIONS}
-              />
+                {scheduleType === "weekly" ? (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <ControlledSelectField
+                      control={form.control}
+                      description="Day of week to execute."
+                      label="Day"
+                      name="scheduleDayOfWeek"
+                      options={DAY_OPTIONS}
+                    />
+                    <Controller
+                      control={form.control}
+                      name="scheduleTime"
+                      render={({ field }) => (
+                        <TimeField
+                          hourCycle={24}
+                          granularity="minute"
+                          value={parseTimeString(field.value)}
+                          onChange={(val) =>
+                            field.onChange(
+                              val
+                                ? `${String(val.hour).padStart(2, "0")}:${String(val.minute).padStart(2, "0")}`
+                                : "",
+                            )
+                          }
+                        >
+                          <Label>Time</Label>
+                          <TimeField.Group>
+                            <TimeField.Input>
+                              {(segment) => (
+                                <TimeField.Segment segment={segment} />
+                              )}
+                            </TimeField.Input>
+                          </TimeField.Group>
+                          <Description>24-hour format.</Description>
+                        </TimeField>
+                      )}
+                    />
+                  </div>
+                ) : null}
 
-              {scheduleType === "weekly" ? (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <ControlledSelectField
-                    control={form.control}
-                    description="Day of week to execute."
-                    label="Day"
-                    name="scheduleDayOfWeek"
-                    options={DAY_OPTIONS}
-                  />
+                {(scheduleType === "daily" || scheduleType === "weekdays") && (
                   <Controller
                     control={form.control}
                     name="scheduleTime"
@@ -861,100 +928,75 @@ export function AutomationDetailScreen({
                       </TimeField>
                     )}
                   />
-                </div>
-              ) : null}
+                )}
 
-              {(scheduleType === "daily" || scheduleType === "weekdays") && (
-                <Controller
-                  control={form.control}
-                  name="scheduleTime"
-                  render={({ field }) => (
-                    <TimeField
-                      hourCycle={24}
-                      granularity="minute"
-                      value={parseTimeString(field.value)}
-                      onChange={(val) =>
-                        field.onChange(
-                          val
-                            ? `${String(val.hour).padStart(2, "0")}:${String(val.minute).padStart(2, "0")}`
-                            : "",
-                        )
-                      }
-                    >
-                      <Label>Time</Label>
-                      <TimeField.Group>
-                        <TimeField.Input>
-                          {(segment) => <TimeField.Segment segment={segment} />}
-                        </TimeField.Input>
-                      </TimeField.Group>
-                      <Description>24-hour format.</Description>
-                    </TimeField>
-                  )}
-                />
-              )}
-
-              {scheduleType === "custom" ? (
-                <ControlledTextField
-                  control={form.control}
-                  description="Cronbake cron expression."
-                  inputProps={{ placeholder: "0 0 9 * * *" }}
-                  label="Cron expression"
-                  name="scheduleCron"
-                />
-              ) : null}
+                {scheduleType === "custom" ? (
+                  <ControlledTextField
+                    control={form.control}
+                    description="Cronbake cron expression."
+                    inputProps={{ placeholder: "0 0 9 * * *" }}
+                    label="Cron expression"
+                    name="scheduleCron"
+                  />
+                ) : null}
+              </div>
             </div>
           </section>
 
-          <section className="bg-surface rounded-3xl border border-border/50 p-4">
-            <h2 className="text-foreground mb-3 text-sm font-medium">
+          {/* Configuration */}
+          <section>
+            <h2 className="text-foreground mb-3 px-2 text-sm font-medium">
               Configuration
             </h2>
+            <div className="border-separator/20 bg-surface rounded-2xl border p-4">
+              <div className="flex flex-col gap-5">
+                <ControlledSelectField
+                  control={form.control}
+                  description="Workspace where this automation should run."
+                  label="Project"
+                  name="workspaceId"
+                  options={workspaceOptions}
+                />
 
-            <div className="flex flex-col gap-5">
-              <ControlledSelectField
-                control={form.control}
-                description="Workspace where this automation should run."
-                label="Project"
-                name="workspaceId"
-                options={workspaceOptions}
-              />
+                <ControlledSelectField
+                  control={form.control}
+                  description="Choose whether this automation runs with Sentinel or Codex."
+                  label="Engine"
+                  name="chatEngine"
+                  options={engineOptions}
+                />
 
-              <ControlledSelectField
-                control={form.control}
-                description="Choose whether this automation runs with Sentinel or Codex."
-                label="Engine"
-                name="chatEngine"
-                options={engineOptions}
-              />
+                <ControlledSelectField
+                  control={form.control}
+                  description="Model used when this automation runs."
+                  label="Model"
+                  name="modelId"
+                  options={modelOptions}
+                />
 
-              <ControlledSelectField
-                control={form.control}
-                description="Model used when this automation runs."
-                label="Model"
-                name="modelId"
-                options={modelOptions}
-              />
-
-              <ControlledSelectField
-                control={form.control}
-                description="Reasoning effort applied to generated responses."
-                label="Reasoning"
-                name="reasoningEffort"
-                options={reasoningOptions}
-                selectProps={{
-                  isDisabled: reasoningOptions.length === 0,
-                }}
-              />
+                <ControlledSelectField
+                  control={form.control}
+                  description="Reasoning effort applied to generated responses."
+                  label="Reasoning"
+                  name="reasoningEffort"
+                  options={reasoningOptions}
+                  selectProps={{
+                    isDisabled: reasoningOptions.length === 0,
+                  }}
+                />
+              </div>
             </div>
           </section>
 
-          <div className="flex items-center justify-end gap-2">
+          {/* Save / Discard */}
+          <div className="flex items-center justify-end gap-1.5">
             <Button
               isDisabled={!isDirty || isSaving}
               onPress={() => form.reset(formDefaults ?? undefined)}
               size="sm"
               type="button"
-              variant="ghost"
+              variant="tertiary"
+              className="h-7 px-2 rounded-[10px]"
             >
               Discard
             </Button>
@@ -963,6 +1005,8 @@ export function AutomationDetailScreen({
               isPending={isSaving}
               size="sm"
               type="submit"
+              variant="primary"
+              className="h-7 px-2 rounded-[10px]"
             >
               {({ isPending }) => (
                 <>
@@ -973,90 +1017,94 @@ export function AutomationDetailScreen({
             </Button>
           </div>
 
-          <section className="rounded-2xl border p-1 border-border/30 bg-surface">
-            <h2 className="text-foreground px-3 pt-2.5 pb-1.5 text-sm font-medium">
+          {/* Previous runs */}
+          <section>
+            <h2 className="text-foreground mb-3 px-2 text-sm font-medium">
               Previous runs
             </h2>
-            {automation.runs.filter((r) => !r.thread?.archivedAt).length ? (
-              <table className="w-full text-left text-[11px]">
-                <thead>
-                  <tr className="border-b border-border/15 text-muted">
-                    <th className="px-3 py-1 font-normal">Status</th>
-                    <th className="px-3 py-1 font-normal">Started</th>
-                    <th className="w-0 px-3 py-1" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {automation.runs
-                    .filter((r) => !r.thread?.archivedAt)
-                    .map((run) => (
-                      <tr
-                        className="border-b border-border/10 last:border-b-0"
-                        key={run.id}
-                      >
-                        <td className="px-3 py-1">
-                          <Chip
-                            color={
-                              run.status === "completed"
-                                ? "success"
-                                : run.status === "failed"
-                                  ? "danger"
-                                  : "default"
-                            }
-                            size="sm"
-                            variant="soft"
-                          >
-                            {(run.status === "running" ||
-                              run.status === "pending") && (
-                              <Spinner
-                                color="current"
-                                size="sm"
-                                className="size-3"
-                              />
-                            )}
-                            {run.status}
-                          </Chip>
-                        </td>
-                        <td className="px-3 py-1 text-muted">
-                          {formatDateTime(run.startedAt)}
-                          {run.status === "running" && (
-                            <span className="ml-1.5 animate-pulse text-foreground/50">
-                              running...
-                            </span>
-                          )}
-                          {run.error ? (
-                            <span className="ml-2 text-danger-soft-foreground">
-                              {run.error}
-                            </span>
-                          ) : null}
-                        </td>
-                        <td className="px-3 py-1 text-right">
-                          {run.thread?.id ? (
-                            <Link href={`/thread/${run.thread.id}`} prefetch>
-                              <span className="cursor-pointer text-[11px] text-muted underline hover:text-foreground">
-                                Open
-                              </span>
-                            </Link>
-                          ) : null}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="text-muted px-3 pb-2.5 text-xs">No runs yet.</p>
-            )}
+            <div className="grid grid-cols-1 gap-1">
+              {visibleRuns.length ? (
+                visibleRuns.map((run) => (
+                  <div
+                    className="border-separator/20 bg-surface group flex items-center gap-2.5 rounded-2xl border p-2.5 transition-colors"
+                    key={run.id}
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-separator bg-background text-foreground">
+                      {run.status === "running" || run.status === "pending" ? (
+                        <Spinner color="current" size="sm" className="size-4" />
+                      ) : (
+                        <HugeiconsIcon
+                          color="currentColor"
+                          icon={
+                            run.status === "completed"
+                              ? Rocket01Icon
+                              : PauseIcon
+                          }
+                          size={16}
+                          strokeWidth={1.5}
+                        />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Chip
+                          color={
+                            run.status === "completed"
+                              ? "success"
+                              : run.status === "failed"
+                                ? "danger"
+                                : "default"
+                          }
+                          size="sm"
+                          variant="soft"
+                        >
+                          {run.status}
+                        </Chip>
+                        {run.status === "running" && (
+                          <span className="animate-pulse text-xs text-foreground/50">
+                            running...
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-muted mt-0.5 truncate text-xs">
+                        {formatDateTime(run.startedAt)}
+                        {run.error ? (
+                          <span className="ml-2 text-danger-soft-foreground">
+                            {run.error}
+                          </span>
+                        ) : null}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center">
+                      {run.thread?.id ? (
+                        <Link href={`/thread/${run.thread.id}`} prefetch>
+                          <div className="text-muted transition-colors group-hover:text-foreground">
+                            <HugeiconsIcon
+                              color="currentColor"
+                              icon={ArrowRight01Icon}
+                              size={16}
+                              strokeWidth={1.5}
+                            />
+                          </div>
+                        </Link>
+                      ) : null}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="border-separator/20 bg-surface rounded-2xl border p-4">
+                  <h2 className="text-foreground text-sm font-medium">
+                    No runs yet
+                  </h2>
+                  <p className="text-muted mt-1 text-sm">
+                    Runs will appear here once the automation has been
+                    triggered.
+                  </p>
+                </div>
+              )}
+            </div>
           </section>
         </Form>
-      )}
-
-      {(runNowMutation.isPending ||
-        toggleMutation.isPending ||
-        deleteMutation.isPending) && (
-        <div className="mt-4 flex items-center gap-2 text-xs text-muted">
-          <Spinner color="current" size="sm" />
-          Saving changes...
-        </div>
       )}
     </SettingsPageWrapper>
   );
