@@ -26,6 +26,7 @@ type SuggestionListProps = {
   clientRect?: (() => DOMRect | null) | null;
   command: (item: SuggestionItem) => void;
   items: SuggestionItem[];
+  title?: string;
 };
 
 function getIcon(icon: SuggestionItem["icon"]) {
@@ -42,7 +43,7 @@ function getIcon(icon: SuggestionItem["icon"]) {
 export const SuggestionList = forwardRef<
   SuggestionListRef,
   SuggestionListProps
->(function SuggestionList({ clientRect, command, items }, ref) {
+>(function SuggestionList({ clientRect, command, items, title }, ref) {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
@@ -103,6 +104,11 @@ export const SuggestionList = forwardRef<
 
   return createPortal(
     <div className="sentinel-suggestion-popup" style={style}>
+      {title ? (
+        <div className="px-3 pb-1 pt-2 text-[11px] font-medium text-muted">
+          {title}
+        </div>
+      ) : null}
       <ScrollShadow
         className="sentinel-suggestion-scroll"
         orientation="vertical"

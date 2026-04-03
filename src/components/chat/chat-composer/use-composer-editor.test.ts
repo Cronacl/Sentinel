@@ -1,0 +1,152 @@
+import { describe, expect, it } from "bun:test";
+
+import {
+  filterSkillsForEngine,
+  getSkillSuggestionTitle,
+} from "./use-composer-editor";
+
+describe("filterSkillsForEngine", () => {
+  const skills = [
+    {
+      description: "Agents fallback",
+      directory: "/tmp/agents/shared",
+      name: "shared",
+      scope: "workspace",
+      sourceKind: "agents",
+      target: "sentinel",
+    },
+    {
+      description: "Sentinel primary",
+      directory: "/tmp/sentinel/shared",
+      name: "shared",
+      scope: "workspace",
+      sourceKind: "sentinel",
+      target: "sentinel",
+    },
+    {
+      description: "Claude primary",
+      directory: "/tmp/claude/shared",
+      name: "shared",
+      scope: "workspace",
+      sourceKind: "claude",
+      target: "claude",
+    },
+    {
+      description: "Codex primary",
+      directory: "/tmp/codex/shared",
+      name: "shared",
+      scope: "global",
+      sourceKind: "codex",
+      target: "codex",
+    },
+    {
+      description: "Another sentinel skill",
+      directory: "/tmp/sentinel/other",
+      name: "other",
+      scope: "workspace",
+      sourceKind: "sentinel",
+      target: "sentinel",
+    },
+  ];
+
+  it("prefers Sentinel installs over agents for the Sentinel engine", () => {
+    expect(filterSkillsForEngine(skills, "sentinel")).toEqual([
+      expect.objectContaining({
+        name: "shared",
+        sourceKind: "sentinel",
+      }),
+      expect.objectContaining({
+        name: "other",
+        sourceKind: "sentinel",
+      }),
+    ]);
+  });
+
+  it("prefers Claude installs over agents fallback for the Claude engine", () => {
+    expect(filterSkillsForEngine(skills, "claude")).toEqual([
+      expect.objectContaining({
+        name: "shared",
+        sourceKind: "claude",
+        target: "claude",
+      }),
+    ]);
+  });
+
+  it("prefers Sentinel-managed metadata over external metadata for duplicate names", () => {
+    expect(
+      filterSkillsForEngine(
+        [
+          {
+            description: "External shared",
+            directory: "/tmp/external/shared",
+            installOrigin: "external",
+            isExternal: true,
+            name: "shared",
+            scope: "workspace",
+            sourceKind: "sentinel",
+            target: "sentinel",
+          },
+          {
+            description: "Managed shared",
+            directory: "/tmp/managed/shared",
+            installOrigin: "sentinel",
+            isExternal: false,
+            name: "shared",
+            scope: "global",
+            sourceKind: "sentinel",
+            target: "sentinel",
+          },
+        ],
+        "sentinel",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        description: "Managed shared",
+        installOrigin: "sentinel",
+      }),
+    ]);
+  });
+
+  it("keeps external-only skills available when no managed overlap exists", () => {
+    expect(
+      filterSkillsForEngine(
+        [
+          {
+            description: "External only",
+            directory: "/tmp/external/only",
+            installOrigin: "external",
+            isExternal: true,
+            name: "external-only",
+            scope: "workspace",
+            sourceKind: "sentinel",
+            target: "sentinel",
+          },
+        ],
+        "sentinel",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        installOrigin: "external",
+        name: "external-only",
+      }),
+    ]);
+  });
+
+  it("only returns Codex installs for the Codex engine", () => {
+    expect(filterSkillsForEngine(skills, "codex")).toEqual([
+      expect.objectContaining({
+        name: "shared",
+        sourceKind: "codex",
+        target: "codex",
+      }),
+    ]);
+  });
+});
+
+describe("getSkillSuggestionTitle", () => {
+  it("returns a visible title for each engine", () => {
+    expect(getSkillSuggestionTitle("sentinel")).toBe("Showing Sentinel skills");
+    expect(getSkillSuggestionTitle("claude")).toBe("Showing Claude skills");
+    expect(getSkillSuggestionTitle("codex")).toBe("Showing Codex skills");
+  });
+});

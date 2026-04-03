@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 const SKILL_FILENAME = "SKILL.md";
+const SENTINEL_INSTALL_METADATA_FILENAME = ".sentinel-install.json";
 const WATCH_DEBOUNCE_MS = 150;
 const WATCH_REFRESH_RETRY_COUNT = 4;
 const FILE_SAMPLE_LIMIT = 24;
@@ -23,15 +24,20 @@ export type SkillScope = (typeof SOURCE_PRECEDENCE)[number]["scope"];
 export type SkillSourceKind =
   | (typeof SOURCE_PRECEDENCE)[number]["sourceKind"]
   | typeof CODEX_SOURCE_KIND;
+export type SkillInstallOrigin = "external" | "sentinel";
+export type SkillTarget = "claude" | "codex" | "sentinel";
 
 export type SkillMetadata = {
   description: string;
   directory: string;
+  installOrigin: SkillInstallOrigin;
+  isExternal: boolean;
   name: string;
   preview: string;
   scope: SkillScope;
   skillFile: string;
   sourceKind: SkillSourceKind;
+  target: SkillTarget;
 };
 
 export type LoadedSkill = SkillMetadata & {
@@ -41,6 +47,7 @@ export type LoadedSkill = SkillMetadata & {
 
 type DiscoveredSkill = LoadedSkill & {
   normalizedName: string;
+  precedence: number;
   realSkillFile: string;
   shadowedByName: string | null;
 };
@@ -176,6 +183,43 @@ function buildConventionalRoots(
   }).filter((entry): entry is ConventionalSkillRoot => Boolean(entry));
 }
 
+function getTargetForSourceKind(sourceKind: SkillSourceKind): SkillTarget {
+  if (sourceKind === "codex") {
+    return "codex";
+  }
+
+  if (sourceKind === "claude") {
+    return "claude";
+  }
+
+  return "sentinel";
+}
+
+function getSourceKindSortRank(sourceKind: SkillSourceKind) {
+  switch (sourceKind) {
+    case "sentinel":
+      return 0;
+    case "agents":
+      return 1;
+    case "claude":
+      return 2;
+    case "codex":
+      return 3;
+    default:
+      return 99;
+  }
+}
+
+async function getInstallOrigin(
+  directory: string,
+): Promise<SkillInstallOrigin> {
+  const installMarkerPath = path.join(
+    directory,
+    SENTINEL_INSTALL_METADATA_FILENAME,
+  );
+  return (await pathExists(installMarkerPath)) ? "sentinel" : "external";
+}
+
 async function listSampleFiles(skillDirectory: string) {
   const files: string[] = [];
 
@@ -209,7 +253,10 @@ async function listSampleFiles(skillDirectory: string) {
         continue;
       }
 
-      if (relativePath === SKILL_FILENAME) {
+      if (
+        relativePath === SKILL_FILENAME ||
+        relativePath === SENTINEL_INSTALL_METADATA_FILENAME
+      ) {
         continue;
       }
 
@@ -238,17 +285,21 @@ async function loadSkillFromDirectory({
   }
 
   const parsed = parseSkillFrontmatter(content);
+  const installOrigin = await getInstallOrigin(directory);
 
   return {
     content: stripSkillFrontmatter(content),
     description: parsed.description,
     directory,
     files: await listSampleFiles(directory),
+    installOrigin,
+    isExternal: installOrigin === "external",
     name: parsed.name,
     preview: stripSkillFrontmatter(content).slice(0, 400),
     scope,
     skillFile,
     sourceKind,
+    target: getTargetForSourceKind(sourceKind),
   } satisfies LoadedSkill;
 }
 
@@ -271,33 +322,22 @@ async function discoverSkillsInRoot(root: ConventionalSkillRoot) {
     }
 
     const directory = path.join(root.containerDirectory, entry.name);
-    const skillFile = path.join(directory, SKILL_FILENAME);
-    const content = await readFile(skillFile, "utf8").catch(() => null);
+    const loaded = await loadSkillFromDirectory({
+      directory,
+      scope: root.scope,
+      sourceKind: root.sourceKind,
+    }).catch(() => null);
 
-    if (!content) {
-      continue;
-    }
-
-    let parsed: ReturnType<typeof parseSkillFrontmatter>;
-    try {
-      parsed = parseSkillFrontmatter(content);
-    } catch {
+    if (!loaded) {
       continue;
     }
 
     discovered.push({
-      content: stripSkillFrontmatter(content),
-      description: parsed.description,
-      directory,
-      files: await listSampleFiles(directory),
-      name: parsed.name,
-      normalizedName: normalizeSkillName(parsed.name),
-      preview: stripSkillFrontmatter(content).slice(0, 400),
-      realSkillFile: await safeRealpath(skillFile),
-      scope: root.scope,
+      ...loaded,
+      normalizedName: normalizeSkillName(loaded.name),
+      precedence: root.precedence,
+      realSkillFile: await safeRealpath(loaded.skillFile),
       shadowedByName: null,
-      skillFile,
-      sourceKind: root.sourceKind,
     });
   }
 
@@ -310,10 +350,14 @@ function createFingerprint(skills: DiscoveredSkill[]) {
       content: skill.content,
       description: skill.description,
       directory: skill.directory,
+      installOrigin: skill.installOrigin,
+      isExternal: skill.isExternal,
       name: skill.name,
+      precedence: skill.precedence,
       scope: skill.scope,
       skillFile: skill.skillFile,
       sourceKind: skill.sourceKind,
+      target: skill.target,
     })),
   );
 }
@@ -326,11 +370,14 @@ function toSkillSnapshot(
   const skills = effectiveSkills.map<SkillMetadata>((skill) => ({
     description: skill.description,
     directory: skill.directory,
+    installOrigin: skill.installOrigin,
+    isExternal: skill.isExternal,
     name: skill.name,
     preview: skill.content.slice(0, 400),
     scope: skill.scope,
     skillFile: skill.skillFile,
     sourceKind: skill.sourceKind,
+    target: skill.target,
   }));
   const fingerprint = createFingerprint(effectiveSkills);
   const revision =
@@ -372,22 +419,53 @@ async function discoverSkillState(
 
   const winners = new Map<string, DiscoveredSkill>();
 
+  const shouldReplaceWinner = (
+    current: DiscoveredSkill,
+    next: DiscoveredSkill,
+  ) => {
+    if (
+      current.installOrigin !== "sentinel" &&
+      next.installOrigin === "sentinel"
+    ) {
+      return true;
+    }
+
+    if (
+      current.installOrigin === next.installOrigin &&
+      next.precedence < current.precedence
+    ) {
+      return true;
+    }
+
+    return false;
+  };
+
   for (const skill of allDiscovered) {
-    const existing = winners.get(skill.normalizedName);
+    const winnerKey = `${skill.normalizedName}:${skill.sourceKind}`;
+    const existing = winners.get(winnerKey);
 
     if (!existing) {
-      winners.set(skill.normalizedName, skill);
+      winners.set(winnerKey, skill);
+      continue;
+    }
+
+    if (shouldReplaceWinner(existing, skill)) {
+      existing.shadowedByName = skill.name;
+      winners.set(winnerKey, skill);
       continue;
     }
 
     skill.shadowedByName = existing.name;
   }
 
-  const effectiveSkills = Array.from(winners.values()).sort((left, right) =>
-    left.name.localeCompare(right.name, undefined, {
-      numeric: true,
-      sensitivity: "base",
-    }),
+  const effectiveSkills = Array.from(winners.values()).sort(
+    (left, right) =>
+      left.name.localeCompare(right.name, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      }) ||
+      getSourceKindSortRank(left.sourceKind) -
+        getSourceKindSortRank(right.sourceKind),
   );
 
   return {
@@ -661,11 +739,14 @@ export async function discoverSkills({
   return effectiveSkills.map<SkillMetadata>((skill) => ({
     description: skill.description,
     directory: skill.directory,
+    installOrigin: skill.installOrigin,
+    isExternal: skill.isExternal,
     name: skill.name,
     preview: skill.content.slice(0, 400),
     scope: skill.scope,
     skillFile: skill.skillFile,
     sourceKind: skill.sourceKind,
+    target: skill.target,
   }));
 }
 
@@ -706,11 +787,14 @@ export async function discoverCodexSkills({
     skills.push({
       description: loaded.description,
       directory: loaded.directory,
+      installOrigin: loaded.installOrigin,
+      isExternal: loaded.isExternal,
       name: loaded.name,
       preview: loaded.preview,
       scope: loaded.scope,
       skillFile: loaded.skillFile,
       sourceKind: loaded.sourceKind,
+      target: loaded.target,
     });
   }
 
@@ -789,6 +873,7 @@ export async function loadSkillByName({
       ? new Set<SkillSourceKind>(["claude"])
       : new Set<SkillSourceKind>(["sentinel", "agents"]);
   const seenRealFiles = new Set<string>();
+  let bestMatch: LoadedSkill | null = null;
 
   for (const root of roots) {
     if (!allowedSourceKinds.has(root.sourceKind)) {
@@ -805,22 +890,38 @@ export async function loadSkillByName({
       seenRealFiles.add(skill.realSkillFile);
 
       if (skill.normalizedName === normalizedName) {
-        return {
+        const candidate = {
           content: skill.content,
           description: skill.description,
           directory: skill.directory,
           files: skill.files,
+          installOrigin: skill.installOrigin,
+          isExternal: skill.isExternal,
           name: skill.name,
           preview: skill.content.slice(0, 400),
           scope: skill.scope,
           skillFile: skill.skillFile,
           sourceKind: skill.sourceKind,
+          target: skill.target,
         } satisfies LoadedSkill;
+
+        if (!bestMatch) {
+          bestMatch = candidate;
+          continue;
+        }
+
+        if (
+          bestMatch.sourceKind === candidate.sourceKind &&
+          bestMatch.installOrigin !== "sentinel" &&
+          candidate.installOrigin === "sentinel"
+        ) {
+          bestMatch = candidate;
+        }
       }
     }
   }
 
-  return null;
+  return bestMatch;
 }
 
 export const __internal = {
@@ -839,6 +940,7 @@ export const __internal = {
   loadSkillFromDirectory,
   normalizeSkillName,
   parseSkillFrontmatter,
+  SENTINEL_INSTALL_METADATA_FILENAME,
   stripSkillFrontmatter,
   WATCH_REFRESH_RETRY_COUNT,
   WATCH_DEBOUNCE_MS,

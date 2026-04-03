@@ -23,30 +23,91 @@ import {
 type SkillListItem = {
   description: string;
   directory: string;
+  installOrigin?: "external" | "sentinel";
+  isExternal?: boolean;
   name: string;
   scope: string;
   sourceKind: string;
   target: string;
 };
 
-function filterSkillsForEngine(
+function getSkillEngineSourceRank(skill: SkillListItem, engine: ChatEngine) {
+  switch (engine) {
+    case "claude":
+      return skill.sourceKind === "claude" ? 0 : 1;
+    case "sentinel":
+      return skill.sourceKind === "sentinel" ? 0 : 1;
+    case "codex":
+      return 0;
+    default:
+      return 99;
+  }
+}
+
+function getSkillInstallOriginRank(skill: SkillListItem) {
+  return skill.installOrigin === "sentinel" ? 0 : 1;
+}
+
+export function getSkillSuggestionTitle(engine: ChatEngine) {
+  switch (engine) {
+    case "claude":
+      return "Showing Claude skills";
+    case "codex":
+      return "Showing Codex skills";
+    case "sentinel":
+      return "Showing Sentinel skills";
+    default:
+      return "Showing skills";
+  }
+}
+
+export function filterSkillsForEngine(
   skills: SkillListItem[],
   engine: ChatEngine,
 ): SkillListItem[] {
-  switch (engine) {
-    case "sentinel":
-      return skills.filter((s) => s.target === "sentinel");
-    case "codex":
-      return skills.filter((s) => s.target === "codex");
-    case "claude":
-      return skills.filter(
-        (s) =>
-          s.target === "claude" ||
-          (s.target === "sentinel" && s.sourceKind === "agents"),
-      );
-    default:
-      return skills;
+  const filtered = (() => {
+    switch (engine) {
+      case "sentinel":
+        return skills.filter((s) => s.target === "sentinel");
+      case "codex":
+        return skills.filter((s) => s.target === "codex");
+      case "claude":
+        return skills.filter(
+          (s) =>
+            s.target === "claude" ||
+            (s.target === "sentinel" && s.sourceKind === "agents"),
+        );
+      default:
+        return skills;
+    }
+  })();
+
+  const winners = new Map<string, SkillListItem>();
+
+  for (const skill of filtered) {
+    const key = skill.name.trim().toLowerCase();
+    const existing = winners.get(key);
+
+    if (!existing) {
+      winners.set(key, skill);
+      continue;
+    }
+
+    const skillSourceRank = getSkillEngineSourceRank(skill, engine);
+    const existingSourceRank = getSkillEngineSourceRank(existing, engine);
+    const skillInstallRank = getSkillInstallOriginRank(skill);
+    const existingInstallRank = getSkillInstallOriginRank(existing);
+
+    if (
+      skillSourceRank < existingSourceRank ||
+      (skillSourceRank === existingSourceRank &&
+        skillInstallRank < existingInstallRank)
+    ) {
+      winners.set(key, skill);
+    }
   }
+
+  return Array.from(winners.values());
 }
 
 function createSuggestionRenderer() {
@@ -78,6 +139,57 @@ function createSuggestionRenderer() {
           clientRect: props.clientRect,
           command: props.command,
           items: props.items,
+        });
+      },
+      onKeyDown: ({ event }: { event: KeyboardEvent }) => {
+        if (event.key === "Escape") {
+          renderer?.destroy();
+          renderer = null;
+          return true;
+        }
+        return renderer?.ref?.onKeyDown(event) ?? false;
+      },
+      onExit: () => {
+        renderer?.destroy();
+        renderer = null;
+      },
+    };
+  };
+}
+
+function createSkillSuggestionRenderer(selectedEngineRef: {
+  current: ChatEngine;
+}) {
+  return () => {
+    let renderer: ReactRenderer<SuggestionListRef> | null = null;
+
+    return {
+      onStart: (props: {
+        clientRect?: (() => DOMRect | null) | null;
+        command: (item: SuggestionItem) => void;
+        editor: Editor;
+        items: SuggestionItem[];
+      }) => {
+        renderer = new ReactRenderer(SuggestionList, {
+          editor: props.editor,
+          props: {
+            clientRect: props.clientRect,
+            command: props.command,
+            items: props.items,
+            title: getSkillSuggestionTitle(selectedEngineRef.current),
+          },
+        });
+      },
+      onUpdate: (props: {
+        clientRect?: (() => DOMRect | null) | null;
+        command: (item: SuggestionItem) => void;
+        items: SuggestionItem[];
+      }) => {
+        renderer?.updateProps({
+          clientRect: props.clientRect,
+          command: props.command,
+          items: props.items,
+          title: getSkillSuggestionTitle(selectedEngineRef.current),
         });
       },
       onKeyDown: ({ event }: { event: KeyboardEvent }) => {
@@ -138,7 +250,10 @@ export function useComposerEditor({
   activeWorkspaceIdRef.current = activeWorkspaceId;
 
   const pathSuggestionRender = useMemo(() => createSuggestionRenderer(), []);
-  const skillSuggestionRender = useMemo(() => createSuggestionRenderer(), []);
+  const skillSuggestionRender = useMemo(
+    () => createSkillSuggestionRenderer(selectedEngineRef),
+    [],
+  );
 
   const pathItems = useCallback(
     async ({ query }: { query: string }): Promise<SuggestionItem[]> => {

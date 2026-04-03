@@ -13,11 +13,14 @@ const getSkillSnapshot = mock(async ({ workspaceRoot, globalBase }) => ({
     {
       description: "Helpful skill",
       directory: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.sentinel/skills/example`,
+      installOrigin: "sentinel",
+      isExternal: false,
       name: "example",
       preview: "# Example",
       scope: workspaceRoot ? "workspace" : "global",
       skillFile: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.sentinel/skills/example/SKILL.md`,
       sourceKind: "sentinel",
+      target: "sentinel",
     },
   ],
   updatedAt: 123,
@@ -147,11 +150,14 @@ describe("skillsRouter", () => {
           {
             description: "Helpful skill",
             directory: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.claude/skills/example`,
+            installOrigin: "sentinel",
+            isExternal: false,
             name: "example",
             preview: "# Example",
             scope: workspaceRoot ? "workspace" : "global",
             skillFile: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.claude/skills/example/SKILL.md`,
             sourceKind: "claude",
+            target: "claude",
           },
         ],
         updatedAt: 123,
@@ -183,11 +189,14 @@ describe("skillsRouter", () => {
       {
         description: "Helpful skill",
         directory: "/tmp/codex-home/skills/example",
+        installOrigin: "sentinel",
+        isExternal: false,
         name: "example",
         preview: "# Example",
         scope: "global",
         skillFile: "/tmp/codex-home/skills/example/SKILL.md",
         sourceKind: "codex",
+        target: "codex",
       },
     ]);
 
@@ -223,11 +232,14 @@ describe("skillsRouter", () => {
           {
             description: "Helpful skill",
             directory: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.claude/skills/example`,
+            installOrigin: "sentinel",
+            isExternal: false,
             name: "example",
             preview: "# Example",
             scope: workspaceRoot ? "workspace" : "global",
             skillFile: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.claude/skills/example/SKILL.md`,
             sourceKind: "claude",
+            target: "claude",
           },
         ],
         updatedAt: 123,
@@ -249,6 +261,65 @@ describe("skillsRouter", () => {
           claude: true,
           codex: false,
           sentinel: false,
+        },
+        name: "example",
+      }),
+    ]);
+  });
+
+  it("keeps installed targets true across multiple local harnesses for the same skill", async () => {
+    getSkillSnapshot.mockImplementationOnce(
+      async ({ workspaceRoot, globalBase }) => ({
+        revision: 2,
+        skillRoots: [
+          `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.sentinel/skills/example`,
+          `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.claude/skills/example`,
+        ],
+        skills: [
+          {
+            description: "Helpful skill",
+            directory: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.sentinel/skills/example`,
+            installOrigin: "sentinel",
+            isExternal: false,
+            name: "example",
+            preview: "# Example",
+            scope: workspaceRoot ? "workspace" : "global",
+            skillFile: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.sentinel/skills/example/SKILL.md`,
+            sourceKind: "sentinel",
+            target: "sentinel",
+          },
+          {
+            description: "Helpful skill",
+            directory: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.claude/skills/example`,
+            installOrigin: "external",
+            isExternal: true,
+            name: "example",
+            preview: "# Example",
+            scope: workspaceRoot ? "workspace" : "global",
+            skillFile: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.claude/skills/example/SKILL.md`,
+            sourceKind: "claude",
+            target: "claude",
+          },
+        ],
+        updatedAt: 123,
+      }),
+    );
+
+    const result = await skillsRouter.registry({
+      ctx: {
+        user: {
+          skillsBasePath: "/tmp/custom-home",
+        },
+        workspace: null,
+      },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        installedTargets: {
+          claude: true,
+          codex: false,
+          sentinel: true,
         },
         name: "example",
       }),

@@ -9,11 +9,14 @@ export const loadSkillOutputSchema = z.object({
   description: z.string(),
   directory: z.string(),
   files: z.array(z.string()),
+  installOrigin: z.enum(["external", "sentinel"]),
+  isExternal: z.boolean(),
   name: z.string(),
   preview: z.string(),
   scope: z.enum(["global", "workspace"]),
   skillFile: z.string(),
   sourceKind: z.enum(["agents", "claude", "codex", "sentinel"]),
+  target: z.enum(["sentinel", "codex", "claude"]),
 });
 
 export type LoadSkillInput = z.infer<typeof loadSkillInputSchema>;

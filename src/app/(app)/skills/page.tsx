@@ -27,6 +27,7 @@ import {
   SparklesIcon,
   TestTube01Icon,
   WebDesign02Icon,
+  ZapIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import Link from "next/link";
@@ -74,6 +75,7 @@ type UnifiedSkill = {
 
 type ViewFilter = "all" | "installed" | "available";
 type SkillCategoryKey =
+  | "external"
   | "development"
   | "deployment"
   | "docs"
@@ -118,9 +120,11 @@ const SKILL_CATEGORY_ORDER: SkillCategoryKey[] = [
   "marketing",
   "installed",
   "other",
+  "external",
 ];
 
 const SKILL_CATEGORY_TITLES: Record<SkillCategoryKey, string> = {
+  external: "External",
   development: "Development",
   deployment: "Deployment",
   docs: "Docs & Data",
@@ -253,8 +257,19 @@ function buildUnifiedList(
     const existing = map.get(norm);
 
     if (existing) {
+      const hadManagedInstall = existing.installedSkills.some(
+        (installed) => installed.installOrigin === "sentinel",
+      );
       existing.installedTargets[skill.target as SkillInstallTarget] = true;
       existing.installedSkills.push(skill);
+      if (
+        !existing.registryEntry &&
+        !hadManagedInstall &&
+        skill.installOrigin === "sentinel"
+      ) {
+        existing.description = skill.description ?? existing.description;
+        existing.detailHref = getInstalledDetailHref(skill);
+      }
       if (!existing.detailHref) {
         existing.detailHref = getInstalledDetailHref(skill);
       }
@@ -293,7 +308,27 @@ function matchesUnified(item: UnifiedSkill, query: string) {
   return haystack.includes(q);
 }
 
+function hasExternalInstall(item: UnifiedSkill) {
+  return item.installedSkills.some((skill) => skill.isExternal);
+}
+
+function hasManagedInstall(item: UnifiedSkill) {
+  return item.installedSkills.some(
+    (skill) => skill.installOrigin === "sentinel",
+  );
+}
+
+function shouldTreatAsExternal(item: UnifiedSkill) {
+  return (
+    !item.registryEntry && !hasManagedInstall(item) && hasExternalInstall(item)
+  );
+}
+
 function getSkillCategory(item: UnifiedSkill): SkillCategoryKey {
+  if (shouldTreatAsExternal(item)) {
+    return "external";
+  }
+
   const normalized = item.name.trim().toLowerCase();
   const category = SKILL_CATEGORY_MAP[normalized];
 
@@ -376,7 +411,26 @@ const SKILL_ICON_MAP: Record<string, BrandIconEntry | HugeIconEntry> = {
   "social-content": { type: "huge", icon: ShareKnowledgeIcon },
 };
 
-function SkillIcon({ name, size = 20 }: { name: string; size?: number }) {
+function SkillIcon({
+  name,
+  size = 20,
+  isExternal = false,
+}: {
+  name: string;
+  size?: number;
+  isExternal?: boolean;
+}) {
+  if (isExternal) {
+    return (
+      <HugeiconsIcon
+        color="currentColor"
+        icon={ZapIcon}
+        size={size}
+        strokeWidth={1.5}
+      />
+    );
+  }
+
   const normalized = name.trim().toLowerCase();
   const entry = SKILL_ICON_MAP[normalized];
 
@@ -488,7 +542,11 @@ function SkillCell({
           >
             {/* Icon */}
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-separator bg-background text-foreground">
-              <SkillIcon name={item.name} size={16} />
+              <SkillIcon
+                isExternal={shouldTreatAsExternal(item)}
+                name={item.name}
+                size={16}
+              />
             </div>
             <div className="min-w-0 flex-1">
               <span className="text-foreground text-[13px] font-medium leading-tight line-clamp-1">
@@ -502,7 +560,11 @@ function SkillCell({
         ) : (
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-separator bg-background text-foreground">
-              <SkillIcon name={item.name} size={16} />
+              <SkillIcon
+                isExternal={shouldTreatAsExternal(item)}
+                name={item.name}
+                size={16}
+              />
             </div>
             <div className="min-w-0 flex-1">
               <span className="text-foreground text-[13px] font-medium leading-tight line-clamp-1">
