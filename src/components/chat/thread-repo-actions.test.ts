@@ -274,9 +274,9 @@ describe("thread repo action helpers", () => {
   it("formats GitHub validation payloads into readable text", () => {
     expect(
       formatRepoActionErrorMessage(
-        'Validation Failed: {"resource":"PullRequest","code":"custom","message":"A pull request already exists for chaqchase:feat/new."} - https://docs.github.com/rest/pulls/pulls#create-a-pull-request',
+        'Validation Failed: {"resource":"PullRequest","code":"custom","message":"A pull request already exists for Cronacl:feat/new."} - https://docs.github.com/rest/pulls/pulls#create-a-pull-request',
       ),
-    ).toBe("A pull request already exists for chaqchase:feat/new.");
+    ).toBe("A pull request already exists for Cronacl:feat/new.");
   });
 
   it("strips GitHub docs links from plain error messages", () => {

@@ -84,12 +84,12 @@ describe("desktop update formatting helpers", () => {
         createState({
           availableVersion: "1.1.0",
           releasePageUrl:
-            "https://github.com/chaqchase/Sentinel/releases/tag/v1.1.0",
+            "https://github.com/Cronacl/Sentinel/releases/tag/v1.1.0",
         }),
       ),
-    ).toBe("https://github.com/chaqchase/Sentinel/releases/tag/v1.1.0");
+    ).toBe("https://github.com/Cronacl/Sentinel/releases/tag/v1.1.0");
     expect(getUpdateReleaseUrl(createState())).toBe(
-      "https://github.com/chaqchase/Sentinel/releases",
+      "https://github.com/Cronacl/Sentinel/releases",
     );
   });
 

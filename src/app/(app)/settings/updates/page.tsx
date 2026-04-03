@@ -62,7 +62,7 @@ export default function UpdatesSettingsPage() {
     () =>
       state
         ? getUpdateReleaseUrl(state)
-        : "https://github.com/chaqchase/Sentinel/releases",
+        : "https://github.com/Cronacl/Sentinel/releases",
     [state],
   );
 
