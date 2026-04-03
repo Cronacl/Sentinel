@@ -7,6 +7,7 @@ mock.module("server-only", () => ({}));
 
 import {
   __internal,
+  discoverCodexSkills,
   discoverSkills,
   getSkillSnapshot,
   loadSkillByName,
@@ -21,12 +22,14 @@ async function writeSkill({
   container,
   content = "# Skill\n\nRun the workflow.\n",
   description = "Helpful skill",
+  managedBySentinel = false,
   name,
 }: {
   baseDirectory: string;
   container: string;
   content?: string;
   description?: string;
+  managedBySentinel?: boolean;
   name: string;
 }) {
   const skillDirectory = path.join(baseDirectory, container, name);
@@ -35,6 +38,13 @@ async function writeSkill({
     path.join(skillDirectory, "SKILL.md"),
     `---\nname: ${name}\ndescription: ${description}\n---\n\n${content}`,
   );
+
+  if (managedBySentinel) {
+    await writeFile(
+      path.join(skillDirectory, __internal.SENTINEL_INSTALL_METADATA_FILENAME),
+      JSON.stringify({ installedBy: "sentinel" }),
+    );
+  }
 
   return skillDirectory;
 }
@@ -90,6 +100,7 @@ describe("skills", () => {
     await writeSkill({
       baseDirectory: workspaceRoot,
       container: ".agents/skills",
+      managedBySentinel: true,
       name: "workspace-agent",
     });
     await writeSkill({
@@ -104,6 +115,8 @@ describe("skills", () => {
       "global-claude",
       "workspace-agent",
     ]);
+    expect(skills[0]?.installOrigin).toBe("external");
+    expect(skills[1]?.installOrigin).toBe("sentinel");
     expect(skills[0]?.scope).toBe("global");
     expect(skills[1]?.scope).toBe("workspace");
   });
@@ -174,7 +187,7 @@ describe("skills", () => {
     });
   });
 
-  it("deduplicates by precedence and ignores exact duplicate filesystem entries", async () => {
+  it("keeps one effective install per source kind and ignores exact duplicate filesystem entries", async () => {
     await writeSkill({
       baseDirectory: homeDirectory,
       container: ".agents/skills",
@@ -194,12 +207,136 @@ describe("skills", () => {
 
     const skills = await discoverSkills({ workspaceRoot });
 
-    expect(skills).toHaveLength(1);
+    expect(skills).toHaveLength(2);
     expect(skills[0]).toMatchObject({
       description: "Workspace sentinel version",
       directory: winningDirectory,
       name: "shared-skill",
       scope: "workspace",
+      sourceKind: "sentinel",
+    });
+    expect(skills[1]).toMatchObject({
+      description: "Global version",
+      name: "shared-skill",
+      scope: "global",
+      sourceKind: "agents",
+    });
+  });
+
+  it("counts the same skill independently across sentinel, claude, and codex installs", async () => {
+    await writeSkill({
+      baseDirectory: workspaceRoot,
+      container: ".sentinel/skills",
+      managedBySentinel: true,
+      name: "triple-skill",
+    });
+    await writeSkill({
+      baseDirectory: workspaceRoot,
+      container: ".claude/skills",
+      managedBySentinel: true,
+      name: "triple-skill",
+    });
+    await writeSkill({
+      baseDirectory: homeDirectory,
+      container: ".codex/skills",
+      managedBySentinel: true,
+      name: "triple-skill",
+    });
+
+    const localSkills = await discoverSkills({ workspaceRoot });
+    const codexSkills = await discoverCodexSkills({
+      globalBase: path.join(homeDirectory, ".codex"),
+    });
+
+    expect(
+      localSkills
+        .filter((skill) => skill.name === "triple-skill")
+        .map((skill) => `${skill.sourceKind}:${skill.target}`),
+    ).toEqual(["sentinel:sentinel", "claude:claude"]);
+    expect(codexSkills).toContainEqual(
+      expect.objectContaining({
+        name: "triple-skill",
+        sourceKind: "codex",
+        target: "codex",
+      }),
+    );
+  });
+
+  it("marks Sentinel-managed skills and omits the metadata marker from sampled files", async () => {
+    const managedSkillDirectory = await writeSkill({
+      baseDirectory: homeDirectory,
+      container: ".claude/skills",
+      managedBySentinel: true,
+      name: "managed-skill",
+    });
+    await writeFile(path.join(managedSkillDirectory, "notes.md"), "hello");
+
+    const managedSkill = await loadSkillByName({
+      name: "managed-skill",
+      target: "claude",
+      workspaceRoot,
+    });
+
+    expect(managedSkill).toMatchObject({
+      installOrigin: "sentinel",
+      isExternal: false,
+    });
+    expect(managedSkill?.files).toEqual(["notes.md"]);
+  });
+
+  it("surfaces skills without Sentinel metadata as external", async () => {
+    await writeSkill({
+      baseDirectory: workspaceRoot,
+      container: ".claude/skills",
+      name: "external-only-skill",
+    });
+
+    const skills = await discoverSkills({ workspaceRoot });
+
+    expect(skills).toContainEqual(
+      expect.objectContaining({
+        installOrigin: "external",
+        isExternal: true,
+        name: "external-only-skill",
+        target: "claude",
+      }),
+    );
+  });
+
+  it("prefers Sentinel-managed metadata over external metadata for the same source kind", async () => {
+    await writeSkill({
+      baseDirectory: workspaceRoot,
+      container: ".sentinel/skills",
+      description: "Workspace external version",
+      name: "same-source-skill",
+    });
+    await writeSkill({
+      baseDirectory: homeDirectory,
+      container: ".sentinel/skills",
+      description: "Global managed version",
+      managedBySentinel: true,
+      name: "same-source-skill",
+    });
+
+    const skills = await discoverSkills({ workspaceRoot });
+    const loaded = await loadSkillByName({
+      name: "same-source-skill",
+      target: "sentinel",
+      workspaceRoot,
+    });
+
+    expect(skills).toContainEqual(
+      expect.objectContaining({
+        description: "Global managed version",
+        installOrigin: "sentinel",
+        isExternal: false,
+        name: "same-source-skill",
+        sourceKind: "sentinel",
+      }),
+    );
+    expect(loaded).toMatchObject({
+      description: "Global managed version",
+      installOrigin: "sentinel",
       sourceKind: "sentinel",
     });
   });

@@ -182,6 +182,8 @@ export function ChatComposer({
     return data.skills.map((skill) => ({
       description: skill.description,
       directory: skill.directory,
+      installOrigin: skill.installOrigin,
+      isExternal: skill.isExternal,
       name: skill.name,
       scope: skill.scope,
       sourceKind: skill.sourceKind,

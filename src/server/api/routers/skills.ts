@@ -83,24 +83,9 @@ async function findCodexInstalledSkill(name: string) {
 
 async function buildCodexSkillList() {
   const codexHome = resolveCodexHome();
-  const skills = await discoverCodexSkills({
+  return await discoverCodexSkills({
     globalBase: codexHome,
   });
-
-  return skills.map((skill) => ({
-    ...skill,
-    target: "codex" as const,
-  }));
-}
-
-function mapLocalSkillTarget(
-  sourceKind: "agents" | "claude" | "codex" | "sentinel",
-) {
-  if (sourceKind === "codex") {
-    return "codex" as const;
-  }
-
-  return sourceKind === "claude" ? ("claude" as const) : ("sentinel" as const);
 }
 
 export const skillsRouter = createTRPCRouter({
@@ -128,13 +113,7 @@ export const skillsRouter = createTRPCRouter({
 
       return {
         ...localSnapshot,
-        skills: [
-          ...localSnapshot.skills.map((skill) => ({
-            ...skill,
-            target: mapLocalSkillTarget(skill.sourceKind),
-          })),
-          ...codexSkills,
-        ],
+        skills: [...localSnapshot.skills, ...codexSkills],
       };
     }),
 
@@ -176,12 +155,12 @@ export const skillsRouter = createTRPCRouter({
 
     const installedSentinelNames = new Set(
       snapshot.skills
-        .filter((skill) => mapLocalSkillTarget(skill.sourceKind) === "sentinel")
+        .filter((skill) => skill.target === "sentinel")
         .map((s) => s.name.trim().toLowerCase()),
     );
     const installedClaudeNames = new Set(
       snapshot.skills
-        .filter((skill) => mapLocalSkillTarget(skill.sourceKind) === "claude")
+        .filter((skill) => skill.target === "claude")
         .map((s) => s.name.trim().toLowerCase()),
     );
     const installedCodexNames = new Set(

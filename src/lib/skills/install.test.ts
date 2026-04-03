@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -72,5 +72,37 @@ describe("executeInstallSteps", () => {
     ).rejects.toThrow(
       `Directory at ${skillDirectory} already exists but does not contain a valid SKILL.md.`,
     );
+  });
+
+  it("writes Sentinel install metadata for new installs", async () => {
+    const root = await createTempRoot("sentinel-skill-install-");
+    tempRoots.push(root);
+
+    const result = await executeInstallSteps({
+      destRoot: root,
+      installSteps: [
+        `mkdir -p "${root}/.sentinel/skills/example"`,
+        `cat <<'EOF' > "${root}/.sentinel/skills/example/SKILL.md"
+---
+name: example
+description: Helpful skill
+---
+
+# Steps
+EOF`,
+      ],
+      name: "example",
+      target: "sentinel",
+    });
+
+    const metadata = await readFile(
+      path.join(result.directory, ".sentinel-install.json"),
+      "utf8",
+    );
+
+    expect(JSON.parse(metadata)).toMatchObject({
+      installedBy: "sentinel",
+      target: "sentinel",
+    });
   });
 });

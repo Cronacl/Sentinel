@@ -1,10 +1,11 @@
 import { execSync } from "node:child_process";
-import { readFile, rm, mkdir, stat } from "node:fs/promises";
+import { readFile, rm, mkdir, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 const DEST_PLACEHOLDER = "{{DEST}}";
 const SKILL_FILENAME = "SKILL.md";
+const SENTINEL_INSTALL_METADATA_FILENAME = ".sentinel-install.json";
 const SKILL_DIRECTORY_NAME_PATTERN = /^[a-z0-9][a-z0-9-_]*$/i;
 export type SkillInstallTarget = "sentinel" | "codex" | "claude";
 export type SkillInstallResult = {
@@ -86,6 +87,22 @@ function resolveSkillDestination(
   return { dest, skillsDir };
 }
 
+async function writeInstallMetadata(dest: string, target: SkillInstallTarget) {
+  const metadataPath = path.join(dest, SENTINEL_INSTALL_METADATA_FILENAME);
+  await writeFile(
+    metadataPath,
+    JSON.stringify(
+      {
+        installedAt: new Date().toISOString(),
+        installedBy: "sentinel",
+        target,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 export async function executeInstallSteps({
   name,
   installSteps,
@@ -141,6 +158,8 @@ export async function executeInstallSteps({
     await rm(dest, { recursive: true, force: true }).catch(() => {});
     throw validationError;
   }
+
+  await writeInstallMetadata(dest, target);
 
   return { directory: dest, name };
 }
