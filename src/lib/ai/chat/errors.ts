@@ -1,3 +1,5 @@
+import { getErrorMessage } from "@/lib/errors";
+
 export class InvalidThreadChatRequestError extends Error {
   constructor(message = "Missing required fields") {
     super(message);
@@ -13,8 +15,7 @@ export class ThreadChatConflictError extends Error {
 }
 
 export function createThreadChatErrorResponse(error: unknown) {
-  const message =
-    error instanceof Error ? error.message : "An unexpected error occurred";
+  const message = getErrorMessage(error, "An unexpected error occurred");
 
   if (error instanceof InvalidThreadChatRequestError) {
     return Response.json(

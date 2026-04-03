@@ -7,6 +7,7 @@ import {
 } from "ai";
 
 import { streamContext } from "@/lib/streams";
+import { getErrorMessage } from "@/lib/errors";
 import { createLogger } from "@/lib/logger";
 import {
   mergeThreadMessageMetadata,
@@ -618,6 +619,48 @@ function updatePendingAssistantStatusLabel(
   });
 }
 
+function emitPendingAssistantStatusLabel(
+  run: Pick<
+    BootstrappedThreadRun,
+    "eventChannel" | "placeholderMessage" | "request" | "runId"
+  >,
+  statusLabel: string | null,
+) {
+  if (run.placeholderMessage.metadata?.statusLabel === statusLabel) {
+    return;
+  }
+
+  const nextMessage = updatePendingAssistantStatusLabel(
+    run.request.threadId,
+    run.placeholderMessage,
+    statusLabel,
+  );
+  run.placeholderMessage = nextMessage;
+  run.eventChannel.emit({
+    message: nextMessage,
+    runId: run.runId,
+    type: "message.upsert",
+  });
+}
+
+function getInitialPendingStatusLabel(trigger: ThreadChatRequest["trigger"]) {
+  switch (trigger) {
+    case "retry-assistant-message":
+      return "Retrying response...";
+    case "regenerate-assistant-message":
+      return "Regenerating response...";
+    case "edit-user-message":
+      return "Updating response...";
+    case "submit-tool-approval":
+      return "Resuming after approval...";
+    case "submit-plan-answer":
+      return "Continuing with plan answers...";
+    case "submit-user-message":
+    default:
+      return "Preparing workspace...";
+  }
+}
+
 function resolveUserParentId(
   request: ThreadChatRequest,
   transcript: ThreadUIMessage[],
@@ -703,8 +746,7 @@ async function failThreadRun(
   >,
   error: unknown,
 ) {
-  const message =
-    error instanceof Error ? error.message : String(error ?? "Unknown error");
+  const message = getErrorMessage(error, "Unknown error");
 
   await clearThreadRepoCheckpointRun(run.runId);
   persist.clearActiveStream(run.request.threadId);
@@ -932,6 +974,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
             userId: run.request.userId,
             workspaceId: run.request.workspaceId,
           });
+          emitPendingAssistantStatusLabel(run, "Loading workspace context...");
           const [
             projectAwareness,
             skillSnapshot,
@@ -955,6 +998,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
             userId: run.request.userId,
             workspaceId: run.request.workspaceId,
           });
+          emitPendingAssistantStatusLabel(run, "Building prompt...");
 
           const promptContext = buildThreadPromptContext({
             allowedInspectionRoots: [
@@ -1043,17 +1087,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
               fixedWindowSize: contextCompactionSettings.fixedWindowSize,
               languageModel: resolvedModel.languageModel,
               onCompactionStart: async () => {
-                const compactingMessage = updatePendingAssistantStatusLabel(
-                  run.request.threadId,
-                  run.placeholderMessage,
-                  "Compacting context...",
-                );
-                run.placeholderMessage = compactingMessage;
-                eventChannel.emit({
-                  message: compactingMessage,
-                  runId: run.runId,
-                  type: "message.upsert",
-                });
+                emitPendingAssistantStatusLabel(run, "Compacting context...");
               },
               ...(resolvedModel.providerOptions
                 ? { providerOptions: resolvedModel.providerOptions }
@@ -1081,6 +1115,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
             baseSystemPromptPromise,
             compactionResultPromise,
           ]);
+          emitPendingAssistantStatusLabel(run, "Starting generation...");
           const systemPrompt =
             planPromptLines.length > 0
               ? [baseSystemPrompt, ...planPromptLines]
@@ -1099,10 +1134,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
             },
             messageMetadata: ({ part }) => tracker.getMessageMetadata(part),
             onError: (error) => {
-              streamErrorMessage =
-                error instanceof Error
-                  ? error.message
-                  : String(error ?? "Unknown error");
+              streamErrorMessage = getErrorMessage(error, "Unknown error");
               return streamErrorMessage;
             },
             options: {
@@ -1412,6 +1444,11 @@ async function runParsedThreadChat(
     request.draftRepoState ? { repo: request.draftRepoState } : null,
   );
   let activeRunId: string | null = null;
+  let assistantId: string | null = null;
+  let parentId: string | null = null;
+  let persistedUserId: string | null = null;
+  let placeholderDraft: ThreadUIMessage | null = null;
+  let placeholderMessage: ThreadUIMessage | null = null;
 
   try {
     if (request.trigger === "submit-plan-answer" && request.planQuestionSetId) {
@@ -1437,15 +1474,16 @@ async function runParsedThreadChat(
       request,
       modelTranscript,
     );
-    const assistantId = continuationAssistant?.id ?? crypto.randomUUID();
-    const parentId = getParentMessageId(request, allRecords);
+    assistantId = continuationAssistant?.id ?? crypto.randomUUID();
+    parentId = getParentMessageId(request, allRecords);
     const placeholder = buildPlaceholderMessage(
       request,
       parentId,
       assistantId,
       continuationAssistant,
     );
-    const persistedUserId = persistUserMessage(
+    placeholderDraft = placeholder;
+    persistedUserId = persistUserMessage(
       request,
       transcript,
       allRecords,
@@ -1459,12 +1497,17 @@ async function runParsedThreadChat(
         });
       }
     }
-    const placeholderMessage = persist.upsertMessage(request.threadId, {
+    placeholderMessage = persist.upsertMessage(request.threadId, {
       ...placeholder,
       metadata: mergeThreadMessageMetadata(placeholder.metadata, {
         runId,
       }),
     });
+    placeholderMessage = updatePendingAssistantStatusLabel(
+      request.threadId,
+      placeholderMessage,
+      getInitialPendingStatusLabel(request.trigger),
+    );
     await persist.setActiveMessage(request.threadId, assistantId);
     const abortController = new AbortController();
     const eventChannel = await createThreadEventChannel(runId);
@@ -1528,6 +1571,25 @@ async function runParsedThreadChat(
       { status: 202 },
     );
   } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : String(error ?? "Unknown error");
+
+    if (
+      persistedUserId &&
+      assistantId &&
+      (placeholderMessage || placeholderDraft)
+    ) {
+      const persistedAssistant = persist.upsertMessage(
+        request.threadId,
+        buildPersistedAssistantMessage({
+          assistantId,
+          errorMessage,
+          placeholder: placeholderMessage ?? placeholderDraft!,
+        }),
+      );
+      await persist.setActiveMessage(request.threadId, persistedAssistant.id);
+    }
+
     if (activeRunId) {
       await clearThreadRepoCheckpointRun(activeRunId);
     }

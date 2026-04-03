@@ -30,4 +30,17 @@ describe("createThreadChatErrorResponse", () => {
       error: { message: "That Claude approval request is no longer active." },
     });
   });
+
+  it("unwraps object-shaped errors into readable messages", async () => {
+    const response = createThreadChatErrorResponse({
+      error: {
+        message: "Provider request failed.",
+      },
+    });
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: { message: "Provider request failed." },
+    });
+  });
 });

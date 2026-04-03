@@ -307,8 +307,8 @@ export default function AppearanceSettingsPage() {
                   </p>
                 </div>
 
-                <div className="grid gap-5 lg:grid-cols-2">
-                  <div className="space-y-3">
+                <div className="grid gap-5 w-fit overflow-hidden lg:grid-cols-2">
+                  <div className="space-y-3 overflow-hidden max-w-full">
                     <FontFamilySelector
                       control={form.control}
                       description="Used for non-code interface text."
@@ -334,7 +334,7 @@ export default function AppearanceSettingsPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-3 overflow-hidden max-w-full">
                     <FontFamilySelector
                       control={form.control}
                       description="Used for terminals, code blocks, and inline code."

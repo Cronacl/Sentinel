@@ -17,6 +17,7 @@ import { SentinelLogoBadge } from "@/components/shared/logo";
 import { PageWrapper } from "@/components/shell";
 import { useOutsideClick } from "@/hooks/use-outside-click";
 import { useThreadChat } from "@/hooks/use-thread-chat";
+import { isCommittedThreadActionError } from "@/hooks/use-thread-chat";
 import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
@@ -207,6 +208,10 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     threadId: draftThreadId,
   });
   const handleError = useCallback((error: Error) => {
+    if (isCommittedThreadActionError(error)) {
+      return;
+    }
+
     setChatError(error.message);
   }, []);
   const handleSnapshot = useCallback(
@@ -430,15 +435,29 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
           workspaceId: selectedWorkspace?.id,
         });
       };
-      if (!threadId && !hasHandedOffRef.current) {
-        hasHandedOffRef.current = true;
-        window.history.replaceState(null, "", `/thread/${draftThreadId}`);
-        router.replace(`/thread/${draftThreadId}`);
-        void pendingBootstrap.then(applyBootstrapSnapshot).catch(() => {});
-        return;
+
+      try {
+        const bootstrap = await pendingBootstrap;
+        applyBootstrapSnapshot(bootstrap);
+
+        if (!threadId && !hasHandedOffRef.current) {
+          hasHandedOffRef.current = true;
+          window.history.replaceState(null, "", `/thread/${draftThreadId}`);
+          router.replace(`/thread/${draftThreadId}`);
+        }
+      } catch (error) {
+        if (
+          !threadId &&
+          !hasHandedOffRef.current &&
+          isCommittedThreadActionError(error)
+        ) {
+          hasHandedOffRef.current = true;
+          window.history.replaceState(null, "", `/thread/${draftThreadId}`);
+          router.replace(`/thread/${draftThreadId}`);
+        }
+
+        throw error;
       }
-      const bootstrap = await pendingBootstrap;
-      applyBootstrapSnapshot(bootstrap);
     },
     [
       draftThreadId,
@@ -644,7 +663,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
       reasoningEffort: resolvedSelection.reasoningEffort,
       text: "Implement Plan",
       threadMode: "chat",
-    });
+    }).catch(() => {});
     void utils.threads.list.invalidate();
   }, [
     draftThreadId,

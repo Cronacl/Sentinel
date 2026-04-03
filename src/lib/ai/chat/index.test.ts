@@ -16,7 +16,7 @@ const aiState = {
   },
   latestInputTokens: null as number | null,
   streamChunks: [],
-  streamErrorMessage: null as string | null,
+  streamErrorMessage: null as unknown,
 };
 
 const createAgentUIStream = mock(async (args) => {
@@ -31,7 +31,7 @@ const createAgentUIStream = mock(async (args) => {
     });
   }
   if (aiState.streamErrorMessage) {
-    args.onError?.(new Error(aiState.streamErrorMessage));
+    args.onError?.(aiState.streamErrorMessage);
   }
   return { kind: "agent-ui-stream" };
 });
@@ -125,10 +125,19 @@ const buildMemoryPromptLines = mock(() => []);
 const autosaveConversationMemories = mock(async () => []);
 
 const buildPersistedAssistantMessage = mock(
-  ({ assistantId, finalAssistant, placeholder }) =>
-    finalAssistant
+  ({ assistantId, errorMessage, finalAssistant, placeholder }) => {
+    const baseMessage = finalAssistant
       ? { ...finalAssistant, id: assistantId }
-      : { ...placeholder, id: assistantId },
+      : { ...placeholder, id: assistantId };
+
+    return {
+      ...baseMessage,
+      metadata: {
+        ...(baseMessage.metadata ?? {}),
+        ...(errorMessage ? { errorMessage, status: "error" } : {}),
+      },
+    };
+  },
 );
 
 const tracker = {
@@ -1198,6 +1207,78 @@ beforeEach(async () => {
 
 afterEach(() => {
   mock.clearAllMocks();
+});
+
+describe("runThreadChat bootstrap failure recovery", () => {
+  it("emits startup phase status labels before visible output begins", async () => {
+    const response = await runThreadChat(createSubmitRequest(), "user-1");
+    await flushAsyncWork();
+
+    expect(response.status).toBe(202);
+
+    const statusLabels = upsertMessage.mock.calls
+      .map(([, message]) => message?.metadata?.statusLabel ?? null)
+      .filter(Boolean);
+
+    expect(statusLabels).toContain("Preparing workspace...");
+    expect(statusLabels).toContain("Loading workspace context...");
+    expect(statusLabels).toContain("Building prompt...");
+    expect(statusLabels).toContain("Starting generation...");
+  });
+
+  it("emits a retry-specific status label before retrying generation", async () => {
+    const response = await runThreadChat(
+      createRetryRequest("retry-assistant-message"),
+      "user-1",
+    );
+    await flushAsyncWork();
+
+    expect(response.status).toBe(202);
+
+    const statusLabels = upsertMessage.mock.calls
+      .map(([, message]) => message?.metadata?.statusLabel ?? null)
+      .filter(Boolean);
+
+    expect(statusLabels).toContain("Retrying response...");
+  });
+
+  it("unwraps object-shaped stream errors before persisting assistant failure metadata", async () => {
+    aiState.streamErrorMessage = {
+      error: {
+        message: "Provider request failed.",
+      },
+    };
+
+    const response = await runThreadChat(createSubmitRequest(), "user-1");
+    await flushAsyncWork();
+
+    expect(response.status).toBe(202);
+    expect(buildPersistedAssistantMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        errorMessage: "Provider request failed.",
+      }),
+    );
+  });
+
+  it("persists an inline assistant error when bootstrap fails after the user turn is committed", async () => {
+    loadThreadSessionSnapshot.mockImplementationOnce(async () => null);
+
+    await expect(
+      runThreadChat(createSubmitRequest(), "user-1"),
+    ).rejects.toThrow("Unable to bootstrap the chat session.");
+    expect(buildPersistedAssistantMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        errorMessage: "Unable to bootstrap the chat session.",
+      }),
+    );
+    expect(upsertMessage).toHaveBeenCalledTimes(4);
+    expect(setThreadStatus).toHaveBeenLastCalledWith("thread-1", "idle");
+    expect(clearActiveStream).toHaveBeenCalledWith("thread-1");
+    expect(setActiveMessage).toHaveBeenLastCalledWith(
+      "thread-1",
+      expect.any(String),
+    );
+  });
 });
 
 /*

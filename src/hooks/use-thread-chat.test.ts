@@ -4,9 +4,12 @@ import type { ThreadSessionSnapshot } from "@/lib/ai/chat/session-types";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 
 import {
+  ThreadActionError,
+  didSnapshotCommitMessage,
   fetchThreadSessionSnapshot,
   formatClientTimingLog,
   hasActiveThreadRun,
+  isCommittedThreadActionError,
   mergeThreadSessionStateFromSnapshot,
   mergeThreadSessionStateWithError,
   readThreadChatErrorMessage,
@@ -376,6 +379,33 @@ describe("fetchThreadSessionSnapshot", () => {
   });
 });
 
+describe("didSnapshotCommitMessage", () => {
+  it("treats snapshots containing the submitted message id as committed", () => {
+    const snapshot = createSnapshot({
+      activeRunId: null,
+      messages: [createMessage("user-1", "Prompt", 1)],
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadStatus: "idle",
+    });
+
+    expect(didSnapshotCommitMessage(snapshot, "user-1")).toBe(true);
+  });
+
+  it("treats snapshots missing the submitted message id as uncommitted", () => {
+    const snapshot = createSnapshot({
+      activeRunId: null,
+      messages: [createMessage("user-2", "Other prompt", 1)],
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadStatus: "idle",
+    });
+
+    expect(didSnapshotCommitMessage(snapshot, "user-1")).toBe(false);
+    expect(didSnapshotCommitMessage(null, "user-1")).toBe(false);
+  });
+});
+
 describe("readThreadChatErrorMessage", () => {
   it("extracts nested JSON error messages", async () => {
     const response = Response.json(
@@ -515,6 +545,24 @@ describe("mergeThreadSessionStateWithError", () => {
     expect(result.errorMessage).toBe(
       "This action is no longer available because the session has moved on.",
     );
+  });
+});
+
+describe("ThreadActionError", () => {
+  it("marks committed turn failures so the transcript can own recovery", () => {
+    const error = new ThreadActionError("Request failed.", {
+      committed: true,
+    });
+
+    expect(isCommittedThreadActionError(error)).toBe(true);
+    expect(error.committed).toBe(true);
+  });
+
+  it("treats uncommitted failures as banner-worthy request errors", () => {
+    const error = new ThreadActionError("Request failed.");
+
+    expect(isCommittedThreadActionError(error)).toBe(false);
+    expect(error.committed).toBe(false);
   });
 });
 

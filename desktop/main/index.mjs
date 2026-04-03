@@ -1246,12 +1246,12 @@ app.whenReady().then(async () => {
     app.setAppUserModelId("app.sentinel.desktop");
   }
 
+  registerIpc();
   await applyDevAppIcon();
   await prepareDevSession();
   createWindow();
   desktopUpdater.subscribe(sendDesktopUpdateState);
   desktopUpdater.initialize();
-  registerIpc();
 
   try {
     await bootstrapDesktop();

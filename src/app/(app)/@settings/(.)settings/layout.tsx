@@ -10,6 +10,8 @@ import { SETTINGS_NAV } from "@/components/settings/settings-nav";
 import { getDesktopApi } from "@/lib/desktop/client";
 import { useShortcutAction, useShortcutScope } from "@/lib/shortcuts/provider";
 
+const SETTINGS_SIDEBAR_WIDTH = 224;
+
 export default function SettingsModalLayout({ children }: PropsWithChildren) {
   const router = useRouter();
   const pathname = usePathname();
@@ -33,7 +35,10 @@ export default function SettingsModalLayout({ children }: PropsWithChildren) {
 
   return (
     <div className="bg-surface fixed inset-0 z-50 flex">
-      <aside className="border-separator flex h-full w-64 shrink-0 flex-col border-r">
+      <aside
+        className="border-separator bg-surface flex h-full shrink-0 flex-col border-r"
+        style={{ width: SETTINGS_SIDEBAR_WIDTH }}
+      >
         <div
           className="app-region-drag shrink-0"
           style={{ minHeight: isMac ? 56 : 40 }}
