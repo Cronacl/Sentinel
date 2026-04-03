@@ -1354,7 +1354,7 @@ export function ThreadRepoActions({
                   <Modal.CloseTrigger />
                 </div>
 
-                <h2 className="mt-3 text-base font-semibold text-foreground">
+                <h2 className="mt-3 text-base font-medium text-foreground">
                   Commit your changes
                 </h2>
 
@@ -1590,7 +1590,7 @@ export function ThreadRepoActions({
                   <Modal.CloseTrigger />
                 </div>
 
-                <h2 className="mt-3 text-base font-semibold text-foreground">
+                <h2 className="mt-3 text-base font-medium text-foreground">
                   Push changes
                 </h2>
 
@@ -1650,7 +1650,7 @@ export function ThreadRepoActions({
                   <Modal.CloseTrigger />
                 </div>
 
-                <h2 className="mt-3 text-base font-semibold text-foreground">
+                <h2 className="mt-3 text-base font-medium text-foreground">
                   Work here
                 </h2>
                 <p className="mt-1 text-sm text-muted">
@@ -1713,7 +1713,7 @@ export function ThreadRepoActions({
                   <Modal.CloseTrigger />
                 </div>
 
-                <h2 className="mt-3 text-base font-semibold text-foreground">
+                <h2 className="mt-3 text-base font-medium text-foreground">
                   Create PR branch
                 </h2>
                 <p className="mt-1 text-sm text-muted">

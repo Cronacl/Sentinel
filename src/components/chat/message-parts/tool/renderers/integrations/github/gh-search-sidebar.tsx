@@ -270,7 +270,7 @@ export const GHSearchSidebar = memo(function GHSearchSidebar({
           </button>
         ) : null}
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[15px] font-semibold text-foreground">
+          <h2 className="truncate text-[15px] font-medium text-foreground">
             {title}
           </h2>
           {subtitle ? (
