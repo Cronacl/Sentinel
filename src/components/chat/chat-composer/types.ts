@@ -46,7 +46,7 @@ export type ChatComposerProps = {
     reasoningEffort?: ReasoningEffort | null;
   }) => void;
   onStop?: () => void;
-  onSend?: (input: ComposerSendInput) => void;
+  onSend?: (input: ComposerSendInput) => Promise<unknown> | unknown;
   onSteerFollowUp?: (input: ComposerSendInput) => Promise<void> | void;
   onSteerQueuedFollowUp?: (id: string) => Promise<void> | void;
   onCancelEdit?: () => void;

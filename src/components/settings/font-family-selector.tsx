@@ -153,7 +153,7 @@ export function FontFamilySelector<
                   }
 
                   return (
-                    <div className="min-w-0 space-y-0.5">
+                    <div className="min-w-0 space-y-0.5 line-clamp-1">
                       <p
                         className="truncate"
                         style={{ fontFamily: selectedOption.previewFontFamily }}
@@ -170,7 +170,7 @@ export function FontFamilySelector<
               <Select.Indicator />
             </Select.Trigger>
             <Select.Popover>
-              <ListBox className="max-h-[320px] overflow-y-auto">
+              <ListBox className="max-h-[320px] overflow-y-auto w-96">
                 {sections.map((section, index) => (
                   <Fragment key={section.section}>
                     <ListBox.Section>

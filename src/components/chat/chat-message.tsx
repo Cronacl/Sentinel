@@ -80,6 +80,28 @@ export function getPendingAssistantStatusLabel({
   return "Thinking...";
 }
 
+export function getAssistantFailureText({
+  errorMessage,
+  messageStatus,
+}: {
+  errorMessage?: string | null;
+  messageStatus?: ThreadMessageMetadata["status"];
+}) {
+  if (errorMessage?.trim()) {
+    return errorMessage.trim();
+  }
+
+  if (messageStatus === "cancelled") {
+    return "Generation stopped.";
+  }
+
+  if (messageStatus === "error") {
+    return "Generation failed.";
+  }
+
+  return null;
+}
+
 function PendingAssistantStatus({
   messageStatus,
   statusLabel,
@@ -116,6 +138,14 @@ function PendingAssistantStatus({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function FailedAssistantStatus({ errorText }: { errorText: string }) {
+  return (
+    <div className="rounded-lg border border-danger-soft-hover bg-danger-soft px-3 py-2.5">
+      <p className="text-xs text-danger-soft-foreground">{errorText}</p>
     </div>
   );
 }
@@ -476,6 +506,12 @@ function AssistantMessage({
   const status =
     rawStatus ??
     (isStreaming ? "streaming" : hasVisibleParts ? "completed" : undefined);
+  const failureText = getAssistantFailureText({
+    errorMessage: metadata?.errorMessage,
+    messageStatus: status,
+  });
+  const shouldRenderFailureState =
+    Boolean(failureText) && (status === "error" || status === "cancelled");
 
   const stableOnAnswerPlanQuestions = useCallback(
     (input: {
@@ -570,6 +606,10 @@ function AssistantMessage({
             })}
           </div>
         ))}
+
+        {shouldRenderFailureState ? (
+          <FailedAssistantStatus errorText={failureText!} />
+        ) : null}
 
         {isStreaming && hasVisibleParts ? (
           <p className="flex min-w-0 items-center gap-2 py-1 text-xs font-medium text-foreground/70">

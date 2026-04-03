@@ -1,5 +1,6 @@
 import type { AIProvider, ChatEngine } from "@/server/db/enums";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import { isCommittedThreadActionError } from "@/hooks/use-thread-chat";
 
 export type ChatComposerEngineOption = {
   engine: ChatEngine;
@@ -124,4 +125,12 @@ export function resolveReasoningEffort(
   }
 
   return model.defaultReasoningEffort;
+}
+
+export function shouldClearComposerAfterSendError(error: unknown) {
+  return isCommittedThreadActionError(error);
+}
+
+export function shouldClearComposerAfterSend(error?: unknown) {
+  return error === undefined || shouldClearComposerAfterSendError(error);
 }

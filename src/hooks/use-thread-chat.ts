@@ -27,6 +27,7 @@ import {
   type ThreadUIMessage,
 } from "@/lib/ai/messages/types";
 import type { ThreadMode, ThreadPlanAnswer } from "@/lib/plan";
+import { getErrorMessage } from "@/lib/errors";
 import type { ChatEngine, ThreadStatus } from "@/server/db/enums";
 
 type UseThreadChatOptions = {
@@ -78,6 +79,28 @@ type ClientTimingPhase =
   | "send_start"
   | "snapshot_hydrated"
   | "sse_connect_started";
+
+export class ThreadActionError extends Error {
+  committed: boolean;
+
+  constructor(
+    message: string,
+    options?: {
+      cause?: unknown;
+      committed?: boolean;
+    },
+  ) {
+    super(message, options?.cause ? { cause: options.cause } : undefined);
+    this.name = "ThreadActionError";
+    this.committed = options?.committed ?? false;
+  }
+}
+
+export function isCommittedThreadActionError(
+  error: unknown,
+): error is ThreadActionError {
+  return error instanceof ThreadActionError && error.committed;
+}
 
 type ThreadSessionState = {
   activeRunId: string | null;
@@ -255,6 +278,15 @@ function normalizeQueuedFollowUps(
         ? followUp.createdAt
         : new Date(followUp.createdAt),
   }));
+}
+
+export function didSnapshotCommitMessage(
+  snapshot: ThreadSessionSnapshot | null,
+  messageId: string,
+) {
+  return (
+    snapshot?.messages.some((message) => message.id === messageId) ?? false
+  );
 }
 
 function extractQueuedFollowUpText(message: ThreadUIMessage) {
@@ -805,8 +837,7 @@ function createSessionStore(
           ...current,
           activeRunId: null,
           connectionState: "idle",
-          errorMessage:
-            event.type === "run.failed" ? event.error : current.errorMessage,
+          errorMessage: null,
           lastSyncedAt: Date.now(),
           threadStatus: event.threadStatus,
         }));
@@ -1051,18 +1082,18 @@ function getOrCreateSessionStore(
 function createUserThreadMessage({
   composerContext,
   files,
+  id,
   text,
-}: Pick<
-  SendThreadMessageInput,
-  "composerContext" | "files" | "text"
->): ThreadUIMessage {
+}: Pick<SendThreadMessageInput, "composerContext" | "files" | "text"> & {
+  id?: string;
+}): ThreadUIMessage {
   const fileParts = files ?? [];
   const hasContext =
     composerContext &&
     (composerContext.paths.length > 0 || composerContext.skills.length > 0);
 
   return {
-    id: crypto.randomUUID(),
+    id: id ?? crypto.randomUUID(),
     metadata: {
       ...(hasContext ? { composerContext } : {}),
     },
@@ -1171,6 +1202,9 @@ export function useThreadChat({
     async (
       body: Record<string, unknown>,
       localMessages?: ThreadUIMessage[],
+      options?: {
+        committedMessageId?: string;
+      },
     ): Promise<ThreadChatBootstrapResponse | null> => {
       store.markClientTiming("send_start");
       store.beginAction();
@@ -1190,19 +1224,62 @@ export function useThreadChat({
         store.markClientTiming("snapshot_hydrated");
         return data;
       } catch (error) {
-        const nextError =
-          error instanceof Error
-            ? error
-            : new Error("Unable to process the chat request.");
-        store.setRequestError(nextError.message);
-        void store.refreshSnapshot({ allowMissing: true }).catch(() => {});
-        onError?.(nextError);
+        const baseErrorMessage = getErrorMessage(
+          error,
+          "Unable to process the chat request.",
+        );
+        const baseError =
+          error instanceof Error ? error : new Error(baseErrorMessage);
+        let committed = false;
+
+        if (options?.committedMessageId) {
+          try {
+            const snapshot = await fetchThreadSessionSnapshot(threadId, {
+              allowMissing: true,
+            });
+            if (snapshot) {
+              store.hydrate(snapshot);
+            }
+            committed = didSnapshotCommitMessage(
+              snapshot,
+              options.committedMessageId,
+            );
+          } catch {
+            store.setRequestError(baseErrorMessage);
+            const nextError = new ThreadActionError(baseErrorMessage, {
+              cause: error,
+              committed: false,
+            });
+            onError?.(nextError);
+            throw nextError;
+          }
+        } else {
+          store.setRequestError(baseErrorMessage);
+          void store.refreshSnapshot({ allowMissing: true }).catch(() => {});
+          const nextError = new ThreadActionError(baseErrorMessage, {
+            cause: error,
+            committed: false,
+          });
+          onError?.(nextError);
+          throw nextError;
+        }
+
+        const nextError = new ThreadActionError(baseErrorMessage, {
+          cause: error,
+          committed,
+        });
+
+        if (!committed) {
+          store.setRequestError(baseErrorMessage);
+          onError?.(nextError);
+        }
+
         throw nextError;
       } finally {
         store.endAction();
       }
     },
-    [onError, postThreadAction, store],
+    [onError, postThreadAction, store, threadId],
   );
 
   const sendMessage = useCallback(
@@ -1216,17 +1293,27 @@ export function useThreadChat({
       text,
       threadMode,
     }: SendThreadMessageInput) => {
-      return runAction({
-        ...(draftRepoState ? { draftRepoState } : {}),
-        engine,
-        id: threadId,
-        message: createUserThreadMessage({ composerContext, files, text }),
-        modelId,
-        ...(reasoningEffort ? { reasoningEffort } : {}),
-        ...(threadMode ? { threadMode } : {}),
-        trigger: "submit-user-message",
-        workspaceId: workspaceIdRef.current,
+      const message = createUserThreadMessage({
+        composerContext,
+        files,
+        id: crypto.randomUUID(),
+        text,
       });
+      return runAction(
+        {
+          ...(draftRepoState ? { draftRepoState } : {}),
+          engine,
+          id: threadId,
+          message,
+          modelId,
+          ...(reasoningEffort ? { reasoningEffort } : {}),
+          ...(threadMode ? { threadMode } : {}),
+          trigger: "submit-user-message",
+          workspaceId: workspaceIdRef.current,
+        },
+        undefined,
+        { committedMessageId: message.id },
+      );
     },
     [runAction, threadId],
   );
@@ -1241,16 +1328,26 @@ export function useThreadChat({
       targetMessageId,
       text,
     }: EditThreadMessageInput) => {
-      await runAction({
-        engine,
-        id: threadId,
-        message: createUserThreadMessage({ composerContext, files, text }),
-        messageId: targetMessageId,
-        modelId,
-        ...(reasoningEffort ? { reasoningEffort } : {}),
-        trigger: "edit-user-message",
-        workspaceId: workspaceIdRef.current,
+      const message = createUserThreadMessage({
+        composerContext,
+        files,
+        id: crypto.randomUUID(),
+        text,
       });
+      await runAction(
+        {
+          engine,
+          id: threadId,
+          message,
+          messageId: targetMessageId,
+          modelId,
+          ...(reasoningEffort ? { reasoningEffort } : {}),
+          trigger: "edit-user-message",
+          workspaceId: workspaceIdRef.current,
+        },
+        undefined,
+        { committedMessageId: message.id },
+      );
     },
     [runAction, threadId],
   );

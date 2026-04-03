@@ -32,6 +32,7 @@ import { sileo } from "sileo";
 
 import { PageWrapper } from "@/components/shell";
 import { useThreadChat } from "@/hooks/use-thread-chat";
+import { isCommittedThreadActionError } from "@/hooks/use-thread-chat";
 import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
@@ -111,6 +112,10 @@ export function ThreadScreen({
   }, [thread.title]);
 
   const handleError = useCallback((error: Error) => {
+    if (isCommittedThreadActionError(error)) {
+      return;
+    }
+
     setChatError(error.message);
   }, []);
   const repoContextQueryInput = useMemo(
@@ -355,7 +360,7 @@ export function ThreadScreen({
   }, [isBusy]);
 
   const handleSend = useCallback(
-    ({
+    async ({
       composerContext,
       files,
       engine,
@@ -390,7 +395,7 @@ export function ThreadScreen({
         utils,
         workspaceId: workspace.id,
       });
-      void sendMessage({
+      await sendMessage({
         composerContext,
         engine,
         files,
@@ -623,7 +628,7 @@ export function ThreadScreen({
   }, [messages]);
 
   const handleEditSubmit = useCallback(
-    ({
+    async ({
       engine,
       files,
       modelId,
@@ -641,15 +646,23 @@ export function ThreadScreen({
       }
 
       setChatError(null);
-      void editMessage({
-        engine,
-        files,
-        modelId,
-        reasoningEffort,
-        targetMessageId: editingMessage.id,
-        text,
-      });
-      setEditingMessage(null);
+      try {
+        await editMessage({
+          engine,
+          files,
+          modelId,
+          reasoningEffort,
+          targetMessageId: editingMessage.id,
+          text,
+        });
+        setEditingMessage(null);
+      } catch (error) {
+        if (isCommittedThreadActionError(error)) {
+          setEditingMessage(null);
+        }
+
+        throw error;
+      }
     },
     [editMessage, editingMessage],
   );
@@ -903,7 +916,7 @@ export function ThreadScreen({
       reasoningEffort,
       text: "Implement Plan",
       threadMode: "chat",
-    });
+    }).catch(() => {});
   }, [
     isBusy,
     sendMessage,

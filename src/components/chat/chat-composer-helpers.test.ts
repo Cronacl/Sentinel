@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+import { ThreadActionError } from "@/hooks/use-thread-chat";
+
 import type { ChatComposerModel } from "./chat-composer-helpers";
 import {
   FALLBACK_CHAT_ENGINE_OPTIONS,
@@ -8,6 +10,8 @@ import {
   haveSameSelectableModelSet,
   resolveStableEngineOptions,
   resolveStableSelectableModels,
+  shouldClearComposerAfterSend,
+  shouldClearComposerAfterSendError,
 } from "./chat-composer-helpers";
 
 function createModel(
@@ -85,5 +89,25 @@ describe("chat composer model helpers", () => {
         FALLBACK_CHAT_ENGINE_OPTIONS[2]!,
       ]),
     ).toBe(false);
+  });
+
+  it("clears the composer after committed turn failures", () => {
+    expect(
+      shouldClearComposerAfterSendError(
+        new ThreadActionError("Request failed.", { committed: true }),
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps the composer draft after uncommitted turn failures", () => {
+    expect(
+      shouldClearComposerAfterSendError(
+        new ThreadActionError("Request failed."),
+      ),
+    ).toBe(false);
+  });
+
+  it("clears the composer after successful sends", () => {
+    expect(shouldClearComposerAfterSend()).toBe(true);
   });
 });

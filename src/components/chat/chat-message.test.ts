@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import {
+  ChatMessage,
+  getAssistantFailureText,
   getPendingAssistantStatusLabel,
   isVisibleAssistantPart,
 } from "./chat-message";
@@ -86,5 +90,45 @@ describe("chat-message helpers", () => {
         messageStatus: "pending",
       }),
     ).toBe("Working...");
+  });
+
+  it("prefers explicit assistant failure text", () => {
+    expect(
+      getAssistantFailureText({
+        errorMessage: "Provider request failed.",
+        messageStatus: "error",
+      }),
+    ).toBe("Provider request failed.");
+  });
+
+  it("falls back to a cancellation label when no error text is present", () => {
+    expect(
+      getAssistantFailureText({
+        messageStatus: "cancelled",
+      }),
+    ).toBe("Generation stopped.");
+  });
+});
+
+describe("ChatMessage", () => {
+  it("renders inline assistant failures even when the message has no visible parts", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ChatMessage, {
+        chatEngine: "sentinel",
+        message: {
+          id: "assistant-error",
+          metadata: {
+            errorMessage: "Provider request failed.",
+            status: "error",
+          },
+          parts: [{ text: " ", type: "text" }],
+          role: "assistant",
+        },
+        onRetry: () => {},
+      }),
+    );
+
+    expect(markup).toContain("Provider request failed.");
+    expect(markup).toContain("Retry");
   });
 });

@@ -17,8 +17,9 @@ import { ComposerToolbar } from "../composer-toolbar";
 import { ComposerWorkspaceBar } from "../composer-workspace-bar";
 import { ModelSelector } from "../model-selector";
 import { QueuedMessages } from "../queued-messages";
+import { shouldClearComposerAfterSendError } from "../chat-composer-helpers";
 
-import type { ChatComposerProps } from "./types";
+import type { ChatComposerProps, ComposerSendInput } from "./types";
 import { useAttachments } from "./use-attachments";
 import { useComposerEditor } from "./use-composer-editor";
 import { useModelSelection } from "./use-model-selection";
@@ -266,6 +267,8 @@ export function ChatComposer({
     const text = editor.getText().trim();
     if (!text && attachments.length === 0) return;
 
+    let messagePayload: ComposerSendInput | null = null;
+
     try {
       setAttachmentError("");
       const files = await convertToFileParts();
@@ -276,7 +279,7 @@ export function ChatComposer({
 
       const composerContext = extractComposerContext(editor);
 
-      const messagePayload = {
+      messagePayload = {
         ...(hasComposerContext(composerContext) ? { composerContext } : {}),
         ...(draftRepoState ? { draftRepoState } : {}),
         engine: selectedEngine,
@@ -286,7 +289,16 @@ export function ChatComposer({
         text,
         threadMode: (planMode ? "plan" : "chat") as "chat" | "plan",
       };
+    } catch {
+      setAttachmentError("Unable to attach one or more selected files.");
+      return;
+    }
 
+    if (!messagePayload) {
+      return;
+    }
+
+    try {
       if (isBusy) {
         if (followUpBehavior === "queue") {
           await onQueueFollowUp?.(messagePayload);
@@ -294,12 +306,14 @@ export function ChatComposer({
           await onSteerFollowUp?.(messagePayload);
         }
       } else {
-        onSend(messagePayload);
+        await onSend(messagePayload);
       }
-    } catch {
-      setAttachmentError("Unable to attach one or more selected files.");
-      return;
+    } catch (error) {
+      if (!shouldClearComposerAfterSendError(error)) {
+        return;
+      }
     }
+
     editor.commands.clearContent();
     setPreviewAttachment(null);
     clearAttachments();
