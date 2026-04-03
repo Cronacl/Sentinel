@@ -57,12 +57,14 @@ import {
   useRepoDiffSidebarState,
 } from "./repo-diff-sidebar-store";
 import {
+  buildRepoDiffPreloadKey,
   buildCreatePullRequestInput,
   buildGenerateCommitMessageInput,
   formatRepoActionErrorMessage,
   getActivePullRequestUrl,
   getGeneratedCommitPromptValue,
   getLinkedPullRequestStatus,
+  REPO_DIFF_PRELOAD_MODES,
   getThreadLinkedPullRequest,
 } from "./thread-repo-actions.helpers";
 
@@ -210,6 +212,7 @@ export function ThreadRepoActions({
 
   const snapshotRef = useRef(repoContext);
   const syncedPullRequestKeyRef = useRef<string | null>(null);
+  const preloadedRepoDiffKeyRef = useRef<string | null>(null);
   if (!anyModalOpen) {
     snapshotRef.current = repoContext;
   }
@@ -345,6 +348,10 @@ export function ThreadRepoActions({
 
     return `branch:${branchKey}:none`;
   }, [repoContext]);
+  const repoDiffPreloadKey = useMemo(
+    () => buildRepoDiffPreloadKey(repoContext),
+    [repoContext],
+  );
 
   useEffect(() => {
     if (!threadId || !syncedPullRequestKey) {
@@ -359,6 +366,29 @@ export function ThreadRepoActions({
     void utils.threads.get.invalidate({ threadId });
     void utils.threads.list.invalidate();
   }, [syncedPullRequestKey, threadId, utils]);
+
+  useEffect(() => {
+    if (!isDesktop || !repoDiffPreloadKey) {
+      preloadedRepoDiffKeyRef.current = null;
+      return;
+    }
+
+    if (preloadedRepoDiffKeyRef.current === repoDiffPreloadKey) {
+      return;
+    }
+
+    preloadedRepoDiffKeyRef.current = repoDiffPreloadKey;
+
+    void Promise.allSettled(
+      REPO_DIFF_PRELOAD_MODES.map((mode) =>
+        utils.repo.getDiffPanelData.prefetch({
+          mode,
+          threadId,
+          workspaceId,
+        }),
+      ),
+    );
+  }, [isDesktop, repoDiffPreloadKey, threadId, utils, workspaceId]);
 
   useEffect(() => {
     if (!isRepoVisible || !launchPath || !desktop) {

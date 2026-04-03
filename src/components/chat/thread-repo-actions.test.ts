@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  buildRepoDiffPreloadKey,
   buildCreatePullRequestInput,
   buildGenerateCommitMessageInput,
   formatRepoActionErrorMessage,
@@ -8,6 +9,7 @@ import {
   getGeneratedCommitPromptValue,
   getLinkedPullRequestStatus,
   getThreadLinkedPullRequest,
+  REPO_DIFF_PRELOAD_MODES,
 } from "./thread-repo-actions.helpers";
 
 describe("thread repo action helpers", () => {
@@ -23,6 +25,34 @@ describe("thread repo action helpers", () => {
       threadId: "thread-1",
       workspaceId: "workspace-1",
     });
+  });
+
+  it("lists the repo diff modes we preload for the thread panel", () => {
+    expect(REPO_DIFF_PRELOAD_MODES).toEqual(["unstaged", "staged", "branch"]);
+  });
+
+  it("builds a stable repo diff preload key for git-backed threads", () => {
+    const base = {
+      branch: "feature/thread-preload",
+      changedFileCount: 3,
+      deletions: 5,
+      effectiveProjectPath: "/tmp/sentinel/thread-1",
+      hasChanges: true,
+      insertions: 8,
+      isGitRepo: true,
+      threadBranch: "feature/thread-preload",
+      threadProjectMode: "worktree",
+      worktreeStatus: "ready",
+    } as const;
+
+    expect(buildRepoDiffPreloadKey(base)).toBe(buildRepoDiffPreloadKey(base));
+    expect(
+      buildRepoDiffPreloadKey({
+        ...base,
+        changedFileCount: 4,
+      }),
+    ).not.toBe(buildRepoDiffPreloadKey(base));
+    expect(buildRepoDiffPreloadKey({ isGitRepo: false })).toBeNull();
   });
 
   it("passes threadId and trims branch names for PR creation", () => {
