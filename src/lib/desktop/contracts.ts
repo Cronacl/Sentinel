@@ -14,6 +14,10 @@ export type DesktopServicesStatus = {
   appServer: boolean;
 };
 
+export type DesktopSystemFontFamily = {
+  family: string;
+};
+
 export type DesktopResolvedTheme = "light" | "dark";
 export type DesktopPlatform = "darwin" | "linux" | "win32";
 export type DesktopUpdateStatus =
@@ -57,6 +61,7 @@ export type DesktopTerminalSession = {
 export type SentinelDesktopApi = {
   app: {
     getVersion: () => Promise<string>;
+    listSystemFonts: () => Promise<DesktopSystemFontFamily[]>;
     platform: DesktopPlatform;
   };
   openExternal: (url: string) => Promise<void>;
