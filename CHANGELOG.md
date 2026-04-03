@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.12](https://github.com/chaqchase/Sentinel/compare/v0.0.11...v0.0.12) (2026-04-03)
+
+
+### Features
+
+* add external skill handling and improve skill metadata management ([cc1a4bc](https://github.com/chaqchase/Sentinel/commit/cc1a4bc4a08701e450e51c555d7e9b24bf70a47c))
+* enhance appearance settings with new code theme options and improve theme handling ([88ce9a6](https://github.com/chaqchase/Sentinel/commit/88ce9a687fe9d28609e2c0a136d1309a49c51fed))
+* implement font family selection and system font listing functionality ([5610c2c](https://github.com/chaqchase/Sentinel/commit/5610c2c091dbd29e3a86d712ae735701e5e17712))
+* improve the automations and skills ui and clean up a bit ([f9cf206](https://github.com/chaqchase/Sentinel/commit/f9cf206436e180cc54cbffea1e98602c087f8af2))
+* **thread-status:** enhance ThreadStatusIndicators ([10d1912](https://github.com/chaqchase/Sentinel/commit/10d1912cb37a0a47a3a83020058a9f1712e19a35))
+
+
+### Bug Fixes
+
+* fix the overlay issue with command palette ([43dc8f1](https://github.com/chaqchase/Sentinel/commit/43dc8f1993943b88d6ef6ac94795d1a3f2ea1f28))
+* introduce several ui fixes and improvements ([f5aa189](https://github.com/chaqchase/Sentinel/commit/f5aa189e2a6dd8c60967d6fda4a5a3b4da8712f1))
+
 ## [0.0.11](https://github.com/chaqchase/Sentinel/compare/v0.0.10...v0.0.11) (2026-04-02)
 
 
