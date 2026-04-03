@@ -113,8 +113,7 @@ describe("desktop updater controller", () => {
     expect(controller.getState()).toMatchObject({
       availableVersion: "1.2.0",
       releaseName: "Sentinel 1.2.0",
-      releasePageUrl:
-        "https://github.com/chaqchase/Sentinel/releases/tag/v1.2.0",
+      releasePageUrl: "https://github.com/Cronacl/Sentinel/releases/tag/v1.2.0",
       status: "available",
     });
 
@@ -216,7 +215,7 @@ describe("desktop updater helpers", () => {
       ]),
     ).toBe("## 1.1.0\nFix bugs\n\n## 1.0.9\nSpeed up startup");
     expect(buildReleasePageUrl("1.1.0")).toBe(
-      "https://github.com/chaqchase/Sentinel/releases/tag/v1.1.0",
+      "https://github.com/Cronacl/Sentinel/releases/tag/v1.1.0",
     );
   });
 });
