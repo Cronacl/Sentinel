@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
 
+mock.module("server-only", () => ({}));
+
 const generateImageMock = mock(
   async ({ model }: { model: { modelId: string } }) => {
     if (model.modelId === "broken-model") {
