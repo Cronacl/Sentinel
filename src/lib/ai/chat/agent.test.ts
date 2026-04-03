@@ -337,7 +337,6 @@ const { getDefaultToolApprovalPolicies } =
   await import("./tool-approval-policy");
 const { buildThreadPromptContext } = await import("./prompt-context");
 const { createThreadAgent } = await import("./agent.ts");
-mock.restore();
 
 const defaultMemoryRuntime = {
   available: true,
@@ -408,6 +407,12 @@ async function prepareWith(options) {
       resolvedModelId: options.resolvedModelId ?? "gpt-5.2",
       resolvedProviderId: options.resolvedProviderId ?? "openai",
       skillRoots: [],
+      videoGenerationRuntime:
+        options.videoGenerationRuntime ??
+        ({
+          defaultProvider: null,
+          providers: {},
+        } as const),
       ...options,
     },
   });
