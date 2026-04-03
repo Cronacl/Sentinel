@@ -57,6 +57,10 @@ import type { FileUIPart } from "ai";
 import { ChatComposer } from "./chat-composer";
 import { ChatMessage } from "./chat-message";
 import { ChatScrollControl, useChatScrollControl } from "./chat-scroll-control";
+import {
+  buildRepoDiffPanelInvalidationInputs,
+  reapplyUserMessageCheckpoint,
+} from "./thread-checkpoints";
 import { ThreadRepoActions } from "./thread-repo-actions";
 
 type ThreadScreenProps = {
@@ -207,7 +211,9 @@ export function ThreadScreen({
   });
 
   const [chatError, setChatError] = useState<string | null>(null);
-  const [busyCheckpointId, setBusyCheckpointId] = useState<string | null>(null);
+  const [busyCheckpointMessageId, setBusyCheckpointMessageId] = useState<
+    string | null
+  >(null);
   const [pendingCheckpointReset, setPendingCheckpointReset] = useState<{
     checkpointId: string;
     message: ThreadUIMessage;
@@ -333,6 +339,7 @@ export function ThreadScreen({
     enabled: Boolean(workspace.rootPath),
   });
   const resetCheckpointMutation = api.repo.resetCheckpoint.useMutation();
+  const toggleCheckpointMutation = api.repo.toggleCheckpoint.useMutation();
 
   const isBusy = status === "submitted" || status === "streaming";
   const visibleChatError = chatError ?? errorMessage;
@@ -779,7 +786,7 @@ export function ThreadScreen({
     const previousRepoContext =
       utils.repo.getContext.getData(repoContextQueryInput) ?? null;
 
-    setBusyCheckpointId(checkpointId);
+    setBusyCheckpointMessageId(message.id);
     setChatError(null);
 
     if (previousRepoContext) {
@@ -798,23 +805,12 @@ export function ThreadScreen({
       });
 
       utils.repo.getContext.setData(repoContextQueryInput, result.repoContext);
-      await Promise.all([
-        utils.repo.getDiffPanelData.invalidate({
-          mode: "branch",
+      await Promise.all(
+        buildRepoDiffPanelInvalidationInputs({
           threadId: thread.id,
           workspaceId: workspace.id,
-        }),
-        utils.repo.getDiffPanelData.invalidate({
-          mode: "staged",
-          threadId: thread.id,
-          workspaceId: workspace.id,
-        }),
-        utils.repo.getDiffPanelData.invalidate({
-          mode: "unstaged",
-          threadId: thread.id,
-          workspaceId: workspace.id,
-        }),
-      ]);
+        }).map((input) => utils.repo.getDiffPanelData.invalidate(input)),
+      );
 
       setEditingMessage(message);
       sileo.success({
@@ -834,7 +830,7 @@ export function ThreadScreen({
       }
       setChatError(getErrorMessage(error, "Unable to reset to this point."));
     } finally {
-      setBusyCheckpointId(null);
+      setBusyCheckpointMessageId(null);
       await utils.repo.getContext.invalidate(repoContextQueryInput);
     }
   }, [
@@ -848,6 +844,77 @@ export function ThreadScreen({
     utils.repo.getDiffPanelData,
     workspace.id,
   ]);
+
+  const handleReapplyCheckpoint = useCallback(
+    async (message: ThreadUIMessage) => {
+      const previousRepoContext =
+        utils.repo.getContext.getData(repoContextQueryInput) ?? null;
+
+      setBusyCheckpointMessageId(message.id);
+      try {
+        const reapplied = await reapplyUserMessageCheckpoint({
+          clearEditingMessage: () => setEditingMessage(null),
+          invalidateRepoContext: () =>
+            utils.repo.getContext.invalidate(repoContextQueryInput),
+          invalidateRepoDiffPanels: () =>
+            Promise.all(
+              buildRepoDiffPanelInvalidationInputs({
+                threadId: thread.id,
+                workspaceId: workspace.id,
+              }).map((input) => utils.repo.getDiffPanelData.invalidate(input)),
+            ),
+          notifySuccess: () => {
+            sileo.success({
+              description:
+                "The repo was restored to the latest checkpoint and the composer exited edit mode.",
+              title: "Latest checkpoint restored",
+            });
+          },
+          previousRepoContext,
+          setError: setChatError,
+          setRepoContext: (nextRepoContext) => {
+            utils.repo.getContext.setData(repoContextQueryInput, (current) =>
+              current ? { ...current, ...nextRepoContext } : current,
+            );
+          },
+          threadId: thread.id,
+          toggleCheckpoint: (input) =>
+            toggleCheckpointMutation.mutateAsync(input),
+          workspaceId: workspace.id,
+        });
+
+        if (reapplied) {
+          setPendingCheckpointReset(null);
+        }
+      } finally {
+        setBusyCheckpointMessageId(null);
+      }
+    },
+    [
+      repoContextQueryInput,
+      thread.id,
+      toggleCheckpointMutation,
+      utils.repo.getContext,
+      utils.repo.getDiffPanelData,
+      workspace.id,
+    ],
+  );
+
+  const handleRepoCheckpointAction = useCallback(
+    (input: {
+      action: "reapply" | "reset";
+      checkpointId: string;
+      message: ThreadUIMessage;
+    }) => {
+      if (input.action === "reapply") {
+        void handleReapplyCheckpoint(input.message);
+        return;
+      }
+
+      handleOpenResetCheckpoint(input.message, input.checkpointId);
+    },
+    [handleOpenResetCheckpoint, handleReapplyCheckpoint],
+  );
 
   const handleResetCheckpointOpenChange = useCallback(
     (isOpen: boolean) => {
@@ -1095,7 +1162,7 @@ export function ThreadScreen({
                   onAnswerPlanQuestions={handleAnswerPlanQuestions}
                   onDenyTool={handleDenyTool}
                   onEdit={handleEdit}
-                  onResetRepoCheckpoint={handleOpenResetCheckpoint}
+                  onRepoCheckpointAction={handleRepoCheckpointAction}
                   onStartPlanImplementation={
                     !isBusy &&
                     (idx === messages.length - 1 || idx === messages.length - 2)
@@ -1115,11 +1182,17 @@ export function ThreadScreen({
                   repoCheckpointAnchorMessageId={
                     repoContextQuery.data?.checkpointAnchorMessageId ?? null
                   }
-                  repoCheckpointBusyId={busyCheckpointId}
+                  repoCheckpointBusyMessageId={busyCheckpointMessageId}
+                  repoCheckpointCursorId={
+                    repoContextQuery.data?.checkpointCursorId ?? null
+                  }
                   repoCheckpointId={
                     message.role === "user"
                       ? (userMessageCheckpointIds.get(message.id) ?? null)
                       : null
+                  }
+                  repoCheckpointLatestId={
+                    repoContextQuery.data?.checkpointLatestId ?? null
                   }
                   repoCheckpointPathMatches={
                     repoContextQuery.data?.checkpointPathMatches ?? true

@@ -106,7 +106,7 @@
     "resumable-stream": "^2.2.10",
     "rtf2text": "^1.0.1",
     "server-only": "^0.0.1",
-    "shiki": "^4.0.1",
+    "shiki": "^3.23.0",
     "sileo": "^0.1.5",
     "sqlite-vec": "0.1.7-alpha.2",
     "superjson": "^2.2.1",

@@ -507,6 +507,11 @@ export async function resetThreadRepoCheckpoint(input: {
     );
   }
 
+  const currentCheckpointId =
+    repoState?.checkpointCursorId ?? repoState?.checkpointLatestId ?? null;
+  const latestCheckpointId =
+    repoState?.checkpointLatestId ?? currentCheckpointId;
+
   const restoreResult = target.beforeTreeHash
     ? await restoreRepoCheckpointTree({
         projectPath: input.projectPath,
@@ -526,7 +531,7 @@ export async function resetThreadRepoCheckpoint(input: {
   updateThreadRepoState(input.threadId, {
     checkpointAnchorMessageId: input.userMessageId,
     checkpointCursorId: target.parentCheckpointId ?? null,
-    checkpointLatestId: target.parentCheckpointId ?? null,
+    checkpointLatestId: latestCheckpointId,
     checkpointProjectPath: input.projectPath,
   });
 
@@ -534,6 +539,6 @@ export async function resetThreadRepoCheckpoint(input: {
     changed: restoreResult.appliedPaths.length > 0,
     checkpointAnchorMessageId: input.userMessageId,
     checkpointCursorId: target.parentCheckpointId ?? null,
-    checkpointLatestId: target.parentCheckpointId ?? null,
+    checkpointLatestId: latestCheckpointId,
   };
 }

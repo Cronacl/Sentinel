@@ -34,7 +34,11 @@ import {
   isToolPart,
   type MessagePart,
 } from "./message-parts/types";
-import { Button, Spinner } from "@heroui/react";
+import {
+  resolveUserMessageCheckpointAction,
+  type UserMessageCheckpointAction,
+} from "./thread-checkpoints";
+import { Button, Spinner, Tooltip } from "@heroui/react";
 import type { ChatEngine } from "@/server/db/enums";
 
 const VARIABLE_TOKEN_REGEX = /(\{\{[^{}]+\}\})/g;
@@ -170,14 +174,19 @@ function MessageActionButton({
   onClick,
   disabled = false,
   isLoading = false,
+  tooltip,
 }: {
-  icon?: typeof PencilEdit02Icon;
+  icon?:
+    | typeof ArrowReloadHorizontalIcon
+    | typeof ArrowTurnBackwardIcon
+    | typeof PencilEdit02Icon;
   disabled?: boolean;
   isLoading?: boolean;
   label: string;
   onClick: () => void;
+  tooltip?: string;
 }) {
-  return (
+  const button = (
     <Button
       size="sm"
       variant="ghost"
@@ -200,6 +209,22 @@ function MessageActionButton({
         />
       ) : null}
     </Button>
+  );
+
+  if (!tooltip?.trim()) {
+    return button;
+  }
+
+  return (
+    <Tooltip.Root delay={150}>
+      <Tooltip.Trigger>{button}</Tooltip.Trigger>
+      <Tooltip.Content
+        className="rounded-xl border border-border/60 bg-overlay px-2 py-1 text-xs shadow-overlay"
+        offset={10}
+      >
+        {tooltip}
+      </Tooltip.Content>
+    </Tooltip.Root>
   );
 }
 
@@ -705,26 +730,31 @@ function ComposerContextChips({
 function UserMessage({
   message,
   onEdit,
-  onResetRepoCheckpoint,
+  onRepoCheckpointAction,
   onSelectBranch,
   disableBranchSwitching,
   repoCheckpointAnchorMessageId,
-  repoCheckpointBusyId,
+  repoCheckpointBusyMessageId,
+  repoCheckpointCursorId,
   repoCheckpointId,
+  repoCheckpointLatestId,
   repoCheckpointPathMatches,
   workspaceRootPath,
 }: {
   message: ThreadUIMessage;
   onEdit?: (message: ThreadUIMessage) => void;
-  onResetRepoCheckpoint?: (
-    message: ThreadUIMessage,
-    checkpointId: string,
-  ) => void;
+  onRepoCheckpointAction?: (input: {
+    action: UserMessageCheckpointAction;
+    checkpointId: string;
+    message: ThreadUIMessage;
+  }) => void;
   onSelectBranch?: (messageId: string) => void;
   disableBranchSwitching?: boolean;
   repoCheckpointAnchorMessageId?: string | null;
-  repoCheckpointBusyId?: string | null;
+  repoCheckpointBusyMessageId?: string | null;
+  repoCheckpointCursorId?: string | null;
   repoCheckpointId?: string | null;
+  repoCheckpointLatestId?: string | null;
   repoCheckpointPathMatches?: boolean;
   workspaceRootPath?: string | null;
 }) {
@@ -742,8 +772,14 @@ function UserMessage({
   const combinedText = textParts.map((part) => part.text).join("\n\n");
   const isCollapsible = shouldCollapseUserMessage(combinedText);
   const [isExpanded, setIsExpanded] = useState(false);
-  const isCheckpointBusy =
-    repoCheckpointId != null && repoCheckpointBusyId === repoCheckpointId;
+  const checkpointAction = resolveUserMessageCheckpointAction({
+    checkpointAnchorMessageId: repoCheckpointAnchorMessageId,
+    checkpointCursorId: repoCheckpointCursorId,
+    checkpointId: repoCheckpointId,
+    checkpointLatestId: repoCheckpointLatestId,
+    messageId: message.id,
+  });
+  const isCheckpointBusy = repoCheckpointBusyMessageId === message.id;
   const isCheckpointAnchor = repoCheckpointAnchorMessageId === message.id;
   const shouldRenderComposerContextRow =
     Boolean(composerContext) && textParts.length === 0;
@@ -839,16 +875,33 @@ function UserMessage({
         ) : null}
         <div className="flex flex-wrap items-center gap-1 text-muted">
           <CopyButton text={combinedText} title="Copy prompt" />
-          {repoCheckpointId && onResetRepoCheckpoint ? (
+          {repoCheckpointId && checkpointAction && onRepoCheckpointAction ? (
             <>
               <MessageActionButton
                 disabled={
                   isCheckpointBusy || repoCheckpointPathMatches === false
                 }
-                icon={ArrowTurnBackwardIcon}
+                icon={
+                  checkpointAction === "reapply"
+                    ? ArrowReloadHorizontalIcon
+                    : ArrowTurnBackwardIcon
+                }
                 isLoading={isCheckpointBusy}
-                label="Reset to here"
-                onClick={() => onResetRepoCheckpoint(message, repoCheckpointId)}
+                label={
+                  checkpointAction === "reapply" ? "Reapply" : "Reset to here"
+                }
+                tooltip={
+                  checkpointAction === "reapply"
+                    ? "Reapply the restored checkpoint and return to the latest repo state"
+                    : "Reset the repo to this message and branch from here"
+                }
+                onClick={() =>
+                  onRepoCheckpointAction({
+                    action: checkpointAction,
+                    checkpointId: repoCheckpointId,
+                    message,
+                  })
+                }
               />
               {isCheckpointAnchor ? (
                 <span className="rounded-full bg-default px-1.5 py-0.5 text-[10px] font-medium text-foreground/70">
@@ -894,16 +947,19 @@ type ChatMessageProps = {
   isStreaming?: boolean;
   onEdit?: (message: ThreadUIMessage) => void;
   onRegenerate?: (messageId: string) => void;
-  onResetRepoCheckpoint?: (
-    message: ThreadUIMessage,
-    checkpointId: string,
-  ) => void;
+  onRepoCheckpointAction?: (input: {
+    action: UserMessageCheckpointAction;
+    checkpointId: string;
+    message: ThreadUIMessage;
+  }) => void;
   onRetry?: (messageId: string) => void;
   onSelectBranch?: (messageId: string) => void;
   disableBranchSwitching?: boolean;
   repoCheckpointAnchorMessageId?: string | null;
-  repoCheckpointBusyId?: string | null;
+  repoCheckpointBusyMessageId?: string | null;
+  repoCheckpointCursorId?: string | null;
   repoCheckpointId?: string | null;
+  repoCheckpointLatestId?: string | null;
   repoCheckpointPathMatches?: boolean;
   workspaceRootPath?: string | null;
 };
@@ -919,13 +975,15 @@ export const ChatMessage = memo(function ChatMessage({
   onStartPlanImplementation,
   onEdit,
   onRegenerate,
-  onResetRepoCheckpoint,
+  onRepoCheckpointAction,
   onRetry,
   onSelectBranch,
   disableBranchSwitching,
   repoCheckpointAnchorMessageId,
-  repoCheckpointBusyId,
+  repoCheckpointBusyMessageId,
+  repoCheckpointCursorId,
   repoCheckpointId,
+  repoCheckpointLatestId,
   repoCheckpointPathMatches,
   workspaceRootPath,
 }: ChatMessageProps) {
@@ -934,12 +992,14 @@ export const ChatMessage = memo(function ChatMessage({
       <UserMessage
         message={message}
         onEdit={onEdit}
-        onResetRepoCheckpoint={onResetRepoCheckpoint}
+        onRepoCheckpointAction={onRepoCheckpointAction}
         onSelectBranch={onSelectBranch}
         disableBranchSwitching={disableBranchSwitching}
         repoCheckpointAnchorMessageId={repoCheckpointAnchorMessageId}
-        repoCheckpointBusyId={repoCheckpointBusyId}
+        repoCheckpointBusyMessageId={repoCheckpointBusyMessageId}
+        repoCheckpointCursorId={repoCheckpointCursorId}
         repoCheckpointId={repoCheckpointId}
+        repoCheckpointLatestId={repoCheckpointLatestId}
         repoCheckpointPathMatches={repoCheckpointPathMatches}
         workspaceRootPath={workspaceRootPath}
       />
