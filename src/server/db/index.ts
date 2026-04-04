@@ -98,6 +98,35 @@ export function ensureTables(
   db.run(
     sql`CREATE INDEX IF NOT EXISTS "user_selected_workspace_idx" ON "user" ("selected_workspace_id")`,
   );
+  ensureTableColumns(sqlite, "user", [
+    { name: "nickname", definition: "text" },
+    { name: "occupation", definition: "text" },
+    { name: "about_user", definition: "text" },
+    {
+      name: "personality_preset",
+      definition: "text DEFAULT 'pragmatic' NOT NULL",
+    },
+    { name: "custom_instructions", definition: "text" },
+    {
+      name: "theme_preference",
+      definition: "text DEFAULT 'system' NOT NULL",
+    },
+    { name: "code_theme", definition: "text" },
+    { name: "ui_font_family", definition: "text" },
+    { name: "code_font_family", definition: "text" },
+    { name: "ui_font_size", definition: "real" },
+    { name: "code_font_size", definition: "real" },
+    { name: "shortcut_overrides", definition: "text" },
+    { name: "selected_workspace_id", definition: "text" },
+    {
+      name: "thread_list_organize_by",
+      definition: "text DEFAULT 'workspace' NOT NULL",
+    },
+    {
+      name: "thread_list_sort_by",
+      definition: "text DEFAULT 'updated' NOT NULL",
+    },
+  ]);
 
   db.run(sql`CREATE TABLE IF NOT EXISTS "workspace" (
     "id" text PRIMARY KEY NOT NULL,
@@ -602,6 +631,39 @@ export function ensureTables(
     sql`CREATE INDEX IF NOT EXISTS "search_setting_user_id_idx" ON "search_setting" ("user_id")`,
   );
 
+  db.run(sql`CREATE TABLE IF NOT EXISTS "image_generation_setting" (
+    "id" text PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL,
+    "default_provider" text,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "image_generation_setting_user_unique" ON "image_generation_setting" ("user_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "image_generation_setting_user_id_idx" ON "image_generation_setting" ("user_id")`,
+  );
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS "image_generation_provider_setting" (
+    "id" text PRIMARY KEY NOT NULL,
+    "user_id" text NOT NULL,
+    "provider" text NOT NULL,
+    "model_id" text,
+    "is_custom" integer DEFAULT false NOT NULL,
+    "is_enabled" integer DEFAULT true NOT NULL,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "image_generation_provider_setting_user_provider_unique" ON "image_generation_provider_setting" ("user_id", "provider")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "image_generation_provider_setting_user_id_idx" ON "image_generation_provider_setting" ("user_id")`,
+  );
+
   db.run(sql`CREATE TABLE IF NOT EXISTS "video_generation_setting" (
     "id" text PRIMARY KEY NOT NULL,
     "user_id" text NOT NULL,
@@ -794,6 +856,24 @@ export function ensureTables(
   );
   db.run(
     sql`CREATE INDEX IF NOT EXISTS "integration_oauth_app_user_id_idx" ON "integration_oauth_app" ("user_id")`,
+  );
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS "integration_database_config" (
+    "id" text PRIMARY KEY NOT NULL,
+    "integration_id" text NOT NULL REFERENCES "integration"("id") ON DELETE CASCADE,
+    "encrypted_host" text NOT NULL,
+    "encrypted_port" text NOT NULL,
+    "encrypted_database" text,
+    "encrypted_username" text NOT NULL,
+    "encrypted_password" text NOT NULL,
+    "encrypted_connection_url" text,
+    "use_connection_url" integer DEFAULT false NOT NULL,
+    "ssl" integer DEFAULT false NOT NULL,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "integration_db_config_integration_idx" ON "integration_database_config" ("integration_id")`,
   );
 }
 
