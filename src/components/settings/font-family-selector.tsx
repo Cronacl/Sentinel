@@ -1,12 +1,13 @@
 "use client";
 
 import {
+  ComboBox,
   Description,
   FieldError,
   Header,
+  Input,
   Label,
   ListBox,
-  Select,
   Separator,
 } from "@heroui/react";
 import { Fragment, useEffect, useState } from "react";
@@ -33,6 +34,7 @@ type FontFamilySelectorProps<
   mode: FontSelectorMode;
   name: TName;
   placeholder: string;
+  showDescriptions?: boolean;
 };
 
 const SECTION_ORDER = [
@@ -99,6 +101,7 @@ export function FontFamilySelector<
   mode,
   name,
   placeholder,
+  showDescriptions = true,
 }: FontFamilySelectorProps<TFieldValues, TName>) {
   const [systemFamilies, setSystemFamilies] = useState<string[]>([]);
 
@@ -135,41 +138,20 @@ export function FontFamilySelector<
         })).filter((section) => section.items.length > 0);
 
         return (
-          <Select.Root
+          <ComboBox
             className="w-full"
             isInvalid={fieldState.invalid}
+            menuTrigger="input"
             name={field.name}
             onSelectionChange={(key) => field.onChange(String(key))}
             selectedKey={currentValue || null}
           >
             <Label>{label}</Label>
-            <Select.Trigger>
-              <Select.Value>
-                {() => {
-                  if (!selectedOption) {
-                    return (
-                      <span className="truncate text-muted">{placeholder}</span>
-                    );
-                  }
-
-                  return (
-                    <div className="min-w-0 space-y-0.5 line-clamp-1">
-                      <p
-                        className="truncate"
-                        style={{ fontFamily: selectedOption.previewFontFamily }}
-                      >
-                        {selectedOption.label}
-                      </p>
-                      <p className="truncate text-xs text-muted">
-                        {selectedOption.description ?? selectedOption.value}
-                      </p>
-                    </div>
-                  );
-                }}
-              </Select.Value>
-              <Select.Indicator />
-            </Select.Trigger>
-            <Select.Popover>
+            <ComboBox.InputGroup>
+              <Input placeholder={placeholder} />
+              <ComboBox.Trigger />
+            </ComboBox.InputGroup>
+            <ComboBox.Popover>
               <ListBox className="max-h-[320px] overflow-y-auto w-96">
                 {sections.map((section, index) => (
                   <Fragment key={section.section}>
@@ -182,14 +164,14 @@ export function FontFamilySelector<
                           textValue={option.textValue}
                         >
                           <div className="flex min-w-0 items-center justify-between gap-3">
-                            <div className="min-w-0 flex-1 space-y-0.5">
+                            <div className="min-w-0 flex-1">
                               <p
                                 className="truncate"
                                 style={{ fontFamily: option.previewFontFamily }}
                               >
                                 {option.label}
                               </p>
-                              {option.description ? (
+                              {showDescriptions && option.description ? (
                                 <p className="truncate text-xs text-muted">
                                   {option.description}
                                 </p>
@@ -204,10 +186,10 @@ export function FontFamilySelector<
                   </Fragment>
                 ))}
               </ListBox>
-            </Select.Popover>
+            </ComboBox.Popover>
             {description ? <Description>{description}</Description> : null}
             <FieldError>{fieldState.error?.message}</FieldError>
-          </Select.Root>
+          </ComboBox>
         );
       }}
     />
