@@ -8,6 +8,7 @@ import {
   Sun03Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { sileo } from "sileo";
@@ -30,10 +31,8 @@ import {
   DEFAULT_UI_FONT_SIZE,
   FONT_SIZE_STEP,
   THEME_OPTIONS,
-  getCodeThemePalette,
   type ThemePreference,
 } from "@/lib/appearance";
-import { useResolvedTheme } from "@/lib/syntax/use-resolved-theme";
 import {
   type AppearanceFormValues,
   appearanceFormSchema,
@@ -53,75 +52,83 @@ function dispatchAppearanceEvents() {
 
 function AppearanceSkeleton() {
   return (
-    <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-      <div className="mb-5 space-y-2">
-        <Skeleton className="h-5 w-32 rounded-md" />
-        <Skeleton className="h-4 w-80 rounded-md" />
-      </div>
-
-      <div className="space-y-5">
-        <Skeleton className="h-32 w-full rounded-xl" />
-        <Skeleton className="h-16 w-full rounded-xl" />
-        <Skeleton className="h-16 w-full rounded-xl" />
-        <Skeleton className="h-16 w-full rounded-xl" />
-      </div>
-
-      <div className="mt-5 flex justify-end">
+    <section className="border-separator/20 bg-surface rounded-2xl border">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div
+          className={`flex items-center justify-between gap-6 p-5${i > 0 ? " border-t border-border/50" : ""}`}
+          key={i}
+        >
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-40 rounded-md" />
+            <Skeleton className="h-4 w-72 rounded-md" />
+          </div>
+          <Skeleton className="h-8 w-40 shrink-0 rounded-xl" />
+        </div>
+      ))}
+      <div className="flex justify-end border-t border-border/50 p-5">
         <Skeleton className="h-9 w-32 rounded-xl" />
       </div>
     </section>
   );
 }
 
-function CodeThemeSnippet({
+function SettingsSectionRow({
+  children,
   description,
-  label,
-  resolvedTheme,
-  value,
+  isFirst = false,
+  title,
 }: {
-  description: string;
-  label: string;
-  resolvedTheme: "dark" | "light";
-  value: AppearanceFormValues["codeTheme"];
+  children: ReactNode;
+  description: ReactNode;
+  isFirst?: boolean;
+  title: ReactNode;
 }) {
-  const palette = getCodeThemePalette(value, resolvedTheme);
-
   return (
-    <div className="rounded-2xl border border-border/50 bg-background/50 p-4">
-      <div className="mb-3 space-y-1">
-        <p className="text-sm font-medium text-foreground">{label}</p>
-        <p className="text-xs text-muted">{description}</p>
+    <div
+      className={`flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between${isFirst ? "" : " border-t border-border/50"}`}
+    >
+      <div className="space-y-1">
+        <h2 className="text-foreground text-base font-medium">{title}</h2>
+        <p className="text-muted text-sm">{description}</p>
       </div>
-
-      <div
-        className="overflow-hidden rounded-xl border border-black/6 px-3 py-2.5 font-mono text-[11px] leading-[1.55] dark:border-white/8"
-        style={{
-          backgroundColor: palette.background,
-          color: palette.foreground,
-        }}
-      >
-        <div>
-          <span style={{ color: palette["token-keyword"] }}>const</span>{" "}
-          <span style={{ color: palette["token-function"] }}>theme</span>{" "}
-          <span style={{ color: palette["token-punctuation"] }}>=</span>{" "}
-          <span style={{ color: palette["token-string"] }}>"{label}"</span>
-        </div>
-        <div>
-          <span style={{ color: palette["token-keyword"] }}>return</span>{" "}
-          <span style={{ color: palette["token-function"] }}>render</span>
-          <span style={{ color: palette["token-punctuation"] }}>(</span>
-          <span style={{ color: palette["token-parameter"] }}>theme</span>
-          <span style={{ color: palette["token-punctuation"] }}>)</span>
-        </div>
-      </div>
+      {children}
     </div>
+  );
+}
+
+function SettingsRowControl({
+  children,
+  widthClassName = "lg:w-[360px]",
+}: {
+  children: ReactNode;
+  widthClassName?: string;
+}) {
+  return (
+    <div
+      className={`flex w-full max-w-full flex-col gap-2 ${widthClassName} lg:items-end`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function ResetAction({
+  label = "Reset",
+  onPress,
+}: {
+  label?: string;
+  onPress: () => void;
+}) {
+  return (
+    <Button onPress={onPress} size="sm" variant="ghost">
+      {label}
+    </Button>
   );
 }
 
 export default function AppearanceSettingsPage() {
   const utils = api.useUtils();
   const [submitError, setSubmitError] = useState("");
-  const resolvedTheme = useResolvedTheme();
 
   const form = useForm<AppearanceFormValues>({
     defaultValues: DEFAULT_APPEARANCE_SETTINGS,
@@ -163,6 +170,7 @@ export default function AppearanceSettingsPage() {
   );
 
   const appearanceValues = form.watch();
+  const themePreference = appearanceValues.themePreference;
   const selectedCodeTheme =
     CODE_THEME_OPTIONS.find(
       (option) => option.value === appearanceValues.codeTheme,
@@ -248,186 +256,106 @@ export default function AppearanceSettingsPage() {
       {!appearance && isPending ? (
         <AppearanceSkeleton />
       ) : (
-        <Form
-          className="flex flex-col gap-6"
-          onSubmit={form.handleSubmit(handleSubmit)}
-        >
-          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-            <div className="space-y-6">
-              <div>
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="space-y-1">
-                    <h2 className="text-foreground text-base font-medium">
-                      Theme
-                    </h2>
-                    <p className="text-muted text-sm">
-                      Choose the overall light, dark, or system appearance.
-                    </p>
-                  </div>
+        <Form onSubmit={form.handleSubmit(handleSubmit)}>
+          <section className="border-separator/20 bg-surface rounded-2xl border">
+            <SettingsSectionRow
+              description="Choose the overall light, dark, or system appearance."
+              isFirst
+              title="Theme"
+            >
+              <div className="bg-background border-separator inline-flex w-full flex-wrap gap-1 rounded-full border p-1 lg:w-auto lg:flex-nowrap">
+                {THEME_OPTIONS.map((option) => {
+                  const isSelected = themePreference === option.value;
+                  const isSaving = updateAppearance.isPending && isSelected;
 
-                  <div className="bg-background border-separator inline-flex w-full flex-wrap gap-1 rounded-full border p-1 lg:w-auto lg:flex-nowrap">
-                    {THEME_OPTIONS.map((option) => {
-                      const isSelected =
-                        form.watch("themePreference") === option.value;
-                      const isSaving = updateAppearance.isPending && isSelected;
-
-                      return (
-                        <Button
-                          className="justify-center rounded-full"
-                          isDisabled={updateAppearance.isPending}
-                          key={option.value}
-                          onPress={() => void handleThemeChange(option.value)}
-                          size="sm"
-                          variant={isSelected ? "tertiary" : "ghost"}
-                        >
-                          {isSaving ? (
-                            <Spinner color="current" size="sm" />
-                          ) : (
-                            <HugeiconsIcon
-                              color="currentColor"
-                              icon={THEME_ICON[option.value]}
-                              size={16}
-                              strokeWidth={1.5}
-                            />
-                          )}
-                          {option.label}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                </div>
+                  return (
+                    <Button
+                      className="justify-center rounded-full"
+                      isDisabled={updateAppearance.isPending}
+                      key={option.value}
+                      onPress={() => void handleThemeChange(option.value)}
+                      size="sm"
+                      variant={isSelected ? "tertiary" : "ghost"}
+                    >
+                      {isSaving ? (
+                        <Spinner color="current" size="sm" />
+                      ) : (
+                        <HugeiconsIcon
+                          color="currentColor"
+                          icon={THEME_ICON[option.value]}
+                          size={16}
+                          strokeWidth={1.5}
+                        />
+                      )}
+                      {option.label}
+                    </Button>
+                  );
+                })}
               </div>
+            </SettingsSectionRow>
 
-              <div className="border-t border-border/50 pt-6">
-                <div className="mb-5">
-                  <h2 className="text-foreground text-base font-medium">
-                    Typography
-                  </h2>
-                  <p className="text-muted mt-1 text-sm">
-                    Set the font stacks used for UI text and code surfaces.
-                  </p>
+            <SettingsSectionRow
+              description="Used for interface text."
+              title="UI font family"
+            >
+              <SettingsRowControl>
+                <div className="w-full">
+                  <FontFamilySelector
+                    control={form.control}
+                    mode="ui"
+                    name="uiFontFamily"
+                    placeholder="Choose a UI font stack"
+                    label="UI font family"
+                    showDescriptions={false}
+                  />
                 </div>
+              </SettingsRowControl>
+            </SettingsSectionRow>
 
-                <div className="grid gap-5 w-fit overflow-hidden lg:grid-cols-2">
-                  <div className="space-y-3 overflow-hidden max-w-full">
-                    <FontFamilySelector
-                      control={form.control}
-                      description="Used for non-code interface text."
-                      label="UI font family"
-                      mode="ui"
-                      name="uiFontFamily"
-                      placeholder="Choose a UI font stack"
-                    />
-
-                    <div className="flex items-center justify-between gap-3 text-xs text-muted">
-                      <p className="min-w-0 truncate font-mono">
-                        {DEFAULT_UI_FONT_FAMILY}
-                      </p>
-                      <Button
-                        onPress={() =>
-                          resetField("uiFontFamily", DEFAULT_UI_FONT_FAMILY)
-                        }
-                        size="sm"
-                        variant="ghost"
-                      >
-                        Reset
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 overflow-hidden max-w-full">
-                    <FontFamilySelector
-                      control={form.control}
-                      description="Used for terminals, code blocks, and inline code."
-                      label="Code font family"
-                      mode="code"
-                      name="codeFontFamily"
-                      placeholder="Choose a code font stack"
-                    />
-
-                    <div className="flex items-center justify-between gap-3 text-xs text-muted">
-                      <p className="min-w-0 truncate font-mono">
-                        {DEFAULT_CODE_FONT_FAMILY}
-                      </p>
-                      <Button
-                        onPress={() =>
-                          resetField("codeFontFamily", DEFAULT_CODE_FONT_FAMILY)
-                        }
-                        size="sm"
-                        variant="ghost"
-                      >
-                        Reset
-                      </Button>
-                    </div>
-                  </div>
+            <SettingsSectionRow
+              description="Used for terminals, code blocks, and diffs."
+              title="Code font family"
+            >
+              <SettingsRowControl>
+                <div className="w-full">
+                  <FontFamilySelector
+                    control={form.control}
+                    mode="code"
+                    name="codeFontFamily"
+                    placeholder="Choose a code font stack"
+                    label="Code font family"
+                    showDescriptions={false}
+                  />
                 </div>
-              </div>
+              </SettingsRowControl>
+            </SettingsSectionRow>
 
-              <div className="border-t border-border/50 pt-6">
-                <div className="mb-5 flex items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-foreground text-base font-medium">
-                      Code theme
-                    </h2>
-                    <p className="text-muted mt-1 text-sm">
-                      Pick the Shiki theme family used for code blocks, diffs,
-                      and terminals.
-                    </p>
-                  </div>
-                  <Button
-                    onPress={() => resetField("codeTheme", DEFAULT_CODE_THEME)}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    Reset
-                  </Button>
-                </div>
-
-                <div className="grid gap-5 lg:grid-cols-[minmax(0,260px)_minmax(0,1fr)] lg:items-start">
+            <SettingsSectionRow
+              description="Pick the syntax theme used for code surfaces."
+              title="Code theme"
+            >
+              <SettingsRowControl>
+                <div className="w-full">
                   <ControlledSelectField
                     control={form.control}
-                    description="Applies across code blocks, diff views, and terminal surfaces."
-                    label="Theme"
+                    label="Code theme"
                     name="codeTheme"
                     options={CODE_THEME_OPTIONS}
                     selectProps={{ className: "w-full" }}
-                  />
-
-                  <CodeThemeSnippet
-                    description={selectedCodeTheme.description}
-                    label={selectedCodeTheme.label}
-                    resolvedTheme={resolvedTheme}
-                    value={selectedCodeTheme.value}
+                    showDescriptions={false}
                   />
                 </div>
-              </div>
+              </SettingsRowControl>
+            </SettingsSectionRow>
 
-              <div className="border-t border-border/50 pt-6">
-                <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-                  <div>
-                    <h2 className="text-foreground text-base font-medium">
-                      Sizing
-                    </h2>
-                    <p className="text-muted mt-1 text-sm">
-                      Adjust the base reading scale for UI text and code.
-                    </p>
-                  </div>
-                  <Button
-                    onPress={() => {
-                      resetField("uiFontSize", DEFAULT_UI_FONT_SIZE);
-                      resetField("codeFontSize", DEFAULT_CODE_FONT_SIZE);
-                    }}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    Reset sizes
-                  </Button>
-                </div>
-
-                <div className="grid gap-5 lg:grid-cols-2">
+            <SettingsSectionRow
+              description="Adjust the base reading size for interface text from 14 to 18 in half-step increments."
+              title="UI font size"
+            >
+              <SettingsRowControl widthClassName="lg:w-[280px]">
+                <div className="w-full">
                   <ControlledNumberField
                     control={form.control}
-                    description="Half-step increments from 14 to 18."
                     inputProps={{ className: "w-full" }}
                     label="UI font size"
                     name="uiFontSize"
@@ -438,10 +366,18 @@ export default function AppearanceSettingsPage() {
                       step: FONT_SIZE_STEP,
                     }}
                   />
+                </div>
+              </SettingsRowControl>
+            </SettingsSectionRow>
 
+            <SettingsSectionRow
+              description="Adjust monospace sizing from 11 to 16 in half-step increments."
+              title="Code font size"
+            >
+              <SettingsRowControl widthClassName="lg:w-[280px]">
+                <div className="w-full">
                   <ControlledNumberField
                     control={form.control}
-                    description="Half-step increments from 11 to 16."
                     inputProps={{ className: "w-full" }}
                     label="Code font size"
                     name="codeFontSize"
@@ -453,42 +389,25 @@ export default function AppearanceSettingsPage() {
                     }}
                   />
                 </div>
-              </div>
+              </SettingsRowControl>
+            </SettingsSectionRow>
 
-              <div className="border-t border-border/50 pt-5">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="text-xs text-muted">
-                    <p>
-                      Code theme{" "}
-                      {
-                        CODE_THEME_OPTIONS.find(
-                          (option) =>
-                            option.value === appearanceValues.codeTheme,
-                        )?.label
-                      }
-                    </p>
-                    <p>UI {appearanceValues.uiFontSize}px</p>
-                    <p>Code {appearanceValues.codeFontSize}px</p>
-                  </div>
-                  <Button
-                    isDisabled={
-                      updateAppearance.isPending || !form.formState.isDirty
-                    }
-                    isPending={updateAppearance.isPending}
-                    size="sm"
-                    type="submit"
-                  >
-                    {({ isPending }) => (
-                      <>
-                        {isPending ? (
-                          <Spinner color="current" size="sm" />
-                        ) : null}
-                        Save appearance
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
+            <div className="flex justify-end border-t border-border/50 p-5">
+              <Button
+                isDisabled={
+                  updateAppearance.isPending || !form.formState.isDirty
+                }
+                isPending={updateAppearance.isPending}
+                size="sm"
+                type="submit"
+              >
+                {({ isPending }) => (
+                  <>
+                    {isPending ? <Spinner color="current" size="sm" /> : null}
+                    Save
+                  </>
+                )}
+              </Button>
             </div>
           </section>
         </Form>

@@ -2,6 +2,7 @@
 
 import { Button, Form, Skeleton, Spinner } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { sileo } from "sileo";
@@ -25,42 +26,103 @@ import { api } from "@/trpc/react";
 
 function PersonalizationSkeleton() {
   return (
-    <div className="flex flex-col gap-6">
-      <div className="border-separator/20 bg-surface rounded-2xl border p-5">
-        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_280px]">
+    <section className="border-separator/20 bg-surface rounded-2xl border">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div
+          className={`flex flex-col gap-4 p-5 lg:flex-row lg:items-start lg:justify-between${i > 0 ? " border-t border-border/50" : ""}`}
+          key={i}
+        >
           <div className="space-y-2">
-            <Skeleton className="h-5 w-28 rounded-md" />
+            <Skeleton className="h-5 w-40 rounded-md" />
             <Skeleton className="h-4 w-72 rounded-md" />
           </div>
-        </div>
-      </div>
-
-      <div className="border-separator/20 bg-surface rounded-2xl border p-5">
-        <div className="space-y-5">
-          {Array.from({ length: 2 }).map((_, index) => (
-            <div className="space-y-2" key={index}>
-              <Skeleton className="h-4 w-32 rounded-md" />
-              <Skeleton className="h-10 w-full rounded-lg" />
-            </div>
-          ))}
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-28 rounded-md" />
-            <Skeleton className="h-28 w-full rounded-xl" />
+          <div className="w-full lg:w-[360px]">
+            <Skeleton className="h-10 w-full rounded-xl" />
+            {i >= 2 ? (
+              <Skeleton className="mt-3 h-28 w-full rounded-xl" />
+            ) : null}
           </div>
         </div>
-      </div>
-
-      <div className="border-separator/20 bg-surface rounded-2xl border p-5">
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-36 rounded-md" />
-          <Skeleton className="h-48 w-full rounded-xl" />
-        </div>
-      </div>
-
-      <div className="flex justify-end">
+      ))}
+      <div className="flex justify-end border-t border-border/50 p-5">
         <Skeleton className="h-10 w-20 rounded-xl" />
       </div>
+    </section>
+  );
+}
+
+function SettingsSectionRow({
+  children,
+  description,
+  isFirst = false,
+  title,
+}: {
+  children: ReactNode;
+  description: ReactNode;
+  isFirst?: boolean;
+  title: ReactNode;
+}) {
+  return (
+    <div
+      className={`flex flex-col gap-4 p-5 lg:flex-row lg:items-start lg:justify-between${isFirst ? "" : " border-t border-border/50"}`}
+    >
+      <div className="space-y-1">
+        <h2 className="text-foreground text-base font-medium">{title}</h2>
+        <p className="text-muted text-sm">{description}</p>
+      </div>
+      {children}
     </div>
+  );
+}
+
+function SettingsRowControl({
+  children,
+  widthClassName = "lg:w-[360px]",
+}: {
+  children: ReactNode;
+  widthClassName?: string;
+}) {
+  return (
+    <div
+      className={`flex w-full max-w-full flex-col gap-3 ${widthClassName} lg:items-end`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function ResetAction({
+  label = "Reset",
+  onPress,
+}: {
+  label?: string;
+  onPress: () => void;
+}) {
+  return (
+    <Button onPress={onPress} size="sm" variant="ghost">
+      {label}
+    </Button>
+  );
+}
+
+const DEFAULT_PERSONALIZATION_VALUES: PersonalizationFormValues = {
+  aboutUser: "",
+  customInstructions: "",
+  nickname: "",
+  occupation: "",
+  personality: DEFAULT_PERSONALITY_PRESET,
+};
+
+function isDefaultValue(value: string | null | undefined) {
+  return !value?.trim();
+}
+
+function getPersonalityDescription(
+  value: PersonalizationFormValues["personality"],
+) {
+  return (
+    PERSONALITY_PRESETS.find((preset) => preset.value === value)?.description ??
+    ""
   );
 }
 
@@ -69,13 +131,7 @@ export default function PersonalizationPage() {
   const [submitError, setSubmitError] = useState("");
 
   const form = useForm<PersonalizationFormValues>({
-    defaultValues: {
-      aboutUser: "",
-      customInstructions: "",
-      nickname: "",
-      occupation: "",
-      personality: DEFAULT_PERSONALITY_PRESET,
-    },
+    defaultValues: DEFAULT_PERSONALIZATION_VALUES,
     resolver: zodResolver(personalizationFormSchema),
   });
 
@@ -126,6 +182,23 @@ export default function PersonalizationPage() {
     }
   };
 
+  const resetField = <TField extends keyof PersonalizationFormValues>(
+    field: TField,
+    value: PersonalizationFormValues[TField],
+  ) => {
+    form.setValue(field, value as never, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+  };
+
+  const selectedPersonality = form.watch("personality");
+  const nickname = form.watch("nickname");
+  const occupation = form.watch("occupation");
+  const aboutUser = form.watch("aboutUser");
+  const customInstructions = form.watch("customInstructions");
+
   return (
     <SettingsPageWrapper
       subtitle="Set a default personality and give Sentinel more context about you."
@@ -146,113 +219,135 @@ export default function PersonalizationPage() {
       {!personalization && isPending ? (
         <PersonalizationSkeleton />
       ) : (
-        <Form
-          className="flex flex-col gap-6"
-          onSubmit={form.handleSubmit(handleSubmit)}
-        >
-          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_280px] md:items-start">
-              <div className="space-y-1">
-                <h2 className="text-foreground text-base font-medium">
-                  Personality
-                </h2>
-                <p className="text-muted text-sm">
-                  Choose the default tone Sentinel should use when responding.
-                </p>
-              </div>
-
-              <ControlledSelectField
-                control={form.control}
-                label="Personality"
-                name="personality"
-                options={PERSONALITY_PRESETS.map((preset) => ({
-                  description: preset.description,
-                  label: preset.label,
-                  value: preset.value,
-                }))}
-                selectProps={{ className: "w-full" }}
-              />
-            </div>
-          </section>
-
-          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-            <div className="mb-5">
-              <h2 className="text-foreground text-base font-medium">
-                About You
-              </h2>
-              <p className="text-muted mt-1 text-sm">
-                Give Sentinel a bit more context to personalize answers and
-                examples.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-5">
-              <ControlledTextField
-                control={form.control}
-                inputProps={{ placeholder: "Name" }}
-                label="Your nickname"
-                name="nickname"
-              />
-
-              <ControlledTextField
-                control={form.control}
-                inputProps={{ placeholder: "Engineer, student, etc." }}
-                label="Your occupation"
-                name="occupation"
-              />
-
-              <ControlledTextAreaField
-                control={form.control}
-                label="More about you"
-                name="aboutUser"
-                textAreaProps={{
-                  className: "min-h-28",
-                  placeholder:
-                    "Interests, values, or preferences to keep in mind",
-                }}
-              />
-            </div>
-          </section>
-
-          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-            <div className="mb-5">
-              <h2 className="text-foreground text-base font-medium">
-                Custom Instructions
-              </h2>
-              <p className="text-muted mt-1 text-sm">
-                Add persistent instructions that Sentinel should follow across
-                conversations.
-              </p>
-            </div>
-
-            <ControlledTextAreaField
-              control={form.control}
-              label="Instructions"
-              name="customInstructions"
-              textAreaProps={{
-                className: "min-h-56 font-mono text-sm",
-                placeholder: "Add your custom instructions...",
-              }}
-            />
-          </section>
-
-          <div className="flex justify-end">
-            <Button
-              isDisabled={
-                savePersonalization.isPending || !form.formState.isDirty
-              }
-              isPending={savePersonalization.isPending}
-              size="sm"
-              type="submit"
+        <Form onSubmit={form.handleSubmit(handleSubmit)}>
+          <section className="border-separator/20 bg-surface rounded-2xl border">
+            <SettingsSectionRow
+              description="Choose the default tone Sentinel should use when responding."
+              isFirst
+              title="Personality"
             >
-              {({ isPending }) => (
-                <>
-                  {isPending ? <Spinner color="current" size="sm" /> : null}
-                  Save
-                </>
-              )}
-            </Button>
-          </div>
+              <SettingsRowControl>
+                <div className="w-full lg:max-w-[360px]">
+                  <ControlledSelectField
+                    control={form.control}
+                    label="Personality"
+                    name="personality"
+                    options={PERSONALITY_PRESETS.map((preset) => ({
+                      description: preset.description,
+                      label: preset.label,
+                      value: preset.value,
+                    }))}
+                    selectProps={{ className: "w-full" }}
+                  />
+                </div>
+              </SettingsRowControl>
+            </SettingsSectionRow>
+
+            <SettingsSectionRow
+              description="Add a name Sentinel can use when it personalizes responses."
+              title="Nickname"
+            >
+              <SettingsRowControl>
+                <ControlledTextField
+                  control={form.control}
+                  inputProps={{ placeholder: "Name" }}
+                  label="Your nickname"
+                  name="nickname"
+                  textFieldProps={{ className: "w-full" }}
+                />
+                {!isDefaultValue(nickname) ? (
+                  <div className="flex justify-end">
+                    <ResetAction onPress={() => resetField("nickname", "")} />
+                  </div>
+                ) : null}
+              </SettingsRowControl>
+            </SettingsSectionRow>
+
+            <SettingsSectionRow
+              description="Share your role or area of work so examples feel more relevant."
+              title="Occupation"
+            >
+              <SettingsRowControl>
+                <ControlledTextField
+                  control={form.control}
+                  inputProps={{ placeholder: "Engineer, student, etc." }}
+                  label="Your occupation"
+                  name="occupation"
+                  textFieldProps={{ className: "w-full" }}
+                />
+                {!isDefaultValue(occupation) ? (
+                  <div className="flex justify-end">
+                    <ResetAction onPress={() => resetField("occupation", "")} />
+                  </div>
+                ) : null}
+              </SettingsRowControl>
+            </SettingsSectionRow>
+
+            <SettingsSectionRow
+              description="Give Sentinel context about your interests, values, or preferences."
+              title="About you"
+            >
+              <SettingsRowControl widthClassName="lg:w-[420px]">
+                <ControlledTextAreaField
+                  control={form.control}
+                  label="More about you"
+                  name="aboutUser"
+                  textAreaProps={{
+                    className: "min-h-28",
+                    placeholder:
+                      "Interests, values, or preferences to keep in mind",
+                  }}
+                />
+                {!isDefaultValue(aboutUser) ? (
+                  <div className="flex justify-end">
+                    <ResetAction onPress={() => resetField("aboutUser", "")} />
+                  </div>
+                ) : null}
+              </SettingsRowControl>
+            </SettingsSectionRow>
+
+            <SettingsSectionRow
+              description="Add persistent instructions Sentinel should follow across conversations."
+              title="Custom instructions"
+            >
+              <SettingsRowControl widthClassName="lg:w-[420px]">
+                <ControlledTextAreaField
+                  control={form.control}
+                  label="Instructions"
+                  name="customInstructions"
+                  textAreaProps={{
+                    className: "min-h-56 font-mono text-sm",
+                    placeholder: "Add your custom instructions...",
+                  }}
+                />
+                {!isDefaultValue(customInstructions) ? (
+                  <div className="flex justify-end">
+                    <ResetAction
+                      onPress={() => resetField("customInstructions", "")}
+                    />
+                  </div>
+                ) : null}
+              </SettingsRowControl>
+            </SettingsSectionRow>
+
+            <div className="flex justify-end border-t border-border/50 p-5">
+              <Button
+                isDisabled={
+                  savePersonalization.isPending || !form.formState.isDirty
+                }
+                isPending={savePersonalization.isPending}
+                size="sm"
+                type="submit"
+              >
+                {({ isPending }) => (
+                  <>
+                    {isPending ? <Spinner color="current" size="sm" /> : null}
+                    Save
+                  </>
+                )}
+              </Button>
+            </div>
+          </section>
         </Form>
       )}
     </SettingsPageWrapper>

@@ -1,9 +1,9 @@
 "use client";
 
-import { Button, Form, Skeleton, Spinner } from "@heroui/react";
+import { Button, Form, Skeleton, Spinner, Switch } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { sileo } from "sileo";
 
 import {
@@ -30,23 +30,23 @@ import { api } from "@/trpc/react";
 
 function GeneralSettingsSkeleton() {
   return (
-    <div className="flex flex-col gap-6">
-      <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-        <div className="mb-5 space-y-2">
-          <Skeleton className="h-5 w-36 rounded-md" />
-          <Skeleton className="h-4 w-80 rounded-md" />
+    <section className="border-separator/20 bg-surface rounded-2xl border">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div
+          className={`flex items-center justify-between gap-6 p-5${i > 0 ? " border-t border-border/50" : ""}`}
+          key={i}
+        >
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-40 rounded-md" />
+            <Skeleton className="h-4 w-72 rounded-md" />
+          </div>
+          <Skeleton className="h-8 w-24 shrink-0 rounded-xl" />
         </div>
-
-        <div className="space-y-4">
-          <Skeleton className="h-16 w-full rounded-xl" />
-          <Skeleton className="h-20 w-full rounded-xl" />
-        </div>
-
-        <div className="mt-5 flex justify-end">
-          <Skeleton className="h-9 w-24 rounded-xl" />
-        </div>
-      </section>
-    </div>
+      ))}
+      <div className="border-t border-border/50 p-5 flex justify-end">
+        <Skeleton className="h-9 w-24 rounded-xl" />
+      </div>
+    </section>
   );
 }
 
@@ -146,9 +146,14 @@ export default function GeneralSettingsPage() {
       {!generalSettings.data && generalSettings.isPending ? (
         <GeneralSettingsSkeleton />
       ) : (
-        <div className="flex flex-col gap-6">
-          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <Form
+          onSubmit={generalSettingsForm.handleSubmit(
+            handleGeneralSettingsSubmit,
+          )}
+        >
+          <section className="border-separator/20 bg-surface rounded-2xl border">
+            {/* Follow-up behavior */}
+            <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
               <div className="space-y-1">
                 <h2 className="text-foreground text-base font-medium">
                   Follow-up behavior
@@ -197,18 +202,12 @@ export default function GeneralSettingsPage() {
                 })}
               </div>
             </div>
-          </section>
 
-          <Form
-            onSubmit={generalSettingsForm.handleSubmit(
-              handleGeneralSettingsSubmit,
-            )}
-            className="flex flex-col gap-6"
-          >
-            <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-              <div className="mb-5 space-y-1">
+            {/* Browser session persistence */}
+            <div className="flex flex-col gap-4 border-t border-border/50 p-5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="space-y-1">
                 <h2 className="text-foreground text-base font-medium">
-                  Browser session
+                  Persist browser session
                 </h2>
                 <p className="text-muted text-sm">
                   Keep built-in browser tabs and the active page available after
@@ -216,124 +215,144 @@ export default function GeneralSettingsPage() {
                 </p>
               </div>
 
-              <div className="space-y-5">
-                <ControlledSwitchField
+              <Controller
+                control={generalSettingsForm.control}
+                name="persistBrowserSession"
+                render={({ field }) => (
+                  <Switch
+                    aria-label="Persist browser session"
+                    className="shrink-0"
+                    isSelected={Boolean(field.value)}
+                    name={field.name}
+                    onBlur={field.onBlur}
+                    onChange={field.onChange}
+                  >
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
+                  </Switch>
+                )}
+              />
+            </div>
+
+            {/* Context compaction */}
+            <div className="border-t border-border/50 p-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1">
+                  <h2 className="text-foreground text-base font-medium">
+                    Context compaction
+                  </h2>
+                  <p className="text-muted text-sm">
+                    Use the active model&apos;s context window and compact older
+                    transcript history once the estimated prompt reaches your
+                    configured threshold.
+                  </p>
+                </div>
+
+                <Controller
                   control={generalSettingsForm.control}
-                  description="When enabled, browser tabs are restored after closing the panel and after restarting Sentinel. Turn this off if you want browser sessions cleared when the browser is closed."
-                  label="Persist browser session"
-                  name="persistBrowserSession"
+                  name="contextCompactionEnabled"
+                  render={({ field }) => (
+                    <Switch
+                      aria-label="Enable context compaction"
+                      className="shrink-0"
+                      isSelected={Boolean(field.value)}
+                      name={field.name}
+                      onBlur={field.onBlur}
+                      onChange={field.onChange}
+                    >
+                      <Switch.Control>
+                        <Switch.Thumb />
+                      </Switch.Control>
+                    </Switch>
+                  )}
                 />
               </div>
 
-              <div className="mt-5 flex justify-end">
-                <Button
-                  isDisabled={
-                    updateGeneralSettings.isPending ||
-                    !generalSettingsForm.formState.isDirty
-                  }
-                  isPending={updateGeneralSettings.isPending}
-                  size="sm"
-                  type="submit"
-                >
-                  {({ isPending }) => (
-                    <>
-                      {isPending ? <Spinner color="current" size="sm" /> : null}
-                      Save
-                    </>
-                  )}
-                </Button>
-              </div>
-            </section>
+              {contextCompactionEnabled ? (
+                <div className="mt-5 space-y-5">
+                  <ControlledNumberField
+                    control={generalSettingsForm.control}
+                    description="Target percentage of the active model's context window that can be filled before Sentinel compacts older context. Allowed range: 50 to 90."
+                    inputProps={{ className: "w-full" }}
+                    label="Context window target (%)"
+                    name="contextCompactionWindowPercent"
+                    numberFieldProps={{
+                      className: "w-full max-w-xs",
+                      maxValue: 90,
+                      minValue: 50,
+                    }}
+                  />
 
-            <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-              <div className="mb-5 space-y-1">
+                  <ControlledSwitchField
+                    control={generalSettingsForm.control}
+                    description="Use a fixed token window for context estimates and compaction instead of the selected model's advertised context window."
+                    label="Use fixed context window size"
+                    name="contextCompactionUseFixedWindow"
+                  />
+
+                  {contextCompactionUseFixedWindow ? (
+                    <ControlledNumberField
+                      control={generalSettingsForm.control}
+                      description={`Fixed context window size in tokens. Allowed range: ${MIN_FIXED_CONTEXT_WINDOW_SIZE.toLocaleString()} to ${MAX_FIXED_CONTEXT_WINDOW_SIZE.toLocaleString()}.`}
+                      inputProps={{ className: "w-full" }}
+                      label="Fixed context window size"
+                      name="contextCompactionFixedWindowSize"
+                      numberFieldProps={{
+                        className: "w-full max-w-xs",
+                        maxValue: MAX_FIXED_CONTEXT_WINDOW_SIZE,
+                        minValue: MIN_FIXED_CONTEXT_WINDOW_SIZE,
+                      }}
+                    />
+                  ) : null}
+
+                  <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-xs text-muted">
+                    Current policy:{" "}
+                    {`compaction enabled once the estimated prompt reaches ${contextCompactionWindowPercent}% of the ${
+                      contextCompactionUseFixedWindow
+                        ? `${contextCompactionFixedWindowSize.toLocaleString()}-token fixed window`
+                        : "active model context window"
+                    }.`}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Web fetch batch */}
+            <div className="flex flex-col gap-4 border-t border-border/50 p-5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="space-y-1">
                 <h2 className="text-foreground text-base font-medium">
-                  Context compaction
+                  Web fetch batching
                 </h2>
                 <p className="text-muted text-sm">
-                  Use the active model&apos;s context window and compact older
-                  transcript history once the estimated prompt reaches your
-                  configured threshold.
+                  Allow the model to fetch multiple URLs in a single batch
+                  request.
                 </p>
               </div>
 
-              <div className="space-y-5">
-                <ControlledSwitchField
-                  control={generalSettingsForm.control}
-                  description="When enabled, Sentinel summarizes older conversation history before new model calls once the prompt estimate crosses your threshold."
-                  label="Enable context compaction"
-                  name="contextCompactionEnabled"
-                />
+              <Controller
+                control={generalSettingsForm.control}
+                name="webFetchBatchEnabled"
+                render={({ field }) => (
+                  <Switch
+                    aria-label="Web fetch batching"
+                    className="shrink-0"
+                    isSelected={Boolean(field.value)}
+                    name={field.name}
+                    onBlur={field.onBlur}
+                    onChange={field.onChange}
+                  >
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
+                  </Switch>
+                )}
+              />
+            </div>
 
-                <ControlledNumberField
-                  control={generalSettingsForm.control}
-                  description="Target percentage of the active model's context window that can be filled before Sentinel compacts older context. Allowed range: 50 to 90."
-                  inputProps={{ className: "w-full" }}
-                  label="Context window target (%)"
-                  name="contextCompactionWindowPercent"
-                  numberFieldProps={{
-                    className: "w-full max-w-xs",
-                    isDisabled: !contextCompactionEnabled,
-                    maxValue: 90,
-                    minValue: 50,
-                  }}
-                />
-
-                <ControlledSwitchField
-                  control={generalSettingsForm.control}
-                  description="Use a fixed token window for context estimates and compaction instead of the selected model's advertised context window."
-                  label="Use fixed context window size"
-                  name="contextCompactionUseFixedWindow"
-                />
-
-                <ControlledNumberField
-                  control={generalSettingsForm.control}
-                  description={`Fixed context window size in tokens. Allowed range: ${MIN_FIXED_CONTEXT_WINDOW_SIZE.toLocaleString()} to ${MAX_FIXED_CONTEXT_WINDOW_SIZE.toLocaleString()}.`}
-                  inputProps={{ className: "w-full" }}
-                  label="Fixed context window size"
-                  name="contextCompactionFixedWindowSize"
-                  numberFieldProps={{
-                    className: "w-full max-w-xs",
-                    isDisabled: !contextCompactionUseFixedWindow,
-                    maxValue: MAX_FIXED_CONTEXT_WINDOW_SIZE,
-                    minValue: MIN_FIXED_CONTEXT_WINDOW_SIZE,
-                  }}
-                />
-
-                <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-xs text-muted">
-                  Current policy:{" "}
-                  {contextCompactionEnabled
-                    ? `compaction enabled once the estimated prompt reaches ${contextCompactionWindowPercent}% of the ${
-                        contextCompactionUseFixedWindow
-                          ? `${contextCompactionFixedWindowSize.toLocaleString()}-token fixed window`
-                          : "active model context window"
-                      }.`
-                    : "compaction disabled; full transcript history is sent until the model limit is hit."}
-                </div>
-              </div>
-
-              <div className="mt-5 flex justify-end">
-                <Button
-                  isDisabled={
-                    updateGeneralSettings.isPending ||
-                    !generalSettingsForm.formState.isDirty
-                  }
-                  isPending={updateGeneralSettings.isPending}
-                  size="sm"
-                  type="submit"
-                >
-                  {({ isPending }) => (
-                    <>
-                      {isPending ? <Spinner color="current" size="sm" /> : null}
-                      Save
-                    </>
-                  )}
-                </Button>
-              </div>
-            </section>
-
-            <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-              <div className="mb-5 space-y-1">
+            {/* Skills directory */}
+            <div className="border-t border-border/50 p-5">
+              <div className="space-y-1">
                 <h2 className="text-foreground text-base font-medium">
                   Skills directory
                 </h2>
@@ -343,7 +362,7 @@ export default function GeneralSettingsPage() {
                 </p>
               </div>
 
-              <div className="space-y-5">
+              <div className="mt-4 space-y-4">
                 <ControlledTextField
                   control={generalSettingsForm.control}
                   description="Absolute path to use as the base for global skill discovery (e.g. /Users/you/my-skills)."
@@ -380,28 +399,29 @@ export default function GeneralSettingsPage() {
                   ) : null}
                 </div>
               </div>
+            </div>
 
-              <div className="mt-5 flex justify-end">
-                <Button
-                  isDisabled={
-                    updateGeneralSettings.isPending ||
-                    !generalSettingsForm.formState.isDirty
-                  }
-                  isPending={updateGeneralSettings.isPending}
-                  size="sm"
-                  type="submit"
-                >
-                  {({ isPending }) => (
-                    <>
-                      {isPending ? <Spinner color="current" size="sm" /> : null}
-                      Save
-                    </>
-                  )}
-                </Button>
-              </div>
-            </section>
-          </Form>
-        </div>
+            {/* Save button */}
+            <div className="border-t border-border/50 p-5 flex justify-end">
+              <Button
+                isDisabled={
+                  updateGeneralSettings.isPending ||
+                  !generalSettingsForm.formState.isDirty
+                }
+                isPending={updateGeneralSettings.isPending}
+                size="sm"
+                type="submit"
+              >
+                {({ isPending }) => (
+                  <>
+                    {isPending ? <Spinner color="current" size="sm" /> : null}
+                    Save
+                  </>
+                )}
+              </Button>
+            </div>
+          </section>
+        </Form>
       )}
     </SettingsPageWrapper>
   );

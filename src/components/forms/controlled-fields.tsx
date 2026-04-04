@@ -165,6 +165,7 @@ export function ControlledTextAreaField<
           name={field.name}
           onBlur={field.onBlur}
           onChange={field.onChange}
+          fullWidth
           value={String(field.value ?? "")}
         >
           <Label>{label}</Label>
@@ -184,6 +185,7 @@ export type ControlledSelectFieldProps<
   options: readonly SelectOption[];
   placeholder?: ReactNode;
   selectProps?: SelectRootProps;
+  showDescriptions?: boolean;
 };
 
 export function ControlledSelectField<
@@ -197,6 +199,7 @@ export function ControlledSelectField<
   options,
   placeholder,
   selectProps,
+  showDescriptions = true,
 }: ControlledSelectFieldProps<TFieldValues, TName>) {
   return (
     <Controller
@@ -224,9 +227,9 @@ export function ControlledSelectField<
               <Select.Value>
                 {() =>
                   selectedOption ? (
-                    <div className="space-y-0.5">
+                    <div className={showDescriptions ? "space-y-0.5" : ""}>
                       <div>{selectedOption.label}</div>
-                      {selectedOption.description ? (
+                      {showDescriptions && selectedOption.description ? (
                         <p className="text-muted text-xs">
                           {selectedOption.description}
                         </p>
@@ -249,9 +252,9 @@ export function ControlledSelectField<
                     textValue={String(option.label)}
                   >
                     <div className="flex items-center justify-between gap-3">
-                      <div className="space-y-0.5">
+                      <div className={showDescriptions ? "space-y-0.5" : ""}>
                         <div>{option.label}</div>
-                        {option.description ? (
+                        {showDescriptions && option.description ? (
                           <p className="text-muted text-xs">
                             {option.description}
                           </p>
