@@ -1,8 +1,8 @@
 "use client";
 
-import { Button, Form, Spinner } from "@heroui/react";
+import { Button, Drawer, Form, Spinner } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Cancel01Icon, LinkSquare02Icon } from "@hugeicons/core-free-icons";
+import { LinkSquare02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -15,7 +15,6 @@ import {
 } from "@/components/forms/controlled-fields";
 import { getErrorMessage } from "@/lib/errors";
 import { sileo } from "sileo";
-import { useRightSidebar } from "@/components/shell/shell-context";
 import { buildInstallSteps } from "@/lib/skills/registry";
 import {
   customSkillInstallFormSchema,
@@ -24,9 +23,11 @@ import {
 } from "@/schemas/skill-install.schema";
 import { api } from "@/trpc/react";
 
-type CustomSkillInstallSidebarProps = {
+type CustomSkillInstallDrawerProps = {
   codexAvailable: boolean;
   createSkillHref: string;
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
 };
 
 const SCOPE_OPTIONS = [
@@ -72,11 +73,15 @@ function createDefaultValues(): CustomSkillInstallFormInputValues {
   };
 }
 
-export function CustomSkillInstallSidebar({
+function CustomSkillInstallDrawerContent({
   codexAvailable,
   createSkillHref,
-}: CustomSkillInstallSidebarProps) {
-  const { close } = useRightSidebar();
+  onClose,
+}: {
+  codexAvailable: boolean;
+  createSkillHref: string;
+  onClose: () => void;
+}) {
   const utils = api.useUtils();
   const [submitError, setSubmitError] = useState("");
   const installCustom = api.skills.installCustom.useMutation();
@@ -136,7 +141,7 @@ export function CustomSkillInstallSidebar({
           ? "Skill already installed. Refreshed skill state."
           : "Custom skill installed.",
       });
-      close();
+      onClose();
     } catch (error) {
       setSubmitError(
         getErrorMessage(error, "Unable to install this custom skill."),
@@ -148,181 +153,180 @@ export function CustomSkillInstallSidebar({
   const createSkillIsExternal = createSkillHref.startsWith("http");
 
   return (
-    <div className="flex h-full w-full flex-col bg-transparent">
-      <div className="flex items-start justify-between gap-4 px-7 pb-5 pt-8">
-        <div className="min-w-0">
-          <h2 className="text-[22px] font-medium text-foreground/78">
-            Install skill
-          </h2>
-          <p className="mt-1.5 text-[13px] text-muted/90">
-            Pull a skill from GitHub and optionally override the install
-            commands that run locally.
+    <Form className="contents" onSubmit={form.handleSubmit(handleSave)}>
+      <Drawer.Header className="flex-col items-start gap-0 pb-0">
+        <Drawer.Heading className="text-base">Install skill</Drawer.Heading>
+        <p className="mt-1.5 text-[13px] text-foreground/70">
+          Pull a skill from GitHub and optionally override the install commands
+          that run locally.
+        </p>
+      </Drawer.Header>
+
+      <Drawer.Body className="flex flex-col gap-5">
+        {submitError ? (
+          <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground rounded-xl border px-3 py-2.5 text-xs">
+            {submitError}
           </p>
-        </div>
-        <button
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted/80 transition-colors hover:text-foreground/80"
-          onClick={close}
-          type="button"
-        >
-          <HugeiconsIcon
-            color="currentColor"
-            icon={Cancel01Icon}
-            size={16}
-            strokeWidth={1.5}
-          />
-        </button>
-      </div>
+        ) : null}
 
-      <div className="sentinel-scroll-shell min-h-0 flex-1">
-        <div className="sentinel-scroll-area h-full">
-          <Form
-            className="flex min-h-full flex-col px-7 gap-4 pb-6"
-            onSubmit={form.handleSubmit(handleSave)}
+        <div className="border-warning/20 bg-warning-soft text-warning-soft-foreground rounded-xl border px-3 py-2.5 text-xs">
+          Custom install commands are executed locally. Use{" "}
+          <code className="font-mono">{"{{DEST}}"}</code> as the target
+          directory placeholder when overriding the defaults.
+        </div>
+
+        <ControlledTextField
+          control={form.control}
+          description="Folder name that will be created in the selected runtime's skills directory."
+          inputProps={{ placeholder: "my-skill" }}
+          label="Skill name"
+          name="name"
+        />
+
+        <ControlledTextField
+          control={form.control}
+          description="GitHub repository to install from."
+          inputProps={{
+            placeholder: "https://github.com/openai/skills",
+          }}
+          label="Repository URL"
+          name="repoUrl"
+        />
+
+        <ControlledTextField
+          control={form.control}
+          description="Branch, tag, or commit SHA."
+          inputProps={{ placeholder: "main" }}
+          label="Git ref"
+          name="ref"
+        />
+
+        <ControlledSelectField
+          control={form.control}
+          description="Which runtime should receive this skill."
+          label="Install target"
+          name="target"
+          options={TARGET_OPTIONS.map((option) => ({
+            ...option,
+            isDisabled: option.value === "codex" && !codexAvailable,
+          }))}
+        />
+
+        <ControlledSelectField
+          control={form.control}
+          description={
+            target === "codex"
+              ? "Codex installs are global-only."
+              : "Where this skill should be installed."
+          }
+          label="Install scope"
+          name="scope"
+          options={SCOPE_OPTIONS}
+          selectProps={{ isDisabled: target === "codex" }}
+        />
+
+        <ControlledTextField
+          control={form.control}
+          description="Repo-relative path to the skill directory that contains SKILL.md."
+          inputProps={{ placeholder: "skills/.curated/gh-fix-ci" }}
+          label="Skill path"
+          name="skillPath"
+        />
+
+        <ControlledTextAreaField
+          control={form.control}
+          description="Optional. One shell command per line. Leave empty to use the generated GitHub archive install flow."
+          label="Install commands override"
+          name="installInstructions"
+          textAreaProps={{ rows: 5 }}
+        />
+
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium text-foreground">
+            Install preview
+          </h3>
+          <p className="text-xs text-muted">
+            {previewSteps.length
+              ? "These commands will run during installation."
+              : "Enter a repo URL, ref, and skill path to preview the generated commands."}
+          </p>
+          {previewSteps.length ? (
+            <pre className="overflow-x-auto rounded-xl border border-border/60 bg-background px-3 py-2 text-xs text-foreground">
+              {previewSteps.join("\n")}
+            </pre>
+          ) : null}
+        </div>
+
+        <hr className="border-border/50" />
+
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium text-foreground">
+            Create a skill from scratch
+          </h3>
+          <p className="text-xs text-muted">
+            Need to author your own skill instead of installing one? Follow the
+            instructions below.
+          </p>
+          <Link
+            className="text-primary inline-flex items-center gap-2 text-sm font-medium transition-opacity hover:opacity-80"
+            href={createSkillHref}
+            prefetch={!createSkillIsExternal}
+            rel={createSkillIsExternal ? "noopener noreferrer" : undefined}
+            target={createSkillIsExternal ? "_blank" : undefined}
           >
-            <div className="flex flex-col gap-5">
-              {submitError ? (
-                <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground rounded-xl border px-3 py-2.5 text-xs">
-                  {submitError}
-                </p>
-              ) : null}
-
-              <div className="border-warning/20 bg-warning-soft text-warning-soft-foreground rounded-xl border px-3 py-2.5 text-xs">
-                Custom install commands are executed locally. Use{" "}
-                <code className="font-mono">{"{{DEST}}"}</code> as the target
-                directory placeholder when overriding the defaults.
-              </div>
-
-              <ControlledTextField
-                control={form.control}
-                description="Folder name that will be created in the selected runtime's skills directory."
-                inputProps={{ placeholder: "my-skill" }}
-                label="Skill name"
-                name="name"
-              />
-
-              <ControlledTextField
-                control={form.control}
-                description="GitHub repository to install from."
-                inputProps={{
-                  placeholder: "https://github.com/openai/skills",
-                }}
-                label="Repository URL"
-                name="repoUrl"
-              />
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <ControlledTextField
-                  control={form.control}
-                  description="Branch, tag, or commit SHA."
-                  inputProps={{ placeholder: "main" }}
-                  label="Git ref"
-                  name="ref"
-                />
-
-                <ControlledSelectField
-                  control={form.control}
-                  description="Which runtime should receive this skill."
-                  label="Install target"
-                  name="target"
-                  options={TARGET_OPTIONS.map((option) => ({
-                    ...option,
-                    isDisabled: option.value === "codex" && !codexAvailable,
-                  }))}
-                />
-              </div>
-
-              <ControlledSelectField
-                control={form.control}
-                description={
-                  target === "codex"
-                    ? "Codex installs are global-only."
-                    : "Where this skill should be installed."
-                }
-                label="Install scope"
-                name="scope"
-                options={SCOPE_OPTIONS}
-                selectProps={{ isDisabled: target === "codex" }}
-              />
-
-              <ControlledTextField
-                control={form.control}
-                description="Repo-relative path to the skill directory that contains SKILL.md."
-                inputProps={{ placeholder: "skills/.curated/gh-fix-ci" }}
-                label="Skill path"
-                name="skillPath"
-              />
-
-              <ControlledTextAreaField
-                control={form.control}
-                description="Optional. One shell command per line. Leave empty to use the generated GitHub archive install flow."
-                label="Install commands override"
-                name="installInstructions"
-                textAreaProps={{ rows: 5 }}
-              />
-
-              <div className="border-separator bg-background/60 rounded-2xl border p-3">
-                <p className="text-foreground text-sm font-medium">
-                  Install preview
-                </p>
-                <p className="text-muted mt-1 text-xs">
-                  {previewSteps.length
-                    ? "These commands will run during installation."
-                    : "Enter a repo URL, ref, and skill path to preview the generated commands."}
-                </p>
-                {previewSteps.length ? (
-                  <pre className="text-foreground mt-3 overflow-x-auto rounded-xl border border-border/60 bg-background px-3 py-2 text-xs">
-                    {previewSteps.join("\n")}
-                  </pre>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="mt-6 flex items-center justify-end gap-3">
-              <Button
-                isDisabled={isBusy}
-                onPress={close}
-                type="button"
-                variant="ghost"
-              >
-                Cancel
-              </Button>
-              <Button isDisabled={isBusy} isPending={isBusy} type="submit">
-                {({ isPending }) => (
-                  <>
-                    {isPending ? <Spinner color="current" size="sm" /> : null}
-                    Install skill
-                  </>
-                )}
-              </Button>
-            </div>
-
-            <div className="border-separator bg-surface/60  rounded-2xl border p-4 pt-4 ">
-              <p className="text-foreground text-sm font-medium">
-                Create a skill from scratch
-              </p>
-              <p className="text-muted mt-1 text-xs">
-                Need to author your own skill instead of installing one? Follow
-                the instructions below.
-              </p>
-              <Link
-                className="text-primary mt-3 inline-flex items-center gap-2 text-sm font-medium transition-opacity hover:opacity-80"
-                href={createSkillHref}
-                prefetch={!createSkillIsExternal}
-                rel={createSkillIsExternal ? "noopener noreferrer" : undefined}
-                target={createSkillIsExternal ? "_blank" : undefined}
-              >
-                <HugeiconsIcon
-                  color="currentColor"
-                  icon={LinkSquare02Icon}
-                  size={16}
-                  strokeWidth={1.5}
-                />
-                View skill creation instructions
-              </Link>
-            </div>
-          </Form>
+            <HugeiconsIcon
+              color="currentColor"
+              icon={LinkSquare02Icon}
+              size={16}
+              strokeWidth={1.5}
+            />
+            View skill creation instructions
+          </Link>
         </div>
-      </div>
-    </div>
+      </Drawer.Body>
+
+      <Drawer.Footer>
+        <div className="flex w-full items-center justify-end gap-2">
+          <Button
+            isDisabled={isBusy}
+            onPress={onClose}
+            type="button"
+            variant="ghost"
+          >
+            Cancel
+          </Button>
+          <Button isDisabled={isBusy} isPending={isBusy} type="submit">
+            {({ isPending }) => (
+              <>
+                {isPending ? <Spinner color="current" size="sm" /> : null}
+                Install skill
+              </>
+            )}
+          </Button>
+        </div>
+      </Drawer.Footer>
+    </Form>
+  );
+}
+
+export function CustomSkillInstallDrawer({
+  codexAvailable,
+  createSkillHref,
+  isOpen,
+  onOpenChange,
+}: CustomSkillInstallDrawerProps) {
+  return (
+    <Drawer.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
+      <Drawer.Content placement="right">
+        <Drawer.Dialog className="rounded-none bg-background dark:bg-surface">
+          <Drawer.CloseTrigger />
+          <CustomSkillInstallDrawerContent
+            codexAvailable={codexAvailable}
+            createSkillHref={createSkillHref}
+            onClose={() => onOpenChange(false)}
+          />
+        </Drawer.Dialog>
+      </Drawer.Content>
+    </Drawer.Backdrop>
   );
 }

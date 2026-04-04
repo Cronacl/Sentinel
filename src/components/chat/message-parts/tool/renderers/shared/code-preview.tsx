@@ -6,6 +6,7 @@ import { Copy01Icon, Tick01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Icon } from "@iconify/react";
 
+import { writeTextToClipboard } from "@/lib/desktop/permissions";
 import {
   detectLanguageFromPath,
   highlightToTokensCached,
@@ -125,7 +126,13 @@ export function CodePreview({
   }, [hasBeenVisible, language, theme, rawCode, codeLines.length]);
 
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(rawCode);
+    const didCopy = await writeTextToClipboard(rawCode, {
+      errorMessage: "Unable to copy this code preview.",
+    });
+    if (!didCopy) {
+      return;
+    }
+
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2000);
   }, [rawCode]);

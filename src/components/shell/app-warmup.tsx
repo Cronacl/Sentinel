@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { preflightMicrophonePermissionOnStartup } from "@/lib/desktop/permissions";
 import { api } from "@/trpc/react";
 
 import {
@@ -68,6 +69,7 @@ export function AppWarmupCoordinator() {
     void utils.engines.models.prefetch({ engine: "codex" });
     void utils.engines.models.prefetch({ engine: "claude" });
     void utils.workspaces.getCurrent.prefetch();
+    void preflightMicrophonePermissionOnStartup().catch(() => {});
 
     const tasks: Array<() => void> = [
       () => {

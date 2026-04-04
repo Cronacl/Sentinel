@@ -27,6 +27,7 @@ import { useEffect, useState } from "react";
 
 import { MarkdownContent } from "@/components/chat/message-parts/text";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
+import { writeTextToClipboard } from "@/lib/desktop/permissions";
 import {
   CloudflareIcon,
   FigmaIcon,
@@ -182,8 +183,13 @@ export function SkillDetailScreen({
   }, [copiedLabel]);
 
   const handleCopy = async (value: string, label: "name" | "path") => {
-    if (!navigator?.clipboard) return;
-    await navigator.clipboard.writeText(value);
+    const didCopy = await writeTextToClipboard(value, {
+      errorMessage: "Unable to copy this value.",
+    });
+    if (!didCopy) {
+      return;
+    }
+
     setCopiedLabel(label);
   };
 

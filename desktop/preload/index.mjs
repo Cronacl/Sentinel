@@ -9,8 +9,18 @@ contextBridge.exposeInMainWorld("sentinelDesktop", {
       ipcRenderer.invoke(DESKTOP_CHANNELS.APP_LIST_SYSTEM_FONTS),
     platform: process.platform,
   },
+  clipboard: {
+    writeText: (text) =>
+      ipcRenderer.invoke(DESKTOP_CHANNELS.CLIPBOARD_WRITE_TEXT, text),
+  },
   openExternal: (url) =>
     ipcRenderer.invoke(DESKTOP_CHANNELS.OPEN_EXTERNAL, url),
+  permissions: {
+    getStatus: (name) =>
+      ipcRenderer.invoke(DESKTOP_CHANNELS.PERMISSIONS_GET_STATUS, name),
+    request: (name) =>
+      ipcRenderer.invoke(DESKTOP_CHANNELS.PERMISSIONS_REQUEST, name),
+  },
   pickFiles: () => ipcRenderer.invoke(DESKTOP_CHANNELS.PICK_FILES),
   pickDirectory: () => ipcRenderer.invoke(DESKTOP_CHANNELS.PICK_DIRECTORY),
   services: {

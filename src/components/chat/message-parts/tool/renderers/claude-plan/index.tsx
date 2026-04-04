@@ -19,6 +19,7 @@ import {
   extractTextFromContent,
   getApprovalReason,
 } from "../claude-helpers";
+import { writeTextToClipboard } from "@/lib/desktop/permissions";
 
 type ClaudePlanInput = {
   allowedPrompts?: Array<{ prompt: string; tool: string }>;
@@ -115,7 +116,13 @@ export const ClaudePlanTool = memo(function ClaudePlanTool({
   if (!body) return null;
 
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(body);
+    const didCopy = await writeTextToClipboard(body, {
+      errorMessage: "Unable to copy this plan.",
+    });
+    if (!didCopy) {
+      return;
+    }
+
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [body]);

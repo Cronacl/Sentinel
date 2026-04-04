@@ -3,6 +3,7 @@ import { describe, expect, it, mock } from "bun:test";
 import {
   formatVoiceInputDuration,
   insertTranscriptIntoComposer,
+  resolveVoiceInputStartError,
   shouldShowVoiceInputControl,
 } from "./voice-input.helpers";
 
@@ -50,5 +51,24 @@ describe("voice input helpers", () => {
   it("formats the recorder timer in minutes and seconds", () => {
     expect(formatVoiceInputDuration(3)).toBe("00:03");
     expect(formatVoiceInputDuration(64)).toBe("01:04");
+  });
+
+  it("returns the denied-permission error before recording starts", () => {
+    expect(
+      resolveVoiceInputStartError({
+        allowed: false,
+        message:
+          "Microphone access was denied. Allow microphone access for Sentinel and try again.",
+        state: "denied",
+      }),
+    ).toBe(
+      "Microphone access was denied. Allow microphone access for Sentinel and try again.",
+    );
+    expect(
+      resolveVoiceInputStartError({
+        allowed: true,
+        state: "granted",
+      }),
+    ).toBeNull();
   });
 });

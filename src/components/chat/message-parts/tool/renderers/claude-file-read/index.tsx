@@ -7,6 +7,7 @@ import { Copy01Icon, Tick01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Icon } from "@iconify/react";
 
+import { writeTextToClipboard } from "@/lib/desktop/permissions";
 import type { RendererProps } from "../../renderer";
 import { ToolLayout } from "../shared/tool-layout";
 import { renderClaudeApprovalActions } from "../claude-approval-actions";
@@ -194,7 +195,13 @@ function FileContent({
   }, [hasBeenVisible, theme, content, lang, codeLines.length]);
 
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(content);
+    const didCopy = await writeTextToClipboard(content, {
+      errorMessage: "Unable to copy this file content.",
+    });
+    if (!didCopy) {
+      return;
+    }
+
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2000);
   }, [content]);

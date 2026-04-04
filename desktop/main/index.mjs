@@ -1,12 +1,14 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
   nativeImage,
   nativeTheme,
   session,
   shell,
+  systemPreferences,
 } from "electron";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -20,6 +22,11 @@ import * as nodePty from "node-pty";
 import { DESKTOP_CHANNELS } from "../shared/channels.mjs";
 import { createDesktopUpdaterController } from "./updater.mjs";
 import { PRIVATE_GITHUB_RELEASES_UNSUPPORTED_REASON } from "./updater.mjs";
+import {
+  configureDesktopPermissionHandlers,
+  getDesktopMicrophonePermissionState,
+  requestDesktopMicrophonePermission,
+} from "./permissions.mjs";
 import {
   getOpenFileCommandForTarget,
   getOpenCommandForTarget,
@@ -834,20 +841,6 @@ function isTrustedAppOrigin(candidateUrl) {
   }
 }
 
-function configureMediaPermissionRequests(targetSession) {
-  targetSession.setPermissionRequestHandler(
-    (webContents, permission, callback, details) => {
-      if (permission !== "media" && permission !== "microphone") {
-        callback(false);
-        return;
-      }
-
-      const requestUrl = details?.requestingUrl || webContents.getURL();
-      callback(isTrustedAppOrigin(requestUrl));
-    },
-  );
-}
-
 async function prepareDevSession() {
   if (app.isPackaged) {
     return;
@@ -1052,6 +1045,39 @@ function registerIpc() {
   ipcMain.handle(DESKTOP_CHANNELS.APP_LIST_SYSTEM_FONTS, async () =>
     listSystemFontFamilies(),
   );
+  ipcMain.handle(
+    DESKTOP_CHANNELS.CLIPBOARD_WRITE_TEXT,
+    async (_event, text) => {
+      if (typeof text !== "string") {
+        throw new Error("Clipboard text must be a string.");
+      }
+
+      clipboard.writeText(text);
+    },
+  );
+  ipcMain.handle(
+    DESKTOP_CHANNELS.PERMISSIONS_GET_STATUS,
+    async (_event, name) => {
+      if (name !== "microphone") {
+        throw new Error(`Unsupported permission: ${String(name)}`);
+      }
+
+      return getDesktopMicrophonePermissionState({
+        platform: process.platform,
+        systemPreferences,
+      });
+    },
+  );
+  ipcMain.handle(DESKTOP_CHANNELS.PERMISSIONS_REQUEST, async (_event, name) => {
+    if (name !== "microphone") {
+      throw new Error(`Unsupported permission: ${String(name)}`);
+    }
+
+    return requestDesktopMicrophonePermission({
+      platform: process.platform,
+      systemPreferences,
+    });
+  });
   ipcMain.handle(DESKTOP_CHANNELS.PICK_DIRECTORY, async () => {
     const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
       properties: ["openDirectory"],
@@ -1289,7 +1315,9 @@ app.whenReady().then(async () => {
     app.setAppUserModelId("app.sentinel.desktop");
   }
 
-  configureMediaPermissionRequests(session.defaultSession);
+  configureDesktopPermissionHandlers(session.defaultSession, {
+    isTrustedOrigin: isTrustedAppOrigin,
+  });
   registerIpc();
   await applyDevAppIcon();
   await prepareDevSession();
