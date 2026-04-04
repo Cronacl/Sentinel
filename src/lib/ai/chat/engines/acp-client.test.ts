@@ -1,6 +1,8 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, mock } from "bun:test";
 import { EventEmitter } from "node:events";
 import { PassThrough, Writable } from "node:stream";
+
+mock.module("server-only", () => ({}));
 
 const { AcpClient } =
   // @ts-expect-error Bun cache-busting import for test isolation.
