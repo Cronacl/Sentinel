@@ -1,7 +1,10 @@
 export const DESKTOP_CHANNELS = {
   APP_VERSION: "sentinel:app-version",
   APP_LIST_SYSTEM_FONTS: "sentinel:app-list-system-fonts",
+  CLIPBOARD_WRITE_TEXT: "sentinel:clipboard-write-text",
   OPEN_EXTERNAL: "sentinel:open-external",
+  PERMISSIONS_GET_STATUS: "sentinel:permissions-get-status",
+  PERMISSIONS_REQUEST: "sentinel:permissions-request",
   PICK_FILES: "sentinel:pick-files",
   PICK_DIRECTORY: "sentinel:pick-directory",
   SERVICES_START: "sentinel:services-start",

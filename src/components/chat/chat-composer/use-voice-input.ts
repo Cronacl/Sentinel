@@ -4,7 +4,10 @@ import type { Editor } from "@tiptap/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sileo } from "sileo";
 
+import { ensureMicrophoneAccessForVoiceInput } from "@/lib/desktop/permissions";
+
 import { insertTranscriptIntoComposer } from "./voice-input.helpers";
+import { resolveVoiceInputStartError } from "./voice-input.helpers";
 
 type VoiceInputPhase = "idle" | "recording" | "transcribing";
 
@@ -233,6 +236,12 @@ export function useVoiceInput({ editor }: UseVoiceInputOptions) {
       cancelledRef.current = false;
 
       try {
+        const microphoneAccess = await ensureMicrophoneAccessForVoiceInput();
+        const permissionError = resolveVoiceInputStartError(microphoneAccess);
+        if (permissionError) {
+          throw new Error(permissionError);
+        }
+
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
         });

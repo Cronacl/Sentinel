@@ -37,7 +37,7 @@ import { sileo } from "sileo";
 
 import { type SelectOption } from "@/components/forms/controlled-fields";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
-import { CustomSkillInstallSidebar } from "@/components/skills/custom-skill-install-sidebar";
+import { CustomSkillInstallDrawer } from "@/components/skills/custom-skill-install-sidebar";
 import {
   CloudflareIcon,
   FigmaIcon,
@@ -50,7 +50,7 @@ import {
   VercelIcon,
   WordIcon,
 } from "@/components/skills/skill-icons";
-import { SidebarToggle, useRightSidebar, useShell } from "@/components/shell";
+import { SidebarToggle, useShell } from "@/components/shell";
 import { api, type RouterOutputs } from "@/trpc/react";
 
 /* -------------------------------------------------------------------------- */
@@ -490,7 +490,7 @@ function SkillsSkeleton() {
           className="flex items-center gap-2.5 rounded-2xl bg-surface px-2.5 py-2"
           key={index}
         >
-          <Skeleton className="h-8 w-8 shrink-0 rounded-[10px]" />
+          <Skeleton className="h-8 w-8 shrink-0 rounded-xl" />
           <div className="min-w-0 flex-1 space-y-1">
             <Skeleton className="h-3.5 w-24 rounded-md" />
             <Skeleton className="h-3 w-40 rounded-md" />
@@ -541,7 +541,7 @@ function SkillCell({
             className="flex min-w-0 flex-1 items-center gap-2.5"
           >
             {/* Icon */}
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-separator bg-background text-foreground">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-separator bg-background text-foreground">
               <SkillIcon
                 isExternal={shouldTreatAsExternal(item)}
                 name={item.name}
@@ -559,7 +559,7 @@ function SkillCell({
           </Link>
         ) : (
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-separator bg-background text-foreground">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-separator bg-background text-foreground">
               <SkillIcon
                 isExternal={shouldTreatAsExternal(item)}
                 name={item.name}
@@ -587,7 +587,7 @@ function SkillCell({
                 size="sm"
                 variant="tertiary"
                 isIconOnly
-                className="h-6 w-6 min-w-0 rounded-full"
+                className="h-6 w-6 min-w-0"
               >
                 {({ isPending }) =>
                   isPending ? (
@@ -672,7 +672,7 @@ function SkillCell({
 
 export default function SkillsPage() {
   const { leftSidebarOpen } = useShell();
-  const { open: openRightSidebar } = useRightSidebar();
+  const [installDrawerOpen, setInstallDrawerOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
   const [installErrors, setInstallErrors] = useState<Record<string, string>>(
@@ -785,23 +785,14 @@ export default function SkillsPage() {
     ? "/skills/skill-creator"
     : "https://agentskills.io/specification";
 
-  const handleOpenInstallSidebar = useCallback(() => {
-    openRightSidebar(
-      <CustomSkillInstallSidebar
-        codexAvailable={codexAvailable}
-        createSkillHref={newSkillHref}
-      />,
-    );
-  }, [codexAvailable, newSkillHref, openRightSidebar]);
-
   return (
     <SettingsPageWrapper
       actions={
         <Button
-          onPress={handleOpenInstallSidebar}
+          onPress={() => setInstallDrawerOpen(true)}
           size="sm"
           variant="primary"
-          className="h-7 px-2 rounded-[10px]"
+          className="h-7 px-2"
         >
           <HugeiconsIcon
             color="currentColor"
@@ -901,6 +892,12 @@ export default function SkillsPage() {
           )}
         </div>
       </div>
+      <CustomSkillInstallDrawer
+        codexAvailable={codexAvailable}
+        createSkillHref={newSkillHref}
+        isOpen={installDrawerOpen}
+        onOpenChange={setInstallDrawerOpen}
+      />
     </SettingsPageWrapper>
   );
 }

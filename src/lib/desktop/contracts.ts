@@ -20,6 +20,12 @@ export type DesktopSystemFontFamily = {
 
 export type DesktopResolvedTheme = "light" | "dark";
 export type DesktopPlatform = "darwin" | "linux" | "win32";
+export type DesktopPermissionName = "microphone";
+export type DesktopPermissionState =
+  | "denied"
+  | "granted"
+  | "prompt"
+  | "unsupported";
 export type DesktopUpdateStatus =
   | "idle"
   | "checking"
@@ -64,7 +70,14 @@ export type SentinelDesktopApi = {
     listSystemFonts: () => Promise<DesktopSystemFontFamily[]>;
     platform: DesktopPlatform;
   };
+  clipboard: {
+    writeText: (text: string) => Promise<void>;
+  };
   openExternal: (url: string) => Promise<void>;
+  permissions: {
+    getStatus: (name: DesktopPermissionName) => Promise<DesktopPermissionState>;
+    request: (name: DesktopPermissionName) => Promise<DesktopPermissionState>;
+  };
   pickFiles: () => Promise<DesktopFileSelection[]>;
   pickDirectory: () => Promise<DesktopDirectorySelection | null>;
   services: {

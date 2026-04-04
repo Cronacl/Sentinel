@@ -248,7 +248,7 @@ export default function AutomationsPage() {
           onPress={() => handleOpenModal()}
           size="sm"
           variant="primary"
-          className="h-7 px-2 rounded-[10px]"
+          className="h-7 px-2"
         >
           <HugeiconsIcon
             color="currentColor"

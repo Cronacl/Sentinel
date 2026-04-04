@@ -7,6 +7,7 @@ import { Copy01Icon, Tick01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Icon } from "@iconify/react";
 
+import { writeTextToClipboard } from "@/lib/desktop/permissions";
 import type { RendererProps } from "../../renderer";
 import { ToolLayout } from "../shared/tool-layout";
 import { renderClaudeApprovalActions } from "../claude-approval-actions";
@@ -216,7 +217,13 @@ function TerminalOutput({ text }: { text: string }) {
 
   const handleCopy = useCallback(async () => {
     const outputOnly = codeLines.slice(1).join("\n");
-    await navigator.clipboard.writeText(outputOnly || text);
+    const didCopy = await writeTextToClipboard(outputOnly || text, {
+      errorMessage: "Unable to copy this command output.",
+    });
+    if (!didCopy) {
+      return;
+    }
+
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2000);
   }, [text, codeLines]);

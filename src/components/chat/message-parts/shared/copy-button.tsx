@@ -5,6 +5,8 @@ import { Copy01Icon, Tick01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useCallback, useState } from "react";
 
+import { writeTextToClipboard } from "@/lib/desktop/permissions";
+
 export function CopyButton({
   text,
   title = "Copy",
@@ -15,7 +17,13 @@ export function CopyButton({
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(text);
+    const didCopy = await writeTextToClipboard(text, {
+      errorMessage: "Unable to copy this text.",
+    });
+    if (!didCopy) {
+      return;
+    }
+
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [text]);

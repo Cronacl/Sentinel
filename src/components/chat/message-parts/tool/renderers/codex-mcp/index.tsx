@@ -6,6 +6,7 @@ import { Button, ScrollShadow } from "@heroui/react";
 import { Copy01Icon, Tick01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
+import { writeTextToClipboard } from "@/lib/desktop/permissions";
 import type { RendererProps } from "../../renderer";
 import { ToolLayout } from "../shared/tool-layout";
 
@@ -134,7 +135,13 @@ function JsonBlock({ label, value }: { label: string; value: unknown }) {
   const text = useMemo(() => formatJson(value), [value]);
 
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(text);
+    const didCopy = await writeTextToClipboard(text, {
+      errorMessage: "Unable to copy this MCP result.",
+    });
+    if (!didCopy) {
+      return;
+    }
+
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2000);
   }, [text]);

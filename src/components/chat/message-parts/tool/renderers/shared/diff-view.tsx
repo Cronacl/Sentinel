@@ -6,6 +6,7 @@ import { Copy01Icon, Tick01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Icon } from "@iconify/react";
 
+import { writeTextToClipboard } from "@/lib/desktop/permissions";
 import { createUnifiedDiff } from "@/lib/diff/unified";
 import {
   detectLanguageFromPath,
@@ -591,7 +592,13 @@ export function DiffView({
   }, [hasBeenVisible, language, theme, allLines]);
 
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(diff);
+    const didCopy = await writeTextToClipboard(diff, {
+      errorMessage: "Unable to copy this diff.",
+    });
+    if (!didCopy) {
+      return;
+    }
+
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2000);
   }, [diff]);

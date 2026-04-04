@@ -14,6 +14,7 @@ import {
   ensureLanguageLoaded,
   type SyntaxSegment,
 } from "@/lib/syntax/highlighter";
+import { writeTextToClipboard } from "@/lib/desktop/permissions";
 import { useResolvedTheme } from "@/lib/syntax/use-resolved-theme";
 
 const DEFAULT_MAX_LINES = 10;
@@ -100,7 +101,13 @@ export function CodeBlock({
   }, [hasBeenVisible, shouldHighlight]);
 
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(trimmedCode);
+    const didCopy = await writeTextToClipboard(trimmedCode, {
+      errorMessage: "Unable to copy this code block.",
+    });
+    if (!didCopy) {
+      return;
+    }
+
     setCopied(true);
     window.setTimeout(() => setCopied(false), 2000);
   }, [trimmedCode]);

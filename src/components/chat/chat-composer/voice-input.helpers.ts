@@ -1,5 +1,7 @@
 import type { Editor } from "@tiptap/core";
 
+import type { MicrophoneAccessResult } from "@/lib/desktop/permissions";
+
 export function formatVoiceInputDuration(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60)
     .toString()
@@ -28,4 +30,8 @@ export function insertTranscriptIntoComposer(
 
   editor.chain().focus().insertContent(normalized).run();
   return true;
+}
+
+export function resolveVoiceInputStartError(result: MicrophoneAccessResult) {
+  return result.allowed ? null : result.message;
 }

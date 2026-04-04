@@ -502,7 +502,7 @@ export function DatabaseConfigDrawer({
   return (
     <Drawer.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
       <Drawer.Content placement="right">
-        <Drawer.Dialog>
+        <Drawer.Dialog className="rounded-none bg-background dark:bg-surface">
           <Drawer.CloseTrigger />
           {integration ? (
             <DatabaseDrawerContent integration={integration} />

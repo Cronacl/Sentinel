@@ -574,7 +574,7 @@ export function AutomationDetailScreen({
               isPending={runNowMutation.isPending}
               size="sm"
               variant="primary"
-              className="h-7 px-2 rounded-[10px]"
+              className="h-7 px-2"
             >
               Run now
             </Button>
@@ -622,7 +622,7 @@ export function AutomationDetailScreen({
             <Button
               isPending={toggleMutation.isPending}
               size="sm"
-              className="h-7 px-2 rounded-[10px] bg-warning-soft text-warning-soft-foreground"
+              className="h-7 px-2 bg-warning-soft text-warning-soft-foreground"
             >
               {isActive ? "Pause" : "Resume"}
             </Button>
@@ -676,7 +676,7 @@ export function AutomationDetailScreen({
               isPending={deleteMutation.isPending}
               size="sm"
               variant="tertiary"
-              className="h-7 px-2 rounded-[10px] text-danger-soft-foreground bg-danger-soft"
+              className="h-7 px-2 text-danger-soft-foreground bg-danger-soft"
               isIconOnly
             >
               <HugeiconsIcon
@@ -996,7 +996,7 @@ export function AutomationDetailScreen({
               size="sm"
               type="button"
               variant="tertiary"
-              className="h-7 px-2 rounded-[10px]"
+              className="h-7 px-2"
             >
               Discard
             </Button>
@@ -1006,7 +1006,7 @@ export function AutomationDetailScreen({
               size="sm"
               type="submit"
               variant="primary"
-              className="h-7 px-2 rounded-[10px]"
+              className="h-7 px-2"
             >
               {({ isPending }) => (
                 <>

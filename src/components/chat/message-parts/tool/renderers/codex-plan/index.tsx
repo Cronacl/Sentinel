@@ -12,6 +12,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
+import { writeTextToClipboard } from "@/lib/desktop/permissions";
 import type { RendererProps } from "../../renderer";
 import { MarkdownContent } from "../../../text/markdown-content";
 
@@ -115,7 +116,13 @@ export const CodexPlanTool = memo(function CodexPlanTool({
   const hasSteps = output?.steps && output.steps.length > 0;
 
   const handleCopy = useCallback(async () => {
-    await navigator.clipboard.writeText(body);
+    const didCopy = await writeTextToClipboard(body, {
+      errorMessage: "Unable to copy this plan.",
+    });
+    if (!didCopy) {
+      return;
+    }
+
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [body]);
