@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.14](https://github.com/Cronacl/Sentinel/compare/v0.0.13...v0.0.14) (2026-04-04)
+
+
+### Bug Fixes
+
+* fix layout for settings pages ([80e2759](https://github.com/Cronacl/Sentinel/commit/80e27593e03de672442e0232e67d6eeec5153abf))
+* fix layout for settings pages ([68b97c6](https://github.com/Cronacl/Sentinel/commit/68b97c63315604152db8c60e2a022424f1c34f81))
+* update the ui and create a unified os permission model ([0321d86](https://github.com/Cronacl/Sentinel/commit/0321d864169c564d53aae36a29306719744b2e7d))
+
 ## [0.0.13](https://github.com/Cronacl/Sentinel/compare/v0.0.12...v0.0.13) (2026-04-03)
 
 
