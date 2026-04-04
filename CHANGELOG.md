@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.15](https://github.com/Cronacl/Sentinel/compare/v0.0.14...v0.0.15) (2026-04-04)
+
+
+### Features
+
+* enhance database schema and testing for user and automation settings ([358ad8a](https://github.com/Cronacl/Sentinel/commit/358ad8a9dd284d8c3e075e1d3dc25d1c246c701c))
+
+
+### Bug Fixes
+
+* improve type safety in database test assertions ([208e280](https://github.com/Cronacl/Sentinel/commit/208e2802e9dd3b4d84811be08ea02b8aed979ad6))
+
 ## [0.0.14](https://github.com/Cronacl/Sentinel/compare/v0.0.13...v0.0.14) (2026-04-04)
 
 
