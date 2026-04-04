@@ -6,7 +6,6 @@ import {
   Disclosure,
   DisclosureGroup,
   Form,
-  Skeleton,
   Spinner,
   Switch,
 } from "@heroui/react";
@@ -49,41 +48,70 @@ const CAPABILITY_LABEL: Record<string, string> = {
   vision: "Vision",
 };
 
-function ModelsSkeleton() {
+function SettingsLoadingSpinner() {
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid gap-4 lg:grid-cols-2">
-        {Array.from({ length: 2 }).map((_, i) => (
-          <div
-            className="border-separator/20 bg-surface rounded-2xl border px-4 py-3"
-            key={i}
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <Skeleton className="h-4 w-28 rounded-md" />
-              <Skeleton className="h-5 w-16 rounded-full" />
-            </div>
-            <div className="space-y-1.5">
-              {Array.from({ length: 4 }).map((__, j) => (
-                <div className="flex items-center justify-between" key={j}>
-                  <Skeleton className="h-3 w-12 rounded-md" />
-                  <Skeleton className="h-3 w-20 rounded-md" />
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+    <div className="flex items-center justify-center py-48">
+      <Spinner size="sm" />
+    </div>
+  );
+}
 
-      <div className="border-separator/20 bg-surface divide-separator/20 divide-y rounded-2xl border">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div className="flex items-center gap-3 px-4 py-2.5" key={i}>
-            <Skeleton className="h-7 w-7 shrink-0 rounded-lg" />
-            <Skeleton className="h-4 w-28 rounded-md" />
-            <Skeleton className="ml-auto h-5 w-14 rounded-full" />
-            <Skeleton className="h-4 w-4 rounded" />
+function RuntimeCard({
+  title,
+  badge,
+  badgeColor,
+  rows,
+  fallbackMessage,
+  engineError,
+  isRefreshing,
+  onRefresh,
+}: {
+  title: string;
+  badge: string;
+  badgeColor: "success" | "warning" | "danger" | "default";
+  rows: { label: string; value: string }[];
+  fallbackMessage: string | null;
+  engineError: string | null;
+  isRefreshing: boolean;
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="border-separator/20 rounded-2xl border bg-surface px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-foreground text-[13px] font-medium">{title}</span>
+        <div className="flex items-center gap-1.5">
+          <Button
+            isDisabled={isRefreshing}
+            isPending={isRefreshing}
+            onPress={onRefresh}
+            size="sm"
+            variant="secondary"
+            className="h-6 min-w-0 px-2 text-[11px]"
+          >
+            Reload
+          </Button>
+          <Chip color={badgeColor} size="sm" variant="soft">
+            {badge}
+          </Chip>
+        </div>
+      </div>
+      <div className="mt-1.5 space-y-0.5 text-[11px]">
+        {rows.map((row) => (
+          <div className="flex items-center justify-between" key={row.label}>
+            <span className="text-muted">{row.label}</span>
+            <span className="text-foreground">{row.value}</span>
           </div>
         ))}
       </div>
+      {fallbackMessage ? (
+        <p className="border-warning/20 bg-warning-soft text-warning-soft-foreground mt-2 rounded-lg border px-2 py-1 text-[11px]">
+          {fallbackMessage}
+        </p>
+      ) : engineError ? (
+        <p className="border-warning/20 bg-warning-soft text-warning-soft-foreground mt-2 rounded-lg border px-2 py-1 text-[11px]">
+          {engineError}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -344,13 +372,35 @@ export default function ModelsPage() {
   const codexFallbackMessage = getCodexRuntimeFallbackMessage(codexStatus);
   const claudeFallbackMessage = getClaudeRuntimeFallbackMessage(claudeStatus);
 
+  const codexAccountValue = (() => {
+    const raw =
+      codexStatus?.account?.type === "chatgpt"
+        ? codexStatus.account.email
+        : codexStatus?.account?.type === "apiKey"
+          ? "API key"
+          : null;
+    if (!raw) return "Not authenticated";
+    if (raw === "API key") return raw;
+    return showCodexAccount
+      ? raw
+      : "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
+  })();
+
+  const claudeAccountValue = (() => {
+    const raw = claudeStatus?.account?.email ?? null;
+    if (!raw) return "Not authenticated";
+    return showClaudeAccount
+      ? raw
+      : "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
+  })();
+
   return (
     <SettingsPageWrapper
-      subtitle="Enable or disable models and add custom ones"
+      subtitle="Enable or disable models and add custom ones."
       title="Models"
     >
       {isPending && !models ? (
-        <ModelsSkeleton />
+        <SettingsLoadingSpinner />
       ) : (
         <>
           {actionError ? (
@@ -359,267 +409,83 @@ export default function ModelsPage() {
             </p>
           ) : null}
 
-          <div className="flex flex-col gap-6">
-            {/* ── Runtime status cards: side-by-side on large screens ── */}
-            <div className="grid gap-4 lg:grid-cols-2">
-              <section className="border-separator/20 bg-surface rounded-2xl border px-4 py-3">
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="text-foreground text-sm font-medium">
-                    Codex Runtime
-                  </h2>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      isDisabled={isRefreshingCodex}
-                      isPending={isRefreshingCodex}
-                      onPress={() => void handleRefreshRuntime("codex")}
-                      size="sm"
-                      variant="secondary"
-                    >
-                      Reload
-                    </Button>
-                    <Chip
-                      color={getCodexRuntimeBadgeColor(
-                        codexStatus,
-                        codexEngine?.isAvailable ?? false,
-                      )}
-                      size="sm"
-                      variant="soft"
-                    >
-                      {getCodexRuntimeBadgeLabel(
-                        codexStatus,
-                        codexEngine?.isAvailable ?? false,
-                      )}
-                    </Chip>
-                  </div>
-                </div>
-
-                <div className="mt-2 space-y-1 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted">CLI</span>
-                    <span className="text-foreground">
-                      {getCodexRuntimeCliLabel(codexStatus)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted">Auth</span>
-                    <span className="text-foreground">
-                      {codexStatus?.authReady
-                        ? "Ready"
-                        : codexStatus?.requiresOpenaiAuth
-                          ? "Login needed"
-                          : "Unavailable"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted">Models</span>
-                    <span className="text-foreground">
-                      {codexStatus?.availableModels.length ?? 0} available
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-muted">Account</span>
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      <span className="min-w-0 truncate text-foreground">
-                        {(() => {
-                          const raw =
-                            codexStatus?.account?.type === "chatgpt"
-                              ? codexStatus.account.email
-                              : codexStatus?.account?.type === "apiKey"
-                                ? "API key"
-                                : null;
-                          if (!raw) return "Not authenticated";
-                          if (raw === "API key") return raw;
-                          return showCodexAccount
-                            ? raw
-                            : "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
-                        })()}
-                      </span>
-                      {codexStatus?.account?.type === "chatgpt" && (
-                        <button
-                          className="text-muted hover:text-foreground shrink-0 transition-colors"
-                          onClick={() => setShowCodexAccount((v) => !v)}
-                          type="button"
-                        >
-                          {showCodexAccount ? (
-                            <svg
-                              className="h-3.5 w-3.5"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth={1.5}
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12c1.292 4.338 5.31 7.5 10.066 7.5.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          ) : (
-                            <svg
-                              className="h-3.5 w-3.5"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth={1.5}
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                              <path
-                                d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          )}
-                        </button>
-                      )}
-                    </span>
-                  </div>
-                </div>
-
-                {codexFallbackMessage ? (
-                  <p className="border-warning/20 bg-warning-soft text-warning-soft-foreground mt-2 rounded-lg border px-2.5 py-1.5 text-xs">
-                    {codexFallbackMessage}
-                  </p>
-                ) : null}
-
-                {!codexFallbackMessage &&
-                !codexEngine?.isAvailable &&
-                codexEngine?.error ? (
-                  <p className="border-warning/20 bg-warning-soft text-warning-soft-foreground mt-2 rounded-lg border px-2.5 py-1.5 text-xs">
-                    {codexEngine.error}
-                  </p>
-                ) : null}
-              </section>
-
-              <section className="border-separator/20 bg-surface rounded-2xl border px-4 py-3">
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="text-foreground text-sm font-medium">
-                    Claude Code Runtime
-                  </h2>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      isDisabled={isRefreshingClaude}
-                      isPending={isRefreshingClaude}
-                      onPress={() => void handleRefreshRuntime("claude")}
-                      size="sm"
-                      variant="secondary"
-                    >
-                      Reload
-                    </Button>
-                    <Chip
-                      color={getClaudeRuntimeBadgeColor(
-                        claudeStatus,
-                        claudeEngine?.isAvailable ?? false,
-                      )}
-                      size="sm"
-                      variant="soft"
-                    >
-                      {getClaudeRuntimeBadgeLabel(
-                        claudeStatus,
-                        claudeEngine?.isAvailable ?? false,
-                      )}
-                    </Chip>
-                  </div>
-                </div>
-
-                <div className="mt-2 space-y-1 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted">Binary</span>
-                    <span className="text-foreground">
-                      {getClaudeRuntimeBinaryLabel(claudeStatus)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted">Auth</span>
-                    <span className="text-foreground">
-                      {claudeStatus?.authReady ? "Ready" : "Unavailable"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted">Models</span>
-                    <span className="text-foreground">
-                      {claudeStatus?.availableModels.length ?? 0} available
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-muted">Account</span>
-                    <span className="flex min-w-0 items-center gap-1.5">
-                      <span className="min-w-0 truncate text-foreground">
-                        {(() => {
-                          const raw = claudeStatus?.account?.email ?? null;
-                          if (!raw) return "Not authenticated";
-                          return showClaudeAccount
-                            ? raw
-                            : "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
-                        })()}
-                      </span>
-                      {claudeStatus?.account?.email && (
-                        <button
-                          className="text-muted hover:text-foreground shrink-0 transition-colors"
-                          onClick={() => setShowClaudeAccount((v) => !v)}
-                          type="button"
-                        >
-                          {showClaudeAccount ? (
-                            <svg
-                              className="h-3.5 w-3.5"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth={1.5}
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12c1.292 4.338 5.31 7.5 10.066 7.5.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          ) : (
-                            <svg
-                              className="h-3.5 w-3.5"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth={1.5}
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                              <path
-                                d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          )}
-                        </button>
-                      )}
-                    </span>
-                  </div>
-                </div>
-
-                {claudeFallbackMessage ? (
-                  <p className="border-warning/20 bg-warning-soft text-warning-soft-foreground mt-2 rounded-lg border px-2.5 py-1.5 text-xs">
-                    {claudeFallbackMessage}
-                  </p>
-                ) : null}
-
-                {!claudeFallbackMessage &&
-                !claudeEngine?.isAvailable &&
-                claudeEngine?.error ? (
-                  <p className="border-warning/20 bg-warning-soft text-warning-soft-foreground mt-2 rounded-lg border px-2.5 py-1.5 text-xs">
-                    {claudeEngine.error}
-                  </p>
-                ) : null}
-              </section>
+          <div className="flex flex-col gap-3">
+            <div className="grid gap-1.5 md:grid-cols-2">
+              <RuntimeCard
+                title="Codex Runtime"
+                badge={getCodexRuntimeBadgeLabel(
+                  codexStatus,
+                  codexEngine?.isAvailable ?? false,
+                )}
+                badgeColor={getCodexRuntimeBadgeColor(
+                  codexStatus,
+                  codexEngine?.isAvailable ?? false,
+                )}
+                rows={[
+                  { label: "CLI", value: getCodexRuntimeCliLabel(codexStatus) },
+                  {
+                    label: "Auth",
+                    value: codexStatus?.authReady
+                      ? "Ready"
+                      : codexStatus?.requiresOpenaiAuth
+                        ? "Login needed"
+                        : "Unavailable",
+                  },
+                  {
+                    label: "Models",
+                    value: `${codexStatus?.availableModels.length ?? 0} available`,
+                  },
+                  { label: "Account", value: codexAccountValue },
+                ]}
+                fallbackMessage={codexFallbackMessage}
+                engineError={
+                  !codexFallbackMessage &&
+                  !codexEngine?.isAvailable &&
+                  codexEngine?.error
+                    ? codexEngine.error
+                    : null
+                }
+                isRefreshing={isRefreshingCodex}
+                onRefresh={() => void handleRefreshRuntime("codex")}
+              />
+              <RuntimeCard
+                title="Claude Code Runtime"
+                badge={getClaudeRuntimeBadgeLabel(
+                  claudeStatus,
+                  claudeEngine?.isAvailable ?? false,
+                )}
+                badgeColor={getClaudeRuntimeBadgeColor(
+                  claudeStatus,
+                  claudeEngine?.isAvailable ?? false,
+                )}
+                rows={[
+                  {
+                    label: "Binary",
+                    value: getClaudeRuntimeBinaryLabel(claudeStatus),
+                  },
+                  {
+                    label: "Auth",
+                    value: claudeStatus?.authReady ? "Ready" : "Unavailable",
+                  },
+                  {
+                    label: "Models",
+                    value: `${claudeStatus?.availableModels.length ?? 0} available`,
+                  },
+                  { label: "Account", value: claudeAccountValue },
+                ]}
+                fallbackMessage={claudeFallbackMessage}
+                engineError={
+                  !claudeFallbackMessage &&
+                  !claudeEngine?.isAvailable &&
+                  claudeEngine?.error
+                    ? claudeEngine.error
+                    : null
+                }
+                isRefreshing={isRefreshingClaude}
+                onRefresh={() => void handleRefreshRuntime("claude")}
+              />
             </div>
 
-            {/* ── Runtime model lists + Provider model groups (all collapsible) ── */}
             {(hasCodexModels || hasClaudeModels || grouped.length > 0) && (
               <DisclosureGroup
                 allowsMultipleExpanded
@@ -627,18 +493,17 @@ export default function ModelsPage() {
                 onExpandedChange={setExpandedProviders}
               >
                 <div className="border-separator/20 bg-surface divide-separator/20 divide-y rounded-2xl border">
-                  {/* Codex runtime models */}
                   {hasCodexModels && (
                     <Disclosure id="runtime-codex">
                       <Disclosure.Heading>
-                        <Disclosure.Trigger className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left">
+                        <Disclosure.Trigger className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left">
                           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-background/80">
                             <ProviderIcon
-                              className="h-4 w-4"
+                              className="h-3.5 w-3.5"
                               provider="openai"
                             />
                           </div>
-                          <span className="text-foreground text-sm font-medium">
+                          <span className="text-foreground text-[13px] font-medium">
                             Codex Models
                           </span>
                           <Chip size="sm" variant="soft">
@@ -649,13 +514,13 @@ export default function ModelsPage() {
                       </Disclosure.Heading>
                       <Disclosure.Content>
                         <Disclosure.Body>
-                          <div className="divide-separator/10 divide-y px-4 pb-2">
+                          <div className="divide-separator/10 divide-y px-3 pb-2">
                             {codexStatus!.availableModels.map((model) => (
                               <div
-                                className="flex items-center gap-3 py-2 pl-10"
+                                className="flex items-center gap-2.5 py-1.5 pl-9"
                                 key={model.id}
                               >
-                                <span className="text-foreground min-w-0 shrink-0 text-sm">
+                                <span className="text-foreground shrink-0 text-[13px]">
                                   {model.displayName}
                                 </span>
                                 {model.isDefault && (
@@ -663,7 +528,7 @@ export default function ModelsPage() {
                                     Default
                                   </Chip>
                                 )}
-                                <span className="text-muted min-w-0 flex-1 truncate text-xs">
+                                <span className="text-muted min-w-0 flex-1 truncate text-[11px]">
                                   {model.description}
                                 </span>
                                 <div className="flex shrink-0 gap-1">
@@ -676,11 +541,6 @@ export default function ModelsPage() {
                                       {modality}
                                     </Chip>
                                   ))}
-                                  {model.supportsPersonality && (
-                                    <Chip size="sm" variant="soft">
-                                      Personality
-                                    </Chip>
-                                  )}
                                 </div>
                               </div>
                             ))}
@@ -690,18 +550,17 @@ export default function ModelsPage() {
                     </Disclosure>
                   )}
 
-                  {/* Claude Code runtime models */}
                   {hasClaudeModels && (
                     <Disclosure id="runtime-claude">
                       <Disclosure.Heading>
-                        <Disclosure.Trigger className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left">
+                        <Disclosure.Trigger className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left">
                           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-background/80">
                             <ProviderIcon
-                              className="h-4 w-4"
+                              className="h-3.5 w-3.5"
                               provider="anthropic"
                             />
                           </div>
-                          <span className="text-foreground text-sm font-medium">
+                          <span className="text-foreground text-[13px] font-medium">
                             Claude Code Models
                           </span>
                           <Chip size="sm" variant="soft">
@@ -712,13 +571,13 @@ export default function ModelsPage() {
                       </Disclosure.Heading>
                       <Disclosure.Content>
                         <Disclosure.Body>
-                          <div className="divide-separator/10 divide-y px-4 pb-2">
+                          <div className="divide-separator/10 divide-y px-3 pb-2">
                             {claudeStatus!.availableModels.map((model) => (
                               <div
-                                className="flex items-center gap-3 py-2 pl-10"
+                                className="flex items-center gap-2.5 py-1.5 pl-9"
                                 key={model.id}
                               >
-                                <span className="text-foreground min-w-0 shrink-0 text-sm">
+                                <span className="text-foreground shrink-0 text-[13px]">
                                   {model.displayName}
                                 </span>
                                 {model.isDefault && (
@@ -726,7 +585,7 @@ export default function ModelsPage() {
                                     Default
                                   </Chip>
                                 )}
-                                <span className="text-muted min-w-0 flex-1 truncate text-xs">
+                                <span className="text-muted min-w-0 flex-1 truncate text-[11px]">
                                   {model.description}
                                 </span>
                                 <div className="flex shrink-0 gap-1">
@@ -742,7 +601,6 @@ export default function ModelsPage() {
                                   {model.contextWindow && (
                                     <Chip size="sm" variant="soft">
                                       {(model.contextWindow / 1000).toFixed(0)}k
-                                      ctx
                                     </Chip>
                                   )}
                                 </div>
@@ -754,18 +612,17 @@ export default function ModelsPage() {
                     </Disclosure>
                   )}
 
-                  {/* Provider model groups */}
                   {grouped.map(([provider, providerModels]) => (
                     <Disclosure id={provider} key={provider}>
                       <Disclosure.Heading>
-                        <Disclosure.Trigger className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left">
+                        <Disclosure.Trigger className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left">
                           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-background/80">
                             <ProviderIcon
-                              className="h-4 w-4"
+                              className="h-3.5 w-3.5"
                               provider={provider}
                             />
                           </div>
-                          <span className="text-foreground text-sm font-medium">
+                          <span className="text-foreground text-[13px] font-medium">
                             {PROVIDERS[provider]?.displayName ?? provider}
                           </span>
                           {providerModels[0] &&
@@ -775,9 +632,9 @@ export default function ModelsPage() {
                             </Chip>
                           ) : null}
                           <div className="ml-auto flex items-center gap-2">
-                            <span className="text-muted text-xs tabular-nums">
+                            <span className="text-muted text-[11px] tabular-nums">
                               {providerModels.filter((m) => m.isEnabled).length}
-                              /{providerModels.length} enabled
+                              /{providerModels.length}
                             </span>
                             <Disclosure.Indicator />
                           </div>
@@ -785,14 +642,14 @@ export default function ModelsPage() {
                       </Disclosure.Heading>
                       <Disclosure.Content>
                         <Disclosure.Body>
-                          <div className="divide-separator/10 divide-y px-4 pb-2">
+                          <div className="divide-separator/10 divide-y px-3 pb-2">
                             {providerModels.map((model) => (
                               <div
-                                className="flex items-center gap-3 py-2 pl-10"
+                                className="flex items-center gap-2.5 py-1.5 pl-9"
                                 key={model.modelId}
                               >
-                                <div className="flex min-w-0 flex-1 items-center gap-2">
-                                  <span className="text-foreground shrink-0 text-sm">
+                                <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                                  <span className="text-foreground shrink-0 text-[13px]">
                                     {model.displayName}
                                   </span>
                                   {model.isCustom ? (
@@ -800,7 +657,7 @@ export default function ModelsPage() {
                                       Custom
                                     </Chip>
                                   ) : null}
-                                  <span className="text-muted hidden min-w-0 truncate text-xs sm:inline">
+                                  <span className="text-muted hidden min-w-0 truncate text-[11px] sm:inline">
                                     {model.description}
                                   </span>
                                 </div>
@@ -834,6 +691,7 @@ export default function ModelsPage() {
                                       }
                                       size="sm"
                                       variant="danger"
+                                      className="h-6 min-w-0 px-2 text-[11px]"
                                     >
                                       {({ isPending }) => (
                                         <>
@@ -885,13 +743,12 @@ export default function ModelsPage() {
               </DisclosureGroup>
             )}
 
-            {/* ── Add custom model (collapsible) ── */}
             <div className="border-separator/20 bg-surface overflow-hidden rounded-2xl border">
               <Disclosure>
                 <Disclosure.Heading>
-                  <Disclosure.Trigger className="flex w-full cursor-pointer items-center gap-2 px-4 py-2.5 text-left">
+                  <Disclosure.Trigger className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left">
                     <svg
-                      className="h-4 w-4 shrink-0 text-muted"
+                      className="text-muted h-3.5 w-3.5 shrink-0"
                       fill="none"
                       stroke="currentColor"
                       strokeWidth={2}
@@ -903,16 +760,16 @@ export default function ModelsPage() {
                         strokeLinejoin="round"
                       />
                     </svg>
-                    <span className="text-foreground text-sm font-medium">
+                    <span className="text-foreground text-[13px] font-medium">
                       Add Custom Model
                     </span>
                     <Disclosure.Indicator className="ml-auto" />
                   </Disclosure.Trigger>
                 </Disclosure.Heading>
                 <Disclosure.Content>
-                  <Disclosure.Body className="border-separator/20 border-t px-4 pb-3 pt-3">
+                  <Disclosure.Body className="border-separator/20 border-t px-3 pb-2.5 pt-2.5">
                     <Form
-                      className="flex items-end gap-3"
+                      className="flex items-end gap-2.5"
                       onSubmit={customModelForm.handleSubmit(handleAddCustom)}
                     >
                       <ControlledSelectField
@@ -947,6 +804,7 @@ export default function ModelsPage() {
                         isPending={addCustom.isPending}
                         size="sm"
                         type="submit"
+                        className="h-8"
                       >
                         {({ isPending }) => (
                           <>
@@ -960,14 +818,16 @@ export default function ModelsPage() {
                     </Form>
 
                     {!connectedProviders.has(selectedProvider) ? (
-                      <p className="text-muted mt-2 text-xs">
+                      <p className="text-muted mt-1.5 text-[11px]">
                         Connect and enable this provider before adding a custom
                         model.
                       </p>
                     ) : null}
 
                     {customError ? (
-                      <p className="text-danger mt-2 text-xs">{customError}</p>
+                      <p className="text-danger mt-1.5 text-[11px]">
+                        {customError}
+                      </p>
                     ) : null}
                   </Disclosure.Body>
                 </Disclosure.Content>

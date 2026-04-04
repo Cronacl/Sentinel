@@ -1,23 +1,16 @@
 "use client";
 
-import {
-  Button,
-  Chip,
-  Modal,
-  Skeleton,
-  Switch,
-  useOverlayState,
-} from "@heroui/react";
-import { useEffect, useMemo, useState } from "react";
+import { Button, Chip, Spinner, Switch } from "@heroui/react";
+import { useEffect, useState } from "react";
 import { sileo } from "sileo";
 
 import { IntegrationProviderIcon } from "@/components/icons/integration-provider-icon";
 import {
-  IntegrationConfigSidebar,
+  IntegrationConfigDrawer,
   type IntegrationSummary,
 } from "@/components/settings/integration-config-sidebar";
 import {
-  DatabaseConfigSidebar,
+  DatabaseConfigDrawer,
   type DatabaseIntegrationSummary,
 } from "@/components/settings/database-config-sidebar";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
@@ -61,27 +54,15 @@ type IntegrationListItem = {
   provider: IntegrationProvider;
 };
 
-function IntegrationsSkeleton() {
+function SettingsLoadingSpinner() {
   return (
-    <div className="flex flex-col gap-2">
-      {Array.from({ length: 4 }).map((_, index) => (
-        <section
-          className="border-separator/20 bg-surface rounded-2xl border p-5"
-          key={index}
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 flex-1 space-y-2">
-              <Skeleton className="h-3 w-36 rounded-md" />
-              <Skeleton className="h-2 w-72 max-w-full rounded-md" />
-            </div>
-          </div>
-        </section>
-      ))}
+    <div className="flex items-center justify-center py-48">
+      <Spinner size="sm" />
     </div>
   );
 }
 
-function IntegrationRow({
+function IntegrationCell({
   connectingProvider,
   integration,
   isAuthlessToggling,
@@ -114,56 +95,55 @@ function IntegrationRow({
     !integration.isConnected &&
     isSetupReady &&
     integration.hasOAuthApp;
-  const detailLabel = integration.isConnected ? "Details" : "Setup";
-
-  const statusChip = integration.isConnected ? (
-    <Chip
-      color={integration.isEnabled ? "success" : "warning"}
-      size="sm"
-      variant="soft"
-    >
-      {integration.isEnabled ? "Active" : "Paused"}
-    </Chip>
-  ) : integration.hasOAuthApp ? (
-    <Chip color="warning" size="sm" variant="soft">
-      Credentials saved
-    </Chip>
-  ) : !isSetupReady ? (
-    <Chip size="sm" variant="soft">
-      Coming soon
-    </Chip>
-  ) : isAuthless ? (
-    <Chip size="sm" variant="soft">
-      No setup needed
-    </Chip>
-  ) : null;
 
   return (
     <div
-      className={`flex items-center gap-4 rounded-xl border px-4 py-2.5 transition-colors ${
+      className={`border-separator/20 flex items-center gap-2.5 rounded-2xl border px-2.5 py-2 transition-colors ${
         isSelected
           ? "border-primary/50 bg-primary/[0.03]"
-          : "border-separator bg-surface"
+          : "bg-surface hover:bg-surface-hover"
       }`}
     >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/80">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-separator bg-background">
         <IntegrationProviderIcon
-          className="h-5 w-5"
+          className="h-4 w-4"
           provider={integration.provider}
         />
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-foreground text-sm font-medium">
+        <div className="flex items-center gap-1.5">
+          <span className="text-foreground text-[13px] font-medium leading-tight">
             {integration.label}
           </span>
-          {statusChip}
+          {integration.isConnected ? (
+            <Chip
+              color={integration.isEnabled ? "success" : "warning"}
+              size="sm"
+              variant="soft"
+            >
+              {integration.isEnabled ? "Active" : "Paused"}
+            </Chip>
+          ) : integration.hasOAuthApp ? (
+            <Chip color="warning" size="sm" variant="soft">
+              Credentials saved
+            </Chip>
+          ) : !isSetupReady ? (
+            <Chip size="sm" variant="soft">
+              Coming soon
+            </Chip>
+          ) : isAuthless ? (
+            <Chip size="sm" variant="soft">
+              No setup needed
+            </Chip>
+          ) : null}
         </div>
-        <p className="text-muted mt-0.5 text-xs">{metadata.description}</p>
+        <p className="text-muted mt-0.5 truncate text-[11px]">
+          {metadata.description}
+        </p>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1.5">
         {isAuthless ? (
           <Switch
             aria-label={`Enable ${integration.label}`}
@@ -203,25 +183,31 @@ function IntegrationRow({
                 onPress={() => onConnect(integration.provider)}
                 size="sm"
                 variant="primary"
+                className="h-7 min-w-0 px-2.5 text-xs"
               >
                 Connect
               </Button>
             ) : null}
 
-            <Button
-              isDisabled={!canManage}
-              onPress={() => onManage(integration.provider)}
-              size="sm"
-              variant={
-                isSelected
-                  ? "primary"
-                  : showConnectButton || integration.isConnected
-                    ? "secondary"
-                    : "primary"
-              }
-            >
-              {canManage ? detailLabel : "Coming soon"}
-            </Button>
+            {canManage ? (
+              <Button
+                onPress={() => onManage(integration.provider)}
+                size="sm"
+                variant={isSelected ? "primary" : "secondary"}
+                className="h-7 min-w-0 px-2.5 text-xs"
+              >
+                {integration.isConnected ? "Details" : "Setup"}
+              </Button>
+            ) : !isSetupReady ? null : (
+              <Button
+                isDisabled
+                size="sm"
+                variant="secondary"
+                className="h-7 min-w-0 px-2.5 text-xs"
+              >
+                Coming soon
+              </Button>
+            )}
           </>
         )}
       </div>
@@ -313,36 +299,9 @@ export default function IntegrationsSettingsPage() {
       : (integrations.find((item) => item.provider === selectedProvider) ??
         null);
   const isDetailsOpen = selectedIntegration !== null;
-  const detailsOverlayState = useOverlayState({
-    isOpen: isDetailsOpen,
-    onOpenChange: (open) => {
-      if (!open) {
-        setSelectedProvider(null);
-      }
-    },
-  });
-
-  const detailsContent = useMemo(() => {
-    if (!selectedIntegration) {
-      return null;
-    }
-
-    if (isDatabaseProvider(selectedIntegration.provider)) {
-      return (
-        <DatabaseConfigSidebar
-          integration={selectedIntegration as DatabaseIntegrationSummary}
-          onClose={() => setSelectedProvider(null)}
-        />
-      );
-    }
-
-    return (
-      <IntegrationConfigSidebar
-        integration={selectedIntegration as IntegrationSummary}
-        onClose={() => setSelectedProvider(null)}
-      />
-    );
-  }, [selectedIntegration]);
+  const isDbDrawer =
+    selectedIntegration !== null &&
+    isDatabaseProvider(selectedIntegration.provider);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -420,9 +379,10 @@ export default function IntegrationsSettingsPage() {
       disableAuthless.mutate({ provider });
     }
   };
-  const renderRows = (items: IntegrationListItem[], isToggling: boolean) =>
+
+  const renderCells = (items: IntegrationListItem[], isToggling: boolean) =>
     items.map((integration) => (
-      <IntegrationRow
+      <IntegrationCell
         connectingProvider={connectingProvider}
         integration={integration}
         isAuthlessToggling={
@@ -442,87 +402,84 @@ export default function IntegrationsSettingsPage() {
 
   return (
     <SettingsPageWrapper
-      subtitle="Connect the external tools Sentinel can act on directly. Setup stays local, and each integration uses your own credentials."
+      subtitle="Connect external tools Sentinel can act on directly using your own credentials."
       title="Integrations"
     >
       <>
         {integrationsQuery.isPending && integrations.length === 0 ? (
-          <IntegrationsSkeleton />
+          <SettingsLoadingSpinner />
         ) : (
-          <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-3">
             {connected.length > 0 ? (
-              <section>
-                <h2 className="text-foreground mb-2 px-1 text-sm font-medium">
-                  Connected
-                </h2>
-                <div className="flex flex-col gap-2">
-                  {renderRows(connected, toggle.isPending)}
+              <section className="flex flex-col gap-1.5">
+                <div className="px-1.5 pb-0.5">
+                  <h2 className="text-foreground text-sm font-medium">
+                    Connected
+                  </h2>
+                </div>
+                <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
+                  {renderCells(connected, toggle.isPending)}
                 </div>
               </section>
             ) : null}
 
             {authless.length > 0 ? (
-              <section>
-                <div className="mb-2 px-1">
+              <section className="flex flex-col gap-1.5">
+                <div className="px-1.5 pb-0.5">
                   <h2 className="text-foreground text-sm font-medium">
                     Public Data Sources
                   </h2>
-                  <p className="text-muted mt-0.5 text-xs">
-                    These integrations use public APIs and require no
-                    credentials — just toggle them on.
-                  </p>
                 </div>
-                <div className="flex flex-col gap-2">
-                  {renderRows(authless, false)}
+                <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
+                  {renderCells(authless, false)}
                 </div>
               </section>
             ) : null}
 
             {readyToSetup.length > 0 ? (
-              <section>
-                <h2 className="text-foreground mb-2 px-1 text-sm font-medium">
-                  Ready To Set Up
-                </h2>
-                <div className="flex flex-col gap-2">
-                  {renderRows(readyToSetup, false)}
+              <section className="flex flex-col gap-1.5">
+                <div className="px-1.5 pb-0.5">
+                  <h2 className="text-foreground text-sm font-medium">
+                    Ready To Set Up
+                  </h2>
+                </div>
+                <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
+                  {renderCells(readyToSetup, false)}
                 </div>
               </section>
             ) : null}
 
             {comingSoon.length > 0 ? (
-              <section>
-                <div className="mb-2 px-1">
+              <section className="flex flex-col gap-1.5">
+                <div className="px-1.5 pb-0.5">
                   <h2 className="text-foreground text-sm font-medium">
                     Coming Soon
                   </h2>
-                  <p className="text-muted mt-0.5 text-xs">
-                    These integrations are planned, but the connection flow is
-                    not available yet.
-                  </p>
                 </div>
-                <div className="flex flex-col gap-2">
-                  {renderRows(comingSoon, false)}
+                <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
+                  {renderCells(comingSoon, false)}
                 </div>
               </section>
             ) : null}
           </div>
         )}
-        <Modal.Root state={detailsOverlayState}>
-          <Modal.Backdrop
-            className="items-stretch justify-end"
-            variant="opaque"
-          >
-            <Modal.Container
-              className="items-end justify-start p-0 sm:w-full sm:max-w-none sm:p-0"
-              placement="center"
-              size="full"
-            >
-              <Modal.Dialog className="border-separator bg-surface h-dvh w-[min(560px,92vw)] max-w-[92vw] rounded-none border-l p-0 shadow-xl sm:w-[560px] sm:max-w-[560px]">
-                {detailsContent}
-              </Modal.Dialog>
-            </Modal.Container>
-          </Modal.Backdrop>
-        </Modal.Root>
+        {isDbDrawer ? (
+          <DatabaseConfigDrawer
+            integration={selectedIntegration as DatabaseIntegrationSummary}
+            isOpen={isDetailsOpen}
+            onOpenChange={(open) => {
+              if (!open) setSelectedProvider(null);
+            }}
+          />
+        ) : (
+          <IntegrationConfigDrawer
+            integration={selectedIntegration as IntegrationSummary | null}
+            isOpen={isDetailsOpen}
+            onOpenChange={(open) => {
+              if (!open) setSelectedProvider(null);
+            }}
+          />
+        )}
       </>
     </SettingsPageWrapper>
   );

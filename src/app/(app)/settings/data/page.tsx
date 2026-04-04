@@ -1,12 +1,13 @@
 "use client";
 
-import { AlertDialog, Button, Skeleton, Spinner } from "@heroui/react";
+import { AlertDialog, Button, Spinner } from "@heroui/react";
 import {
   Database01Icon,
   Download04Icon,
   Delete02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import type { ReactNode } from "react";
 import { useState } from "react";
 import { sileo } from "sileo";
 
@@ -27,30 +28,34 @@ function formatDate(iso: string): string {
   }).format(new Date(iso));
 }
 
-function DataSettingsSkeleton() {
+function SettingsSectionRow({
+  children,
+  description,
+  isFirst = false,
+  title,
+}: {
+  children: ReactNode;
+  description: ReactNode;
+  isFirst?: boolean;
+  title: ReactNode;
+}) {
   return (
-    <div className="flex flex-col gap-6">
-      <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-        <div className="mb-5 space-y-2">
-          <Skeleton className="h-5 w-36 rounded-md" />
-          <Skeleton className="h-4 w-80 rounded-md" />
-        </div>
-        <div className="flex gap-3">
-          <Skeleton className="h-9 w-36 rounded-xl" />
-          <Skeleton className="h-9 w-36 rounded-xl" />
-        </div>
-      </section>
-      <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-        <div className="mb-5 space-y-2">
-          <Skeleton className="h-5 w-28 rounded-md" />
-          <Skeleton className="h-4 w-64 rounded-md" />
-        </div>
-        <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton className="h-16 w-full rounded-xl" key={i} />
-          ))}
-        </div>
-      </section>
+    <div
+      className={`flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between${isFirst ? "" : " border-t border-border/50"}`}
+    >
+      <div className="space-y-1">
+        <h2 className="text-foreground text-base font-medium">{title}</h2>
+        <p className="text-muted text-sm">{description}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function SettingsLoadingSpinner() {
+  return (
+    <div className="flex items-center justify-center py-48">
+      <Spinner size="sm" />
     </div>
   );
 }
@@ -100,40 +105,21 @@ export default function DataSettingsPage() {
       title="Data"
     >
       {actionError ? (
-        <p className="border-danger-soft-hover bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
+        <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
           {actionError}
         </p>
       ) : null}
 
       {backups.isPending && !backups.data ? (
-        <DataSettingsSkeleton />
+        <SettingsLoadingSpinner />
       ) : (
         <div className="flex flex-col gap-6">
-          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-            <div className="mb-5 space-y-1">
-              <div className="flex items-center gap-2">
-                <HugeiconsIcon
-                  color="currentColor"
-                  icon={Database01Icon}
-                  size={18}
-                  strokeWidth={1.5}
-                />
-                <h2 className="text-foreground text-base font-medium">
-                  Database
-                </h2>
-              </div>
-              <p className="text-muted text-sm">
-                All your data lives in a local SQLite database. Create a backup
-                snapshot or export the full database file.
-              </p>
-            </div>
-
-            <div className="mb-4 rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-xs text-muted">
-              Sentinel automatically creates a backup on startup when the last
-              one is older than 12 hours. Up to 10 backups are retained.
-            </div>
-
-            <div className="flex flex-wrap gap-3">
+          <section className="border-separator/20 bg-surface rounded-2xl border">
+            <SettingsSectionRow
+              description="Create a snapshot of your local SQLite database. Auto-backups run on startup when the last one is older than 12 hours."
+              isFirst
+              title="Create backup"
+            >
               <Button
                 isDisabled={isBusy}
                 isPending={createBackup.isPending}
@@ -159,6 +145,12 @@ export default function DataSettingsPage() {
                   </>
                 )}
               </Button>
+            </SettingsSectionRow>
+
+            <SettingsSectionRow
+              description="Download the full SQLite database file."
+              title="Export database"
+            >
               <Button
                 isDisabled={isBusy}
                 onPress={handleExport}
@@ -173,26 +165,26 @@ export default function DataSettingsPage() {
                 />
                 Export database
               </Button>
-            </div>
+            </SettingsSectionRow>
           </section>
 
-          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-            <div className="mb-4 space-y-1">
+          <section className="border-separator/20 bg-surface rounded-2xl border">
+            <div className="p-5">
               <h2 className="text-foreground text-base font-medium">Backups</h2>
-              <p className="text-muted text-sm">
+              <p className="text-muted mt-1 text-sm">
                 {backups.data && backups.data.length > 0
                   ? `${backups.data.length} backup${backups.data.length === 1 ? "" : "s"} stored in ~/.sentinel/backups/`
                   : "No backups yet. Create one above or wait for the next automatic backup."}
               </p>
             </div>
 
-            <div className="space-y-3">
+            <div className="divide-separator/50 divide-y border-t border-border/50">
               {backups.data && backups.data.length > 0 ? (
                 backups.data.map((backup) => {
                   const isAuto = backup.filename.includes("_auto");
                   return (
                     <div
-                      className="border-separator bg-background/40 flex items-center justify-between gap-4 rounded-xl border px-4 py-3"
+                      className="flex items-center justify-between gap-4 px-5 py-3.5"
                       key={backup.filename}
                     >
                       <div className="min-w-0 flex-1">
@@ -238,7 +230,7 @@ export default function DataSettingsPage() {
                   );
                 })
               ) : (
-                <div className="border-separator bg-background/40 rounded-xl border px-4 py-8 text-center">
+                <div className="px-5 py-8 text-center">
                   <p className="text-muted text-sm">
                     No backups found. Create your first backup above.
                   </p>

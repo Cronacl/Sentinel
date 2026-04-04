@@ -1,10 +1,9 @@
 "use client";
 
-import { Button, Chip, Form, Skeleton, Spinner, Switch } from "@heroui/react";
+import { Button, Chip, Form, Spinner, Switch } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { GlobalSearchIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { sileo } from "sileo";
@@ -54,33 +53,50 @@ const STATUS_LABEL = {
   not_configured: "Not configured",
 } as const;
 
-function SearchSettingsSkeleton() {
+function SettingsLoadingSpinner() {
   return (
-    <div className="flex flex-col gap-6">
-      <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-        <div className="mb-5 space-y-2">
-          <Skeleton className="h-5 w-32 rounded-md" />
-          <Skeleton className="h-4 w-72 rounded-md" />
-        </div>
-        <div className="space-y-4">
-          <Skeleton className="h-16 w-full rounded-xl" />
-          <Skeleton className="h-16 w-full rounded-xl" />
-          <Skeleton className="h-16 w-full rounded-xl" />
-        </div>
-      </section>
+    <div className="flex items-center justify-center py-48">
+      <Spinner size="sm" />
+    </div>
+  );
+}
 
-      <section className="border-separator bg-surface rounded-xl border">
-        {Array.from({ length: 1 }).map((_, index) => (
-          <div className="flex items-center gap-4 px-4 py-3" key={index}>
-            <div className="min-w-0 flex-1 space-y-2">
-              <Skeleton className="h-4 w-28 rounded-md" />
-              <Skeleton className="h-3 w-56 rounded-md" />
-            </div>
-            <Skeleton className="h-8 w-16 rounded-full" />
-            <Skeleton className="h-9 w-20 rounded-xl" />
-          </div>
-        ))}
-      </section>
+function SettingsSectionRow({
+  children,
+  description,
+  isFirst = false,
+  title,
+}: {
+  children: ReactNode;
+  description: ReactNode;
+  isFirst?: boolean;
+  title: ReactNode;
+}) {
+  return (
+    <div
+      className={`flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between${isFirst ? "" : " border-t border-border/50"}`}
+    >
+      <div className="space-y-1">
+        <h2 className="text-foreground text-base font-medium">{title}</h2>
+        <p className="text-muted text-sm">{description}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function SettingsRowControl({
+  children,
+  widthClassName = "lg:w-[360px]",
+}: {
+  children: ReactNode;
+  widthClassName?: string;
+}) {
+  return (
+    <div
+      className={`flex w-full max-w-full flex-col gap-2 ${widthClassName} lg:items-end`}
+    >
+      {children}
     </div>
   );
 }
@@ -91,8 +107,7 @@ export default function SearchSettingsPage() {
     id: SearchProviderKey;
     name: string;
   } | null>(null);
-  const [settingsError, setSettingsError] = useState("");
-  const [webFetchError, setWebFetchError] = useState("");
+  const [submitError, setSubmitError] = useState("");
 
   const searchSettings = api.searchSettings.get.useQuery();
   const searchProviders = api.searchProviders.list.useQuery();
@@ -140,10 +155,10 @@ export default function SearchSettingsPage() {
         values,
       getData: () => utils.searchSettings.get.getData(),
       onError: (error) => {
-        setSettingsError(error.message);
+        setSubmitError(error.message);
       },
       onSuccess: (data) => {
-        setSettingsError("");
+        setSubmitError("");
         utils.searchSettings.get.setData(undefined, data);
         form.reset(data);
         sileo.success({ description: "Search settings saved." });
@@ -205,10 +220,10 @@ export default function SearchSettingsPage() {
           : current,
       getData: () => utils.generalSettings.get.getData(),
       onError: (error) => {
-        setWebFetchError(error.message);
+        setSubmitError(error.message);
       },
       onSuccess: (data) => {
-        setWebFetchError("");
+        setSubmitError("");
         utils.generalSettings.get.setData(undefined, data);
         webFetchForm.reset({
           webFetchBatchEnabled: data.webFetchBatchEnabled,
@@ -223,7 +238,7 @@ export default function SearchSettingsPage() {
   );
 
   const handleSubmit = async (values: SearchSettingsFormValues) => {
-    setSettingsError("");
+    setSubmitError("");
 
     try {
       await updateSearchSettings.mutateAsync(values);
@@ -237,7 +252,7 @@ export default function SearchSettingsPage() {
       return;
     }
 
-    setWebFetchError("");
+    setSubmitError("");
 
     try {
       await updateWebFetchSettings.mutateAsync({
@@ -253,98 +268,104 @@ export default function SearchSettingsPage() {
   const settingsPending = searchSettings.isPending && !searchSettings.data;
   const webFetchPending = generalSettings.isPending && !generalSettings.data;
   const webFetchBatchEnabled = webFetchForm.watch("webFetchBatchEnabled");
-  const webFetchBatchLimit = webFetchForm.watch("webFetchBatchLimit");
+
+  const queryError =
+    searchSettings.error ?? searchProviders.error ?? generalSettings.error;
 
   return (
     <SettingsPageWrapper
       subtitle="Manage web search defaults, web fetch behavior, and external search providers."
       title="Search"
     >
-      {searchSettings.error ? (
+      {queryError ? (
         <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
-          {searchSettings.error.message}
+          {queryError.message}
         </p>
       ) : null}
 
-      {searchProviders.error ? (
+      {submitError ? (
         <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
-          {searchProviders.error.message}
-        </p>
-      ) : null}
-
-      {settingsError ? (
-        <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
-          {settingsError}
-        </p>
-      ) : null}
-
-      {webFetchError ? (
-        <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
-          {webFetchError}
+          {submitError}
         </p>
       ) : null}
 
       {settingsPending || providersPending || webFetchPending ? (
-        <SearchSettingsSkeleton />
+        <SettingsLoadingSpinner />
       ) : (
         <div className="flex flex-col gap-6">
           <Form onSubmit={form.handleSubmit(handleSubmit)}>
-            <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-              <div className="mb-5 space-y-1">
-                <h2 className="text-foreground text-base font-medium">
-                  Search defaults
-                </h2>
-                <p className="text-muted text-sm">
-                  Configure the default provider and how many results the
-                  assistant can request in one web search.
-                </p>
-              </div>
+            <section className="border-separator/20 bg-surface rounded-2xl border">
+              <SettingsSectionRow
+                description="The default provider used when the tool does not explicitly choose one."
+                isFirst
+                title="Default provider"
+              >
+                <SettingsRowControl>
+                  <div className="w-full">
+                    <ControlledSelectField
+                      control={form.control}
+                      label="Default provider"
+                      name="defaultProvider"
+                      options={
+                        searchProviders.data?.map((provider) => ({
+                          label: provider.displayName,
+                          value: provider.id,
+                        })) ?? []
+                      }
+                      selectProps={{
+                        className: "w-full",
+                        isDisabled: updateSearchSettings.isPending,
+                      }}
+                    />
+                  </div>
+                </SettingsRowControl>
+              </SettingsSectionRow>
 
-              <div className="space-y-5">
-                <ControlledSelectField
-                  control={form.control}
-                  description="The default provider used when the tool does not explicitly choose one."
-                  label="Default provider"
-                  name="defaultProvider"
-                  options={
-                    searchProviders.data?.map((provider) => ({
-                      label: provider.displayName,
-                      value: provider.id,
-                    })) ?? []
-                  }
-                  selectProps={{ isDisabled: updateSearchSettings.isPending }}
-                />
+              <SettingsSectionRow
+                description="Default number of results returned by one web search call."
+                title="Default result count"
+              >
+                <SettingsRowControl widthClassName="lg:w-[280px]">
+                  <div className="w-full">
+                    <ControlledNumberField
+                      control={form.control}
+                      inputProps={{ className: "w-full" }}
+                      label="Default result count"
+                      name="defaultResultCount"
+                      numberFieldProps={{
+                        className: "w-full",
+                        isDisabled: updateSearchSettings.isPending,
+                        maxValue: MAX_SEARCH_RESULT_COUNT,
+                        minValue: MIN_SEARCH_RESULT_COUNT,
+                      }}
+                    />
+                  </div>
+                </SettingsRowControl>
+              </SettingsSectionRow>
 
-                <ControlledNumberField
-                  control={form.control}
-                  description="Default number of results returned by one websearch call."
-                  inputProps={{ className: "w-full" }}
-                  label="Default result count"
-                  name="defaultResultCount"
-                  numberFieldProps={{
-                    className: "w-full max-w-xs",
-                    isDisabled: updateSearchSettings.isPending,
-                    maxValue: MAX_SEARCH_RESULT_COUNT,
-                    minValue: MIN_SEARCH_RESULT_COUNT,
-                  }}
-                />
+              <SettingsSectionRow
+                description="Hard cap enforced server-side even when the tool requests more."
+                title="Maximum result count"
+              >
+                <SettingsRowControl widthClassName="lg:w-[280px]">
+                  <div className="w-full">
+                    <ControlledNumberField
+                      control={form.control}
+                      inputProps={{ className: "w-full" }}
+                      label="Maximum result count"
+                      name="maxResultCount"
+                      numberFieldProps={{
+                        className: "w-full",
+                        isDisabled: updateSearchSettings.isPending,
+                        maxValue: MAX_SEARCH_RESULT_COUNT,
+                        minValue: MIN_SEARCH_RESULT_COUNT,
+                      }}
+                    />
+                  </div>
+                </SettingsRowControl>
+              </SettingsSectionRow>
 
-                <ControlledNumberField
-                  control={form.control}
-                  description="Hard cap enforced server-side even when the tool requests more results."
-                  inputProps={{ className: "w-full" }}
-                  label="Maximum result count"
-                  name="maxResultCount"
-                  numberFieldProps={{
-                    className: "w-full max-w-xs",
-                    isDisabled: updateSearchSettings.isPending,
-                    maxValue: MAX_SEARCH_RESULT_COUNT,
-                    minValue: MIN_SEARCH_RESULT_COUNT,
-                  }}
-                />
-              </div>
-
-              <div className="mt-5 flex justify-end">
+              <div className="flex justify-end border-t border-border/50 p-5">
                 <Button
                   isDisabled={
                     updateSearchSettings.isPending || !form.formState.isDirty
@@ -365,47 +386,42 @@ export default function SearchSettingsPage() {
           </Form>
 
           <Form onSubmit={webFetchForm.handleSubmit(handleWebFetchSubmit)}>
-            <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-              <div className="mb-5 space-y-1">
-                <h2 className="text-foreground text-base font-medium">
-                  Web fetch
-                </h2>
-                <p className="text-muted text-sm">
-                  Control whether Sentinel can fetch multiple URLs in one
-                  `webfetch` call and how large a batch is allowed.
-                </p>
-              </div>
-
-              <div className="space-y-5">
+            <section className="border-separator/20 bg-surface rounded-2xl border">
+              <SettingsSectionRow
+                description="Allow Sentinel to fetch several URLs in a single webfetch call."
+                isFirst
+                title="Batch web fetch"
+              >
                 <ControlledSwitchField
                   control={webFetchForm.control}
-                  description="When enabled, the assistant can fetch several URLs in a single webfetch call."
                   label="Enable batch web fetch"
                   name="webFetchBatchEnabled"
                 />
+              </SettingsSectionRow>
 
-                <ControlledNumberField
-                  control={webFetchForm.control}
-                  description="Maximum number of URLs allowed in one batch webfetch call."
-                  inputProps={{ className: "w-full" }}
-                  label="Batch URL limit"
-                  name="webFetchBatchLimit"
-                  numberFieldProps={{
-                    className: "w-full max-w-xs",
-                    isDisabled: !webFetchBatchEnabled,
-                    maxValue: MAX_WEBFETCH_BATCH_LIMIT,
-                    minValue: MIN_WEBFETCH_BATCH_LIMIT,
-                  }}
-                />
+              <SettingsSectionRow
+                description="Maximum number of URLs allowed in one batch webfetch call."
+                title="Batch URL limit"
+              >
+                <SettingsRowControl widthClassName="lg:w-[280px]">
+                  <div className="w-full">
+                    <ControlledNumberField
+                      control={webFetchForm.control}
+                      inputProps={{ className: "w-full" }}
+                      label="Batch URL limit"
+                      name="webFetchBatchLimit"
+                      numberFieldProps={{
+                        className: "w-full",
+                        isDisabled: !webFetchBatchEnabled,
+                        maxValue: MAX_WEBFETCH_BATCH_LIMIT,
+                        minValue: MIN_WEBFETCH_BATCH_LIMIT,
+                      }}
+                    />
+                  </div>
+                </SettingsRowControl>
+              </SettingsSectionRow>
 
-                <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-xs text-muted">
-                  {webFetchBatchEnabled
-                    ? `Batch fetches enabled, up to ${webFetchBatchLimit} URLs per call.`
-                    : "Single-URL fetches only."}
-                </div>
-              </div>
-
-              <div className="mt-5 flex justify-end">
+              <div className="flex justify-end border-t border-border/50 p-5">
                 <Button
                   isDisabled={
                     updateWebFetchSettings.isPending ||
@@ -426,21 +442,20 @@ export default function SearchSettingsPage() {
             </section>
           </Form>
 
-          <section className="border-separator bg-surface rounded-xl border">
-            <div className="border-separator border-b px-4 py-3">
+          <section className="border-separator/20 bg-surface rounded-2xl border">
+            <div className="p-5">
               <h2 className="text-foreground text-base font-medium">
                 Providers
               </h2>
               <p className="text-muted mt-1 text-sm">
-                Configure external web search providers. SearXNG can be
-                self-hosted and installed from its official docs.
+                Configure external web search providers.
               </p>
             </div>
 
-            <div className="divide-separator divide-y">
+            <div className="divide-separator/50 divide-y border-t border-border/50">
               {searchProviders.data?.map((provider) => (
                 <div
-                  className="flex items-center gap-4 px-4 py-3"
+                  className="flex items-center gap-4 px-5 py-3.5"
                   key={provider.id}
                 >
                   <div className="min-w-0 flex-1">

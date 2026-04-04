@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Chip, Skeleton, Switch } from "@heroui/react";
+import { Button, Chip, Spinner, Switch } from "@heroui/react";
 import { useState } from "react";
 import { sileo } from "sileo";
 
@@ -26,22 +26,10 @@ const STATUS_LABEL = {
   not_configured: "Not configured",
 } as const;
 
-function ProvidersSkeleton() {
+function SettingsLoadingSpinner() {
   return (
-    <div className="flex flex-col gap-2">
-      {Array.from({ length: 3 }).map((_, index) => (
-        <section
-          className="border-separator/20 bg-surface rounded-2xl border p-5"
-          key={index}
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0 flex-1 space-y-2">
-              <Skeleton className="h-3 w-36 rounded-md" />
-              <Skeleton className="h-2 w-72 max-w-full rounded-md" />
-            </div>
-          </div>
-        </section>
-      ))}
+    <div className="flex items-center justify-center py-48">
+      <Spinner size="sm" />
     </div>
   );
 }
@@ -93,67 +81,130 @@ export default function ProvidersPage() {
   });
   const isToggling = toggle.isPending;
 
+  const configured =
+    providers?.filter((p) => p.status !== "not_configured") ?? [];
+  const unconfigured =
+    providers?.filter((p) => p.status === "not_configured") ?? [];
+
   return (
     <SettingsPageWrapper
-      subtitle="Manage your AI provider connections"
+      subtitle="Manage your AI provider connections."
       title="Providers"
     >
-      {!providers && isPending ? <ProvidersSkeleton /> : null}
+      {!providers && isPending ? <SettingsLoadingSpinner /> : null}
 
-      <div className="flex flex-col gap-2">
-        {providers?.map((p) => (
-          <div
-            key={p.id}
-            className="border-separator/20 bg-surface flex items-center gap-4 rounded-2xl border px-4 py-2.5"
-          >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/80">
-              <ProviderIcon className="h-5 w-5" provider={p.id} />
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-foreground text-sm font-medium">
-                  {p.displayName}
-                </span>
-                <Chip color={STATUS_COLOR[p.status]} size="sm" variant="soft">
-                  {STATUS_LABEL[p.status]}
-                </Chip>
+      {providers ? (
+        <div className="flex flex-col gap-3">
+          {configured.length > 0 ? (
+            <section className="flex flex-col gap-1.5">
+              <div className="px-1.5 pb-0.5">
+                <h2 className="text-foreground text-sm font-medium">
+                  Configured
+                </h2>
               </div>
-              <p className="text-muted mt-0.5 text-xs">{p.description}</p>
-            </div>
+              <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
+                {configured.map((p) => (
+                  <div
+                    key={p.id}
+                    className="border-separator/20 flex items-center gap-2.5 rounded-2xl border bg-surface px-2.5 py-2 transition-colors hover:bg-surface-hover"
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-separator bg-background">
+                      <ProviderIcon className="h-4 w-4" provider={p.id} />
+                    </div>
 
-            <div className="flex shrink-0 items-center gap-2">
-              {p.status !== "not_configured" && (
-                <Switch
-                  isDisabled={isToggling}
-                  isSelected={p.status === "active"}
-                  onChange={() =>
-                    toggle.mutate({
-                      provider: p.id,
-                      isEnabled: p.status !== "active",
-                    })
-                  }
-                >
-                  <Switch.Control>
-                    <Switch.Thumb />
-                  </Switch.Control>
-                </Switch>
-              )}
-              <Button
-                onPress={() =>
-                  setModalProvider({ id: p.id, name: p.displayName })
-                }
-                size="sm"
-                variant={
-                  p.status === "not_configured" ? "primary" : "secondary"
-                }
-              >
-                {p.status === "not_configured" ? "Connect" : "Edit"}
-              </Button>
-            </div>
-          </div>
-        ))}
-      </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-foreground text-[13px] font-medium leading-tight">
+                          {p.displayName}
+                        </span>
+                        <Chip
+                          color={STATUS_COLOR[p.status]}
+                          size="sm"
+                          variant="soft"
+                        >
+                          {STATUS_LABEL[p.status]}
+                        </Chip>
+                      </div>
+                      <p className="text-muted mt-0.5 truncate text-[11px]">
+                        {p.description}
+                      </p>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <Switch
+                        isDisabled={isToggling}
+                        isSelected={p.status === "active"}
+                        onChange={() =>
+                          toggle.mutate({
+                            provider: p.id,
+                            isEnabled: p.status !== "active",
+                          })
+                        }
+                      >
+                        <Switch.Control>
+                          <Switch.Thumb />
+                        </Switch.Control>
+                      </Switch>
+                      <Button
+                        onPress={() =>
+                          setModalProvider({ id: p.id, name: p.displayName })
+                        }
+                        size="sm"
+                        variant="secondary"
+                        className="h-7 min-w-0 px-2.5 text-xs"
+                      >
+                        Edit
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {unconfigured.length > 0 ? (
+            <section className="flex flex-col gap-1.5">
+              <div className="px-1.5 pb-0.5">
+                <h2 className="text-foreground text-sm font-medium">
+                  Available
+                </h2>
+              </div>
+              <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
+                {unconfigured.map((p) => (
+                  <div
+                    key={p.id}
+                    className="border-separator/20 flex items-center gap-2.5 rounded-2xl border bg-surface px-2.5 py-2 transition-colors hover:bg-surface-hover"
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-separator bg-background">
+                      <ProviderIcon className="h-4 w-4" provider={p.id} />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <span className="text-foreground text-[13px] font-medium leading-tight line-clamp-1">
+                        {p.displayName}
+                      </span>
+                      <p className="text-muted mt-0.5 truncate text-[11px]">
+                        {p.description}
+                      </p>
+                    </div>
+
+                    <Button
+                      onPress={() =>
+                        setModalProvider({ id: p.id, name: p.displayName })
+                      }
+                      size="sm"
+                      variant="primary"
+                      className="h-7 min-w-0 shrink-0 px-2.5 text-xs"
+                    >
+                      Connect
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </div>
+      ) : null}
 
       {modalProvider && (
         <ProviderConfigModal

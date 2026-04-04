@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  Button,
-  Form,
-  Modal,
-  Skeleton,
-  Spinner,
-  useOverlayState,
-} from "@heroui/react";
+import { Button, Form, Modal, Spinner, useOverlayState } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -316,23 +309,9 @@ export function ProviderConfigModal({
                   </div>
                   <Modal.CloseTrigger />
                 </Modal.Header>
-                <Modal.Body className="p-2">
-                  <div className="flex flex-col gap-5">
-                    <div className="space-y-3">
-                      <Skeleton className="h-5 w-36 rounded-md" />
-                      <Skeleton className="h-3 w-full rounded-md" />
-                      <Skeleton className="h-3 w-4/5 rounded-md" />
-                    </div>
-                    <div className="space-y-3">
-                      <Skeleton className="h-4 w-24 rounded-md" />
-                      <Skeleton className="h-11 w-full rounded-xl" />
-                      <Skeleton className="h-3 w-3/4 rounded-md" />
-                    </div>
-                    <div className="space-y-3">
-                      <Skeleton className="h-4 w-20 rounded-md" />
-                      <Skeleton className="h-11 w-full rounded-xl" />
-                      <Skeleton className="h-3 w-2/3 rounded-md" />
-                    </div>
+                <Modal.Body>
+                  <div className="flex items-center justify-center py-12">
+                    <Spinner size="sm" />
                   </div>
                 </Modal.Body>
               </>

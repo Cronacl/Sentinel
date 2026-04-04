@@ -846,7 +846,7 @@ export default function SkillsPage() {
           ) : sections.length ? (
             sections.map((section) => (
               <section className="flex flex-col gap-1.5" key={section.key}>
-                <div className="px-3 pb-0.5">
+                <div className="px-1.5 pb-0.5">
                   <h2 className="text-foreground text-sm font-medium">
                     {section.title}
                   </h2>

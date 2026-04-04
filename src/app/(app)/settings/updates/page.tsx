@@ -1,12 +1,13 @@
 "use client";
 
-import { Button, Chip, ProgressBar, Skeleton, Spinner } from "@heroui/react";
+import { Button, Chip, ProgressBar, Spinner } from "@heroui/react";
 import {
   Download04Icon,
   RefreshIcon,
   Rocket01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { sileo } from "sileo";
 
@@ -22,32 +23,34 @@ import {
   getUpdateStatusLabel,
 } from "@/lib/desktop/updates";
 
-function UpdatesSettingsSkeleton() {
+function SettingsSectionRow({
+  children,
+  description,
+  isFirst = false,
+  title,
+}: {
+  children: ReactNode;
+  description: ReactNode;
+  isFirst?: boolean;
+  title: ReactNode;
+}) {
   return (
-    <div className="flex flex-col gap-6">
-      <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-        <div className="mb-5 space-y-2">
-          <Skeleton className="h-5 w-44 rounded-md" />
-          <Skeleton className="h-4 w-80 rounded-md" />
-        </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <Skeleton className="h-16 w-full rounded-xl" />
-          <Skeleton className="h-16 w-full rounded-xl" />
-          <Skeleton className="h-16 w-full rounded-xl" />
-        </div>
-        <div className="mt-4">
-          <Skeleton className="h-12 w-full rounded-xl" />
-        </div>
-      </section>
+    <div
+      className={`flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between${isFirst ? "" : " border-t border-border/50"}`}
+    >
+      <div className="space-y-1">
+        <h2 className="text-foreground text-base font-medium">{title}</h2>
+        <p className="text-muted text-sm">{description}</p>
+      </div>
+      {children}
     </div>
   );
 }
 
-function InfoPanel({ label, value }: { label: string; value: string }) {
+function SettingsLoadingSpinner() {
   return (
-    <div className="border-separator bg-background/40 rounded-xl border px-4 py-3">
-      <p className="text-muted text-xs">{label}</p>
-      <p className="text-foreground mt-1 text-sm font-medium">{value}</p>
+    <div className="flex items-center justify-center py-48">
+      <Spinner size="sm" />
     </div>
   );
 }
@@ -174,198 +177,184 @@ export default function UpdatesSettingsPage() {
         subtitle="Desktop releases distributed through GitHub Releases."
         title="Updates"
       >
-        <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-          <div className="mb-4 space-y-1">
-            <h2 className="text-foreground text-base font-medium">
-              Desktop only
-            </h2>
-            <p className="text-muted text-sm">
-              Native background updates are available only inside the Sentinel
-              desktop app.
-            </p>
-          </div>
-          <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-3">
-            <p className="text-muted text-sm">
-              Open the packaged desktop app to check, download, and install
-              updates in the background.
-            </p>
-          </div>
+        <section className="border-separator/20 bg-surface rounded-2xl border">
+          <SettingsSectionRow
+            description="Native background updates are available only inside the Sentinel desktop app."
+            isFirst
+            title="Desktop only"
+          >
+            <span className="text-muted text-sm">
+              Open the packaged desktop app to manage updates.
+            </span>
+          </SettingsSectionRow>
         </section>
       </SettingsPageWrapper>
     );
   }
+
+  const errorMessage = actionError || state?.errorMessage;
 
   return (
     <SettingsPageWrapper
       subtitle="Desktop releases distributed through GitHub Releases."
       title="Updates"
     >
-      {actionError ? (
+      {errorMessage ? (
         <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
-          {actionError}
-        </p>
-      ) : null}
-
-      {state?.errorMessage ? (
-        <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
-          {state.errorMessage}
+          {errorMessage}
         </p>
       ) : null}
 
       {!state ? (
-        <UpdatesSettingsSkeleton />
+        <SettingsLoadingSpinner />
       ) : (
         <div className="flex flex-col gap-6">
-          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <HugeiconsIcon
-                    color="currentColor"
-                    icon={RefreshIcon}
-                    size={18}
-                    strokeWidth={1.5}
-                  />
-                  <h2 className="text-foreground text-base font-medium">
-                    Sentinel desktop updates
-                  </h2>
-                </div>
-                <p className="text-muted max-w-2xl text-sm">
-                  Review the latest desktop release information and install new
-                  builds when they become available.
-                </p>
+          <section className="border-separator/20 bg-surface rounded-2xl border">
+            <SettingsSectionRow
+              description="The version currently running on this machine."
+              isFirst
+              title="Current version"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-foreground text-sm font-medium font-mono">
+                  {currentVersion}
+                </span>
+                <Chip
+                  color={getUpdateStatusColor(state)}
+                  size="sm"
+                  variant="soft"
+                >
+                  {getUpdateStatusLabel(state)}
+                </Chip>
               </div>
-              <Chip
-                color={getUpdateStatusColor(state)}
-                size="sm"
-                variant="soft"
-              >
-                {getUpdateStatusLabel(state)}
-              </Chip>
-            </div>
+            </SettingsSectionRow>
 
-            <div className="space-y-5">
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                <InfoPanel label="Current version" value={currentVersion} />
-                <InfoPanel label="Latest stable" value={latestVersion} />
-                <InfoPanel
-                  label="Last checked"
-                  value={formatUpdateTimestamp(state.checkedAt)}
-                />
-              </div>
+            <SettingsSectionRow
+              description="The newest stable release available."
+              title="Latest stable"
+            >
+              <span className="text-foreground text-sm font-medium font-mono">
+                {latestVersion}
+              </span>
+            </SettingsSectionRow>
 
-              {!state.isSupported ? (
-                <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-xs text-muted">
+            <SettingsSectionRow
+              description="When Sentinel last checked for a new release."
+              title="Last checked"
+            >
+              <span className="text-foreground text-sm font-medium">
+                {formatUpdateTimestamp(state.checkedAt)}
+              </span>
+            </SettingsSectionRow>
+
+            {!state.isSupported ? (
+              <div className="border-t border-border/50 px-5 py-3">
+                <p className="text-muted text-xs">
                   <span className="text-foreground font-medium">
                     Native updates are unavailable.
                   </span>{" "}
                   {state.supportReason ??
                     "This build does not support background updates."}
-                </div>
-              ) : null}
-
-              {isProgressVisible ? (
-                <div className="border-separator bg-background/40 rounded-xl border px-4 py-4">
-                  <div className="mb-3 flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-foreground text-sm font-medium">
-                        {state.releaseName ??
-                          `Sentinel ${state.availableVersion ?? ""}`.trim()}
-                      </p>
-                      <p className="text-muted mt-1 text-sm">
-                        {state.status === "downloaded"
-                          ? "The update package is ready. Restart Sentinel to finish the installation."
-                          : "Sentinel is downloading the update package in the background."}
-                      </p>
-                    </div>
-                    <span className="text-muted text-sm">
-                      {getUpdateProgressText(state)}
-                    </span>
-                  </div>
-
-                  <ProgressBar.Root
-                    aria-label="Update download progress"
-                    className="gap-2.5"
-                    color={state.status === "downloaded" ? "success" : "accent"}
-                    isIndeterminate={state.bytesTotal === null}
-                    size="md"
-                    value={state.downloadPercent ?? undefined}
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-muted text-xs">
-                        {state.status === "downloaded"
-                          ? "Downloaded"
-                          : "Downloading"}
-                      </span>
-                      <ProgressBar.Output className="text-foreground text-sm font-medium" />
-                    </div>
-                    <ProgressBar.Track>
-                      <ProgressBar.Fill />
-                    </ProgressBar.Track>
-                  </ProgressBar.Root>
-                </div>
-              ) : null}
-
-              <div className="flex flex-wrap gap-3">
-                {state.isSupported ? (
-                  <Button
-                    isPending={isPrimaryPending}
-                    onPress={handlePrimaryAction}
-                    size="sm"
-                  >
-                    {({ isPending }) => (
-                      <>
-                        {isPending ? (
-                          <Spinner color="current" size="sm" />
-                        ) : state.status === "downloaded" ? (
-                          <HugeiconsIcon
-                            color="currentColor"
-                            icon={Rocket01Icon}
-                            size={15}
-                            strokeWidth={1.5}
-                          />
-                        ) : (
-                          <HugeiconsIcon
-                            color="currentColor"
-                            icon={RefreshIcon}
-                            size={15}
-                            strokeWidth={1.5}
-                          />
-                        )}
-                        {getUpdatePrimaryActionLabel(state)}
-                      </>
-                    )}
-                  </Button>
-                ) : null}
-                <Button
-                  onPress={handleOpenRelease}
-                  size="sm"
-                  variant="tertiary"
-                >
-                  <HugeiconsIcon
-                    color="currentColor"
-                    icon={Download04Icon}
-                    size={15}
-                    strokeWidth={1.5}
-                  />
-                  Release notes
-                </Button>
+                </p>
               </div>
+            ) : null}
+
+            {isProgressVisible ? (
+              <div className="border-t border-border/50 px-5 py-4">
+                <div className="mb-3 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-foreground text-sm font-medium">
+                      {state.releaseName ??
+                        `Sentinel ${state.availableVersion ?? ""}`.trim()}
+                    </p>
+                    <p className="text-muted mt-0.5 text-xs">
+                      {state.status === "downloaded"
+                        ? "Ready to install. Restart Sentinel to finish."
+                        : "Downloading in the background."}
+                    </p>
+                  </div>
+                  <span className="text-muted text-sm">
+                    {getUpdateProgressText(state)}
+                  </span>
+                </div>
+
+                <ProgressBar.Root
+                  aria-label="Update download progress"
+                  className="gap-2.5"
+                  color={state.status === "downloaded" ? "success" : "accent"}
+                  isIndeterminate={state.bytesTotal === null}
+                  size="md"
+                  value={state.downloadPercent ?? undefined}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-muted text-xs">
+                      {state.status === "downloaded"
+                        ? "Downloaded"
+                        : "Downloading"}
+                    </span>
+                    <ProgressBar.Output className="text-foreground text-sm font-medium" />
+                  </div>
+                  <ProgressBar.Track>
+                    <ProgressBar.Fill />
+                  </ProgressBar.Track>
+                </ProgressBar.Root>
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap gap-3 border-t border-border/50 p-5">
+              {state.isSupported ? (
+                <Button
+                  isPending={isPrimaryPending}
+                  onPress={handlePrimaryAction}
+                  size="sm"
+                >
+                  {({ isPending }) => (
+                    <>
+                      {isPending ? (
+                        <Spinner color="current" size="sm" />
+                      ) : state.status === "downloaded" ? (
+                        <HugeiconsIcon
+                          color="currentColor"
+                          icon={Rocket01Icon}
+                          size={15}
+                          strokeWidth={1.5}
+                        />
+                      ) : (
+                        <HugeiconsIcon
+                          color="currentColor"
+                          icon={RefreshIcon}
+                          size={15}
+                          strokeWidth={1.5}
+                        />
+                      )}
+                      {getUpdatePrimaryActionLabel(state)}
+                    </>
+                  )}
+                </Button>
+              ) : null}
+              <Button onPress={handleOpenRelease} size="sm" variant="tertiary">
+                <HugeiconsIcon
+                  color="currentColor"
+                  icon={Download04Icon}
+                  size={15}
+                  strokeWidth={1.5}
+                />
+                Release notes
+              </Button>
             </div>
           </section>
 
           {state.releaseNotes ? (
-            <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-              <div className="mb-4 space-y-1">
+            <section className="border-separator/20 bg-surface rounded-2xl border">
+              <div className="p-5">
                 <h2 className="text-foreground text-base font-medium">
                   What&apos;s new
                 </h2>
-                <p className="text-muted text-sm">
+                <p className="text-muted mt-1 text-sm">
                   Release details for the latest available stable update.
                 </p>
               </div>
-
-              <div className="border-separator bg-background/40 rounded-xl border px-4 py-4">
+              <div className="border-t border-border/50 px-5 py-4">
                 <pre className="text-muted max-h-56 overflow-auto whitespace-pre-wrap text-xs leading-5">
                   {state.releaseNotes}
                 </pre>

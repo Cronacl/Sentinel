@@ -1,15 +1,7 @@
 "use client";
 
-import {
-  Button,
-  Chip,
-  CloseButton,
-  Form,
-  ScrollShadow,
-  Spinner,
-} from "@heroui/react";
+import { Button, Chip, Drawer, Form, Spinner } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -86,30 +78,17 @@ export type DatabaseIntegrationSummary = {
   provider: DatabaseIntegrationProvider;
 };
 
-type DatabaseConfigSidebarProps = {
-  integration: DatabaseIntegrationSummary;
-  onClose: () => void;
+type DatabaseConfigDrawerProps = {
+  integration: DatabaseIntegrationSummary | null;
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
 };
 
-function SidebarSection({
-  children,
-  title,
-}: {
-  children: ReactNode;
-  title: string;
-}) {
-  return (
-    <section className="border-separator bg-background/70 rounded-2xl border p-3">
-      <p className="text-sm font-medium text-foreground">{title}</p>
-      <div className="mt-3">{children}</div>
-    </section>
-  );
-}
-
-export function DatabaseConfigSidebar({
+function DatabaseDrawerContent({
   integration,
-  onClose,
-}: DatabaseConfigSidebarProps) {
+}: {
+  integration: DatabaseIntegrationSummary;
+}) {
   const utils = api.useUtils();
   const metadata = INTEGRATION_METADATA[integration.provider];
   const [submitError, setSubmitError] = useState("");
@@ -250,7 +229,6 @@ export function DatabaseConfigSidebar({
       });
       await utils.integrations.list.invalidate();
       sileo.success({ description: "Database disconnected." });
-      onClose();
     } catch (error) {
       setSubmitError(
         error instanceof Error
@@ -260,280 +238,277 @@ export function DatabaseConfigSidebar({
     }
   };
 
+  const statusText = integration.isConnected
+    ? integration.isEnabled
+      ? "Sentinel can use this database right now."
+      : "Connected but tools are currently disabled."
+    : metadata.setupHint;
+
   return (
-    <div className="flex h-full w-full flex-col bg-transparent">
-      <header className="flex items-start justify-between gap-3 border-b border-border/20 px-5 pb-4 pt-6">
-        <div className="min-w-0">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-border/50 bg-background/80">
-              <IntegrationProviderIcon
-                className="h-5 w-5"
-                provider={integration.provider}
-              />
-            </div>
-            <div className="min-w-0">
-              <h2 className="truncate text-[18px] font-medium text-foreground">
-                {integration.label}
-              </h2>
-              <p className="mt-1 text-[13px] text-muted/90">
-                {integration.isConnected
-                  ? "Database connection"
-                  : "Setup and connection"}
-              </p>
-            </div>
+    <Form
+      className="contents"
+      validationBehavior="aria"
+      onSubmit={form.handleSubmit(handleSave)}
+    >
+      <Drawer.Header className="flex-col items-start gap-0 pb-0">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/80">
+            <IntegrationProviderIcon
+              className="h-4.5 w-4.5"
+              provider={integration.provider}
+            />
           </div>
-          <p className="mt-3 text-[13px] text-foreground/70">
-            {metadata.description}
-          </p>
+          <div className="min-w-0">
+            <Drawer.Heading className="text-base">
+              {integration.label}
+            </Drawer.Heading>
+            <p className="text-xs text-muted">{statusText}</p>
+          </div>
         </div>
-        <CloseButton
-          aria-label={`Close ${integration.label} details`}
-          className="shrink-0"
-          onPress={onClose}
+        <p className="mt-3 text-[13px] text-foreground/70">
+          {metadata.description}
+        </p>
+      </Drawer.Header>
+
+      <Drawer.Body className="flex flex-col gap-5">
+        <div className="space-y-1.5">
+          <h3 className="text-xs font-medium text-foreground">What you get</h3>
+          <ul className="space-y-1">
+            {metadata.highlights.map((item) => (
+              <li className="text-xs text-muted" key={item}>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="h-px bg-border/40" />
+
+        <ControlledSwitchField
+          control={form.control}
+          description="Toggle to use a full connection URL instead of individual fields."
+          label="Use connection URL"
+          name="useConnectionUrl"
+          switchProps={{ isDisabled: isBusy, size: "sm" }}
         />
-      </header>
 
-      <div className="sentinel-scroll-shell min-h-0 flex-1">
-        <ScrollShadow
-          className="sentinel-scroll-area h-full"
-          orientation="vertical"
-        >
-          <Form
-            className="flex min-h-full flex-col gap-4 px-5 pb-5 pt-4"
-            validationBehavior="aria"
-            onSubmit={form.handleSubmit(handleSave)}
+        {useConnectionUrl ? (
+          <ControlledTextField
+            control={form.control}
+            description={`Full ${integration.label} connection URL.`}
+            inputProps={{
+              autoComplete: "off",
+              placeholder:
+                integration.provider === "mongodb"
+                  ? "mongodb://user:password@host:27017/database"
+                  : integration.provider === "mysql"
+                    ? "mysql://user:password@host:3306/database"
+                    : "postgresql://user:password@host:5432/database",
+            }}
+            label="Connection URL"
+            name="connectionUrl"
+          />
+        ) : (
+          <>
+            <ControlledTextField
+              control={form.control}
+              description="Database server hostname or IP address."
+              inputProps={{
+                autoComplete: "off",
+                placeholder: "localhost",
+              }}
+              label="Host"
+              name="host"
+            />
+
+            <ControlledTextField
+              control={form.control}
+              description="Port number."
+              inputProps={{
+                autoComplete: "off",
+                placeholder: DEFAULT_PORTS[integration.provider],
+                type: "number",
+              }}
+              label="Port"
+              name="port"
+            />
+
+            <ControlledTextField
+              control={form.control}
+              description="Default database name (optional)."
+              inputProps={{
+                autoComplete: "off",
+                placeholder:
+                  integration.provider === "mongodb" ? "admin" : "mydb",
+              }}
+              label="Database"
+              name="database"
+            />
+
+            <ControlledTextField
+              control={form.control}
+              description="Database username."
+              inputProps={{
+                autoComplete: "off",
+                placeholder:
+                  integration.provider === "postgresql"
+                    ? "postgres"
+                    : integration.provider === "mongodb"
+                      ? "admin"
+                      : "root",
+              }}
+              label="Username"
+              name="username"
+            />
+
+            <ControlledTextField
+              control={form.control}
+              description={
+                integration.isConnected
+                  ? "Leave blank to keep the current password."
+                  : "Database password."
+              }
+              inputProps={{
+                autoComplete: "off",
+                placeholder: integration.isConnected
+                  ? "Current password stored"
+                  : "Enter password",
+                type: "password",
+              }}
+              label="Password"
+              name="password"
+            />
+          </>
+        )}
+
+        <ControlledSwitchField
+          control={form.control}
+          description="Enable SSL/TLS for the database connection."
+          label="SSL"
+          name="ssl"
+          switchProps={{ isDisabled: isBusy, size: "sm" }}
+        />
+
+        <ControlledSwitchField
+          control={form.control}
+          description={
+            integration.isConnected
+              ? "Disabled integrations stay saved, but Sentinel will not use their tools."
+              : "Start enabled so Sentinel can use this integration immediately."
+          }
+          label="Enable integration"
+          name="isEnabled"
+          switchProps={{ isDisabled: isBusy, size: "sm" }}
+        />
+
+        {testResult ? (
+          <div
+            className={`rounded-xl border px-3 py-2.5 text-xs ${
+              testResult.success
+                ? "border-success-soft-hover bg-success/10 text-success"
+                : "border-danger-soft-hover bg-danger-soft text-danger-soft-foreground"
+            }`}
           >
-            <SidebarSection title="Status">
-              <div className="space-y-2 text-xs text-foreground/70">
-                <p>
-                  {integration.isConnected
-                    ? integration.isEnabled
-                      ? "Sentinel can use this database integration right now."
-                      : "The connection is saved, but the tools are currently disabled."
-                    : metadata.setupHint}
-                </p>
+            {testResult.success ? (
+              <div className="flex items-center gap-2">
+                <Chip color="success" size="sm" variant="soft">
+                  Connected
+                </Chip>
+                <span>
+                  {testResult.version
+                    ? `Server: ${testResult.version.slice(0, 80)}`
+                    : "Connection successful"}
+                </span>
               </div>
-            </SidebarSection>
+            ) : (
+              <p>{testResult.error ?? "Connection failed."}</p>
+            )}
+          </div>
+        ) : null}
 
-            <SidebarSection title="What You Get">
-              <div className="space-y-2">
-                {metadata.highlights.map((item) => (
-                  <p className="text-xs text-foreground/70" key={item}>
-                    {item}
-                  </p>
-                ))}
-              </div>
-            </SidebarSection>
+        {submitError ? (
+          <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground rounded-xl border px-3 py-2.5 text-xs">
+            {submitError}
+          </p>
+        ) : null}
+      </Drawer.Body>
 
-            <SidebarSection title="Connection">
-              <div className="space-y-4">
-                <ControlledSwitchField
-                  control={form.control}
-                  description="Toggle to use a full connection URL instead of individual fields."
-                  label="Use connection URL"
-                  name="useConnectionUrl"
-                  switchProps={{ isDisabled: isBusy, size: "sm" }}
-                />
+      <Drawer.Footer>
+        <div className="flex w-full flex-wrap items-center gap-2">
+          <Button
+            isDisabled={isBusy}
+            isPending={testConnection.isPending}
+            onPress={handleTestConnection}
+            size="sm"
+            type="button"
+            variant="secondary"
+          >
+            {({ isPending }) => (
+              <>
+                {isPending ? <Spinner color="current" size="sm" /> : null}
+                Test connection
+              </>
+            )}
+          </Button>
 
-                {useConnectionUrl ? (
-                  <ControlledTextField
-                    control={form.control}
-                    description={`Full ${integration.label} connection URL.`}
-                    inputProps={{
-                      autoComplete: "off",
-                      placeholder:
-                        integration.provider === "mongodb"
-                          ? "mongodb://user:password@host:27017/database"
-                          : integration.provider === "mysql"
-                            ? "mysql://user:password@host:3306/database"
-                            : "postgresql://user:password@host:5432/database",
-                    }}
-                    label="Connection URL"
-                    name="connectionUrl"
-                  />
-                ) : (
-                  <>
-                    <ControlledTextField
-                      control={form.control}
-                      description="Database server hostname or IP address."
-                      inputProps={{
-                        autoComplete: "off",
-                        placeholder: "localhost",
-                      }}
-                      label="Host"
-                      name="host"
-                    />
+          <Button
+            className="ml-auto"
+            isDisabled={isBusy}
+            isPending={
+              form.formState.isSubmitting ||
+              saveDatabaseConfig.isPending ||
+              toggle.isPending
+            }
+            size="sm"
+            type="submit"
+            variant="primary"
+          >
+            {({ isPending }) => (
+              <>
+                {isPending ? <Spinner color="current" size="sm" /> : null}
+                {integration.isConnected ? "Update" : "Save & connect"}
+              </>
+            )}
+          </Button>
 
-                    <ControlledTextField
-                      control={form.control}
-                      description="Port number."
-                      inputProps={{
-                        autoComplete: "off",
-                        placeholder: DEFAULT_PORTS[integration.provider],
-                        type: "number",
-                      }}
-                      label="Port"
-                      name="port"
-                    />
+          {integration.isConnected ? (
+            <Button
+              isDisabled={isBusy}
+              isPending={removeDatabaseConfig.isPending}
+              onPress={handleRemove}
+              size="sm"
+              type="button"
+              variant="danger"
+            >
+              {({ isPending }) => (
+                <>
+                  {isPending ? <Spinner color="current" size="sm" /> : null}
+                  Disconnect
+                </>
+              )}
+            </Button>
+          ) : null}
+        </div>
+      </Drawer.Footer>
+    </Form>
+  );
+}
 
-                    <ControlledTextField
-                      control={form.control}
-                      description="Default database name (optional)."
-                      inputProps={{
-                        autoComplete: "off",
-                        placeholder:
-                          integration.provider === "mongodb" ? "admin" : "mydb",
-                      }}
-                      label="Database"
-                      name="database"
-                    />
-
-                    <ControlledTextField
-                      control={form.control}
-                      description="Database username."
-                      inputProps={{
-                        autoComplete: "off",
-                        placeholder:
-                          integration.provider === "postgresql"
-                            ? "postgres"
-                            : integration.provider === "mongodb"
-                              ? "admin"
-                              : "root",
-                      }}
-                      label="Username"
-                      name="username"
-                    />
-
-                    <ControlledTextField
-                      control={form.control}
-                      description={
-                        integration.isConnected
-                          ? "Leave blank to keep the current password."
-                          : "Database password."
-                      }
-                      inputProps={{
-                        autoComplete: "off",
-                        placeholder: integration.isConnected
-                          ? "Current password stored"
-                          : "Enter password",
-                        type: "password",
-                      }}
-                      label="Password"
-                      name="password"
-                    />
-                  </>
-                )}
-
-                <ControlledSwitchField
-                  control={form.control}
-                  description="Enable SSL/TLS for the database connection."
-                  label="SSL"
-                  name="ssl"
-                  switchProps={{ isDisabled: isBusy, size: "sm" }}
-                />
-
-                <ControlledSwitchField
-                  control={form.control}
-                  description={
-                    integration.isConnected
-                      ? "Disabled integrations stay saved, but Sentinel will not use their tools."
-                      : "Start enabled so Sentinel can use this integration immediately."
-                  }
-                  label="Enable integration"
-                  name="isEnabled"
-                  switchProps={{ isDisabled: isBusy, size: "sm" }}
-                />
-              </div>
-            </SidebarSection>
-
-            {testResult ? (
-              <div
-                className={`rounded-xl border px-3 py-2.5 text-xs ${
-                  testResult.success
-                    ? "border-success-soft-hover bg-success/10 text-success"
-                    : "border-danger-soft-hover bg-danger-soft text-danger-soft-foreground"
-                }`}
-              >
-                {testResult.success ? (
-                  <div className="flex items-center gap-2">
-                    <Chip color="success" size="sm" variant="soft">
-                      Connected
-                    </Chip>
-                    <span>
-                      {testResult.version
-                        ? `Server: ${testResult.version.slice(0, 80)}`
-                        : "Connection successful"}
-                    </span>
-                  </div>
-                ) : (
-                  <p>{testResult.error ?? "Connection failed."}</p>
-                )}
-              </div>
-            ) : null}
-
-            {submitError ? (
-              <p className="border-danger-soft-hover bg-danger-soft text-danger-soft-foreground rounded-xl border px-3 py-2.5 text-xs">
-                {submitError}
-              </p>
-            ) : null}
-
-            <div className="mt-auto flex flex-wrap items-center gap-2 w-full pt-2">
-              <Button
-                isDisabled={isBusy}
-                isPending={testConnection.isPending}
-                onPress={handleTestConnection}
-                size="sm"
-                type="button"
-                variant="secondary"
-              >
-                {({ isPending }) => (
-                  <>
-                    {isPending ? <Spinner color="current" size="sm" /> : null}
-                    Test Connection
-                  </>
-                )}
-              </Button>
-
-              <Button
-                isDisabled={isBusy}
-                isPending={
-                  form.formState.isSubmitting ||
-                  saveDatabaseConfig.isPending ||
-                  toggle.isPending
-                }
-                size="sm"
-                type="submit"
-                variant="primary"
-              >
-                {({ isPending }) => (
-                  <>
-                    {isPending ? <Spinner color="current" size="sm" /> : null}
-                    {integration.isConnected ? "Update" : "Save & Connect"}
-                  </>
-                )}
-              </Button>
-
-              {integration.isConnected ? (
-                <Button
-                  isDisabled={isBusy}
-                  isPending={removeDatabaseConfig.isPending}
-                  onPress={handleRemove}
-                  size="sm"
-                  type="button"
-                  variant="danger"
-                >
-                  {({ isPending }) => (
-                    <>
-                      {isPending ? <Spinner color="current" size="sm" /> : null}
-                      Disconnect
-                    </>
-                  )}
-                </Button>
-              ) : null}
-            </div>
-          </Form>
-        </ScrollShadow>
-      </div>
-    </div>
+export function DatabaseConfigDrawer({
+  integration,
+  isOpen,
+  onOpenChange,
+}: DatabaseConfigDrawerProps) {
+  return (
+    <Drawer.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
+      <Drawer.Content placement="right">
+        <Drawer.Dialog>
+          <Drawer.CloseTrigger />
+          {integration ? (
+            <DatabaseDrawerContent integration={integration} />
+          ) : null}
+        </Drawer.Dialog>
+      </Drawer.Content>
+    </Drawer.Backdrop>
   );
 }

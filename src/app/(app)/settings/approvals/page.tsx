@@ -4,37 +4,83 @@ import {
   AlertDialog,
   Button,
   Chip,
-  Skeleton,
+  Disclosure,
+  DisclosureGroup,
+  Input,
   Spinner,
   Switch,
 } from "@heroui/react";
-import { ValidationApprovalIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { sileo } from "sileo";
 
+import { IntegrationProviderIcon } from "@/components/icons/integration-provider-icon";
+import { SentinelLogoMark } from "@/components/shared/logo";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
-import type { EffectiveToolApprovalPolicy } from "@/lib/ai/chat/tool-approval-policy";
+import {
+  TOOL_APPROVAL_GROUPS,
+  type EffectiveToolApprovalPolicy,
+} from "@/lib/ai/chat/tool-approval-policy";
 import { api } from "@/trpc/react";
+import type { IntegrationProvider } from "@/server/db/enums";
 
-function ApprovalsSkeleton() {
+type GroupId = keyof typeof TOOL_APPROVAL_GROUPS;
+
+type ApprovalGroupView = {
+  description: string;
+  groupId: GroupId | "built_in";
+  label: string;
+  riskSummary: string;
+  tools: EffectiveToolApprovalPolicy[];
+};
+
+type PendingDisableState =
+  | {
+      groupId: GroupId;
+      kind: "group";
+      label: string;
+      riskSummary: string;
+    }
+  | {
+      kind: "tool";
+      label: string;
+      riskSummary: string;
+      toolName: EffectiveToolApprovalPolicy["toolName"];
+    };
+
+function normalizeForSearch(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function matchesSearch(haystack: string, query: string) {
+  if (!query) {
+    return true;
+  }
+
+  return normalizeForSearch(haystack).includes(query);
+}
+
+function SettingsLoadingSpinner() {
   return (
-    <section className="border-separator bg-surface rounded-xl border">
-      <div className="divide-separator divide-y">
-        {Array.from({ length: 6 }).map((_, index) => (
-          <div
-            className="flex items-start justify-between gap-4 px-5 py-4"
-            key={index}
-          >
-            <div className="min-w-0 flex-1 space-y-2">
-              <Skeleton className="h-5 w-28 rounded-md" />
-              <Skeleton className="h-4 w-64 max-w-full rounded-md" />
-            </div>
-            <Skeleton className="h-9 w-14 rounded-full" />
-          </div>
-        ))}
-      </div>
-    </section>
+    <div className="flex items-center justify-center py-48">
+      <Spinner size="sm" />
+    </div>
+  );
+}
+
+function ApprovalGroupIcon({
+  groupId,
+}: {
+  groupId: ApprovalGroupView["groupId"];
+}) {
+  if (groupId === "built_in") {
+    return <SentinelLogoMark className="h-4 w-4" />;
+  }
+
+  return (
+    <IntegrationProviderIcon
+      className="h-4 w-4"
+      provider={groupId as IntegrationProvider}
+    />
   );
 }
 
@@ -76,6 +122,31 @@ function applyUpdates(
   });
 }
 
+function applyGroupUpdate(
+  current: EffectiveToolApprovalPolicy[] | undefined,
+  input: {
+    groupId: GroupId;
+    requireApproval: boolean;
+  },
+) {
+  const group = TOOL_APPROVAL_GROUPS[input.groupId];
+  if (!group || !current) {
+    return current;
+  }
+
+  return current.map((tool) => {
+    if (!group.toolNames.includes(tool.toolName)) {
+      return tool;
+    }
+
+    return {
+      ...tool,
+      isDefault: input.requireApproval === tool.defaultRequireApproval,
+      requireApproval: input.requireApproval,
+    };
+  });
+}
+
 function ToolApprovalRow({
   isPending,
   onToggle,
@@ -89,10 +160,10 @@ function ToolApprovalRow({
   tool: EffectiveToolApprovalPolicy;
 }) {
   return (
-    <div className="flex flex-col gap-3 px-5 py-4 md:flex-row md:items-center md:justify-between">
+    <div className="flex flex-col gap-3 py-3 pl-10 md:flex-row md:items-center md:justify-between">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-foreground text-sm font-medium">{tool.label}</h2>
+          <h3 className="text-foreground text-sm font-medium">{tool.label}</h3>
           <Chip
             color={tool.requireApproval ? "success" : "warning"}
             size="sm"
@@ -105,6 +176,9 @@ function ToolApprovalRow({
               Custom
             </Chip>
           ) : null}
+          <Chip size="sm" variant="soft">
+            {tool.toolName}
+          </Chip>
         </div>
 
         <p className="text-muted mt-1 text-sm">{tool.description}</p>
@@ -138,19 +212,28 @@ export default function ApprovalsSettingsPage() {
   const utils = api.useUtils();
   const approvals = api.approvals.get.useQuery();
   const [actionError, setActionError] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [pendingToggleKey, setPendingToggleKey] = useState<string | null>(null);
-  const [pendingDisableTool, setPendingDisableTool] =
-    useState<EffectiveToolApprovalPolicy | null>(null);
+  const [pendingDisable, setPendingDisable] =
+    useState<PendingDisableState | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string | number>>(
+    new Set(),
+  );
 
   const updateApprovals = api.approvals.update.useMutation({
     onMutate: async (input) => {
       const previousApprovals = utils.approvals.get.getData();
 
-      if (!("groupId" in input)) {
-        utils.approvals.get.setData(undefined, (current) =>
-          applyUpdates(current, input),
-        );
-      }
+      utils.approvals.get.setData(undefined, (current) => {
+        if ("groupId" in input) {
+          return applyGroupUpdate(current, {
+            groupId: input.groupId as GroupId,
+            requireApproval: input.requireApproval,
+          });
+        }
+
+        return applyUpdates(current, input);
+      });
 
       return { previousApprovals };
     },
@@ -163,7 +246,81 @@ export default function ApprovalsSettingsPage() {
             : "Failed to update approval setting.",
       });
     },
+    onSuccess: (data) => {
+      utils.approvals.get.setData(undefined, data);
+    },
   });
+
+  const groupedApprovals = useMemo<ApprovalGroupView[]>(() => {
+    const groupMap = new Map<string, EffectiveToolApprovalPolicy[]>();
+    const builtInTools: EffectiveToolApprovalPolicy[] = [];
+
+    for (const tool of approvals.data ?? []) {
+      if (tool.group) {
+        const currentTools = groupMap.get(tool.group) ?? [];
+        currentTools.push(tool);
+        groupMap.set(tool.group, currentTools);
+      } else {
+        builtInTools.push(tool);
+      }
+    }
+
+    const groups = Object.entries(TOOL_APPROVAL_GROUPS)
+      .map(([groupId, meta]) => ({
+        description: meta.description,
+        groupId: groupId as GroupId,
+        label: meta.label,
+        riskSummary: meta.riskSummary,
+        tools: groupMap.get(groupId) ?? [],
+      }))
+      .filter((group) => group.tools.length > 0);
+
+    if (builtInTools.length > 0) {
+      groups.unshift({
+        description:
+          "Core Sentinel tools for local workspace access, editing, search, and shell execution.",
+        groupId: "built_in",
+        label: "Built-in tools",
+        riskSummary:
+          "Sentinel can inspect files, edit the workspace, run shell commands, search the web, and manage local memory without a confirmation pause.",
+        tools: builtInTools,
+      });
+    }
+
+    return groups;
+  }, [approvals.data]);
+
+  const normalizedSearchQuery = normalizeForSearch(searchQuery);
+
+  const visibleGroups = useMemo(() => {
+    return groupedApprovals
+      .map((group) => {
+        const groupMatches = matchesSearch(
+          `${group.label} ${group.description} ${group.riskSummary}`,
+          normalizedSearchQuery,
+        );
+
+        const tools = group.tools.filter((tool) => {
+          return matchesSearch(
+            `${tool.label} ${tool.description} ${tool.toolName} ${tool.riskSummary}`,
+            normalizedSearchQuery,
+          );
+        });
+
+        if (!groupMatches && tools.length === 0) {
+          return null;
+        }
+
+        return {
+          ...group,
+          tools,
+        };
+      })
+      .filter((group): group is ApprovalGroupView => Boolean(group))
+      .filter(
+        (group) => group.tools.length > 0 || normalizedSearchQuery === "",
+      );
+  }, [groupedApprovals, normalizedSearchQuery]);
 
   const executeToggle = async (
     toolName: EffectiveToolApprovalPolicy["toolName"],
@@ -189,6 +346,32 @@ export default function ApprovalsSettingsPage() {
     }
   };
 
+  const executeGroupToggle = async (
+    groupId: GroupId,
+    requireApproval: boolean,
+  ) => {
+    if (pendingToggleKey) {
+      return;
+    }
+
+    setActionError("");
+    setPendingToggleKey(`group:${groupId}`);
+
+    try {
+      await updateApprovals.mutateAsync({ groupId, requireApproval });
+    } catch (error) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "Unable to update that approval group.",
+      );
+    } finally {
+      setPendingToggleKey((current) =>
+        current === `group:${groupId}` ? null : current,
+      );
+    }
+  };
+
   const handleToggle = async (
     tool: EffectiveToolApprovalPolicy,
     requireApproval: boolean,
@@ -198,21 +381,58 @@ export default function ApprovalsSettingsPage() {
     }
 
     if (!requireApproval) {
-      setPendingDisableTool(tool);
+      setPendingDisable({
+        kind: "tool",
+        label: tool.label,
+        riskSummary: tool.riskSummary,
+        toolName: tool.toolName,
+      });
       return;
     }
 
     await executeToggle(tool.toolName, true);
   };
 
-  const handleConfirmDisable = async () => {
-    if (!pendingDisableTool) {
+  const handleGroupToggle = async (
+    group: ApprovalGroupView,
+    requireApproval: boolean,
+  ) => {
+    if (group.groupId === "built_in") {
       return;
     }
 
-    const toolName = pendingDisableTool.toolName;
-    setPendingDisableTool(null);
-    await executeToggle(toolName, false);
+    const currentValue = group.tools.every((tool) => tool.requireApproval);
+    if (requireApproval === currentValue) {
+      return;
+    }
+
+    if (!requireApproval) {
+      setPendingDisable({
+        groupId: group.groupId,
+        kind: "group",
+        label: group.label,
+        riskSummary: group.riskSummary,
+      });
+      return;
+    }
+
+    await executeGroupToggle(group.groupId, true);
+  };
+
+  const handleConfirmDisable = async () => {
+    if (!pendingDisable) {
+      return;
+    }
+
+    const nextAction = pendingDisable;
+    setPendingDisable(null);
+
+    if (nextAction.kind === "group") {
+      await executeGroupToggle(nextAction.groupId, false);
+      return;
+    }
+
+    await executeToggle(nextAction.toolName, false);
   };
 
   return (
@@ -233,37 +453,148 @@ export default function ApprovalsSettingsPage() {
       ) : null}
 
       {approvals.isPending && !approvals.data ? (
-        <ApprovalsSkeleton />
+        <SettingsLoadingSpinner />
       ) : (
         <div className="flex flex-col gap-4">
-          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-            <p className="text-muted text-sm">
-              Approval rules apply per tool. Disabling approval skips the pause
-              step only; workspace boundaries, permission mode restrictions, and
-              tool-specific limits still apply.
-            </p>
-          </section>
+          <div className="flex items-center gap-3">
+            <Input
+              fullWidth
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search tools..."
+              value={searchQuery}
+              variant="secondary"
+            />
+          </div>
 
-          <section className="border-separator bg-surface rounded-xl border">
-            <div className="divide-separator divide-y">
-              {approvals.data?.map((tool) => (
-                <ToolApprovalRow
-                  isPending={pendingToggleKey === tool.toolName}
-                  key={tool.toolName}
-                  onToggle={handleToggle}
-                  tool={tool}
-                />
-              ))}
-            </div>
+          <section className="border-separator/20 bg-surface overflow-hidden rounded-2xl border">
+            {visibleGroups.length > 0 ? (
+              <DisclosureGroup
+                allowsMultipleExpanded
+                expandedKeys={expandedGroups}
+                onExpandedChange={setExpandedGroups}
+              >
+                <div className="divide-separator/20 divide-y">
+                  {visibleGroups.map((group) => {
+                    const enabledTools = group.tools.filter(
+                      (tool) => tool.requireApproval,
+                    ).length;
+                    const groupIsPending =
+                      pendingToggleKey === `group:${group.groupId}`;
+                    const allRequireApproval =
+                      group.tools.length > 0 &&
+                      group.tools.every((tool) => tool.requireApproval);
+
+                    return (
+                      <Disclosure id={group.groupId} key={group.groupId}>
+                        <Disclosure.Heading>
+                          <Disclosure.Trigger className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left">
+                            <div className="border-separator/60 bg-background/80 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border">
+                              <ApprovalGroupIcon groupId={group.groupId} />
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-foreground text-sm font-medium">
+                                  {group.label}
+                                </span>
+                                <Chip size="sm" variant="soft">
+                                  {group.tools.length}
+                                </Chip>
+                                {group.groupId !== "built_in" ? (
+                                  <Chip
+                                    color={
+                                      allRequireApproval ? "success" : "warning"
+                                    }
+                                    size="sm"
+                                    variant="soft"
+                                  >
+                                    {allRequireApproval
+                                      ? "Approval required"
+                                      : "Some disabled"}
+                                  </Chip>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <div className="ml-auto flex items-center gap-3">
+                              <Chip
+                                className="hidden sm:inline-flex"
+                                size="sm"
+                                variant="soft"
+                              >
+                                {enabledTools}/{group.tools.length}
+                              </Chip>
+                              {group.groupId !== "built_in" ? (
+                                <div
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  <Switch.Root
+                                    aria-label={`Require approval for all ${group.label} tools`}
+                                    className={
+                                      groupIsPending ? "opacity-60" : undefined
+                                    }
+                                    isSelected={allRequireApproval}
+                                    onChange={(value) =>
+                                      void handleGroupToggle(group, value)
+                                    }
+                                  >
+                                    <Switch.Control>
+                                      <Switch.Thumb />
+                                    </Switch.Control>
+                                  </Switch.Root>
+                                </div>
+                              ) : null}
+                              <Disclosure.Indicator />
+                            </div>
+                          </Disclosure.Trigger>
+                        </Disclosure.Heading>
+                        <Disclosure.Content>
+                          <Disclosure.Body className="border-separator/20 border-t px-4 pb-3 pt-3">
+                            {group.tools.length > 0 ? (
+                              <div className="divide-separator/10 divide-y">
+                                {group.tools.map((tool) => (
+                                  <ToolApprovalRow
+                                    isPending={
+                                      pendingToggleKey === tool.toolName
+                                    }
+                                    key={tool.toolName}
+                                    onToggle={handleToggle}
+                                    tool={tool}
+                                  />
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="px-2 py-4 text-sm text-muted">
+                                No tools match your search.
+                              </div>
+                            )}
+                          </Disclosure.Body>
+                        </Disclosure.Content>
+                      </Disclosure>
+                    );
+                  })}
+                </div>
+              </DisclosureGroup>
+            ) : (
+              <div className="px-5 py-10 text-center">
+                <p className="text-foreground text-sm font-medium">
+                  No approval rules match that search.
+                </p>
+                <p className="text-muted mt-1 text-sm">
+                  Try a tool name like <code>shell_command</code> or an
+                  integration like GitHub.
+                </p>
+              </div>
+            )}
           </section>
         </div>
       )}
 
       <AlertDialog.Backdrop
-        isOpen={Boolean(pendingDisableTool)}
+        isOpen={Boolean(pendingDisable)}
         onOpenChange={(isOpen) => {
           if (!isOpen) {
-            setPendingDisableTool(null);
+            setPendingDisable(null);
           }
         }}
       >
@@ -278,17 +609,17 @@ export default function ApprovalsSettingsPage() {
               <p className="text-sm text-foreground">
                 Sentinel will be allowed to run{" "}
                 <span className="font-medium">
-                  {pendingDisableTool?.label ?? "this tool"}
+                  {pendingDisable?.label ?? "this tool"}
                 </span>{" "}
                 immediately.
               </p>
               <p className="text-muted mt-2 text-xs">
-                {pendingDisableTool?.riskSummary}
+                {pendingDisable?.riskSummary}
               </p>
             </AlertDialog.Body>
             <AlertDialog.Footer>
               <Button
-                onPress={() => setPendingDisableTool(null)}
+                onPress={() => setPendingDisable(null)}
                 variant="tertiary"
               >
                 Cancel
