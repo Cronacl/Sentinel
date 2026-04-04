@@ -1,14 +1,7 @@
 "use client";
 
-import {
-  Button,
-  CloseButton,
-  Form,
-  ScrollShadow,
-  Spinner,
-} from "@heroui/react";
+import { Button, Drawer, Form, Spinner } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -162,9 +155,10 @@ export type IntegrationSummary = {
   provider: IntegrationProvider;
 };
 
-type IntegrationConfigSidebarProps = {
-  integration: IntegrationSummary;
-  onClose: () => void;
+type IntegrationConfigDrawerProps = {
+  integration: IntegrationSummary | null;
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
 };
 
 function createDefaultValues(
@@ -178,25 +172,11 @@ function createDefaultValues(
   };
 }
 
-function SidebarSection({
-  children,
-  title,
-}: {
-  children: ReactNode;
-  title: string;
-}) {
-  return (
-    <section className="border-separator bg-background/70 rounded-2xl border p-3">
-      <p className="text-sm font-medium text-foreground">{title}</p>
-      <div className="mt-3">{children}</div>
-    </section>
-  );
-}
-
-export function IntegrationConfigSidebar({
+function IntegrationDrawerContent({
   integration,
-  onClose,
-}: IntegrationConfigSidebarProps) {
+}: {
+  integration: IntegrationSummary;
+}) {
   const utils = api.useUtils();
   const metadata = INTEGRATION_METADATA[integration.provider];
   const isSetupReady = isIntegrationSetupReady(integration.provider);
@@ -404,267 +384,258 @@ export function IntegrationConfigSidebar({
     }
   };
 
+  const statusText = integration.isConnected
+    ? integration.isEnabled
+      ? "Sentinel can use this integration right now."
+      : "Connected but tools are currently disabled."
+    : existingOAuthApp
+      ? "Credentials saved. Connect to complete authorization."
+      : metadata.setupHint;
+
   return (
-    <div className="flex h-full w-full flex-col bg-transparent">
-      <header className="flex items-start justify-between gap-3 border-b border-border/20 px-5 pb-4 pt-6">
-        <div className="min-w-0">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-border/50 bg-background/80">
-              <IntegrationProviderIcon
-                className="h-5 w-5"
-                provider={integration.provider}
-              />
-            </div>
-            <div className="min-w-0">
-              <h2 className="truncate text-[18px] font-medium text-foreground">
-                {integration.label}
-              </h2>
-              <p className="mt-1 text-[13px] text-muted/90">
-                {integration.isConnected
-                  ? "Connected configuration"
-                  : isSetupReady
-                    ? "Setup and connection"
-                    : "Integration details"}
-              </p>
-            </div>
+    <Form className="contents" onSubmit={form.handleSubmit(handleSave)}>
+      <Drawer.Header className="flex-col items-start gap-0 pb-0">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/50 bg-background/80">
+            <IntegrationProviderIcon
+              className="h-4.5 w-4.5"
+              provider={integration.provider}
+            />
           </div>
-          <p className="mt-3 text-[13px] text-foreground/70">
-            {metadata.description}
-          </p>
+          <div className="min-w-0">
+            <Drawer.Heading className="text-base">
+              {integration.label}
+            </Drawer.Heading>
+            <p className="text-xs text-muted">{statusText}</p>
+          </div>
         </div>
-        <CloseButton
-          aria-label={`Close ${integration.label} details`}
-          className="shrink-0"
-          onPress={onClose}
-        />
-      </header>
+        <p className="mt-3 text-[13px] text-foreground/70">
+          {metadata.description}
+        </p>
+      </Drawer.Header>
 
-      <div className="sentinel-scroll-shell min-h-0 flex-1">
-        <ScrollShadow
-          className="sentinel-scroll-area h-full"
-          orientation="vertical"
-        >
-          <Form
-            className="flex min-h-full flex-col gap-4 px-5 pb-5 pt-4"
-            onSubmit={form.handleSubmit(handleSave)}
-          >
-            <SidebarSection title="Status">
-              <div className="space-y-2 text-xs text-foreground/70">
-                <p>
-                  {integration.isConnected
-                    ? integration.isEnabled
-                      ? "Sentinel can use this integration right now."
-                      : "The connection is preserved, but the tools are currently disabled."
-                    : existingOAuthApp
-                      ? "Credentials are saved locally. Connect to complete account authorization."
-                      : metadata.setupHint}
-                </p>
-                {!isSetupReady ? (
-                  <p>
-                    This provider is visible in the catalog, but setup is not
-                    available yet.
-                  </p>
-                ) : null}
-              </div>
-            </SidebarSection>
+      <Drawer.Body className="flex flex-col gap-5">
+        <div className="space-y-1.5">
+          <h3 className="text-xs font-medium text-foreground">What you get</h3>
+          <ul className="space-y-1">
+            {metadata.highlights.map((item) => (
+              <li className="text-xs text-muted" key={item}>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
 
-            <SidebarSection title="What You Get">
-              <div className="space-y-2">
-                {metadata.highlights.map((item) => (
-                  <p className="text-xs text-foreground/70" key={item}>
-                    {item}
-                  </p>
-                ))}
-              </div>
-            </SidebarSection>
+        {metadata.requiredAccess.length > 0 ? (
+          <div className="space-y-1.5">
+            <h3 className="text-xs font-medium text-foreground">
+              Requested access
+            </h3>
+            <ul className="space-y-1">
+              {metadata.requiredAccess.map((item) => (
+                <li className="text-xs text-muted" key={item}>
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
-            {metadata.requiredAccess.length > 0 ? (
-              <SidebarSection title="Requested Access">
-                <div className="space-y-2">
-                  {metadata.requiredAccess.map((item) => (
-                    <p className="text-xs text-foreground/70" key={item}>
-                      {item}
-                    </p>
-                  ))}
-                </div>
-              </SidebarSection>
-            ) : null}
+        {isSetupReady ? (
+          <>
+            <div className="h-px bg-border/40" />
 
-            {isSetupReady ? (
-              <>
-                <SidebarSection title="Connection">
-                  <div className="space-y-4">
-                    <ControlledSwitchField
-                      control={form.control}
-                      description={
-                        integration.isConnected
-                          ? "Disabled integrations stay connected, but Sentinel will not use their tools."
-                          : "Start enabled so Sentinel can use this integration as soon as OAuth completes."
-                      }
-                      label="Enable integration"
-                      name="isEnabled"
-                      switchProps={{ isDisabled: isBusy, size: "sm" }}
-                    />
+            <ControlledSwitchField
+              control={form.control}
+              description={
+                integration.isConnected
+                  ? "Disabled integrations stay connected, but Sentinel will not use their tools."
+                  : "Start enabled so Sentinel can use this integration as soon as OAuth completes."
+              }
+              label="Enable integration"
+              name="isEnabled"
+              switchProps={{ isDisabled: isBusy, size: "sm" }}
+            />
 
-                    <ControlledTextField
-                      control={form.control}
-                      description={providerCopy.clientIdDescription}
-                      inputProps={{
-                        autoComplete: "off",
-                        placeholder: providerCopy.clientIdPlaceholder,
-                      }}
-                      label="Client ID"
-                      name="clientId"
-                      textFieldProps={{ isRequired: true }}
-                    />
+            <ControlledTextField
+              control={form.control}
+              description={providerCopy.clientIdDescription}
+              inputProps={{
+                autoComplete: "off",
+                placeholder: providerCopy.clientIdPlaceholder,
+              }}
+              label="Client ID"
+              name="clientId"
+              textFieldProps={{ isRequired: true }}
+            />
 
-                    <ControlledTextField
-                      control={form.control}
-                      description={
-                        existingOAuthApp?.hasClientSecret
-                          ? "Leave blank to keep the current secret, or paste a new one to replace it."
-                          : providerCopy.clientSecretDescription
-                      }
-                      inputProps={{
-                        autoComplete: "off",
-                        placeholder: existingOAuthApp?.hasClientSecret
-                          ? "Current secret is already stored"
-                          : providerCopy.clientSecretPlaceholder,
-                        type: "password",
-                      }}
-                      label="Client Secret"
-                      name="clientSecret"
-                    />
+            <ControlledTextField
+              control={form.control}
+              description={
+                existingOAuthApp?.hasClientSecret
+                  ? "Leave blank to keep the current secret, or paste a new one to replace it."
+                  : providerCopy.clientSecretDescription
+              }
+              inputProps={{
+                autoComplete: "off",
+                placeholder: existingOAuthApp?.hasClientSecret
+                  ? "Current secret is already stored"
+                  : providerCopy.clientSecretPlaceholder,
+                type: "password",
+              }}
+              label="Client Secret"
+              name="clientSecret"
+            />
 
-                    <ControlledTextField
-                      control={form.control}
-                      description={providerCopy.redirectUriDescription}
-                      inputProps={{
-                        autoComplete: "off",
-                        placeholder: buildIntegrationOAuthRedirectUri(),
-                        type: "url",
-                      }}
-                      label="Redirect URI"
-                      name="redirectUri"
-                      textFieldProps={{ isRequired: true }}
-                    />
-                  </div>
-                </SidebarSection>
+            <ControlledTextField
+              control={form.control}
+              description={providerCopy.redirectUriDescription}
+              inputProps={{
+                autoComplete: "off",
+                placeholder: buildIntegrationOAuthRedirectUri(),
+                type: "url",
+              }}
+              label="Redirect URI"
+              name="redirectUri"
+              textFieldProps={{ isRequired: true }}
+            />
 
-                <SidebarSection title="Redirect URI">
-                  <div className="space-y-2">
-                    <p className="text-xs text-foreground/70">
-                      {providerCopy.redirectUriNote}
-                    </p>
-                    <code className="block overflow-x-auto rounded-xl border border-border/50 bg-background px-3 py-2 text-[11px] text-foreground">
-                      {form.watch("redirectUri") ||
-                        buildIntegrationOAuthRedirectUri()}
-                    </code>
-                  </div>
-                </SidebarSection>
-              </>
-            ) : null}
-
-            {oauthAppQuery.error ? (
-              <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground rounded-xl border px-3 py-2.5 text-xs">
-                {oauthAppQuery.error.message}
+            <div className="space-y-1.5">
+              <h3 className="text-xs font-medium text-foreground">
+                Callback URL
+              </h3>
+              <p className="text-xs text-muted">
+                {providerCopy.redirectUriNote}
               </p>
-            ) : null}
-
-            {submitError ? (
-              <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground rounded-xl border px-3 py-2.5 text-xs">
-                {submitError}
-              </p>
-            ) : null}
-
-            <div className="mt-auto flex flex-wrap items-center gap-2 w-full pt-2">
-              {integration.isConnected ? (
-                <Button
-                  isDisabled={isBusy}
-                  isPending={disconnect.isPending}
-                  onPress={handleDisconnect}
-                  size="sm"
-                  type="button"
-                  variant="danger"
-                >
-                  {({ isPending }) => (
-                    <>
-                      {isPending ? <Spinner color="current" size="sm" /> : null}
-                      Disconnect
-                    </>
-                  )}
-                </Button>
-              ) : existingOAuthApp ? (
-                <>
-                  <Button
-                    isDisabled={isBusy}
-                    isPending={connect.isPending}
-                    onPress={handleConnect}
-                    size="sm"
-                    type="button"
-                    variant="primary"
-                  >
-                    {({ isPending }) => (
-                      <>
-                        {isPending ? (
-                          <Spinner color="current" size="sm" />
-                        ) : null}
-                        Connect
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    isDisabled={isBusy}
-                    isPending={deleteOAuthApp.isPending}
-                    onPress={handleDeleteCredentials}
-                    size="sm"
-                    type="button"
-                    variant="danger-soft"
-                  >
-                    {({ isPending }) => (
-                      <>
-                        {isPending ? (
-                          <Spinner color="current" size="sm" />
-                        ) : null}
-                        Remove credentials
-                      </>
-                    )}
-                  </Button>
-                </>
-              ) : null}
-
-              {isSetupReady ? (
-                <Button
-                  isDisabled={oauthAppQuery.isLoading || disconnect.isPending}
-                  isPending={
-                    form.formState.isSubmitting ||
-                    upsertOAuthApp.isPending ||
-                    toggle.isPending
-                  }
-                  size="sm"
-                  type="submit"
-                  variant={
-                    existingOAuthApp || integration.isConnected
-                      ? "secondary"
-                      : "primary"
-                  }
-                >
-                  {({ isPending }) => (
-                    <>
-                      {isPending ? <Spinner color="current" size="sm" /> : null}
-                      {integration.isConnected
-                        ? "Update"
-                        : existingOAuthApp
-                          ? "Save changes"
-                          : "Save setup"}
-                    </>
-                  )}
-                </Button>
-              ) : null}
+              <code className="block overflow-x-auto rounded-lg border border-border/50 bg-background px-3 py-2 text-[11px] text-foreground">
+                {form.watch("redirectUri") ||
+                  buildIntegrationOAuthRedirectUri()}
+              </code>
             </div>
-          </Form>
-        </ScrollShadow>
-      </div>
-    </div>
+          </>
+        ) : (
+          <p className="text-xs text-muted">
+            This provider is visible in the catalog, but setup is not available
+            yet.
+          </p>
+        )}
+
+        {oauthAppQuery.error ? (
+          <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground rounded-xl border px-3 py-2.5 text-xs">
+            {oauthAppQuery.error.message}
+          </p>
+        ) : null}
+
+        {submitError ? (
+          <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground rounded-xl border px-3 py-2.5 text-xs">
+            {submitError}
+          </p>
+        ) : null}
+      </Drawer.Body>
+
+      <Drawer.Footer>
+        <div className="flex w-full flex-wrap items-center gap-2">
+          {integration.isConnected ? (
+            <Button
+              isDisabled={isBusy}
+              isPending={disconnect.isPending}
+              onPress={handleDisconnect}
+              size="sm"
+              type="button"
+              variant="danger"
+            >
+              {({ isPending }) => (
+                <>
+                  {isPending ? <Spinner color="current" size="sm" /> : null}
+                  Disconnect
+                </>
+              )}
+            </Button>
+          ) : existingOAuthApp ? (
+            <>
+              <Button
+                isDisabled={isBusy}
+                isPending={connect.isPending}
+                onPress={handleConnect}
+                size="sm"
+                type="button"
+                variant="primary"
+              >
+                {({ isPending }) => (
+                  <>
+                    {isPending ? <Spinner color="current" size="sm" /> : null}
+                    Connect
+                  </>
+                )}
+              </Button>
+              <Button
+                isDisabled={isBusy}
+                isPending={deleteOAuthApp.isPending}
+                onPress={handleDeleteCredentials}
+                size="sm"
+                type="button"
+                variant="danger-soft"
+              >
+                {({ isPending }) => (
+                  <>
+                    {isPending ? <Spinner color="current" size="sm" /> : null}
+                    Remove credentials
+                  </>
+                )}
+              </Button>
+            </>
+          ) : null}
+
+          {isSetupReady ? (
+            <Button
+              className="ml-auto"
+              isDisabled={oauthAppQuery.isLoading || disconnect.isPending}
+              isPending={
+                form.formState.isSubmitting ||
+                upsertOAuthApp.isPending ||
+                toggle.isPending
+              }
+              size="sm"
+              type="submit"
+              variant={
+                existingOAuthApp || integration.isConnected
+                  ? "secondary"
+                  : "primary"
+              }
+            >
+              {({ isPending }) => (
+                <>
+                  {isPending ? <Spinner color="current" size="sm" /> : null}
+                  {integration.isConnected
+                    ? "Update"
+                    : existingOAuthApp
+                      ? "Save changes"
+                      : "Save & connect"}
+                </>
+              )}
+            </Button>
+          ) : null}
+        </div>
+      </Drawer.Footer>
+    </Form>
+  );
+}
+
+export function IntegrationConfigDrawer({
+  integration,
+  isOpen,
+  onOpenChange,
+}: IntegrationConfigDrawerProps) {
+  return (
+    <Drawer.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
+      <Drawer.Content placement="right">
+        <Drawer.Dialog>
+          <Drawer.CloseTrigger />
+          {integration ? (
+            <IntegrationDrawerContent integration={integration} />
+          ) : null}
+        </Drawer.Dialog>
+      </Drawer.Content>
+    </Drawer.Backdrop>
   );
 }

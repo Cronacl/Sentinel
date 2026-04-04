@@ -1,7 +1,8 @@
 "use client";
 
-import { Button, Chip, Form, Skeleton, Switch } from "@heroui/react";
+import { Button, Chip, Form, Spinner, Switch } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
+import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { sileo } from "sileo";
@@ -49,11 +50,50 @@ function toProviderFormValues(
   };
 }
 
-function ImagesSettingsSkeleton() {
+function SettingsSectionRow({
+  children,
+  description,
+  isFirst = false,
+  title,
+}: {
+  children: ReactNode;
+  description: ReactNode;
+  isFirst?: boolean;
+  title: ReactNode;
+}) {
   return (
-    <div className="space-y-3">
-      <Skeleton className="h-28 w-full rounded-2xl" />
-      <Skeleton className="h-56 w-full rounded-2xl" />
+    <div
+      className={`flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between${isFirst ? "" : " border-t border-border/50"}`}
+    >
+      <div className="space-y-1">
+        <h2 className="text-foreground text-base font-medium">{title}</h2>
+        <p className="text-muted text-sm">{description}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function SettingsRowControl({
+  children,
+  widthClassName = "lg:w-[360px]",
+}: {
+  children: ReactNode;
+  widthClassName?: string;
+}) {
+  return (
+    <div
+      className={`flex w-full max-w-full flex-col gap-2 ${widthClassName} lg:items-end`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SettingsLoadingSpinner() {
+  return (
+    <div className="flex items-center justify-center py-48">
+      <Spinner size="sm" />
     </div>
   );
 }
@@ -105,17 +145,17 @@ function ProviderRow({ provider }: { provider: ImageProviderRow }) {
 
   return (
     <Form
-      className="space-y-3 px-4 py-3"
+      className="border-t border-border/50 p-5"
       onSubmit={form.handleSubmit(async (values) => {
         await updateProvider.mutateAsync(values);
       })}
     >
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0 flex-1 space-y-2">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-sm font-medium text-foreground">
+            <span className="text-foreground text-sm font-medium">
               {provider.displayName}
-            </h2>
+            </span>
             <Chip
               color={
                 provider.providerStatus === "active" ? "success" : "warning"
@@ -123,9 +163,7 @@ function ProviderRow({ provider }: { provider: ImageProviderRow }) {
               size="sm"
               variant="soft"
             >
-              {provider.providerStatus === "active"
-                ? "Credentials active"
-                : "Credentials disabled"}
+              {provider.providerStatus === "active" ? "Active" : "Disabled"}
             </Chip>
             <Chip
               color={isReady ? "success" : "warning"}
@@ -135,7 +173,7 @@ function ProviderRow({ provider }: { provider: ImageProviderRow }) {
               {isReady ? "Ready" : "Needs attention"}
             </Chip>
           </div>
-          <p className="text-muted text-xs leading-5">{provider.description}</p>
+          <p className="text-muted mt-0.5 text-xs">{provider.description}</p>
         </div>
 
         <Button
@@ -143,13 +181,12 @@ function ProviderRow({ provider }: { provider: ImageProviderRow }) {
           isPending={updateProvider.isPending}
           size="sm"
           type="submit"
-          variant="primary"
         >
           Save
         </Button>
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,13rem)_minmax(0,13rem)_minmax(0,1fr)]">
+      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,13rem)_minmax(0,13rem)_minmax(0,1fr)]">
         <div className="border-separator/20 bg-background/60 rounded-xl border px-3 py-2.5">
           <Switch
             className="justify-between gap-3"
@@ -292,99 +329,71 @@ export default function ImagesSettingsPage() {
         provider.hasValidModel,
     ) ?? [];
   const configuredProviders = providersQuery.data ?? [];
-  const inactiveCount = configuredProviders.filter(
-    (provider) =>
-      provider.providerStatus !== "active" ||
-      !provider.isEnabled ||
-      !provider.hasValidModel,
-  ).length;
-  const defaultProviderLabel = validProviders.find(
-    (provider) => provider.provider === settingsQuery.data?.defaultProvider,
-  )?.displayName;
 
   return (
     <SettingsPageWrapper
-      subtitle="Choose default image providers, configure per-provider models, and control which providers can participate in image generation."
+      subtitle="Choose default image providers and configure per-provider models."
       title="Images"
     >
       {settingsQuery.isPending || providersQuery.isPending ? (
-        <ImagesSettingsSkeleton />
+        <SettingsLoadingSpinner />
       ) : (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-6">
           <Form
-            className="rounded-2xl border border-separator/30 bg-surface p-4"
             onSubmit={form.handleSubmit(async (values) => {
               await updateSettings.mutateAsync(values);
             })}
           >
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-sm font-medium text-foreground">
-                    Default routing
-                  </h2>
-                  <Chip color="success" size="sm" variant="soft">
-                    {validProviders.length} ready
-                  </Chip>
-                  {inactiveCount > 0 ? (
-                    <Chip color="warning" size="sm" variant="soft">
-                      {inactiveCount} unavailable
-                    </Chip>
-                  ) : null}
-                </div>
-                <p className="text-muted max-w-2xl text-xs leading-5">
-                  Choose the provider the assistant should use when a prompt
-                  does not name one explicitly.
-                </p>
-                <p className="text-muted text-xs">
-                  Active default: {defaultProviderLabel ?? "None selected"}
-                </p>
-              </div>
+            <section className="border-separator/20 bg-surface rounded-2xl border">
+              <SettingsSectionRow
+                description="The provider used when a prompt does not name one explicitly."
+                isFirst
+                title="Default provider"
+              >
+                <SettingsRowControl>
+                  <div className="w-full">
+                    <ControlledSelectField
+                      control={form.control}
+                      label="Default provider"
+                      name="defaultProvider"
+                      options={validProviders.map((provider) => ({
+                        label: provider.displayName,
+                        value: provider.provider,
+                      }))}
+                      placeholder="Select a provider"
+                      selectProps={{
+                        className: "w-full",
+                        isDisabled: validProviders.length === 0,
+                      }}
+                    />
+                  </div>
+                </SettingsRowControl>
+              </SettingsSectionRow>
 
-              <div className="grid w-full gap-3 lg:max-w-xl lg:grid-cols-[minmax(0,1fr)_auto]">
-                <ControlledSelectField
-                  control={form.control}
-                  description="Only providers with active credentials and a valid image target appear here."
-                  label="Default provider"
-                  name="defaultProvider"
-                  options={validProviders.map((provider) => ({
-                    label: provider.displayName,
-                    value: provider.provider,
-                  }))}
-                  placeholder="Select a provider"
-                  selectProps={{
-                    className: "w-full",
-                    isDisabled: validProviders.length === 0,
-                  }}
-                />
-
-                <div className="flex items-end justify-end">
-                  <Button
-                    isDisabled={
-                      !form.formState.isDirty || updateSettings.isPending
-                    }
-                    isPending={updateSettings.isPending}
-                    size="sm"
-                    type="submit"
-                    variant="primary"
-                  >
-                    Save
-                  </Button>
-                </div>
+              <div className="flex justify-end border-t border-border/50 p-5">
+                <Button
+                  isDisabled={
+                    !form.formState.isDirty || updateSettings.isPending
+                  }
+                  isPending={updateSettings.isPending}
+                  size="sm"
+                  type="submit"
+                >
+                  Save
+                </Button>
               </div>
-            </div>
+            </section>
           </Form>
 
           {configuredProviders.length > 0 ? (
-            <section className="overflow-hidden rounded-2xl border border-separator/30 bg-surface">
-              <div className="border-separator/20 flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+            <section className="border-separator/20 bg-surface rounded-2xl border">
+              <div className="flex items-center justify-between gap-3 p-5">
                 <div className="space-y-1">
-                  <h2 className="text-sm font-medium text-foreground">
+                  <h2 className="text-foreground text-base font-medium">
                     Provider targets
                   </h2>
-                  <p className="text-muted text-xs">
-                    Keep each provider lean: enable it, pick its image target,
-                    and save.
+                  <p className="text-muted text-sm">
+                    Enable providers, pick their image model, and save.
                   </p>
                 </div>
                 <Chip size="sm" variant="soft">
@@ -392,14 +401,12 @@ export default function ImagesSettingsPage() {
                 </Chip>
               </div>
 
-              <div className="divide-separator/20 divide-y">
-                {configuredProviders.map((provider) => (
-                  <ProviderRow key={provider.provider} provider={provider} />
-                ))}
-              </div>
+              {configuredProviders.map((provider) => (
+                <ProviderRow key={provider.provider} provider={provider} />
+              ))}
             </section>
           ) : (
-            <div className="rounded-2xl border border-separator/30 bg-surface p-5 text-sm text-muted">
+            <div className="border-separator/20 bg-surface rounded-2xl border p-5 text-sm text-muted">
               No image-capable providers are currently configured. Add provider
               credentials in Settings &gt; Providers first.
             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Form, Skeleton, Spinner } from "@heroui/react";
+import { Button, Form, Spinner } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -24,30 +24,11 @@ import {
 } from "@/schemas/personalization.schema";
 import { api } from "@/trpc/react";
 
-function PersonalizationSkeleton() {
+function SettingsLoadingSpinner() {
   return (
-    <section className="border-separator/20 bg-surface rounded-2xl border">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div
-          className={`flex flex-col gap-4 p-5 lg:flex-row lg:items-start lg:justify-between${i > 0 ? " border-t border-border/50" : ""}`}
-          key={i}
-        >
-          <div className="space-y-2">
-            <Skeleton className="h-5 w-40 rounded-md" />
-            <Skeleton className="h-4 w-72 rounded-md" />
-          </div>
-          <div className="w-full lg:w-[360px]">
-            <Skeleton className="h-10 w-full rounded-xl" />
-            {i >= 2 ? (
-              <Skeleton className="mt-3 h-28 w-full rounded-xl" />
-            ) : null}
-          </div>
-        </div>
-      ))}
-      <div className="flex justify-end border-t border-border/50 p-5">
-        <Skeleton className="h-10 w-20 rounded-xl" />
-      </div>
-    </section>
+    <div className="flex items-center justify-center py-48">
+      <Spinner size="sm" />
+    </div>
   );
 }
 
@@ -217,7 +198,7 @@ export default function PersonalizationPage() {
       ) : null}
 
       {!personalization && isPending ? (
-        <PersonalizationSkeleton />
+        <SettingsLoadingSpinner />
       ) : (
         <Form onSubmit={form.handleSubmit(handleSubmit)}>
           <section className="border-separator/20 bg-surface rounded-2xl border">

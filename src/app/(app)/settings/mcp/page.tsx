@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Chip, Skeleton, Switch } from "@heroui/react";
+import { Button, Chip, Spinner, Switch } from "@heroui/react";
 import { Settings05Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
@@ -30,35 +30,73 @@ const STATUS_LABEL = {
   invalid: "Needs attention",
 } as const;
 
-const TRANSPORT_LABEL = {
-  http: "Streamable HTTP",
-  stdio: "STDIO",
-} as const;
-
 type ListedServer = RouterOutputs["mcpServers"]["list"][number];
 
-function McpSettingsSkeleton() {
+function SettingsLoadingSpinner() {
   return (
-    <div className="flex flex-col gap-6">
-      <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-        <div className="space-y-3">
-          <Skeleton className="h-4 w-40 rounded-md" />
-          <Skeleton className="h-3 w-64 rounded-md" />
-        </div>
-      </section>
-      <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-        <div className="space-y-3">
-          <Skeleton className="h-4 w-48 rounded-md" />
-          {Array.from({ length: 4 }).map((_, index) => (
-            <Skeleton className="h-20 w-full rounded-xl" key={index} />
-          ))}
-        </div>
-      </section>
+    <div className="flex items-center justify-center py-48">
+      <Spinner size="sm" />
     </div>
   );
 }
 
-function RecommendedServerRow({
+function CustomServerCell({
+  onEdit,
+  onToggle,
+  server,
+  isToggling,
+}: {
+  onEdit: (serverId: string) => void;
+  onToggle: (serverId: string, isEnabled: boolean) => void;
+  server: ListedServer;
+  isToggling: boolean;
+}) {
+  return (
+    <div className="border-separator/20 flex items-center gap-2.5 rounded-2xl border bg-surface px-2.5 py-2 transition-colors hover:bg-surface-hover">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-foreground text-[13px] font-medium leading-tight">
+            {server.name}
+          </span>
+          <Chip color={STATUS_COLOR[server.status]} size="sm" variant="soft">
+            {STATUS_LABEL[server.status]}
+          </Chip>
+        </div>
+        <p className="text-muted mt-0.5 truncate text-[11px]">
+          {server.status === "invalid"
+            ? server.errorMessage
+            : server.transport === "http"
+              ? "Streamable HTTP"
+              : "STDIO"}
+        </p>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1.5">
+        {server.status !== "invalid" ? (
+          <Switch
+            isDisabled={isToggling}
+            isSelected={server.status === "active"}
+            onChange={() => onToggle(server.id, server.status !== "active")}
+          >
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
+          </Switch>
+        ) : null}
+        <Button
+          onPress={() => onEdit(server.id)}
+          size="sm"
+          variant={server.status === "invalid" ? "primary" : "secondary"}
+          className="h-7 min-w-0 px-2.5 text-xs"
+        >
+          Edit
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function RecommendedServerCell({
   onAuthenticate,
   onInstall,
   onOpenSettings,
@@ -80,45 +118,38 @@ function RecommendedServerRow({
   const installedServer = installed ?? null;
 
   return (
-    <section className="border-separator flex flex-col gap-4 border-b px-4 py-4 last:border-b-0 md:flex-row md:items-center md:justify-between">
-      <div className="flex min-w-0 items-start gap-3">
-        <div className="border-separator bg-background flex size-12 shrink-0 items-center justify-center rounded-xl border">
-          <Icon className="size-7 shrink-0" />
-        </div>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-foreground text-sm font-medium">
-              {server.name}
-              <span className="text-muted font-normal">
-                {" "}
-                by {server.vendor}
-              </span>
-            </p>
-            {installed ? (
-              <Chip
-                color={STATUS_COLOR[installed.status]}
-                size="sm"
-                variant="soft"
-              >
-                {STATUS_LABEL[installed.status]}
-              </Chip>
-            ) : null}
-          </div>
-          <p className="text-muted mt-1 text-sm">{server.description}</p>
-          {isInvalid ? (
-            <p className="text-danger-soft-foreground mt-2 text-xs">
-              {installed?.errorMessage}
-            </p>
-          ) : null}
-        </div>
+    <div className="border-separator/20 flex items-center gap-2.5 rounded-2xl border bg-surface px-2.5 py-2 transition-colors hover:bg-surface-hover">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-separator bg-background">
+        <Icon className="size-5 shrink-0" />
       </div>
 
-      <div className="flex shrink-0 items-center gap-2 self-end md:self-auto">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-foreground text-[13px] font-medium leading-tight">
+            {server.name}
+          </span>
+          {installed ? (
+            <Chip
+              color={STATUS_COLOR[installed.status]}
+              size="sm"
+              variant="soft"
+            >
+              {STATUS_LABEL[installed.status]}
+            </Chip>
+          ) : null}
+        </div>
+        <p className="text-muted mt-0.5 truncate text-[11px]">
+          {isInvalid ? installed?.errorMessage : server.description}
+        </p>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1.5">
         {!isInstalled ? (
           <Button
             onPress={() => onInstall(server.id)}
             size="sm"
             variant="secondary"
+            className="h-7 min-w-0 px-2.5 text-xs"
           >
             {server.installLabel ?? "Install"}
           </Button>
@@ -129,8 +160,9 @@ function RecommendedServerRow({
                 onPress={() => onAuthenticate(installedServer.id)}
                 size="sm"
                 variant="secondary"
+                className="h-7 min-w-0 px-2.5 text-xs"
               >
-                Authenticate
+                Auth
               </Button>
             ) : null}
             <Button
@@ -138,11 +170,12 @@ function RecommendedServerRow({
               onPress={() => onOpenSettings(installedServer.id)}
               size="sm"
               variant="ghost"
+              className="h-7 w-7 min-w-0"
             >
               <HugeiconsIcon
                 color="currentColor"
                 icon={Settings05Icon}
-                size={16}
+                size={14}
                 strokeWidth={1.5}
               />
             </Button>
@@ -163,7 +196,7 @@ function RecommendedServerRow({
           </>
         ) : null}
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -290,6 +323,8 @@ export default function McpSettingsPage() {
     await beginOAuth.mutateAsync({ id: serverId });
   };
 
+  const errorMessage = servers.error?.message ?? mutationError;
+
   return (
     <SettingsPageWrapper
       subtitle={
@@ -307,135 +342,70 @@ export default function McpSettingsPage() {
       }
       title="MCP servers"
     >
-      {servers.error ? (
+      {errorMessage ? (
         <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
-          {servers.error.message}
+          {errorMessage}
         </p>
       ) : null}
 
-      {mutationError ? (
-        <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
-          {mutationError}
-        </p>
-      ) : null}
-
-      {servers.isPending && !servers.data ? <McpSettingsSkeleton /> : null}
-
-      {!servers.isPending ? (
-        <div className="flex flex-col gap-6">
-          <section>
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 className="text-foreground text-lg font-medium">
+      {servers.isPending && !servers.data ? (
+        <SettingsLoadingSpinner />
+      ) : (
+        <div className="flex flex-col gap-3">
+          <section className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between px-1.5 pb-0.5">
+              <h2 className="text-foreground text-sm font-medium">
                 Custom servers
               </h2>
-              {customServers.length ? (
-                <Button
-                  onPress={() => router.replace("/settings/mcp/new")}
-                  size="sm"
-                  variant="secondary"
-                >
-                  Add server
-                </Button>
-              ) : null}
+              <Button
+                onPress={() => router.replace("/settings/mcp/new")}
+                size="sm"
+                variant="primary"
+                className="h-7 px-2 text-xs"
+              >
+                Add server
+              </Button>
             </div>
 
-            {customServers.length ? (
-              <div className="border-separator bg-surface rounded-xl border">
+            {customServers.length > 0 ? (
+              <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
                 {customServers.map((server) => (
-                  <section
-                    className="border-separator flex flex-col gap-3 border-b px-4 py-4 last:border-b-0 md:flex-row md:items-center md:justify-between"
+                  <CustomServerCell
+                    isToggling={toggle.isPending}
                     key={server.id}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-foreground text-sm font-medium">
-                          {server.name}
-                        </span>
-                        <Chip
-                          color={STATUS_COLOR[server.status]}
-                          size="sm"
-                          variant="soft"
-                        >
-                          {STATUS_LABEL[server.status]}
-                        </Chip>
-                        <Chip size="sm" variant="soft">
-                          {TRANSPORT_LABEL[server.transport]}
-                        </Chip>
-                      </div>
-                      <p className="text-muted mt-1 text-xs">
-                        {server.status === "invalid"
-                          ? server.errorMessage
-                          : server.transport === "http"
-                            ? "Remote MCP server over Streamable HTTP."
-                            : "Local MCP server launched over stdio."}
-                      </p>
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-2">
-                      {server.status !== "invalid" ? (
-                        <Switch
-                          isDisabled={toggle.isPending}
-                          isSelected={server.status === "active"}
-                          onChange={() =>
-                            toggle.mutate({
-                              id: server.id,
-                              isEnabled: server.status !== "active",
-                            })
-                          }
-                        >
-                          <Switch.Control>
-                            <Switch.Thumb />
-                          </Switch.Control>
-                        </Switch>
-                      ) : null}
-                      <Button
-                        onPress={() =>
-                          router.replace(`/settings/mcp/${server.id}`)
-                        }
-                        size="sm"
-                        variant={
-                          server.status === "invalid" ? "primary" : "secondary"
-                        }
-                      >
-                        Edit
-                      </Button>
-                    </div>
-                  </section>
+                    onEdit={(serverId) =>
+                      router.replace(`/settings/mcp/${serverId}`)
+                    }
+                    onToggle={(serverId, isEnabled) =>
+                      toggle.mutate({ id: serverId, isEnabled })
+                    }
+                    server={server}
+                  />
                 ))}
               </div>
             ) : (
-              <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                  <div className="space-y-1">
-                    <h3 className="text-foreground text-base font-medium">
-                      No custom MCP servers connected
-                    </h3>
-                    <p className="text-muted text-sm">
-                      Add a Streamable HTTP or STDIO server to expose MCP tools
-                      in chat threads.
-                    </p>
-                  </div>
-                  <Button
-                    onPress={() => router.replace("/settings/mcp/new")}
-                    size="sm"
-                  >
-                    Add server
-                  </Button>
-                </div>
-              </section>
+              <div className="border-separator/20 rounded-2xl border bg-surface px-4 py-6 text-center">
+                <p className="text-foreground text-sm font-medium">
+                  No custom MCP servers
+                </p>
+                <p className="text-muted mt-1 text-xs">
+                  Add a Streamable HTTP or STDIO server to expose MCP tools in
+                  chat.
+                </p>
+              </div>
             )}
           </section>
 
-          <section>
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h2 className="text-foreground text-lg font-medium">
-                Recommended servers
+          <section className="flex flex-col gap-1.5">
+            <div className="px-1.5 pb-0.5">
+              <h2 className="text-foreground text-sm font-medium">
+                Recommended
               </h2>
             </div>
 
-            <div className="border-separator bg-surface rounded-xl border">
+            <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
               {recommendedServers.map((server) => (
-                <RecommendedServerRow
+                <RecommendedServerCell
                   key={server.id}
                   onAuthenticate={(serverId) =>
                     void handleAuthenticate(serverId)
@@ -453,7 +423,7 @@ export default function McpSettingsPage() {
             </div>
           </section>
         </div>
-      ) : null}
+      )}
     </SettingsPageWrapper>
   );
 }

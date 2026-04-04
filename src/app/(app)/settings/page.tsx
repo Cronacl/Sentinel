@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Form, Skeleton, Spinner, Switch } from "@heroui/react";
+import { Button, Form, Spinner, Switch } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
@@ -28,25 +28,11 @@ import {
 } from "@/schemas/general-settings.schema";
 import { api } from "@/trpc/react";
 
-function GeneralSettingsSkeleton() {
+function SettingsLoadingSpinner() {
   return (
-    <section className="border-separator/20 bg-surface rounded-2xl border">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div
-          className={`flex items-center justify-between gap-6 p-5${i > 0 ? " border-t border-border/50" : ""}`}
-          key={i}
-        >
-          <div className="space-y-2">
-            <Skeleton className="h-5 w-40 rounded-md" />
-            <Skeleton className="h-4 w-72 rounded-md" />
-          </div>
-          <Skeleton className="h-8 w-24 shrink-0 rounded-xl" />
-        </div>
-      ))}
-      <div className="border-t border-border/50 p-5 flex justify-end">
-        <Skeleton className="h-9 w-24 rounded-xl" />
-      </div>
-    </section>
+    <div className="flex items-center justify-center py-48">
+      <Spinner size="sm" />
+    </div>
   );
 }
 
@@ -144,7 +130,7 @@ export default function GeneralSettingsPage() {
       ) : null}
 
       {!generalSettings.data && generalSettings.isPending ? (
-        <GeneralSettingsSkeleton />
+        <SettingsLoadingSpinner />
       ) : (
         <Form
           onSubmit={generalSettingsForm.handleSubmit(

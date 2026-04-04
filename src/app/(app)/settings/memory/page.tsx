@@ -6,12 +6,10 @@ import {
   Chip,
   Form,
   Pagination,
-  Skeleton,
   Spinner,
 } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AiIdeaIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
+import type { ReactNode } from "react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { sileo } from "sileo";
@@ -67,24 +65,50 @@ type BrowseChipOption<TValue extends string> = {
   value: TValue;
 };
 
-function MemorySettingsSkeleton() {
+function SettingsSectionRow({
+  children,
+  description,
+  isFirst = false,
+  title,
+}: {
+  children: ReactNode;
+  description: ReactNode;
+  isFirst?: boolean;
+  title: ReactNode;
+}) {
   return (
-    <div className="flex flex-col gap-6">
-      <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-        <div className="space-y-4">
-          <Skeleton className="h-16 w-full rounded-xl" />
-          <Skeleton className="h-16 w-full rounded-xl" />
-          <Skeleton className="h-16 w-full rounded-xl" />
-          <Skeleton className="h-16 w-full rounded-xl" />
-        </div>
-      </section>
-      <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-        <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <Skeleton className="h-24 w-full rounded-xl" key={index} />
-          ))}
-        </div>
-      </section>
+    <div
+      className={`flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between${isFirst ? "" : " border-t border-border/50"}`}
+    >
+      <div className="space-y-1">
+        <h2 className="text-foreground text-base font-medium">{title}</h2>
+        <p className="text-muted text-sm">{description}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function SettingsRowControl({
+  children,
+  widthClassName = "lg:w-[360px]",
+}: {
+  children: ReactNode;
+  widthClassName?: string;
+}) {
+  return (
+    <div
+      className={`flex w-full max-w-full flex-col gap-2 ${widthClassName} lg:items-end`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function SettingsLoadingSpinner() {
+  return (
+    <div className="flex items-center justify-center py-48">
+      <Spinner size="sm" />
     </div>
   );
 }
@@ -515,14 +539,16 @@ export default function MemorySettingsPage() {
     deleteMemory.isPending ||
     togglePinned.isPending;
 
+  const queryError = memorySettings.error;
+
   return (
     <SettingsPageWrapper
-      subtitle="Configure long-term memory, choose the embedding profile, and manage what Sentinel keeps for future chats."
+      subtitle="Configure long-term memory, choose the embedding profile, and manage stored memories."
       title="Memory"
     >
-      {memorySettings.error ? (
+      {queryError ? (
         <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
-          {memorySettings.error.message}
+          {queryError.message}
         </p>
       ) : null}
 
@@ -533,29 +559,22 @@ export default function MemorySettingsPage() {
       ) : null}
 
       {memorySettings.isPending && !memorySettings.data ? (
-        <MemorySettingsSkeleton />
+        <SettingsLoadingSpinner />
       ) : (
         <div className="flex flex-col gap-6">
           <Form onSubmit={form.handleSubmit(handleSubmit)}>
-            <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-              <div className="mb-5 space-y-1">
-                <h2 className="text-foreground text-base font-medium">
-                  Memory settings
-                </h2>
-                <p className="text-muted text-sm">
-                  Memory works only when the selected embedding provider is
-                  configured and active.
-                </p>
-              </div>
-
-              <div className="space-y-5">
+            <section className="border-separator/20 bg-surface rounded-2xl border">
+              <SettingsSectionRow
+                description={
+                  selectedProfileAvailable
+                    ? "Allow Sentinel to retrieve and use long-term memory during chat."
+                    : "Select an embedding profile from an active provider before turning memory on."
+                }
+                isFirst
+                title="Enable memory"
+              >
                 <ControlledSwitchField
                   control={form.control}
-                  description={
-                    selectedProfileAvailable
-                      ? "Allow Sentinel to retrieve and use long-term memory during chat."
-                      : "Select an embedding profile from a configured and active provider before turning memory on."
-                  }
                   label="Enable memory"
                   name="enabled"
                   switchProps={{
@@ -563,10 +582,14 @@ export default function MemorySettingsPage() {
                     size: "sm",
                   }}
                 />
+              </SettingsSectionRow>
 
+              <SettingsSectionRow
+                description="Extract durable facts after successful assistant turns."
+                title="Automatic saving"
+              >
                 <ControlledSwitchField
                   control={form.control}
-                  description="Extract durable facts after successful assistant turns."
                   label="Automatic memory saving"
                   name="autoSaveEnabled"
                   switchProps={{
@@ -574,77 +597,94 @@ export default function MemorySettingsPage() {
                     size: "sm",
                   }}
                 />
+              </SettingsSectionRow>
 
-                <ControlledSelectField
-                  control={form.control}
-                  description="Choose which memory store Sentinel prefers when a tool does not force the scope."
-                  label="Default scope"
-                  name="defaultScope"
-                  options={MEMORY_SCOPE_VALUES.map((value) => ({
-                    label: value[0]?.toUpperCase() + value.slice(1),
-                    value,
-                  }))}
-                  selectProps={{ isDisabled: isBusy }}
-                />
-
-                <ControlledNumberField
-                  control={form.control}
-                  description="Maximum number of retrieved memories injected into a conversation."
-                  inputProps={{ className: "w-full" }}
-                  label="Retrieval limit"
-                  name="retrievalLimit"
-                  numberFieldProps={{
-                    className: "w-full max-w-xs",
-                    isDisabled: isBusy,
-                    maxValue: 12,
-                    minValue: 1,
-                  }}
-                />
-
-                <ControlledNumberField
-                  control={form.control}
-                  description="Maximum number of memories Sentinel may save after one assistant turn."
-                  inputProps={{ className: "w-full" }}
-                  label="Auto-save per turn"
-                  name="autoSavePerTurnLimit"
-                  numberFieldProps={{
-                    className: "w-full max-w-xs",
-                    isDisabled: isBusy || !form.watch("autoSaveEnabled"),
-                    maxValue: 6,
-                    minValue: 1,
-                  }}
-                />
-
-                <ControlledSelectField
-                  control={form.control}
-                  description={
-                    hasEligibleMemoryProvider
-                      ? "Profiles from inactive providers stay visible, but you can only select profiles whose provider is active."
-                      : "No supported embedding providers are active yet. Configure a supported provider in Settings > Providers."
-                  }
-                  label="Embedding profile"
-                  name="memoryProfileId"
-                  options={profileOptions}
-                  selectProps={{ isDisabled: isBusy }}
-                />
-
-                {selectedProfile ? (
-                  <div className="border-separator bg-background/60 flex items-center gap-2 rounded-xl border px-3 py-2.5 text-xs">
-                    <HugeiconsIcon
-                      color="currentColor"
-                      icon={AiIdeaIcon}
-                      size={14}
-                      strokeWidth={1.5}
+              <SettingsSectionRow
+                description="Preferred memory store when a tool does not force the scope."
+                title="Default scope"
+              >
+                <SettingsRowControl>
+                  <div className="w-full">
+                    <ControlledSelectField
+                      control={form.control}
+                      label="Default scope"
+                      name="defaultScope"
+                      options={MEMORY_SCOPE_VALUES.map((value) => ({
+                        label: value[0]?.toUpperCase() + value.slice(1),
+                        value,
+                      }))}
+                      selectProps={{ className: "w-full", isDisabled: isBusy }}
                     />
-                    <span className="text-muted">
-                      {selectedProfile.provider} • {selectedProfile.model} •{" "}
-                      {selectedProfile.dimensions} dimensions
-                    </span>
                   </div>
-                ) : null}
-              </div>
+                </SettingsRowControl>
+              </SettingsSectionRow>
 
-              <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+              <SettingsSectionRow
+                description="Maximum memories injected into a conversation."
+                title="Retrieval limit"
+              >
+                <SettingsRowControl widthClassName="lg:w-[280px]">
+                  <div className="w-full">
+                    <ControlledNumberField
+                      control={form.control}
+                      inputProps={{ className: "w-full" }}
+                      label="Retrieval limit"
+                      name="retrievalLimit"
+                      numberFieldProps={{
+                        className: "w-full",
+                        isDisabled: isBusy,
+                        maxValue: 12,
+                        minValue: 1,
+                      }}
+                    />
+                  </div>
+                </SettingsRowControl>
+              </SettingsSectionRow>
+
+              <SettingsSectionRow
+                description="Maximum memories Sentinel may save after one assistant turn."
+                title="Auto-save per turn"
+              >
+                <SettingsRowControl widthClassName="lg:w-[280px]">
+                  <div className="w-full">
+                    <ControlledNumberField
+                      control={form.control}
+                      inputProps={{ className: "w-full" }}
+                      label="Auto-save per turn"
+                      name="autoSavePerTurnLimit"
+                      numberFieldProps={{
+                        className: "w-full",
+                        isDisabled: isBusy || !form.watch("autoSaveEnabled"),
+                        maxValue: 6,
+                        minValue: 1,
+                      }}
+                    />
+                  </div>
+                </SettingsRowControl>
+              </SettingsSectionRow>
+
+              <SettingsSectionRow
+                description={
+                  hasEligibleMemoryProvider
+                    ? "Profiles from inactive providers stay visible but cannot be selected."
+                    : "No supported embedding providers are active yet. Configure one in Settings > Providers."
+                }
+                title="Embedding profile"
+              >
+                <SettingsRowControl>
+                  <div className="w-full">
+                    <ControlledSelectField
+                      control={form.control}
+                      label="Embedding profile"
+                      name="memoryProfileId"
+                      options={profileOptions}
+                      selectProps={{ className: "w-full", isDisabled: isBusy }}
+                    />
+                  </div>
+                </SettingsRowControl>
+              </SettingsSectionRow>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 p-5">
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     isDisabled={isBusy || totalMemories === 0}
@@ -676,14 +716,19 @@ export default function MemorySettingsPage() {
                   size="sm"
                   type="submit"
                 >
-                  Save changes
+                  {({ isPending }) => (
+                    <>
+                      {isPending ? <Spinner color="current" size="sm" /> : null}
+                      Save
+                    </>
+                  )}
                 </Button>
               </div>
             </section>
           </Form>
 
-          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <section className="border-separator/20 bg-surface rounded-2xl border">
+            <div className="flex flex-wrap items-start justify-between gap-3 p-5">
               <div className="space-y-1">
                 <h2 className="text-foreground text-base font-medium">
                   Memory manager
@@ -696,183 +741,188 @@ export default function MemorySettingsPage() {
               </div>
             </div>
 
-            <div className="mb-4 grid gap-3 md:grid-cols-2">
-              <label className="space-y-1">
-                <span className="text-muted text-xs font-medium">Search</span>
-                <input
-                  className="border-separator bg-background/70 text-foreground placeholder:text-muted/70 w-full rounded-xl border px-3 py-2.5 text-sm outline-none"
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search memory content or summaries"
-                  value={query}
-                />
-              </label>
+            <div className="border-t border-border/50 px-5 py-4">
+              <div className="mb-4 grid gap-3 md:grid-cols-2">
+                <label className="space-y-1">
+                  <span className="text-muted text-xs font-medium">Search</span>
+                  <input
+                    className="border-separator bg-background/70 text-foreground placeholder:text-muted/70 w-full rounded-xl border px-3 py-2.5 text-sm outline-none"
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Search memory content or summaries"
+                    value={query}
+                  />
+                </label>
 
-              <label className="space-y-1">
-                <span className="text-muted text-xs font-medium">
-                  Workspace
-                </span>
-                <select
-                  className="border-separator bg-background/70 text-foreground w-full rounded-xl border px-3 py-2.5 text-sm outline-none"
-                  onChange={(event) => setWorkspaceFilter(event.target.value)}
-                  value={workspaceFilter}
-                >
-                  <option value="all">All workspaces</option>
-                  {(workspaces.data ?? []).map((workspace) => (
-                    <option key={workspace.id} value={workspace.id}>
-                      {workspace.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="space-y-1">
-                <span className="text-muted text-xs font-medium">Pinned</span>
-                <select
-                  className="border-separator bg-background/70 text-foreground w-full rounded-xl border px-3 py-2.5 text-sm outline-none"
-                  onChange={(event) =>
-                    setPinnedFilter(event.target.value as typeof pinnedFilter)
-                  }
-                  value={pinnedFilter}
-                >
-                  {PINNED_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="mb-4 grid gap-3">
-              <MemoryBrowseChips
-                label="Kind"
-                onChange={setKindFilter}
-                options={kindBrowseOptions}
-                value={kindFilter}
-              />
-              <MemoryBrowseChips
-                label="Scope"
-                onChange={setScopeFilter}
-                options={scopeBrowseOptions}
-                value={scopeFilter}
-              />
-            </div>
-
-            <div className="space-y-3">
-              {memories.isPending && !memories.data ? (
-                Array.from({ length: 3 }).map((_, index) => (
-                  <Skeleton className="h-28 w-full rounded-xl" key={index} />
-                ))
-              ) : paginatedItems.length > 0 ? (
-                paginatedItems.map((memory) => (
-                  <article
-                    className="border-separator bg-background/40 rounded-xl border p-4"
-                    key={memory.id}
+                <label className="space-y-1">
+                  <span className="text-muted text-xs font-medium">
+                    Workspace
+                  </span>
+                  <select
+                    className="border-separator bg-background/70 text-foreground w-full rounded-xl border px-3 py-2.5 text-sm outline-none"
+                    onChange={(event) => setWorkspaceFilter(event.target.value)}
+                    value={workspaceFilter}
                   >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1 space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Chip size="sm" variant="soft">
-                            {memory.kind}
-                          </Chip>
-                          <Chip
-                            color={
-                              memory.scope === "workspace"
-                                ? "warning"
-                                : "default"
+                    <option value="all">All workspaces</option>
+                    {(workspaces.data ?? []).map((workspace) => (
+                      <option key={workspace.id} value={workspace.id}>
+                        {workspace.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-muted text-xs font-medium">Pinned</span>
+                  <select
+                    className="border-separator bg-background/70 text-foreground w-full rounded-xl border px-3 py-2.5 text-sm outline-none"
+                    onChange={(event) =>
+                      setPinnedFilter(event.target.value as typeof pinnedFilter)
+                    }
+                    value={pinnedFilter}
+                  >
+                    {PINNED_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="mb-4 grid gap-3">
+                <MemoryBrowseChips
+                  label="Kind"
+                  onChange={setKindFilter}
+                  options={kindBrowseOptions}
+                  value={kindFilter}
+                />
+                <MemoryBrowseChips
+                  label="Scope"
+                  onChange={setScopeFilter}
+                  options={scopeBrowseOptions}
+                  value={scopeFilter}
+                />
+              </div>
+
+              <div className="space-y-3">
+                {memories.isPending && !memories.data ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Spinner size="md" />
+                  </div>
+                ) : paginatedItems.length > 0 ? (
+                  paginatedItems.map((memory) => (
+                    <article
+                      className="border-separator bg-background/40 rounded-xl border p-4"
+                      key={memory.id}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Chip size="sm" variant="soft">
+                              {memory.kind}
+                            </Chip>
+                            <Chip
+                              color={
+                                memory.scope === "workspace"
+                                  ? "warning"
+                                  : "default"
+                              }
+                              size="sm"
+                              variant="soft"
+                            >
+                              {memory.scope}
+                            </Chip>
+                            {memory.isPinned ? (
+                              <Chip color="success" size="sm" variant="soft">
+                                Pinned
+                              </Chip>
+                            ) : null}
+                          </div>
+
+                          <p className="text-foreground text-sm">
+                            {memory.content}
+                          </p>
+
+                          {memory.summary ? (
+                            <p className="text-muted text-sm">
+                              {memory.summary}
+                            </p>
+                          ) : null}
+
+                          <div className="text-muted flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                            <span>ID: {memory.id}</span>
+                            <span>
+                              Workspace:{" "}
+                              {memory.workspaceName ?? "Global memory"}
+                            </span>
+                            <span>
+                              Thread: {memory.threadTitle ?? "Unknown thread"}
+                            </span>
+                            <span>
+                              Last used: {formatDate(memory.lastAccessedAt)}
+                            </span>
+                            <span>Updated: {formatDate(memory.updatedAt)}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-2">
+                          <Button
+                            isDisabled={isBusy}
+                            isPending={
+                              togglePinned.isPending &&
+                              togglePinned.variables?.memoryId === memory.id
+                            }
+                            onPress={() =>
+                              togglePinned.mutate({
+                                isPinned: !memory.isPinned,
+                                memoryId: memory.id,
+                              })
                             }
                             size="sm"
-                            variant="soft"
+                            variant="tertiary"
                           >
-                            {memory.scope}
-                          </Chip>
-                          {memory.isPinned ? (
-                            <Chip color="success" size="sm" variant="soft">
-                              Pinned
-                            </Chip>
-                          ) : null}
-                        </div>
-
-                        <p className="text-foreground text-sm">
-                          {memory.content}
-                        </p>
-
-                        {memory.summary ? (
-                          <p className="text-muted text-sm">{memory.summary}</p>
-                        ) : null}
-
-                        <div className="text-muted flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                          <span>ID: {memory.id}</span>
-                          <span>
-                            Workspace: {memory.workspaceName ?? "Global memory"}
-                          </span>
-                          <span>
-                            Thread: {memory.threadTitle ?? "Unknown thread"}
-                          </span>
-                          <span>
-                            Last used: {formatDate(memory.lastAccessedAt)}
-                          </span>
-                          <span>Updated: {formatDate(memory.updatedAt)}</span>
+                            {memory.isPinned ? "Unpin" : "Pin"}
+                          </Button>
+                          <Button
+                            isDisabled={isBusy}
+                            isPending={
+                              deleteMemory.isPending &&
+                              deleteMemory.variables?.memoryId === memory.id
+                            }
+                            onPress={() => setPendingDeleteMemory(memory)}
+                            size="sm"
+                            variant="danger"
+                          >
+                            Delete
+                          </Button>
                         </div>
                       </div>
+                    </article>
+                  ))
+                ) : (
+                  <div className="border-separator bg-background/40 rounded-xl border px-4 py-8 text-center">
+                    <p className="text-foreground text-sm font-medium">
+                      No memories matched these filters.
+                    </p>
+                    <p className="text-muted mt-1 text-sm">
+                      Saved memory will appear here once Sentinel starts storing
+                      durable context.
+                    </p>
+                  </div>
+                )}
+              </div>
 
-                      <div className="flex shrink-0 items-center gap-2">
-                        <Button
-                          isDisabled={isBusy}
-                          isPending={
-                            togglePinned.isPending &&
-                            togglePinned.variables?.memoryId === memory.id
-                          }
-                          onPress={() =>
-                            togglePinned.mutate({
-                              isPinned: !memory.isPinned,
-                              memoryId: memory.id,
-                            })
-                          }
-                          size="sm"
-                          variant="tertiary"
-                        >
-                          {memory.isPinned ? "Unpin" : "Pin"}
-                        </Button>
-                        <Button
-                          isDisabled={isBusy}
-                          isPending={
-                            deleteMemory.isPending &&
-                            deleteMemory.variables?.memoryId === memory.id
-                          }
-                          onPress={() => setPendingDeleteMemory(memory)}
-                          size="sm"
-                          variant="danger"
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  </article>
-                ))
-              ) : (
-                <div className="border-separator bg-background/40 rounded-xl border px-4 py-8 text-center">
-                  <p className="text-foreground text-sm font-medium">
-                    No memories matched these filters.
-                  </p>
-                  <p className="text-muted mt-1 text-sm">
-                    Saved memory will appear here once Sentinel starts storing
-                    durable context.
-                  </p>
-                </div>
+              {filteredCount > MEMORIES_PER_PAGE && (
+                <MemoryPagination
+                  page={safePage}
+                  totalPages={totalPages}
+                  startItem={startItem}
+                  endItem={endItem}
+                  filteredCount={filteredCount}
+                  onPageChange={setPage}
+                />
               )}
             </div>
-
-            {filteredCount > MEMORIES_PER_PAGE && (
-              <MemoryPagination
-                page={safePage}
-                totalPages={totalPages}
-                startItem={startItem}
-                endItem={endItem}
-                filteredCount={filteredCount}
-                onPageChange={setPage}
-              />
-            )}
           </section>
         </div>
       )}

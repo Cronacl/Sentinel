@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Form, Skeleton, Spinner } from "@heroui/react";
+import { Button, Form, Spinner } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ComputerIcon,
@@ -50,25 +50,11 @@ function dispatchAppearanceEvents() {
   window.dispatchEvent(new Event("sentinel-theme-change"));
 }
 
-function AppearanceSkeleton() {
+function SettingsLoadingSpinner() {
   return (
-    <section className="border-separator/20 bg-surface rounded-2xl border">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div
-          className={`flex items-center justify-between gap-6 p-5${i > 0 ? " border-t border-border/50" : ""}`}
-          key={i}
-        >
-          <div className="space-y-2">
-            <Skeleton className="h-5 w-40 rounded-md" />
-            <Skeleton className="h-4 w-72 rounded-md" />
-          </div>
-          <Skeleton className="h-8 w-40 shrink-0 rounded-xl" />
-        </div>
-      ))}
-      <div className="flex justify-end border-t border-border/50 p-5">
-        <Skeleton className="h-9 w-32 rounded-xl" />
-      </div>
-    </section>
+    <div className="flex items-center justify-center py-48">
+      <Spinner size="sm" />
+    </div>
   );
 }
 
@@ -254,7 +240,7 @@ export default function AppearanceSettingsPage() {
       ) : null}
 
       {!appearance && isPending ? (
-        <AppearanceSkeleton />
+        <SettingsLoadingSpinner />
       ) : (
         <Form onSubmit={form.handleSubmit(handleSubmit)}>
           <section className="border-separator/20 bg-surface rounded-2xl border">
