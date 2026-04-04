@@ -251,26 +251,26 @@ describe("ensureTables", () => {
 
     ensureTables(db as never, sqlite as never);
 
-    const statements = db.run.mock.calls.map(([statement]) =>
+    const statements = db.run.mock.calls.map(([statement]: [unknown]) =>
       serializeRunSql(statement),
     );
 
     expect(
-      statements.some((statement) =>
+      statements.some((statement: string) =>
         statement.includes(
           `CREATE TABLE IF NOT EXISTS "image_generation_setting"`,
         ),
       ),
     ).toBe(true);
     expect(
-      statements.some((statement) =>
+      statements.some((statement: string) =>
         statement.includes(
           `CREATE TABLE IF NOT EXISTS "image_generation_provider_setting"`,
         ),
       ),
     ).toBe(true);
     expect(
-      statements.some((statement) =>
+      statements.some((statement: string) =>
         statement.includes(
           `CREATE TABLE IF NOT EXISTS "integration_database_config"`,
         ),
