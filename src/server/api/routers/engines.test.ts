@@ -52,10 +52,33 @@ const getClaudeEngineStatus = mock(async () => ({
   state: "ready",
   usedCachedStatus: false,
 }));
+const getGeminiEngineStatus = mock(async () => ({
+  authReady: true,
+  availableModels: [
+    {
+      defaultReasoningEffort: "medium",
+      description: "Gemini model",
+      displayName: "Gemini 2.5 Pro",
+      id: "gemini-2.5-pro",
+      inputModalities: ["text", "image"],
+      isDefault: true,
+      model: "gemini-2.5-pro",
+      supportedReasoningEfforts: [{ effort: "medium" }],
+    },
+  ],
+  cliDetected: true,
+  cliVersion: "gemini 1.2.3",
+  engine: "gemini",
+  error: null,
+  lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
+  state: "ready",
+  usedCachedStatus: false,
+}));
 const resetCodexCliResolutionCache = mock(() => undefined);
 const resetCodexEngineStatusCache = mock(() => undefined);
 const resetClaudeCodeRuntimeCache = mock(() => undefined);
 const resetClaudeEngineStatusCache = mock(() => undefined);
+const resetGeminiEngineStatusCache = mock(() => undefined);
 const resolveCodexCli = mock(async () => ({
   command: "/Users/test/.local/bin/codex",
   env: process.env,
@@ -99,6 +122,25 @@ mock.module("@/lib/ai/chat/engines/claude-sdk", () => ({
     status.state === "ready" || status.state === "timeout_no_cache",
   resetClaudeCodeRuntimeCache,
   resetClaudeEngineStatusCache,
+}));
+
+mock.module("@/lib/ai/chat/engines/gemini-acp", () => ({
+  buildFallbackGeminiModels: () => [
+    {
+      defaultReasoningEffort: "medium",
+      description: "Gemini model",
+      displayName: "Gemini 2.5 Pro",
+      id: "gemini-2.5-pro",
+      inputModalities: ["text", "image"],
+      isDefault: true,
+      model: "gemini-2.5-pro",
+      supportedReasoningEfforts: [{ effort: "medium" }],
+    },
+  ],
+  getGeminiEngineStatus,
+  isGeminiEngineAvailable: (status: any) =>
+    status.state === "ready" || status.state === "timeout_using_cache",
+  resetGeminiEngineStatusCache,
 }));
 
 mock.module("@/lib/ai/chat/engines/codex-cli", () => ({
@@ -172,10 +214,12 @@ beforeEach(() => {
   reloadRuntime.mockReset();
   getStatus.mockReset();
   getClaudeEngineStatus.mockReset();
+  getGeminiEngineStatus.mockReset();
   resetCodexCliResolutionCache.mockReset();
   resetCodexEngineStatusCache.mockReset();
   resetClaudeCodeRuntimeCache.mockReset();
   resetClaudeEngineStatusCache.mockReset();
+  resetGeminiEngineStatusCache.mockReset();
   resolveCodexCli.mockReset();
   readCodexCliVersion.mockReset();
   spawnCodexCli.mockReset();
@@ -233,6 +277,28 @@ beforeEach(() => {
     error: null,
     lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
     sdkDetected: true,
+    state: "ready",
+    usedCachedStatus: false,
+  }));
+  getGeminiEngineStatus.mockImplementation(async () => ({
+    authReady: true,
+    availableModels: [
+      {
+        defaultReasoningEffort: "medium",
+        description: "Gemini model",
+        displayName: "Gemini 2.5 Pro",
+        id: "gemini-2.5-pro",
+        inputModalities: ["text", "image"],
+        isDefault: true,
+        model: "gemini-2.5-pro",
+        supportedReasoningEfforts: [{ effort: "medium" }],
+      },
+    ],
+    cliDetected: true,
+    cliVersion: "gemini 1.2.3",
+    engine: "gemini",
+    error: null,
+    lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
     state: "ready",
     usedCachedStatus: false,
   }));

@@ -31,7 +31,7 @@ const composerPathEntrySchema = z.object({
 
 const composerSkillEntrySchema = z.object({
   directory: z.string().optional(),
-  engine: z.enum(["sentinel", "codex", "claude"]),
+  engine: z.enum(["sentinel", "codex", "claude", "gemini"]),
   name: z.string(),
   scope: z.enum(["global", "workspace"]).optional(),
   sourceKind: z.enum(["sentinel", "agents", "claude", "codex"]).optional(),

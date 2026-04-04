@@ -29,6 +29,10 @@ import {
   getClaudeRuntimeBadgeLabel,
   getClaudeRuntimeBinaryLabel,
   getClaudeRuntimeFallbackMessage,
+  getGeminiRuntimeBadgeColor,
+  getGeminiRuntimeBadgeLabel,
+  getGeminiRuntimeCliLabel,
+  getGeminiRuntimeFallbackMessage,
 } from "@/components/settings/runtime-status";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { PROVIDERS } from "@/lib/ai/providers/registry";
@@ -39,7 +43,7 @@ import {
 import { api } from "@/trpc/react";
 
 type ProviderKey = AIProvider;
-type RuntimeEngineKey = "claude" | "codex";
+type RuntimeEngineKey = "claude" | "codex" | "gemini";
 
 const CAPABILITY_LABEL: Record<string, string> = {
   object_generation: "Structured",
@@ -133,6 +137,13 @@ export default function ModelsPage() {
   const claudeStatus =
     claudeEngine?.engine === "claude" && "status" in claudeEngine
       ? claudeEngine.status
+      : null;
+  const geminiEngine = enginesQuery.data?.find(
+    (engine) => engine.engine === "gemini",
+  );
+  const geminiStatus =
+    geminiEngine?.engine === "gemini" && "status" in geminiEngine
+      ? geminiEngine.status
       : null;
 
   const enable = api.models.enable.useMutation({
@@ -340,7 +351,9 @@ export default function ModelsPage() {
             description:
               engine === "codex"
                 ? "Codex detection reloaded."
-                : "Claude detection reloaded.",
+                : engine === "claude"
+                  ? "Claude detection reloaded."
+                  : "Gemini detection reloaded.",
           });
         }
       } catch (error) {
@@ -367,10 +380,14 @@ export default function ModelsPage() {
     codexStatus?.availableModels && codexStatus.availableModels.length > 0;
   const hasClaudeModels =
     claudeStatus?.availableModels && claudeStatus.availableModels.length > 0;
+  const hasGeminiModels =
+    geminiStatus?.availableModels && geminiStatus.availableModels.length > 0;
   const isRefreshingCodex = pendingRuntimeRefresh === "codex";
   const isRefreshingClaude = pendingRuntimeRefresh === "claude";
+  const isRefreshingGemini = pendingRuntimeRefresh === "gemini";
   const codexFallbackMessage = getCodexRuntimeFallbackMessage(codexStatus);
   const claudeFallbackMessage = getClaudeRuntimeFallbackMessage(claudeStatus);
+  const geminiFallbackMessage = getGeminiRuntimeFallbackMessage(geminiStatus);
 
   const codexAccountValue = (() => {
     const raw =
@@ -410,7 +427,7 @@ export default function ModelsPage() {
           ) : null}
 
           <div className="flex flex-col gap-3">
-            <div className="grid gap-1.5 md:grid-cols-2">
+            <div className="grid gap-1.5 md:grid-cols-3">
               <RuntimeCard
                 title="Codex Runtime"
                 badge={getCodexRuntimeBadgeLabel(
@@ -484,9 +501,53 @@ export default function ModelsPage() {
                 isRefreshing={isRefreshingClaude}
                 onRefresh={() => void handleRefreshRuntime("claude")}
               />
+              <RuntimeCard
+                title="Gemini CLI Runtime"
+                badge={getGeminiRuntimeBadgeLabel(
+                  geminiStatus,
+                  geminiEngine?.isAvailable ?? false,
+                )}
+                badgeColor={getGeminiRuntimeBadgeColor(
+                  geminiStatus,
+                  geminiEngine?.isAvailable ?? false,
+                )}
+                rows={[
+                  {
+                    label: "CLI",
+                    value: getGeminiRuntimeCliLabel(geminiStatus),
+                  },
+                  {
+                    label: "Auth",
+                    value: geminiStatus?.authReady ? "Ready" : "Unavailable",
+                  },
+                  {
+                    label: "Models",
+                    value: `${geminiStatus?.availableModels.length ?? 0} available`,
+                  },
+                  {
+                    label: "Cache",
+                    value: geminiStatus?.usedCachedStatus
+                      ? "Using cache"
+                      : "Live",
+                  },
+                ]}
+                fallbackMessage={geminiFallbackMessage}
+                engineError={
+                  !geminiFallbackMessage &&
+                  !geminiEngine?.isAvailable &&
+                  geminiEngine?.error
+                    ? geminiEngine.error
+                    : null
+                }
+                isRefreshing={isRefreshingGemini}
+                onRefresh={() => void handleRefreshRuntime("gemini")}
+              />
             </div>
 
-            {(hasCodexModels || hasClaudeModels || grouped.length > 0) && (
+            {(hasCodexModels ||
+              hasClaudeModels ||
+              hasGeminiModels ||
+              grouped.length > 0) && (
               <DisclosureGroup
                 allowsMultipleExpanded
                 expandedKeys={expandedProviders}
@@ -603,6 +664,63 @@ export default function ModelsPage() {
                                       {(model.contextWindow / 1000).toFixed(0)}k
                                     </Chip>
                                   )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </Disclosure.Body>
+                      </Disclosure.Content>
+                    </Disclosure>
+                  )}
+
+                  {hasGeminiModels && (
+                    <Disclosure id="runtime-gemini">
+                      <Disclosure.Heading>
+                        <Disclosure.Trigger className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-background/80">
+                            <ProviderIcon
+                              className="h-3.5 w-3.5"
+                              provider="google"
+                            />
+                          </div>
+                          <span className="text-foreground text-[13px] font-medium">
+                            Gemini CLI Models
+                          </span>
+                          <Chip size="sm" variant="soft">
+                            {geminiStatus!.availableModels.length}
+                          </Chip>
+                          <Disclosure.Indicator className="ml-auto" />
+                        </Disclosure.Trigger>
+                      </Disclosure.Heading>
+                      <Disclosure.Content>
+                        <Disclosure.Body>
+                          <div className="divide-separator/10 divide-y px-3 pb-2">
+                            {geminiStatus!.availableModels.map((model) => (
+                              <div
+                                className="flex items-center gap-2.5 py-1.5 pl-9"
+                                key={model.id}
+                              >
+                                <span className="text-foreground shrink-0 text-[13px]">
+                                  {model.displayName}
+                                </span>
+                                {model.isDefault && (
+                                  <Chip color="accent" size="sm" variant="soft">
+                                    Default
+                                  </Chip>
+                                )}
+                                <span className="text-muted min-w-0 flex-1 truncate text-[11px]">
+                                  {model.description}
+                                </span>
+                                <div className="flex shrink-0 gap-1">
+                                  {model.inputModalities.map((modality) => (
+                                    <Chip
+                                      key={modality}
+                                      size="sm"
+                                      variant="soft"
+                                    >
+                                      {modality}
+                                    </Chip>
+                                  ))}
                                 </div>
                               </div>
                             ))}

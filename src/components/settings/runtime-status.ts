@@ -8,7 +8,7 @@ type RuntimeStatusLike = {
   usedCachedStatus?: boolean;
 };
 
-type RuntimeStatusKind = "Claude" | "Codex";
+type RuntimeStatusKind = "Claude" | "Codex" | "Gemini";
 
 function formatRuntimeTimestamp(
   value: string,
@@ -103,6 +103,7 @@ function getRuntimeComposerUnavailableMessage(
 
 type ClaudeRuntimeStatusLike = RuntimeStatusLike;
 type CodexRuntimeStatusLike = RuntimeStatusLike;
+type GeminiRuntimeStatusLike = RuntimeStatusLike;
 
 export function formatClaudeRuntimeTimestamp(
   value: string,
@@ -193,4 +194,46 @@ export function getCodexComposerUnavailableMessage(
   status: CodexRuntimeStatusLike | null | undefined,
 ) {
   return getRuntimeComposerUnavailableMessage("Codex", status);
+}
+
+export function getGeminiRuntimeBadgeLabel(
+  status: GeminiRuntimeStatusLike | null | undefined,
+  isAvailable: boolean,
+) {
+  return getRuntimeBadgeLabel(status, isAvailable, {
+    detectedKey: "cliDetected",
+    missingState: "missing_cli",
+  });
+}
+
+export function getGeminiRuntimeBadgeColor(
+  status: GeminiRuntimeStatusLike | null | undefined,
+  isAvailable: boolean,
+) {
+  return getRuntimeBadgeColor(status, isAvailable, {
+    detectedKey: "cliDetected",
+    missingState: "missing_cli",
+  });
+}
+
+export function getGeminiRuntimeCliLabel(
+  status: GeminiRuntimeStatusLike | null | undefined,
+) {
+  return getRuntimeDetectionLabel(status, {
+    detectedKey: "cliDetected",
+    versionKey: "cliVersion",
+  });
+}
+
+export function getGeminiRuntimeFallbackMessage(
+  status: GeminiRuntimeStatusLike | null | undefined,
+  formatter?: (date: Date) => string,
+) {
+  return getRuntimeFallbackMessage("Gemini", status, formatter);
+}
+
+export function getGeminiComposerUnavailableMessage(
+  status: GeminiRuntimeStatusLike | null | undefined,
+) {
+  return getRuntimeComposerUnavailableMessage("Gemini", status);
 }

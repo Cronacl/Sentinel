@@ -34,6 +34,10 @@ function renderExternalEngineIcon(
     return <ClaudeAIIcon className={className} />;
   }
 
+  if (engine === "gemini") {
+    return <ProviderIcon className={className} provider="google" />;
+  }
+
   return null;
 }
 

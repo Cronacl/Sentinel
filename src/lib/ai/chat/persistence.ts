@@ -8,6 +8,7 @@ import type { ChatEngine } from "@/server/db/enums";
 import type {
   ClaudeThreadState,
   CodexThreadState,
+  GeminiThreadState,
   RepoThreadState,
   ThreadChatEngineState,
 } from "@/lib/ai/chat/engines/types";
@@ -227,6 +228,16 @@ export function updateClaudeThreadState(
   updateThreadChatEngineState(
     threadId,
     buildThreadChatEngineState("claude", state),
+  );
+}
+
+export function updateGeminiThreadState(
+  threadId: string,
+  state: GeminiThreadState | null,
+) {
+  updateThreadChatEngineState(
+    threadId,
+    buildThreadChatEngineState("gemini", state),
   );
 }
 

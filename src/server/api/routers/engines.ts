@@ -14,6 +14,13 @@ import {
   resetCodexEngineStatusCache,
 } from "@/lib/ai/chat/engines/codex-app-server";
 import { resetCodexCliResolutionCache } from "@/lib/ai/chat/engines/codex-cli";
+import {
+  buildFallbackGeminiModels,
+  type GeminiEngineStatus,
+  getGeminiEngineStatus,
+  isGeminiEngineAvailable,
+  resetGeminiEngineStatusCache,
+} from "@/lib/ai/chat/engines/gemini-acp";
 import { getCodexThreadState } from "@/lib/ai/chat/engines/types";
 import {
   getDefaultReasoningEffort,
@@ -30,7 +37,7 @@ import { modelPreferences, providerCredentials } from "@/server/db/schema";
 import { getOwnedThreadOrThrow } from "./workspace-thread-helpers";
 
 const chatEngineSchema = z.enum(CHAT_ENGINES);
-const runtimeEngineSchema = z.enum(["codex", "claude"]);
+const runtimeEngineSchema = z.enum(["codex", "claude", "gemini"]);
 
 function isCodexEngineAvailable(status: CodexEngineStatus) {
   return status.state === "ready" || status.state === "timeout_no_cache";
@@ -83,6 +90,14 @@ function canUseClaudeFallbackModels(status: ClaudeEngineStatus) {
   );
 }
 
+function canUseGeminiFallbackModels(status: GeminiEngineStatus) {
+  return (
+    status.cliDetected &&
+    status.state === "timeout_no_cache" &&
+    status.availableModels.length === 0
+  );
+}
+
 function shouldExposeRuntimeModels(options: {
   availableModelsCount: number;
   isAvailable: boolean;
@@ -128,16 +143,18 @@ async function resolveCodexThreadId(
 function createRuntimeStatusResolver(options?: { forceRefresh?: boolean }) {
   let codexPromise: Promise<CodexEngineStatus> | null = null;
   let claudePromise: Promise<ClaudeEngineStatus> | null = null;
+  let geminiPromise: Promise<GeminiEngineStatus> | null = null;
 
   return {
     all: async () => {
-      const [codex, claude] = await Promise.all([
+      const [codex, claude, gemini] = await Promise.all([
         codexPromise ??
           (codexPromise = getCodexAppServerManager().getStatus(options)),
         claudePromise ?? (claudePromise = getClaudeEngineStatus(options)),
+        geminiPromise ?? (geminiPromise = getGeminiEngineStatus(options)),
       ]);
 
-      return { claude, codex };
+      return { claude, codex, gemini };
     },
     claude: async () => {
       claudePromise ??= getClaudeEngineStatus(options);
@@ -147,13 +164,17 @@ function createRuntimeStatusResolver(options?: { forceRefresh?: boolean }) {
       codexPromise ??= getCodexAppServerManager().getStatus(options);
       return await codexPromise;
     },
+    gemini: async () => {
+      geminiPromise ??= getGeminiEngineStatus(options);
+      return await geminiPromise;
+    },
   };
 }
 
 export const enginesRouter = createTRPCRouter({
   list: protectedProcedure.query(async () => {
     const runtimeStatuses = createRuntimeStatusResolver();
-    const { codex, claude } = await runtimeStatuses.all();
+    const { codex, claude, gemini } = await runtimeStatuses.all();
 
     return [
       {
@@ -179,6 +200,15 @@ export const enginesRouter = createTRPCRouter({
         isAvailable: isClaudeEngineAvailable(claude),
         label: "Claude",
         status: claude,
+      },
+      {
+        description:
+          "Use the Gemini CLI ACP runtime configured on this machine.",
+        engine: "gemini" as const,
+        error: gemini.error,
+        isAvailable: isGeminiEngineAvailable(gemini),
+        label: "Gemini",
+        status: gemini,
       },
     ];
   }),
@@ -232,6 +262,34 @@ export const enginesRouter = createTRPCRouter({
           description: model.description,
           displayName: model.displayName,
           engine: "claude" as const,
+          inputModalities: model.inputModalities,
+          isConnected,
+          isEnabled: true,
+          modelId: model.id,
+          provider: null,
+          rawModelId: model.model,
+          supportedReasoningEfforts: model.supportedReasoningEfforts.map(
+            (option) => option.effort,
+          ),
+        }));
+      }
+
+      if (input.engine === "gemini") {
+        const status = await runtimeStatuses.gemini();
+        const models = canUseGeminiFallbackModels(status)
+          ? buildFallbackGeminiModels()
+          : status.availableModels;
+        const isConnected = shouldExposeRuntimeModels({
+          availableModelsCount: models.length,
+          isAvailable: isGeminiEngineAvailable(status),
+        });
+
+        return models.map((model) => ({
+          contextWindow: undefined as number | undefined,
+          defaultReasoningEffort: model.defaultReasoningEffort,
+          description: model.description,
+          displayName: model.displayName,
+          engine: "gemini" as const,
           inputModalities: model.inputModalities,
           isConnected,
           isEnabled: true,
@@ -339,6 +397,16 @@ export const enginesRouter = createTRPCRouter({
 
         return {
           engine: "codex" as const,
+          status,
+        };
+      }
+
+      if (input.engine === "gemini") {
+        resetGeminiEngineStatusCache();
+        const status = await runtimeStatuses.gemini();
+
+        return {
+          engine: "gemini" as const,
           status,
         };
       }

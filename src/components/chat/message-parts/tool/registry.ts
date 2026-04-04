@@ -139,6 +139,7 @@ import {
   ClaudeWebFetchTool,
   ClaudeWebSearchTool,
 } from "./renderers/claude-web";
+import { GeminiRuntimeTool } from "./renderers/gemini-runtime";
 
 const renderers: Record<string, Renderer> = {
   apply_patch: WorkspaceTool,
@@ -476,6 +477,10 @@ export function resolveRenderer(part: ToolPart): Renderer | undefined {
 
     if (part.toolName.startsWith("claude_")) {
       return claudeRenderers[part.toolName] ?? ClaudeRuntimeTool;
+    }
+
+    if (part.toolName.startsWith("gemini_")) {
+      return GeminiRuntimeTool;
     }
 
     return (

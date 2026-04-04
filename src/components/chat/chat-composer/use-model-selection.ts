@@ -18,7 +18,12 @@ import {
 import type { usePersistSelection } from "./use-persist-selection";
 
 type PersistSelectionReturn = ReturnType<typeof usePersistSelection>;
-const MODEL_SELECTION_ENGINES = ["claude", "codex", "sentinel"] as const;
+const MODEL_SELECTION_ENGINES = [
+  "claude",
+  "codex",
+  "gemini",
+  "sentinel",
+] as const;
 
 export function useModelSelection({
   globalSelectionQuery,
@@ -59,6 +64,8 @@ export function useModelSelection({
     utils.engines.models.getData({ engine: "codex" }) ?? [];
   const cachedClaudeModels =
     utils.engines.models.getData({ engine: "claude" }) ?? [];
+  const cachedGeminiModels =
+    utils.engines.models.getData({ engine: "gemini" }) ?? [];
 
   const enginesQuery = api.engines.list.useQuery(undefined, {
     initialData: cachedEngines.length > 0 ? cachedEngines : undefined,
@@ -93,6 +100,16 @@ export function useModelSelection({
       staleTime: 60_000,
     },
   );
+  const geminiModelsQuery = api.engines.models.useQuery(
+    {
+      engine: "gemini",
+    },
+    {
+      initialData:
+        cachedGeminiModels.length > 0 ? cachedGeminiModels : undefined,
+      staleTime: 60_000,
+    },
+  );
   const [cachedEngineOptions, setCachedEngineOptions] = useState<
     ChatComposerEngineOption[]
   >(() =>
@@ -105,6 +122,7 @@ export function useModelSelection({
       () => ({
         claude: filterSelectableModels(cachedClaudeModels),
         codex: filterSelectableModels(cachedCodexModels),
+        gemini: filterSelectableModels(cachedGeminiModels),
         sentinel: filterSelectableModels(cachedSentinelModels),
       }),
     );
@@ -154,11 +172,13 @@ export function useModelSelection({
   const modelsByEngine = {
     claude: claudeModelsQuery.data ?? [],
     codex: codexModelsQuery.data ?? [],
+    gemini: geminiModelsQuery.data ?? [],
     sentinel: sentinelModelsQuery.data ?? [],
   };
   const modelsQueryByEngine = {
     claude: claudeModelsQuery,
     codex: codexModelsQuery,
+    gemini: geminiModelsQuery,
     sentinel: sentinelModelsQuery,
   };
   const selectedEngineModels = modelsByEngine[selectedEngine];
@@ -167,9 +187,15 @@ export function useModelSelection({
     () => ({
       claude: filterSelectableModels(modelsByEngine.claude),
       codex: filterSelectableModels(modelsByEngine.codex),
+      gemini: filterSelectableModels(modelsByEngine.gemini),
       sentinel: filterSelectableModels(modelsByEngine.sentinel),
     }),
-    [modelsByEngine.claude, modelsByEngine.codex, modelsByEngine.sentinel],
+    [
+      modelsByEngine.claude,
+      modelsByEngine.codex,
+      modelsByEngine.gemini,
+      modelsByEngine.sentinel,
+    ],
   );
   const availableModelsByEngine = useMemo(
     () => ({
@@ -181,6 +207,10 @@ export function useModelSelection({
         modelsByEngine.codex,
         cachedAvailableModelsByEngine.codex,
       ),
+      gemini: resolveStableSelectableModels(
+        modelsByEngine.gemini,
+        cachedAvailableModelsByEngine.gemini,
+      ),
       sentinel: resolveStableSelectableModels(
         modelsByEngine.sentinel,
         cachedAvailableModelsByEngine.sentinel,
@@ -189,9 +219,11 @@ export function useModelSelection({
     [
       cachedAvailableModelsByEngine.claude,
       cachedAvailableModelsByEngine.codex,
+      cachedAvailableModelsByEngine.gemini,
       cachedAvailableModelsByEngine.sentinel,
       modelsByEngine.claude,
       modelsByEngine.codex,
+      modelsByEngine.gemini,
       modelsByEngine.sentinel,
     ],
   );

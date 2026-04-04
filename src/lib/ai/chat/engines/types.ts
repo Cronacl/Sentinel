@@ -12,6 +12,8 @@ export const claudePermissionModeSchema = z.enum([
   "dontAsk",
 ]);
 
+export const geminiSessionModeSchema = z.enum(["default", "plan", "auto_edit"]);
+
 export const codexApprovalPolicySchema = z.enum([
   "untrusted",
   "on-failure",
@@ -42,6 +44,14 @@ export const claudeThreadStateSchema = z.object({
   modelId: z.string().nullish(),
   permissionMode: claudePermissionModeSchema.nullish(),
   sessionId: z.string(),
+});
+
+export const geminiThreadStateSchema = z.object({
+  cliVersion: z.string().nullish(),
+  cwd: z.string().nullish(),
+  modelId: z.string().nullish(),
+  sessionId: z.string(),
+  sessionMode: geminiSessionModeSchema.nullish(),
 });
 
 const repoComparePullRequestSchema = z.object({
@@ -90,6 +100,7 @@ export const threadChatEngineStateSchema = z
   .object({
     claude: claudeThreadStateSchema.nullish(),
     codex: codexThreadStateSchema.nullish(),
+    gemini: geminiThreadStateSchema.nullish(),
     repo: repoThreadStateSchema.nullish(),
   })
   .partial();
@@ -97,15 +108,18 @@ export const threadChatEngineStateSchema = z
 type ThreadChatEngineStateMap = {
   claude: z.infer<typeof claudeThreadStateSchema>;
   codex: z.infer<typeof codexThreadStateSchema>;
+  gemini: z.infer<typeof geminiThreadStateSchema>;
 };
 
 type ExternalChatEngine = Exclude<ChatEngine, "sentinel">;
 
 export type ClaudePermissionMode = z.infer<typeof claudePermissionModeSchema>;
+export type GeminiSessionMode = z.infer<typeof geminiSessionModeSchema>;
 export type CodexApprovalPolicy = z.infer<typeof codexApprovalPolicySchema>;
 export type CodexSandboxMode = z.infer<typeof codexSandboxModeSchema>;
 export type CodexThreadState = z.infer<typeof codexThreadStateSchema>;
 export type ClaudeThreadState = z.infer<typeof claudeThreadStateSchema>;
+export type GeminiThreadState = z.infer<typeof geminiThreadStateSchema>;
 export type RepoLastPullRequest = z.infer<typeof repoLastPullRequestSchema>;
 export type RepoProjectMode = z.infer<typeof repoProjectModeSchema>;
 export type RepoThreadState = z.infer<typeof repoThreadStateSchema>;
@@ -126,6 +140,10 @@ export function getClaudeThreadState(value: unknown): ClaudeThreadState | null {
   return parseThreadChatEngineState(value)?.claude ?? null;
 }
 
+export function getGeminiThreadState(value: unknown): GeminiThreadState | null {
+  return parseThreadChatEngineState(value)?.gemini ?? null;
+}
+
 export function getRepoThreadState(value: unknown): RepoThreadState | null {
   return parseThreadChatEngineState(value)?.repo ?? null;
 }
@@ -139,7 +157,7 @@ export function mergeThreadChatEngineState(
     ...(patch ?? {}),
   };
 
-  if (!next.claude && !next.codex && !next.repo) {
+  if (!next.claude && !next.codex && !next.gemini && !next.repo) {
     return null;
   }
 
@@ -150,7 +168,12 @@ export function buildThreadChatEngineState(
   engine: ExternalChatEngine,
   value: ThreadChatEngineStateMap[ExternalChatEngine] | null,
 ): ThreadChatEngineState | null {
-  return engine === "codex"
-    ? { codex: value as CodexThreadState | null }
-    : { claude: value as ClaudeThreadState | null };
+  switch (engine) {
+    case "codex":
+      return { codex: value as CodexThreadState | null };
+    case "claude":
+      return { claude: value as ClaudeThreadState | null };
+    case "gemini":
+      return { gemini: value as GeminiThreadState | null };
+  }
 }
