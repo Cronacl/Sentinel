@@ -154,6 +154,11 @@ export function ensureTables(
     "user_id" text NOT NULL REFERENCES "user"("id"),
     "title" text NOT NULL,
     "summary" text,
+    "visibility" text DEFAULT 'visible' NOT NULL,
+    "parent_thread_id" text,
+    "virtual_key" text,
+    "delegation_id" text,
+    "source_virtual_thread_id" text,
     "mode" text DEFAULT 'chat' NOT NULL,
     "chat_engine" text DEFAULT 'sentinel' NOT NULL,
     "chat_engine_state" text,
@@ -175,6 +180,21 @@ export function ensureTables(
   );
   db.run(
     sql`CREATE INDEX IF NOT EXISTS "thread_user_id_idx" ON "thread" ("user_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "thread_parent_thread_id_idx" ON "thread" ("parent_thread_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "thread_visibility_parent_idx" ON "thread" ("visibility", "parent_thread_id")`,
+  );
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "thread_virtual_parent_key_unique" ON "thread" ("parent_thread_id", "virtual_key")`,
+  );
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "thread_parent_delegation_unique" ON "thread" ("parent_thread_id", "delegation_id")`,
+  );
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "thread_source_virtual_unique" ON "thread" ("source_virtual_thread_id")`,
   );
   db.run(
     sql`CREATE INDEX IF NOT EXISTS "thread_workspace_archived_updated_idx" ON "thread" ("workspace_id", "archived_at", "updated_at")`,
@@ -324,6 +344,40 @@ export function ensureTables(
   try {
     db.run(
       sql`ALTER TABLE "workspace" ADD COLUMN "is_expanded" integer DEFAULT false NOT NULL`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(
+      sql`ALTER TABLE "thread" ADD COLUMN "visibility" text DEFAULT 'visible' NOT NULL`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(sql`ALTER TABLE "thread" ADD COLUMN "parent_thread_id" text`);
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(sql`ALTER TABLE "thread" ADD COLUMN "virtual_key" text`);
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(sql`ALTER TABLE "thread" ADD COLUMN "delegation_id" text`);
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.run(
+      sql`ALTER TABLE "thread" ADD COLUMN "source_virtual_thread_id" text`,
     );
   } catch {
     // column already exists

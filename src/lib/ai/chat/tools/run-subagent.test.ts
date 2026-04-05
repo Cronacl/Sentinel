@@ -166,6 +166,7 @@ describe("run_subagent", () => {
     const result = await executeRunSubagent({
       input: {
         allowMutations: true,
+        delegationId: "tool-call-1",
         prompt: "Research the repo layout",
         virtualKey: "project-discovery",
       },
@@ -186,6 +187,24 @@ describe("run_subagent", () => {
       type: "text",
       value: "Detailed delegated summary",
     });
+  });
+
+  it("stores the tool call id on unkeyed virtual threads for live resolution", async () => {
+    await executeRunSubagent({
+      input: {
+        allowMutations: true,
+        delegationId: "tool-call-live-1",
+        prompt: "Discover the project layout",
+      },
+      runtime: createRuntime(),
+    });
+
+    expect(ensureVirtualThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        delegationId: "tool-call-live-1",
+        virtualKey: null,
+      }),
+    );
   });
 
   it("disables mutation tools for the delegated run when allowMutations is false", async () => {

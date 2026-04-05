@@ -796,10 +796,13 @@ function buildDelegationTools(options: ThreadAgentCallOptions) {
       inputSchema: runSubagentInputSchema,
       outputSchema: runSubagentOutputSchema,
       toModelOutput: ({ output }) => toRunSubagentModelOutput(output),
-      execute: async (input, { abortSignal }) =>
+      execute: async (input, { abortSignal, toolCallId }) =>
         executeRunSubagent({
           abortSignal,
-          input,
+          input: {
+            ...input,
+            delegationId: toolCallId,
+          },
           runtime: options,
         }),
     }),

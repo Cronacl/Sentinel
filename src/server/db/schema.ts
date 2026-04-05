@@ -221,6 +221,7 @@ export const threads = sqliteTable(
       .default("visible"),
     parentThreadId: text("parent_thread_id"),
     virtualKey: text("virtual_key"),
+    delegationId: text("delegation_id"),
     sourceVirtualThreadId: text("source_virtual_thread_id"),
     mode: text("mode", { enum: THREAD_MODES }).notNull().default("chat"),
     chatEngine: text("chat_engine", { enum: CHAT_ENGINES })
@@ -259,6 +260,10 @@ export const threads = sqliteTable(
     uniqueIndex("thread_virtual_parent_key_unique").on(
       table.parentThreadId,
       table.virtualKey,
+    ),
+    uniqueIndex("thread_parent_delegation_unique").on(
+      table.parentThreadId,
+      table.delegationId,
     ),
     uniqueIndex("thread_source_virtual_unique").on(table.sourceVirtualThreadId),
     index("thread_workspace_archived_updated_idx").on(
