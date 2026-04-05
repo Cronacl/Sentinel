@@ -178,6 +178,16 @@ export function ensureTables(
   db.run(
     sql`CREATE INDEX IF NOT EXISTS "thread_user_id_idx" ON "thread" ("user_id")`,
   );
+  ensureTableColumns(sqlite, "thread", [
+    {
+      name: "visibility",
+      definition: "text DEFAULT 'visible' NOT NULL",
+    },
+    { name: "parent_thread_id", definition: "text" },
+    { name: "virtual_key", definition: "text" },
+    { name: "delegation_id", definition: "text" },
+    { name: "source_virtual_thread_id", definition: "text" },
+  ]);
   db.run(
     sql`CREATE INDEX IF NOT EXISTS "thread_parent_thread_id_idx" ON "thread" ("parent_thread_id")`,
   );
@@ -341,40 +351,6 @@ export function ensureTables(
   try {
     db.run(
       sql`ALTER TABLE "workspace" ADD COLUMN "is_expanded" integer DEFAULT false NOT NULL`,
-    );
-  } catch {
-    // column already exists
-  }
-
-  try {
-    db.run(
-      sql`ALTER TABLE "thread" ADD COLUMN "visibility" text DEFAULT 'visible' NOT NULL`,
-    );
-  } catch {
-    // column already exists
-  }
-
-  try {
-    db.run(sql`ALTER TABLE "thread" ADD COLUMN "parent_thread_id" text`);
-  } catch {
-    // column already exists
-  }
-
-  try {
-    db.run(sql`ALTER TABLE "thread" ADD COLUMN "virtual_key" text`);
-  } catch {
-    // column already exists
-  }
-
-  try {
-    db.run(sql`ALTER TABLE "thread" ADD COLUMN "delegation_id" text`);
-  } catch {
-    // column already exists
-  }
-
-  try {
-    db.run(
-      sql`ALTER TABLE "thread" ADD COLUMN "source_virtual_thread_id" text`,
     );
   } catch {
     // column already exists
