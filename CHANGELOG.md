@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.18](https://github.com/Cronacl/Sentinel/compare/v0.0.17...v0.0.18) (2026-04-05)
+
+
+### Bug Fixes
+
+* fix schema migration issue ([677152d](https://github.com/Cronacl/Sentinel/commit/677152d50121eea17adb639c4a5d443f421eea33))
+
 ## [0.0.17](https://github.com/Cronacl/Sentinel/compare/v0.0.16...v0.0.17) (2026-04-05)
 
 
