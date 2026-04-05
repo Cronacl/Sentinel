@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.16](https://github.com/Cronacl/Sentinel/compare/v0.0.15...v0.0.16) (2026-04-05)
+
+
+### Features
+
+* add delegationId support for run_subagent tool and database schema ([2ff666c](https://github.com/Cronacl/Sentinel/commit/2ff666c220a33a7433937b5e9533c2cbe9361a75))
+* implement run_subagent tool for delegated task execution ([d3475b7](https://github.com/Cronacl/Sentinel/commit/d3475b732972484363bbde382ad55455c15b8d83))
+
 ## [0.0.15](https://github.com/Cronacl/Sentinel/compare/v0.0.14...v0.0.15) (2026-04-04)
 
 
