@@ -72,6 +72,7 @@ const workspaceSelect = {
 } as const;
 
 const subagentResolveSchema = threadGetSchema.extend({
+  delegationId: z.string().trim().min(1).max(200).optional(),
   title: z.string().trim().min(1).max(200).optional(),
   virtualKey: z.string().trim().min(1).max(120).optional(),
 });
@@ -294,11 +295,13 @@ export const threadsRouter = createTRPCRouter({
             eq(threads.parentThreadId, input.threadId),
             eq(threads.visibility, "virtual"),
             eq(threads.userId, ctx.session.user.id),
-            input.virtualKey
-              ? eq(threads.virtualKey, input.virtualKey)
-              : input.title
-                ? eq(threads.title, input.title)
-                : undefined,
+            input.delegationId
+              ? eq(threads.delegationId, input.delegationId)
+              : input.virtualKey
+                ? eq(threads.virtualKey, input.virtualKey)
+                : input.title
+                  ? eq(threads.title, input.title)
+                  : undefined,
           ].filter(Boolean),
         ),
         orderBy: (thread, { desc }) => [desc(thread.updatedAt)],

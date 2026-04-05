@@ -33,14 +33,6 @@ type RunSubagentOutput = {
   virtualThreadId: string;
 };
 
-function buildVirtualThreadTitle(input: RunSubagentInput) {
-  if (input.virtualKey) {
-    return `Sub-agent: ${input.virtualKey}`;
-  }
-
-  return `Sub-agent: ${input.prompt.slice(0, 72).trim()}`;
-}
-
 function isRunSubagentInput(value: unknown): value is RunSubagentInput {
   const candidate = value as {
     allowMutations?: unknown;
@@ -177,15 +169,14 @@ export const RunSubagentTool = memo(function RunSubagentTool({
     const match = pathname?.match(/\/thread\/([^/?#]+)/);
     return match?.[1] ?? null;
   }, [pathname]);
-  const virtualThreadTitle = input ? buildVirtualThreadTitle(input) : null;
   const resolvedSubagentThreadQuery = api.threads.resolveSubagent.useQuery(
     parentThreadId && input
       ? {
           threadId: parentThreadId,
           ...(input.virtualKey
             ? { virtualKey: input.virtualKey }
-            : virtualThreadTitle
-              ? { title: virtualThreadTitle }
+            : part.toolCallId
+              ? { delegationId: part.toolCallId }
               : {}),
         }
       : {

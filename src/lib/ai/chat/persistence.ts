@@ -87,6 +87,7 @@ export async function ensureThread(
 
 export async function ensureVirtualThread(input: {
   chatEngineState?: ThreadChatEngineState | null;
+  delegationId?: string | null;
   engine?: ChatEngine;
   mode?: ThreadMode;
   parentThreadId: string;
@@ -122,6 +123,7 @@ export async function ensureVirtualThread(input: {
         id: threadId,
         mode: input.mode ?? "chat",
         parentThreadId: input.parentThreadId,
+        delegationId: input.delegationId ?? null,
         title: input.title,
         userId: input.userId,
         virtualKey: input.virtualKey ?? null,
@@ -142,6 +144,7 @@ export async function loadThread(threadId: string) {
       archivedAt: true,
       chatEngine: true,
       chatEngineState: true,
+      delegationId: true,
       id: true,
       mode: true,
       parentThreadId: true,

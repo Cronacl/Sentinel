@@ -44,6 +44,10 @@ export const runSubagentOutputSchema = z.object({
   virtualThreadId: z.string(),
 });
 
+type RunSubagentExecutionInput = z.infer<typeof runSubagentInputSchema> & {
+  delegationId?: string | null;
+};
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -232,7 +236,7 @@ export async function executeRunSubagent({
   runtime,
 }: {
   abortSignal?: AbortSignal;
-  input: z.infer<typeof runSubagentInputSchema>;
+  input: RunSubagentExecutionInput;
   runtime: ThreadAgentCallOptions;
 }) {
   if (!runtime.workspaceId) {
@@ -247,6 +251,7 @@ export async function executeRunSubagent({
   const virtualThreadId = await ensureVirtualThread({
     engine: "sentinel",
     mode: "chat",
+    delegationId: input.virtualKey ? null : (input.delegationId ?? null),
     parentThreadId: runtime.threadId,
     title: buildVirtualThreadTitle(input),
     userId: runtime.userId,
