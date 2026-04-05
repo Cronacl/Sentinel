@@ -22,6 +22,9 @@ mock.module("@/env", () => ({
     SENTINEL_STATE_PATH: "/tmp/sentinel-state.json",
   },
 }));
+mock.module("@/lib/runtime/local-state", () => ({
+  getSentinelStateFilePath: () => "/tmp/sentinel-state.json",
+}));
 mock.module("drizzle-orm", () => ({
   eq: (...args: unknown[]) => args,
 }));
