@@ -155,6 +155,10 @@ function buildCoreTools(
     coreTools.add("manage_task");
   }
 
+  if (availableToolNames.includes("run_subagent")) {
+    coreTools.add("run_subagent");
+  }
+
   if (
     promptContext.availableSkills.length > 0 &&
     availableToolNames.includes("load_skill")

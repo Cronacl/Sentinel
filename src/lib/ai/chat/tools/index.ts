@@ -25,6 +25,7 @@ import {
   moveFileDescription,
   multieditDescription,
   readDescription,
+  runSubagentDescription,
   runTaskDescription,
   saveMemoryDescription,
   searchMemoryDescription,
@@ -106,6 +107,12 @@ import {
   multieditOutputSchema,
 } from "./multiedit";
 import { executeRead, readInputSchema, readOutputSchema } from "./read";
+import {
+  executeRunSubagent,
+  runSubagentInputSchema,
+  runSubagentOutputSchema,
+  toRunSubagentModelOutput,
+} from "./run-subagent";
 import {
   runTaskInputSchema,
   runTaskOutputSchema,
@@ -782,6 +789,23 @@ function buildTaskTools(options: ThreadAgentCallOptions) {
   };
 }
 
+function buildDelegationTools(options: ThreadAgentCallOptions) {
+  return {
+    run_subagent: tool({
+      description: runSubagentDescription,
+      inputSchema: runSubagentInputSchema,
+      outputSchema: runSubagentOutputSchema,
+      toModelOutput: ({ output }) => toRunSubagentModelOutput(output),
+      execute: async (input, { abortSignal }) =>
+        executeRunSubagent({
+          abortSignal,
+          input,
+          runtime: options,
+        }),
+    }),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Public API: single entry point for all tool assembly
 // ---------------------------------------------------------------------------
@@ -806,6 +830,7 @@ export function buildTools(options: ThreadAgentCallOptions) {
     ...(options.integrationTools ?? {}),
     ...buildSkillTools(options),
     ...buildTaskTools(options),
+    ...buildDelegationTools(options),
     ...buildWebTools(options),
     ...(hasFilesystemTools
       ? {

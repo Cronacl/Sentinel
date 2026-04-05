@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { and, eq, isNull, sql } from "drizzle-orm";
+import { z } from "zod";
 
 import {
   threadArchiveSchema,
@@ -27,10 +28,15 @@ import { summarizeQueuedFollowUp } from "@/lib/ai/chat/session-server";
 import { disposeShellSession } from "@/lib/ai/chat/tools/shell";
 import { mapThreadMessagesToUIMessages } from "@/lib/ai/messages/ui";
 import { threadMessages, threads, workspaces } from "@/server/db/schema";
-import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
+import {
+  createTRPCContext,
+  createTRPCRouter,
+  protectedProcedure,
+} from "@/server/api/trpc";
 
 import {
   getOwnedThreadOrThrow,
+  getOwnedSubagentThreadOrThrow,
   getOwnedWorkspaceOrThrow,
   getThreadListSettings,
 } from "./workspace-thread-helpers";
@@ -65,6 +71,11 @@ const workspaceSelect = {
   updatedAt: true,
 } as const;
 
+const subagentResolveSchema = threadGetSchema.extend({
+  title: z.string().trim().min(1).max(200).optional(),
+  virtualKey: z.string().trim().min(1).max(120).optional(),
+});
+
 function withLinkedPullRequest<T extends { chatEngineState?: unknown }>(
   thread: T,
 ) {
@@ -72,6 +83,52 @@ function withLinkedPullRequest<T extends { chatEngineState?: unknown }>(
     ...thread,
     linkedPullRequest:
       getRepoThreadState(thread.chatEngineState)?.lastPullRequest ?? null,
+  };
+}
+
+async function buildThreadDetails(
+  ctx: Awaited<ReturnType<typeof createTRPCContext>>,
+  thread:
+    | Awaited<ReturnType<typeof getOwnedThreadOrThrow>>
+    | Awaited<ReturnType<typeof getOwnedSubagentThreadOrThrow>>,
+) {
+  const messages = await ctx.db.query.threadMessages.findMany({
+    where: eq(threadMessages.threadId, thread.id),
+    orderBy: (messages, { asc }) => [asc(messages.createdAt)],
+  });
+  const queuedFollowUps = await listThreadFollowUps(thread.id);
+
+  return {
+    messages: await mapThreadMessagesToUIMessages(messages as any[]),
+    queuedFollowUps: queuedFollowUps
+      .filter((followUp) => followUp.status === "queued")
+      .map(summarizeQueuedFollowUp),
+    thread: {
+      activeRunId: thread.activeStreamId,
+      archivedAt: thread.archivedAt,
+      chatEngine: thread.chatEngine,
+      chatModelId: thread.chatModelId,
+      chatReasoningEffort: thread.chatReasoningEffort,
+      createdAt: thread.createdAt,
+      id: thread.id,
+      linkedPullRequest:
+        getRepoThreadState(thread.chatEngineState)?.lastPullRequest ?? null,
+      mode: thread.mode,
+      pinnedAt: thread.pinnedAt,
+      status: thread.status,
+      summary: thread.summary,
+      title: thread.title,
+      updatedAt: thread.updatedAt,
+    },
+    workspace: {
+      createdAt: thread.workspace.createdAt,
+      description: thread.workspace.description,
+      id: thread.workspace.id,
+      name: thread.workspace.name,
+      permissionModeOverride: thread.workspace.permissionModeOverride,
+      rootPath: thread.workspace.rootPath,
+      updatedAt: thread.workspace.updatedAt,
+    },
   };
 }
 
@@ -102,6 +159,7 @@ export const threadsRouter = createTRPCRouter({
             threads: {
               where: and(
                 isNull(threads.archivedAt),
+                eq(threads.visibility, "visible"),
                 eq(threads.userId, ctx.session.user.id),
                 ...(settings.workspaceId
                   ? [eq(threads.workspaceId, settings.workspaceId)]
@@ -138,6 +196,7 @@ export const threadsRouter = createTRPCRouter({
       const items = await ctx.db.query.threads.findMany({
         where: and(
           isNull(threads.archivedAt),
+          eq(threads.visibility, "visible"),
           eq(threads.userId, ctx.session.user.id),
           ...(settings.workspaceId
             ? [eq(threads.workspaceId, settings.workspaceId)]
@@ -214,43 +273,72 @@ export const threadsRouter = createTRPCRouter({
     .input(threadGetSchema)
     .query(async ({ ctx, input }) => {
       const thread = await getOwnedThreadOrThrow(ctx, input.threadId);
-      const messages = await ctx.db.query.threadMessages.findMany({
-        where: eq(threadMessages.threadId, thread.id),
-        orderBy: (messages, { asc }) => [asc(messages.createdAt)],
+      return buildThreadDetails(ctx, thread);
+    }),
+
+  getSubagent: protectedProcedure
+    .input(threadGetSchema)
+    .query(async ({ ctx, input }) => {
+      const thread = await getOwnedSubagentThreadOrThrow(ctx, input.threadId);
+      return buildThreadDetails(ctx, thread);
+    }),
+
+  resolveSubagent: protectedProcedure
+    .input(subagentResolveSchema)
+    .query(async ({ ctx, input }) => {
+      await getOwnedThreadOrThrow(ctx, input.threadId);
+
+      const virtualThread = await ctx.db.query.threads.findFirst({
+        where: and(
+          ...[
+            eq(threads.parentThreadId, input.threadId),
+            eq(threads.visibility, "virtual"),
+            eq(threads.userId, ctx.session.user.id),
+            input.virtualKey
+              ? eq(threads.virtualKey, input.virtualKey)
+              : input.title
+                ? eq(threads.title, input.title)
+                : undefined,
+          ].filter(Boolean),
+        ),
+        orderBy: (thread, { desc }) => [desc(thread.updatedAt)],
+        columns: { id: true },
       });
-      const queuedFollowUps = await listThreadFollowUps(thread.id);
+
+      if (!virtualThread) {
+        return null;
+      }
+
+      const childThread = await ctx.db.query.threads.findFirst({
+        where: and(
+          eq(threads.sourceVirtualThreadId, virtualThread.id),
+          eq(threads.visibility, "visible"),
+          eq(threads.userId, ctx.session.user.id),
+        ),
+        orderBy: (thread, { desc }) => [desc(thread.updatedAt)],
+        columns: {
+          activeStreamId: true,
+          id: true,
+          status: true,
+        },
+      });
+
+      if (
+        childThread &&
+        (childThread.status === "awaiting_approval" ||
+          childThread.activeStreamId != null)
+      ) {
+        return {
+          threadId: childThread.id,
+          visibility: "visible" as const,
+          virtualThreadId: virtualThread.id,
+        };
+      }
 
       return {
-        messages: await mapThreadMessagesToUIMessages(messages as any[]),
-        queuedFollowUps: queuedFollowUps
-          .filter((followUp) => followUp.status === "queued")
-          .map(summarizeQueuedFollowUp),
-        thread: {
-          activeRunId: thread.activeStreamId,
-          archivedAt: thread.archivedAt,
-          chatEngine: thread.chatEngine,
-          chatModelId: thread.chatModelId,
-          chatReasoningEffort: thread.chatReasoningEffort,
-          createdAt: thread.createdAt,
-          id: thread.id,
-          linkedPullRequest:
-            getRepoThreadState(thread.chatEngineState)?.lastPullRequest ?? null,
-          mode: thread.mode,
-          pinnedAt: thread.pinnedAt,
-          status: thread.status,
-          summary: thread.summary,
-          title: thread.title,
-          updatedAt: thread.updatedAt,
-        },
-        workspace: {
-          createdAt: thread.workspace.createdAt,
-          description: thread.workspace.description,
-          id: thread.workspace.id,
-          name: thread.workspace.name,
-          permissionModeOverride: thread.workspace.permissionModeOverride,
-          rootPath: thread.workspace.rootPath,
-          updatedAt: thread.workspace.updatedAt,
-        },
+        threadId: virtualThread.id,
+        visibility: "virtual" as const,
+        virtualThreadId: virtualThread.id,
       };
     }),
 
@@ -262,6 +350,7 @@ export const threadsRouter = createTRPCRouter({
       const matchedThreads = await ctx.db.query.threads.findMany({
         where: and(
           isNull(threads.archivedAt),
+          eq(threads.visibility, "visible"),
           eq(threads.userId, ctx.session.user.id),
           sql`(
             lower(${threads.title}) like ${queryPattern} escape '\\'

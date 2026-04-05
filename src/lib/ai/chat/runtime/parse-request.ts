@@ -96,6 +96,8 @@ export async function parseRequest(
     input.threadMode === "plan" || input.threadMode === "chat"
       ? (input.threadMode as "plan" | "chat")
       : undefined;
+  const toolsEnabled =
+    typeof input.toolsEnabled === "boolean" ? input.toolsEnabled : undefined;
   const draftRepoState = input.draftRepoState
     ? repoThreadStateSchema.partial().safeParse(input.draftRepoState)
     : null;
@@ -155,6 +157,7 @@ export async function parseRequest(
     ...(reasoningEffort ? { reasoningEffort } : {}),
     threadId,
     ...(threadMode ? { threadMode } : {}),
+    ...(toolsEnabled !== undefined ? { toolsEnabled } : {}),
     ...(toolApprovalResponse ? { toolApprovalResponse } : {}),
     trigger,
     userId,

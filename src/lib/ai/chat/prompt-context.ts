@@ -21,6 +21,8 @@ export type ThreadPromptIntegration = {
   toolPrefix: string | null;
 };
 
+export type ThreadAgentRole = "primary" | "subagent";
+
 export type ThreadPromptPlanSummary = {
   audience: ThreadPlanAudience;
   goal: string;
@@ -72,6 +74,7 @@ export type ThreadPromptVideoGeneration = {
 };
 
 export type ThreadPromptContext = {
+  agentRole?: ThreadAgentRole;
   availableSkills: SkillMetadata[];
   allowedInspectionRoots: string[];
   allowedMutationRoot: string | null;
@@ -121,6 +124,7 @@ export function buildThreadPromptContext(
 ): ThreadPromptContext {
   return {
     ...input,
+    agentRole: input.agentRole ?? "primary",
     allowedInspectionRoots: uniqueStrings(input.allowedInspectionRoots ?? []),
     allowedMutationRoot: input.allowedMutationRoot?.trim() || null,
     availableSkills: [...input.availableSkills],

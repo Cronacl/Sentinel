@@ -38,6 +38,7 @@ function selectChatCoreTools(
   promptContext: ThreadPromptContext,
 ) {
   appendMatchingTools(activeTools, availableTools, ["manage_task"]);
+  appendMatchingTools(activeTools, availableTools, ["run_subagent"]);
 
   if (promptContext.availableSkills.length > 0) {
     appendMatchingTools(activeTools, availableTools, ["load_skill"]);

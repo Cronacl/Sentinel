@@ -62,6 +62,7 @@ mock.module("@/lib/ai/messages/ui", () => ({
 
 mock.module("@/server/db/schema", () => ({
   threadMessages: {
+    createdAt: "threadMessages.createdAt",
     threadId: "threadMessages.threadId",
   },
   threads: {
@@ -79,6 +80,7 @@ mock.module("@/server/db/schema", () => ({
     title: "threads.title",
     updatedAt: "threads.updatedAt",
     userId: "threads.userId",
+    visibility: "threads.visibility",
     workspaceId: "threads.workspaceId",
   },
   workspaces: {
