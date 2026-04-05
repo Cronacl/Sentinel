@@ -108,6 +108,14 @@ function buildSummaryOnlyPrompt() {
   ].join("\n");
 }
 
+function isRecoverablePostSummaryError(errorMessage: string) {
+  return (
+    /^Offset \d+ is out of range for this (?:file|directory) \(\d+ (?:lines|entries)\)\.$/.test(
+      errorMessage,
+    ) || /^Path not found: .+/.test(errorMessage)
+  );
+}
+
 function resolveDelegatedModelId(runtime: ThreadAgentCallOptions) {
   if (!runtime.resolvedModelId) {
     return null;
@@ -435,7 +443,11 @@ export async function executeRunSubagent({
     subagentOutcome = await loadSubagentOutcome(virtualThreadId);
   }
 
-  if (subagentOutcome.errorMessage) {
+  if (
+    subagentOutcome.errorMessage &&
+    (!subagentOutcome.summaryText ||
+      !isRecoverablePostSummaryError(subagentOutcome.errorMessage))
+  ) {
     return {
       childThreadId: null,
       status: "failed" as const,
