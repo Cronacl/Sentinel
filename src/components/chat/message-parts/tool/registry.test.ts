@@ -38,6 +38,7 @@ import {
 } from "./renderers/claude-web";
 import { SkillTool } from "./renderers/skill";
 import { GenerateVideoTool } from "./renderers/generate-video";
+import { RunSubagentTool } from "./renderers/run-subagent";
 import { GCalCreateEventTool } from "./renderers/integrations/gcal/gcal-create-event";
 import { IntegrationGenericTool } from "./renderers/integrations/shared/generic";
 
@@ -127,6 +128,27 @@ describe("resolveRenderer", () => {
     } as any);
 
     expect(renderer).toBe(GenerateVideoTool);
+  });
+
+  it("uses the RunSubagentTool renderer for run_subagent", () => {
+    const renderer = resolveRenderer({
+      input: {
+        allowMutations: true,
+        prompt: "Discover the repository layout",
+      },
+      output: {
+        childThreadId: null,
+        status: "completed",
+        summaryText: "Summary",
+        virtualThreadId: "virtual-thread-1",
+      },
+      state: "output-available",
+      toolCallId: "tool-call-subagent-1",
+      toolName: "run_subagent",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(RunSubagentTool);
   });
 
   it("uses the CodexFileChangeTool renderer for codex_file_change", () => {

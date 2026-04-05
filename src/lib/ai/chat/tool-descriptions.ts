@@ -367,3 +367,15 @@ export const askQuestionDescription = lines(
     "- Gather context from available tools first when they can answer the uncertainty instead.",
   ].join("\n"),
 );
+
+export const runSubagentDescription = lines(
+  "Delegate context-heavy work to a persisted Sentinel sub-agent.",
+  [
+    "- Creates or reuses a hidden virtual sub-thread under the current parent thread.",
+    "- Sub-agents get their own tool routing pass across the full available tool universe.",
+    "- Use this tool for repo discovery, broad research, and other tasks that would otherwise flood the main context window.",
+    "- toolHints are guidance for the delegated agent, not hard restrictions.",
+    "- If the sub-agent needs user input or approval, the runtime promotes it into a visible child thread and returns that linkage.",
+    "- The parent receives only the delegated run's final assistant summary text when the hidden run completes cleanly.",
+  ].join("\n"),
+);

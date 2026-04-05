@@ -665,6 +665,7 @@ describe("createThreadAgent", () => {
     });
 
     expect(Object.keys(prepared.tools)).toContain("manage_task");
+    expect(Object.keys(prepared.tools)).toContain("run_subagent");
     expect(Object.keys(prepared.tools)).not.toContain("create_plan");
     expect(Object.keys(prepared.tools)).not.toContain("update_plan");
     expect(Object.keys(prepared.tools)).not.toContain("ask_question");

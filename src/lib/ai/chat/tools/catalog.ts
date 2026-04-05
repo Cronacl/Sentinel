@@ -1,4 +1,5 @@
 export type ToolCategory =
+  | "delegation"
   | "execution"
   | "inspection"
   | "integration"
@@ -162,6 +163,12 @@ export const TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     capability: "to ask structured clarification questions",
     category: "plan",
     label: "the ask_question tool",
+  },
+  run_subagent: {
+    capability:
+      "to delegate context-heavy discovery, research, or implementation work to a persisted sub-agent",
+    category: "delegation",
+    label: "the run_subagent tool",
   },
 };
 

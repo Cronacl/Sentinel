@@ -97,6 +97,14 @@ import {
 } from "../session-server";
 import type { ThreadStreamEvent } from "../session-types";
 
+function getThreadAgentRole(
+  thread: Awaited<ReturnType<typeof persist.loadThread>> | null | undefined,
+) {
+  return thread?.visibility === "virtual" || thread?.sourceVirtualThreadId
+    ? "subagent"
+    : "primary";
+}
+
 type ResolvedModel = Awaited<ReturnType<typeof resolveThreadChatModel>>;
 type ThreadEventChannel = Awaited<ReturnType<typeof createThreadEventChannel>>;
 
@@ -882,7 +890,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
       });
 
     const latestUserText = extractLatestUserText(run.baseMessages);
-    const toolsEnabled = Boolean(workspaceRoot);
+    const toolsEnabled = run.request.toolsEnabled ?? Boolean(workspaceRoot);
     const hasIntegrations =
       run.threadMode === "chat" && enabledIntegrations.length > 0;
     const integrationApprovalFn = (toolName: string) =>
@@ -997,6 +1005,9 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           closeMcpTools = mcpRuntime.closeAll;
           const mcpToolNames = Object.keys(mcpRuntime.tools);
           const integrationToolNames = Object.keys(integrationTools);
+          const currentThreadState = await persist.loadThread(
+            run.request.threadId,
+          );
           logRuntimeTiming("preflight_ready", run.timingStartedAt, {
             runId: run.runId,
             threadId: run.request.threadId,
@@ -1007,6 +1018,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           emitPendingAssistantStatusLabel(run, "Building prompt...");
 
           const promptContext = buildThreadPromptContext({
+            agentRole: getThreadAgentRole(currentThreadState),
             allowedInspectionRoots: [
               ...(workspaceRoot ? [workspaceRoot] : []),
               ...skillSnapshot.skillRoots,
@@ -1166,6 +1178,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
               return streamErrorMessage;
             },
             options: {
+              agentRole: getThreadAgentRole(currentThreadState),
               availableSkills: skillSnapshot.skills,
               ...(workspaceRoot ? { defaultDirectory: workspaceRoot } : {}),
               globalSkillsBasePath: skillsBasePath,
@@ -1296,6 +1309,17 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           run.request.threadId,
           hasApprovalPending ? "awaiting_approval" : "idle",
         );
+        const settledThread = await persist.loadThread(run.request.threadId);
+        if (
+          !streamErrorMessage &&
+          !hasApprovalPending &&
+          settledThread?.sourceVirtualThreadId
+        ) {
+          await persist.syncThreadFromThread({
+            sourceThreadId: run.request.threadId,
+            targetThreadId: settledThread.sourceVirtualThreadId,
+          });
+        }
         if (!streamErrorMessage && !hasApprovalPending) {
           launchBackgroundContextCompactionWarmup({
             contextCompactionSettings,

@@ -9,6 +9,7 @@ import { PlanTool } from "./renderers/plan";
 import { ReadTool } from "./renderers/read";
 import { LoadDocumentTool } from "./renderers/load-document";
 import { RunTaskTool } from "./renderers/run-task";
+import { RunSubagentTool } from "./renderers/run-subagent";
 import { ShellTool } from "./renderers/shell";
 import { SkillTool } from "./renderers/skill";
 import { WebSearchTool } from "./renderers/websearch";
@@ -160,6 +161,7 @@ const renderers: Record<string, Renderer> = {
   read: ReadTool,
   load_document: LoadDocumentTool,
   run_task: RunTaskTool,
+  run_subagent: RunSubagentTool,
   save_memory: MemoryTool,
   search_memory: MemoryTool,
   shell_command: ShellTool,

@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import type { ThreadListInput } from "@/schemas/workspace-thread.schema";
 import type { Database } from "@/server/db";
@@ -37,7 +37,7 @@ export async function getOwnedThreadOrThrow(
   threadId: string,
 ) {
   const thread = await ctx.db.query.threads.findFirst({
-    where: eq(threads.id, threadId),
+    where: and(eq(threads.id, threadId), eq(threads.visibility, "visible")),
     with: {
       workspace: true,
     },
@@ -51,6 +51,32 @@ export async function getOwnedThreadOrThrow(
     throw new TRPCError({
       code: "NOT_FOUND",
       message: "Thread not found.",
+    });
+  }
+
+  return thread;
+}
+
+export async function getOwnedSubagentThreadOrThrow(
+  ctx: ProtectedTRPCContext,
+  threadId: string,
+) {
+  const thread = await ctx.db.query.threads.findFirst({
+    where: eq(threads.id, threadId),
+    with: {
+      workspace: true,
+    },
+  });
+
+  if (
+    !thread ||
+    thread.userId !== ctx.session.user.id ||
+    thread.workspace.userId !== ctx.session.user.id ||
+    (thread.visibility !== "virtual" && thread.sourceVirtualThreadId == null)
+  ) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Sub-agent thread not found.",
     });
   }
 

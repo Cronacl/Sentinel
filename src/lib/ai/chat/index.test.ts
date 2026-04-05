@@ -221,11 +221,13 @@ const getThreadContextCompactionCheckpoint = mock(async () =>
   cloneContextCompactionCheckpointState(),
 );
 const ensureThread = mock(async () => ({ created: true }));
+const ensureVirtualThread = mock(async () => "virtual-thread-1");
 const enqueueThreadFollowUp = mock(() => {});
 const enqueueThreadFollowUpAtFront = mock(() => {});
 const claimNextThreadFollowUp = mock(() => null);
 const deleteThreadFollowUp = mock(() => {});
 const getLatestAssistantMessageId = mock(async () => "assistant-1");
+const getLatestVisibleChildThreadForVirtualThread = mock(async () => null);
 const listThreadFollowUps = mock(async () => []);
 const moveThreadFollowUpToFront = mock(() => {});
 const removeThreadFollowUp = mock(() => {});
@@ -243,6 +245,8 @@ const setThreadStatus = mock(
 );
 const updateThreadChatSettings = mock(() => {});
 const updateThreadRepoState = mock(() => {});
+const promoteVirtualThreadToVisibleChild = mock(async () => "child-thread-1");
+const syncThreadFromThread = mock(async () => true);
 const updateThreadContextCompactionCheckpoint = mock(
   (_threadId, checkpoint) => {
     contextCompactionCheckpointVersion += 1;
@@ -688,18 +692,22 @@ mock.module("./persistence", () => ({
   enqueueThreadFollowUp,
   enqueueThreadFollowUpAtFront,
   ensureThread,
+  ensureVirtualThread,
   getLatestAssistantMessageId,
+  getLatestVisibleChildThreadForVirtualThread,
   getThreadContextCompactionCheckpoint,
   loadThread,
   listThreadFollowUps,
   loadThreadMessages,
   moveThreadFollowUpToFront,
+  promoteVirtualThreadToVisibleChild,
   removeThreadFollowUp,
   requeueThreadFollowUp,
   resetProcessingThreadFollowUps,
   setActiveMessage,
   setActiveStream,
   setThreadStatus,
+  syncThreadFromThread,
   updateMessageMetadata,
   updateThreadChatSettings,
   updateThreadContextCompactionCheckpoint,
@@ -715,18 +723,22 @@ mock.module("@/lib/ai/chat/persistence", () => ({
   enqueueThreadFollowUp,
   enqueueThreadFollowUpAtFront,
   ensureThread,
+  ensureVirtualThread,
   getLatestAssistantMessageId,
+  getLatestVisibleChildThreadForVirtualThread,
   getThreadContextCompactionCheckpoint,
   loadThread,
   listThreadFollowUps,
   loadThreadMessages,
   moveThreadFollowUpToFront,
+  promoteVirtualThreadToVisibleChild,
   removeThreadFollowUp,
   requeueThreadFollowUp,
   resetProcessingThreadFollowUps,
   setActiveMessage,
   setActiveStream,
   setThreadStatus,
+  syncThreadFromThread,
   updateMessageMetadata,
   updateThreadChatSettings,
   updateThreadContextCompactionCheckpoint,
@@ -1056,18 +1068,22 @@ beforeEach(async () => {
     enqueueThreadFollowUp,
     enqueueThreadFollowUpAtFront,
     ensureThread,
+    ensureVirtualThread,
     getLatestAssistantMessageId,
+    getLatestVisibleChildThreadForVirtualThread,
     getThreadContextCompactionCheckpoint,
     loadThread,
     listThreadFollowUps,
     loadThreadMessages,
     moveThreadFollowUpToFront,
+    promoteVirtualThreadToVisibleChild,
     removeThreadFollowUp,
     requeueThreadFollowUp,
     resetProcessingThreadFollowUps,
     setActiveMessage,
     setActiveStream,
     setThreadStatus,
+    syncThreadFromThread,
     updateMessageMetadata,
     updateThreadChatSettings,
     updateThreadContextCompactionCheckpoint,
@@ -1082,18 +1098,22 @@ beforeEach(async () => {
     enqueueThreadFollowUp,
     enqueueThreadFollowUpAtFront,
     ensureThread,
+    ensureVirtualThread,
     getLatestAssistantMessageId,
+    getLatestVisibleChildThreadForVirtualThread,
     getThreadContextCompactionCheckpoint,
     loadThread,
     listThreadFollowUps,
     loadThreadMessages,
     moveThreadFollowUpToFront,
+    promoteVirtualThreadToVisibleChild,
     removeThreadFollowUp,
     requeueThreadFollowUp,
     resetProcessingThreadFollowUps,
     setActiveMessage,
     setActiveStream,
     setThreadStatus,
+    syncThreadFromThread,
     updateMessageMetadata,
     updateThreadChatSettings,
     updateThreadContextCompactionCheckpoint,

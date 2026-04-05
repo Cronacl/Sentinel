@@ -89,7 +89,13 @@ export const workspacesRouter = createTRPCRouter({
         latestThreadUpdatedAt: max(threads.updatedAt).as("latest_updated"),
       })
       .from(threads)
-      .where(and(isNull(threads.archivedAt), eq(threads.userId, userId)))
+      .where(
+        and(
+          isNull(threads.archivedAt),
+          eq(threads.userId, userId),
+          eq(threads.visibility, "visible"),
+        ),
+      )
       .groupBy(threads.workspaceId)
       .all();
 

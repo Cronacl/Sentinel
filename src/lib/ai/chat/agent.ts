@@ -32,6 +32,7 @@ import { buildThreadAgentInstructions } from "./instructions";
 // ---------------------------------------------------------------------------
 
 const threadAgentCallOptionsSchema = z.object({
+  agentRole: z.enum(["primary", "subagent"]).optional(),
   defaultDirectory: z.string().optional(),
   globalSkillsBasePath: z.string().nullable().optional(),
   imageGenerationRuntime: z.custom<ImageGenerationRuntime>(),

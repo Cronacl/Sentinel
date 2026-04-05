@@ -48,6 +48,7 @@ function buildRuntimeSnapshot(
   const configuredSearchProviders = getConfiguredSearchProviders(promptContext);
 
   return section("Runtime Snapshot", [
+    `Agent role: ${promptContext.agentRole ?? "primary"}.`,
     `Thread mode: ${promptContext.threadMode}.`,
     promptContext.workspaceRoot
       ? `Workspace root: ${promptContext.workspaceRoot}.`
@@ -497,6 +498,12 @@ function buildChatModeOverlay(
   const categories = getActiveCategories(activeToolNames);
 
   return section("Mode Overlay", [
+    ...(promptContext.agentRole === "subagent"
+      ? [
+          "Sub-agent mode is active. Your final answer must be a detailed standalone markdown summary because only your last assistant text is returned to the parent agent.",
+          "In that final summary, preserve findings, evidence, commands or tools that mattered, decisions, blockers, approvals, and next steps. Do not rely on the parent seeing your full transcript.",
+        ]
+      : []),
     "Chat mode is active. You may inspect, execute, and mutate only through capabilities that are available in this call.",
     "Follow the task-driven cycle: create tasks -> inspect -> execute -> validate -> update task status -> repeat until all tasks are done.",
     "Do not ask the user to confirm every obvious intermediate step. Make progress until a real decision, approval boundary, or material ambiguity blocks you.",

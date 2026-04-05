@@ -158,7 +158,7 @@ export function RightSidebar() {
 
         {/* drawer panel */}
         <aside
-          className="bg-surface border-separator/70 ease-out-quart fixed top-0 right-0 z-50 flex h-dvh flex-col border-l shadow-xl transition-transform duration-300"
+          className="bg-surface border-separator/20 ease-out-quart fixed top-0 right-0 z-50 flex h-dvh flex-col border-l shadow-xl transition-transform duration-300"
           style={{
             width: sidebarWidth,
             maxWidth: "90vw",
@@ -177,7 +177,7 @@ export function RightSidebar() {
 
   return (
     <aside
-      className={`border-separator bg-surface relative flex h-full shrink-0 flex-col overflow-clip border-l ${
+      className={`border-separator/50 bg-surface relative flex h-full shrink-0 flex-col overflow-clip border-l ${
         isResizing ? "" : "ease-out-quart transition-[width] duration-300"
       }`}
       style={{ width: rightSidebarOpen ? sidebarWidth : 0 }}

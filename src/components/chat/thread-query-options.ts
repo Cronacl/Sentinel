@@ -2,8 +2,10 @@ import type { RouterOutputs } from "@/trpc/react";
 
 type ThreadDetails = RouterOutputs["threads"]["get"];
 
-export function buildThreadQueryOptions(cachedThread?: ThreadDetails): {
-  initialData?: ThreadDetails;
+export function buildThreadQueryOptions<T extends ThreadDetails>(
+  cachedThread?: T,
+): {
+  initialData?: T;
   placeholderData: () => undefined;
 } {
   return {

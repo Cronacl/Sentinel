@@ -34,6 +34,7 @@ import {
   THREAD_PLAN_QUESTION_STATUSES,
   THREAD_PLAN_TASK_STATUSES,
   THREAD_STATUSES,
+  THREAD_VISIBILITIES,
 } from "./enums";
 import type { ShortcutOverrides } from "@/lib/shortcuts/schema";
 
@@ -215,6 +216,12 @@ export const threads = sqliteTable(
       .references(() => users.id),
     title: text("title").notNull(),
     summary: text("summary"),
+    visibility: text("visibility", { enum: THREAD_VISIBILITIES })
+      .notNull()
+      .default("visible"),
+    parentThreadId: text("parent_thread_id"),
+    virtualKey: text("virtual_key"),
+    sourceVirtualThreadId: text("source_virtual_thread_id"),
     mode: text("mode", { enum: THREAD_MODES }).notNull().default("chat"),
     chatEngine: text("chat_engine", { enum: CHAT_ENGINES })
       .notNull()
@@ -244,6 +251,16 @@ export const threads = sqliteTable(
   (table) => [
     index("thread_workspace_id_idx").on(table.workspaceId),
     index("thread_user_id_idx").on(table.userId),
+    index("thread_parent_thread_id_idx").on(table.parentThreadId),
+    index("thread_visibility_parent_idx").on(
+      table.visibility,
+      table.parentThreadId,
+    ),
+    uniqueIndex("thread_virtual_parent_key_unique").on(
+      table.parentThreadId,
+      table.virtualKey,
+    ),
+    uniqueIndex("thread_source_virtual_unique").on(table.sourceVirtualThreadId),
     index("thread_workspace_archived_updated_idx").on(
       table.workspaceId,
       table.archivedAt,

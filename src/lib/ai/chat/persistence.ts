@@ -1,10 +1,10 @@
-import { and, asc, eq, lt } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
 
 import { db } from "@/server/db";
 import { threadFollowUps, threadMessages, threads } from "@/server/db/schema";
 import type { ThreadMode } from "@/lib/plan";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
-import type { ChatEngine } from "@/server/db/enums";
+import type { ChatEngine, ThreadVisibility } from "@/server/db/enums";
 import type {
   ClaudeThreadState,
   CodexThreadState,
@@ -49,6 +49,10 @@ export type ThreadContextCompactionCheckpoint = {
   updatedAt: Date | null;
 };
 
+export type PersistedThreadRecord = NonNullable<
+  Awaited<ReturnType<typeof loadThread>>
+>;
+
 export async function ensureThread(
   threadId: string,
   userId: string,
@@ -81,6 +85,55 @@ export async function ensureThread(
   return { created: !existing };
 }
 
+export async function ensureVirtualThread(input: {
+  chatEngineState?: ThreadChatEngineState | null;
+  engine?: ChatEngine;
+  mode?: ThreadMode;
+  parentThreadId: string;
+  title: string;
+  userId: string;
+  virtualKey?: string | null;
+  workspaceId: string;
+}) {
+  const existing =
+    input.virtualKey == null
+      ? null
+      : await db.query.threads.findFirst({
+          where: and(
+            eq(threads.parentThreadId, input.parentThreadId),
+            eq(threads.visibility, "virtual"),
+            eq(threads.userId, input.userId),
+            eq(threads.workspaceId, input.workspaceId),
+            eq(threads.virtualKey, input.virtualKey),
+          ),
+          orderBy: (thread, { desc }) => [desc(thread.updatedAt)],
+          columns: { id: true },
+        });
+
+  const threadId = existing?.id ?? crypto.randomUUID();
+
+  if (!existing) {
+    db.insert(threads)
+      .values({
+        chatEngine: input.engine ?? "sentinel",
+        ...(input.chatEngineState
+          ? { chatEngineState: input.chatEngineState }
+          : {}),
+        id: threadId,
+        mode: input.mode ?? "chat",
+        parentThreadId: input.parentThreadId,
+        title: input.title,
+        userId: input.userId,
+        virtualKey: input.virtualKey ?? null,
+        visibility: "virtual",
+        workspaceId: input.workspaceId,
+      })
+      .run();
+  }
+
+  return threadId;
+}
+
 export async function loadThread(threadId: string) {
   const thread = await db.query.threads.findFirst({
     where: eq(threads.id, threadId),
@@ -91,9 +144,13 @@ export async function loadThread(threadId: string) {
       chatEngineState: true,
       id: true,
       mode: true,
+      parentThreadId: true,
+      sourceVirtualThreadId: true,
       status: true,
       title: true,
       userId: true,
+      visibility: true,
+      virtualKey: true,
       workspaceId: true,
     },
   });
@@ -236,6 +293,44 @@ export async function loadThreadMessages(threadId: string) {
     orderBy: (m, { asc }) => [asc(m.createdAt)],
   });
   return rows as unknown as PersistedThreadMessageRecord[];
+}
+
+export async function getLatestVisibleChildThreadForVirtualThread(
+  virtualThreadId: string,
+) {
+  const child = await db.query.threads.findFirst({
+    where: and(
+      eq(threads.sourceVirtualThreadId, virtualThreadId),
+      eq(threads.visibility, "visible"),
+    ),
+    orderBy: (thread, { desc }) => [desc(thread.updatedAt)],
+    columns: {
+      activeStreamId: true,
+      archivedAt: true,
+      chatEngine: true,
+      chatEngineState: true,
+      id: true,
+      mode: true,
+      parentThreadId: true,
+      sourceVirtualThreadId: true,
+      status: true,
+      title: true,
+      userId: true,
+      visibility: true,
+      virtualKey: true,
+      workspaceId: true,
+    },
+  });
+
+  if (!child) {
+    return null;
+  }
+
+  return {
+    ...child,
+    activeRunId: child.activeStreamId,
+    chatEngineState: parseThreadChatEngineState(child.chatEngineState),
+  };
 }
 
 export async function listThreadFollowUps(
@@ -534,6 +629,31 @@ export function upsertMessage(
   return storedMessage;
 }
 
+export function replaceThreadMessages(
+  threadId: string,
+  messages: ThreadUIMessage[],
+) {
+  db.transaction((tx) => {
+    tx.delete(threadMessages)
+      .where(eq(threadMessages.threadId, threadId))
+      .run();
+
+    for (const message of messages) {
+      tx.insert(threadMessages)
+        .values({
+          ...serializeThreadUIMessage(message),
+          threadId,
+        })
+        .run();
+    }
+
+    tx.update(threads)
+      .set({ updatedAt: new Date() })
+      .where(eq(threads.id, threadId))
+      .run();
+  });
+}
+
 export async function setActiveMessage(threadId: string, messageId: string) {
   const messages = await db.query.threadMessages.findMany({
     where: eq(threadMessages.threadId, threadId),
@@ -636,4 +756,144 @@ export function setThreadStatus(
   status: "idle" | "streaming" | "awaiting_approval",
 ) {
   db.update(threads).set({ status }).where(eq(threads.id, threadId)).run();
+}
+
+export function updateThreadVisibility(
+  threadId: string,
+  visibility: ThreadVisibility,
+) {
+  db.update(threads)
+    .set({ updatedAt: new Date(), visibility })
+    .where(eq(threads.id, threadId))
+    .run();
+}
+
+export async function syncThreadFromThread(input: {
+  sourceThreadId: string;
+  targetThreadId: string;
+}) {
+  const [sourceThread, sourceMessages] = await Promise.all([
+    db.query.threads.findFirst({
+      where: eq(threads.id, input.sourceThreadId),
+      columns: {
+        activeStreamId: true,
+        chatEngine: true,
+        chatEngineState: true,
+        chatModelId: true,
+        chatReasoningEffort: true,
+        mode: true,
+        status: true,
+        summary: true,
+        title: true,
+      },
+    }),
+    db.query.threadMessages.findMany({
+      where: eq(threadMessages.threadId, input.sourceThreadId),
+      orderBy: (message, { asc }) => [asc(message.createdAt)],
+    }),
+  ]);
+
+  if (!sourceThread) {
+    return false;
+  }
+
+  db.transaction((tx) => {
+    tx.update(threads)
+      .set({
+        activeStreamId: sourceThread.activeStreamId,
+        chatEngine: sourceThread.chatEngine,
+        chatEngineState: sourceThread.chatEngineState,
+        chatModelId: sourceThread.chatModelId,
+        chatReasoningEffort: sourceThread.chatReasoningEffort,
+        mode: sourceThread.mode,
+        status: sourceThread.status,
+        summary: sourceThread.summary,
+        title: sourceThread.title,
+        updatedAt: new Date(),
+      })
+      .where(eq(threads.id, input.targetThreadId))
+      .run();
+
+    tx.delete(threadMessages)
+      .where(eq(threadMessages.threadId, input.targetThreadId))
+      .run();
+
+    for (const message of sourceMessages) {
+      tx.insert(threadMessages)
+        .values({
+          createdAt: message.createdAt,
+          messageId: message.messageId,
+          metadata: message.metadata,
+          parts: message.parts,
+          role: message.role,
+          threadId: input.targetThreadId,
+          updatedAt: message.updatedAt,
+        })
+        .run();
+    }
+  });
+
+  return true;
+}
+
+export async function promoteVirtualThreadToVisibleChild(input: {
+  parentThreadId: string;
+  title: string;
+  userId: string;
+  virtualThreadId: string;
+  workspaceId: string;
+}) {
+  const virtualThread = await loadThread(input.virtualThreadId);
+  if (!virtualThread) {
+    throw new Error("Virtual thread not found.");
+  }
+
+  const existingChild = await getLatestVisibleChildThreadForVirtualThread(
+    input.virtualThreadId,
+  );
+  const childThreadId = existingChild?.id ?? crypto.randomUUID();
+
+  if (!existingChild) {
+    db.insert(threads)
+      .values({
+        chatEngine: virtualThread.chatEngine,
+        chatEngineState: virtualThread.chatEngineState,
+        id: childThreadId,
+        mode: virtualThread.mode,
+        parentThreadId: input.parentThreadId,
+        sourceVirtualThreadId: input.virtualThreadId,
+        title: input.title,
+        userId: input.userId,
+        visibility: "visible",
+        workspaceId: input.workspaceId,
+      })
+      .run();
+  } else {
+    db.update(threads)
+      .set({
+        chatEngine: virtualThread.chatEngine,
+        chatEngineState: virtualThread.chatEngineState,
+        mode: virtualThread.mode,
+        parentThreadId: input.parentThreadId,
+        title: input.title,
+        updatedAt: new Date(),
+      })
+      .where(eq(threads.id, childThreadId))
+      .run();
+  }
+
+  await syncThreadFromThread({
+    sourceThreadId: input.virtualThreadId,
+    targetThreadId: childThreadId,
+  });
+
+  db.update(threads)
+    .set({
+      title: input.title,
+      updatedAt: new Date(),
+    })
+    .where(eq(threads.id, childThreadId))
+    .run();
+
+  return childThreadId;
 }

@@ -67,6 +67,9 @@ export const THREAD_STATUSES = [
 ] as const;
 export type ThreadStatus = (typeof THREAD_STATUSES)[number];
 
+export const THREAD_VISIBILITIES = ["visible", "virtual"] as const;
+export type ThreadVisibility = (typeof THREAD_VISIBILITIES)[number];
+
 export const THREAD_PLAN_TASK_STATUSES = [
   "pending",
   "in_progress",

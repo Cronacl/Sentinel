@@ -38,6 +38,7 @@ export type ThreadChatRequest = {
   reasoningEffort?: ReasoningEffort;
   threadId: string;
   threadMode?: ThreadMode;
+  toolsEnabled?: boolean;
   toolApprovalResponse?: ThreadToolApprovalResponse;
   trigger: ThreadChatTrigger;
   userId: string;

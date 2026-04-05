@@ -42,6 +42,7 @@ mock.module("@/server/db/schema", () => ({
     createdAt: "thread.createdAt",
     updatedAt: "thread.updatedAt",
     userId: "thread.userId",
+    visibility: "thread.visibility",
     workspaceId: "thread.workspaceId",
   },
   users: {
