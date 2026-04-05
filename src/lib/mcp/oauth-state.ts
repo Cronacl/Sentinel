@@ -1,10 +1,10 @@
 import type { OAuthClientInformation, OAuthTokens } from "@ai-sdk/mcp";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 
 import { env } from "@/env";
 import { decrypt, encrypt } from "@/lib/ai/providers/encrypt";
+import { getSentinelStateRoot } from "@/lib/runtime/local-state";
 
 type McpOAuthStateRecord = {
   clientInformation?: OAuthClientInformation;
@@ -27,11 +27,12 @@ const STATE_DIRECTORY_MODE = 0o700;
 const STATE_FILE_MODE = 0o600;
 
 function getStateRoot() {
-  if (env.SENTINEL_STATE_PATH?.trim()) {
-    return path.dirname(env.SENTINEL_STATE_PATH.trim());
-  }
-
-  return path.join(os.homedir(), ".sentinel");
+  return getSentinelStateRoot({
+    env: {
+      ...process.env,
+      SENTINEL_STATE_PATH: env.SENTINEL_STATE_PATH,
+    },
+  });
 }
 
 function getStorePath() {

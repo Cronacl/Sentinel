@@ -2,14 +2,7 @@ import "server-only";
 
 import { execFile, spawn, type ChildProcessByStdio } from "node:child_process";
 import { constants as fsConstants } from "node:fs";
-import {
-  access,
-  chmod,
-  mkdir,
-  readFile,
-  readdir,
-  writeFile,
-} from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { Readable, Writable } from "node:stream";
@@ -22,6 +15,15 @@ import {
 
 import { createLogger } from "@/lib/logger";
 import { setLocalRuntimeEnvValue } from "@/lib/runtime/local-runtime-env";
+import {
+  applyPrivateFsMode,
+  getSentinelStateRoot,
+} from "@/lib/runtime/local-state";
+import {
+  buildManagedExecutablePathValue,
+  buildPreferredExecutablePathValue,
+  getPlatformHomeDirectory,
+} from "@/lib/runtime/platform-paths";
 import type {
   ClaudePermissionMode,
   ClaudeThreadState,
@@ -151,7 +153,7 @@ let cachedRuntime: {
 let backgroundStatusRefresh: Promise<void> | null = null;
 
 function getLocalStateDirectory() {
-  return path.join(process.env.HOME?.trim() || os.homedir(), ".sentinel");
+  return getSentinelStateRoot();
 }
 
 function getClaudeStatusSnapshotPath() {
@@ -178,8 +180,8 @@ async function writeClaudeStatusSnapshot(snapshot: ClaudeStatusSnapshot) {
     encoding: "utf8",
     mode: LOCAL_STATE_FILE_MODE,
   });
-  await chmod(localStateDirectory, LOCAL_STATE_DIRECTORY_MODE);
-  await chmod(snapshotPath, LOCAL_STATE_FILE_MODE);
+  await applyPrivateFsMode(localStateDirectory, LOCAL_STATE_DIRECTORY_MODE);
+  await applyPrivateFsMode(snapshotPath, LOCAL_STATE_FILE_MODE);
 }
 
 async function readClaudeStatusSnapshot(options: { binaryPath: string }) {
@@ -467,74 +469,11 @@ export function isClaudeEngineAvailable(status: ClaudeEngineStatus) {
 }
 
 function getPreferredPathValue(pathValue?: string | null) {
-  const homePath = process.env.HOME ?? os.homedir();
-  const candidateEntries =
-    process.platform === "win32"
-      ? []
-      : [
-          path.join(homePath, ".bun", "bin"),
-          path.join(homePath, ".local", "bin"),
-          path.join(homePath, "bin"),
-          path.join(homePath, ".volta", "bin"),
-          path.join(homePath, ".asdf", "shims"),
-          path.join(homePath, ".nodenv", "shims"),
-          path.join(homePath, ".nvm", "current", "bin"),
-          path.join(homePath, ".fnm", "current", "bin"),
-          path.join(homePath, "Library", "pnpm"),
-          "/opt/homebrew/bin",
-          "/usr/local/bin",
-          "/opt/local/bin",
-          "/usr/bin",
-          "/bin",
-        ];
-  const entries = [
-    ...(pathValue ?? "")
-      .split(path.delimiter)
-      .map((entry) => entry.trim())
-      .filter(Boolean),
-    ...candidateEntries,
-  ];
-
-  return Array.from(new Set(entries)).join(path.delimiter);
-}
-
-async function listSubdirectories(rootPath: string) {
-  try {
-    const entries = await readdir(rootPath, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => path.join(rootPath, entry.name));
-  } catch {
-    return [];
-  }
+  return buildPreferredExecutablePathValue(pathValue);
 }
 
 async function getManagedPathValue(pathValue?: string | null) {
-  const homePath = process.env.HOME ?? os.homedir();
-  const managedEntries =
-    process.platform === "win32"
-      ? []
-      : [
-          ...(
-            await listSubdirectories(
-              path.join(homePath, ".nvm", "versions", "node"),
-            )
-          ).map((directory) => path.join(directory, "bin")),
-          ...(
-            await listSubdirectories(
-              path.join(homePath, ".fnm", "node-versions"),
-            )
-          ).map((directory) => path.join(directory, "installation", "bin")),
-          ...(
-            await listSubdirectories(
-              path.join(homePath, ".local", "share", "fnm", "node-versions"),
-            )
-          ).map((directory) => path.join(directory, "installation", "bin")),
-        ];
-
-  return getPreferredPathValue(
-    [pathValue, ...managedEntries].filter(Boolean).join(path.delimiter),
-  );
+  return buildManagedExecutablePathValue(pathValue);
 }
 
 function buildLoginShellLookupArgs(script: string) {
@@ -634,7 +573,7 @@ async function resolveClaudeCodeRuntimeFromWindowsWhere() {
   for (const candidatePath of candidates) {
     const env = {
       ...process.env,
-      HOME: process.env.HOME ?? os.homedir(),
+      HOME: getPlatformHomeDirectory(),
     };
     const verified = await verifyClaudeExecutable(candidatePath, env);
     if (verified) {
@@ -669,7 +608,7 @@ async function resolveClaudeCodeRuntimeFromShell() {
       {
         env: {
           ...process.env,
-          HOME: process.env.HOME ?? os.homedir(),
+          HOME: getPlatformHomeDirectory(),
           TERM: process.env.TERM ?? "dumb",
         },
         timeout: SHELL_LOOKUP_TIMEOUT_MS,
@@ -696,7 +635,7 @@ async function resolveClaudeCodeRuntimeFromShell() {
 
   const env = {
     ...process.env,
-    HOME: process.env.HOME ?? os.homedir(),
+    HOME: getPlatformHomeDirectory(),
     ...(pathValue ? { PATH: pathValue } : {}),
   };
   const verifiedCommand = resolvedCommand
@@ -729,7 +668,7 @@ export async function resolveClaudeCodeRuntime(options?: {
     const preferredPath = await getManagedPathValue(process.env.PATH);
     const baseEnv = {
       ...process.env,
-      HOME: process.env.HOME ?? os.homedir(),
+      HOME: getPlatformHomeDirectory(),
       PATH: preferredPath,
     };
     const overridePath =
@@ -788,7 +727,7 @@ export async function resolveClaudeCodeRuntime(options?: {
       binaryVersion: null,
       env: {
         ...process.env,
-        HOME: process.env.HOME ?? os.homedir(),
+        HOME: getPlatformHomeDirectory(),
       },
       executablePath: null,
     } satisfies ResolvedClaudeCodeRuntime;

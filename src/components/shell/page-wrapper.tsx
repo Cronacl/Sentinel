@@ -4,7 +4,10 @@ import type { CSSProperties, PropsWithChildren, ReactNode } from "react";
 
 import { getDesktopApi } from "@/lib/desktop/client";
 
-import { getDesktopWindowControlsInset } from "./sidebar-window-chrome";
+import {
+  getDesktopChromeMetrics,
+  getDesktopWindowControlsInset,
+} from "./sidebar-window-chrome";
 import { useShell } from "./shell-context";
 import { SidebarToggle } from "./sidebar-toggle";
 
@@ -46,7 +49,8 @@ export function PageWrapper({
   const isMacDesktop = platform === "darwin";
   const { leftSidebarOpen } = useShell();
   const showToggle = !leftSidebarOpen;
-  const headerHeight = 44;
+  const chromeMetrics = getDesktopChromeMetrics(platform);
+  const headerHeight = Math.max(44, chromeMetrics.titleBarHeight);
   const leadingInset = isMacDesktop && showToggle ? 92 : undefined;
   const trailingInset = getDesktopWindowControlsInset(platform) || undefined;
   const headerStyle = {

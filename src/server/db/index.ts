@@ -5,14 +5,11 @@ import os from "node:os";
 import { sql } from "drizzle-orm";
 
 import { createLogger } from "@/lib/logger";
+import { getSentinelDbFilePath } from "@/lib/runtime/local-state";
 import * as schema from "./schema";
 
 function getDbPath(): string {
-  if (process.env.SENTINEL_DB_PATH?.trim()) {
-    return process.env.SENTINEL_DB_PATH.trim();
-  }
-
-  return path.join(os.homedir(), ".sentinel", "sentinel.db");
+  return getSentinelDbFilePath();
 }
 
 function getVectorDbPath(): string {

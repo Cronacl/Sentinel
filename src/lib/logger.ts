@@ -1,6 +1,7 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
+
+import { getSentinelStateRoot } from "@/lib/runtime/local-state";
 
 type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -17,7 +18,7 @@ const MAX_ROTATED_FILES = 3;
 function getLogDirectory(): string {
   const sentinelDir = process.env.SENTINEL_DB_PATH?.trim()
     ? path.dirname(process.env.SENTINEL_DB_PATH.trim())
-    : path.join(os.homedir(), ".sentinel");
+    : getSentinelStateRoot();
   return path.join(sentinelDir, "logs");
 }
 

@@ -5,13 +5,28 @@ export const APP_HOST = "127.0.0.1";
 export const APP_PORT = 3232;
 export const APP_URL = `http://localhost:${APP_PORT}`;
 
+function getHomeDirectory() {
+  if (process.platform === "win32") {
+    return (
+      process.env.USERPROFILE ||
+      (process.env.HOMEDRIVE && process.env.HOMEPATH
+        ? path.win32.join(process.env.HOMEDRIVE, process.env.HOMEPATH)
+        : "") ||
+      process.env.HOME ||
+      os.homedir()
+    );
+  }
+
+  return process.env.HOME || os.homedir();
+}
+
 export function createRuntimePaths({
   appRoot,
   isPackaged,
   resourcesPath,
   userDataPath,
 }) {
-  const stableStateRoot = path.join(os.homedir(), ".sentinel");
+  const stableStateRoot = path.join(getHomeDirectory(), ".sentinel");
   const stableEnvPath = path.join(stableStateRoot, "desktop.env");
   const legacyEnvPath = path.join(userDataPath, "desktop.env");
 

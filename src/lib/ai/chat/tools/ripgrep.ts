@@ -130,7 +130,7 @@ async function defaultExtractArchive({
     return;
   }
 
-  await runCommand("powershell", [
+  await runCommand("powershell.exe", [
     "-NoProfile",
     "-Command",
     `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${extractDirectory.replace(/'/g, "''")}' -Force`,
@@ -273,9 +273,6 @@ async function installManagedRipgrep({
 export async function resolveRipgrepPath(options: RipgrepResolverOptions = {}) {
   const arch = options.arch ?? process.arch;
   const platform = options.platform ?? process.platform;
-  const platformKey = getPlatformKey({ arch, platform });
-  const platformConfig = PLATFORM_CONFIG[platformKey];
-
   const whichExecutable =
     options.whichExecutable ?? ((name: string) => findExecutableOnPath(name));
   const systemExecutable = await whichExecutable("rg");
@@ -283,6 +280,15 @@ export async function resolveRipgrepPath(options: RipgrepResolverOptions = {}) {
   if (systemExecutable && (await isExecutableFile(systemExecutable))) {
     return systemExecutable;
   }
+
+  if (platform === "win32" && arch === "arm64") {
+    throw new Error(
+      "Ripgrep fallback is not available on Windows ARM64 for this bundled version. Install rg on PATH to enable search tooling.",
+    );
+  }
+
+  const platformKey = getPlatformKey({ arch, platform });
+  const platformConfig = PLATFORM_CONFIG[platformKey];
 
   if (!platformConfig) {
     throw new Error(`Ripgrep is not supported on platform ${platformKey}.`);

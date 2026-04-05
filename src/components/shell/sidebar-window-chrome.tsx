@@ -7,22 +7,58 @@ import type { DesktopPlatform } from "@/lib/desktop/contracts";
 
 import { SidebarToggle } from "./sidebar-toggle";
 
-const DESKTOP_WINDOW_CONTROLS_WIDTH: Record<
-  Exclude<DesktopPlatform, "darwin">,
-  number
-> = {
-  linux: 112,
-  win32: 132,
+type DesktopChromeMetrics = {
+  sidebarChromeHeight: number;
+  sidebarLeadingWidth: number;
+  sidebarTrailingWidth: number;
+  titleBarHeight: number;
+  windowControlsWidth: number;
 };
+
+const DEFAULT_DESKTOP_CHROME_METRICS: DesktopChromeMetrics = {
+  sidebarChromeHeight: 56,
+  sidebarLeadingWidth: 52,
+  sidebarTrailingWidth: 52,
+  titleBarHeight: 0,
+  windowControlsWidth: 0,
+};
+
+const DESKTOP_CHROME_METRICS: Record<DesktopPlatform, DesktopChromeMetrics> = {
+  darwin: {
+    sidebarChromeHeight: 56,
+    sidebarLeadingWidth: 72,
+    sidebarTrailingWidth: 72,
+    titleBarHeight: 0,
+    windowControlsWidth: 0,
+  },
+  linux: {
+    sidebarChromeHeight: 56,
+    sidebarLeadingWidth: 52,
+    sidebarTrailingWidth: 112,
+    titleBarHeight: 32,
+    windowControlsWidth: 112,
+  },
+  win32: {
+    sidebarChromeHeight: 56,
+    sidebarLeadingWidth: 52,
+    sidebarTrailingWidth: 132,
+    titleBarHeight: 32,
+    windowControlsWidth: 132,
+  },
+};
+
+export function getDesktopChromeMetrics(
+  platform: DesktopPlatform | null,
+): DesktopChromeMetrics {
+  return platform
+    ? DESKTOP_CHROME_METRICS[platform]
+    : DEFAULT_DESKTOP_CHROME_METRICS;
+}
 
 export function getDesktopWindowControlsInset(
   platform: DesktopPlatform | null,
 ) {
-  if (platform === "win32" || platform === "linux") {
-    return DESKTOP_WINDOW_CONTROLS_WIDTH[platform];
-  }
-
-  return 0;
+  return getDesktopChromeMetrics(platform).windowControlsWidth;
 }
 
 function WindowsMinimizeIcon() {
@@ -60,6 +96,19 @@ function LinuxMaximizeIcon() {
         x="2.5"
         y="2.5"
       />
+    </svg>
+  );
+}
+
+function WindowsMaximizeIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-2.5 w-2.5"
+      fill="none"
+      viewBox="0 0 10 10"
+    >
+      <path d="M2 2.5h6v5H2z" stroke="currentColor" strokeWidth="1" />
     </svg>
   );
 }
@@ -137,31 +186,67 @@ function LinuxWindowControls({ className }: { className?: string }) {
   );
 }
 
-export function DesktopWindowControls({
+function WindowsWindowControls({ className }: { className?: string }) {
+  const desktop = getDesktopApi();
+
+  return (
+    <div className={`flex h-8 items-stretch ${className ?? ""}`.trim()}>
+      <WindowControlButton
+        ariaLabel="Minimize window"
+        className="h-8 w-11 hover:bg-black/6 dark:hover:bg-white/8"
+        onPress={() => void desktop?.window.minimize()}
+      >
+        <WindowsMinimizeIcon />
+      </WindowControlButton>
+      <WindowControlButton
+        ariaLabel="Maximize window"
+        className="h-8 w-11 hover:bg-black/6 dark:hover:bg-white/8"
+        onPress={() => void desktop?.window.toggleMaximize()}
+      >
+        <WindowsMaximizeIcon />
+      </WindowControlButton>
+      <WindowControlButton
+        ariaLabel="Close window"
+        className="h-8 w-11 hover:bg-[#e81123] hover:text-white"
+        onPress={() => void desktop?.window.close()}
+      >
+        <CloseIcon />
+      </WindowControlButton>
+    </div>
+  );
+}
+
+export function DesktopTitleBar({
   platform,
 }: {
-  platform: DesktopPlatform | null;
+  platform: Exclude<DesktopPlatform, "darwin">;
 }) {
-  if (platform === "linux") {
-    return <LinuxWindowControls />;
-  }
-
-  return null;
+  return (
+    <div className="app-region-drag flex h-8 w-full shrink-0 items-center justify-end border-b border-border/10 bg-surface">
+      {platform === "linux" ? (
+        <div className="app-region-no-drag">
+          <LinuxWindowControls />
+        </div>
+      ) : (
+        <div className="app-region-no-drag">
+          <WindowsWindowControls />
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function SidebarWindowChrome() {
   const desktop = getDesktopApi();
   const platform = desktop?.app.platform ?? null;
-  const isMac = platform === "darwin";
-  const chromeHeight = 56;
-  const edgeWidth = isMac ? 72 : 52;
+  const chromeMetrics = getDesktopChromeMetrics(platform);
 
   return (
     <div
       className="app-region-drag grid shrink-0 items-center px-3"
       style={{
-        gridTemplateColumns: `${edgeWidth}px 1fr ${edgeWidth}px`,
-        minHeight: chromeHeight,
+        gridTemplateColumns: `${chromeMetrics.sidebarLeadingWidth}px 1fr ${chromeMetrics.sidebarTrailingWidth}px`,
+        minHeight: chromeMetrics.sidebarChromeHeight,
       }}
     >
       <div aria-hidden />

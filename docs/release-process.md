@@ -42,6 +42,8 @@ The main CI workflow is split into stable branch-protection jobs:
 
 `changes` uses path-aware filters so docs-only pull requests skip `typecheck` and `test`.
 
+The default CI gate keeps automated test coverage on `ubuntu-24.04` for the fastest and lowest-cost signal. Windows and Linux desktop parity checks still belong in `desktop-verify` plus the manual platform smoke checklist before release.
+
 ## Desktop Verification
 
 Use the `desktop-verify` workflow to test desktop packaging before a tag exists.
@@ -50,7 +52,10 @@ Use the `desktop-verify` workflow to test desktop packaging before a tag exists.
 2. Set `git_ref` to the branch, commit SHA, or tag you want to validate.
 3. Leave `platforms` as `linux` for the cheapest default verification.
 4. Select `mac`, `windows`, or `all` only when you need platform-specific validation.
-5. Review the uploaded workflow artifacts. This workflow never creates or updates a GitHub Release.
+5. Review the uploaded workflow artifacts.
+6. Complete the manual Windows/Linux smoke flow in [desktop-platform-smoke-checklist.md](/Users/mohamedachaq/rework/cronacl-saas/sentinel/docs/desktop-platform-smoke-checklist.md) for any platform you intend to ship.
+
+This workflow never creates or updates a GitHub Release. It is also not complete until the matching platform smoke checklist has been executed by an owner.
 
 ## Releases
 

@@ -9,6 +9,11 @@ import os from "node:os";
 import path from "node:path";
 
 import { setLocalRuntimeEnvValue } from "@/lib/runtime/local-runtime-env";
+import {
+  buildManagedExecutablePathValue,
+  buildPreferredExecutablePathValue,
+  getPlatformHomeDirectory,
+} from "@/lib/runtime/platform-paths";
 
 const CODEX_PATH_START_MARKER = "__SENTINEL_CODEX_PATH_START__";
 const CODEX_PATH_END_MARKER = "__SENTINEL_CODEX_PATH_END__";
@@ -127,35 +132,7 @@ async function findExecutableInPath(
 }
 
 function getPreferredPathValue(pathValue?: string | null) {
-  const homePath = process.env.HOME ?? os.homedir();
-  const candidateEntries =
-    process.platform === "win32"
-      ? []
-      : [
-          path.join(homePath, ".bun", "bin"),
-          path.join(homePath, ".local", "bin"),
-          path.join(homePath, "bin"),
-          path.join(homePath, ".volta", "bin"),
-          path.join(homePath, ".asdf", "shims"),
-          path.join(homePath, ".nodenv", "shims"),
-          path.join(homePath, ".nvm", "current", "bin"),
-          path.join(homePath, ".fnm", "current", "bin"),
-          path.join(homePath, "Library", "pnpm"),
-          "/opt/homebrew/bin",
-          "/usr/local/bin",
-          "/opt/local/bin",
-          "/usr/bin",
-          "/bin",
-        ];
-  const entries = [
-    ...(pathValue ?? "")
-      .split(path.delimiter)
-      .map((entry) => entry.trim())
-      .filter(Boolean),
-    ...candidateEntries,
-  ];
-
-  return Array.from(new Set(entries)).join(path.delimiter);
+  return buildPreferredExecutablePathValue(pathValue);
 }
 
 async function listSubdirectories(rootPath: string) {
@@ -170,31 +147,7 @@ async function listSubdirectories(rootPath: string) {
 }
 
 async function getManagedPathValue(pathValue?: string | null) {
-  const homePath = process.env.HOME ?? os.homedir();
-  const managedEntries =
-    process.platform === "win32"
-      ? []
-      : [
-          ...(
-            await listSubdirectories(
-              path.join(homePath, ".nvm", "versions", "node"),
-            )
-          ).map((directory) => path.join(directory, "bin")),
-          ...(
-            await listSubdirectories(
-              path.join(homePath, ".fnm", "node-versions"),
-            )
-          ).map((directory) => path.join(directory, "installation", "bin")),
-          ...(
-            await listSubdirectories(
-              path.join(homePath, ".local", "share", "fnm", "node-versions"),
-            )
-          ).map((directory) => path.join(directory, "installation", "bin")),
-        ];
-
-  return getPreferredPathValue(
-    [pathValue, ...managedEntries].filter(Boolean).join(path.delimiter),
-  );
+  return buildManagedExecutablePathValue(pathValue);
 }
 
 function buildLoginShellLookupArgs(script: string) {
@@ -319,7 +272,7 @@ async function resolveCodexCliFromShell() {
       {
         env: {
           ...process.env,
-          HOME: process.env.HOME ?? os.homedir(),
+          HOME: getPlatformHomeDirectory(),
           TERM: process.env.TERM ?? "dumb",
         },
         timeout: SHELL_LOOKUP_TIMEOUT_MS,

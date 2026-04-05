@@ -6,7 +6,22 @@ import path from "node:path";
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
 
-const LOCAL_STATE_DIRECTORY = path.join(os.homedir(), ".sentinel");
+function getLocalHomeDirectory() {
+  if (process.platform === "win32") {
+    return (
+      process.env.USERPROFILE ||
+      (process.env.HOMEDRIVE && process.env.HOMEPATH
+        ? path.win32.join(process.env.HOMEDRIVE, process.env.HOMEPATH)
+        : "") ||
+      process.env.HOME ||
+      os.homedir()
+    );
+  }
+
+  return process.env.HOME || os.homedir();
+}
+
+const LOCAL_STATE_DIRECTORY = path.join(getLocalHomeDirectory(), ".sentinel");
 const LOCAL_RUNTIME_ENV_PATH = path.join(LOCAL_STATE_DIRECTORY, "desktop.env");
 const LOCAL_STATE_DIRECTORY_MODE = 0o700;
 const LOCAL_RUNTIME_ENV_FILE_MODE = 0o600;

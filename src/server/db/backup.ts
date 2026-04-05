@@ -1,18 +1,14 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 
 import { createLogger } from "@/lib/logger";
+import { getSentinelDbFilePath } from "@/lib/runtime/local-state";
 
 const MAX_BACKUPS = 10;
 
 function getDbPath(): string {
-  if (process.env.SENTINEL_DB_PATH?.trim()) {
-    return process.env.SENTINEL_DB_PATH.trim();
-  }
-
-  return path.join(os.homedir(), ".sentinel", "sentinel.db");
+  return getSentinelDbFilePath();
 }
 
 function getBackupDir(): string {

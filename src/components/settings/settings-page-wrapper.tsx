@@ -4,7 +4,10 @@ import { getDesktopApi } from "@/lib/desktop/client";
 import type { PropsWithChildren, ReactNode } from "react";
 
 import { useShell } from "@/components/shell";
-import { getDesktopWindowControlsInset } from "@/components/shell/sidebar-window-chrome";
+import {
+  getDesktopChromeMetrics,
+  getDesktopWindowControlsInset,
+} from "@/components/shell/sidebar-window-chrome";
 
 interface SettingsPageWrapperProps extends PropsWithChildren {
   title: ReactNode;
@@ -23,6 +26,7 @@ export function SettingsPageWrapper({
   const desktop = getDesktopApi();
   const platform = desktop?.app.platform ?? null;
   const isMacDesktop = platform === "darwin";
+  const chromeMetrics = getDesktopChromeMetrics(platform);
   const { leftSidebarOpen } = useShell();
   const leadingInset = isMacDesktop && !leftSidebarOpen ? 92 : undefined;
   const trailingInset = getDesktopWindowControlsInset(platform) || undefined;
@@ -32,7 +36,10 @@ export function SettingsPageWrapper({
       <div className="sentinel-scroll-shell min-h-0 h-full w-full">
         <div
           className="sentinel-scroll-area h-full w-full px-6 py-8 lg:px-8"
-          style={{ paddingLeft: leadingInset }}
+          style={{
+            paddingLeft: leadingInset,
+            paddingTop: chromeMetrics.titleBarHeight > 0 ? 24 : undefined,
+          }}
         >
           <div className={`mx-auto w-full ${contentClassName ?? "max-w-2xl"}`}>
             <div

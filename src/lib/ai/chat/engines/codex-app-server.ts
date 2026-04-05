@@ -1,11 +1,14 @@
 import "server-only";
 
 import { type ChildProcessWithoutNullStreams } from "node:child_process";
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { createLogger } from "@/lib/logger";
+import {
+  applyPrivateFsMode,
+  getSentinelStateRoot,
+} from "@/lib/runtime/local-state";
 import type {
   CodexApprovalPolicy,
   CodexSandboxMode,
@@ -80,7 +83,7 @@ function normalizeCodexReasoningEffort(
 }
 
 function getLocalStateDirectory() {
-  return path.join(process.env.HOME?.trim() || os.homedir(), ".sentinel");
+  return getSentinelStateRoot();
 }
 
 function getCodexStatusSnapshotPath() {
@@ -99,8 +102,8 @@ async function writeCodexStatusSnapshot(snapshot: CodexStatusSnapshot) {
     encoding: "utf8",
     mode: LOCAL_STATE_FILE_MODE,
   });
-  await chmod(localStateDirectory, LOCAL_STATE_DIRECTORY_MODE);
-  await chmod(snapshotPath, LOCAL_STATE_FILE_MODE);
+  await applyPrivateFsMode(localStateDirectory, LOCAL_STATE_DIRECTORY_MODE);
+  await applyPrivateFsMode(snapshotPath, LOCAL_STATE_FILE_MODE);
 }
 
 async function readCodexStatusSnapshot(options: { cliPath: string }) {
