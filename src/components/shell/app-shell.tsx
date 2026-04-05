@@ -20,10 +20,7 @@ import { RightSidebar } from "./right-sidebar";
 import { AppWarmupCoordinator } from "./app-warmup";
 import { ShellProvider, useShell } from "./shell-context";
 import { useAppShortcutActions } from "./use-app-shortcut-actions";
-import {
-  DesktopWindowControls,
-  SidebarWindowChrome,
-} from "./sidebar-window-chrome";
+import { DesktopTitleBar, SidebarWindowChrome } from "./sidebar-window-chrome";
 
 function ShellWarmCache() {
   api.workspaces.getCurrent.useQuery();
@@ -117,7 +114,7 @@ function AppShellShortcutBindings() {
 export function AppShell({ children }: PropsWithChildren) {
   const desktop = getDesktopApi();
   const platform = desktop?.app.platform ?? null;
-  const showDesktopWindowControls = platform === "linux";
+  const showTitleBar = platform === "win32" || platform === "linux";
 
   return (
     <ShortcutProvider>
@@ -125,30 +122,25 @@ export function AppShell({ children }: PropsWithChildren) {
         <ShellWarmCache />
         <AppWarmupCoordinator />
         <AppShellShortcutBindings />
-        <div className="relative flex h-dvh overflow-clip">
-          <LeftSidebar>
-            <div className="flex h-full flex-col">
-              <SidebarWindowChrome />
-              <div className="min-h-0 flex-1">
-                <SidebarContent />
+        <div className="flex h-dvh flex-col overflow-clip">
+          {showTitleBar ? <DesktopTitleBar platform={platform!} /> : null}
+          <div className="relative flex min-h-0 flex-1 overflow-clip">
+            <LeftSidebar>
+              <div className="flex h-full flex-col">
+                <SidebarWindowChrome />
+                <div className="min-h-0 flex-1">
+                  <SidebarContent />
+                </div>
               </div>
-            </div>
-          </LeftSidebar>
+            </LeftSidebar>
 
-          <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip">
-            <div className="min-h-0 flex-1">{children}</div>
-            <TerminalPanel />
-          </main>
+            <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip">
+              <div className="min-h-0 flex-1">{children}</div>
+              <TerminalPanel />
+            </main>
 
-          <RightSidebar />
-
-          {showDesktopWindowControls ? (
-            <div className="pointer-events-none absolute top-0 right-0 z-30 flex h-14 items-start">
-              <div className="pointer-events-auto app-region-no-drag">
-                <DesktopWindowControls platform={platform} />
-              </div>
-            </div>
-          ) : null}
+            <RightSidebar />
+          </div>
         </div>
       </ShellProvider>
     </ShortcutProvider>

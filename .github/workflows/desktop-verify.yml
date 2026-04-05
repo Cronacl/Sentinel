@@ -88,6 +88,7 @@ jobs:
             echo "- Ref: \`${{ steps.resolve.outputs.git_ref }}\`"
             echo "- Platforms: ${{ steps.resolve.outputs.platforms_label }}"
             echo "- GitHub Release publication: disabled"
+            echo "- Manual smoke checklist: \`docs/desktop-platform-smoke-checklist.md\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   build:
@@ -212,3 +213,14 @@ jobs:
           name: ${{ steps.build-config.outputs.artifact_name }}
           path: ${{ steps.build-config.outputs.artifact_paths }}
           retention-days: 5
+
+      - name: Summarize ${{ matrix.platform }} smoke follow-up
+        shell: bash
+        run: |
+          {
+            echo "### ${{ matrix.platform }} follow-up"
+            echo
+            echo "- Build artifact created successfully."
+            echo "- Manual verification is still required before treating this platform as release-ready."
+            echo "- Run the checks in \`docs/desktop-platform-smoke-checklist.md\` on a real ${{ matrix.platform }} machine."
+          } >> "$GITHUB_STEP_SUMMARY"

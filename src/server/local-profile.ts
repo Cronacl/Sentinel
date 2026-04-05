@@ -9,6 +9,7 @@ import { eq } from "drizzle-orm";
 import type { InferSelectModel } from "drizzle-orm";
 
 import { env } from "@/env";
+import { getSentinelStateFilePath } from "@/lib/runtime/local-state";
 import { db } from "@/server/db";
 import { users } from "@/server/db/schema";
 
@@ -44,11 +45,12 @@ function getDefaultProfileSeed() {
 }
 
 function getStatePath() {
-  if (env.SENTINEL_STATE_PATH?.trim()) {
-    return env.SENTINEL_STATE_PATH.trim();
-  }
-
-  return path.join(os.homedir(), ".sentinel", "state.json");
+  return getSentinelStateFilePath({
+    env: {
+      ...process.env,
+      SENTINEL_STATE_PATH: env.SENTINEL_STATE_PATH,
+    },
+  });
 }
 
 async function readState(): Promise<LocalProfileState> {

@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { type PropsWithChildren, useCallback } from "react";
 
 import { SETTINGS_NAV } from "@/components/settings/settings-nav";
+import { getDesktopChromeMetrics } from "@/components/shell/sidebar-window-chrome";
 import { getDesktopApi } from "@/lib/desktop/client";
 import { useShortcutAction, useShortcutScope } from "@/lib/shortcuts/provider";
 
@@ -19,6 +20,7 @@ export default function SettingsModalLayout({ children }: PropsWithChildren) {
   const desktop = getDesktopApi();
   const platform = desktop?.app.platform ?? null;
   const isMac = platform === "darwin";
+  const chromeMetrics = getDesktopChromeMetrics(platform);
   const settingsScope = useShortcutScope({
     kind: "overlay",
   });
@@ -41,7 +43,7 @@ export default function SettingsModalLayout({ children }: PropsWithChildren) {
       >
         <div
           className="app-region-drag shrink-0"
-          style={{ minHeight: isMac ? 56 : 40 }}
+          style={{ minHeight: isMac ? 56 : chromeMetrics.titleBarHeight + 8 }}
         />
 
         <div className="shrink-0 px-3 pb-1">

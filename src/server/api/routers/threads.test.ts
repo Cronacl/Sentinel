@@ -6,6 +6,9 @@ const findMany = mock(async () => []);
 const getOwnedThreadOrThrow = mock(async () => ({
   id: "thread-1",
 }));
+const getOwnedSubagentThreadOrThrow = mock(async () => ({
+  id: "thread-virtual-1",
+}));
 const getOwnedWorkspaceOrThrow = mock(async () => ({
   id: "workspace-1",
   isArchived: false,
@@ -23,6 +26,7 @@ mock.module("@/server/api/trpc", () => ({
 }));
 
 mock.module("./workspace-thread-helpers", () => ({
+  getOwnedSubagentThreadOrThrow,
   getOwnedThreadOrThrow,
   getOwnedWorkspaceOrThrow,
   getThreadListSettings: () => ({
@@ -100,6 +104,7 @@ const { threadsRouter } = await import("./threads");
 
 beforeEach(() => {
   findMany.mockReset();
+  getOwnedSubagentThreadOrThrow.mockClear();
   getOwnedThreadOrThrow.mockClear();
   getOwnedWorkspaceOrThrow.mockClear();
 });

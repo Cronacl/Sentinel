@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 
 import type { PermissionMode } from "@/lib/security";
+import { getPlatformHomeDirectory } from "@/lib/runtime/platform-paths";
 
 const COMMAND_INACTIVITY_TIMEOUT_MS = 5 * 60_000;
 const COMMAND_MAX_DURATION_MS = 30 * 60_000;
@@ -104,6 +105,7 @@ type ShellSession = {
   pending: PendingExecution | null;
   process: ChildProcessWithoutNullStreams;
   queue: Promise<unknown>;
+  shellKind: "posix" | "powershell";
   threadId: string;
 };
 
@@ -259,7 +261,74 @@ function appendTailChunk(
   };
 }
 
+function isWindowsPathLike(candidatePath: string) {
+  return (
+    /^[a-z]:[\\/]/i.test(candidatePath) ||
+    /^\\\\/.test(candidatePath) ||
+    /^[a-z]:$/i.test(candidatePath)
+  );
+}
+
+function resolvePathStyle(candidatePath: string): "posix" | "win32" {
+  if (process.platform === "win32" || isWindowsPathLike(candidatePath)) {
+    return "win32";
+  }
+
+  return "posix";
+}
+
+function getPathModuleForStyle(style: "posix" | "win32") {
+  return style === "win32" ? path.win32 : path.posix;
+}
+
+function normalizeShellPath(
+  candidatePath: string,
+  style: "posix" | "win32" = resolvePathStyle(candidatePath),
+) {
+  const pathModule = getPathModuleForStyle(style);
+  const homeDirectory = getPlatformHomeDirectory({
+    platform: style === "win32" ? "win32" : process.platform,
+  });
+  const expandedPath =
+    style === "win32"
+      ? candidatePath.replace(/^~(?=[\\/]|$)/, homeDirectory)
+      : candidatePath.replace(/^~(?=\/|$)/, homeDirectory);
+
+  if (style === "win32") {
+    return pathModule.resolve(expandedPath).toLowerCase();
+  }
+
+  try {
+    return realpathSync.native(expandedPath);
+  } catch {
+    return pathModule.resolve(expandedPath);
+  }
+}
+
 function getShellCommand() {
+  if (process.platform === "win32") {
+    const executable = [
+      "pwsh.exe",
+      "powershell.exe",
+      process.env.ComSpec?.trim(),
+      process.env.COMSPEC?.trim(),
+      "cmd.exe",
+    ].find(Boolean) as string;
+
+    return {
+      args: [
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "-",
+      ],
+      executable,
+      kind: "powershell" as const,
+    };
+  }
+
   const preferredShell = process.env.SHELL?.trim();
   const preferredShellName = preferredShell
     ? path.basename(preferredShell)
@@ -270,7 +339,9 @@ function getShellCommand() {
     "/bin/bash",
     "/usr/bin/bash",
     preferredShell &&
-    (preferredShellName === "bash" || preferredShellName === "zsh")
+    (preferredShellName === "bash" ||
+      preferredShellName === "zsh" ||
+      preferredShellName === "fish")
       ? preferredShell
       : null,
     os.platform() === "darwin" ? "/bin/zsh" : null,
@@ -285,6 +356,7 @@ function getShellCommand() {
     return {
       args: ["--noprofile", "--norc"],
       executable,
+      kind: "posix" as const,
     };
   }
 
@@ -292,12 +364,14 @@ function getShellCommand() {
     return {
       args: ["-f"],
       executable,
+      kind: "posix" as const,
     };
   }
 
   return {
     args: [],
     executable,
+    kind: "posix" as const,
   };
 }
 
@@ -469,23 +543,25 @@ function appendPreviewContent(
 }
 
 function toComparablePath(candidatePath: string) {
-  try {
-    return realpathSync.native(candidatePath);
-  } catch {
-    return path.resolve(candidatePath);
-  }
+  return normalizeShellPath(candidatePath);
 }
 
 function isPathInsideRoot(candidatePath: string, allowedRoot: string) {
-  const normalizedCandidatePath = toComparablePath(candidatePath);
-  const normalizedAllowedRoot = toComparablePath(allowedRoot);
-  const relative = path.relative(
+  const style =
+    resolvePathStyle(candidatePath) === "win32" ||
+    resolvePathStyle(allowedRoot) === "win32"
+      ? "win32"
+      : "posix";
+  const pathModule = getPathModuleForStyle(style);
+  const normalizedCandidatePath = normalizeShellPath(candidatePath, style);
+  const normalizedAllowedRoot = normalizeShellPath(allowedRoot, style);
+  const relative = pathModule.relative(
     normalizedAllowedRoot,
     normalizedCandidatePath,
   );
   return (
     relative === "" ||
-    (!relative.startsWith("..") && !path.isAbsolute(relative))
+    (!relative.startsWith("..") && !pathModule.isAbsolute(relative))
   );
 }
 
@@ -517,7 +593,7 @@ function normalizeAllowedRoots({
   const roots = [
     ...(allowedRoot ? [allowedRoot] : []),
     ...(allowedRoots ?? []),
-  ].map((root) => toComparablePath(root));
+  ].map((root) => normalizeShellPath(root));
 
   return Array.from(new Set(roots));
 }
@@ -536,6 +612,9 @@ function extractMissingCommand(text: string) {
     /(?:^|\n)\s*([a-z0-9._+-]+): command not found\b/i,
     /(?:^|\n)(?:bash|zsh|sh):\s*(?:(?:line\s+)?\d+:\s*)?([a-z0-9._+-]+):\s*(?:not found|command not found)\b/i,
     /(?:^|\n)(?:\/bin\/sh|\/bin\/bash|\/bin\/zsh):\s*(?:(?:line\s+)?\d+:\s*)?([a-z0-9._+-]+):\s*(?:not found|command not found)\b/i,
+    /(?:^|\n)The term '([^']+)' is not recognized as the name of a cmdlet, function, script file, or operable program\./i,
+    /(?:^|\n)'([^']+)' is not recognized as an internal or external command,/i,
+    /(?:^|\n).*CommandNotFoundException.*['"]([^'"]+)['"]/i,
   ];
 
   for (const pattern of patterns) {
@@ -594,7 +673,7 @@ function classifyShellCommandFailure({
   }
 
   if (
-    /\b(permission denied|operation not permitted|eacces|eperm)\b/i.test(
+    /\b(permission denied|operation not permitted|eacces|eperm|access to the path .* is denied|unauthorizedaccessexception)\b/i.test(
       combined,
     )
   ) {
@@ -788,6 +867,47 @@ function handleStreamChunk(
   appendPreviewContent(session, pending, chunk);
 }
 
+function buildPosixPayload(marker: string, command: string) {
+  return [
+    `printf '__sentinel_start__:${marker}\\n'`,
+    command,
+    "sentinel_exit_code=$?",
+    'sentinel_cwd="$(pwd)"',
+    `printf '__sentinel_exit__:${marker}:%s:%s\\n' "$sentinel_exit_code" "$sentinel_cwd"`,
+  ].join("\n");
+}
+
+function buildPowerShellPayload(marker: string, command: string) {
+  return [
+    `[Console]::Out.WriteLine('__sentinel_start__:${marker}')`,
+    "$global:LASTEXITCODE = 0",
+    "$sentinelExitCode = 0",
+    "try {",
+    "  . {",
+    command
+      .split("\n")
+      .map((line) => `    ${line}`)
+      .join("\n"),
+    "  }",
+    "  $sentinelLastExitCode = (Get-Variable LASTEXITCODE -ErrorAction SilentlyContinue).Value",
+    "  if (-not $?) {",
+    "    if ($null -ne $sentinelLastExitCode -and [int]$sentinelLastExitCode -ne 0) {",
+    "      $sentinelExitCode = [int]$sentinelLastExitCode",
+    "    } else {",
+    "      $sentinelExitCode = 1",
+    "    }",
+    "  } elseif ($null -ne $sentinelLastExitCode) {",
+    "    $sentinelExitCode = [int]$sentinelLastExitCode",
+    "  }",
+    "} catch {",
+    "  $sentinelExitCode = 1",
+    "  [Console]::Error.WriteLine($_.ToString())",
+    "}",
+    "$sentinelCwd = (Get-Location).Path",
+    `[Console]::Out.WriteLine("__sentinel_exit__:${marker}:$sentinelExitCode:$sentinelCwd")`,
+  ].join("\n");
+}
+
 function createShellSession(threadId: string, cwd: string): ShellSession {
   assertShellWorkingDirectoryAvailable(cwd);
   const shell = getShellCommand();
@@ -801,6 +921,7 @@ function createShellSession(threadId: string, cwd: string): ShellSession {
       ZDOTDIR: os.tmpdir(),
     },
     stdio: "pipe",
+    windowsHide: true,
   });
 
   const session: ShellSession = {
@@ -811,6 +932,7 @@ function createShellSession(threadId: string, cwd: string): ShellSession {
     pending: null,
     process: child,
     queue: Promise.resolve(),
+    shellKind: shell.kind,
     threadId,
   };
 
@@ -959,13 +1081,10 @@ function runCommandInSession(
 
   resetIdleTimer(session);
 
-  const payload = [
-    `printf '__sentinel_start__:${marker}\\n'`,
-    command,
-    "sentinel_exit_code=$?",
-    'sentinel_cwd="$(pwd)"',
-    `printf '__sentinel_exit__:${marker}:%s:%s\\n' "$sentinel_exit_code" "$sentinel_cwd"`,
-  ].join("\n");
+  const payload =
+    session.shellKind === "powershell"
+      ? buildPowerShellPayload(marker, command)
+      : buildPosixPayload(marker, command);
 
   session.process.stdin.write(`${payload}\n`);
 
@@ -983,8 +1102,7 @@ export function assertShellCommandAllowed(
     allowedRoots: allowedRootsInput,
   });
   const forbiddenPatterns = [
-    /\bpushd\b/i,
-    /\bcd\s+\.\.(?:\s|$|\/|\\)/i,
+    /\b(?:cd|pushd)\s+\.\.(?:\s|$|\/|\\)/i,
     /\bcd\s+-/i,
   ];
 
@@ -995,22 +1113,35 @@ export function assertShellCommandAllowed(
   }
 
   const absoluteCdMatches = Array.from(
-    command.matchAll(/\bcd\s+((?:~\/[^\s;&|]+)|(?:\/[^\s;&|]+))/gi),
+    command.matchAll(/\b(?:cd|pushd)\s+(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))/gi),
   );
 
   for (const match of absoluteCdMatches) {
-    const rawTarget = match[1]?.trim();
+    const rawTarget = (match[1] ?? match[2] ?? match[3])?.trim();
     if (!rawTarget) {
       continue;
     }
 
-    const resolvedTarget = rawTarget.startsWith("~/")
-      ? path.join(os.homedir(), rawTarget.slice(2))
-      : rawTarget;
+    if (rawTarget === "-" || /^[a-z]:$/i.test(rawTarget)) {
+      throw new Error(
+        "Shell command violates default permissions mode by attempting to change directories outside the selected workspace root or discovered skill directories.",
+      );
+    }
+
+    const style = resolvePathStyle(rawTarget);
+    const pathModule = getPathModuleForStyle(style);
+    const isAbsoluteTarget =
+      rawTarget.startsWith("~") || pathModule.isAbsolute(rawTarget);
+
+    if (!isAbsoluteTarget) {
+      continue;
+    }
+
+    const resolvedTarget = normalizeShellPath(rawTarget, style);
 
     if (
       allowedRoots.length > 0 &&
-      isPathInsideAllowedRoots(path.resolve(resolvedTarget), allowedRoots)
+      isPathInsideAllowedRoots(resolvedTarget, allowedRoots)
     ) {
       continue;
     }
@@ -1133,7 +1264,11 @@ export async function disposeShellSession(threadId: string) {
   }
 
   if (!session.process.killed) {
-    session.process.kill("SIGKILL");
+    if (process.platform === "win32") {
+      session.process.kill();
+    } else {
+      session.process.kill("SIGKILL");
+    }
   }
 }
 
@@ -1142,6 +1277,10 @@ export function getShellSessionCount() {
 }
 
 export const __internal = {
+  buildPowerShellPayload,
   classifyShellCommandFailure,
   extractMissingCommand,
+  isPathInsideRoot,
+  normalizeShellPath,
+  resolvePathStyle,
 };

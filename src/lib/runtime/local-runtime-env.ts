@@ -1,14 +1,18 @@
 import "server-only";
 
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+
+import {
+  applyPrivateFsMode,
+  getSentinelStateRoot,
+} from "@/lib/runtime/local-state";
 
 const LOCAL_STATE_DIRECTORY_MODE = 0o700;
 const LOCAL_RUNTIME_ENV_FILE_MODE = 0o600;
 
 function getLocalStateDirectory() {
-  return path.join(process.env.HOME?.trim() || os.homedir(), ".sentinel");
+  return getSentinelStateRoot();
 }
 
 function getLocalRuntimeEnvPath() {
@@ -77,8 +81,8 @@ async function writeLocalRuntimeEnvFile(content: string) {
     encoding: "utf8",
     mode: LOCAL_RUNTIME_ENV_FILE_MODE,
   });
-  await chmod(localStateDirectory, LOCAL_STATE_DIRECTORY_MODE);
-  await chmod(localRuntimeEnvPath, LOCAL_RUNTIME_ENV_FILE_MODE);
+  await applyPrivateFsMode(localStateDirectory, LOCAL_STATE_DIRECTORY_MODE);
+  await applyPrivateFsMode(localRuntimeEnvPath, LOCAL_RUNTIME_ENV_FILE_MODE);
 }
 
 export async function setLocalRuntimeEnvValue(

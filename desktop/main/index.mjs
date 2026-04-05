@@ -30,7 +30,8 @@ import {
 import {
   getOpenFileCommandForTarget,
   getOpenCommandForTarget,
-  resolveMacOpenTargets,
+  getRevealInFileManagerCommand,
+  resolveOpenTargets,
 } from "../shared/workspace-targets.mjs";
 import {
   APP_PORT,
@@ -410,7 +411,9 @@ async function applyDevAppIcon() {
 
 function getTerminalShell() {
   if (process.platform === "win32") {
-    return process.env.COMSPEC || "powershell.exe";
+    return (
+      process.env.SENTINEL_WINDOWS_SHELL || process.env.COMSPEC || "pwsh.exe"
+    );
   }
 
   return process.env.SHELL || "/bin/zsh";
@@ -418,7 +421,9 @@ function getTerminalShell() {
 
 function getTerminalShellCandidates() {
   if (process.platform === "win32") {
-    return [getTerminalShell(), "powershell.exe", "cmd.exe"].filter(Boolean);
+    return ["pwsh.exe", getTerminalShell(), "powershell.exe", "cmd.exe"].filter(
+      Boolean,
+    );
   }
 
   return Array.from(
@@ -428,6 +433,15 @@ function getTerminalShellCandidates() {
 
 function getTerminalShellArgs(shellPath) {
   if (process.platform === "win32") {
+    const normalizedShell = shellPath.toLowerCase();
+    if (normalizedShell.endsWith("pwsh.exe")) {
+      return ["-NoLogo"];
+    }
+
+    if (normalizedShell.endsWith("powershell.exe")) {
+      return ["-NoLogo", "-NoProfile"];
+    }
+
     return [];
   }
 
@@ -519,9 +533,9 @@ function createTerminalSession(cwd) {
         env: {
           ...process.env,
           COLORTERM: "truecolor",
-          TERM: "xterm-256color",
+          TERM: process.platform === "win32" ? "xterm" : "xterm-256color",
         },
-        name: "xterm-256color",
+        name: process.platform === "win32" ? "xterm" : "xterm-256color",
         rows: 32,
       });
       break;
@@ -582,7 +596,6 @@ function getBrowserWindowChromeOptions(theme = resolvedTheme) {
 
   if (process.platform === "win32") {
     return {
-      titleBarOverlay: getWindowTitleBarOverlay(theme),
       titleBarStyle: "hidden",
     };
   }
@@ -599,7 +612,9 @@ function syncWindowsTitleBarOverlay(theme) {
 
   const overlay = getWindowTitleBarOverlay(theme);
   for (const win of BrowserWindow.getAllWindows()) {
-    win.setTitleBarOverlay(overlay);
+    try {
+      win.setTitleBarOverlay(overlay);
+    } catch {}
   }
 }
 
@@ -639,10 +654,10 @@ function getPopupHtml(targetUrl, appOrigin, theme, platform) {
   const escapedAppOrigin = escapeHtml(appOrigin);
   const escapedTheme = theme === "light" ? "light" : "dark";
   const usesNativeMacChrome = platform === "darwin";
-  const usesNativeWindowsChrome = platform === "win32";
+  const usesCustomWindowsChrome = platform === "win32";
   const edgeWidth = usesNativeMacChrome
     ? 72
-    : usesNativeWindowsChrome
+    : usesCustomWindowsChrome
       ? 132
       : platform === "linux"
         ? 112
@@ -672,7 +687,21 @@ function getPopupHtml(targetUrl, appOrigin, theme, platform) {
           </button>
         </div>
       `
-      : `<div class="ws" aria-hidden="true"></div>`;
+      : platform === "win32"
+        ? `
+        <div class="wcwr" aria-label="Window controls">
+          <button class="wc wb" id="bn" title="Minimize" aria-label="Minimize window">
+            <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 7.25h6"/></svg>
+          </button>
+          <button class="wc wb" id="bx" title="${expandButtonTitle}" aria-label="Maximize window">
+            <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2.5h6v5H2z"/></svg>
+          </button>
+          <button class="wc wb wbc" id="bc" title="Close" aria-label="Close window">
+            <svg viewBox="0 0 10 10" aria-hidden="true"><path d="m2.5 2.5 5 5m0-5-5 5"/></svg>
+          </button>
+        </div>
+      `
+        : `<div class="ws" aria-hidden="true"></div>`;
 
   return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
 <html lang="en" data-theme="${escapedTheme}">
@@ -984,38 +1013,93 @@ async function assertProjectDirectory(projectPath) {
   return normalizedPath;
 }
 
-async function listWorkspaceTargets() {
-  if (process.platform !== "darwin") {
-    return [];
+async function commandExists(candidatePath) {
+  try {
+    return Boolean(await stat(candidatePath));
+  } catch {
+    return false;
+  }
+}
+
+async function whichExecutable(command) {
+  if (!command) {
+    return null;
   }
 
-  const targets = await resolveMacOpenTargets({
+  if (path.isAbsolute(command)) {
+    return (await commandExists(command)) ? command : null;
+  }
+
+  const pathEntries = (process.env.PATH ?? "")
+    .split(path.delimiter)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const pathExts =
+    process.platform === "win32"
+      ? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM")
+          .split(";")
+          .map((entry) => entry.trim())
+          .filter(Boolean)
+      : [""];
+
+  for (const directory of pathEntries) {
+    for (const extension of pathExts) {
+      const candidatePath =
+        process.platform === "win32" &&
+        extension &&
+        !command.toLowerCase().endsWith(extension.toLowerCase())
+          ? path.join(directory, `${command}${extension}`)
+          : path.join(directory, command);
+
+      if (await commandExists(candidatePath)) {
+        return candidatePath;
+      }
+    }
+  }
+
+  return null;
+}
+
+async function listWorkspaceTargets() {
+  const targets = await resolveOpenTargets({
+    env: process.env,
     exists: async (candidatePath) => {
       const stats = await stat(candidatePath).catch(() => null);
       return Boolean(stats);
     },
     homePath: app.getPath("home"),
+    platform: process.platform,
+    whichExecutable,
   });
 
   return targets.map(
-    ({ appPath: _appPath, systemApp: _systemApp, ...target }) => target,
+    ({
+      appPath: _appPath,
+      commandCandidates: _commandCandidates,
+      commandPath: _commandPath,
+      platform: _platform,
+      supportsGoto: _supportsGoto,
+      systemApp: _systemApp,
+      ...target
+    }) => target,
   );
 }
 
 async function resolveWorkspaceTarget(targetId) {
-  if (process.platform !== "darwin") {
-    throw new Error("Workspace launch targets are only supported on macOS.");
-  }
-
-  const targets = await resolveMacOpenTargets({
+  const targets = await resolveOpenTargets({
+    env: process.env,
     exists: async (candidatePath) => {
       const stats = await stat(candidatePath).catch(() => null);
       return Boolean(stats);
     },
     homePath: app.getPath("home"),
+    platform: process.platform,
+    whichExecutable,
   });
 
-  const target = targets.find((entry) => entry.id === targetId);
+  const target =
+    targets.find((entry) => entry.id === targetId) ??
+    (targetId ? null : targets[0]);
   if (!target) {
     throw new Error("The requested app target is not available.");
   }
@@ -1128,7 +1212,10 @@ function registerIpc() {
     DESKTOP_CHANNELS.WORKSPACE_OPEN_FILE_IN_TARGET,
     async (_event, projectPath, filePath, targetId, lineNumber) => {
       const normalizedPath = await assertProjectDirectory(projectPath);
-      const target = await resolveWorkspaceTarget(targetId || "cursor");
+      const target = await resolveWorkspaceTarget(targetId);
+      if (target.kind !== "editor" && target.kind !== "ide") {
+        throw new Error("Selected target does not support opening files.");
+      }
       const resolvedFilePath = path.resolve(normalizedPath, filePath);
       if (!resolvedFilePath.startsWith(normalizedPath)) {
         throw new Error("Selected file is outside the project directory.");
@@ -1156,7 +1243,11 @@ function registerIpc() {
     DESKTOP_CHANNELS.WORKSPACE_REVEAL_IN_FILE_MANAGER,
     async (_event, projectPath) => {
       const normalizedPath = await assertProjectDirectory(projectPath);
-      await runOpenCommand("open", [normalizedPath]);
+      const command = getRevealInFileManagerCommand(
+        process.platform,
+        normalizedPath,
+      );
+      await runOpenCommand(command.command, command.args);
     },
   );
 

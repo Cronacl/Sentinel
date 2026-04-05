@@ -138,7 +138,7 @@ describe("resolveRipgrepPath", () => {
         platform: "win32",
         whichExecutable: async () => null,
       }),
-    ).rejects.toThrow(/not supported/i);
+    ).rejects.toThrow(/windows arm64/i);
   });
 
   it("fails cleanly when the download request fails", async () => {

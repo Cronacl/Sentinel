@@ -181,6 +181,25 @@ describe("shell session manager", () => {
     ).not.toThrow();
   });
 
+  it("accepts Windows absolute paths that remain inside the allowed root", () => {
+    expect(() =>
+      assertShellCommandAllowed('cd "C:\\workspace\\repo"', [
+        "C:\\workspace\\repo",
+      ]),
+    ).not.toThrow();
+  });
+
+  it("rejects Windows path escapes in default mode", () => {
+    expect(() =>
+      assertShellCommandAllowed('pushd "\\\\server\\share\\repo"', [
+        "C:\\workspace\\repo",
+      ]),
+    ).toThrow(/violates default permissions mode/i);
+    expect(() => assertShellCommandAllowed("cd D:")).toThrow(
+      /violates default permissions mode/i,
+    );
+  });
+
   it("rejects missing working directories before starting a shell session", async () => {
     const missingDirectory = path.join(
       workspaceRoot,
@@ -242,5 +261,50 @@ describe("shell session manager", () => {
       missingCommand: null,
       suggestedNextAction: "inspect",
     });
+  });
+
+  it("classifies Windows missing-command failures for remediation", () => {
+    expect(
+      __internal.classifyShellCommandFailure({
+        exitCode: 1,
+        stderr:
+          "The term 'pnpm' is not recognized as the name of a cmdlet, function, script file, or operable program.",
+        stdout: "",
+      }),
+    ).toEqual({
+      failureKind: "missing_command",
+      missingCommand: "pnpm",
+      suggestedNextAction: "install",
+    });
+  });
+
+  it("normalizes Windows paths for containment checks", () => {
+    expect(
+      __internal.isPathInsideRoot(
+        "C:\\workspace\\repo\\src\\index.ts",
+        "C:\\workspace\\repo",
+      ),
+    ).toBe(true);
+    expect(
+      __internal.isPathInsideRoot(
+        "D:\\workspace\\repo\\src\\index.ts",
+        "C:\\workspace\\repo",
+      ),
+    ).toBe(false);
+    expect(__internal.normalizeShellPath("C:\\Workspace\\Repo")).toBe(
+      "c:\\workspace\\repo",
+    );
+    expect(__internal.resolvePathStyle("C:\\workspace\\repo")).toBe("win32");
+  });
+
+  it("builds a PowerShell payload with start and exit markers", () => {
+    const payload = __internal.buildPowerShellPayload(
+      "marker-1",
+      "Write-Output 'hello'",
+    );
+
+    expect(payload).toContain("__sentinel_start__:marker-1");
+    expect(payload).toContain("__sentinel_exit__:marker-1");
+    expect(payload).toContain("Write-Output 'hello'");
   });
 });
