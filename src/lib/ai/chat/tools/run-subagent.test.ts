@@ -392,4 +392,39 @@ describe("run_subagent", () => {
         'Invalid model ID "gemini-2.5-flash". Expected format: "provider:model"',
     });
   });
+
+  it("keeps the delegated summary when a trailing stale read offset error is attached", async () => {
+    loadThreadMessages.mockResolvedValueOnce([
+      {
+        createdAt: new Date("2026-04-05T10:00:00.000Z"),
+        id: "db-assistant-1",
+        messageId: "assistant-1",
+        metadata: {
+          errorMessage: "Offset 221 is out of range for this file (123 lines).",
+        },
+        parts: [{ text: "Detailed delegated summary", type: "text" }],
+        role: "assistant",
+        updatedAt: new Date("2026-04-05T10:00:00.000Z"),
+      },
+    ]);
+
+    const result = await executeRunSubagent({
+      input: {
+        allowMutations: true,
+        prompt: "Discover the repo",
+      },
+      runtime: createRuntime(),
+    });
+
+    expect(result).toMatchObject({
+      childThreadId: null,
+      status: "completed",
+      summaryText: "Detailed delegated summary",
+      virtualThreadId: "virtual-thread-1",
+    });
+    expect(toRunSubagentModelOutput(result)).toEqual({
+      type: "text",
+      value: "Detailed delegated summary",
+    });
+  });
 });
