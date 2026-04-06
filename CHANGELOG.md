@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.22](https://github.com/Cronacl/Sentinel/compare/v0.0.21...v0.0.22) (2026-04-06)
+
+
+### Features
+
+* enhance background warmup and terminal session handling ([74865fa](https://github.com/Cronacl/Sentinel/commit/74865fa6bdb1293e303e91bb65a4a6bc0e75e03a))
+
+
+### Bug Fixes
+
+* handle undefined query input in diff panel query ([4f140a1](https://github.com/Cronacl/Sentinel/commit/4f140a1b9346661361929bfda4ee0148a155dea7))
+* update chat message handling for cancelled states ([f2bd7cd](https://github.com/Cronacl/Sentinel/commit/f2bd7cd8c40f2afc327af5a28e86d702706ad05b))
+
 ## [0.0.21](https://github.com/Cronacl/Sentinel/compare/v0.0.20...v0.0.21) (2026-04-06)
 
 
