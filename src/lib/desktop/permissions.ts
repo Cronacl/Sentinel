@@ -21,6 +21,8 @@ type ClipboardWriteOptions = {
 };
 
 let hasRequestedStartupMicrophonePermission = false;
+const MACOS_MICROPHONE_SETTINGS_URL =
+  "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone";
 
 function resolveClipboardErrorMessage(
   error: unknown,
@@ -84,6 +86,29 @@ export function resolveMicrophonePermissionErrorMessage(
   }
 
   return "Microphone access was not granted. Allow microphone access for Sentinel and try again.";
+}
+
+export function canOpenMicrophonePermissionSettings(
+  platform: DesktopPlatform | null,
+) {
+  return platform === "darwin";
+}
+
+export async function openMicrophonePermissionSettings() {
+  const desktop = getDesktopApi();
+  if (
+    !desktop?.openExternal ||
+    !canOpenMicrophonePermissionSettings(desktop.app.platform)
+  ) {
+    return false;
+  }
+
+  try {
+    await desktop.openExternal(MACOS_MICROPHONE_SETTINGS_URL);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function writeTextToClipboard(
@@ -165,7 +190,19 @@ export async function ensureMicrophoneAccessForVoiceInput(): Promise<MicrophoneA
       ? await requestMicrophonePermission()
       : currentState;
 
-  if (nextState === "granted") {
+  if (nextState === "unsupported") {
+    return {
+      allowed: false,
+      message: resolveMicrophonePermissionErrorMessage(nextState, platform),
+      state: nextState,
+    };
+  }
+
+  if (
+    nextState === "granted" ||
+    nextState === "denied" ||
+    nextState === "prompt"
+  ) {
     return { allowed: true, state: nextState };
   }
 
@@ -189,11 +226,7 @@ export async function preflightMicrophonePermissionOnStartup() {
   }
 
   const currentState = await desktop.permissions.getStatus("microphone");
-  if (currentState !== "prompt") {
-    return currentState;
-  }
-
-  return desktop.permissions.request("microphone");
+  return currentState;
 }
 
 export function resetDesktopPermissionWarmupForTests() {
