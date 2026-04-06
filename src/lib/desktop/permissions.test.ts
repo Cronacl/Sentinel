@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, mock } from "bun:test";
 import type { SentinelDesktopApi } from "./contracts";
 import {
   ensureMicrophoneAccessForVoiceInput,
+  openMicrophonePermissionSettings,
   preflightMicrophonePermissionOnStartup,
   resetDesktopPermissionWarmupForTests,
   resolveMicrophonePermissionErrorMessage,
@@ -162,7 +163,7 @@ describe("desktop clipboard helpers", () => {
 });
 
 describe("desktop microphone helpers", () => {
-  it("requests permission in desktop runtime and blocks denied access", async () => {
+  it("treats desktop denied state as advisory after requesting access", async () => {
     const getStatus = mock(async () => "prompt" as const);
     const request = mock(async () => "denied" as const);
 
@@ -176,11 +177,30 @@ describe("desktop microphone helpers", () => {
     } as never);
 
     await expect(ensureMicrophoneAccessForVoiceInput()).resolves.toEqual({
-      allowed: false,
-      message:
-        "Microphone access was denied. Allow microphone access for Sentinel in System Settings and try again.",
+      allowed: true,
       state: "denied",
     });
+  });
+
+  it("allows voice input to proceed when native desktop status is already denied", async () => {
+    const getStatus = mock(async () => "denied" as const);
+    const request = mock(async () => "granted" as const);
+
+    setWindow({
+      sentinelDesktop: createDesktopApi({
+        permissions: {
+          getStatus,
+          request,
+        },
+      }),
+    } as never);
+
+    await expect(ensureMicrophoneAccessForVoiceInput()).resolves.toEqual({
+      allowed: true,
+      state: "denied",
+    });
+
+    expect(request).not.toHaveBeenCalled();
   });
 
   it("allows browser voice input to continue when permission state is still prompt", async () => {
@@ -199,7 +219,7 @@ describe("desktop microphone helpers", () => {
     });
   });
 
-  it("only preflights microphone access once during startup", async () => {
+  it("only reads microphone access once during startup without prompting", async () => {
     const getStatus = mock(async () => "prompt" as const);
     const request = mock(async () => "granted" as const);
 
@@ -215,12 +235,12 @@ describe("desktop microphone helpers", () => {
     } as never);
 
     await expect(preflightMicrophonePermissionOnStartup()).resolves.toBe(
-      "granted",
+      "prompt",
     );
     await expect(preflightMicrophonePermissionOnStartup()).resolves.toBeNull();
 
     expect(getStatus).toHaveBeenCalledTimes(1);
-    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).not.toHaveBeenCalled();
   });
 
   it("derives the expected user-facing microphone denial message", () => {
@@ -229,6 +249,21 @@ describe("desktop microphone helpers", () => {
     );
     expect(resolveMicrophonePermissionErrorMessage("unsupported", null)).toBe(
       "Microphone input is unavailable in this environment.",
+    );
+  });
+
+  it("opens the macOS microphone settings pane when desktop support is available", async () => {
+    const openExternal = mock(async () => undefined);
+
+    setWindow({
+      sentinelDesktop: createDesktopApi({
+        openExternal,
+      }),
+    } as never);
+
+    await expect(openMicrophonePermissionSettings()).resolves.toBe(true);
+    expect(openExternal).toHaveBeenCalledWith(
+      "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
     );
   });
 });

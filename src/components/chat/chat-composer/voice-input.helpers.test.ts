@@ -3,6 +3,7 @@ import { describe, expect, it, mock } from "bun:test";
 import {
   formatVoiceInputDuration,
   insertTranscriptIntoComposer,
+  resolveVoiceInputStartFailure,
   resolveVoiceInputStartError,
   shouldShowVoiceInputControl,
 } from "./voice-input.helpers";
@@ -70,5 +71,32 @@ describe("voice input helpers", () => {
         state: "granted",
       }),
     ).toBeNull();
+  });
+
+  it("maps renderer permission failures to the macOS denial message and recovery action", () => {
+    const result = resolveVoiceInputStartFailure({
+      error: new DOMException("Permission denied", "NotAllowedError"),
+      platform: "darwin",
+    });
+
+    expect(result).toEqual({
+      canOfferRecovery: true,
+      message:
+        "Microphone access was denied. Allow microphone access for Sentinel in System Settings and try again.",
+    });
+  });
+
+  it("keeps unsupported start failures distinct from permission denial", () => {
+    expect(
+      resolveVoiceInputStartFailure({
+        error: new Error(
+          "Microphone input is unavailable in this environment.",
+        ),
+        platform: null,
+      }),
+    ).toEqual({
+      canOfferRecovery: false,
+      message: "Microphone input is unavailable in this environment.",
+    });
   });
 });
