@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.20](https://github.com/Cronacl/Sentinel/compare/v0.0.19...v0.0.20) (2026-04-06)
+
+
+### Features
+
+* enhance voice input error handling and recovery options ([8221bc8](https://github.com/Cronacl/Sentinel/commit/8221bc8a46dc0db692b381d4c5874f081d9e4639))
+* update README and add comprehensive documentation structure ([d559ea2](https://github.com/Cronacl/Sentinel/commit/d559ea2a7e4435a90a62181460f2c9881db83485))
+
+
+### Bug Fixes
+
+* delegated summary no longer gets marked as failed ([93f1643](https://github.com/Cronacl/Sentinel/commit/93f1643bebcf1a0fba597a6f26ae720a2529acb5))
+
 ## [0.0.19](https://github.com/Cronacl/Sentinel/compare/v0.0.18...v0.0.19) (2026-04-05)
 
 
