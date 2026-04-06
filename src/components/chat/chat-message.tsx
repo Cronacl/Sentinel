@@ -92,12 +92,12 @@ export function getAssistantFailureText({
   errorMessage?: string | null;
   messageStatus?: ThreadMessageMetadata["status"];
 }) {
-  if (errorMessage?.trim()) {
-    return errorMessage.trim();
+  if (messageStatus === "cancelled") {
+    return null;
   }
 
-  if (messageStatus === "cancelled") {
-    return "Generation stopped.";
+  if (errorMessage?.trim()) {
+    return errorMessage.trim();
   }
 
   if (messageStatus === "error") {
@@ -575,7 +575,7 @@ function AssistantMessage({
   const shouldRenderFailureState =
     !isStreaming &&
     Boolean(failureText) &&
-    (status === "error" || status === "cancelled") &&
+    status === "error" &&
     !failureAlreadyVisible;
 
   const stableOnAnswerPlanQuestions = useCallback(
@@ -700,7 +700,7 @@ function AssistantMessage({
             {!isStreaming &&
             supportsSentinelMessageActions &&
             onRetry &&
-            (status === "error" || status === "cancelled") ? (
+            status === "error" ? (
               <MessageActionButton
                 icon={ArrowReloadHorizontalIcon}
                 label="Retry"
