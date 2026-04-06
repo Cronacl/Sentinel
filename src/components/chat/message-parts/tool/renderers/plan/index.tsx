@@ -692,6 +692,10 @@ export const PlanTool = memo(function PlanTool({
   const planDraft = useStablePlanDraft(toolName, part);
   const isPlanDoc = toolName === "create_plan" || toolName === "update_plan";
 
+  useEffect(() => {
+    setIsExpanded(false);
+  }, [part.toolCallId]);
+
   const statusLabel =
     part.state === "output-available"
       ? toolName === "create_plan"
@@ -746,33 +750,6 @@ export const PlanTool = memo(function PlanTool({
     if (!snapshot) return;
     syncPlanSidebarDraft({ snapshot, sourceKey: part.toolCallId });
   }, [buildSidebarSnapshot, isOpen, isPlanDoc, part.toolCallId, planDraft]);
-
-  const autoExpandedRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (isPlanDoc) {
-      return;
-    }
-
-    const shouldAutoExpand = Boolean(
-      part.state === "output-error" ||
-      (toolName === "ask_question" &&
-        part.state === "output-available" &&
-        output &&
-        (output as AskQuestionOutput).status === "pending"),
-    );
-
-    if (shouldAutoExpand && autoExpandedRef.current !== part.toolCallId) {
-      autoExpandedRef.current = part.toolCallId;
-      setIsExpanded(true);
-    } else if (
-      !shouldAutoExpand &&
-      autoExpandedRef.current === part.toolCallId
-    ) {
-      autoExpandedRef.current = null;
-      setIsExpanded(false);
-    }
-  }, [isPlanDoc, output, part.state, part.toolCallId, toolName]);
 
   if (!toolName) return null;
 

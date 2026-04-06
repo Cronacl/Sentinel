@@ -149,7 +149,7 @@ function JsonBlock({ label, value }: { label: string; value: unknown }) {
   return (
     <div>
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-[10px] font-medium uppercase tracking-wider text-foreground/30">
+        <span className="text-[10px] font-medium text-foreground/30">
           {label}
         </span>
         <button
@@ -291,7 +291,7 @@ export const CodexMcpTool = memo(function CodexMcpTool({
         {hasResult && !errorText ? (
           resultText ? (
             <div>
-              <span className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-foreground/30">
+              <span className="mb-1 block text-[10px] font-medium text-foreground/30">
                 Result
               </span>
               <ScrollShadow className="max-h-[200px] overflow-x-auto">

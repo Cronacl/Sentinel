@@ -4,12 +4,19 @@ import {
   memo,
   type ReactElement,
   type ReactNode,
+  useCallback,
   useDeferredValue,
   useMemo,
 } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { sileo } from "sileo";
 
+import { useWorkspaceFileLinkRootPath } from "@/components/chat/workspace-file-link-context";
+import { getDesktopApi } from "@/lib/desktop/client";
+import { getErrorMessage } from "@/lib/errors";
+
+import { resolveWorkspaceFileLink } from "./file-link";
 import { CodeBlock } from "./code-block";
 
 const REMARK_PLUGINS = [remarkGfm];
@@ -34,6 +41,19 @@ function InlineCode({ children }: { children: ReactNode }) {
   );
 }
 
+function getPreferredEditorTarget(
+  openTargets: Array<{
+    id: string;
+    kind: "editor" | "file_manager" | "ide" | "terminal";
+  }>,
+) {
+  return (
+    openTargets.find(
+      (target) => target.kind === "editor" || target.kind === "ide",
+    ) ?? null
+  );
+}
+
 export const MarkdownContent = memo(function MarkdownContent({
   isStreaming = false,
   text,
@@ -43,6 +63,40 @@ export const MarkdownContent = memo(function MarkdownContent({
   text: string;
   variant?: "answer" | "reasoning" | "reasoning-timeline";
 }) {
+  const workspaceRootPath = useWorkspaceFileLinkRootPath();
+  const handleFileLinkClick = useCallback(
+    async (href: string) => {
+      const resolvedLink = resolveWorkspaceFileLink(href, workspaceRootPath);
+      if (!resolvedLink || !workspaceRootPath) {
+        return;
+      }
+
+      const desktop = getDesktopApi();
+      if (!desktop) {
+        return;
+      }
+
+      try {
+        const openTargets =
+          await desktop.workspace.listOpenTargets(workspaceRootPath);
+        const preferredEditorTarget = getPreferredEditorTarget(openTargets);
+
+        await desktop.workspace.openFileInTarget(
+          workspaceRootPath,
+          resolvedLink.filePath,
+          preferredEditorTarget?.id,
+          resolvedLink.lineNumber ?? undefined,
+        );
+      } catch (error) {
+        sileo.error({
+          description: getErrorMessage(error, "Unable to open that file."),
+          title: "Open file failed",
+        });
+      }
+    },
+    [workspaceRootPath],
+  );
+
   const markdownComponents = useMemo<import("react-markdown").Components>(
     () => ({
       pre({ children }) {
@@ -72,12 +126,25 @@ export const MarkdownContent = memo(function MarkdownContent({
         return <InlineCode>{children}</InlineCode>;
       },
       a({ href, children }) {
+        const resolvedFileLink = resolveWorkspaceFileLink(
+          href,
+          workspaceRootPath,
+        );
+
         return (
           <a
             className="text-blue-400 underline decoration-blue-400/30 underline-offset-2 transition-colors hover:decoration-blue-400"
             href={href}
+            onClick={(event) => {
+              if (!href || !resolvedFileLink) {
+                return;
+              }
+
+              event.preventDefault();
+              void handleFileLinkClick(href);
+            }}
             rel="noopener noreferrer"
-            target="_blank"
+            target={resolvedFileLink ? undefined : "_blank"}
           >
             {children}
           </a>
@@ -110,7 +177,7 @@ export const MarkdownContent = memo(function MarkdownContent({
         return null;
       },
     }),
-    [isStreaming],
+    [handleFileLinkClick, isStreaming, workspaceRootPath],
   );
 
   const deferredText = useDeferredValue(text);

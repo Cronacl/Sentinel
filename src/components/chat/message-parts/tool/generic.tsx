@@ -39,13 +39,11 @@ export const GenericTool = memo(function GenericTool({
     part.state === "output-available" ||
     part.state === "output-error" ||
     part.state === "output-denied";
-  const [isExpanded, setIsExpanded] = useState(
-    part.state === "approval-requested",
-  );
+  const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
-    setIsExpanded(part.state === "approval-requested");
-  }, [part.state, part.toolCallId]);
+    setIsExpanded(false);
+  }, [part.toolCallId]);
 
   return (
     <ToolLayout

@@ -23,6 +23,7 @@ import { ReasoningPart } from "./message-parts/reasoning";
 import { CopyButton } from "./message-parts/shared";
 import { TextPart } from "./message-parts/text";
 import { ToolPart } from "./message-parts/tool";
+import { WorkspaceFileLinkProvider } from "./workspace-file-link-context";
 import {
   coalesceReasoningEntries,
   extractReasoningTokens,
@@ -174,9 +175,7 @@ function FailedAssistantStatus({
   if (variant === "inline") {
     return (
       <div className="rounded-md border border-danger/15 bg-danger/5 px-3 py-2">
-        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-danger/75">
-          Run failed
-        </p>
+        <p className="text-[11px] font-medium text-danger/75">Run failed</p>
         <p className="mt-1 text-[11px] leading-5 text-danger/85">{errorText}</p>
       </div>
     );
@@ -1051,19 +1050,21 @@ export const ChatMessage = memo(function ChatMessage({
   }
 
   return (
-    <AssistantMessage
-      chatEngine={chatEngine}
-      isStreaming={isStreaming}
-      message={message}
-      onApproveTool={onApproveTool}
-      onApproveToolWithDecision={onApproveToolWithDecision}
-      onAnswerPlanQuestions={onAnswerPlanQuestions}
-      onDenyTool={onDenyTool}
-      onStartPlanImplementation={onStartPlanImplementation}
-      onRegenerate={onRegenerate}
-      onRetry={onRetry}
-      onSelectBranch={onSelectBranch}
-      disableBranchSwitching={disableBranchSwitching}
-    />
+    <WorkspaceFileLinkProvider workspaceRootPath={workspaceRootPath}>
+      <AssistantMessage
+        chatEngine={chatEngine}
+        isStreaming={isStreaming}
+        message={message}
+        onApproveTool={onApproveTool}
+        onApproveToolWithDecision={onApproveToolWithDecision}
+        onAnswerPlanQuestions={onAnswerPlanQuestions}
+        onDenyTool={onDenyTool}
+        onStartPlanImplementation={onStartPlanImplementation}
+        onRegenerate={onRegenerate}
+        onRetry={onRetry}
+        onSelectBranch={onSelectBranch}
+        disableBranchSwitching={disableBranchSwitching}
+      />
+    </WorkspaceFileLinkProvider>
   );
 });

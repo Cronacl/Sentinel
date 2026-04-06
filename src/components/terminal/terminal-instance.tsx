@@ -12,7 +12,9 @@ import {
 import { getDesktopApi } from "@/lib/desktop/client";
 import { useResolvedTheme } from "@/lib/syntax/use-resolved-theme";
 
+import { closeTerminal } from "./terminal-store";
 import { subscribeTerminalOutput } from "./terminal-store";
+import { isTerminalToggleShortcut } from "./terminal-shortcuts";
 
 type TerminalInstanceProps = {
   isActive: boolean;
@@ -179,6 +181,15 @@ export function TerminalInstance({
 
     terminal.loadAddon(fitAddon);
     terminal.open(container);
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (!isTerminalToggleShortcut(event, desktop.app.platform)) {
+        return true;
+      }
+
+      event.preventDefault();
+      closeTerminal();
+      return false;
+    });
 
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;

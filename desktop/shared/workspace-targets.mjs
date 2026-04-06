@@ -3,6 +3,7 @@ import path from "node:path";
 const MAC_TARGETS = [
   {
     appNames: ["Cursor.app"],
+    commandCandidates: ["cursor"],
     id: "cursor",
     kind: "editor",
     label: "Cursor",
@@ -10,6 +11,7 @@ const MAC_TARGETS = [
   },
   {
     appNames: ["Visual Studio Code.app"],
+    commandCandidates: ["code"],
     id: "vscode",
     kind: "editor",
     label: "VS Code",
@@ -23,6 +25,7 @@ const MAC_TARGETS = [
   },
   {
     appNames: ["Windsurf.app"],
+    commandCandidates: ["windsurf"],
     id: "windsurf",
     kind: "editor",
     label: "Windsurf",
@@ -205,7 +208,20 @@ function expandMacAppCandidates(appNames, homePath) {
   );
 }
 
-async function resolveMacTargets({ exists, homePath }) {
+function getBundledMacCliCandidates(target, appPath) {
+  switch (target.id) {
+    case "cursor":
+      return [path.join(appPath, "Contents/Resources/app/bin/cursor")];
+    case "vscode":
+      return [path.join(appPath, "Contents/Resources/app/bin/code")];
+    case "windsurf":
+      return [path.join(appPath, "Contents/Resources/app/bin/windsurf")];
+    default:
+      return [];
+  }
+}
+
+async function resolveMacTargets({ exists, homePath, whichExecutable }) {
   const targets = [];
 
   for (const target of MAC_TARGETS) {
@@ -228,9 +244,29 @@ async function resolveMacTargets({ exists, homePath }) {
       continue;
     }
 
+    let commandPath = null;
+    const bundledCliCandidates = getBundledMacCliCandidates(target, appPath);
+    for (const candidate of bundledCliCandidates) {
+      if (await exists(candidate)) {
+        commandPath = candidate;
+        break;
+      }
+    }
+
+    if (!commandPath && target.commandCandidates?.length && whichExecutable) {
+      for (const candidate of target.commandCandidates) {
+        const resolved = await whichExecutable(candidate);
+        if (resolved) {
+          commandPath = resolved;
+          break;
+        }
+      }
+    }
+
     targets.push({
       ...target,
       appPath,
+      commandPath: commandPath ?? undefined,
       platform: "darwin",
     });
   }
@@ -293,7 +329,7 @@ export async function resolveOpenTargets({
   whichExecutable,
 }) {
   if (platform === "darwin") {
-    return resolveMacTargets({ exists, homePath });
+    return resolveMacTargets({ exists, homePath, whichExecutable });
   }
 
   if (platform === "win32") {
@@ -517,12 +553,10 @@ function buildMacOpenFileCommand(target, filePath, lineNumber) {
     lineNumber > 0
       ? `:${Math.trunc(lineNumber)}`
       : "";
-  const supportsGoto = new Set(["cursor", "vscode", "windsurf"]);
-
-  if (supportsGoto.has(target.id)) {
+  if (target.commandPath && target.supportsGoto) {
     return {
-      args: ["-a", application, "--args", "-g", `${filePath}${lineSuffix}`],
-      command: "open",
+      args: ["-g", `${filePath}${lineSuffix}`],
+      command: target.commandPath,
     };
   }
 

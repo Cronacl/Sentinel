@@ -27,6 +27,7 @@ import {
   FilterMailIcon,
   Folder03Icon,
   FolderAddIcon,
+  FolderOpenIcon,
   GitPullRequestIcon,
   LayoutLeftIcon,
   MoreHorizontalIcon,
@@ -64,7 +65,15 @@ import {
   applyOptimisticThreadPinUpdate,
   restoreOptimisticThreadPinUpdate,
 } from "@/lib/threads/cache";
+import {
+  normalizeWorkspaceDirectoryPath,
+  pickWorkspaceDirectory,
+} from "@/lib/workspaces/picker";
 import { api, type RouterOutputs } from "@/trpc/react";
+import {
+  collectRepoDiffPreloadCandidates,
+  REPO_DIFF_PRELOAD_MODES,
+} from "@/components/chat/thread-repo-actions.helpers";
 
 import { SidebarCommandPalette } from "./sidebar-command-palette";
 import {
@@ -99,6 +108,7 @@ const THEME_ACTION_ICONS = {
   light: Sun03Icon,
   system: ComputerIcon,
 } as const;
+const MAX_BACKGROUND_REPO_PRELOADS = 4;
 
 function toCurrentWorkspace(
   workspace:
@@ -389,14 +399,22 @@ function ThreadItemTrailing({
 }
 
 function WorkspaceItemActions({
+  hasLinkedFolder,
   onArchive,
+  onRelocate,
   onRename,
   workspaceName,
 }: {
+  hasLinkedFolder: boolean;
   onArchive: () => void;
+  onRelocate: () => void;
   onRename: () => void;
   workspaceName: string;
 }) {
+  const relocateLabel = hasLinkedFolder
+    ? "Relocate workspace path"
+    : "Link workspace path";
+
   return (
     <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-1 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
       <Dropdown>
@@ -421,6 +439,7 @@ function WorkspaceItemActions({
           <Dropdown.Menu
             onAction={(key) => {
               if (key === "rename") onRename();
+              if (key === "relocate") onRelocate();
               if (key === "archive") onArchive();
             }}
           >
@@ -432,6 +451,15 @@ function WorkspaceItemActions({
                 strokeWidth={1.5}
               />
               <Label>Rename workspace</Label>
+            </Dropdown.Item>
+            <Dropdown.Item id="relocate" textValue={relocateLabel}>
+              <HugeiconsIcon
+                color="currentColor"
+                icon={FolderOpenIcon}
+                size={16}
+                strokeWidth={1.5}
+              />
+              <Label>{relocateLabel}</Label>
             </Dropdown.Item>
             <Dropdown.Item id="archive" textValue="Delete workspace">
               <HugeiconsIcon
@@ -716,6 +744,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
   onPin,
   onPressThread,
   onPressWorkspace,
+  onRelocateWorkspace,
   onRenameThread,
   onRenameWorkspace,
   onToggleWorkspace,
@@ -729,6 +758,7 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
   onPressWorkspace: (workspaceId: string) => void;
+  onRelocateWorkspace: (workspaceId: string) => void;
   onRenameThread: (threadId: string) => void;
   onRenameWorkspace: (workspaceId: string) => void;
   onToggleWorkspace: (workspaceId: string) => void;
@@ -810,7 +840,9 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
           workspaceButton
         )}
         <WorkspaceItemActions
+          hasLinkedFolder={Boolean(group.workspace.rootPath)}
           onArchive={() => onArchiveWorkspace(group.workspace.id)}
+          onRelocate={() => onRelocateWorkspace(group.workspace.id)}
           onRename={() => onRenameWorkspace(group.workspace.id)}
           workspaceName={group.workspace.name}
         />
@@ -896,6 +928,7 @@ const ThreadList = memo(function ThreadList({
   onArchiveWorkspace,
   onPressThread,
   onPressWorkspace,
+  onRelocateWorkspace,
   onRenameThread,
   onRenameWorkspace,
   expandedWorkspaceIds,
@@ -912,6 +945,7 @@ const ThreadList = memo(function ThreadList({
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
   onPressWorkspace: (workspaceId: string) => void;
+  onRelocateWorkspace: (workspaceId: string) => void;
   onRenameThread: (threadId: string) => void;
   onRenameWorkspace: (workspaceId: string) => void;
   selectedThreadId: string | null;
@@ -931,6 +965,7 @@ const ThreadList = memo(function ThreadList({
             onPin={onPin}
             onPressThread={onPressThread}
             onPressWorkspace={onPressWorkspace}
+            onRelocateWorkspace={onRelocateWorkspace}
             onRenameThread={onRenameThread}
             onRenameWorkspace={onRenameWorkspace}
             onToggleWorkspace={onToggleWorkspace}
@@ -1283,6 +1318,66 @@ export function WorkspaceSidebar() {
       (left, right) => right.updatedAt.getTime() - left.updatedAt.getTime(),
     );
   }, [groups, items]);
+  const backgroundRepoPreloadCandidates = useMemo(
+    () =>
+      collectRepoDiffPreloadCandidates({
+        groups,
+        items,
+        maxCandidates: MAX_BACKGROUND_REPO_PRELOADS,
+        selectedThreadId,
+      }),
+    [groups, items, selectedThreadId],
+  );
+  const backgroundRepoPreloadKey = useMemo(
+    () =>
+      backgroundRepoPreloadCandidates
+        .map((candidate) => `${candidate.threadId}:${candidate.workspaceId}`)
+        .join("|"),
+    [backgroundRepoPreloadCandidates],
+  );
+  const backgroundRepoPreloadKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!backgroundRepoPreloadCandidates.length) {
+      backgroundRepoPreloadKeyRef.current = null;
+      return;
+    }
+
+    if (backgroundRepoPreloadKeyRef.current === backgroundRepoPreloadKey) {
+      return;
+    }
+
+    backgroundRepoPreloadKeyRef.current = backgroundRepoPreloadKey;
+    let cancelled = false;
+    const timeoutId = window.setTimeout(() => {
+      if (cancelled) {
+        return;
+      }
+
+      void Promise.allSettled(
+        backgroundRepoPreloadCandidates.flatMap(({ threadId, workspaceId }) => [
+          utils.repo.getContext.prefetch({ threadId, workspaceId }),
+          ...REPO_DIFF_PRELOAD_MODES.map((mode) =>
+            utils.repo.getDiffPanelData.prefetch({
+              mode,
+              threadId,
+              workspaceId,
+            }),
+          ),
+        ]),
+      );
+    }, 120);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    backgroundRepoPreloadCandidates,
+    backgroundRepoPreloadKey,
+    utils.repo.getContext,
+    utils.repo.getDiffPanelData,
+  ]);
 
   const togglePin = api.threads.togglePin.useMutation({
     onMutate: async ({ pinned, threadId }) => {
@@ -1466,7 +1561,7 @@ export function WorkspaceSidebar() {
     [renameThreadState],
   );
 
-  const renameWorkspace = api.workspaces.update.useMutation({
+  const updateWorkspace = api.workspaces.update.useMutation({
     onSuccess: (workspace) => {
       utils.workspaces.list.setData(undefined, (current) =>
         current?.map((item) =>
@@ -1494,7 +1589,6 @@ export function WorkspaceSidebar() {
       );
       void utils.threads.list.invalidate();
       void utils.repo.listWorkspaceStatuses.invalidate();
-      renameWorkspaceState.close();
     },
   });
 
@@ -2043,14 +2137,72 @@ export function WorkspaceSidebar() {
         return;
       }
 
-      void renameWorkspace.mutate({
-        description: renameTargetWorkspace.description ?? "",
-        name,
-        rootPath: renameTargetWorkspace.rootPath ?? undefined,
-        workspaceId: renameTargetWorkspace.id,
-      });
+      void (async () => {
+        try {
+          await updateWorkspace.mutateAsync({
+            description: renameTargetWorkspace.description ?? "",
+            name,
+            rootPath: renameTargetWorkspace.rootPath ?? undefined,
+            workspaceId: renameTargetWorkspace.id,
+          });
+          renameWorkspaceState.close();
+        } catch (error) {
+          sileo.error({
+            description: getErrorMessage(
+              error,
+              "Unable to rename that workspace.",
+            ),
+            title: "Workspace rename failed",
+          });
+        }
+      })();
     },
-    [renameTargetWorkspace, renameWorkspace],
+    [renameTargetWorkspace, renameWorkspaceState, updateWorkspace],
+  );
+
+  const handleRelocateWorkspace = useCallback(
+    (workspaceId: string) => {
+      const targetWorkspace = (workspaces.data ?? []).find(
+        (workspace) => workspace.id === workspaceId,
+      );
+      if (!targetWorkspace) {
+        return;
+      }
+
+      void (async () => {
+        try {
+          const directory = await pickWorkspaceDirectory();
+          if (!directory) {
+            return;
+          }
+
+          const nextRootPath = normalizeWorkspaceDirectoryPath(directory.path);
+          const currentRootPath = normalizeWorkspaceDirectoryPath(
+            targetWorkspace.rootPath ?? "",
+          );
+
+          if (nextRootPath === currentRootPath) {
+            return;
+          }
+
+          await updateWorkspace.mutateAsync({
+            description: targetWorkspace.description ?? "",
+            name: targetWorkspace.name,
+            rootPath: directory.path,
+            workspaceId: targetWorkspace.id,
+          });
+        } catch (error) {
+          sileo.error({
+            description: getErrorMessage(
+              error,
+              "Unable to update that workspace path.",
+            ),
+            title: "Workspace path update failed",
+          });
+        }
+      })();
+    },
+    [updateWorkspace, workspaces.data],
   );
 
   const handleRenameThreadSubmit = useCallback(
@@ -2422,6 +2574,7 @@ export function WorkspaceSidebar() {
                 onPin={handlePin}
                 onPressThread={handlePressThread}
                 onPressWorkspace={handlePressWorkspace}
+                onRelocateWorkspace={handleRelocateWorkspace}
                 onRenameThread={handleOpenRenameThread}
                 onRenameWorkspace={handleOpenRenameWorkspace}
                 onWarmThread={handleWarmThread}
@@ -2643,7 +2796,7 @@ export function WorkspaceSidebar() {
                   >
                     Cancel
                   </Button>
-                  <Button isPending={renameWorkspace.isPending} type="submit">
+                  <Button isPending={updateWorkspace.isPending} type="submit">
                     Rename
                   </Button>
                 </Modal.Footer>
