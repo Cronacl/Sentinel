@@ -1472,6 +1472,37 @@ describe("repoRouter.diff panel", () => {
     expect(result.repoContext.preferredOpenTargetId).toBe("cursor");
   });
 
+  it("ignores a missing optional draft thread when loading diff panel data", async () => {
+    getOwnedThreadOrThrow.mockImplementationOnce(async () => {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "Thread not found.",
+      });
+    });
+
+    const result = await repoRouter.getDiffPanelData({
+      ctx: {
+        session: { user: { id: "user-draft" } },
+        user: {
+          id: "user-draft",
+          lastProjectOpenTargetId: null,
+        },
+      },
+      input: {
+        mode: "unstaged",
+        threadId: "draft-thread",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(getRepoDiffPanelData).toHaveBeenCalledWith(
+      "/tmp/workspace",
+      "unstaged",
+    );
+    expect(result.diff.mode).toBe("unstaged");
+    expect(result.repoContext.isGitRepo).toBe(true);
+  });
+
   it("stages, unstages, and reverts files through repo mutations", async () => {
     const ctx = {
       session: { user: { id: "user-1" } },

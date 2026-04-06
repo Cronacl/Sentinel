@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { scheduleIdleTask } from "@/lib/browser/idle-task";
 import { preflightMicrophonePermissionOnStartup } from "@/lib/desktop/permissions";
 import { api } from "@/trpc/react";
 
@@ -11,42 +12,7 @@ import {
   STATIC_APP_WARMUP_ROUTES,
 } from "./app-warmup-config";
 
-type IdleHandle = number;
-type IdleDeadline = {
-  didTimeout: boolean;
-  timeRemaining: () => number;
-};
-type IdleWindow = Window & {
-  cancelIdleCallback?: (handle: IdleHandle) => void;
-  requestIdleCallback?: (
-    callback: (deadline: IdleDeadline) => void,
-    options?: { timeout: number },
-  ) => IdleHandle;
-};
-
 let hasStartedAppWarmup = false;
-
-function scheduleIdleTask(callback: () => void) {
-  const idleWindow = window as IdleWindow;
-
-  if (typeof idleWindow.requestIdleCallback === "function") {
-    const idleHandle = idleWindow.requestIdleCallback(
-      () => {
-        callback();
-      },
-      { timeout: 1_000 },
-    );
-
-    return () => {
-      idleWindow.cancelIdleCallback?.(idleHandle);
-    };
-  }
-
-  const timeoutHandle = window.setTimeout(callback, 120);
-  return () => {
-    window.clearTimeout(timeoutHandle);
-  };
-}
 
 export function AppWarmupCoordinator() {
   const router = useRouter();
