@@ -5,7 +5,7 @@
 <h1 align="center">Sentinel</h1>
 
 <p align="center">
-  Local-first desktop AI workspace for real software projects.
+  A local-first workspace for AI coding
 </p>
 
 <p align="center">
