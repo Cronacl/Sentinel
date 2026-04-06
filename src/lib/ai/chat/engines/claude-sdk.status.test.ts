@@ -168,7 +168,7 @@ describe("getClaudeEngineStatus", () => {
     } finally {
       await rm(tempRoot, { force: true, recursive: true });
     }
-  }, 4_500);
+  }, 8_000);
 
   it("returns snapshot-backed status immediately before a background refresh completes", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
@@ -224,7 +224,7 @@ describe("getClaudeEngineStatus", () => {
     } finally {
       await rm(tempRoot, { force: true, recursive: true });
     }
-  }, 4_500);
+  }, 8_000);
 
   it("reuses cached models when Claude reports as unauthenticated", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));

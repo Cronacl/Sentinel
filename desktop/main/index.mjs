@@ -847,7 +847,15 @@ function isTrustedAppOrigin(candidateUrl) {
   }
 
   try {
-    const origin = new URL(candidateUrl).origin;
+    const parsedUrl = new URL(candidateUrl);
+    const origin = parsedUrl.origin;
+    const isLoopbackHttpOrigin =
+      (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") &&
+      ["127.0.0.1", "localhost", "[::1]"].includes(parsedUrl.hostname);
+    if (isLoopbackHttpOrigin) {
+      return true;
+    }
+
     const allowedOrigins = [
       serverState?.url,
       process.env.SENTINEL_APP_URL,

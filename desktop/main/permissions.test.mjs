@@ -33,6 +33,14 @@ describe("desktop permission policy", () => {
         isTrustedOrigin,
       ),
     ).toBe(true);
+    expect(
+      shouldAllowTrustedDesktopPermission(
+        "microphone",
+        "",
+        isTrustedOrigin,
+        "http://localhost:3232",
+      ),
+    ).toBe(true);
   });
 
   it("denies untrusted origins and clipboard reads", () => {
@@ -57,6 +65,7 @@ describe("desktop permission policy", () => {
   it("wires the same policy into session permission check and request handlers", () => {
     const setPermissionCheckHandler = mock(() => undefined);
     const setPermissionRequestHandler = mock(() => undefined);
+    const warn = mock(() => undefined);
 
     configureDesktopPermissionHandlers(
       {
@@ -65,6 +74,7 @@ describe("desktop permission policy", () => {
       },
       {
         isTrustedOrigin: (value) => value === "http://localhost:3232",
+        logger: { warn },
       },
     );
 
@@ -75,7 +85,7 @@ describe("desktop permission policy", () => {
       checkHandler?.(
         { getURL: () => "http://localhost:3232" },
         "microphone",
-        "http://localhost:3232",
+        "",
       ),
     ).toBe(true);
     expect(
@@ -102,6 +112,14 @@ describe("desktop permission policy", () => {
       { requestingUrl: "https://example.com" },
     );
     expect(callback).toHaveBeenLastCalledWith(false);
+    expect(warn).toHaveBeenCalledWith(
+      "[electron] denied desktop media permission",
+      {
+        ownerUrl: "https://example.com",
+        permission: "microphone",
+        requestUrl: "https://example.com",
+      },
+    );
   });
 });
 

@@ -8,6 +8,7 @@ export function shouldAllowTrustedDesktopPermission(
   permission,
   requestingUrl,
   isTrustedOrigin,
+  ownerUrl = "",
 ) {
   if (permission === "clipboard-read") {
     return false;
@@ -17,25 +18,38 @@ export function shouldAllowTrustedDesktopPermission(
     return false;
   }
 
-  return isTrustedOrigin(requestingUrl);
+  return isTrustedOrigin(requestingUrl) || isTrustedOrigin(ownerUrl);
 }
 
 export function configureDesktopPermissionHandlers(
   targetSession,
-  { isTrustedOrigin },
+  { isTrustedOrigin, logger = console },
 ) {
-  const shouldAllow = (permission, requestUrl) =>
-    shouldAllowTrustedDesktopPermission(
+  const shouldAllow = (permission, requestUrl, ownerUrl) => {
+    const allowed = shouldAllowTrustedDesktopPermission(
       permission,
       requestUrl,
       isTrustedOrigin,
+      ownerUrl,
     );
+
+    if (!allowed && (permission === "media" || permission === "microphone")) {
+      logger.warn?.("[electron] denied desktop media permission", {
+        ownerUrl,
+        permission,
+        requestUrl,
+      });
+    }
+
+    return allowed;
+  };
 
   targetSession.setPermissionCheckHandler(
     (webContents, permission, requestingOrigin) =>
       shouldAllow(
         permission,
-        requestingOrigin || webContents?.getURL?.() || "",
+        requestingOrigin || "",
+        webContents?.getURL?.() || "",
       ),
   );
 
@@ -44,7 +58,8 @@ export function configureDesktopPermissionHandlers(
       callback(
         shouldAllow(
           permission,
-          details?.requestingUrl || webContents?.getURL?.() || "",
+          details?.requestingUrl || "",
+          webContents?.getURL?.() || "",
         ),
       );
     },
