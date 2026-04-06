@@ -24,27 +24,18 @@ type UseToolExpansionStateOptions = {
 
 export function useToolExpansionState({
   toolCallId,
-  defaultExpanded,
-  autoExpand = false,
+  defaultExpanded: _defaultExpanded,
+  autoExpand: _autoExpand = false,
 }: UseToolExpansionStateOptions) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const [isExpanded, setIsExpanded] = useState(false);
   const lastToolCallIdRef = useRef(toolCallId);
-  const previousAutoExpandRef = useRef(autoExpand);
 
   useEffect(() => {
     if (lastToolCallIdRef.current !== toolCallId) {
       lastToolCallIdRef.current = toolCallId;
-      previousAutoExpandRef.current = autoExpand;
       setIsExpanded(false);
-      return;
     }
-
-    if (autoExpand && !previousAutoExpandRef.current) {
-      setIsExpanded(true);
-    }
-
-    previousAutoExpandRef.current = autoExpand;
-  }, [autoExpand, defaultExpanded, toolCallId]);
+  }, [toolCallId]);
 
   return [isExpanded, setIsExpanded] as const;
 }

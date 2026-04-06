@@ -1,5 +1,6 @@
 // @ts-nocheck
 
+import { TRPCError } from "@trpc/server";
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 
 const getOwnedWorkspaceOrThrow = mock(async () => ({
@@ -1268,6 +1269,40 @@ describe("repoRouter workspace PR status queries", () => {
     expect(result.threadBranch).toBe("feature/linked");
     expect(result.branchResumeStatus).toBe("blocked_dirty");
     expect(result.branchResumeReason).toContain("uncommitted changes");
+  });
+
+  it("ignores a missing optional draft thread when loading repo context", async () => {
+    getOwnedThreadOrThrow.mockImplementationOnce(async () => {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "Thread not found.",
+      });
+    });
+
+    const result = await repoRouter.getContext({
+      ctx: {
+        db: {
+          query: {
+            integrations: {
+              findFirst: findGithubIntegration,
+            },
+          },
+        },
+        session: { user: { id: "user-draft" } },
+        user: {
+          defaultChatModelId: null,
+          id: "user-draft",
+          lastProjectOpenTargetId: null,
+        },
+      },
+      input: {
+        threadId: "draft-thread",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(result.isGitRepo).toBe(true);
+    expect(result.threadBranch).toBe("feature/test");
   });
 });
 

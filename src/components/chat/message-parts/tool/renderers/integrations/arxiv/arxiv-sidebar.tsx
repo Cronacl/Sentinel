@@ -145,7 +145,7 @@ function PaperDetailView({ paper }: { paper: ArxivPaper }) {
         <Separator variant="tertiary" />
 
         <div>
-          <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-foreground/35">
+          <p className="mb-1 text-[10px] font-medium text-foreground/35">
             Abstract
           </p>
           <p className="text-[12.5px] leading-relaxed text-foreground/70">

@@ -39,6 +39,7 @@ import { ChatComposer } from "./chat-composer";
 import { ChatMessage } from "./chat-message";
 import { ChatScrollControl, useChatScrollControl } from "./chat-scroll-control";
 import { buildThreadQueryOptions } from "./thread-query-options";
+import { ThreadRepoActions } from "./thread-repo-actions";
 import { type DraftProjectMode } from "./draft-thread-project-mode";
 
 type NewThreadScreenProps = {
@@ -276,6 +277,13 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   const hasMessages = messages.length > 0;
   const isBusy = status === "submitted" || status === "streaming";
   const visibleChatError = chatError ?? errorMessage;
+  const pageActions = selectedWorkspace ? (
+    <ThreadRepoActions
+      threadId={draftThreadId}
+      workspaceId={selectedWorkspace.id}
+      workspaceRootPath={selectedWorkspace.rootPath}
+    />
+  ) : undefined;
   const threadDetailsQuery = api.threads.get.useQuery(
     { threadId: draftThreadId },
     {
@@ -854,6 +862,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
 
     return (
       <PageWrapper
+        actions={pageActions}
         title={threadDetailsQuery.data?.thread.title ?? firstText}
         flush
       >
@@ -941,7 +950,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   }
 
   return (
-    <PageWrapper title="New Thread" flush>
+    <PageWrapper actions={pageActions} title="New Thread" flush>
       <div className="sentinel-scroll-shell h-full min-h-0">
         <div className="sentinel-scroll-area flex h-full flex-col">
           <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-6">

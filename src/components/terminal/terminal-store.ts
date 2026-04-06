@@ -228,6 +228,18 @@ export function toggleTerminal(cwd?: string | null) {
   openTerminal(cwd);
 }
 
+export async function toggleTerminalSession(cwd?: string | null) {
+  if (state.isOpen) {
+    closeTerminal();
+    return (
+      state.sessions.find((session) => session.id === state.activeSessionId) ??
+      null
+    );
+  }
+
+  return openOrCreateTerminalSession(cwd ?? getTerminalDefaultCwd());
+}
+
 export async function createTerminalSession(cwd?: string | null) {
   bindDesktopEvents();
 
@@ -310,6 +322,31 @@ export async function openOrCreateTerminalSession(
   }
 
   return createTerminalSession(normalizedCwd);
+}
+
+export async function runCommandInTerminal(
+  cwd: string | null | undefined,
+  command: string,
+) {
+  const normalizedCwd = normalizeCwd(cwd);
+  const trimmedCommand = command.trim();
+  const desktop = getDesktopApi();
+
+  if (!desktop || !normalizedCwd || !trimmedCommand) {
+    return null;
+  }
+
+  const session = await openOrCreateTerminalSession(normalizedCwd);
+  if (!session) {
+    return null;
+  }
+
+  desktop.terminal.write(
+    session.id,
+    trimmedCommand.endsWith("\n") ? trimmedCommand : `${trimmedCommand}\n`,
+  );
+
+  return session;
 }
 
 export async function killTerminalSession(sessionId: string) {

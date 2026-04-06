@@ -4,6 +4,7 @@ import {
   buildRepoDiffPreloadKey,
   buildCreatePullRequestInput,
   buildGenerateCommitMessageInput,
+  collectRepoDiffPreloadCandidates,
   formatRepoActionErrorMessage,
   getActivePullRequestUrl,
   getGeneratedCommitPromptValue,
@@ -53,6 +54,53 @@ describe("thread repo action helpers", () => {
       }),
     ).not.toBe(buildRepoDiffPreloadKey(base));
     expect(buildRepoDiffPreloadKey({ isGitRepo: false })).toBeNull();
+  });
+
+  it("collects one background diff preload candidate per workspace", () => {
+    expect(
+      collectRepoDiffPreloadCandidates({
+        groups: [
+          {
+            threads: [{ id: "thread-1" }, { id: "thread-2" }],
+            workspace: { id: "workspace-1" },
+          },
+          {
+            threads: [{ id: "thread-3" }],
+            workspace: { id: "workspace-2" },
+          },
+        ],
+        items: [
+          { id: "thread-4", workspace: { id: "workspace-3" } },
+          { id: "thread-5", workspace: { id: "workspace-2" } },
+        ],
+      }),
+    ).toEqual([
+      { threadId: "thread-1", workspaceId: "workspace-1" },
+      { threadId: "thread-3", workspaceId: "workspace-2" },
+      { threadId: "thread-4", workspaceId: "workspace-3" },
+    ]);
+  });
+
+  it("prioritizes the selected thread when warming repo diff data", () => {
+    expect(
+      collectRepoDiffPreloadCandidates({
+        groups: [
+          {
+            threads: [{ id: "thread-1" }, { id: "thread-2" }],
+            workspace: { id: "workspace-1" },
+          },
+          {
+            threads: [{ id: "thread-3" }],
+            workspace: { id: "workspace-2" },
+          },
+        ],
+        maxCandidates: 2,
+        selectedThreadId: "thread-2",
+      }),
+    ).toEqual([
+      { threadId: "thread-2", workspaceId: "workspace-1" },
+      { threadId: "thread-3", workspaceId: "workspace-2" },
+    ]);
   });
 
   it("passes threadId and trims branch names for PR creation", () => {

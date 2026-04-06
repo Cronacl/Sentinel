@@ -48,9 +48,10 @@ import type { DesktopOpenTarget } from "@/lib/desktop/contracts";
 import { getErrorMessage } from "@/lib/errors";
 import { useShortcutAction } from "@/lib/shortcuts/provider";
 import { api } from "@/trpc/react";
-import { openOrCreateTerminalSession } from "../terminal/terminal-store";
+import { setTerminalPreferredCwd } from "../terminal/terminal-store";
 import { RepoPullRequestSidebar } from "./repo-pr-sidebar";
 import { RepoDiffSidebar } from "./repo-diff-sidebar";
+import { WorkspaceRunCommandButton } from "./workspace-run-command-button";
 import {
   closeRepoDiffSidebarState,
   setRepoDiffSidebarState,
@@ -193,21 +194,8 @@ export function ThreadRepoActions({
     });
   }, [isBrowserSidebarActive, isDesktop, rightSidebar]);
 
-  const handleToggleTerminal = useCallback(() => {
-    if (!launchPath) {
-      return;
-    }
-
-    void openOrCreateTerminalSession(launchPath, {
-      toggleIfAlreadyActive: true,
-    });
-  }, [launchPath]);
-
   useShortcutAction("browser.toggle", handleToggleBrowser, {
     enabled: isDesktop,
-  });
-  useShortcutAction("terminal.toggle", handleToggleTerminal, {
-    enabled: Boolean(launchPath),
   });
 
   const snapshotRef = useRef(repoContext);
@@ -232,6 +220,10 @@ export function ThreadRepoActions({
   const isRepoVisible = Boolean(
     isDesktop && workspaceRootPath && repoContext?.isGitRepo,
   );
+
+  useEffect(() => {
+    setTerminalPreferredCwd(launchPath);
+  }, [launchPath]);
 
   const refreshContext = useCallback(async () => {
     await utils.repo.getContext.invalidate(repoContextQueryInput);
@@ -925,6 +917,10 @@ export function ThreadRepoActions({
       <div className="flex items-center gap-2">
         <TerminalToggleButton cwd={workspaceRootPath} />
         <BrowserToggleButton />
+        <WorkspaceRunCommandButton
+          cwd={workspaceRootPath}
+          workspaceId={workspaceId}
+        />
         <Button
           isDisabled
           size="sm"
@@ -943,6 +939,7 @@ export function ThreadRepoActions({
       <div className="flex items-center gap-2">
         <TerminalToggleButton cwd={launchPath} />
         <BrowserToggleButton />
+        <WorkspaceRunCommandButton cwd={launchPath} workspaceId={workspaceId} />
         <Button
           isDisabled={initMutation.isPending}
           isPending={initMutation.isPending}
@@ -1032,6 +1029,7 @@ export function ThreadRepoActions({
       <div className="flex items-center gap-2">
         <TerminalToggleButton cwd={launchPath} />
         <BrowserToggleButton />
+        <WorkspaceRunCommandButton cwd={launchPath} workspaceId={workspaceId} />
 
         <ButtonGroup size="sm" variant="tertiary">
           <Button

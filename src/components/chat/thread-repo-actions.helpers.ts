@@ -17,6 +17,19 @@ type RepoDiffPreloadContext = {
   worktreeStatus?: string | null;
 };
 
+type RepoDiffPreloadCandidateInput = {
+  groups?: Array<{
+    threads: Array<{ id: string }>;
+    workspace: { id: string };
+  }>;
+  items?: Array<{
+    id: string;
+    workspace: { id: string };
+  }>;
+  maxCandidates?: number;
+  selectedThreadId?: string | null;
+};
+
 export const REPO_DIFF_PRELOAD_MODES: RepoDiffMode[] = [
   "unstaged",
   "staged",
@@ -80,6 +93,75 @@ export function buildRepoDiffPreloadKey(
     threadProjectMode: input.threadProjectMode ?? null,
     worktreeStatus: input.worktreeStatus ?? null,
   });
+}
+
+export function collectRepoDiffPreloadCandidates({
+  groups = [],
+  items = [],
+  maxCandidates = 4,
+  selectedThreadId = null,
+}: RepoDiffPreloadCandidateInput) {
+  const candidates: Array<{ threadId: string; workspaceId: string }> = [];
+  const seenThreads = new Set<string>();
+  const seenWorkspaces = new Set<string>();
+
+  const addCandidate = (
+    threadId: string | null | undefined,
+    workspaceId: string | null | undefined,
+    prioritize = false,
+  ) => {
+    if (!threadId || !workspaceId) {
+      return;
+    }
+
+    if (seenThreads.has(threadId) || seenWorkspaces.has(workspaceId)) {
+      return;
+    }
+
+    const candidate = { threadId, workspaceId };
+    if (prioritize) {
+      candidates.unshift(candidate);
+    } else {
+      candidates.push(candidate);
+    }
+    seenThreads.add(threadId);
+    seenWorkspaces.add(workspaceId);
+  };
+
+  if (selectedThreadId) {
+    for (const group of groups) {
+      const selectedThread = group.threads.find(
+        (thread) => thread.id === selectedThreadId,
+      );
+      if (selectedThread) {
+        addCandidate(selectedThread.id, group.workspace.id, true);
+        break;
+      }
+    }
+
+    if (candidates.length === 0) {
+      const selectedItem = items.find((item) => item.id === selectedThreadId);
+      if (selectedItem) {
+        addCandidate(selectedItem.id, selectedItem.workspace.id, true);
+      }
+    }
+  }
+
+  for (const group of groups) {
+    addCandidate(group.threads[0]?.id, group.workspace.id);
+    if (candidates.length >= maxCandidates) {
+      return candidates;
+    }
+  }
+
+  for (const item of items) {
+    addCandidate(item.id, item.workspace.id);
+    if (candidates.length >= maxCandidates) {
+      break;
+    }
+  }
+
+  return candidates;
 }
 
 export function buildCreatePullRequestInput(input: {

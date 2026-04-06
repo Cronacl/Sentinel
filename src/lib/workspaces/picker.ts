@@ -3,8 +3,12 @@
 import { getDesktopApi } from "@/lib/desktop/client";
 import type { DesktopDirectorySelection } from "@/lib/desktop/contracts";
 
+export function normalizeWorkspaceDirectoryPath(pathValue: string) {
+  return pathValue.trim().replace(/[\\/]+$/, "");
+}
+
 export function deriveWorkspaceNameFromPath(pathValue: string) {
-  const normalized = pathValue.trim().replace(/[\\/]+$/, "");
+  const normalized = normalizeWorkspaceDirectoryPath(pathValue);
 
   if (!normalized) {
     return "Workspace";

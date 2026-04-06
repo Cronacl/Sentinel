@@ -191,7 +191,7 @@ function ModelSelectorItem({ model }: { model: ChatComposerModel }) {
         <ProviderIcon className="size-4" provider={model.provider} />
       ) : (
         (renderExternalEngineIcon(model.engine, "size-4") ?? (
-          <span className="w-4 text-center text-[10px] font-medium uppercase text-foreground/60">
+          <span className="w-4 text-center text-[10px] font-medium text-foreground/60">
             {model.engine.slice(0, 1)}
           </span>
         ))

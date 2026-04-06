@@ -125,26 +125,17 @@ export function isClaudeToolErrorState(state: RendererProps["part"]["state"]) {
 
 export function useClaudeExpansionState(
   part: RendererProps["part"],
-  defaultExpanded: boolean,
+  _defaultExpanded: boolean,
 ) {
   const [isExpanded, setIsExpanded] = useState(false);
   const lastToolCallIdRef = useRef(part.toolCallId);
-  const previousDefaultExpandedRef = useRef(defaultExpanded);
 
   useEffect(() => {
     if (lastToolCallIdRef.current !== part.toolCallId) {
       lastToolCallIdRef.current = part.toolCallId;
-      previousDefaultExpandedRef.current = defaultExpanded;
       setIsExpanded(false);
-      return;
     }
-
-    if (defaultExpanded && !previousDefaultExpandedRef.current) {
-      setIsExpanded(true);
-    }
-
-    previousDefaultExpandedRef.current = defaultExpanded;
-  }, [defaultExpanded, part.toolCallId]);
+  }, [part.toolCallId]);
 
   return [isExpanded, setIsExpanded] as const;
 }

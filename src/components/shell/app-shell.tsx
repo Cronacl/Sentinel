@@ -5,7 +5,7 @@ import { ArrowLeft02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { PropsWithChildren } from "react";
+import { type PropsWithChildren, useEffect, useRef } from "react";
 
 import { getDesktopApi } from "@/lib/desktop/client";
 import { ShortcutProvider, useShortcutAction } from "@/lib/shortcuts/provider";
@@ -13,6 +13,11 @@ import { api } from "@/trpc/react";
 
 import { SETTINGS_NAV } from "@/components/settings/settings-nav";
 import { TerminalPanel } from "@/components/terminal/terminal-panel";
+import {
+  closeTerminal,
+  getTerminalDefaultCwd,
+  toggleTerminalSession,
+} from "@/components/terminal/terminal-store";
 
 import { WorkspaceSidebar } from "./workspace-sidebar";
 import { LeftSidebar } from "./left-sidebar";
@@ -93,6 +98,9 @@ function SidebarContent() {
 
 function AppShellShortcutBindings() {
   const { toggleLeftSidebar } = useShell();
+  const currentWorkspace = api.workspaces.getCurrent.useQuery(undefined, {
+    staleTime: 30_000,
+  });
   const {
     handleCreateWorkspace,
     handleOpenAutomations,
@@ -107,6 +115,30 @@ function AppShellShortcutBindings() {
   useShortcutAction("skills.open", handleOpenSkills);
   useShortcutAction("settings.open", handleOpenSettings);
   useShortcutAction("sidebar.left.toggle", toggleLeftSidebar);
+  useShortcutAction("terminal.toggle", () => {
+    void toggleTerminalSession(
+      getTerminalDefaultCwd() ?? currentWorkspace.data?.rootPath ?? null,
+    );
+  });
+
+  return null;
+}
+
+function AppShellRouteEffects() {
+  const pathname = usePathname();
+  const previousPathnameRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (previousPathnameRef.current == null) {
+      previousPathnameRef.current = pathname;
+      return;
+    }
+
+    if (previousPathnameRef.current !== pathname) {
+      closeTerminal();
+      previousPathnameRef.current = pathname;
+    }
+  }, [pathname]);
 
   return null;
 }
@@ -122,6 +154,7 @@ export function AppShell({ children }: PropsWithChildren) {
         <ShellWarmCache />
         <AppWarmupCoordinator />
         <AppShellShortcutBindings />
+        <AppShellRouteEffects />
         <div className="flex h-dvh flex-col overflow-clip">
           {showTitleBar ? <DesktopTitleBar platform={platform!} /> : null}
           <div className="relative flex min-h-0 flex-1 overflow-clip">

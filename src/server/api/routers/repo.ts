@@ -779,7 +779,15 @@ export const repoRouter = createTRPCRouter({
     .input(workspaceOptionalThreadInputSchema)
     .query(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
-      const thread = await getOwnedThreadForWorkspace(ctx, input);
+      const thread = await getOwnedThreadForWorkspace(ctx, input).catch(
+        (error) => {
+          if (error instanceof TRPCError && error.code === "NOT_FOUND") {
+            return null;
+          }
+
+          throw error;
+        },
+      );
       const githubService = await resolveGitHubService(ctx);
       return await buildRepoContextResponse({
         githubService,
