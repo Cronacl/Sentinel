@@ -74,6 +74,10 @@ import {
   collectRepoDiffPreloadCandidates,
   REPO_DIFF_PRELOAD_MODES,
 } from "@/components/chat/thread-repo-actions.helpers";
+import {
+  BACKGROUND_REPO_WARMUP_INTERVAL_MS,
+  queueRepoBackgroundWarmup,
+} from "@/components/chat/repo-background-warmup";
 
 import { SidebarCommandPalette } from "./sidebar-command-palette";
 import {
@@ -1348,36 +1352,33 @@ export function WorkspaceSidebar() {
     }
 
     backgroundRepoPreloadKeyRef.current = backgroundRepoPreloadKey;
-    let cancelled = false;
-    const timeoutId = window.setTimeout(() => {
-      if (cancelled) {
-        return;
-      }
+    queueRepoBackgroundWarmup({
+      candidates: backgroundRepoPreloadCandidates,
+      modes: REPO_DIFF_PRELOAD_MODES,
+      strategy: "prefetch",
+      utils,
+    });
+  }, [backgroundRepoPreloadCandidates, backgroundRepoPreloadKey, utils]);
 
-      void Promise.allSettled(
-        backgroundRepoPreloadCandidates.flatMap(({ threadId, workspaceId }) => [
-          utils.repo.getContext.prefetch({ threadId, workspaceId }),
-          ...REPO_DIFF_PRELOAD_MODES.map((mode) =>
-            utils.repo.getDiffPanelData.prefetch({
-              mode,
-              threadId,
-              workspaceId,
-            }),
-          ),
-        ]),
-      );
-    }, 120);
+  useEffect(() => {
+    if (!backgroundRepoPreloadCandidates.length) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      queueRepoBackgroundWarmup({
+        candidates: backgroundRepoPreloadCandidates,
+        minIntervalMs: BACKGROUND_REPO_WARMUP_INTERVAL_MS,
+        modes: REPO_DIFF_PRELOAD_MODES,
+        strategy: "fetch",
+        utils,
+      });
+    }, BACKGROUND_REPO_WARMUP_INTERVAL_MS);
 
     return () => {
-      cancelled = true;
-      window.clearTimeout(timeoutId);
+      window.clearInterval(intervalId);
     };
-  }, [
-    backgroundRepoPreloadCandidates,
-    backgroundRepoPreloadKey,
-    utils.repo.getContext,
-    utils.repo.getDiffPanelData,
-  ]);
+  }, [backgroundRepoPreloadCandidates, backgroundRepoPreloadKey, utils]);
 
   const togglePin = api.threads.togglePin.useMutation({
     onMutate: async ({ pinned, threadId }) => {

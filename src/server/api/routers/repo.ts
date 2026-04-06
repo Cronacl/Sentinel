@@ -866,13 +866,21 @@ export const repoRouter = createTRPCRouter({
 
   getDiffPanelData: protectedProcedure
     .input(
-      workspaceThreadInputSchema.extend({
+      workspaceOptionalThreadInputSchema.extend({
         mode: repoDiffModeSchema,
       }),
     )
     .query(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
-      const thread = await getOwnedThreadForWorkspace(ctx, input);
+      const thread = await getOwnedThreadForWorkspace(ctx, input).catch(
+        (error) => {
+          if (error instanceof TRPCError && error.code === "NOT_FOUND") {
+            return null;
+          }
+
+          throw error;
+        },
+      );
       const rootPath = assertWorkspaceRootPath(workspace.rootPath);
       const projectPath = await resolveThreadProjectPath({
         thread,

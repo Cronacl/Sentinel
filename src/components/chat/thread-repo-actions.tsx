@@ -48,9 +48,17 @@ import type { DesktopOpenTarget } from "@/lib/desktop/contracts";
 import { getErrorMessage } from "@/lib/errors";
 import { useShortcutAction } from "@/lib/shortcuts/provider";
 import { api } from "@/trpc/react";
-import { setTerminalPreferredCwd } from "../terminal/terminal-store";
+import {
+  openOrCreateTerminalSession,
+  setTerminalPreferredCwd,
+  useTerminalState,
+} from "../terminal/terminal-store";
 import { RepoPullRequestSidebar } from "./repo-pr-sidebar";
 import { RepoDiffSidebar } from "./repo-diff-sidebar";
+import {
+  BACKGROUND_REPO_WARMUP_INTERVAL_MS,
+  queueRepoBackgroundWarmup,
+} from "./repo-background-warmup";
 import { WorkspaceRunCommandButton } from "./workspace-run-command-button";
 import {
   closeRepoDiffSidebarState,
@@ -118,6 +126,7 @@ export function ThreadRepoActions({
   const utils = api.useUtils();
   const rightSidebar = useRightSidebar();
   const browserState = useBrowserSidebarState();
+  const isTerminalOpen = useTerminalState((state) => state.isOpen);
   const [launchTargets, setLaunchTargets] = useState<DesktopOpenTarget[]>([]);
   const [isLoadingTargets, setIsLoadingTargets] = useState(false);
   const [launchingTargetId, setLaunchingTargetId] = useState<string | null>(
@@ -223,7 +232,13 @@ export function ThreadRepoActions({
 
   useEffect(() => {
     setTerminalPreferredCwd(launchPath);
-  }, [launchPath]);
+
+    if (!isTerminalOpen || !launchPath) {
+      return;
+    }
+
+    void openOrCreateTerminalSession(launchPath);
+  }, [isTerminalOpen, launchPath]);
 
   const refreshContext = useCallback(async () => {
     await utils.repo.getContext.invalidate(repoContextQueryInput);
@@ -370,16 +385,35 @@ export function ThreadRepoActions({
     }
 
     preloadedRepoDiffKeyRef.current = repoDiffPreloadKey;
+    const candidates = [{ threadId, workspaceId }];
 
-    void Promise.allSettled(
-      REPO_DIFF_PRELOAD_MODES.map((mode) =>
-        utils.repo.getDiffPanelData.prefetch({
-          mode,
-          threadId,
-          workspaceId,
-        }),
-      ),
-    );
+    queueRepoBackgroundWarmup({
+      candidates,
+      modes: REPO_DIFF_PRELOAD_MODES,
+      strategy: "prefetch",
+      utils,
+    });
+  }, [isDesktop, repoDiffPreloadKey, threadId, utils, workspaceId]);
+
+  useEffect(() => {
+    if (!isDesktop || !repoDiffPreloadKey) {
+      return;
+    }
+
+    const candidates = [{ threadId, workspaceId }];
+    const intervalId = window.setInterval(() => {
+      queueRepoBackgroundWarmup({
+        candidates,
+        minIntervalMs: BACKGROUND_REPO_WARMUP_INTERVAL_MS,
+        modes: REPO_DIFF_PRELOAD_MODES,
+        strategy: "fetch",
+        utils,
+      });
+    }, BACKGROUND_REPO_WARMUP_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
   }, [isDesktop, repoDiffPreloadKey, threadId, utils, workspaceId]);
 
   useEffect(() => {
@@ -907,6 +941,56 @@ export function ThreadRepoActions({
       },
     );
   }, [rightSidebar, threadId, workspaceId]);
+
+  useEffect(() => {
+    if (!rightSidebar.isOpen) {
+      return;
+    }
+
+    if (rightSidebar.panelId === "repo-diff") {
+      if (
+        repoDiffSidebarState.kind === "thread" &&
+        repoDiffSidebarState.threadId === threadId &&
+        repoDiffSidebarState.workspaceId === workspaceId
+      ) {
+        return;
+      }
+
+      setRepoDiffSidebarState({
+        threadId,
+        workspaceId,
+      });
+      rightSidebar.setContent(
+        <RepoDiffSidebar key={`${threadId}:${workspaceId}`} />,
+        {
+          panelId: "repo-diff",
+          size: "wide",
+        },
+      );
+      return;
+    }
+
+    if (rightSidebar.panelId === "repo-pr") {
+      rightSidebar.setContent(
+        <RepoPullRequestSidebar
+          key={`repo-pr:${threadId}:${workspaceId}`}
+          threadId={threadId}
+          workspaceId={workspaceId}
+        />,
+        {
+          panelId: "repo-pr",
+          size: "narrow",
+        },
+      );
+    }
+  }, [
+    repoDiffSidebarState.kind,
+    repoDiffSidebarState.threadId,
+    repoDiffSidebarState.workspaceId,
+    rightSidebar,
+    threadId,
+    workspaceId,
+  ]);
 
   if (!isDesktop || !workspaceRootPath) {
     return null;
