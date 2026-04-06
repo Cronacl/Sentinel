@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.21](https://github.com/Cronacl/Sentinel/compare/v0.0.20...v0.0.21) (2026-04-06)
+
+
+### Bug Fixes
+
+* fix system permissions ([080e3c4](https://github.com/Cronacl/Sentinel/commit/080e3c4254326dee082541121831f6f3df732cb6))
+* fix test ci ([820dc7e](https://github.com/Cronacl/Sentinel/commit/820dc7ef5488311aeca02c08710969ac6cb4b392))
+
 ## [0.0.20](https://github.com/Cronacl/Sentinel/compare/v0.0.19...v0.0.20) (2026-04-06)
 
 
