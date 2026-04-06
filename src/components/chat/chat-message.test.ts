@@ -101,12 +101,12 @@ describe("chat-message helpers", () => {
     ).toBe("Provider request failed.");
   });
 
-  it("falls back to a cancellation label when no error text is present", () => {
+  it("does not surface cancellation as a failure", () => {
     expect(
       getAssistantFailureText({
         messageStatus: "cancelled",
       }),
-    ).toBe("Generation stopped.");
+    ).toBeNull();
   });
 });
 
@@ -212,5 +212,27 @@ describe("ChatMessage", () => {
     expect(markup).toContain("Run failed");
     expect(markup).toContain("Provider request failed.");
     expect(markup).toContain("bg-danger/5");
+  });
+
+  it("does not render a failure banner or retry action for cancelled runs", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ChatMessage, {
+        chatEngine: "sentinel",
+        message: {
+          id: "assistant-cancelled",
+          metadata: {
+            errorMessage: "Generation stopped.",
+            status: "cancelled",
+          },
+          parts: [{ text: " ", type: "text" }],
+          role: "assistant",
+        },
+        onRetry: () => {},
+      }),
+    );
+
+    expect(markup).not.toContain("Run failed");
+    expect(markup).not.toContain("Generation stopped.");
+    expect(markup).not.toContain("Retry");
   });
 });
