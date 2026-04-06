@@ -1,138 +1,144 @@
-# Sentinel
+<p align="center">
+  <img src="./assets/icon.png" alt="Sentinel logo" width="80" />
+</p>
 
-> Local-first desktop workspace for software development with AI.
-> Your project, your thread, your tools, and your runtime in one place.
+<h1 align="center">Sentinel</h1>
 
-## ![Status](https://img.shields.io/badge/status-alpha-orange?style=flat-square)
+<p align="center">
+  Local-first desktop AI workspace for real software projects.
+</p>
 
-## Overview
+<p align="center">
+  <a href="https://github.com/Cronacl/Sentinel/releases">Download</a>
+  ·
+  <a href="#getting-started">Run locally</a>
+  ·
+  <a href="#build">Build from source</a>
+  ·
+  <a href="./docs/macos-signing.md">macOS signing</a>
+</p>
 
-Sentinel gives you a workspace, a thread, your repo, your tools, and your runtime in one place. It is built around the normal shape of development work.
+<p align="center">
+  <img alt="Status" src="https://img.shields.io/badge/status-alpha-f59e0b?style=flat-square" />
+  <img alt="Platform" src="https://img.shields.io/badge/platform-desktop-3b82f6?style=flat-square" />
+  <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-111827?style=flat-square" />
+</p>
 
----
+Sentinel is a desktop app for working with AI inside a real codebase.
 
-## How It Works
+It keeps the repo, the thread, the terminal, the browser, and the runtime in one place. Models, approvals, memory, automations, integrations, and repo state all stay close to the work too.
 
-Start with a local project. Open a thread inside that workspace. From there you can:
+Open a workspace. Start a thread. Read code, plan something, make edits, run commands, inspect diffs, commit, push, open a PR, come back later, keep going.
 
-- inspect files
-- switch models
-- use plan mode
-- run tools with approvals
-- work through diffs
-- keep moving without losing context
+## Status
 
----
+Sentinel is still alpha.
 
-## Workflow
+Some parts are solid. Some parts are rough. Things will change.
 
-Sentinel is shaped around the tasks developers actually do:
+## Download
 
-| Step           | What it covers                                   |
-| -------------- | ------------------------------------------------ |
-| **Understand** | Browse and inspect the codebase                  |
-| **Plan**       | Use plan mode when the task needs structure      |
-| **Edit**       | Make changes and review diffs                    |
-| **Run**        | Execute commands in the built-in terminal        |
-| **Ship**       | Commit, push, and open a PR                      |
-| **Branch**     | Spin up worktrees for parallel execution         |
-| **Resume**     | Come back later with project context still there |
+Release builds are published on GitHub Releases:
 
----
+- [Download the latest release](https://github.com/Cronacl/Sentinel/releases)
+- macOS builds are available as DMGs
+- Windows builds are available as NSIS installers
+- Linux builds are available as AppImages
 
-## What's Included
+If you want the current development version, run it locally from source.
 
-- Workspace-based threads
-- Multi-model support
-- Local Codex and Claude Code runtime support
-- Plan mode
-- Repo-aware actions for diffs, branches, commits, push, and PR flow
-- Native worktree support for parallel execution
-- Built-in browser and terminal
-- Memory with global and workspace scope
-- Recurring automations
-- MCP support
-- Installable skills
+## What Sentinel Is
 
----
+The workspace is a real local folder. The thread is the main unit of work. Repo state matters. Longer tasks need more than a prompt box.
 
-## Engines & Providers
+Each thread lives inside a workspace, and that workspace can point at a local project folder. From there the app can keep track of repo state, model state, approvals, checkpoints, worktrees, queued follow-ups, and the rest of the thread context without making you rebuild it every time.
 
-Sentinel has three engines:
+## How The App Is Shaped
 
-| Engine     | Description                       |
-| ---------- | --------------------------------- |
-| `sentinel` | Built-in app harness              |
-| `codex`    | Local Codex runtime support       |
-| `claude`   | Local Claude Code runtime support |
+A workspace points at a local project directory.
 
-### The `sentinel` Engine
+Inside that workspace, you start threads. A thread can be a normal chat or a plan. While you work, Sentinel keeps the thread close to the repo, the model, the runtime, the terminal, the diff, and the rest of the task context.
 
-The `sentinel` engine is the app harness. It handles the parts around the model that make the workflow hold together:
+The shell stays around that work. The left side is for workspaces and threads. The center is the active thread. The bottom panel is the terminal. The right side is where diffs, PR state, browser tabs, and delegated runs show up.
 
-<details>
-<summary>See what it handles</summary>
+The short version is simple: workspace, thread, chat or plan, edit, run, diff, commit, push, PR.
 
-- System prompt and runtime context assembly
-- Project and workspace discovery
-- Tool routing instead of dumping every tool into every step
-- Approvals and permission boundaries
-- Plan mode
-- Context compaction so long-running threads stay usable
-- Memory retrieval and autosave
-- Integrations and MCP loading
-- Search and web fetch
-- Streamed thread state and queued follow-ups
-- Repo checkpoints so code changes inside a thread can be tracked and restored
+## At A Glance
 
-</details>
+| Area              | What it covers                                                          |
+| ----------------- | ----------------------------------------------------------------------- |
+| Workspaces        | Local project folders, thread history, workspace-level context          |
+| Threads           | Chat mode, plan mode, queued follow-ups, checkpoints, long-running work |
+| Repo workflow     | Diffs, branches, worktrees, commits, push, PR flow                      |
+| Built-in tools    | Terminal, browser, attachments, voice input, approvals                  |
+| AI setup          | Multiple engines, provider support, model selection, reasoning controls |
+| Long-term context | Memory, context compaction, recurring automations                       |
+| Extensibility     | Skills, MCP servers, integrations                                       |
 
-### Supported Providers
+## What The Runtime Looks Like
 
-| Provider         | Provider          |
-| ---------------- | ----------------- |
-| OpenAI           | Anthropic         |
-| Google AI Studio | Google Vertex AI  |
-| xAI              | Azure OpenAI      |
-| Amazon Bedrock   | Groq              |
-| Cohere           | Moonshot AI       |
-| Mistral          | Ollama            |
-| OpenRouter       | Vercel AI Gateway |
+Sentinel supports three engines: `sentinel`, `codex`, and `claude`.
 
----
+`sentinel` is the built-in harness. It handles the app side of the run so the thread can keep its state over time.
+
+`codex` and `claude` are local runtimes carried inside the Sentinel shell. The runtime changes, but the thread still lives in Sentinel with the same workspace, repo panels, approvals, settings, and history around it.
+
+The thread is carrying more than messages. It can also carry the current engine, model, working directory, queued follow-ups, repo checkpoint state, and runtime-linked session state.
+
+Compaction is part of this too. Longer threads can tighten older context and keep moving without dragging every raw turn forward forever.
+
+## How The Work Holds Together
+
+Workspaces map to local folders. Threads live inside those workspaces. You can pin them, archive them, switch between chat mode and plan mode, and come back later without losing the task state around the work.
+
+The repo stays attached to the thread. Sentinel can inspect status, show diffs, create and switch branches, commit, push, open a PR, and isolate thread work in a worktree. It also keeps checkpoints tied to thread history, which helps once the work starts branching.
+
+The rest of the app stays close to that thread. There is a built-in terminal, a built-in browser, file and document attachments, voice input, and approvals around tool use. For longer tasks, there is plan mode, queued follow-ups, memory, context compaction, and recurring automations.
+
+Skills, MCP servers, and integrations sit around the same flow. They are separate systems because they do different jobs, but they still land back in the same workspace and thread model.
+
+| Surface    | Included                                                          |
+| ---------- | ----------------------------------------------------------------- |
+| Core shell | Workspaces, threads, sidebars, command palette                    |
+| Repo tools | Status, diffs, branches, worktrees, commits, PR flow, checkpoints |
+| Execution  | Terminal, approvals, runtime controls                             |
+| Context    | Plan mode, follow-ups, memory, context compaction                 |
+| Inputs     | File attachments, document loading, voice input                   |
+| Extensions | Skills, MCP servers, integrations, automations                    |
+
+## Providers
+
+Sentinel supports OpenAI, Anthropic, Google AI Studio, Google Vertex AI, xAI, Azure OpenAI, Amazon Bedrock, Groq, Cohere, Moonshot AI, Mistral, Ollama, OpenRouter, and Vercel AI Gateway.
 
 ## Integrations
 
-Sentinel can connect to the systems around your repo:
+The app can connect to systems around the repo, depending on how you set it up. Current integrations include Gmail, Google Calendar, Google Drive, Slack, Notion, GitHub, Linear, Airtable, PostgreSQL, MySQL, MongoDB, Yahoo Finance, arXiv, and PubMed.
 
-| Category            | Integrations                  |
-| ------------------- | ----------------------------- |
-| **Communication**   | Gmail, Slack, Google Calendar |
-| **Storage & Docs**  | Google Drive, Notion          |
-| **Dev & Project**   | GitHub, Linear, Airtable      |
-| **Databases**       | PostgreSQL, MySQL, MongoDB    |
-| **Data & Research** | Yahoo Finance, arXiv, PubMed  |
+Some use OAuth. Some use connection config or API credentials. A few are authless.
 
----
+## Why People Use It
 
-## Local-First
+Sentinel makes the most sense when the work is bigger than a one-off prompt.
+
+It helps when the repo matters, when the thread needs to keep state over time, when you want plans, diffs, approvals, and commands in the same place, when you want local runtimes and local project context, and when you want recurring tasks or saved memory around the project.
+
+If you only want a quick chat box, this is probably more app than you need.
+
+## Local-first by default
 
 Sentinel keeps its state on your machine.
 
-- Local SQLite database
-- Encrypted stored credentials and config
-- Backup and export tools
-- Memory is optional and off by default
+That means SQLite for app data, encrypted stored credentials and config, local backup and export tools, and optional memory that stays off by default.
 
----
+This is a desktop app first. A lot of the useful parts depend on running close to the local repo and local tools.
 
 ## Getting Started
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) installed on your machine
+- [Bun](https://bun.sh)
 
-### Run Locally
+### Run locally
 
 ```bash
 bun install
@@ -142,19 +148,16 @@ bun run dev:desktop
 
 The app runs at `http://localhost:3232`.
 
-> [!NOTE]
-> `ENCRYPTION_KEY` can be left empty in `.env`. Sentinel will generate one on first desktop launch.
+`ENCRYPTION_KEY` can be left empty in `.env`. Sentinel will generate one on first desktop launch.
 
-### Environment Variables
+### Environment variables
 
 | Variable              | Required | Description                               |
 | --------------------- | -------- | ----------------------------------------- |
-| `ENCRYPTION_KEY`      | No       | Auto-generated on first launch if omitted |
+| `ENCRYPTION_KEY`      | No       | Generated on first launch if omitted      |
 | `SENTINEL_DB_PATH`    | No       | Custom path for the local SQLite database |
 | `SENTINEL_STATE_PATH` | No       | Custom path for app state                 |
 | `SENTINEL_APP_URL`    | No       | Override the default app URL              |
-
----
 
 ## Build
 
@@ -164,9 +167,14 @@ The app runs at `http://localhost:3232`.
 bun run build:desktop:mac
 ```
 
-This produces both `arm64` and `x64` DMG artifacts. For a single-architecture package, use `bun run build:desktop:mac:arm64` or `bun run build:desktop:mac:x64`.
+For a single architecture package:
 
-For signed macOS builds, see [`docs/macos-signing.md`](docs/macos-signing.md).
+```bash
+bun run build:desktop:mac:arm64
+bun run build:desktop:mac:x64
+```
+
+For signed macOS builds, see [docs/macos-signing.md](docs/macos-signing.md).
 
 ### Windows
 
@@ -180,14 +188,13 @@ bun run build:desktop:windows
 bun run build:desktop:linux
 ```
 
----
+## Notes
 
-## Status
+Sentinel is desktop-first. A lot of the useful parts depend on being close to the local repo and local tools.
 
-> [!WARNING]
-> Sentinel is currently in alpha. Expect rough edges, breaking changes, and things that do not work yet.
+State stays on your machine unless you connect external providers or integrations.
 
----
+Updates are currently distributed through GitHub Releases.
 
 ## License
 
