@@ -2,9 +2,13 @@ name: ci
 
 on:
   pull_request:
+    paths:
+      - "src/**"
   push:
     branches:
       - main
+    paths:
+      - "src/**"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -19,7 +23,6 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      docs_config: ${{ steps.filter.outputs.docs_config }}
       source: ${{ steps.filter.outputs.source }}
     steps:
       - uses: actions/checkout@v4
@@ -32,25 +35,6 @@ jobs:
           filters: |
             source:
               - 'src/**'
-              - 'desktop/**'
-              - 'scripts/**'
-              - 'package.json'
-              - 'bun.lock'
-              - 'package-lock.json'
-              - 'tsconfig*.json'
-              - 'next.config.*'
-              - 'postcss.config.*'
-              - '.github/actions/**'
-              - '.github/workflows/**'
-              - 'release-please-config.json'
-              - '.release-please-manifest.json'
-            docs_config:
-              - 'docs/**'
-              - '*.md'
-              - '.gitignore'
-              - '.editorconfig'
-              - '.prettier*'
-              - '.npmrc'
 
   pr-metadata:
     if: github.event_name == 'pull_request'
@@ -82,7 +66,7 @@ jobs:
   format:
     name: format
     needs: changes
-    if: ${{ needs.changes.outputs.source == 'true' || needs.changes.outputs.docs_config == 'true' }}
+    if: ${{ needs.changes.outputs.source == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -115,7 +99,7 @@ jobs:
     name: test
     needs: changes
     if: ${{ needs.changes.outputs.source == 'true' }}
-    runs-on: ubuntu-24.04
+    runs-on: macos-latest
     timeout-minutes: 45
     permissions:
       contents: read
