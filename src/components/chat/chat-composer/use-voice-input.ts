@@ -4,9 +4,13 @@ import type { Editor } from "@tiptap/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sileo } from "sileo";
 
-import { ensureMicrophoneAccessForVoiceInput } from "@/lib/desktop/permissions";
+import {
+  ensureMicrophoneAccessForVoiceInput,
+  openMicrophonePermissionSettings,
+} from "@/lib/desktop/permissions";
 
 import { insertTranscriptIntoComposer } from "./voice-input.helpers";
+import { resolveVoiceInputStartFailure } from "./voice-input.helpers";
 import { resolveVoiceInputStartError } from "./voice-input.helpers";
 
 type VoiceInputPhase = "idle" | "recording" | "transcribing";
@@ -62,6 +66,8 @@ function stopStream(stream: MediaStream | null) {
 export function useVoiceInput({ editor }: UseVoiceInputOptions) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
+  const [hasPermissionRecoveryAction, setHasPermissionRecoveryAction] =
+    useState(false);
   const [level, setLevel] = useState(0);
   const [phase, setPhase] = useState<VoiceInputPhase>("idle");
   const [providerLabel, setProviderLabel] = useState("voice provider");
@@ -110,6 +116,15 @@ export function useVoiceInput({ editor }: UseVoiceInputOptions) {
     recordingStartedAtRef.current = null;
     chunksRef.current = [];
   }, [cleanupAudioAnalysis]);
+
+  const openPermissionRecovery = useCallback(async () => {
+    const opened = await openMicrophonePermissionSettings();
+    if (!opened) {
+      sileo.error({
+        description: "Unable to open Microphone settings right now.",
+      });
+    }
+  }, []);
 
   useEffect(() => {
     if (phase !== "recording") {
@@ -230,13 +245,21 @@ export function useVoiceInput({ editor }: UseVoiceInputOptions) {
         return;
       }
 
+      const platform =
+        typeof window !== "undefined"
+          ? (window.sentinelDesktop?.app.platform ?? null)
+          : null;
+      let nativePermissionState: string | null = null;
+
       setErrorMessage("");
+      setHasPermissionRecoveryAction(false);
       setElapsedSeconds(0);
       setProviderLabel(nextProviderLabel?.trim() || "voice provider");
       cancelledRef.current = false;
 
       try {
         const microphoneAccess = await ensureMicrophoneAccessForVoiceInput();
+        nativePermissionState = microphoneAccess.state;
         const permissionError = resolveVoiceInputStartError(microphoneAccess);
         if (permissionError) {
           throw new Error(permissionError);
@@ -318,13 +341,21 @@ export function useVoiceInput({ editor }: UseVoiceInputOptions) {
         setPhase("recording");
       } catch (error) {
         cleanupRecordingResources();
-        const message =
-          error instanceof DOMException && error.name === "NotAllowedError"
-            ? "Microphone access was denied. Allow microphone access for Sentinel and try again."
-            : error instanceof Error
-              ? error.message
-              : "Unable to start voice input.";
+        const { canOfferRecovery, message } = resolveVoiceInputStartFailure({
+          error,
+          platform,
+        });
+
+        console.warn("[voice-input] microphone start failed", {
+          error:
+            error instanceof Error
+              ? { message: error.message, name: error.name }
+              : String(error),
+          nativePermissionState,
+        });
+
         setErrorMessage(message);
+        setHasPermissionRecoveryAction(canOfferRecovery);
         sileo.error({ description: message });
         setPhase("idle");
       }
@@ -343,11 +374,13 @@ export function useVoiceInput({ editor }: UseVoiceInputOptions) {
     cancel,
     elapsedSeconds,
     errorMessage,
+    hasPermissionRecoveryAction,
     isActive: phase !== "idle",
     isRecording: phase === "recording",
     isSupported,
     isTranscribing: phase === "transcribing",
     level,
+    openPermissionRecovery,
     phase,
     providerLabel,
     start,

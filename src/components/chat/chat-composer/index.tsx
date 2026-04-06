@@ -569,9 +569,24 @@ export function ChatComposer({
 
           {!voiceInput.isActive && voiceInput.errorMessage ? (
             <div className="px-3 pb-1">
-              <p className="text-xs text-danger-soft-foreground">
-                {voiceInput.errorMessage}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-danger-soft-foreground">
+                  {voiceInput.errorMessage}
+                </p>
+                {voiceInput.hasPermissionRecoveryAction ? (
+                  <Button
+                    className="h-6 min-w-0 px-2 text-[11px]"
+                    onPress={() => {
+                      void voiceInput.openPermissionRecovery();
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    Open Settings
+                  </Button>
+                ) : null}
+              </div>
             </div>
           ) : null}
 
