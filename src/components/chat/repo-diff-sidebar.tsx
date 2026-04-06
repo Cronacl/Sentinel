@@ -1,6 +1,7 @@
 "use client";
 
 import { FileDiff } from "@pierre/diffs/react";
+import { skipToken } from "@tanstack/react-query";
 import {
   ArrowLeftRightIcon,
   ArrowDown01Icon,
@@ -394,12 +395,14 @@ export function RepoDiffSidebar() {
     [prefs, threadId, workspaceId],
   );
 
-  const diffPanelQuery = api.repo.getDiffPanelData.useQuery(queryInput!, {
-    enabled: Boolean(queryInput),
-    refetchOnReconnect: false,
-    refetchOnWindowFocus: false,
-    staleTime: 15_000,
-  });
+  const diffPanelQuery = api.repo.getDiffPanelData.useQuery(
+    queryInput ?? skipToken,
+    {
+      refetchOnReconnect: false,
+      refetchOnWindowFocus: false,
+      staleTime: 15_000,
+    },
+  );
 
   const repoRoot =
     diffPanelQuery.data?.repoContext.effectiveRootPath ??
