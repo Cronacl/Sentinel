@@ -41,6 +41,6 @@ runs:
         path: |
           .next/cache
           ${{ steps.cache-paths.outputs.electron_cache_paths }}
-        key: ${{ runner.os }}-desktop-build-${{ hashFiles('bun.lock', 'package.json', 'next.config.*') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-desktop-build-${{ hashFiles('bun.lock', 'package.json', 'next.config.*') }}
         restore-keys: |
-          ${{ runner.os }}-desktop-build-
+          ${{ runner.os }}-${{ runner.arch }}-desktop-build-

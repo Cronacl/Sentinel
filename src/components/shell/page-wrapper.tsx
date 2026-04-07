@@ -47,7 +47,6 @@ export function PageWrapper({
   const desktop = getDesktopApi();
   const platform = desktop?.app.platform ?? null;
   const isMacDesktop = platform === "darwin";
-  const isWindowsDesktop = platform === "win32";
   const { leftSidebarOpen } = useShell();
   const showToggle = !leftSidebarOpen;
   const chromeMetrics = getDesktopChromeMetrics(platform);
@@ -66,7 +65,7 @@ export function PageWrapper({
     <div className="flex h-full w-full flex-col items-start overflow-clip">
       {hasHeader && (
         <header
-          className={`flex w-full shrink-0 items-center gap-3 px-4 lg:px-6 ${isWindowsDesktop ? "app-region-drag" : ""}`}
+          className="flex w-full shrink-0 items-center gap-3 px-4 lg:px-6"
           style={headerStyle}
         >
           {showToggle && <SidebarToggle className="app-region-no-drag" />}

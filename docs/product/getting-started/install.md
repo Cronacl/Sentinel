@@ -48,6 +48,13 @@ bun run build:desktop:windows
 bun run build:desktop:linux
 ```
 
+Single-architecture Linux builds:
+
+```bash
+bun run build:desktop:linux:arm64
+bun run build:desktop:linux:x64
+```
+
 Single-target Linux builds:
 
 ```bash

@@ -38,7 +38,10 @@ export function SettingsPageWrapper({
           className="sentinel-scroll-area h-full w-full px-6 py-8 lg:px-8"
           style={{
             paddingLeft: leadingInset,
-            paddingTop: chromeMetrics.titleBarHeight > 0 ? 24 : undefined,
+            paddingTop:
+              platform !== "win32" && chromeMetrics.titleBarHeight > 0
+                ? 24
+                : undefined,
           }}
         >
           <div className={`mx-auto w-full ${contentClassName ?? "max-w-2xl"}`}>

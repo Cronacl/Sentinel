@@ -9,6 +9,35 @@ const targetPackagePath = path.join(targetRoot, "package.json");
 const electronGypDir = path.join(projectRoot, ".electron-gyp");
 const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
 
+function getArgValue(flag) {
+  const index = process.argv.indexOf(flag);
+  if (index === -1) return null;
+  return process.argv[index + 1] ?? null;
+}
+
+function normalizeTargetPlatform(platform) {
+  switch (platform) {
+    case "darwin":
+    case "linux":
+    case "win32":
+      return platform;
+    case "mac":
+      return "darwin";
+    case "win":
+      return "win32";
+    default:
+      return null;
+  }
+}
+
+function normalizeTargetArch(arch) {
+  if (arch === "arm") {
+    return "armv7l";
+  }
+
+  return arch;
+}
+
 function getElectronExecutablePath() {
   switch (process.platform) {
     case "darwin":
@@ -42,6 +71,13 @@ function getElectronExecutablePath() {
 }
 
 const electronBin = getElectronExecutablePath();
+const hostArch = normalizeTargetArch(process.arch);
+const targetPlatform =
+  normalizeTargetPlatform(getArgValue("--platform") ?? process.platform) ??
+  process.platform;
+const targetArch = normalizeTargetArch(getArgValue("--arch") ?? hostArch);
+const isHostTarget =
+  targetPlatform === process.platform && targetArch === hostArch;
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -164,31 +200,38 @@ await run(npmExecutable, ["rebuild", "better-sqlite3"], {
   cwd: targetRoot,
   env: {
     ...process.env,
-    npm_config_arch: process.arch,
-    npm_config_build_from_source: "true",
+    ...(isHostTarget ? { npm_config_build_from_source: "true" } : {}),
+    npm_config_arch: targetArch,
+    npm_config_platform: targetPlatform,
     npm_config_devdir: electronGypDir,
     npm_config_disturl: "https://electronjs.org/headers",
     npm_config_runtime: "electron",
     npm_config_target: getInstalledVersion("electron"),
-    npm_config_target_arch: process.arch,
-    npm_config_target_platform: process.platform,
+    npm_config_target_arch: targetArch,
+    npm_config_target_platform: targetPlatform,
     npm_config_update_binary: "true",
   },
 });
 
-await run(
-  electronBin,
-  [
-    "-e",
-    "const Database=require('better-sqlite3'); const db=new Database(':memory:'); console.log(db.prepare('select 1 as value').get().value); db.close();",
-  ],
-  {
-    cwd: targetRoot,
-    env: {
-      ...process.env,
-      ELECTRON_RUN_AS_NODE: "1",
+if (isHostTarget) {
+  await run(
+    electronBin,
+    [
+      "-e",
+      "const Database=require('better-sqlite3'); const db=new Database(':memory:'); console.log(db.prepare('select 1 as value').get().value); db.close();",
+    ],
+    {
+      cwd: targetRoot,
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: "1",
+      },
     },
-  },
-);
+  );
+} else {
+  console.log(
+    `[desktop] skipping better-sqlite3 runtime verification for cross-target ${targetPlatform}-${targetArch}`,
+  );
+}
 
 await pruneBetterSqlite3Runtime();

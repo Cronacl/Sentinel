@@ -188,6 +188,13 @@ bun run build:desktop:windows
 bun run build:desktop:linux
 ```
 
+For an explicit architecture package:
+
+```bash
+bun run build:desktop:linux:arm64
+bun run build:desktop:linux:x64
+```
+
 ## Notes
 
 Sentinel is desktop-first. A lot of the useful parts depend on being close to the local repo and local tools.
