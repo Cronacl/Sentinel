@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.30](https://github.com/Cronacl/Sentinel/compare/v0.0.29...v0.0.30) (2026-04-07)
+
+
+### Features
+
+* enhance settings layout for Windows platform ([e70e094](https://github.com/Cronacl/Sentinel/commit/e70e094c5ea3aceb239abbbb8e13ffbc7c909422))
+
 ## [0.0.29](https://github.com/Cronacl/Sentinel/compare/v0.0.28...v0.0.29) (2026-04-07)
 
 
