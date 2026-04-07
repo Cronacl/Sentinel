@@ -17,7 +17,10 @@
     "prepare": "lefthook install",
     "build": "node ./scripts/rebuild-node-native.mjs && node ./scripts/next-build.mjs",
     "build:desktop": "bun run build:desktop:mac",
-    "build:desktop:linux": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform linux --target AppImage",
+    "build:desktop:linux": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform linux",
+    "build:desktop:linux:appimage": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform linux --target AppImage",
+    "build:desktop:linux:deb": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform linux --target deb",
+    "build:desktop:linux:rpm": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform linux --target rpm",
     "build:desktop:mac": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform mac --target dmg --arch arm64",
     "build:desktop:mac:arm64": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform mac --target dmg --arch arm64",
     "build:desktop:mac:x64": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform mac --target dmg --arch x64",
@@ -198,7 +201,9 @@
     "linux": {
       "category": "Development",
       "target": [
-        "AppImage"
+        "AppImage",
+        "deb",
+        "rpm"
       ]
     },
     "publish": [

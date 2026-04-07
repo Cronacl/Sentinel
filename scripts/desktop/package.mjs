@@ -4,15 +4,15 @@ import path from "node:path";
 const PLATFORM_CONFIG = {
   linux: {
     builderFlag: "--linux",
-    defaultTarget: "AppImage",
+    defaultTargets: ["AppImage", "deb", "rpm"],
   },
   mac: {
     builderFlag: "--mac",
-    defaultTarget: "dmg",
+    defaultTargets: ["dmg"],
   },
   win: {
     builderFlag: "--win",
-    defaultTarget: "nsis",
+    defaultTargets: ["nsis"],
   },
 };
 
@@ -80,8 +80,14 @@ if (!platform || !Object.hasOwn(PLATFORM_CONFIG, platform)) {
   throw new Error('Expected "--platform" to be one of: mac, win, linux.');
 }
 
-const target =
-  getArgValue("--target") ?? PLATFORM_CONFIG[platform].defaultTarget;
+const targets = [
+  ...new Set(
+    getArgValues("--target")
+      .flatMap((value) => value.split(","))
+      .map((value) => value.trim())
+      .filter(Boolean),
+  ),
+];
 const archs = [...new Set(getArgValues("--arch"))];
 
 const electronBuilderCli = path.join(
@@ -93,7 +99,7 @@ const electronBuilderCli = path.join(
 
 const builderArgs = [
   PLATFORM_CONFIG[platform].builderFlag,
-  target,
+  ...(targets.length > 0 ? targets : PLATFORM_CONFIG[platform].defaultTargets),
   "--publish",
   "never",
 ];

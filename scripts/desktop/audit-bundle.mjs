@@ -199,7 +199,11 @@ const installerPaths =
     ? findInstallerFiles(files, ".dmg")
     : platform === "win"
       ? findInstallerFiles(files, ".exe")
-      : findInstallerFiles(files, ".AppImage");
+      : [
+          ...findInstallerFiles(files, ".AppImage"),
+          ...findInstallerFiles(files, ".deb"),
+          ...findInstallerFiles(files, ".rpm"),
+        ];
 
 if (installerPaths.length === 0) {
   throw new Error(

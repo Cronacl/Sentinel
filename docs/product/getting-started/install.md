@@ -12,7 +12,7 @@ Current release targets:
 
 - macOS: DMG
 - Windows: NSIS installer
-- Linux: AppImage
+- Linux: AppImage, DEB, RPM
 
 ## Run from source
 
@@ -46,6 +46,14 @@ bun run build:desktop:windows
 
 ```bash
 bun run build:desktop:linux
+```
+
+Single-target Linux builds:
+
+```bash
+bun run build:desktop:linux:appimage
+bun run build:desktop:linux:deb
+bun run build:desktop:linux:rpm
 ```
 
 ## Related pages
