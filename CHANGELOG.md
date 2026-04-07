@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.29](https://github.com/Cronacl/Sentinel/compare/v0.0.28...v0.0.29) (2026-04-07)
+
+
+### Bug Fixes
+
+* update application description for clarity ([d705317](https://github.com/Cronacl/Sentinel/commit/d7053177f3544f6ed258dd36bc31b94c50b27bfd))
+
 ## [0.0.28](https://github.com/Cronacl/Sentinel/compare/v0.0.27...v0.0.28) (2026-04-07)
 
 
