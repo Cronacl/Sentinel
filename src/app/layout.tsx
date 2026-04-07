@@ -7,7 +7,7 @@ import "@/styles/globals.css";
 
 export const metadata: Metadata = {
   title: "Sentinel",
-  description: "Local-first AI desktop workspace for building software.",
+  description: "Local-first AI desktop workspace",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
 
