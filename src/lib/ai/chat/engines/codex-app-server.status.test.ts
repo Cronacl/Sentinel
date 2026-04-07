@@ -28,6 +28,7 @@ const {
 
 const originalHome = process.env.HOME;
 const originalSentinelCodexPath = process.env.SENTINEL_CODEX_PATH;
+const originalSentinelStatePath = process.env.SENTINEL_STATE_PATH;
 
 function buildCodexModel() {
   return {
@@ -53,6 +54,7 @@ beforeEach(() => {
   resolveCodexCliMock.mockReset();
   readCodexCliVersionMock.mockReset();
   spawnCodexCliMock.mockReset();
+  delete process.env.SENTINEL_STATE_PATH;
 
   resolveCodexCliMock.mockImplementation(async () => ({
     command: "/Users/test/.local/bin/codex",
@@ -80,6 +82,11 @@ afterEach(() => {
     process.env.SENTINEL_CODEX_PATH = originalSentinelCodexPath;
   } else {
     delete process.env.SENTINEL_CODEX_PATH;
+  }
+  if (originalSentinelStatePath) {
+    process.env.SENTINEL_STATE_PATH = originalSentinelStatePath;
+  } else {
+    delete process.env.SENTINEL_STATE_PATH;
   }
   resetCodexEngineStatusCache();
 });
