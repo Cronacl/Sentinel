@@ -1,15 +1,19 @@
 import { experimental_generateVideo as generateVideo } from "ai";
-import type { FileUIPart } from "ai";
-import { readFile } from "node:fs/promises";
 import { z } from "zod";
 
 import { createProviderInstance } from "@/lib/ai/providers/factory";
 import {
+  getVideoModelMeta,
   getVideoModelsForProvider,
   supportsCustomVideoModels,
   type VideoGenerationRuntime,
 } from "@/lib/ai/providers/videos";
 import { writeGeneratedMediaArtifact } from "@/lib/generated-media";
+import {
+  preprocessOptionalInputString,
+  resolveReferenceImage,
+  type ReferenceImage,
+} from "@/lib/ai/chat/tools/reference-image";
 import {
   DEFAULT_VIDEO_GENERATION_COUNT,
   MAX_VIDEO_GENERATION_TARGETS,
@@ -17,43 +21,12 @@ import {
   MAX_VIDEO_GENERATION_VIDEOS_PER_TARGET,
   VIDEO_GENERATION_MODE_VALUES,
 } from "@/lib/video-generation";
-import { buildActiveThreadMessages } from "@/lib/ai/messages/branches";
-import { loadThreadMessages } from "@/lib/ai/chat/persistence";
 import { AI_PROVIDERS, type AIProvider } from "@/server/db/enums";
 
 const VIDEO_ARTIFACT_PATH_PLACEHOLDER =
   "[omitted from model output; video playback available in the UI]";
-const NULLISH_OPTIONAL_INPUT_VALUES = new Set([
-  "n/a",
-  "na",
-  "no image",
-  "no reference",
-  "none",
-  "null",
-  "undefined",
-]);
 
 const videoTargetProviderSchema = z.enum(AI_PROVIDERS);
-
-function normalizeOptionalInputString(value: unknown) {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-
-  return NULLISH_OPTIONAL_INPUT_VALUES.has(trimmed.toLowerCase())
-    ? undefined
-    : trimmed;
-}
-
-function preprocessOptionalInputString(value: unknown) {
-  return typeof value === "string"
-    ? normalizeOptionalInputString(value)
-    : value;
-}
 
 export const generateVideoInputSchema = z
   .object({
@@ -221,156 +194,6 @@ type GenerateVideoRuntime = {
   videoGeneration: VideoGenerationRuntime;
 };
 
-type ReferenceImage = {
-  data: Uint8Array;
-  mediaType: string;
-};
-
-function decodeDataUrl(url: string) {
-  const match = /^data:([^;,]+)?(?:;charset=[^;,]+)?;base64,(.+)$/s.exec(url);
-  if (!match?.[2]) {
-    throw new Error("Invalid reference image data URL.");
-  }
-
-  return {
-    data: Uint8Array.from(Buffer.from(match[2], "base64")),
-    mediaType: match[1] || "image/png",
-  };
-}
-
-function getReferenceImageParts(
-  parts: readonly unknown[],
-  filename: string,
-): FileUIPart[] {
-  return parts.filter(
-    (part): part is FileUIPart =>
-      typeof part === "object" &&
-      part != null &&
-      "type" in part &&
-      part.type === "file" &&
-      (("filename" in part ? part.filename : undefined) ?? "Attachment") ===
-        filename,
-  );
-}
-
-function getImageFileParts(parts: readonly unknown[]): FileUIPart[] {
-  return parts.filter(
-    (part): part is FileUIPart =>
-      typeof part === "object" &&
-      part != null &&
-      "type" in part &&
-      part.type === "file" &&
-      "mediaType" in part &&
-      typeof part.mediaType === "string" &&
-      part.mediaType.startsWith("image/"),
-  );
-}
-
-async function resolveReferenceImage(
-  input: GenerateVideoInput,
-  runtime: GenerateVideoRuntime,
-): Promise<ReferenceImage | null> {
-  const filename = normalizeOptionalInputString(input.referenceImageFilename);
-  if (!filename) {
-    return null;
-  }
-
-  const targetMessageId =
-    normalizeOptionalInputString(input.referenceImageMessageId) ||
-    runtime.sourceMessageId ||
-    null;
-  if (!runtime.threadId || !targetMessageId) {
-    throw new Error(
-      "A source message is required to resolve the reference image attachment.",
-    );
-  }
-
-  const transcript = buildActiveThreadMessages(
-    await loadThreadMessages(runtime.threadId),
-  );
-  const message = transcript.find(
-    (candidate) => candidate.id === targetMessageId,
-  );
-
-  if (!message) {
-    throw new Error(
-      `Message "${targetMessageId}" was not found in this thread.`,
-    );
-  }
-
-  const imageParts = getImageFileParts(message.parts);
-  if (imageParts.length === 0) {
-    return null;
-  }
-
-  const matchingParts = getReferenceImageParts(message.parts, filename);
-  if (matchingParts.length === 0) {
-    if (
-      imageParts.length === 1 &&
-      input.referenceImageAttachmentIndex == null &&
-      !normalizeOptionalInputString(input.referenceImageMessageId)
-    ) {
-      const [fallbackPart] = imageParts;
-      if (!fallbackPart) {
-        return null;
-      }
-
-      if (fallbackPart.url.startsWith("data:")) {
-        return decodeDataUrl(fallbackPart.url);
-      }
-
-      if (/^https?:\/\//i.test(fallbackPart.url)) {
-        return null;
-      }
-
-      return {
-        data: Uint8Array.from(await readFile(fallbackPart.url)),
-        mediaType: fallbackPart.mediaType,
-      };
-    }
-
-    throw new Error(
-      `Reference image attachment "${filename}" was not found on message "${targetMessageId}".`,
-    );
-  }
-
-  const selectedIndex =
-    input.referenceImageAttachmentIndex != null
-      ? input.referenceImageAttachmentIndex - 1
-      : 0;
-  if (matchingParts.length > 1 && input.referenceImageAttachmentIndex == null) {
-    throw new Error(
-      `Reference image "${filename}" appears multiple times on message "${targetMessageId}". Provide referenceImageAttachmentIndex to disambiguate.`,
-    );
-  }
-
-  const selected = matchingParts[selectedIndex];
-  if (!selected) {
-    throw new Error(
-      `referenceImageAttachmentIndex ${input.referenceImageAttachmentIndex} is out of range for "${filename}".`,
-    );
-  }
-
-  if (!selected.mediaType?.startsWith("image/")) {
-    throw new Error(`Attachment "${filename}" is not an image.`);
-  }
-
-  if (selected.url.startsWith("data:")) {
-    return decodeDataUrl(selected.url);
-  }
-
-  if (/^https?:\/\//i.test(selected.url)) {
-    throw new Error(
-      `Attachment "${filename}" is not stored locally, so it cannot be used as a reference image yet.`,
-    );
-  }
-
-  return {
-    data: Uint8Array.from(await readFile(selected.url)),
-    mediaType: selected.mediaType,
-  };
-}
-
 function stringifyWarning(value: unknown) {
   if (!value || typeof value !== "object") {
     return String(value ?? "");
@@ -485,6 +308,52 @@ function getVideoModel(
   throw new Error("Provider does not expose a video generation model.");
 }
 
+function assertVideoModelSupportsInput({
+  hasReferenceImage,
+  modelId,
+  provider,
+}: {
+  hasReferenceImage: boolean;
+  modelId: string;
+  provider: AIProvider;
+}) {
+  const modelMeta = getVideoModelMeta(provider, modelId);
+  if (!modelMeta) {
+    if (hasReferenceImage) {
+      throw new Error(
+        `Model "${modelId}" is a custom video model for provider "${provider}", so Sentinel cannot verify image-to-video support.`,
+      );
+    }
+
+    return;
+  }
+
+  if (hasReferenceImage && !modelMeta.capabilities.supportsImageToVideo) {
+    throw new Error(
+      `Model "${modelMeta.displayName}" does not support image-to-video generation.`,
+    );
+  }
+
+  if (!hasReferenceImage && !modelMeta.capabilities.supportsTextToVideo) {
+    throw new Error(
+      `Model "${modelMeta.displayName}" does not support text-to-video generation.`,
+    );
+  }
+}
+
+function buildVideoProviderOptions(
+  provider: AIProvider,
+): Parameters<typeof generateVideo>[0]["providerOptions"] {
+  switch (provider) {
+    case "klingai":
+      return { klingai: { pollTimeoutMs: 600_000 } };
+    case "xai":
+      return { xai: { pollTimeoutMs: 600_000 } };
+    default:
+      return undefined;
+  }
+}
+
 async function executeTarget({
   abortSignal,
   count,
@@ -507,6 +376,12 @@ async function executeTarget({
   userId: string;
 }) {
   try {
+    assertVideoModelSupportsInput({
+      hasReferenceImage: referenceImage !== null,
+      modelId: entry.modelId,
+      provider: entry.provider,
+    });
+
     const providerInstance = createProviderInstance(
       entry.provider,
       entry.config,
@@ -514,6 +389,7 @@ async function executeTarget({
     const model = getVideoModel(providerInstance, entry.modelId) as Parameters<
       typeof generateVideo
     >[0]["model"];
+    const providerOptions = buildVideoProviderOptions(entry.provider);
     const result = await generateVideo({
       abortSignal,
       aspectRatio: input.aspectRatio as `${number}:${number}` | undefined,
@@ -527,6 +403,7 @@ async function executeTarget({
             text: input.prompt.trim(),
           }
         : input.prompt.trim(),
+      ...(providerOptions ? { providerOptions } : {}),
       resolution: input.resolution as `${number}x${number}` | undefined,
       ...(input.seed !== undefined ? { seed: input.seed } : {}),
     });
@@ -593,7 +470,27 @@ export async function executeGenerateVideo({
     );
   }
 
-  const referenceImage = await resolveReferenceImage(input, runtime);
+  const referenceImage = await resolveReferenceImage({
+    attachmentIndex: input.referenceImageAttachmentIndex,
+    filename: input.referenceImageFilename,
+    messageId: input.referenceImageMessageId,
+    sourceMessageId: runtime.sourceMessageId,
+    threadId: runtime.threadId,
+  });
+
+  if (input.mode === "single") {
+    const [target] = targets;
+    if (!target) {
+      throw new Error("No video target is available.");
+    }
+
+    assertVideoModelSupportsInput({
+      hasReferenceImage: referenceImage !== null,
+      modelId: target.modelId,
+      provider: target.provider,
+    });
+  }
+
   const results = await Promise.all(
     targets.map((entry) =>
       executeTarget({
@@ -641,8 +538,7 @@ export function toGenerateVideoModelOutput(output: GenerateVideoOutput) {
 
 export const __internal = {
   MAX_VIDEO_GENERATION_TOTAL_VIDEOS,
-  NULLISH_OPTIONAL_INPUT_VALUES,
   VIDEO_ARTIFACT_PATH_PLACEHOLDER,
-  normalizeOptionalInputString,
+  buildVideoProviderOptions,
   resolveTargets,
 };

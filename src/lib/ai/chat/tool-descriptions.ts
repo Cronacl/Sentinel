@@ -263,10 +263,12 @@ export const websearchDescription = lines(
 );
 
 export const generateImageDescription = lines(
-  "Generate new images from a text prompt using configured image providers.",
+  "Generate new images from text or a reference image using configured image providers.",
   [
     "- Uses AI SDK image models exposed by your configured providers.",
     "- Supports single-provider generation and multi-model fan-out across enabled providers.",
+    "- Supports text-to-image and reference-image generation using an image attachment from the current thread.",
+    "- Only provide referenceImageFilename when the user actually attached an image in this thread; never invent placeholder or guessed filenames.",
     "- Returns structured per-provider results with image previews, warnings, and errors.",
     "- Accepts optional count, size, aspect ratio, and seed controls.",
     "- Requires at least one configured image-capable provider with a valid selected model in Settings > Images.",

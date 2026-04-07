@@ -9,7 +9,14 @@ import {
   type VideoGenerationSettings,
 } from "@/lib/video-generation";
 
+export type VideoModelCapabilities = {
+  supportsImageToVideo: boolean;
+  supportsSeed: boolean;
+  supportsTextToVideo: boolean;
+};
+
 export type VideoModelMeta = {
+  capabilities: VideoModelCapabilities;
   description: string;
   displayName: string;
   id: string;
@@ -66,57 +73,159 @@ type VideoCapableProviderInstance = {
   videoModel?: (modelId: string) => unknown;
 };
 
+const TEXT_AND_IMAGE_VIDEO_CAPABILITIES: VideoModelCapabilities = {
+  supportsImageToVideo: true,
+  supportsSeed: true,
+  supportsTextToVideo: true,
+};
+
+const TEXT_ONLY_VIDEO_CAPABILITIES: VideoModelCapabilities = {
+  supportsImageToVideo: false,
+  supportsSeed: true,
+  supportsTextToVideo: true,
+};
+
+const IMAGE_ONLY_VIDEO_CAPABILITIES: VideoModelCapabilities = {
+  supportsImageToVideo: true,
+  supportsSeed: false,
+  supportsTextToVideo: false,
+};
+
+const NO_SEED_TEXT_AND_IMAGE_VIDEO_CAPABILITIES: VideoModelCapabilities = {
+  supportsImageToVideo: true,
+  supportsSeed: false,
+  supportsTextToVideo: true,
+};
+
 const VIDEO_MODEL_CATALOG: Partial<Record<AIProvider, VideoModelMeta[]>> = {
   google: [
     {
+      capabilities: TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
       description: "Google Veo 3.1 fast preview model.",
       displayName: "Veo 3.1 Fast",
       id: "veo-3.1-fast-generate-preview",
     },
     {
+      capabilities: TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
       description: "Google Veo 3.1 quality preview model.",
       displayName: "Veo 3.1",
       id: "veo-3.1-generate-preview",
     },
     {
-      description: "Google Veo 2 stable video generation model.",
+      capabilities: TEXT_ONLY_VIDEO_CAPABILITIES,
+      description: "Google Veo 2 stable text-to-video model.",
       displayName: "Veo 2",
       id: "veo-2.0-generate-001",
     },
   ],
   google_vertex: [
     {
+      capabilities: TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
       description: "Vertex AI Veo 3.1 fast preview model.",
       displayName: "Veo 3.1 Fast",
       id: "veo-3.1-fast-generate-preview",
     },
     {
+      capabilities: TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
       description: "Vertex AI Veo 3.1 quality preview model.",
       displayName: "Veo 3.1",
       id: "veo-3.1-generate-preview",
     },
     {
-      description: "Vertex AI Veo 2 stable video generation model.",
+      capabilities: TEXT_ONLY_VIDEO_CAPABILITIES,
+      description: "Vertex AI Veo 2 stable text-to-video model.",
       displayName: "Veo 2",
       id: "veo-2.0-generate-001",
     },
   ],
   xai: [
     {
+      capabilities: NO_SEED_TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
       description: "xAI Grok imagine video model.",
       displayName: "Grok Imagine Video",
       id: "grok-imagine-video",
     },
   ],
+  klingai: [
+    {
+      capabilities: {
+        supportsImageToVideo: false,
+        supportsSeed: false,
+        supportsTextToVideo: true,
+      },
+      description: "Latest Kling 3.0 text-to-video model.",
+      displayName: "Kling 3.0 T2V",
+      id: "kling-v3.0-t2v",
+    },
+    {
+      capabilities: {
+        supportsImageToVideo: false,
+        supportsSeed: false,
+        supportsTextToVideo: true,
+      },
+      description: "Kling 2.6 text-to-video model with strong motion quality.",
+      displayName: "Kling 2.6 T2V",
+      id: "kling-v2.6-t2v",
+    },
+    {
+      capabilities: IMAGE_ONLY_VIDEO_CAPABILITIES,
+      description: "Latest Kling 3.0 image-to-video model.",
+      displayName: "Kling 3.0 I2V",
+      id: "kling-v3.0-i2v",
+    },
+    {
+      capabilities: IMAGE_ONLY_VIDEO_CAPABILITIES,
+      description: "Kling 2.6 image-to-video model.",
+      displayName: "Kling 2.6 I2V",
+      id: "kling-v2.6-i2v",
+    },
+  ],
+  fal: [
+    {
+      capabilities: TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
+      description: "Luma Ray 2 video generation on Fal.",
+      displayName: "Luma Ray 2",
+      id: "luma-ray-2",
+    },
+    {
+      capabilities: TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
+      description: "MiniMax video generation on Fal.",
+      displayName: "MiniMax Video",
+      id: "minimax-video",
+    },
+    {
+      capabilities: TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
+      description: "Hunyuan video generation on Fal.",
+      displayName: "Hunyuan Video",
+      id: "hunyuan-video",
+    },
+  ],
+  replicate: [
+    {
+      capabilities: TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
+      description: "MiniMax video generation hosted on Replicate.",
+      displayName: "MiniMax Video 01",
+      id: "minimax/video-01",
+    },
+  ],
 };
 
-const CUSTOM_VIDEO_MODEL_PROVIDERS = new Set<AIProvider>(["vercel"]);
+const CUSTOM_VIDEO_MODEL_PROVIDERS = new Set<AIProvider>([
+  "fal",
+  "klingai",
+  "replicate",
+  "vercel",
+  "xai",
+]);
 
 const VIDEO_PROVIDER_PRIORITY: Partial<Record<AIProvider, number>> = {
   google_vertex: 0,
   google: 1,
-  xai: 2,
-  vercel: 3,
+  klingai: 2,
+  xai: 3,
+  fal: 4,
+  replicate: 5,
+  vercel: 6,
 };
 
 function normalizeModelId(value: string | null | undefined) {
@@ -160,6 +269,12 @@ function isVideoCapableProviderInstance(
 
 export function getVideoModelsForProvider(provider: AIProvider) {
   return [...(VIDEO_MODEL_CATALOG[provider] ?? [])];
+}
+
+export function getVideoModelMeta(provider: AIProvider, modelId: string) {
+  return getVideoModelsForProvider(provider).find(
+    (model) => model.id === modelId,
+  );
 }
 
 export function supportsCustomVideoModels(provider: AIProvider) {

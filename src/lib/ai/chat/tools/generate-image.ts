@@ -3,10 +3,16 @@ import { z } from "zod";
 
 import { createProviderInstance } from "@/lib/ai/providers/factory";
 import {
+  getImageModelMeta,
   getImageModelsForProvider,
   supportsCustomImageModels,
   type ImageGenerationRuntime,
 } from "@/lib/ai/providers/images";
+import {
+  preprocessOptionalInputString,
+  resolveReferenceImage,
+  type ReferenceImage,
+} from "@/lib/ai/chat/tools/reference-image";
 import {
   DEFAULT_IMAGE_GENERATION_COUNT,
   IMAGE_GENERATION_MODE_VALUES,
@@ -59,6 +65,30 @@ export const generateImageInputSchema = z
       .max(MAX_IMAGE_GENERATION_TARGETS)
       .optional()
       .describe("Optional provider subset when mode is multi_model."),
+    referenceImageAttachmentIndex: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe(
+        "Optional attachment index when multiple images share a filename.",
+      ),
+    referenceImageFilename: z
+      .preprocess(
+        preprocessOptionalInputString,
+        z.string().trim().min(1).optional(),
+      )
+      .describe(
+        "Optional image attachment filename for reference-image generation.",
+      ),
+    referenceImageMessageId: z
+      .preprocess(
+        preprocessOptionalInputString,
+        z.string().trim().min(1).optional(),
+      )
+      .describe(
+        "Optional message id containing the reference image attachment.",
+      ),
     seed: z.number().int().optional().describe("Optional deterministic seed."),
     size: z
       .string()
@@ -72,6 +102,19 @@ export const generateImageInputSchema = z
         code: z.ZodIssueCode.custom,
         message: "modelId overrides are only supported in single mode.",
         path: ["modelId"],
+      });
+    }
+
+    if (
+      (value.referenceImageAttachmentIndex != null ||
+        value.referenceImageMessageId != null) &&
+      !value.referenceImageFilename
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "referenceImageFilename is required when targeting a reference image attachment.",
+        path: ["referenceImageFilename"],
       });
     }
 
@@ -131,6 +174,8 @@ export type GenerateImageOutput = z.infer<typeof generateImageOutputSchema>;
 
 type GenerateImageRuntime = {
   imageGeneration: ImageGenerationRuntime;
+  sourceMessageId?: string | null;
+  threadId: string;
 };
 
 function stringifyWarning(value: unknown) {
@@ -230,11 +275,45 @@ function resolveTargets(
   );
 }
 
+function assertImageModelSupportsInput({
+  hasReferenceImage,
+  modelId,
+  provider,
+}: {
+  hasReferenceImage: boolean;
+  modelId: string;
+  provider: AIProvider;
+}) {
+  const modelMeta = getImageModelMeta(provider, modelId);
+  if (!modelMeta) {
+    if (hasReferenceImage) {
+      throw new Error(
+        `Model "${modelId}" is a custom image model for provider "${provider}", so Sentinel cannot verify reference-image support.`,
+      );
+    }
+
+    return;
+  }
+
+  if (hasReferenceImage && !modelMeta.capabilities.supportsReferenceImages) {
+    throw new Error(
+      `Model "${modelMeta.displayName}" does not support reference-image generation.`,
+    );
+  }
+
+  if (!hasReferenceImage && !modelMeta.capabilities.supportsTextToImage) {
+    throw new Error(
+      `Model "${modelMeta.displayName}" does not support text-to-image generation.`,
+    );
+  }
+}
+
 async function executeTarget({
   abortSignal,
   count,
   entry,
   input,
+  referenceImage,
 }: {
   abortSignal?: AbortSignal;
   count: number;
@@ -244,8 +323,15 @@ async function executeTarget({
     provider: AIProvider;
   };
   input: GenerateImageInput;
+  referenceImage: ReferenceImage | null;
 }) {
   try {
+    assertImageModelSupportsInput({
+      hasReferenceImage: referenceImage !== null,
+      modelId: entry.modelId,
+      provider: entry.provider,
+    });
+
     const providerInstance = createProviderInstance(
       entry.provider,
       entry.config,
@@ -260,7 +346,12 @@ async function executeTarget({
       aspectRatio: input.aspectRatio as `${number}:${number}` | undefined,
       model,
       n: count,
-      prompt: input.prompt.trim(),
+      prompt: referenceImage
+        ? {
+            images: [referenceImage.data],
+            text: input.prompt.trim(),
+          }
+        : input.prompt.trim(),
       ...(input.seed !== undefined ? { seed: input.seed } : {}),
       ...(input.size ? { size: input.size as `${number}x${number}` } : {}),
     });
@@ -313,6 +404,27 @@ export async function executeGenerateImage({
     );
   }
 
+  const referenceImage = await resolveReferenceImage({
+    attachmentIndex: input.referenceImageAttachmentIndex,
+    filename: input.referenceImageFilename,
+    messageId: input.referenceImageMessageId,
+    sourceMessageId: runtime.sourceMessageId,
+    threadId: runtime.threadId,
+  });
+
+  if (input.mode === "single") {
+    const [target] = targets;
+    if (!target) {
+      throw new Error("No image target is available.");
+    }
+
+    assertImageModelSupportsInput({
+      hasReferenceImage: referenceImage !== null,
+      modelId: target.modelId,
+      provider: target.provider,
+    });
+  }
+
   const results = await Promise.all(
     targets.map((entry) =>
       executeTarget({
@@ -320,6 +432,7 @@ export async function executeGenerateImage({
         count,
         entry,
         input,
+        referenceImage,
       }),
     ),
   );
