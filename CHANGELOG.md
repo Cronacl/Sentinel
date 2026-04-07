@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.24](https://github.com/Cronacl/Sentinel/compare/v0.0.23...v0.0.24) (2026-04-07)
+
+
+### Features
+
+* add support for new AI providers and enhance image generation capabilities ([6926689](https://github.com/Cronacl/Sentinel/commit/6926689a93709fe3d936cf03b8eb0efaafc91d5c))
+
 ## [0.0.23](https://github.com/Cronacl/Sentinel/compare/v0.0.22...v0.0.23) (2026-04-07)
 
 
