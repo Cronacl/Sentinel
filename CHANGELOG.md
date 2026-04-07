@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.25](https://github.com/Cronacl/Sentinel/compare/v0.0.24...v0.0.25) (2026-04-07)
+
+
+### Bug Fixes
+
+* improve background status refresh handling in Claude SDK ([6d08646](https://github.com/Cronacl/Sentinel/commit/6d08646f03dc86aea63ec50cfe73dc0334403cd6))
+
 ## [0.0.24](https://github.com/Cronacl/Sentinel/compare/v0.0.23...v0.0.24) (2026-04-07)
 
 
