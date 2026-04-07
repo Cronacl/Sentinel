@@ -7,7 +7,6 @@ const projectRoot = process.cwd();
 const targetRoot = path.join(projectRoot, "desktop", "dist", "server");
 const targetPackagePath = path.join(targetRoot, "package.json");
 const electronGypDir = path.join(projectRoot, ".electron-gyp");
-const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
 
 function getArgValue(flag) {
   const index = process.argv.indexOf(flag);
@@ -70,7 +69,37 @@ function getElectronExecutablePath() {
   }
 }
 
+function getNpmInvocation() {
+  if (process.platform !== "win32") {
+    return {
+      argsPrefix: [],
+      command: "npm",
+    };
+  }
+
+  const bundledNpmCliPath = path.join(
+    path.dirname(process.execPath),
+    "node_modules",
+    "npm",
+    "bin",
+    "npm-cli.js",
+  );
+
+  if (!existsSync(bundledNpmCliPath)) {
+    return {
+      argsPrefix: [],
+      command: "npm.cmd",
+    };
+  }
+
+  return {
+    argsPrefix: [bundledNpmCliPath],
+    command: process.execPath,
+  };
+}
+
 const electronBin = getElectronExecutablePath();
+const npmInvocation = getNpmInvocation();
 const hostArch = normalizeTargetArch(process.arch);
 const targetPlatform =
   normalizeTargetPlatform(getArgValue("--platform") ?? process.platform) ??
@@ -237,21 +266,25 @@ await writeFile(
   `${JSON.stringify(runtimePackageJson, null, 2)}\n`,
 );
 
-await runWithEnv(npmExecutable, ["rebuild", "better-sqlite3"], {
-  cwd: targetRoot,
-  env: {
-    ...(isHostTarget ? { npm_config_build_from_source: "true" } : {}),
-    npm_config_arch: targetArch,
-    npm_config_platform: targetPlatform,
-    npm_config_devdir: electronGypDir,
-    npm_config_disturl: "https://electronjs.org/headers",
-    npm_config_runtime: "electron",
-    npm_config_target: getInstalledVersion("electron"),
-    npm_config_target_arch: targetArch,
-    npm_config_target_platform: targetPlatform,
-    npm_config_update_binary: "true",
+await runWithEnv(
+  npmInvocation.command,
+  [...npmInvocation.argsPrefix, "rebuild", "better-sqlite3"],
+  {
+    cwd: targetRoot,
+    env: {
+      ...(isHostTarget ? { npm_config_build_from_source: "true" } : {}),
+      npm_config_arch: targetArch,
+      npm_config_platform: targetPlatform,
+      npm_config_devdir: electronGypDir,
+      npm_config_disturl: "https://electronjs.org/headers",
+      npm_config_runtime: "electron",
+      npm_config_target: getInstalledVersion("electron"),
+      npm_config_target_arch: targetArch,
+      npm_config_target_platform: targetPlatform,
+      npm_config_update_binary: "true",
+    },
   },
-});
+);
 
 if (isHostTarget) {
   await runWithEnv(
