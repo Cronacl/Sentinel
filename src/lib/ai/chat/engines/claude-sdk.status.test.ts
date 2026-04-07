@@ -46,10 +46,12 @@ const originalHome = process.env.HOME;
 const originalPath = process.env.PATH;
 const originalSentinelClaudePath = process.env.SENTINEL_CLAUDE_PATH;
 const originalClaudePath = process.env.CLAUDE_PATH;
+const originalSentinelStatePath = process.env.SENTINEL_STATE_PATH;
 
 beforeEach(() => {
   queryMock.mockClear();
   closeMock.mockClear();
+  delete process.env.SENTINEL_STATE_PATH;
   initializationResultFactory = async () => ({
     account: { email: "claude@example.com" },
     models: [
@@ -76,6 +78,11 @@ afterEach(() => {
   } else {
     delete process.env.CLAUDE_PATH;
   }
+  if (originalSentinelStatePath) {
+    process.env.SENTINEL_STATE_PATH = originalSentinelStatePath;
+  } else {
+    delete process.env.SENTINEL_STATE_PATH;
+  }
   resetClaudeCodeRuntimeCache();
   resetClaudeEngineStatusCache();
 });
@@ -92,6 +99,7 @@ async function createClaudeExecutable(tempRoot: string) {
   process.env.PATH = tempRoot;
   delete process.env.CLAUDE_PATH;
   delete process.env.SENTINEL_CLAUDE_PATH;
+  delete process.env.SENTINEL_STATE_PATH;
   return executablePath;
 }
 
