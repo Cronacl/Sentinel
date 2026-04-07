@@ -43,7 +43,7 @@ Release builds are published on GitHub Releases:
 - [Download the latest release](https://github.com/Cronacl/Sentinel/releases)
 - macOS builds are available as DMGs
 - Windows builds are available as NSIS installers
-- Linux builds are available as AppImages
+- Linux builds are available as AppImages, DEBs, and RPMs
 
 If you want the current development version, run it locally from source.
 

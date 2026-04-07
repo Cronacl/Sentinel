@@ -200,6 +200,7 @@
     },
     "linux": {
       "category": "Development",
+      "maintainer": "Mohamed Achaq <achaq@galvn.com>",
       "target": [
         "AppImage",
         "deb",
