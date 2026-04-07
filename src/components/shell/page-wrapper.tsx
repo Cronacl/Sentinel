@@ -47,6 +47,7 @@ export function PageWrapper({
   const desktop = getDesktopApi();
   const platform = desktop?.app.platform ?? null;
   const isMacDesktop = platform === "darwin";
+  const isWindowsDesktop = platform === "win32";
   const { leftSidebarOpen } = useShell();
   const showToggle = !leftSidebarOpen;
   const chromeMetrics = getDesktopChromeMetrics(platform);
@@ -65,13 +66,13 @@ export function PageWrapper({
     <div className="flex h-full w-full flex-col items-start overflow-clip">
       {hasHeader && (
         <header
-          className="app-region-no-drag flex w-full shrink-0 items-center gap-3 px-4 lg:px-6"
+          className={`flex w-full shrink-0 items-center gap-3 px-4 lg:px-6 ${isWindowsDesktop ? "app-region-drag" : ""}`}
           style={headerStyle}
         >
           {showToggle && <SidebarToggle className="app-region-no-drag" />}
 
           {title && (
-            <div className="min-w-0 flex shrink items-center gap-2">
+            <div className="app-region-no-drag min-w-0 flex shrink items-center gap-2">
               <div className="min-w-0 shrink">
                 <h1 className="text-foreground truncate text-sm font-medium">
                   {title}
@@ -91,7 +92,9 @@ export function PageWrapper({
           <div className="flex-1" />
 
           {actions && (
-            <div className="flex shrink-0 items-center gap-2">{actions}</div>
+            <div className="app-region-no-drag flex shrink-0 items-center gap-2">
+              {actions}
+            </div>
           )}
         </header>
       )}

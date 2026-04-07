@@ -41,7 +41,7 @@ const DESKTOP_CHROME_METRICS: Record<DesktopPlatform, DesktopChromeMetrics> = {
   win32: {
     sidebarChromeHeight: 56,
     sidebarLeadingWidth: 52,
-    sidebarTrailingWidth: 132,
+    sidebarTrailingWidth: 52,
     titleBarHeight: 32,
     windowControlsWidth: 132,
   },

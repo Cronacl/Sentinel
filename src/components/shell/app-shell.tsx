@@ -146,7 +146,7 @@ function AppShellRouteEffects() {
 export function AppShell({ children }: PropsWithChildren) {
   const desktop = getDesktopApi();
   const platform = desktop?.app.platform ?? null;
-  const showTitleBar = platform === "win32" || platform === "linux";
+  const showTitleBar = platform === "linux";
 
   return (
     <ShortcutProvider>
