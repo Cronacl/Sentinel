@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 
+import { SentinelLogoMark } from "@/components/shared/logo";
 import { getDesktopApi } from "@/lib/desktop/client";
 import type { DesktopPlatform } from "@/lib/desktop/contracts";
 
@@ -58,7 +59,15 @@ export function getDesktopChromeMetrics(
 export function getDesktopWindowControlsInset(
   platform: DesktopPlatform | null,
 ) {
+  if (platform === "win32") {
+    return 0;
+  }
+
   return getDesktopChromeMetrics(platform).windowControlsWidth;
+}
+
+export function hasDesktopTitleBar(platform: DesktopPlatform | null) {
+  return platform === "linux" || platform === "win32";
 }
 
 function WindowsMinimizeIcon() {
@@ -221,8 +230,19 @@ export function DesktopTitleBar({
 }: {
   platform: Exclude<DesktopPlatform, "darwin">;
 }) {
+  const isWindows = platform === "win32";
+
   return (
-    <div className="app-region-drag flex h-8 w-full shrink-0 items-center justify-end border-b border-border/10 bg-surface">
+    <div className="app-region-drag flex h-8 w-full shrink-0 items-center justify-between border-b border-border/10 bg-surface">
+      {isWindows ? (
+        <div className="flex min-w-0 items-center gap-2 px-3 text-foreground/80">
+          <SentinelLogoMark className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate text-[12px] font-medium">Sentinel</span>
+        </div>
+      ) : (
+        <div />
+      )}
+
       {platform === "linux" ? (
         <div className="app-region-no-drag">
           <LinuxWindowControls />

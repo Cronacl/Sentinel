@@ -51,7 +51,7 @@ Use the `desktop-verify` workflow to test desktop packaging before a tag exists.
 1. Open GitHub Actions and run `desktop-verify`.
 2. Set `git_ref` to the branch, commit SHA, or tag you want to validate.
 3. Leave `platforms` as `linux` for the cheapest default verification.
-4. Select `mac`, `windows`, or `all` only when you need platform-specific validation.
+4. Select `linux-arm64`, `mac`, `windows`, or `all` only when you need platform-specific validation.
 5. Review the uploaded workflow artifacts.
 6. Complete the manual Windows/Linux smoke flow in [desktop-platform-smoke-checklist.md](/Users/mohamedachaq/rework/cronacl-saas/sentinel/docs/desktop-platform-smoke-checklist.md) for any platform you intend to ship.
 
@@ -70,8 +70,7 @@ This workflow never creates or updates a GitHub Release. It is also not complete
 1. Merge pull requests with conventional titles into `main`.
 2. The `release-please` workflow opens or updates the release PR.
 3. Merging the release PR updates `package.json`, `.release-please-manifest.json`, and `CHANGELOG.md`, then creates the matching `vX.Y.Z` tag.
-4. The `publish-release` workflow starts automatically from that tag, builds macOS, Windows, and Linux desktop artifacts, and updates the GitHub Release using the matching `CHANGELOG.md` section as the release body.
-5. macOS releases publish separate `arm64` and `x64` DMG assets so Apple Silicon and Intel users can download the correct build directly.
+4. The `publish-release` workflow starts automatically from that tag, builds macOS arm64, Windows x64, Linux x64, and Linux arm64 desktop artifacts, and updates the GitHub Release using the matching `CHANGELOG.md` section as the release body.
 
 `CHANGELOG.md` is automation-managed by `release-please`, but it is also the release-summary source of truth. Review the changelog entry in the release PR carefully before merging.
 

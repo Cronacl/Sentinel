@@ -15,6 +15,7 @@ on:
         type: choice
         options:
           - linux
+          - linux-arm64
           - mac
           - windows
           - all
@@ -55,20 +56,24 @@ jobs:
 
           case "$PLATFORMS" in
             linux)
-              MATRIX='[{"platform":"linux","runner":"ubuntu-24.04"}]'
-              LABEL='linux'
+              MATRIX='[{"platform":"linux","arch":"x64","runner":"ubuntu-24.04"}]'
+              LABEL='linux x64'
+              ;;
+            linux-arm64)
+              MATRIX='[{"platform":"linux","arch":"arm64","runner":"ubuntu-24.04-arm"}]'
+              LABEL='linux arm64'
               ;;
             mac)
-              MATRIX='[{"platform":"mac","runner":"macos-latest"}]'
-              LABEL='mac (arm64 + x64)'
+              MATRIX='[{"platform":"mac","arch":"arm64","runner":"macos-latest"}]'
+              LABEL='mac arm64'
               ;;
             windows)
-              MATRIX='[{"platform":"windows","runner":"windows-latest"}]'
+              MATRIX='[{"platform":"windows","arch":"x64","runner":"windows-latest"}]'
               LABEL='windows'
               ;;
             all)
-              MATRIX='[{"platform":"linux","runner":"ubuntu-24.04"},{"platform":"mac","runner":"macos-latest"},{"platform":"windows","runner":"windows-latest"}]'
-              LABEL='linux, mac (arm64 + x64), windows'
+              MATRIX='[{"platform":"linux","arch":"x64","runner":"ubuntu-24.04"},{"platform":"linux","arch":"arm64","runner":"ubuntu-24.04-arm"},{"platform":"mac","arch":"arm64","runner":"macos-latest"},{"platform":"windows","arch":"x64","runner":"windows-latest"}]'
+              LABEL='linux x64, linux arm64, mac arm64, windows x64'
               ;;
             *)
               echo "Unsupported platforms value: $PLATFORMS" >&2
@@ -92,7 +97,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   build:
-    name: build-${{ matrix.platform }}
+    name: build-${{ matrix.platform }}-${{ matrix.arch }}
     needs: prepare
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
@@ -111,10 +116,10 @@ jobs:
       - id: build-config
         shell: bash
         run: |
-          case "${{ matrix.platform }}" in
-            linux)
-              echo "script=build:desktop:linux" >> "$GITHUB_OUTPUT"
-              echo "artifact_name=desktop-verify-linux" >> "$GITHUB_OUTPUT"
+          case "${{ matrix.platform }}:${{ matrix.arch }}" in
+            linux:x64)
+              echo "script=build:desktop:linux:x64" >> "$GITHUB_OUTPUT"
+              echo "artifact_name=desktop-verify-linux-x64" >> "$GITHUB_OUTPUT"
               {
                 echo "artifact_paths<<EOF"
                 echo "dist/*.AppImage"
@@ -125,9 +130,22 @@ jobs:
                 echo "EOF"
               } >> "$GITHUB_OUTPUT"
               ;;
-            mac)
-              echo "script=build:desktop:mac" >> "$GITHUB_OUTPUT"
-              echo "artifact_name=desktop-verify-mac" >> "$GITHUB_OUTPUT"
+            linux:arm64)
+              echo "script=build:desktop:linux:arm64" >> "$GITHUB_OUTPUT"
+              echo "artifact_name=desktop-verify-linux-arm64" >> "$GITHUB_OUTPUT"
+              {
+                echo "artifact_paths<<EOF"
+                echo "dist/*.AppImage"
+                echo "dist/*.deb"
+                echo "dist/*.rpm"
+                echo "dist/*.blockmap"
+                echo "dist/latest-linux-arm64.yml"
+                echo "EOF"
+              } >> "$GITHUB_OUTPUT"
+              ;;
+            mac:arm64)
+              echo "script=build:desktop:mac:arm64" >> "$GITHUB_OUTPUT"
+              echo "artifact_name=desktop-verify-mac-arm64" >> "$GITHUB_OUTPUT"
               {
                 echo "artifact_paths<<EOF"
                 echo "dist/*.dmg"
@@ -136,7 +154,7 @@ jobs:
                 echo "EOF"
               } >> "$GITHUB_OUTPUT"
               ;;
-            windows)
+            windows:x64)
               echo "script=build:desktop:windows" >> "$GITHUB_OUTPUT"
               echo "artifact_name=desktop-verify-windows" >> "$GITHUB_OUTPUT"
               {
@@ -148,7 +166,7 @@ jobs:
               } >> "$GITHUB_OUTPUT"
               ;;
             *)
-              echo "Unsupported platform: ${{ matrix.platform }}" >&2
+              echo "Unsupported platform/arch: ${{ matrix.platform }}:${{ matrix.arch }}" >&2
               exit 1
               ;;
           esac
@@ -208,7 +226,15 @@ jobs:
       - name: Build ${{ matrix.platform }} desktop artifact
         run: bun run ${{ steps.build-config.outputs.script }}
 
-      - name: Upload ${{ matrix.platform }} artifacts
+      - name: Rename Linux arm64 update metadata
+        if: ${{ matrix.platform == 'linux' && matrix.arch == 'arm64' }}
+        shell: bash
+        run: |
+          if [ -f dist/latest-linux.yml ]; then
+            mv dist/latest-linux.yml dist/latest-linux-arm64.yml
+          fi
+
+      - name: Upload ${{ matrix.platform }}-${{ matrix.arch }} artifacts
         uses: actions/upload-artifact@v4
         with:
           if-no-files-found: error
@@ -220,9 +246,9 @@ jobs:
         shell: bash
         run: |
           {
-            echo "### ${{ matrix.platform }} follow-up"
+            echo "### ${{ matrix.platform }}-${{ matrix.arch }} follow-up"
             echo
             echo "- Build artifact created successfully."
             echo "- Manual verification is still required before treating this platform as release-ready."
-            echo "- Run the checks in \`docs/desktop-platform-smoke-checklist.md\` on a real ${{ matrix.platform }} machine."
+            echo "- Run the checks in \`docs/desktop-platform-smoke-checklist.md\` on a real ${{ matrix.platform }} ${{ matrix.arch }} machine."
           } >> "$GITHUB_STEP_SUMMARY"

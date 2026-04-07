@@ -5,16 +5,26 @@ const PLATFORM_CONFIG = {
   linux: {
     builderFlag: "--linux",
     defaultTargets: ["AppImage", "deb", "rpm"],
+    nodePlatform: "linux",
   },
   mac: {
     builderFlag: "--mac",
     defaultTargets: ["dmg"],
+    nodePlatform: "darwin",
   },
   win: {
     builderFlag: "--win",
     defaultTargets: ["nsis"],
+    nodePlatform: "win32",
   },
 };
+const SUPPORTED_ARCHS = new Set([
+  "arm64",
+  "armv7l",
+  "ia32",
+  "universal",
+  "x64",
+]);
 
 function getArgValue(flag) {
   const index = process.argv.indexOf(flag);
@@ -37,6 +47,10 @@ function getArgValues(flag) {
   }
 
   return values;
+}
+
+function normalizeArch(arch) {
+  return arch === "arm" ? "armv7l" : arch;
 }
 
 function run(command, args, options = {}) {
@@ -88,7 +102,7 @@ const targets = [
       .filter(Boolean),
   ),
 ];
-const archs = [...new Set(getArgValues("--arch"))];
+const archs = [...new Set(getArgValues("--arch").map(normalizeArch))];
 
 const electronBuilderCli = path.join(
   process.cwd(),
@@ -105,20 +119,25 @@ const builderArgs = [
 ];
 
 for (const arch of archs) {
-  switch (arch) {
-    case "arm64":
-    case "armv7l":
-    case "ia32":
-    case "universal":
-    case "x64":
-      builderArgs.push(`--${arch}`);
-      break;
-    default:
-      throw new Error(
-        `Unsupported "--arch" value "${arch}". Expected one of: arm64, armv7l, ia32, universal, x64.`,
-      );
+  if (!SUPPORTED_ARCHS.has(arch)) {
+    throw new Error(
+      `Unsupported "--arch" value "${arch}". Expected one of: arm64, armv7l, ia32, universal, x64.`,
+    );
   }
+
+  builderArgs.push(`--${arch}`);
 }
+
+const targetArchs = archs.length > 0 ? archs : [normalizeArch(process.arch)];
+const concreteTargetArchs = targetArchs.filter((arch) => arch !== "universal");
+
+if (concreteTargetArchs.length !== 1) {
+  throw new Error(
+    "Desktop packaging currently supports exactly one concrete target architecture per build.",
+  );
+}
+
+const targetArch = concreteTargetArchs[0];
 
 if (platform === "mac") {
   if (!hasMacSigningCredentials()) {
@@ -134,6 +153,14 @@ await run(process.execPath, [
   "./scripts/desktop/preflight.mjs",
   "--platform",
   platform,
+]);
+
+await run(process.execPath, [
+  "./scripts/desktop/rebuild-standalone-native.mjs",
+  "--platform",
+  PLATFORM_CONFIG[platform].nodePlatform,
+  "--arch",
+  targetArch,
 ]);
 
 await run(process.execPath, [electronBuilderCli, ...builderArgs]);

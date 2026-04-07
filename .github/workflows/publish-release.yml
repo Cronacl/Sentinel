@@ -84,11 +84,11 @@ jobs:
             echo "- Tag: \`${{ steps.resolve.outputs.release_tag }}\`"
             echo "- Commit: \`${{ steps.resolve.outputs.target_commitish }}\`"
             echo "- Mode: release"
-            echo "- Platforms: mac (arm64 + x64), windows, linux"
+            echo "- Platforms: mac arm64, windows x64, linux x64, linux arm64"
           } >> "$GITHUB_STEP_SUMMARY"
 
   build:
-    name: build-${{ matrix.platform }}
+    name: build-${{ matrix.platform }}-${{ matrix.arch }}
     needs: prepare
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
@@ -98,15 +98,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - artifact_name: release-mac
+          - arch: arm64
+            artifact_name: release-mac-arm64
             artifact_paths: |
               dist/*.dmg
               dist/*.blockmap
               dist/latest-mac.yml
             platform: mac
             runner: macos-latest
-            script: build:desktop:mac
-          - artifact_name: release-windows
+            script: build:desktop:mac:arm64
+          - arch: x64
+            artifact_name: release-windows
             artifact_paths: |
               dist/*.exe
               dist/*.blockmap
@@ -114,7 +116,8 @@ jobs:
             platform: windows
             runner: windows-latest
             script: build:desktop:windows
-          - artifact_name: release-linux
+          - arch: x64
+            artifact_name: release-linux-x64
             artifact_paths: |
               dist/*.AppImage
               dist/*.deb
@@ -123,7 +126,18 @@ jobs:
               dist/latest-linux.yml
             platform: linux
             runner: ubuntu-24.04
-            script: build:desktop:linux
+            script: build:desktop:linux:x64
+          - arch: arm64
+            artifact_name: release-linux-arm64
+            artifact_paths: |
+              dist/*.AppImage
+              dist/*.deb
+              dist/*.rpm
+              dist/*.blockmap
+              dist/latest-linux-arm64.yml
+            platform: linux
+            runner: ubuntu-24.04-arm
+            script: build:desktop:linux:arm64
     steps:
       - uses: actions/checkout@v4
         with:
@@ -203,7 +217,15 @@ jobs:
       - name: Build ${{ matrix.platform }} desktop release
         run: bun run ${{ matrix.script }}
 
-      - name: Upload ${{ matrix.platform }} artifacts
+      - name: Rename Linux arm64 update metadata
+        if: ${{ matrix.platform == 'linux' && matrix.arch == 'arm64' }}
+        shell: bash
+        run: |
+          if [ -f dist/latest-linux.yml ]; then
+            mv dist/latest-linux.yml dist/latest-linux-arm64.yml
+          fi
+
+      - name: Upload ${{ matrix.platform }}-${{ matrix.arch }} artifacts
         uses: actions/upload-artifact@v4
         with:
           if-no-files-found: error

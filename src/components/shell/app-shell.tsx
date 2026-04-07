@@ -25,7 +25,11 @@ import { RightSidebar } from "./right-sidebar";
 import { AppWarmupCoordinator } from "./app-warmup";
 import { ShellProvider, useShell } from "./shell-context";
 import { useAppShortcutActions } from "./use-app-shortcut-actions";
-import { DesktopTitleBar, SidebarWindowChrome } from "./sidebar-window-chrome";
+import {
+  DesktopTitleBar,
+  SidebarWindowChrome,
+  hasDesktopTitleBar,
+} from "./sidebar-window-chrome";
 
 function ShellWarmCache() {
   api.workspaces.getCurrent.useQuery();
@@ -146,7 +150,7 @@ function AppShellRouteEffects() {
 export function AppShell({ children }: PropsWithChildren) {
   const desktop = getDesktopApi();
   const platform = desktop?.app.platform ?? null;
-  const showTitleBar = platform === "linux";
+  const showTitleBar = hasDesktopTitleBar(platform);
 
   return (
     <ShortcutProvider>
@@ -156,7 +160,9 @@ export function AppShell({ children }: PropsWithChildren) {
         <AppShellShortcutBindings />
         <AppShellRouteEffects />
         <div className="flex h-dvh flex-col overflow-clip">
-          {showTitleBar ? <DesktopTitleBar platform={platform!} /> : null}
+          {showTitleBar && platform ? (
+            <DesktopTitleBar platform={platform} />
+          ) : null}
           <div className="relative flex min-h-0 flex-1 overflow-clip">
             <LeftSidebar>
               <div className="flex h-full flex-col">

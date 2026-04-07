@@ -42,8 +42,14 @@ export default function SettingsModalLayout({ children }: PropsWithChildren) {
         style={{ width: SETTINGS_SIDEBAR_WIDTH }}
       >
         <div
-          className="app-region-drag shrink-0"
-          style={{ minHeight: isMac ? 56 : chromeMetrics.titleBarHeight + 8 }}
+          className={`shrink-0 ${platform === "linux" ? "app-region-drag" : ""}`.trim()}
+          style={{
+            minHeight: isMac
+              ? 56
+              : platform === "win32"
+                ? 8
+                : chromeMetrics.titleBarHeight + 8,
+          }}
         />
 
         <div className="shrink-0 px-3 pb-1">
