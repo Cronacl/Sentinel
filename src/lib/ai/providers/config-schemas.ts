@@ -10,6 +10,17 @@ const apiKeyProvider = z.object({
   baseURL: z.string().url().optional(),
 });
 
+const apiTokenProvider = z.object({
+  apiToken: z.string().min(1, "API token is required"),
+  baseURL: z.string().url().optional(),
+});
+
+const accessKeySecretKeyProvider = z.object({
+  accessKey: z.string().min(1, "Access key is required"),
+  baseURL: z.string().url().optional(),
+  secretKey: z.string().min(1, "Secret key is required"),
+});
+
 const googleVertexAIProvider = z.object({
   location: z.string().min(1, "Location is required"),
   project: z.string().min(1, "Project ID is required"),
@@ -41,6 +52,10 @@ export const PROVIDER_CONFIG_SCHEMAS: Record<AIProvider, z.ZodType> = {
   google_vertex: googleVertexAIProvider,
   vercel: apiKeyProvider,
   xai: apiKeyProvider,
+  black_forest_labs: apiKeyProvider,
+  klingai: accessKeySecretKeyProvider,
+  fal: apiKeyProvider,
+  replicate: apiTokenProvider,
   azure: apiKeyProvider,
   amazon_bedrock: bedrockProvider,
   groq: apiKeyProvider,

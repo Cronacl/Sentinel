@@ -3,7 +3,13 @@ import { afterEach, describe, expect, it, mock } from "bun:test";
 mock.module("server-only", () => ({}));
 
 const generateImageMock = mock(
-  async ({ model }: { model: { modelId: string } }) => {
+  async ({
+    model,
+    prompt,
+  }: {
+    model: { modelId: string };
+    prompt: string | { images: Uint8Array[]; text?: string };
+  }) => {
     if (model.modelId === "broken-model") {
       throw new Error("Provider failed");
     }
@@ -26,13 +32,21 @@ const generateImageMock = mock(
           timestamp: new Date("2026-04-03T12:00:00.000Z"),
         },
       ],
-      warnings: [{ message: "seed ignored", type: "unsupported-setting" }],
+      warnings:
+        typeof prompt === "string"
+          ? [{ message: "seed ignored", type: "unsupported-setting" }]
+          : [],
     };
   },
 );
 
+const loadThreadMessagesMock = mock(async () => []);
+
 mock.module("ai", () => ({
   generateImage: generateImageMock,
+  experimental_generateVideo: mock(async () => {
+    throw new Error("unexpected video generation call");
+  }),
 }));
 
 mock.module("@/lib/ai/providers/factory", () => ({
@@ -41,11 +55,26 @@ mock.module("@/lib/ai/providers/factory", () => ({
   })),
 }));
 
+mock.module("@/lib/ai/chat/persistence", () => ({
+  loadThreadMessages: loadThreadMessagesMock,
+}));
+
+mock.module("@/lib/ai/messages/branches", () => ({
+  buildActiveThreadMessages: (records: Array<any>) =>
+    records.map((record) => ({
+      id: record.messageId,
+      metadata: {},
+      parts: record.parts,
+      role: record.role,
+    })),
+}));
+
 const { __internal, executeGenerateImage, toGenerateImageModelOutput } =
   await import("./generate-image");
 
 afterEach(() => {
   generateImageMock.mockClear();
+  loadThreadMessagesMock.mockReset();
   mock.restore();
 });
 
@@ -67,9 +96,22 @@ const runtime = {
         modelId: "broken-model",
         provider: "google" as const,
       },
+      xai: {
+        config: { apiKey: "xai-key" },
+        displayName: "xAI",
+        isCustom: false,
+        modelId: "grok-imagine-image",
+        provider: "xai" as const,
+      },
     },
   },
+  sourceMessageId: "message-1",
+  threadId: "thread-1",
 };
+
+function toDataUrl(value: Buffer, mediaType: string) {
+  return `data:${mediaType};base64,${value.toString("base64")}`;
+}
 
 describe("executeGenerateImage", () => {
   it("generates images for a single provider", async () => {
@@ -89,6 +131,121 @@ describe("executeGenerateImage", () => {
       provider: "openai",
       status: "success",
     });
+  });
+
+  it("supports reference-image generation using the current source message attachment", async () => {
+    loadThreadMessagesMock.mockResolvedValueOnce([
+      {
+        messageId: "message-1",
+        parts: [
+          {
+            filename: "reference.png",
+            mediaType: "image/png",
+            type: "file",
+            url: toDataUrl(Buffer.from("reference-image"), "image/png"),
+          },
+        ],
+        role: "user",
+      },
+    ]);
+
+    const result = await executeGenerateImage({
+      input: {
+        count: 1,
+        mode: "single",
+        prompt: "turn this into a cinematic portrait",
+        provider: "xai",
+        referenceImageFilename: "reference.png",
+      },
+      runtime,
+    });
+
+    expect(loadThreadMessagesMock).toHaveBeenCalledWith("thread-1");
+    expect(generateImageMock).toHaveBeenCalled();
+    expect(result.successCount).toBe(1);
+  });
+
+  it("treats placeholder reference image values as absent", async () => {
+    const result = await executeGenerateImage({
+      input: {
+        count: 1,
+        mode: "single",
+        prompt: "a polished product photo",
+        referenceImageFilename: "none" as any,
+      },
+      runtime,
+    });
+
+    expect(loadThreadMessagesMock).not.toHaveBeenCalled();
+    expect(generateImageMock).toHaveBeenCalled();
+    expect(result.successCount).toBe(1);
+  });
+
+  it("fails clearly when the requested reference image is missing", async () => {
+    loadThreadMessagesMock.mockResolvedValueOnce([
+      {
+        messageId: "message-1",
+        parts: [],
+        role: "user",
+      },
+    ]);
+
+    await expect(
+      executeGenerateImage({
+        input: {
+          count: 1,
+          mode: "single",
+          prompt: "turn this into a cinematic portrait",
+          provider: "xai",
+          referenceImageFilename: "reference.png",
+        },
+        runtime,
+      }),
+    ).rejects.toThrow(/does not contain any image attachments/i);
+  });
+
+  it("returns per-target errors for incompatible multi-model reference-image requests", async () => {
+    loadThreadMessagesMock.mockResolvedValueOnce([
+      {
+        messageId: "message-1",
+        parts: [
+          {
+            filename: "reference.png",
+            mediaType: "image/png",
+            type: "file",
+            url: toDataUrl(Buffer.from("reference-image"), "image/png"),
+          },
+        ],
+        role: "user",
+      },
+    ]);
+
+    const result = await executeGenerateImage({
+      input: {
+        count: 1,
+        mode: "multi_model",
+        prompt: "turn this into a cinematic portrait",
+        providers: ["xai", "openai"],
+        referenceImageFilename: "reference.png",
+      },
+      runtime,
+    });
+
+    expect(result.successCount).toBe(1);
+    expect(result.failureCount).toBe(1);
+    expect(result.targets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provider: "xai",
+          status: "success",
+        }),
+        expect.objectContaining({
+          error: expect.stringMatching(/does not support reference-image/i),
+          provider: "openai",
+          status: "error",
+        }),
+      ]),
+    );
   });
 
   it("supports multi-model fan-out with partial failures", async () => {

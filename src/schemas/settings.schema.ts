@@ -7,6 +7,10 @@ export const aiProviderSchema = z.enum([
   "google_vertex",
   "vercel",
   "xai",
+  "black_forest_labs",
+  "klingai",
+  "fal",
+  "replicate",
   "azure",
   "amazon_bedrock",
   "groq",
@@ -27,6 +31,19 @@ const optionalUrlString = z
 
 export const apiKeyProviderConfigFormSchema = z.object({
   apiKey: z.string().trim().min(1, "API key is required."),
+  baseURL: optionalUrlString,
+  isEnabled: z.boolean(),
+});
+
+export const apiTokenProviderConfigFormSchema = z.object({
+  apiToken: z.string().trim().min(1, "API token is required."),
+  baseURL: optionalUrlString,
+  isEnabled: z.boolean(),
+});
+
+export const accessKeySecretKeyProviderConfigFormSchema = z.object({
+  accessKey: z.string().trim().min(1, "Access key is required."),
+  secretKey: z.string().trim().min(1, "Secret key is required."),
   baseURL: optionalUrlString,
   isEnabled: z.boolean(),
 });
@@ -56,13 +73,16 @@ export const ollamaProviderConfigFormSchema = z.object({
 });
 
 export const providerConfigFormSchema = apiKeyProviderConfigFormSchema.extend({
+  accessKey: z.string().trim().optional().default(""),
   accessKeyId: z.string().trim().optional().default(""),
+  apiToken: z.string().trim().optional().default(""),
   clientEmail: z.string().trim().optional().default(""),
   location: z.string().trim().optional().default(""),
   privateKey: z.string().optional().default(""),
   project: z.string().trim().optional().default(""),
   region: z.string().trim().optional().default(""),
   secretAccessKey: z.string().trim().optional().default(""),
+  secretKey: z.string().trim().optional().default(""),
 });
 
 export const customModelFormSchema = z.object({
@@ -72,6 +92,12 @@ export const customModelFormSchema = z.object({
 
 export type APIKeyProviderConfigFormValues = z.infer<
   typeof apiKeyProviderConfigFormSchema
+>;
+export type APITokenProviderConfigFormValues = z.infer<
+  typeof apiTokenProviderConfigFormSchema
+>;
+export type AccessKeySecretKeyProviderConfigFormValues = z.infer<
+  typeof accessKeySecretKeyProviderConfigFormSchema
 >;
 export type GoogleVertexProviderConfigFormValues = z.infer<
   typeof googleVertexProviderConfigFormSchema

@@ -136,7 +136,7 @@ const GEMINI_2_5_PRO_REASONING_CONFIG: ReasoningConfig = {
   supportedEfforts: ["low", "medium", "high"],
 };
 
-export const MODEL_CATALOG: Record<AIProvider, ModelMeta[]> = {
+export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
   openai: [
     {
       id: "gpt-5.4",
@@ -1118,6 +1118,14 @@ function getProviderOptionsKey(provider: AIProvider) {
       return "gateway";
     case "xai":
       return "xai";
+    case "black_forest_labs":
+      return "blackForestLabs";
+    case "klingai":
+      return "klingai";
+    case "fal":
+      return "fal";
+    case "replicate":
+      return "replicate";
     case "azure":
       return "openai";
     case "amazon_bedrock":

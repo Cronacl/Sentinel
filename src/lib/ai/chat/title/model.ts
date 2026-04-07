@@ -5,7 +5,7 @@ import { getLanguageModel } from "../../providers/resolver";
 
 import type { ResolvedThreadTitleModel } from "../types";
 
-const THREAD_TITLE_MODEL_IDS = {
+const THREAD_TITLE_MODEL_IDS: Partial<Record<AIProvider, string>> = {
   anthropic: "claude-haiku-4-5",
   google: "gemini-2.5-flash-lite",
   google_vertex: "gemini-2.5-flash-lite",
@@ -20,10 +20,14 @@ const THREAD_TITLE_MODEL_IDS = {
   mistral: "mistral-small-latest",
   ollama: "llama3",
   openrouter: "openai/gpt-4.1-nano",
-} as const satisfies Record<AIProvider, string>;
+};
 
 export function getThreadTitleModelId(providerId: AIProvider): string {
-  return THREAD_TITLE_MODEL_IDS[providerId];
+  return (
+    THREAD_TITLE_MODEL_IDS[providerId] ??
+    THREAD_TITLE_MODEL_IDS.openai ??
+    "gpt-4.1-nano"
+  );
 }
 
 export async function resolveThreadTitleModel({

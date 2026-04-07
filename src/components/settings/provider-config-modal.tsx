@@ -14,10 +14,14 @@ import {
   ControlledTextField,
 } from "@/components/forms/controlled-fields";
 import {
+  accessKeySecretKeyProviderConfigFormSchema,
   apiKeyProviderConfigFormSchema,
+  apiTokenProviderConfigFormSchema,
   bedrockProviderConfigFormSchema,
   googleVertexProviderConfigFormSchema,
   ollamaProviderConfigFormSchema,
+  type AccessKeySecretKeyProviderConfigFormValues,
+  type APITokenProviderConfigFormValues,
   type BedrockProviderConfigFormValues,
   type GoogleVertexProviderConfigFormValues,
   type APIKeyProviderConfigFormValues,
@@ -35,8 +39,10 @@ interface ProviderConfigModalProps {
 
 function createDefaultValues(): ProviderConfigFormValues {
   return {
+    accessKey: "",
     accessKeyId: "",
     apiKey: "",
+    apiToken: "",
     baseURL: "",
     clientEmail: "",
     isEnabled: true,
@@ -45,6 +51,7 @@ function createDefaultValues(): ProviderConfigFormValues {
     project: "",
     region: "",
     secretAccessKey: "",
+    secretKey: "",
   };
 }
 
@@ -60,13 +67,19 @@ export function ProviderConfigModal({
   const isVertexProvider = provider === "google_vertex";
   const isBedrockProvider = provider === "amazon_bedrock";
   const isOllamaProvider = provider === "ollama";
+  const isReplicateProvider = provider === "replicate";
+  const isKlingAIProvider = provider === "klingai";
   const formResolver: any = isVertexProvider
     ? zodResolver(googleVertexProviderConfigFormSchema)
     : isBedrockProvider
       ? zodResolver(bedrockProviderConfigFormSchema)
       : isOllamaProvider
         ? zodResolver(ollamaProviderConfigFormSchema)
-        : zodResolver(apiKeyProviderConfigFormSchema);
+        : isReplicateProvider
+          ? zodResolver(apiTokenProviderConfigFormSchema)
+          : isKlingAIProvider
+            ? zodResolver(accessKeySecretKeyProviderConfigFormSchema)
+            : zodResolver(apiKeyProviderConfigFormSchema);
   const form = useForm<ProviderConfigFormValues>({
     defaultValues: createDefaultValues(),
     resolver: formResolver,
@@ -103,12 +116,15 @@ export function ProviderConfigModal({
     }
 
     const config = existing.config as Record<string, unknown> & {
+      accessKey?: string;
       apiKey?: string;
+      apiToken?: string;
       baseURL?: string;
       location?: string;
       project?: string;
       accessKeyId?: string;
       secretAccessKey?: string;
+      secretKey?: string;
       region?: string;
       googleAuthOptions?: {
         credentials?: {
@@ -119,10 +135,16 @@ export function ProviderConfigModal({
     };
     form.reset({
       accessKeyId: isBedrockProvider ? (config.accessKeyId ?? "") : "",
+      accessKey: isKlingAIProvider ? (config.accessKey ?? "") : "",
       apiKey:
-        !isVertexProvider && !isBedrockProvider && !isOllamaProvider
+        !isVertexProvider &&
+        !isBedrockProvider &&
+        !isOllamaProvider &&
+        !isReplicateProvider &&
+        !isKlingAIProvider
           ? (config.apiKey ?? "")
           : "",
+      apiToken: isReplicateProvider ? (config.apiToken ?? "") : "",
       baseURL:
         !isVertexProvider && !isBedrockProvider ? (config.baseURL ?? "") : "",
       clientEmail: isVertexProvider
@@ -136,6 +158,7 @@ export function ProviderConfigModal({
       project: isVertexProvider ? (config.project ?? "") : "",
       region: isBedrockProvider ? (config.region ?? "") : "",
       secretAccessKey: isBedrockProvider ? (config.secretAccessKey ?? "") : "",
+      secretKey: isKlingAIProvider ? (config.secretKey ?? "") : "",
     });
   }, [
     existing,
@@ -144,7 +167,9 @@ export function ProviderConfigModal({
     isSuccess,
     isVertexProvider,
     isBedrockProvider,
+    isKlingAIProvider,
     isOllamaProvider,
+    isReplicateProvider,
   ]);
 
   const handleSave = async (values: ProviderConfigFormValues) => {
@@ -186,18 +211,53 @@ export function ProviderConfigModal({
                   "http://localhost:11434/v1"
                 ).trim(),
               }
-            : {
-                apiKey: (
-                  values as APIKeyProviderConfigFormValues
-                ).apiKey.trim(),
-                ...((values as APIKeyProviderConfigFormValues).baseURL.trim()
-                  ? {
-                      baseURL: (
-                        values as APIKeyProviderConfigFormValues
-                      ).baseURL.trim(),
-                    }
-                  : {}),
-              };
+            : isReplicateProvider
+              ? {
+                  apiToken: (
+                    values as APITokenProviderConfigFormValues
+                  ).apiToken.trim(),
+                  ...((
+                    values as APITokenProviderConfigFormValues
+                  ).baseURL.trim()
+                    ? {
+                        baseURL: (
+                          values as APITokenProviderConfigFormValues
+                        ).baseURL.trim(),
+                      }
+                    : {}),
+                }
+              : isKlingAIProvider
+                ? {
+                    accessKey: (
+                      values as AccessKeySecretKeyProviderConfigFormValues
+                    ).accessKey.trim(),
+                    secretKey: (
+                      values as AccessKeySecretKeyProviderConfigFormValues
+                    ).secretKey.trim(),
+                    ...((
+                      values as AccessKeySecretKeyProviderConfigFormValues
+                    ).baseURL.trim()
+                      ? {
+                          baseURL: (
+                            values as AccessKeySecretKeyProviderConfigFormValues
+                          ).baseURL.trim(),
+                        }
+                      : {}),
+                  }
+                : {
+                    apiKey: (
+                      values as APIKeyProviderConfigFormValues
+                    ).apiKey.trim(),
+                    ...((
+                      values as APIKeyProviderConfigFormValues
+                    ).baseURL.trim()
+                      ? {
+                          baseURL: (
+                            values as APIKeyProviderConfigFormValues
+                          ).baseURL.trim(),
+                        }
+                      : {}),
+                  };
 
       await upsert.mutateAsync({
         config,
@@ -393,6 +453,73 @@ export function ProviderConfigModal({
                         name="baseURL"
                         textFieldProps={{ isRequired: true }}
                       />
+                    ) : isReplicateProvider ? (
+                      <>
+                        <ControlledTextField
+                          control={form.control}
+                          description={`Sentinel stores this encrypted and uses it for requests to ${providerName}.`}
+                          inputProps={{
+                            autoComplete: "off",
+                            placeholder: `Enter your ${providerName} API token`,
+                            type: "password",
+                          }}
+                          label="API token"
+                          name="apiToken"
+                          textFieldProps={{ isRequired: true }}
+                        />
+
+                        <ControlledTextField
+                          control={form.control}
+                          description="Optional. Use this for compatible gateways, proxies, or self-hosted endpoints."
+                          inputProps={{
+                            autoComplete: "off",
+                            placeholder: "https://api.example.com/v1",
+                            type: "url",
+                          }}
+                          label="Base URL"
+                          name="baseURL"
+                        />
+                      </>
+                    ) : isKlingAIProvider ? (
+                      <>
+                        <ControlledTextField
+                          control={form.control}
+                          description="Kling AI access key used to sign API requests."
+                          inputProps={{
+                            autoComplete: "off",
+                            placeholder: "Enter your Kling AI access key",
+                            type: "password",
+                          }}
+                          label="Access Key"
+                          name="accessKey"
+                          textFieldProps={{ isRequired: true }}
+                        />
+
+                        <ControlledTextField
+                          control={form.control}
+                          description="Kling AI secret key used to sign API requests."
+                          inputProps={{
+                            autoComplete: "off",
+                            placeholder: "Enter your Kling AI secret key",
+                            type: "password",
+                          }}
+                          label="Secret Key"
+                          name="secretKey"
+                          textFieldProps={{ isRequired: true }}
+                        />
+
+                        <ControlledTextField
+                          control={form.control}
+                          description="Optional. Override the Kling AI API endpoint if needed."
+                          inputProps={{
+                            autoComplete: "off",
+                            placeholder: "https://api-singapore.klingai.com",
+                            type: "url",
+                          }}
+                          label="Base URL"
+                          name="baseURL"
+                        />
+                      </>
                     ) : !isVertexProvider ? (
                       <>
                         <ControlledTextField

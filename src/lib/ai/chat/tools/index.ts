@@ -713,7 +713,11 @@ function buildWebTools(options: ThreadAgentCallOptions) {
               executeGenerateImage({
                 abortSignal,
                 input,
-                runtime: { imageGeneration: imageGenerationRuntime },
+                runtime: {
+                  imageGeneration: imageGenerationRuntime,
+                  sourceMessageId,
+                  threadId,
+                },
               }),
           }),
         }

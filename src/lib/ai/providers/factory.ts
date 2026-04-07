@@ -3,13 +3,17 @@ import "server-only";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createAzure } from "@ai-sdk/azure";
+import { createBlackForestLabs } from "@ai-sdk/black-forest-labs";
 import { createCohere } from "@ai-sdk/cohere";
+import { createFal } from "@ai-sdk/fal";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createVertex } from "@ai-sdk/google-vertex";
 import { createGroq } from "@ai-sdk/groq";
+import { createKlingAI } from "@ai-sdk/klingai";
 import { createMistral } from "@ai-sdk/mistral";
 import { createMoonshotAI } from "@ai-sdk/moonshotai";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createReplicate } from "@ai-sdk/replicate";
 import { createXai } from "@ai-sdk/xai";
 import { createGateway } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
@@ -30,6 +34,17 @@ type VertexConfig = {
       private_key: string;
     };
   };
+};
+
+type ApiTokenConfig = {
+  apiToken: string;
+  baseURL?: string;
+};
+
+type AccessKeySecretKeyConfig = {
+  accessKey: string;
+  baseURL?: string;
+  secretKey: string;
 };
 
 type BedrockConfig = {
@@ -87,6 +102,35 @@ export function createProviderInstance(
       const c = config as ApiKeyConfig;
       return createXai({
         apiKey: c.apiKey,
+        ...(c.baseURL && { baseURL: c.baseURL }),
+      });
+    }
+    case "black_forest_labs": {
+      const c = config as ApiKeyConfig;
+      return createBlackForestLabs({
+        apiKey: c.apiKey,
+        ...(c.baseURL && { baseURL: c.baseURL }),
+      });
+    }
+    case "klingai": {
+      const c = config as AccessKeySecretKeyConfig;
+      return createKlingAI({
+        accessKey: c.accessKey,
+        ...(c.baseURL && { baseURL: c.baseURL }),
+        secretKey: c.secretKey,
+      });
+    }
+    case "fal": {
+      const c = config as ApiKeyConfig;
+      return createFal({
+        apiKey: c.apiKey,
+        ...(c.baseURL && { baseURL: c.baseURL }),
+      });
+    }
+    case "replicate": {
+      const c = config as ApiTokenConfig;
+      return createReplicate({
+        apiToken: c.apiToken,
         ...(c.baseURL && { baseURL: c.baseURL }),
       });
     }

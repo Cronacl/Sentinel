@@ -236,6 +236,42 @@ const XAIGrokIcon = (props: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+const BlackForestLabsIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...props} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path
+      className="fill-black dark:fill-white"
+      d="M5 4h9.5c2.6 0 4.5 1.9 4.5 4.3 0 1.9-1.1 3.4-2.8 4 1.7.5 2.8 2.1 2.8 4 0 2.5-1.9 4.7-4.7 4.7H5V4Zm3 3v3.8h5.7c1.3 0 2.1-.8 2.1-1.9 0-1.1-.8-1.9-2.1-1.9H8Zm0 6.6V18h6.1c1.3 0 2.1-.9 2.1-2.1 0-1.3-.9-2.3-2.3-2.3H8Z"
+    />
+  </svg>
+);
+
+const KlingAIIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...props} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path
+      className="fill-black dark:fill-white"
+      d="M5 4h3v6.7L14.2 4H18l-5.4 7.7L18.5 20h-3.7L10.3 13 8 15.8V20H5V4Z"
+    />
+  </svg>
+);
+
+const FalIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...props} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path
+      className="fill-black dark:fill-white"
+      d="M4 4h14v2.8H7v4.3h9v2.8H7V20H4V4Zm15.2 7.1H22V20h-2.8v-8.9Z"
+    />
+  </svg>
+);
+
+const ReplicateIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...props} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path
+      className="fill-black dark:fill-white"
+      d="M8.4 5C5.4 5 3 7.3 3 10.2c0 3 2.4 5.3 5.4 5.3 1.5 0 2.8-.5 3.9-1.7l1.1-1.1c.6-.6 1.4-1 2.3-1 1.5 0 2.7 1.1 2.7 2.5 0 1.4-1.2 2.5-2.7 2.5-1 0-1.7-.3-2.4-1l-1.8 2c1.1 1.1 2.6 1.8 4.3 1.8 3 0 5.4-2.3 5.4-5.3 0-2.9-2.4-5.2-5.4-5.2-1.5 0-2.8.5-3.9 1.6l-1.1 1.1c-.6.7-1.4 1.1-2.3 1.1-1.5 0-2.7-1.1-2.7-2.6S6.9 7.6 8.4 7.6c1 0 1.8.4 2.4 1l1.8-2C11.5 5.6 10.1 5 8.4 5Z"
+    />
+  </svg>
+);
+
 const MicrosoftAzureIcon = (props: SVGProps<SVGSVGElement>) => (
   <svg {...props} viewBox="0 0 96 96">
     <defs>
@@ -485,6 +521,10 @@ const PROVIDER_ICON_COMPONENTS: Record<AIProvider, ProviderIconComponent> = {
   openai: OpenAIIcon,
   vercel: VercelIcon,
   xai: XAIGrokIcon,
+  black_forest_labs: BlackForestLabsIcon,
+  klingai: KlingAIIcon,
+  fal: FalIcon,
+  replicate: ReplicateIcon,
   azure: MicrosoftAzureIcon,
   amazon_bedrock: AmazonBedrockIcon,
   groq: GroqIcon,

@@ -16,8 +16,11 @@ mock.module("@/lib/ai/providers/factory", () => ({
   })),
 }));
 
-const { buildImageGenerationProviderEntries, buildImageGenerationRuntime } =
-  await import("./images");
+const {
+  buildImageGenerationProviderEntries,
+  buildImageGenerationRuntime,
+  getImageModelMeta,
+} = await import("./images");
 
 afterEach(() => {
   mock.restore();
@@ -139,5 +142,44 @@ describe("image generation provider runtime", () => {
     expect(providerEntries[0]?.provider).toBe("vercel");
     expect(providerEntries[0]?.hasValidModel).toBe(false);
     expect(providerEntries[0]?.modelId).toBe(null);
+  });
+
+  it("includes native media providers and image-editing capability metadata", () => {
+    const providerEntries = buildImageGenerationProviderEntries({
+      credentials: [
+        {
+          encryptedConfig: JSON.stringify({ apiKey: "bfl-key" }),
+          isEnabled: true,
+          provider: "black_forest_labs",
+        },
+        {
+          encryptedConfig: JSON.stringify({ apiKey: "fal-key" }),
+          isEnabled: true,
+          provider: "fal",
+        },
+        {
+          encryptedConfig: JSON.stringify({ apiToken: "replicate-token" }),
+          isEnabled: true,
+          provider: "replicate",
+        },
+        {
+          encryptedConfig: JSON.stringify({ apiKey: "xai-key" }),
+          isEnabled: true,
+          provider: "xai",
+        },
+      ],
+      providerSettings: [],
+    });
+
+    expect(providerEntries.map((entry) => entry.provider)).toEqual([
+      "black_forest_labs",
+      "fal",
+      "replicate",
+      "xai",
+    ]);
+    expect(
+      getImageModelMeta("xai", "grok-imagine-image")?.capabilities
+        .supportsReferenceImages,
+    ).toBe(true);
   });
 });

@@ -130,7 +130,7 @@ export const TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     label: "the webfetch tool",
   },
   generate_image: {
-    capability: "to generate images from text prompts",
+    capability: "to generate images from text prompts or reference images",
     category: "web",
     label: "the generate_image tool",
   },

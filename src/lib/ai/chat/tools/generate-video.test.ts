@@ -6,9 +6,11 @@ const generateVideoMock = mock(
   async ({
     model,
     prompt,
+    providerOptions,
   }: {
     model: { modelId: string };
     prompt: string | { image: Uint8Array; text: string };
+    providerOptions?: Record<string, unknown>;
   }) => {
     if (model.modelId === "broken-model") {
       throw new Error("Provider failed");
@@ -35,7 +37,14 @@ const generateVideoMock = mock(
               : Uint8Array.from([prompt.image.length, 9, 9]),
         },
       ],
-      warnings: [{ details: "seed ignored", type: "unsupported-setting" }],
+      warnings: providerOptions
+        ? [
+            {
+              details: JSON.stringify(providerOptions),
+              type: "provider-options",
+            },
+          ]
+        : [{ details: "seed ignored", type: "unsupported-setting" }],
     };
   },
 );
@@ -60,6 +69,9 @@ const loadThreadMessagesMock = mock(async () => []);
 
 mock.module("ai", () => ({
   experimental_generateVideo: generateVideoMock,
+  generateImage: mock(async () => {
+    throw new Error("unexpected image generation call");
+  }),
 }));
 
 mock.module("@/lib/ai/providers/factory", () => ({
@@ -114,8 +126,22 @@ const runtime = {
         config: { apiKey: "xai-key" },
         displayName: "xAI",
         isCustom: false,
-        modelId: "broken-model",
+        modelId: "grok-imagine-video",
         provider: "xai" as const,
+      },
+      klingai: {
+        config: { accessKey: "access", secretKey: "secret" },
+        displayName: "Kling AI",
+        isCustom: false,
+        modelId: "kling-v3.0-t2v",
+        provider: "klingai" as const,
+      },
+      fal: {
+        config: { apiKey: "fal-key" },
+        displayName: "Fal",
+        isCustom: false,
+        modelId: "broken-model",
+        provider: "fal" as const,
       },
     },
   },
@@ -192,7 +218,7 @@ describe("executeGenerateVideo", () => {
     expect(result.successCount).toBe(1);
   });
 
-  it("ignores invented reference filenames when the source message has no image attachments", async () => {
+  it("fails clearly when the requested reference image is missing", async () => {
     loadThreadMessagesMock.mockResolvedValueOnce([
       {
         messageId: "message-1",
@@ -201,19 +227,61 @@ describe("executeGenerateVideo", () => {
       },
     ]);
 
+    await expect(
+      executeGenerateVideo({
+        input: {
+          count: 1,
+          mode: "single",
+          prompt: "a short cinematic video of Socrates in Athens",
+          referenceImageFilename: "reference.png",
+        },
+        runtime,
+      }),
+    ).rejects.toThrow(/does not contain any image attachments/i);
+  });
+
+  it("returns per-target errors for incompatible multi-model image-to-video requests", async () => {
+    loadThreadMessagesMock.mockResolvedValueOnce([
+      {
+        messageId: "message-1",
+        parts: [
+          {
+            filename: "reference.png",
+            mediaType: "image/png",
+            type: "file",
+            url: toDataUrl(Buffer.from("reference-image"), "image/png"),
+          },
+        ],
+        role: "user",
+      },
+    ]);
+
     const result = await executeGenerateVideo({
       input: {
         count: 1,
-        mode: "single",
-        prompt: "a short cinematic video of Socrates in Athens",
+        mode: "multi_model",
+        prompt: "animate this image into a slow cinematic move",
+        providers: ["google_vertex", "klingai"],
         referenceImageFilename: "reference.png",
       },
       runtime,
     });
 
-    expect(loadThreadMessagesMock).toHaveBeenCalledWith("thread-1");
-    expect(generateVideoMock).toHaveBeenCalled();
     expect(result.successCount).toBe(1);
+    expect(result.failureCount).toBe(1);
+    expect(result.targets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          provider: "google_vertex",
+          status: "success",
+        }),
+        expect.objectContaining({
+          error: expect.stringMatching(/does not support image-to-video/i),
+          provider: "klingai",
+          status: "error",
+        }),
+      ]),
+    );
   });
 
   it("supports multi-model fan-out with partial failures", async () => {
@@ -222,7 +290,7 @@ describe("executeGenerateVideo", () => {
         count: 1,
         mode: "multi_model",
         prompt: "a bright aerial sweep over the coastline",
-        providers: ["google_vertex", "xai"],
+        providers: ["google_vertex", "fal"],
       },
       runtime,
     });
@@ -237,10 +305,45 @@ describe("executeGenerateVideo", () => {
         }),
         expect.objectContaining({
           error: "Provider failed",
-          provider: "xai",
+          provider: "fal",
           status: "error",
         }),
       ]),
+    );
+  });
+
+  it("applies documented provider defaults for xAI and Kling AI polling", async () => {
+    await executeGenerateVideo({
+      input: {
+        count: 1,
+        mode: "single",
+        prompt: "a chicken flying into the sunset",
+        provider: "xai",
+      },
+      runtime,
+    });
+
+    await executeGenerateVideo({
+      input: {
+        count: 1,
+        mode: "single",
+        prompt: "a neon cyberpunk alley",
+        provider: "klingai",
+      },
+      runtime,
+    });
+
+    expect(generateVideoMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        providerOptions: { xai: { pollTimeoutMs: 600000 } },
+      }),
+    );
+    expect(generateVideoMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        providerOptions: { klingai: { pollTimeoutMs: 600000 } },
+      }),
     );
   });
 
@@ -288,12 +391,5 @@ describe("executeGenerateVideo", () => {
       (sanitized.targets[0] as { videos: Array<{ artifactPath: string }> })
         .videos[0]?.artifactPath,
     ).toBe(__internal.VIDEO_ARTIFACT_PATH_PLACEHOLDER);
-  });
-
-  it("normalizes nullish optional reference values in the schema", () => {
-    expect(__internal.normalizeOptionalInputString(" none ")).toBeUndefined();
-    expect(__internal.normalizeOptionalInputString("reference.png")).toBe(
-      "reference.png",
-    );
   });
 });

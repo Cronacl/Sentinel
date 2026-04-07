@@ -25,6 +25,7 @@ mock.module("@/lib/ai/providers/factory", () => ({
 const {
   buildVideoGenerationProviderEntries,
   buildVideoGenerationRuntime,
+  getVideoModelMeta,
   getVideoModelsForProvider,
 } = await import("./videos");
 
@@ -159,5 +160,45 @@ describe("video generation provider runtime", () => {
         }),
       ]),
     );
+  });
+
+  it("includes new native media video providers and capability metadata", () => {
+    const providerEntries = buildVideoGenerationProviderEntries({
+      credentials: [
+        {
+          encryptedConfig: JSON.stringify({
+            accessKey: "kling-access",
+            secretKey: "kling-secret",
+          }),
+          isEnabled: true,
+          provider: "klingai",
+        },
+        {
+          encryptedConfig: JSON.stringify({ apiKey: "fal-key" }),
+          isEnabled: true,
+          provider: "fal",
+        },
+        {
+          encryptedConfig: JSON.stringify({ apiToken: "replicate-token" }),
+          isEnabled: true,
+          provider: "replicate",
+        },
+      ],
+      providerSettings: [],
+    });
+
+    expect(providerEntries.map((entry) => entry.provider)).toEqual([
+      "klingai",
+      "fal",
+      "replicate",
+    ]);
+    expect(
+      getVideoModelMeta("klingai", "kling-v3.0-i2v")?.capabilities
+        .supportsImageToVideo,
+    ).toBe(true);
+    expect(
+      getVideoModelMeta("klingai", "kling-v3.0-t2v")?.capabilities
+        .supportsImageToVideo,
+    ).toBe(false);
   });
 });

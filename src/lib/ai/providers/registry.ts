@@ -37,6 +37,26 @@ export const PROVIDERS: Record<AIProvider, ProviderMeta> = {
     displayName: "xAI",
     description: "Grok model family",
   },
+  black_forest_labs: {
+    id: "black_forest_labs",
+    displayName: "Black Forest Labs",
+    description: "FLUX image generation and editing models",
+  },
+  klingai: {
+    id: "klingai",
+    displayName: "Kling AI",
+    description: "High-quality text-to-video and image-to-video models",
+  },
+  fal: {
+    id: "fal",
+    displayName: "Fal",
+    description: "Generative media platform for image and video models",
+  },
+  replicate: {
+    id: "replicate",
+    displayName: "Replicate",
+    description: "Hosted image and video models from multiple labs",
+  },
   azure: {
     id: "azure",
     displayName: "Azure OpenAI",

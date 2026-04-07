@@ -5,7 +5,7 @@ import { getLanguageModel } from "../providers/resolver";
 
 import type { ResolvedThreadTitleModel } from "./types";
 
-const TOOL_SELECTION_MODEL_IDS: Record<AIProvider, string> = {
+const TOOL_SELECTION_MODEL_IDS: Partial<Record<AIProvider, string>> = {
   anthropic: "claude-haiku-4-5",
   google: "gemini-2.5-flash-lite",
   google_vertex: "gemini-2.5-flash-lite",
@@ -25,7 +25,9 @@ const TOOL_SELECTION_MODEL_IDS: Record<AIProvider, string> = {
 export type ResolvedToolSelectionModel = ResolvedThreadTitleModel;
 
 export function getToolSelectionModelId(providerId: AIProvider): string {
-  return TOOL_SELECTION_MODEL_IDS[providerId];
+  return (
+    TOOL_SELECTION_MODEL_IDS[providerId] ?? TOOL_SELECTION_MODEL_IDS.openai!
+  );
 }
 
 export async function resolveToolSelectionModel({
