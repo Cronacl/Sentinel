@@ -7,7 +7,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { type PropsWithChildren, useCallback } from "react";
 
 import { SETTINGS_NAV } from "@/components/settings/settings-nav";
-import { getDesktopChromeMetrics } from "@/components/shell/sidebar-window-chrome";
+import {
+  DesktopTitleBar,
+  getDesktopChromeMetrics,
+} from "@/components/shell/sidebar-window-chrome";
 import { getDesktopApi } from "@/lib/desktop/client";
 import { useShortcutAction, useShortcutScope } from "@/lib/shortcuts/provider";
 
@@ -20,6 +23,7 @@ export default function SettingsModalLayout({ children }: PropsWithChildren) {
   const desktop = getDesktopApi();
   const platform = desktop?.app.platform ?? null;
   const isMac = platform === "darwin";
+  const isWindows = platform === "win32";
   const chromeMetrics = getDesktopChromeMetrics(platform);
   const settingsScope = useShortcutScope({
     kind: "overlay",
@@ -36,69 +40,72 @@ export default function SettingsModalLayout({ children }: PropsWithChildren) {
     href === "/settings" ? pathname === "/settings" : pathname.startsWith(href);
 
   return (
-    <div className="bg-surface fixed inset-0 z-50 flex">
-      <aside
-        className="border-separator bg-surface flex h-full min-h-0 shrink-0 flex-col border-r"
-        style={{ width: SETTINGS_SIDEBAR_WIDTH }}
-      >
-        <div
-          className={`shrink-0 ${platform === "linux" ? "app-region-drag" : ""}`.trim()}
-          style={{
-            minHeight: isMac
-              ? 56
-              : platform === "win32"
-                ? 8
-                : chromeMetrics.titleBarHeight + 8,
-          }}
-        />
-
-        <div className="shrink-0 px-3 pb-1">
-          <button
-            className="text-muted hover:text-foreground inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors"
-            onClick={close}
-            type="button"
-          >
-            <HugeiconsIcon
-              color="currentColor"
-              icon={ArrowLeft02Icon}
-              size={14}
-              strokeWidth={1.5}
-            />
-            Back to app
-          </button>
-        </div>
-
-        <ScrollShadow
-          className="min-h-0 flex-1 px-3 pt-1 pb-3"
-          hideScrollBar
-          orientation="vertical"
+    <div className="bg-surface fixed inset-0 z-50 flex flex-col">
+      {isWindows ? <DesktopTitleBar platform="win32" /> : null}
+      <div className="flex min-h-0 flex-1">
+        <aside
+          className="border-separator bg-surface flex h-full min-h-0 shrink-0 flex-col border-r"
+          style={{ width: SETTINGS_SIDEBAR_WIDTH }}
         >
-          <nav className="flex flex-col gap-0.5">
-            {SETTINGS_NAV.map((item) => (
-              <Button
-                key={item.href}
-                size="sm"
-                fullWidth
-                variant={isActive(item.href) ? "tertiary" : "ghost"}
-                className="justify-start rounded-lg"
-                onPress={() => router.replace(item.href)}
-              >
-                <HugeiconsIcon
-                  color="currentColor"
-                  icon={item.icon}
-                  size={15}
-                  strokeWidth={1.5}
-                />
-                {item.label}
-              </Button>
-            ))}
-          </nav>
-        </ScrollShadow>
-      </aside>
+          <div
+            className={`shrink-0 ${platform === "linux" ? "app-region-drag" : ""}`.trim()}
+            style={{
+              minHeight: isMac
+                ? 56
+                : isWindows
+                  ? 0
+                  : chromeMetrics.titleBarHeight + 8,
+            }}
+          />
 
-      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip bg-background">
-        {children}
-      </main>
+          <div className="shrink-0 px-3 pb-1">
+            <button
+              className="text-muted hover:text-foreground inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors"
+              onClick={close}
+              type="button"
+            >
+              <HugeiconsIcon
+                color="currentColor"
+                icon={ArrowLeft02Icon}
+                size={14}
+                strokeWidth={1.5}
+              />
+              Back to app
+            </button>
+          </div>
+
+          <ScrollShadow
+            className="min-h-0 flex-1 px-3 pt-1 pb-3"
+            hideScrollBar
+            orientation="vertical"
+          >
+            <nav className="flex flex-col gap-0.5">
+              {SETTINGS_NAV.map((item) => (
+                <Button
+                  key={item.href}
+                  size="sm"
+                  fullWidth
+                  variant={isActive(item.href) ? "tertiary" : "ghost"}
+                  className="justify-start rounded-lg"
+                  onPress={() => router.replace(item.href)}
+                >
+                  <HugeiconsIcon
+                    color="currentColor"
+                    icon={item.icon}
+                    size={15}
+                    strokeWidth={1.5}
+                  />
+                  {item.label}
+                </Button>
+              ))}
+            </nav>
+          </ScrollShadow>
+        </aside>
+
+        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip bg-background">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
