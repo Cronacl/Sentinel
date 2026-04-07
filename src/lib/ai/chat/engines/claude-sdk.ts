@@ -151,6 +151,7 @@ let cachedRuntime: {
   promise: Promise<ResolvedClaudeCodeRuntime>;
 } | null = null;
 let backgroundStatusRefresh: Promise<void> | null = null;
+let backgroundStatusRefreshGeneration = 0;
 
 function getLocalStateDirectory() {
   return getSentinelStateRoot();
@@ -749,6 +750,8 @@ export function resetClaudeCodeRuntimeCache() {
 
 export function resetClaudeEngineStatusCache() {
   cachedStatus = null;
+  backgroundStatusRefresh = null;
+  backgroundStatusRefreshGeneration += 1;
 }
 
 export function buildClaudeSdkBaseOptions(options?: Partial<Options>): Options {
@@ -833,12 +836,17 @@ async function readClaudeStatus(options?: {
 
   if (!options?.forceRefreshRuntime && snapshot) {
     if (!backgroundStatusRefresh) {
-      backgroundStatusRefresh = probeClaudeStatus({
+      const refreshGeneration = backgroundStatusRefreshGeneration;
+      const refreshPromise = probeClaudeStatus({
         fallbackSnapshot: snapshot,
         runtime,
       })
         .then((status) => {
-          if (!status.usedCachedStatus && status.state === "ready") {
+          if (
+            refreshGeneration === backgroundStatusRefreshGeneration &&
+            !status.usedCachedStatus &&
+            status.state === "ready"
+          ) {
             cachedStatus = {
               expiresAt: Date.now() + CLAUDE_STATUS_CACHE_TTL_MS,
               promise: Promise.resolve(status),
@@ -846,8 +854,14 @@ async function readClaudeStatus(options?: {
           }
         })
         .finally(() => {
-          backgroundStatusRefresh = null;
+          if (
+            refreshGeneration === backgroundStatusRefreshGeneration &&
+            backgroundStatusRefresh === refreshPromise
+          ) {
+            backgroundStatusRefresh = null;
+          }
         });
+      backgroundStatusRefresh = refreshPromise;
     }
 
     return buildCachedClaudeStatus({
