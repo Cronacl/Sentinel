@@ -163,6 +163,9 @@ function findInstallerFiles(files, extension) {
 }
 
 function findUnpackedApps(directories, platform) {
+  const hasUnpackedSuffix = (directoryPath) =>
+    path.basename(directoryPath).endsWith("-unpacked");
+
   switch (platform) {
     case "mac":
       return directories.filter(
@@ -172,12 +175,16 @@ function findUnpackedApps(directories, platform) {
           path.dirname(path.dirname(directoryPath)) === distRoot,
       );
     case "win":
-      return directories.filter((directoryPath) =>
-        path.basename(directoryPath).startsWith("win-unpacked"),
+      return directories.filter(
+        (directoryPath) =>
+          path.basename(directoryPath).startsWith("win") &&
+          hasUnpackedSuffix(directoryPath),
       );
     case "linux":
-      return directories.filter((directoryPath) =>
-        path.basename(directoryPath).startsWith("linux-unpacked"),
+      return directories.filter(
+        (directoryPath) =>
+          path.basename(directoryPath).startsWith("linux") &&
+          hasUnpackedSuffix(directoryPath),
       );
     default:
       throw new Error(`Unsupported audit platform: ${platform}`);
