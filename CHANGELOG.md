@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.23](https://github.com/Cronacl/Sentinel/compare/v0.0.22...v0.0.23) (2026-04-07)
+
+
+### Bug Fixes
+
+* adjust platform-specific UI behavior and sidebar metrics ([8ff704b](https://github.com/Cronacl/Sentinel/commit/8ff704b4b2b29f101be9a983ec020d1d0720b751))
+
 ## [0.0.22](https://github.com/Cronacl/Sentinel/compare/v0.0.21...v0.0.22) (2026-04-06)
 
 
