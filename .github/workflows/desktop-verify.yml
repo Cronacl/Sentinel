@@ -118,6 +118,8 @@ jobs:
               {
                 echo "artifact_paths<<EOF"
                 echo "dist/*.AppImage"
+                echo "dist/*.deb"
+                echo "dist/*.rpm"
                 echo "dist/*.blockmap"
                 echo "dist/latest-linux.yml"
                 echo "EOF"

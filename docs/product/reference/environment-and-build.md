@@ -44,6 +44,14 @@ bun run build:desktop:windows
 bun run build:desktop:linux
 ```
 
+Single-target Linux builds:
+
+```bash
+bun run build:desktop:linux:appimage
+bun run build:desktop:linux:deb
+bun run build:desktop:linux:rpm
+```
+
 ## Related docs
 
 - [Release process](../../release-process.md)

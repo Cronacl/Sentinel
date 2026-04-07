@@ -117,6 +117,8 @@ jobs:
           - artifact_name: release-linux
             artifact_paths: |
               dist/*.AppImage
+              dist/*.deb
+              dist/*.rpm
               dist/*.blockmap
               dist/latest-linux.yml
             platform: linux
