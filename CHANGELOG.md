@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.27](https://github.com/Cronacl/Sentinel/compare/v0.0.26...v0.0.27) (2026-04-07)
+
+
+### Bug Fixes
+
+* enhance handling of SENTINEL_STATE_PATH in Claude SDK tests ([e585fb6](https://github.com/Cronacl/Sentinel/commit/e585fb6c0309ba5cff408c75f823bf159e50eaf1))
+
 ## [0.0.26](https://github.com/Cronacl/Sentinel/compare/v0.0.25...v0.0.26) (2026-04-07)
 
 
