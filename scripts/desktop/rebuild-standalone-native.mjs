@@ -103,35 +103,45 @@ function run(command, args, options = {}) {
   });
 }
 
-function createSpawnEnv(overrides = {}) {
+async function runWithEnv(command, args, options = {}) {
+  const { env: envOverrides = {}, ...spawnOptions } = options;
+
   if (process.platform !== "win32") {
-    return {
-      ...process.env,
-      ...overrides,
-    };
+    await run(command, args, {
+      ...spawnOptions,
+      env: {
+        ...process.env,
+        ...envOverrides,
+      },
+    });
+    return;
   }
 
-  const nextEnv = {};
+  const previousEnv = new Map();
 
-  for (const [key, value] of Object.entries(process.env)) {
-    // Windows injects hidden per-drive cwd entries like "=C:" that cannot be
-    // passed back through child_process.spawn when rebuilding env objects.
-    if (key.startsWith("=") || value == null) {
+  for (const [key, value] of Object.entries(envOverrides)) {
+    previousEnv.set(key, process.env[key]);
+
+    if (value == null) {
+      delete process.env[key];
       continue;
     }
 
-    nextEnv[key] = value;
+    process.env[key] = String(value);
   }
 
-  for (const [key, value] of Object.entries(overrides)) {
-    if (key.startsWith("=") || value == null) {
-      continue;
+  try {
+    await run(command, args, spawnOptions);
+  } finally {
+    for (const [key, value] of previousEnv.entries()) {
+      if (value == null) {
+        delete process.env[key];
+        continue;
+      }
+
+      process.env[key] = value;
     }
-
-    nextEnv[key] = value;
   }
-
-  return nextEnv;
 }
 
 function getInstalledVersion(packageName) {
@@ -227,9 +237,9 @@ await writeFile(
   `${JSON.stringify(runtimePackageJson, null, 2)}\n`,
 );
 
-await run(npmExecutable, ["rebuild", "better-sqlite3"], {
+await runWithEnv(npmExecutable, ["rebuild", "better-sqlite3"], {
   cwd: targetRoot,
-  env: createSpawnEnv({
+  env: {
     ...(isHostTarget ? { npm_config_build_from_source: "true" } : {}),
     npm_config_arch: targetArch,
     npm_config_platform: targetPlatform,
@@ -240,11 +250,11 @@ await run(npmExecutable, ["rebuild", "better-sqlite3"], {
     npm_config_target_arch: targetArch,
     npm_config_target_platform: targetPlatform,
     npm_config_update_binary: "true",
-  }),
+  },
 });
 
 if (isHostTarget) {
-  await run(
+  await runWithEnv(
     electronBin,
     [
       "-e",
@@ -252,9 +262,9 @@ if (isHostTarget) {
     ],
     {
       cwd: targetRoot,
-      env: createSpawnEnv({
+      env: {
         ELECTRON_RUN_AS_NODE: "1",
-      }),
+      },
     },
   );
 } else {
