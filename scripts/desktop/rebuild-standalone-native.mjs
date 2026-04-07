@@ -103,6 +103,37 @@ function run(command, args, options = {}) {
   });
 }
 
+function createSpawnEnv(overrides = {}) {
+  if (process.platform !== "win32") {
+    return {
+      ...process.env,
+      ...overrides,
+    };
+  }
+
+  const nextEnv = {};
+
+  for (const [key, value] of Object.entries(process.env)) {
+    // Windows injects hidden per-drive cwd entries like "=C:" that cannot be
+    // passed back through child_process.spawn when rebuilding env objects.
+    if (key.startsWith("=") || value == null) {
+      continue;
+    }
+
+    nextEnv[key] = value;
+  }
+
+  for (const [key, value] of Object.entries(overrides)) {
+    if (key.startsWith("=") || value == null) {
+      continue;
+    }
+
+    nextEnv[key] = value;
+  }
+
+  return nextEnv;
+}
+
 function getInstalledVersion(packageName) {
   const packageJsonPath = path.join(
     projectRoot,
@@ -198,8 +229,7 @@ await writeFile(
 
 await run(npmExecutable, ["rebuild", "better-sqlite3"], {
   cwd: targetRoot,
-  env: {
-    ...process.env,
+  env: createSpawnEnv({
     ...(isHostTarget ? { npm_config_build_from_source: "true" } : {}),
     npm_config_arch: targetArch,
     npm_config_platform: targetPlatform,
@@ -210,7 +240,7 @@ await run(npmExecutable, ["rebuild", "better-sqlite3"], {
     npm_config_target_arch: targetArch,
     npm_config_target_platform: targetPlatform,
     npm_config_update_binary: "true",
-  },
+  }),
 });
 
 if (isHostTarget) {
@@ -222,10 +252,9 @@ if (isHostTarget) {
     ],
     {
       cwd: targetRoot,
-      env: {
-        ...process.env,
+      env: createSpawnEnv({
         ELECTRON_RUN_AS_NODE: "1",
-      },
+      }),
     },
   );
 } else {
