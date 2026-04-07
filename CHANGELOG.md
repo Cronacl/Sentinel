@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.26](https://github.com/Cronacl/Sentinel/compare/v0.0.25...v0.0.26) (2026-04-07)
+
+
+### Bug Fixes
+
+* manage SENTINEL_STATE_PATH environment variable in tests ([492a019](https://github.com/Cronacl/Sentinel/commit/492a019c536e71fc15950ec1aa18a6d84c56946d))
+* refine unpacked app detection logic in audit bundle ([2bb598f](https://github.com/Cronacl/Sentinel/commit/2bb598f73cef5d6b935cfeb7ae13590bbe4b5039))
+
 ## [0.0.25](https://github.com/Cronacl/Sentinel/compare/v0.0.24...v0.0.25) (2026-04-07)
 
 
