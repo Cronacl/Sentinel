@@ -23,6 +23,7 @@ const originalPath = process.env.PATH;
 const originalHome = process.env.HOME;
 const originalSentinelClaudePath = process.env.SENTINEL_CLAUDE_PATH;
 const originalClaudePath = process.env.CLAUDE_PATH;
+const originalSentinelStatePath = process.env.SENTINEL_STATE_PATH;
 
 afterEach(async () => {
   process.env.PATH = originalPath;
@@ -36,6 +37,11 @@ afterEach(async () => {
     process.env.CLAUDE_PATH = originalClaudePath;
   } else {
     delete process.env.CLAUDE_PATH;
+  }
+  if (originalSentinelStatePath) {
+    process.env.SENTINEL_STATE_PATH = originalSentinelStatePath;
+  } else {
+    delete process.env.SENTINEL_STATE_PATH;
   }
   resetClaudeCodeRuntimeCache();
 });
@@ -70,6 +76,7 @@ describe("resolveClaudeCodeRuntime", () => {
       await chmod(executablePath, 0o755);
       process.env.HOME = tempRoot;
       process.env.PATH = `${tempRoot}${path.delimiter}${originalPath ?? ""}`;
+      delete process.env.SENTINEL_STATE_PATH;
 
       const resolved = await resolveClaudeCodeRuntime({ forceRefresh: true });
 
@@ -94,6 +101,7 @@ describe("resolveClaudeCodeRuntime", () => {
       await chmod(executablePath, 0o755);
       process.env.HOME = tempRoot;
       process.env.PATH = "/usr/bin:/bin";
+      delete process.env.SENTINEL_STATE_PATH;
 
       const resolved = await resolveClaudeCodeRuntime({ forceRefresh: true });
       const savedEnv = await readFile(
@@ -122,6 +130,7 @@ describe("resolveClaudeCodeRuntime", () => {
       process.env.PATH = "/usr/bin:/bin";
       process.env.SENTINEL_CLAUDE_PATH = executablePath;
       delete process.env.CLAUDE_PATH;
+      delete process.env.SENTINEL_STATE_PATH;
 
       const resolved = await resolveClaudeCodeRuntime({ forceRefresh: true });
 
