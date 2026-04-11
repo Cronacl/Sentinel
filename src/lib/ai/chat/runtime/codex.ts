@@ -448,6 +448,18 @@ function buildCodexCollaborationMode(input: {
   };
 }
 
+function isUnsupportedCodexCollaborationModeError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("turn/start.collaborationmode") &&
+    message.includes("experimentalapi capability")
+  );
+}
+
 function buildInitialCodexThreadState(input: {
   approvalPolicy: CodexApprovalPolicy;
   cliVersion: string | null | undefined;
@@ -1918,16 +1930,38 @@ export async function runCodexThreadChat(
       effort: request.reasoningEffort ?? null,
     });
 
-    const turnResponse = await codex.startTurn({
+    const startTurnParams = {
       approvalPolicy,
-      ...(collaborationMode ? { collaborationMode } : {}),
       cwd: workspaceRoot,
       effort: request.reasoningEffort ?? null,
       input: codexInput,
       model: request.modelId ?? null,
       sandboxPolicy,
       threadId: threadStartResponse.thread.id,
-    });
+    };
+
+    let turnResponse: Awaited<ReturnType<typeof codex.startTurn>>;
+    try {
+      turnResponse = await codex.startTurn(
+        collaborationMode
+          ? { ...startTurnParams, collaborationMode }
+          : startTurnParams,
+      );
+    } catch (error) {
+      if (
+        !collaborationMode ||
+        !isUnsupportedCodexCollaborationModeError(error)
+      ) {
+        throw error;
+      }
+
+      log.warn("start_turn_collaboration_mode_unsupported", {
+        codexThreadId: threadStartResponse.thread.id,
+        error,
+        threadId: request.threadId,
+      });
+      turnResponse = await codex.startTurn(startTurnParams);
+    }
 
     mirror.codexTurnId = turnResponse.turn.id;
     const control = activeCodexRunControls.get(runId);

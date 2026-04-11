@@ -241,5 +241,66 @@ describe("runCodexThreadChat editing", () => {
       modelId: "gpt-5.4",
       reasoningEffort: null,
     });
+    expect(codexManager.startTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collaborationMode: {
+          mode: "plan",
+          settings: expect.objectContaining({
+            model: "gpt-5.4",
+            reasoning_effort: "medium",
+          }),
+        },
+      }),
+    );
+  });
+
+  it("retries without collaboration mode when the runtime does not support it", async () => {
+    codexManager.startTurn.mockImplementationOnce(async () => {
+      throw new Error(
+        "turn/start.collaborationMode requires experimentalApi capability",
+      );
+    });
+
+    const response = await runCodexThreadChat(
+      {
+        message: {
+          id: "user-3",
+          metadata: {},
+          parts: [{ text: "hey", type: "text" }],
+          role: "user",
+        },
+        modelId: "gpt-5.4",
+        threadId: "thread-3",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      {
+        chatEngineState: null,
+        mode: "chat",
+        status: "idle",
+      } as any,
+    );
+
+    expect(response.status).toBe(202);
+    expect(codexManager.startTurn).toHaveBeenCalledTimes(2);
+    expect(codexManager.startTurn).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        collaborationMode: {
+          mode: "default",
+          settings: expect.objectContaining({
+            model: "gpt-5.4",
+            reasoning_effort: "medium",
+          }),
+        },
+      }),
+    );
+    expect(codexManager.startTurn).toHaveBeenNthCalledWith(
+      2,
+      expect.not.objectContaining({
+        collaborationMode: expect.anything(),
+      }),
+    );
   });
 });
