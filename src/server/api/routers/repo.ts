@@ -119,7 +119,7 @@ async function generateWorkspaceCommitMessage({
   includeUnstaged?: boolean;
   rootPath: string;
   thread: {
-    chatEngine: "claude" | "codex" | "sentinel";
+    chatEngine: "claude" | "codex" | "copilot" | "sentinel";
     chatModelId: string | null;
     chatReasoningEffort: string | null;
   };

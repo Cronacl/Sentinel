@@ -7,7 +7,7 @@ const DEST_PLACEHOLDER = "{{DEST}}";
 const SKILL_FILENAME = "SKILL.md";
 const SENTINEL_INSTALL_METADATA_FILENAME = ".sentinel-install.json";
 const SKILL_DIRECTORY_NAME_PATTERN = /^[a-z0-9][a-z0-9-_]*$/i;
-export type SkillInstallTarget = "sentinel" | "codex" | "claude";
+export type SkillInstallTarget = "sentinel" | "codex" | "claude" | "copilot";
 export type SkillInstallResult = {
   alreadyInstalled?: boolean;
   directory: string;
@@ -64,6 +64,7 @@ function resolveSkillDestination(
   destRoot: string,
   name: string,
   target: SkillInstallTarget,
+  scope: "global" | "workspace",
 ) {
   const normalizedName = name.trim();
   if (!SKILL_DIRECTORY_NAME_PATTERN.test(normalizedName)) {
@@ -77,7 +78,11 @@ function resolveSkillDestination(
       ? path.resolve(destRoot, "skills")
       : target === "claude"
         ? path.resolve(destRoot, ".claude", "skills")
-        : path.resolve(destRoot, ".sentinel", "skills");
+        : target === "copilot"
+          ? scope === "workspace"
+            ? path.resolve(destRoot, ".github", "skills")
+            : path.resolve(destRoot, ".copilot", "skills")
+          : path.resolve(destRoot, ".sentinel", "skills");
   const dest = path.resolve(skillsDir, normalizedName);
 
   if (path.dirname(dest) !== skillsDir) {
@@ -108,13 +113,20 @@ export async function executeInstallSteps({
   installSteps,
   destRoot,
   target = "sentinel",
+  scope = "global",
 }: {
   name: string;
   installSteps: string[];
   destRoot: string;
   target?: SkillInstallTarget;
+  scope?: "global" | "workspace";
 }): Promise<SkillInstallResult> {
-  const { dest, skillsDir } = resolveSkillDestination(destRoot, name, target);
+  const { dest, skillsDir } = resolveSkillDestination(
+    destRoot,
+    name,
+    target,
+    scope,
+  );
 
   if (await pathExists(dest)) {
     await validateInstalledSkillDirectory(dest);
@@ -168,12 +180,14 @@ export async function uninstallSkill({
   name,
   destRoot,
   target = "sentinel",
+  scope = "global",
 }: {
   name: string;
   destRoot: string;
   target?: SkillInstallTarget;
+  scope?: "global" | "workspace";
 }) {
-  const { dest } = resolveSkillDestination(destRoot, name, target);
+  const { dest } = resolveSkillDestination(destRoot, name, target, scope);
 
   if (!(await pathExists(dest))) {
     throw new Error(`Skill "${name}" is not installed at ${dest}.`);

@@ -43,6 +43,12 @@ export const FALLBACK_CHAT_ENGINE_OPTIONS: ChatComposerEngineOption[] = [
     isAvailable: true,
     label: "Claude",
   },
+  {
+    engine: "copilot",
+    error: null,
+    isAvailable: true,
+    label: "Copilot",
+  },
 ];
 
 export function filterSelectableModels(models: ChatComposerModel[]) {

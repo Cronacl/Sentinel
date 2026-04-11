@@ -31,11 +31,13 @@ const composerPathEntrySchema = z.object({
 
 const composerSkillEntrySchema = z.object({
   directory: z.string().optional(),
-  engine: z.enum(["sentinel", "codex", "claude"]),
+  engine: z.enum(["sentinel", "codex", "claude", "copilot"]),
   name: z.string(),
   scope: z.enum(["global", "workspace"]).optional(),
-  sourceKind: z.enum(["sentinel", "agents", "claude", "codex"]).optional(),
-  target: z.enum(["sentinel", "codex", "claude"]).optional(),
+  sourceKind: z
+    .enum(["sentinel", "agents", "claude", "copilot", "codex"])
+    .optional(),
+  target: z.enum(["sentinel", "codex", "claude", "copilot"]).optional(),
 });
 
 const composerContextSchema = z

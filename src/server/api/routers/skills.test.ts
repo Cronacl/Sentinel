@@ -30,7 +30,8 @@ const loadSkillByName = mock(async () => null);
 function resolveTargetDirectory(
   destRoot: string,
   name: string,
-  target: "claude" | "codex" | "sentinel" = "sentinel",
+  target: "claude" | "codex" | "copilot" | "sentinel" = "sentinel",
+  scope: "global" | "workspace" = "global",
 ) {
   if (target === "codex") {
     return `${destRoot}/skills/${name}`;
@@ -40,20 +41,32 @@ function resolveTargetDirectory(
     return `${destRoot}/.claude/skills/${name}`;
   }
 
+  if (target === "copilot") {
+    return scope === "workspace"
+      ? `${destRoot}/.github/skills/${name}`
+      : `${destRoot}/.copilot/skills/${name}`;
+  }
+
   return `${destRoot}/.sentinel/skills/${name}`;
 }
 
 const executeInstallSteps = mock(
-  async ({ name, destRoot, installSteps, target = "sentinel" }) => ({
-    directory: resolveTargetDirectory(destRoot, name, target),
+  async ({
+    name,
+    destRoot,
+    installSteps,
+    scope = "global",
+    target = "sentinel",
+  }) => ({
+    directory: resolveTargetDirectory(destRoot, name, target, scope),
     installSteps,
     name,
   }),
 );
 const resolveCodexHome = mock(() => "/tmp/codex-home");
 const uninstallSkill = mock(
-  async ({ name, destRoot, target = "sentinel" }) => ({
-    directory: resolveTargetDirectory(destRoot, name, target),
+  async ({ name, destRoot, scope = "global", target = "sentinel" }) => ({
+    directory: resolveTargetDirectory(destRoot, name, target, scope),
     name,
   }),
 );
@@ -214,6 +227,7 @@ describe("skillsRouter", () => {
         installedTargets: {
           claude: false,
           codex: true,
+          copilot: false,
           sentinel: true,
         },
         name: "example",
@@ -260,6 +274,7 @@ describe("skillsRouter", () => {
         installedTargets: {
           claude: true,
           codex: false,
+          copilot: false,
           sentinel: false,
         },
         name: "example",
@@ -319,6 +334,7 @@ describe("skillsRouter", () => {
         installedTargets: {
           claude: true,
           codex: false,
+          copilot: false,
           sentinel: true,
         },
         name: "example",
@@ -345,6 +361,7 @@ describe("skillsRouter", () => {
       destRoot: "/tmp/custom-home",
       installSteps: registryEntry.installSteps,
       name: "example",
+      scope: "global",
       target: "sentinel",
     });
     expect(result.directory).toBe("/tmp/custom-home/.sentinel/skills/example");
@@ -369,6 +386,7 @@ describe("skillsRouter", () => {
       destRoot: "/tmp/custom-home",
       installSteps: registryEntry.installSteps,
       name: "example",
+      scope: "global",
       target: "claude",
     });
     expect(result.directory).toBe("/tmp/custom-home/.claude/skills/example");
@@ -395,6 +413,7 @@ describe("skillsRouter", () => {
       destRoot: "/tmp/workspace",
       installSteps: registryEntry.installSteps,
       name: "example",
+      scope: "workspace",
       target: "claude",
     });
     expect(result.directory).toBe("/tmp/workspace/.claude/skills/example");
@@ -459,8 +478,61 @@ describe("skillsRouter", () => {
         "copy skills/custom-skill@main {{DEST}}",
       ],
       name: "custom-skill",
+      scope: "workspace",
       target: "sentinel",
     });
+  });
+
+  it("installs curated skills into Copilot personal skills directories", async () => {
+    const result = await skillsRouter.install({
+      ctx: {
+        user: {
+          skillsBasePath: "/tmp/custom-home",
+        },
+        workspace: null,
+      },
+      input: {
+        name: "example",
+        scope: "global",
+        target: "copilot",
+      },
+    });
+
+    expect(executeInstallSteps).toHaveBeenCalledWith({
+      destRoot: "/tmp/custom-home",
+      installSteps: registryEntry.installSteps,
+      name: "example",
+      scope: "global",
+      target: "copilot",
+    });
+    expect(result.directory).toBe("/tmp/custom-home/.copilot/skills/example");
+  });
+
+  it("installs curated skills into Copilot workspace skill directories", async () => {
+    const result = await skillsRouter.install({
+      ctx: {
+        user: {
+          skillsBasePath: "/tmp/custom-home",
+        },
+        workspace: {
+          rootPath: "/tmp/workspace",
+        },
+      },
+      input: {
+        name: "example",
+        scope: "workspace",
+        target: "copilot",
+      },
+    });
+
+    expect(executeInstallSteps).toHaveBeenCalledWith({
+      destRoot: "/tmp/workspace",
+      installSteps: registryEntry.installSteps,
+      name: "example",
+      scope: "workspace",
+      target: "copilot",
+    });
+    expect(result.directory).toBe("/tmp/workspace/.github/skills/example");
   });
 
   it("loads claude-targeted skills using the claude lookup target", async () => {
@@ -507,6 +579,7 @@ describe("skillsRouter", () => {
     expect(uninstallSkill).toHaveBeenCalledWith({
       destRoot: "/tmp/workspace",
       name: "example",
+      scope: "workspace",
       target: "sentinel",
     });
   });
@@ -531,8 +604,56 @@ describe("skillsRouter", () => {
     expect(uninstallSkill).toHaveBeenCalledWith({
       destRoot: "/tmp/workspace",
       name: "example",
+      scope: "workspace",
       target: "claude",
     });
     expect(result.directory).toBe("/tmp/workspace/.claude/skills/example");
+  });
+
+  it("marks curated skills as installed in Copilot independently from the other runtimes", async () => {
+    getSkillSnapshot.mockImplementationOnce(
+      async ({ workspaceRoot, globalBase }) => ({
+        revision: 2,
+        skillRoots: [
+          `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.github/skills/example`,
+        ],
+        skills: [
+          {
+            description: "Helpful skill",
+            directory: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.github/skills/example`,
+            installOrigin: "sentinel",
+            isExternal: false,
+            name: "example",
+            preview: "# Example",
+            scope: workspaceRoot ? "workspace" : "global",
+            skillFile: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.github/skills/example/SKILL.md`,
+            sourceKind: "copilot",
+            target: "copilot",
+          },
+        ],
+        updatedAt: 123,
+      }),
+    );
+
+    const result = await skillsRouter.registry({
+      ctx: {
+        user: {
+          skillsBasePath: "/tmp/custom-home",
+        },
+        workspace: null,
+      },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        installedTargets: {
+          claude: false,
+          codex: false,
+          copilot: true,
+          sentinel: false,
+        },
+        name: "example",
+      }),
+    ]);
   });
 });

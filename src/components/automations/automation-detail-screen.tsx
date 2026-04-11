@@ -260,6 +260,9 @@ export function AutomationDetailScreen({
   const claudeModelsQuery = api.engines.models.useQuery({
     engine: "claude",
   });
+  const copilotModelsQuery = api.engines.models.useQuery({
+    engine: "copilot",
+  });
 
   const automation = automationQuery.data ?? null;
   const statusTone = automation?.status === "active" ? "success" : "warning";
@@ -278,6 +281,10 @@ export function AutomationDetailScreen({
     () => getAvailableAutomationModels(claudeModelsQuery.data ?? []),
     [claudeModelsQuery.data],
   );
+  const availableCopilotModels = useMemo(
+    () => getAvailableAutomationModels(copilotModelsQuery.data ?? []),
+    [copilotModelsQuery.data],
+  );
 
   const formDefaults = useMemo<EditFormValues | null>(() => {
     if (!automation) return null;
@@ -285,6 +292,7 @@ export function AutomationDetailScreen({
     const selection = resolveAutomationSelection(
       getAutomationModelsForEngine(engine, {
         claude: availableClaudeModels,
+        copilot: availableCopilotModels,
         codex: availableCodexModels,
         sentinel: availableSentinelModels,
       }),
@@ -310,6 +318,7 @@ export function AutomationDetailScreen({
   }, [
     automation,
     availableClaudeModels,
+    availableCopilotModels,
     availableCodexModels,
     availableSentinelModels,
   ]);
@@ -367,11 +376,13 @@ export function AutomationDetailScreen({
     () =>
       getAutomationModelsForEngine(selectedEngine, {
         claude: availableClaudeModels,
+        copilot: availableCopilotModels,
         codex: availableCodexModels,
         sentinel: availableSentinelModels,
       }),
     [
       availableClaudeModels,
+      availableCopilotModels,
       availableCodexModels,
       availableSentinelModels,
       selectedEngine,
@@ -960,7 +971,7 @@ export function AutomationDetailScreen({
 
                 <ControlledSelectField
                   control={form.control}
-                  description="Choose whether this automation runs with Sentinel or Codex."
+                  description="Choose which engine and runtime this automation should use."
                   label="Engine"
                   name="chatEngine"
                   options={engineOptions}

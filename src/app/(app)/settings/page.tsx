@@ -343,17 +343,18 @@ export default function GeneralSettingsPage() {
                   Skills directory
                 </h2>
                 <p className="text-muted text-sm">
-                  Override where Sentinel looks for global skills. Leave empty
-                  to use the default home directory.
+                  Override the base directory used for global Sentinel, Claude,
+                  Agents, and Copilot skill discovery. Leave empty to use the
+                  default home directory.
                 </p>
               </div>
 
               <div className="mt-4 space-y-4">
                 <ControlledTextField
                   control={generalSettingsForm.control}
-                  description="Absolute path to use as the base for global skill discovery (e.g. /Users/you/my-skills)."
+                  description="Absolute path to use as the base for global skill discovery (e.g. /Users/you/my-skills). Sentinel uses .sentinel/skills, Claude uses .claude/skills, Agents uses .agents/skills, and Copilot uses .copilot/skills beneath this base."
                   inputProps={{
-                    placeholder: "~/.sentinel/skills (default)",
+                    placeholder: "~ (default)",
                     className: "w-full font-mono text-sm",
                   }}
                   label="Custom skills base path"
@@ -361,14 +362,31 @@ export default function GeneralSettingsPage() {
                   textFieldProps={{ className: "w-full max-w-lg" }}
                 />
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-start gap-3">
                   <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-xs text-muted flex-1">
-                    Skills will be discovered at:{" "}
-                    <span className="font-mono text-foreground">
-                      {skillsBasePath
-                        ? `${skillsBasePath}/.sentinel/skills/`
-                        : "~/.sentinel/skills/"}
-                    </span>
+                    <p>Global skills will be discovered from:</p>
+                    <div className="mt-2 space-y-1 font-mono text-foreground">
+                      <div>
+                        {skillsBasePath
+                          ? `${skillsBasePath}/.sentinel/skills/`
+                          : "~/.sentinel/skills/"}
+                      </div>
+                      <div>
+                        {skillsBasePath
+                          ? `${skillsBasePath}/.agents/skills/`
+                          : "~/.agents/skills/"}
+                      </div>
+                      <div>
+                        {skillsBasePath
+                          ? `${skillsBasePath}/.claude/skills/`
+                          : "~/.claude/skills/"}
+                      </div>
+                      <div>
+                        {skillsBasePath
+                          ? `${skillsBasePath}/.copilot/skills/`
+                          : "~/.copilot/skills/"}
+                      </div>
+                    </div>
                   </div>
                   {skillsBasePath ? (
                     <Button

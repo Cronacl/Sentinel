@@ -271,6 +271,12 @@ export function NewAutomationModal({
     },
     { enabled: isOpen },
   );
+  const copilotModelsQuery = api.engines.models.useQuery(
+    {
+      engine: "copilot",
+    },
+    { enabled: isOpen },
+  );
   const chatPreferencesQuery = api.chatPreferences.get.useQuery(undefined, {
     enabled: isOpen,
   });
@@ -288,6 +294,10 @@ export function NewAutomationModal({
     () => getAvailableAutomationModels(claudeModelsQuery.data ?? []),
     [claudeModelsQuery.data],
   );
+  const availableCopilotModels = useMemo(
+    () => getAvailableAutomationModels(copilotModelsQuery.data ?? []),
+    [copilotModelsQuery.data],
+  );
   const globalDefaults = useMemo(() => {
     const preferredEngine = chatPreferencesQuery.data?.engine ?? "sentinel";
     const preferredReasoningEffort =
@@ -297,6 +307,7 @@ export function NewAutomationModal({
 
     const preferredModels = getAutomationModelsForEngine(preferredEngine, {
       claude: availableClaudeModels,
+      copilot: availableCopilotModels,
       codex: availableCodexModels,
       sentinel: availableSentinelModels,
     });
@@ -308,6 +319,7 @@ export function NewAutomationModal({
         : fallbackEngine;
     const models = getAutomationModelsForEngine(engine, {
       claude: availableClaudeModels,
+      copilot: availableCopilotModels,
       codex: availableCodexModels,
       sentinel: availableSentinelModels,
     });
@@ -324,6 +336,7 @@ export function NewAutomationModal({
     };
   }, [
     availableClaudeModels,
+    availableCopilotModels,
     availableCodexModels,
     availableSentinelModels,
     chatPreferencesQuery.data?.engine,
@@ -400,11 +413,13 @@ export function NewAutomationModal({
     () =>
       getAutomationModelsForEngine(selectedEngine, {
         claude: availableClaudeModels,
+        copilot: availableCopilotModels,
         codex: availableCodexModels,
         sentinel: availableSentinelModels,
       }),
     [
       availableClaudeModels,
+      availableCopilotModels,
       availableCodexModels,
       availableSentinelModels,
       selectedEngine,
@@ -488,7 +503,8 @@ export function NewAutomationModal({
     enginesQuery.isLoading ||
     sentinelModelsQuery.isLoading ||
     codexModelsQuery.isLoading ||
-    claudeModelsQuery.isLoading;
+    claudeModelsQuery.isLoading ||
+    copilotModelsQuery.isLoading;
 
   const handleCreate = async (values: AutomationFormValues) => {
     setSubmitError("");
@@ -584,7 +600,7 @@ export function NewAutomationModal({
 
                   <ControlledSelectField
                     control={form.control}
-                    description="Choose whether this automation runs with Sentinel or Codex."
+                    description="Choose which engine and runtime this automation should use."
                     label="Engine"
                     name="chatEngine"
                     options={engineOptions}

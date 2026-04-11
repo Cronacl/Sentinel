@@ -62,6 +62,8 @@ function getSkillEngineSourceRank(skill: SkillListItem, engine: ChatEngine) {
   switch (engine) {
     case "claude":
       return skill.sourceKind === "claude" ? 0 : 1;
+    case "copilot":
+      return skill.target === "copilot" ? 0 : 1;
     case "sentinel":
       return skill.sourceKind === "sentinel" ? 0 : 1;
     case "codex":
@@ -79,6 +81,8 @@ export function getSkillSuggestionTitle(engine: ChatEngine) {
   switch (engine) {
     case "claude":
       return "Showing Claude skills";
+    case "copilot":
+      return "Showing Copilot skills";
     case "codex":
       return "Showing Codex skills";
     case "sentinel":
@@ -96,6 +100,8 @@ export function filterSkillsForEngine(
     switch (engine) {
       case "sentinel":
         return skills.filter((s) => s.target === "sentinel");
+      case "copilot":
+        return skills.filter((s) => s.target === "copilot");
       case "codex":
         return skills.filter((s) => s.target === "codex");
       case "claude":

@@ -5,7 +5,12 @@ import path from "node:path";
 
 import { generateObject } from "ai";
 import { z } from "zod";
+import type { SessionConfig } from "@github/copilot-sdk";
 
+import {
+  getCopilotClientManager,
+  normalizeCopilotErrorMessage,
+} from "@/lib/ai/chat/engines/copilot-sdk";
 import {
   getReasoningProviderOptions,
   type ReasoningEffort,
@@ -70,6 +75,12 @@ type GenerateClaudeCommitMessageInput = {
   reasoningEffort?: ReasoningEffort | null;
 };
 
+type GenerateCopilotCommitMessageInput = {
+  context: CommitMessageGenerationContext;
+  modelId: string;
+  reasoningEffort?: ReasoningEffort | null;
+};
+
 type GenerateSentinelCommitMessageInput = {
   context: CommitMessageGenerationContext;
   defaultChatModelId?: string | null;
@@ -93,8 +104,42 @@ type GenerateClaudeDependencies = {
   }) => ChildProcessLike;
 };
 
+type CopilotCommitSessionLike = {
+  disconnect?: () => Promise<void>;
+  sendAndWait: (
+    options: {
+      mode?: "enqueue" | "immediate";
+      prompt: string;
+    },
+    timeout?: number,
+  ) => Promise<
+    | {
+        data?: {
+          content?: string;
+        };
+      }
+    | undefined
+  >;
+};
+
+type GenerateCopilotDependencies = {
+  createSession?: (
+    input: Pick<
+      SessionConfig,
+      | "availableTools"
+      | "clientName"
+      | "model"
+      | "onPermissionRequest"
+      | "reasoningEffort"
+      | "streaming"
+      | "workingDirectory"
+    >,
+  ) => Promise<CopilotCommitSessionLike>;
+};
+
 const CODEX_TIMEOUT_MS = 180_000;
 const CLAUDE_TIMEOUT_MS = 180_000;
+const COPILOT_TIMEOUT_MS = 180_000;
 const CODEX_DEFAULT_REASONING_EFFORT = "low";
 
 const COMMIT_MESSAGE_OUTPUT_SCHEMA = z.object({
@@ -333,6 +378,42 @@ function mapClaudeEffort(effort: ReasoningEffort | null | undefined) {
   }
 }
 
+function mapCopilotEffort(effort: ReasoningEffort | null | undefined) {
+  switch (effort) {
+    case "medium":
+      return "medium";
+    case "high":
+      return "high";
+    case "minimal":
+    case "low":
+      return "low";
+    default:
+      return undefined;
+  }
+}
+
+function extractJsonObject(raw: string) {
+  const trimmed = raw.trim();
+
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fencedMatch?.[1]) {
+    return fencedMatch[1].trim();
+  }
+
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    return trimmed.slice(firstBrace, lastBrace + 1);
+  }
+
+  return trimmed;
+}
+
+function parseStructuredCommitMessageOutput(raw: string) {
+  const candidate = extractJsonObject(raw);
+  return COMMIT_MESSAGE_OUTPUT_SCHEMA.parse(JSON.parse(candidate));
+}
+
 async function createTempDirectory(prefix: string) {
   return await mkdtemp(path.join(tmpdir(), prefix));
 }
@@ -494,6 +575,70 @@ export async function generateClaudeCommitMessage(
   return normalizeCommitResult(envelope.structured_output);
 }
 
+export async function generateCopilotCommitMessage(
+  input: GenerateCopilotCommitMessageInput,
+  dependencies?: GenerateCopilotDependencies,
+) {
+  const createSession =
+    dependencies?.createSession ??
+    (async (
+      config: Pick<
+        SessionConfig,
+        | "availableTools"
+        | "clientName"
+        | "model"
+        | "onPermissionRequest"
+        | "reasoningEffort"
+        | "streaming"
+        | "workingDirectory"
+      >,
+    ) => await getCopilotClientManager().createSession(config));
+
+  let session: CopilotCommitSessionLike | null = null;
+  let content: string;
+
+  try {
+    session = await createSession({
+      availableTools: [],
+      clientName: "sentinel",
+      model: input.modelId,
+      onPermissionRequest: () => ({
+        kind: "denied-no-approval-rule-and-could-not-request-from-user",
+      }),
+      ...(mapCopilotEffort(input.reasoningEffort)
+        ? { reasoningEffort: mapCopilotEffort(input.reasoningEffort) }
+        : {}),
+      streaming: false,
+      workingDirectory: input.context.repoRoot,
+    });
+
+    const response = await session.sendAndWait(
+      {
+        mode: "immediate",
+        prompt: buildCommitMessagePrompt(input.context),
+      },
+      COPILOT_TIMEOUT_MS,
+    );
+
+    content = response?.data?.content?.trim() ?? "";
+  } catch (error) {
+    throw new Error(
+      normalizeCopilotErrorMessage(
+        error,
+        "GitHub Copilot failed to generate a commit message.",
+      ),
+    );
+  } finally {
+    await session?.disconnect?.().catch(() => undefined);
+  }
+
+  if (!content) {
+    throw new Error("GitHub Copilot did not return a commit message.");
+  }
+
+  return normalizeCommitResult(parseStructuredCommitMessageOutput(content));
+}
+
 export async function generateGitCommitMessage(
   input: GenerateCommitMessageInput,
 ) {
@@ -507,6 +652,14 @@ export async function generateGitCommitMessage(
 
   if (input.engine === "claude" && input.modelId) {
     return await generateClaudeCommitMessage({
+      context: input.context,
+      modelId: input.modelId,
+      reasoningEffort: input.reasoningEffort,
+    });
+  }
+
+  if (input.engine === "copilot" && input.modelId) {
+    return await generateCopilotCommitMessage({
       context: input.context,
       modelId: input.modelId,
       reasoningEffort: input.reasoningEffort,

@@ -36,7 +36,7 @@ function resolveDestRoot(
   user: { skillsBasePath?: string | null },
   scope: "global" | "workspace",
   workspaceRootPath: string | null,
-  target: "sentinel" | "codex" | "claude",
+  target: "sentinel" | "codex" | "claude" | "copilot",
 ) {
   if (target === "codex") {
     if (scope === "workspace") {
@@ -163,6 +163,11 @@ export const skillsRouter = createTRPCRouter({
         .filter((skill) => skill.target === "claude")
         .map((s) => s.name.trim().toLowerCase()),
     );
+    const installedCopilotNames = new Set(
+      snapshot.skills
+        .filter((skill) => skill.target === "copilot")
+        .map((s) => s.name.trim().toLowerCase()),
+    );
     const installedCodexNames = new Set(
       (await buildCodexSkillList().catch(() => [])).map((skill) =>
         skill.name.trim().toLowerCase(),
@@ -177,6 +182,7 @@ export const skillsRouter = createTRPCRouter({
       installedTargets: {
         claude: installedClaudeNames.has(entry.name.trim().toLowerCase()),
         codex: installedCodexNames.has(entry.name.trim().toLowerCase()),
+        copilot: installedCopilotNames.has(entry.name.trim().toLowerCase()),
         sentinel: installedSentinelNames.has(entry.name.trim().toLowerCase()),
       },
     }));
@@ -210,6 +216,7 @@ export const skillsRouter = createTRPCRouter({
         name: registrySkill.name,
         installSteps: registrySkill.installSteps,
         destRoot,
+        scope: input.scope,
         target: input.target,
       });
 
@@ -245,6 +252,7 @@ export const skillsRouter = createTRPCRouter({
             ? installSteps
             : buildInstallSteps(input.repoUrl, input.skillPath, input.ref),
         destRoot,
+        scope: input.scope,
         target: input.target,
       });
 
@@ -285,6 +293,7 @@ export const skillsRouter = createTRPCRouter({
       const result = await uninstallSkill({
         name: input.name,
         destRoot,
+        scope: input.scope,
         target: input.target,
       });
 

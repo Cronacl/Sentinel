@@ -41,6 +41,7 @@ describe("executeInstallSteps", () => {
         destRoot: root,
         installSteps: ["echo should-not-run > /tmp/unused"],
         name: "frontend-design",
+        scope: "global",
         target: "claude",
       }),
     ).resolves.toEqual({
@@ -67,6 +68,7 @@ describe("executeInstallSteps", () => {
         destRoot: root,
         installSteps: ["echo should-not-run > /tmp/unused"],
         name: "frontend-design",
+        scope: "global",
         target: "claude",
       }),
     ).rejects.toThrow(
@@ -92,6 +94,7 @@ description: Helpful skill
 EOF`,
       ],
       name: "example",
+      scope: "global",
       target: "sentinel",
     });
 
@@ -104,5 +107,55 @@ EOF`,
       installedBy: "sentinel",
       target: "sentinel",
     });
+  });
+
+  it("installs Copilot skills into the home Copilot directory for global scope", async () => {
+    const root = await createTempRoot("sentinel-skill-install-");
+    tempRoots.push(root);
+
+    const result = await executeInstallSteps({
+      destRoot: root,
+      installSteps: [
+        `mkdir -p "${root}/.copilot/skills/copilot-skill"`,
+        `cat <<'EOF' > "${root}/.copilot/skills/copilot-skill/SKILL.md"
+---
+name: copilot-skill
+description: Helpful skill
+---
+
+# Steps
+EOF`,
+      ],
+      name: "copilot-skill",
+      scope: "global",
+      target: "copilot",
+    });
+
+    expect(result.directory).toBe(`${root}/.copilot/skills/copilot-skill`);
+  });
+
+  it("installs Copilot skills into the workspace .github/skills directory", async () => {
+    const root = await createTempRoot("sentinel-skill-install-");
+    tempRoots.push(root);
+
+    const result = await executeInstallSteps({
+      destRoot: root,
+      installSteps: [
+        `mkdir -p "${root}/.github/skills/copilot-skill"`,
+        `cat <<'EOF' > "${root}/.github/skills/copilot-skill/SKILL.md"
+---
+name: copilot-skill
+description: Helpful skill
+---
+
+# Steps
+EOF`,
+      ],
+      name: "copilot-skill",
+      scope: "workspace",
+      target: "copilot",
+    });
+
+    expect(result.directory).toBe(`${root}/.github/skills/copilot-skill`);
   });
 });

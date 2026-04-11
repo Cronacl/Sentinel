@@ -59,7 +59,7 @@ import { api, type RouterOutputs } from "@/trpc/react";
 
 type SkillListItem = RouterOutputs["skills"]["list"]["skills"][number];
 type RegistryItem = RouterOutputs["skills"]["registry"][number];
-type SkillInstallTarget = "claude" | "codex" | "sentinel";
+type SkillInstallTarget = "claude" | "codex" | "copilot" | "sentinel";
 type InstalledSkillAction = Pick<SkillListItem, "name" | "scope" | "target">;
 
 type UnifiedSkill = {
@@ -68,7 +68,12 @@ type UnifiedSkill = {
   displayName: string;
   description: string;
   registryEntry: RegistryItem | null;
-  installedTargets: { sentinel: boolean; claude: boolean; codex: boolean };
+  installedTargets: {
+    sentinel: boolean;
+    claude: boolean;
+    codex: boolean;
+    copilot: boolean;
+  };
   installedSkills: SkillListItem[];
   detailHref: string | null;
 };
@@ -109,6 +114,12 @@ const TARGET_OPTIONS: SelectOption[] = [
     description: "Install into the Codex home skills directory.",
     label: "Codex",
     value: "codex",
+  },
+  {
+    description:
+      "Install into Copilot's .github/skills workspace folder or ~/.copilot/skills home folder.",
+    label: "Copilot",
+    value: "copilot",
   },
 ] as const;
 
@@ -177,6 +188,9 @@ function getInstalledDetailHref(skill: SkillListItem) {
   if (skill.target === "claude") {
     return `/skills/${encodeURIComponent(skill.name)}?target=claude`;
   }
+  if (skill.target === "copilot") {
+    return `/skills/${encodeURIComponent(skill.name)}?target=copilot`;
+  }
   return `/skills/${encodeURIComponent(skill.name)}`;
 }
 
@@ -205,8 +219,9 @@ function hasAnyInstall(targets: {
   sentinel: boolean;
   claude: boolean;
   codex: boolean;
+  copilot: boolean;
 }) {
-  return targets.sentinel || targets.claude || targets.codex;
+  return targets.sentinel || targets.claude || targets.codex || targets.copilot;
 }
 
 function isFullyInstalled(
@@ -214,15 +229,21 @@ function isFullyInstalled(
     sentinel: boolean;
     claude: boolean;
     codex: boolean;
+    copilot: boolean;
   },
   options?: {
     codexAvailable?: boolean;
+    copilotAvailable?: boolean;
   },
 ) {
   const codexRequired = options?.codexAvailable ?? true;
+  const copilotRequired = options?.copilotAvailable ?? true;
 
   return (
-    targets.sentinel && targets.claude && (codexRequired ? targets.codex : true)
+    targets.sentinel &&
+    targets.claude &&
+    (codexRequired ? targets.codex : true) &&
+    (copilotRequired ? targets.copilot : true)
   );
 }
 
@@ -284,6 +305,7 @@ function buildUnifiedList(
           sentinel: skill.target === "sentinel",
           claude: skill.target === "claude",
           codex: skill.target === "codex",
+          copilot: skill.target === "copilot",
         },
         installedSkills: [skill],
         detailHref: getInstalledDetailHref(skill),
@@ -513,18 +535,23 @@ function SkillsSkeleton() {
 function SkillCell({
   item,
   codexAvailable,
+  copilotAvailable,
   isInstalling,
   installError,
   onInstall,
 }: {
   item: UnifiedSkill;
   codexAvailable: boolean;
+  copilotAvailable: boolean;
   isInstalling: boolean;
   installError: string | null;
   onInstall: (entry: RegistryItem, target: SkillInstallTarget) => void;
 }) {
   const fullyInstalled =
-    isFullyInstalled(item.installedTargets, { codexAvailable }) ||
+    isFullyInstalled(item.installedTargets, {
+      codexAvailable,
+      copilotAvailable,
+    }) ||
     // Custom installed skills (not from registry) are inherently "complete"
     (!item.registryEntry && hasAnyInstall(item.installedTargets));
   const canInstall = item.registryEntry && !fullyInstalled;
@@ -622,6 +649,7 @@ function SkillCell({
                     const optionDisabled =
                       optionInstalled ||
                       (target === "codex" && !codexAvailable) ||
+                      (target === "copilot" && !copilotAvailable) ||
                       isInstalling;
 
                     return (
@@ -640,7 +668,9 @@ function SkillCell({
                           <span className="text-muted text-xs">
                             {target === "codex" && !codexAvailable
                               ? "Codex is currently unavailable."
-                              : option.description}
+                              : target === "copilot" && !copilotAvailable
+                                ? "Copilot is currently unavailable."
+                                : option.description}
                           </span>
                         </div>
                       </Dropdown.Item>
@@ -696,6 +726,9 @@ export default function SkillsPage() {
   const registryEntries = registry.data ?? [];
   const codexAvailable = Boolean(
     engines.data?.find((engine) => engine.engine === "codex")?.isAvailable,
+  );
+  const copilotAvailable = Boolean(
+    engines.data?.find((engine) => engine.engine === "copilot")?.isAvailable,
   );
 
   const isLoading =
@@ -851,6 +884,7 @@ export default function SkillsPage() {
                       ] ??
                       installErrors[getInstallStateKey(item.name, "claude")] ??
                       installErrors[getInstallStateKey(item.name, "codex")] ??
+                      installErrors[getInstallStateKey(item.name, "copilot")] ??
                       null;
 
                     const isItemInstalling =
@@ -862,12 +896,16 @@ export default function SkillsPage() {
                       ) ||
                       installingSkills.has(
                         getInstallStateKey(item.name, "codex"),
+                      ) ||
+                      installingSkills.has(
+                        getInstallStateKey(item.name, "copilot"),
                       );
 
                     return (
                       <SkillCell
                         item={item}
                         codexAvailable={codexAvailable}
+                        copilotAvailable={copilotAvailable}
                         isInstalling={isItemInstalling}
                         installError={installErrorForItem}
                         key={item.key}
@@ -894,6 +932,7 @@ export default function SkillsPage() {
       </div>
       <CustomSkillInstallDrawer
         codexAvailable={codexAvailable}
+        copilotAvailable={copilotAvailable}
         createSkillHref={newSkillHref}
         isOpen={installDrawerOpen}
         onOpenChange={setInstallDrawerOpen}
