@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.31](https://github.com/Cronacl/Sentinel/compare/v0.0.30...v0.0.31) (2026-04-11)
+
+
+### Features
+
+* integrate GitHub Copilot support ([0a37a55](https://github.com/Cronacl/Sentinel/commit/0a37a55558d426bf1480e41204d80dcfc3b3766e))
+
 ## [0.0.30](https://github.com/Cronacl/Sentinel/compare/v0.0.29...v0.0.30) (2026-04-07)
 
 
