@@ -7,6 +7,19 @@ const projectRoot = process.cwd();
 const targetRoot = path.join(projectRoot, "desktop", "dist", "server");
 const targetPackagePath = path.join(targetRoot, "package.json");
 const electronGypDir = path.join(projectRoot, ".electron-gyp");
+const nodeGypCliPath = path.join(
+  projectRoot,
+  "node_modules",
+  "node-gyp",
+  "bin",
+  "node-gyp.js",
+);
+const prebuildInstallCliPath = path.join(
+  projectRoot,
+  "node_modules",
+  "prebuild-install",
+  "bin.js",
+);
 
 function getArgValue(flag) {
   const index = process.argv.indexOf(flag);
@@ -69,37 +82,7 @@ function getElectronExecutablePath() {
   }
 }
 
-function getNpmInvocation() {
-  if (process.platform !== "win32") {
-    return {
-      argsPrefix: [],
-      command: "npm",
-    };
-  }
-
-  const bundledNpmCliPath = path.join(
-    path.dirname(process.execPath),
-    "node_modules",
-    "npm",
-    "bin",
-    "npm-cli.js",
-  );
-
-  if (!existsSync(bundledNpmCliPath)) {
-    return {
-      argsPrefix: [],
-      command: "npm.cmd",
-    };
-  }
-
-  return {
-    argsPrefix: [bundledNpmCliPath],
-    command: process.execPath,
-  };
-}
-
 const electronBin = getElectronExecutablePath();
-const npmInvocation = getNpmInvocation();
 const hostArch = normalizeTargetArch(process.arch);
 const targetPlatform =
   normalizeTargetPlatform(getArgValue("--platform") ?? process.platform) ??
@@ -196,6 +179,55 @@ async function syncModuleDirectory(packageName) {
   await cp(sourcePath, targetPath, { recursive: true });
 }
 
+async function runNodeCli(cliPath, args, options = {}) {
+  if (!existsSync(cliPath)) {
+    throw new Error(`Expected CLI entrypoint at ${cliPath}.`);
+  }
+
+  await runWithEnv(process.execPath, [cliPath, ...args], options);
+}
+
+async function rebuildBetterSqlite3(options) {
+  const moduleRoot = path.join(targetRoot, "node_modules", "better-sqlite3");
+  const electronVersion = getInstalledVersion("electron");
+  const sharedEnv = {
+    npm_config_arch: targetArch,
+    npm_config_platform: targetPlatform,
+    npm_config_devdir: electronGypDir,
+    npm_config_disturl: "https://electronjs.org/headers",
+    npm_config_runtime: "electron",
+    npm_config_target: electronVersion,
+    npm_config_target_arch: targetArch,
+    npm_config_target_platform: targetPlatform,
+    npm_config_update_binary: "true",
+  };
+
+  if (!options.isHostTarget) {
+    try {
+      await runNodeCli(prebuildInstallCliPath, [], {
+        cwd: moduleRoot,
+        env: sharedEnv,
+      });
+
+      return;
+    } catch (error) {
+      console.warn(
+        `[desktop] prebuild-install failed for better-sqlite3, falling back to node-gyp: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  await runNodeCli(nodeGypCliPath, ["rebuild", "--release"], {
+    cwd: moduleRoot,
+    env: {
+      ...sharedEnv,
+      ...(options.isHostTarget ? { npm_config_build_from_source: "true" } : {}),
+    },
+  });
+}
+
 async function pruneBetterSqlite3Runtime() {
   const moduleRoot = path.join(targetRoot, "node_modules", "better-sqlite3");
   const compiledBinaryPath = path.join(
@@ -266,25 +298,7 @@ await writeFile(
   `${JSON.stringify(runtimePackageJson, null, 2)}\n`,
 );
 
-await runWithEnv(
-  npmInvocation.command,
-  [...npmInvocation.argsPrefix, "rebuild", "better-sqlite3"],
-  {
-    cwd: targetRoot,
-    env: {
-      ...(isHostTarget ? { npm_config_build_from_source: "true" } : {}),
-      npm_config_arch: targetArch,
-      npm_config_platform: targetPlatform,
-      npm_config_devdir: electronGypDir,
-      npm_config_disturl: "https://electronjs.org/headers",
-      npm_config_runtime: "electron",
-      npm_config_target: getInstalledVersion("electron"),
-      npm_config_target_arch: targetArch,
-      npm_config_target_platform: targetPlatform,
-      npm_config_update_binary: "true",
-    },
-  },
-);
+await rebuildBetterSqlite3({ isHostTarget });
 
 if (isHostTarget) {
   await runWithEnv(

@@ -1,5 +1,9 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const {
+  getDependencyNamesForPackage,
+  getRequiredServerRuntimePackages,
+} = require("./copilot-runtime-packaging.cjs");
 
 /**
  * @param {string} targetPath
@@ -60,16 +64,38 @@ async function copyPackageWithDependencies(
   const packageJson = JSON.parse(
     await fs.readFile(sourcePackageJsonPath, "utf8"),
   );
-  const dependencyNames = [
-    ...Object.keys(packageJson.dependencies ?? {}),
-    ...Object.keys(packageJson.optionalDependencies ?? {}),
-  ];
+  const dependencyNames = getDependencyNamesForPackage({
+    packageJson,
+    packageName,
+  });
 
   for (const dependencyName of dependencyNames) {
     await copyPackageWithDependencies(
       projectDir,
       targetNodeModulesPath,
       dependencyName,
+      copiedPackages,
+    );
+  }
+}
+
+/**
+ * @param {string} projectDir
+ * @param {string} targetNodeModulesPath
+ * @param {string[]} packageNames
+ */
+async function copyPackagesWithDependencies(
+  projectDir,
+  targetNodeModulesPath,
+  packageNames,
+) {
+  const copiedPackages = new Set();
+
+  for (const packageName of packageNames) {
+    await copyPackageWithDependencies(
+      projectDir,
+      targetNodeModulesPath,
+      packageName,
       copiedPackages,
     );
   }
@@ -120,12 +146,13 @@ async function pruneNodePtyForPlatform({ nodePtyPath, platform }) {
 
 /**
  * @param {{
+ *   arch: number | string;
  *   appOutDir: string;
  *   electronPlatformName: string;
  *   packager: { projectDir: string; appInfo: { productFilename: string } };
  * }} context
  */
-module.exports = async function afterPack(context) {
+async function afterPack(context) {
   const sourceServerNodeModulesPath = path.join(
     context.packager.projectDir,
     "desktop",
@@ -191,9 +218,19 @@ module.exports = async function afterPack(context) {
     platform: context.electronPlatformName,
   });
 
-  await copyPackageWithDependencies(
+  await copyPackagesWithDependencies(
     context.packager.projectDir,
     targetShellNodeModulesPath,
-    "electron-updater",
+    ["electron-updater"],
   );
-};
+
+  await copyPackagesWithDependencies(
+    context.packager.projectDir,
+    targetServerNodeModulesPath,
+    getRequiredServerRuntimePackages(),
+  );
+}
+
+module.exports = afterPack;
+module.exports.copyPackageWithDependencies = copyPackageWithDependencies;
+module.exports.copyPackagesWithDependencies = copyPackagesWithDependencies;
