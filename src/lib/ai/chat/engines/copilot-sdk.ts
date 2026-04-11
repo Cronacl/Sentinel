@@ -2,10 +2,8 @@ import "server-only";
 
 import { execFile } from "node:child_process";
 import { constants as fsConstants } from "node:fs";
-import { access, chmod, mkdir, readFile, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 
 import {
   CopilotClient,
@@ -18,10 +16,15 @@ import {
 import type { CopilotThreadState } from "@/lib/ai/chat/engines/types";
 import { createLogger } from "@/lib/logger";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import { setLocalRuntimeEnvValue } from "@/lib/runtime/local-runtime-env";
 import {
   applyPrivateFsMode,
   getSentinelStateRoot,
 } from "@/lib/runtime/local-state";
+import {
+  buildManagedExecutablePathValue,
+  getPlatformHomeDirectory,
+} from "@/lib/runtime/platform-paths";
 
 const log = createLogger("CopilotSdk");
 const COPILOT_RUNTIME_CACHE_TTL_MS = 15_000;
@@ -31,11 +34,13 @@ const COPILOT_STATUS_QUERY_TIMEOUT_MS = 3_000;
 const COPILOT_STATUS_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 const LOCAL_STATE_DIRECTORY_MODE = 0o700;
 const LOCAL_STATE_FILE_MODE = 0o600;
-const LOCAL_STATE_EXECUTABLE_MODE = 0o700;
 const COPILOT_STATUS_SNAPSHOT_FILE = "copilot-status.json";
-const COPILOT_CLI_SHIM_FILE = "copilot-cli";
-const COPILOT_NODE_PROBE_TIMEOUT_MS = 5_000;
-const execFileAsync = promisify(execFile);
+const COPILOT_CLI_VERIFY_TIMEOUT_MS = 1_500;
+const SHELL_LOOKUP_TIMEOUT_MS = 1_200;
+const COPILOT_PATH_START_MARKER = "__SENTINEL_COPILOT_PATH_START__";
+const COPILOT_PATH_END_MARKER = "__SENTINEL_COPILOT_PATH_END__";
+const COPILOT_SHELL_PATH_START_MARKER = "__SENTINEL_COPILOT_SHELL_PATH_START__";
+const COPILOT_SHELL_PATH_END_MARKER = "__SENTINEL_COPILOT_SHELL_PATH_END__";
 
 export type CopilotAccountInfo = {
   authType: string | null;
@@ -92,7 +97,14 @@ type CopilotStatusSnapshot = {
 
 type ResolvedCopilotRuntime = {
   cliDetected: boolean;
+  error: string | null;
   cliPath: string | null;
+  env: NodeJS.ProcessEnv;
+};
+
+type CopilotShellLookupResult = {
+  copilotPath: string | null;
+  pathValue: string | null;
 };
 
 function getLocalStateDirectory() {
@@ -101,10 +113,6 @@ function getLocalStateDirectory() {
 
 function getCopilotStatusSnapshotPath() {
   return path.join(getLocalStateDirectory(), COPILOT_STATUS_SNAPSHOT_FILE);
-}
-
-function getCopilotCliShimPath() {
-  return path.join(getLocalStateDirectory(), COPILOT_CLI_SHIM_FILE);
 }
 
 function withTimeout<T>(
@@ -334,8 +342,12 @@ function isCopilotAuthErrorMessage(message: string) {
 function isCopilotMissingRuntimeMessage(message: string) {
   const normalizedMessage = message.toLowerCase();
   return (
-    normalizedMessage.includes("could not find @github/copilot package") ||
+    normalizedMessage.includes("copilot cli was not found") ||
     normalizedMessage.includes("copilot cli not found") ||
+    normalizedMessage.includes("copilot cli is not installed") ||
+    normalizedMessage.includes("copilot cli is unavailable") ||
+    normalizedMessage.includes("copilot cli not found at") ||
+    normalizedMessage.includes("copilot runtime is missing") ||
     normalizedMessage.includes("enoent")
   );
 }
@@ -354,105 +366,416 @@ function isCopilotNodeVersionMessage(message: string) {
   );
 }
 
-function toPosixShellString(value: string) {
-  return `'${value.replaceAll("'", `'\\''`)}'`;
+function setProcessCopilotPath(command: string | null) {
+  if (command?.trim()) {
+    process.env.SENTINEL_COPILOT_PATH = command;
+    return;
+  }
+
+  delete process.env.SENTINEL_COPILOT_PATH;
 }
 
-function getNodeCandidatePaths() {
-  const candidates = new Set<string>();
+function isPersistableCopilotPath(command: string) {
+  const normalized = command.replaceAll("\\", "/");
+  return !normalized.includes("/fnm_multishells/");
+}
 
-  if (typeof process.env.SENTINEL_COPILOT_NODE_PATH === "string") {
-    const configuredNodePath = process.env.SENTINEL_COPILOT_NODE_PATH.trim();
-    if (configuredNodePath.length > 0) {
-      candidates.add(configuredNodePath);
+async function persistResolvedCopilotCli(
+  command: string | null,
+  options?: { persist?: boolean },
+) {
+  const persist = options?.persist ?? Boolean(command?.trim());
+
+  try {
+    if (persist) {
+      await setLocalRuntimeEnvValue("SENTINEL_COPILOT_PATH", command);
+      return;
+    }
+
+    await setLocalRuntimeEnvValue("SENTINEL_COPILOT_PATH", null);
+    setProcessCopilotPath(command);
+  } catch {
+    setProcessCopilotPath(command);
+  }
+}
+
+function getExecutableNames(command: string) {
+  if (process.platform !== "win32") {
+    return [command];
+  }
+
+  const pathExt = (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM")
+    .split(";")
+    .map((extension) => extension.trim())
+    .filter(Boolean);
+
+  const names = new Set<string>([command]);
+  const lowerCommand = command.toLowerCase();
+  for (const extension of pathExt) {
+    if (lowerCommand.endsWith(extension.toLowerCase())) {
+      continue;
+    }
+
+    names.add(`${command}${extension}`);
+  }
+
+  return [...names];
+}
+
+function isNodeScriptPath(candidatePath: string) {
+  const extension = path.extname(candidatePath).toLowerCase();
+  return extension === ".js" || extension === ".cjs" || extension === ".mjs";
+}
+
+function normalizeCandidatePath(candidatePath: string) {
+  const trimmedPath = candidatePath.trim();
+  if (!trimmedPath) {
+    return null;
+  }
+
+  return path.isAbsolute(trimmedPath)
+    ? path.normalize(trimmedPath)
+    : path.resolve(process.cwd(), trimmedPath);
+}
+
+function isLikelyCopilotCliPath(candidatePath: string) {
+  const normalizedPath = candidatePath.replaceAll("\\", "/").toLowerCase();
+  const baseName = path.basename(normalizedPath);
+
+  return (
+    baseName.startsWith("copilot") ||
+    normalizedPath.includes("/@github/copilot/") ||
+    normalizedPath.includes("/node_modules/.bin/copilot")
+  );
+}
+
+async function isExecutable(candidatePath: string) {
+  const normalizedPath = normalizeCandidatePath(candidatePath);
+  if (!normalizedPath) {
+    return false;
+  }
+
+  try {
+    await access(
+      normalizedPath,
+      process.platform === "win32" ? fsConstants.F_OK : fsConstants.X_OK,
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function isLaunchableCopilotCli(candidatePath: string) {
+  const normalizedPath = normalizeCandidatePath(candidatePath);
+  if (!normalizedPath) {
+    return false;
+  }
+
+  if (isNodeScriptPath(normalizedPath)) {
+    try {
+      await access(normalizedPath, fsConstants.F_OK);
+      return true;
+    } catch {
+      return false;
     }
   }
 
-  if (typeof process.execPath === "string" && process.execPath.length > 0) {
-    candidates.add(process.execPath);
+  return await isExecutable(normalizedPath);
+}
+
+function getWorkspaceCopilotCliCandidates() {
+  const executableName =
+    process.platform === "win32" ? "copilot.cmd" : "copilot";
+  const platformBinaryName =
+    process.platform === "win32" ? "copilot.exe" : "copilot";
+  const workspaceRoot = process.cwd();
+
+  return [
+    path.join(workspaceRoot, "node_modules", ".bin", executableName),
+    path.join(
+      workspaceRoot,
+      "node_modules",
+      "@github",
+      "copilot",
+      "npm-loader.js",
+    ),
+    path.join(
+      workspaceRoot,
+      "node_modules",
+      "@github",
+      `copilot-${process.platform}-${process.arch}`,
+      platformBinaryName,
+    ),
+  ];
+}
+
+async function findExecutableInPath(
+  command: string,
+  pathValue?: string | null,
+) {
+  if (!pathValue) {
+    return null;
   }
 
-  const pathEntries = (process.env.PATH ?? "")
+  const searchPaths = pathValue
     .split(path.delimiter)
     .map((entry) => entry.trim())
     .filter(Boolean);
 
-  for (const entry of pathEntries) {
-    candidates.add(
-      path.join(entry, process.platform === "win32" ? "node.exe" : "node"),
-    );
-  }
-
-  if (process.platform === "darwin") {
-    candidates.add("/opt/homebrew/bin/node");
-    candidates.add("/usr/local/bin/node");
-  }
-
-  return Array.from(candidates);
-}
-
-async function isCopilotNodeCompatible(
-  nodePath: string,
-  cliEntrypointPath: string,
-) {
-  try {
-    await access(nodePath, fsConstants.X_OK);
-  } catch {
-    return false;
-  }
-
-  try {
-    await execFileAsync(nodePath, [cliEntrypointPath, "--help"], {
-      cwd: process.cwd(),
-      env: {
-        ...process.env,
-        NO_COLOR: "1",
-      },
-      timeout: COPILOT_NODE_PROBE_TIMEOUT_MS,
-      windowsHide: true,
-    });
-    return true;
-  } catch (error) {
-    log.debug("copilot_node_probe_failed", { error, nodePath });
-    return false;
-  }
-}
-
-async function resolveCompatibleCopilotNodePath(cliEntrypointPath: string) {
-  for (const nodePath of getNodeCandidatePaths()) {
-    if (await isCopilotNodeCompatible(nodePath, cliEntrypointPath)) {
-      return nodePath;
+  for (const directory of searchPaths) {
+    const resolvedDirectory = path.isAbsolute(directory)
+      ? directory
+      : path.resolve(process.cwd(), directory);
+    for (const executableName of getExecutableNames(command)) {
+      const candidatePath = path.join(resolvedDirectory, executableName);
+      if (await isExecutable(candidatePath)) {
+        return candidatePath;
+      }
     }
   }
 
   return null;
 }
 
-async function ensureCopilotCliShim(options: {
-  cliEntrypointPath: string;
-  nodePath: string;
-}) {
-  const localStateDirectory = getLocalStateDirectory();
-  const shimPath = getCopilotCliShimPath();
-  const shimContents = [
-    "#!/bin/sh",
-    `exec ${toPosixShellString(options.nodePath)} ${toPosixShellString(options.cliEntrypointPath)} "$@"`,
-    "",
+async function verifyCopilotExecutable(
+  candidatePath: string,
+  env: NodeJS.ProcessEnv,
+) {
+  const normalizedPath = normalizeCandidatePath(candidatePath);
+  if (!normalizedPath || !(await isLaunchableCopilotCli(normalizedPath))) {
+    return null;
+  }
+
+  const verifiedPath = await new Promise<string | null>((resolve) => {
+    const command = isNodeScriptPath(normalizedPath)
+      ? process.execPath
+      : normalizedPath;
+    const args = isNodeScriptPath(normalizedPath)
+      ? [normalizedPath, "--help"]
+      : ["--help"];
+
+    execFile(
+      command,
+      args,
+      {
+        env,
+        timeout: COPILOT_CLI_VERIFY_TIMEOUT_MS,
+        windowsHide: true,
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          if (isLikelyCopilotCliPath(normalizedPath)) {
+            log.debug("copilot_cli_probe_failed", {
+              cliPath: normalizedPath,
+              message: error.message,
+              stderr: stderr.trim() || null,
+              stdout: stdout.trim() || null,
+            });
+            resolve(normalizedPath);
+            return;
+          }
+
+          resolve(null);
+          return;
+        }
+
+        resolve(normalizedPath);
+      },
+    );
+  });
+
+  return verifiedPath;
+}
+
+async function getManagedPathValue(pathValue?: string | null) {
+  return buildManagedExecutablePathValue(pathValue);
+}
+
+async function resolveCopilotCliFromWorkspace(env: NodeJS.ProcessEnv) {
+  for (const candidatePath of getWorkspaceCopilotCliCandidates()) {
+    const verifiedPath = await verifyCopilotExecutable(candidatePath, env);
+    if (verifiedPath) {
+      return verifiedPath;
+    }
+  }
+
+  return null;
+}
+
+function buildLoginShellLookupArgs(script: string) {
+  return ["-l", "-c", script];
+}
+
+function buildPosixShellLookupScript() {
+  return [
+    "if command -v copilot >/dev/null 2>&1; then",
+    `  printf '%s\\n' '${COPILOT_PATH_START_MARKER}'`,
+    "command -v copilot",
+    `  printf '%s\\n' '${COPILOT_PATH_END_MARKER}'`,
+    "fi",
+    `printf '%s\\n' '${COPILOT_SHELL_PATH_START_MARKER}'`,
+    `printf '%s\\n' "$PATH"`,
+    `printf '%s\\n' '${COPILOT_SHELL_PATH_END_MARKER}'`,
   ].join("\n");
+}
 
-  await mkdir(localStateDirectory, {
-    mode: LOCAL_STATE_DIRECTORY_MODE,
-    recursive: true,
-  });
-  await writeFile(shimPath, shimContents, {
-    encoding: "utf8",
-    mode: LOCAL_STATE_EXECUTABLE_MODE,
-  });
-  await chmod(shimPath, LOCAL_STATE_EXECUTABLE_MODE);
-  await applyPrivateFsMode(localStateDirectory, LOCAL_STATE_DIRECTORY_MODE);
-  await applyPrivateFsMode(shimPath, LOCAL_STATE_EXECUTABLE_MODE);
+function buildFishShellLookupScript() {
+  return [
+    "if command -v copilot >/dev/null 2>/dev/null",
+    `  printf '%s\\n' '${COPILOT_PATH_START_MARKER}'`,
+    "command -v copilot",
+    `  printf '%s\\n' '${COPILOT_PATH_END_MARKER}'`,
+    "end",
+    `printf '%s\\n' '${COPILOT_SHELL_PATH_START_MARKER}'`,
+    "printf '%s\\n' (string join : -- $PATH)",
+    `printf '%s\\n' '${COPILOT_SHELL_PATH_END_MARKER}'`,
+  ].join("\n");
+}
 
-  return shimPath;
+export function parseCopilotShellLookupOutput(
+  stdout: string,
+): CopilotShellLookupResult {
+  const lines = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const readBlock = (startMarker: string, endMarker: string) => {
+    const startIndex = lines.indexOf(startMarker);
+    const endIndex = lines.indexOf(endMarker);
+
+    if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
+      return [];
+    }
+
+    return lines.slice(startIndex + 1, endIndex);
+  };
+
+  const copilotPathBlock = readBlock(
+    COPILOT_PATH_START_MARKER,
+    COPILOT_PATH_END_MARKER,
+  );
+  const pathBlock = readBlock(
+    COPILOT_SHELL_PATH_START_MARKER,
+    COPILOT_SHELL_PATH_END_MARKER,
+  );
+
+  const copilotPath =
+    copilotPathBlock.find((line) =>
+      path.basename(line).startsWith("copilot"),
+    ) ?? null;
+  const pathValue = pathBlock.find(Boolean) ?? null;
+
+  return {
+    copilotPath,
+    pathValue,
+  };
+}
+
+async function resolveCopilotCliFromWindowsWhere() {
+  if (process.platform !== "win32") {
+    return null;
+  }
+
+  const stdout = await new Promise<string>((resolve, reject) => {
+    execFile("where", ["copilot"], { env: process.env }, (error, output) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve(output.trim());
+    });
+  }).catch(() => null);
+
+  if (!stdout) {
+    return null;
+  }
+
+  const candidates = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (const candidatePath of candidates) {
+    const verifiedPath = await verifyCopilotExecutable(
+      candidatePath,
+      process.env,
+    );
+    if (verifiedPath) {
+      return {
+        cliPath: verifiedPath,
+        env: process.env,
+      } satisfies Pick<ResolvedCopilotRuntime, "cliPath" | "env">;
+    }
+  }
+
+  return null;
+}
+
+async function resolveCopilotCliFromShell() {
+  if (process.platform === "win32") {
+    return null;
+  }
+
+  const shellPath = process.env.SHELL?.trim() || "/bin/zsh";
+  const shellName = path.basename(shellPath).toLowerCase();
+  const shellLookupScript =
+    shellName === "fish"
+      ? buildFishShellLookupScript()
+      : buildPosixShellLookupScript();
+
+  const stdout = await new Promise<string>((resolve, reject) => {
+    execFile(
+      shellPath,
+      buildLoginShellLookupArgs(shellLookupScript),
+      {
+        env: {
+          ...process.env,
+          HOME: getPlatformHomeDirectory(),
+          TERM: process.env.TERM ?? "dumb",
+        },
+        timeout: SHELL_LOOKUP_TIMEOUT_MS,
+      },
+      (error, shellStdout) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve(shellStdout.trim());
+      },
+    );
+  }).catch(() => null);
+
+  if (!stdout) {
+    return null;
+  }
+
+  const { copilotPath, pathValue } = parseCopilotShellLookupOutput(stdout);
+  const env = pathValue
+    ? {
+        ...process.env,
+        PATH: pathValue,
+      }
+    : process.env;
+  const shellReportedCommand = copilotPath
+    ? await verifyCopilotExecutable(copilotPath, env)
+    : null;
+  const resolvedCommand =
+    shellReportedCommand ?? (await findExecutableInPath("copilot", pathValue));
+  const verifiedCommand =
+    resolvedCommand && (await verifyCopilotExecutable(resolvedCommand, env));
+
+  if (!verifiedCommand) {
+    return null;
+  }
+
+  return {
+    cliPath: verifiedCommand,
+    env,
+  } satisfies Pick<ResolvedCopilotRuntime, "cliPath" | "env">;
 }
 
 function normalizeCopilotError(error: unknown): {
@@ -463,8 +786,9 @@ function normalizeCopilotError(error: unknown): {
 
   if (isCopilotMissingRuntimeMessage(message)) {
     return {
-      error:
-        "GitHub Copilot runtime is missing. Install the bundled Copilot CLI package and its platform binary for this machine.",
+      error: message.startsWith("GitHub Copilot")
+        ? message
+        : "GitHub Copilot CLI is not installed or could not be launched from this Sentinel session.",
       state: "missing_runtime",
     };
   }
@@ -472,7 +796,7 @@ function normalizeCopilotError(error: unknown): {
   if (isCopilotNodeVersionMessage(message)) {
     return {
       error:
-        "GitHub Copilot needs a newer Node.js runtime than this Sentinel build is using. Upgrade the app runtime or run Sentinel with a Node.js version supported by the bundled Copilot CLI.",
+        "GitHub Copilot needs a newer Node.js runtime than this Sentinel build is using. Upgrade the app runtime or use a Copilot CLI build supported by this Node.js version.",
       state: "error",
     };
   }
@@ -497,48 +821,152 @@ let cachedRuntime: {
 } | null = null;
 
 async function resolveCopilotRuntimeUncached(): Promise<ResolvedCopilotRuntime> {
-  try {
-    const require = createRequire(import.meta.url);
-    const sdkEntrypoint = require.resolve("@github/copilot-sdk");
-    const cliEntrypointPath = path.resolve(
-      path.dirname(sdkEntrypoint),
-      "..",
-      "..",
-      "..",
-      "copilot",
-      "index.js",
+  const managedPath = await getManagedPathValue(process.env.PATH);
+  const overridePath =
+    process.env.SENTINEL_COPILOT_PATH?.trim() ||
+    process.env.COPILOT_CLI_PATH?.trim() ||
+    process.env.COPILOT_PATH?.trim();
+
+  if (overridePath) {
+    const overrideEnv = {
+      ...process.env,
+      PATH: managedPath,
+    };
+    const verifiedOverride = await verifyCopilotExecutable(
+      overridePath,
+      overrideEnv,
     );
-    await access(cliEntrypointPath, fsConstants.R_OK);
 
-    const compatibleNodePath =
-      await resolveCompatibleCopilotNodePath(cliEntrypointPath);
+    if (verifiedOverride) {
+      await persistResolvedCopilotCli(verifiedOverride, {
+        persist: isPersistableCopilotPath(verifiedOverride),
+      });
+      log.info("copilot_cli_resolved", {
+        cliPath: verifiedOverride,
+        source: "env_override",
+      });
+      return {
+        cliDetected: true,
+        error: null,
+        cliPath: verifiedOverride,
+        env: overrideEnv,
+      };
+    }
 
-    const cliPath =
-      compatibleNodePath && compatibleNodePath !== process.execPath
-        ? await ensureCopilotCliShim({
-            cliEntrypointPath,
-            nodePath: compatibleNodePath,
-          })
-        : cliEntrypointPath;
-
-    log.info("resolved_copilot_runtime", {
-      cliEntrypointPath,
-      cliPath,
-      compatibleNodePath,
-      processExecPath: process.execPath,
+    log.warn("copilot_cli_override_invalid", {
+      overridePath,
     });
 
+    if (process.env.SENTINEL_COPILOT_PATH?.trim() === overridePath) {
+      await persistResolvedCopilotCli(null);
+    }
+  }
+
+  const directCommand = await findExecutableInPath("copilot", managedPath);
+  if (directCommand) {
+    const directEnv = {
+      ...process.env,
+      PATH: managedPath,
+    };
+    const verifiedDirectCommand = await verifyCopilotExecutable(
+      directCommand,
+      directEnv,
+    );
+
+    if (verifiedDirectCommand) {
+      await persistResolvedCopilotCli(verifiedDirectCommand, {
+        persist: isPersistableCopilotPath(verifiedDirectCommand),
+      });
+      log.info("copilot_cli_resolved", {
+        cliPath: verifiedDirectCommand,
+        source: "managed_path",
+      });
+      return {
+        cliDetected: true,
+        error: null,
+        cliPath: verifiedDirectCommand,
+        env: directEnv,
+      };
+    }
+  }
+
+  const workspaceEnv = {
+    ...process.env,
+    PATH: managedPath,
+  };
+  const workspaceCommand = await resolveCopilotCliFromWorkspace(workspaceEnv);
+  if (workspaceCommand) {
+    await persistResolvedCopilotCli(workspaceCommand, {
+      persist: isPersistableCopilotPath(workspaceCommand),
+    });
+    log.info("copilot_cli_resolved", {
+      cliPath: workspaceCommand,
+      source: "workspace_local",
+    });
     return {
       cliDetected: true,
-      cliPath,
-    };
-  } catch (error) {
-    log.warn("resolve_copilot_runtime_failed", { error });
-    return {
-      cliDetected: false,
-      cliPath: null,
+      error: null,
+      cliPath: workspaceCommand,
+      env: workspaceEnv,
     };
   }
+
+  const windowsWhereCommand = await resolveCopilotCliFromWindowsWhere();
+  const windowsWherePath = windowsWhereCommand?.cliPath ?? null;
+  if (windowsWhereCommand) {
+    await persistResolvedCopilotCli(windowsWhereCommand.cliPath, {
+      persist: isPersistableCopilotPath(windowsWhereCommand.cliPath),
+    });
+    log.info("copilot_cli_resolved", {
+      cliPath: windowsWhereCommand.cliPath,
+      source: "windows_where",
+    });
+    return {
+      cliDetected: true,
+      error: null,
+      cliPath: windowsWhereCommand.cliPath,
+      env: windowsWhereCommand.env,
+    };
+  }
+
+  const shellResolution = await resolveCopilotCliFromShell();
+  const shellResolvedPath = shellResolution?.cliPath ?? null;
+  await persistResolvedCopilotCli(shellResolution?.cliPath ?? null, {
+    persist: shellResolution?.cliPath
+      ? isPersistableCopilotPath(shellResolution.cliPath)
+      : false,
+  });
+
+  if (shellResolution) {
+    log.info("copilot_cli_resolved", {
+      cliPath: shellResolution.cliPath,
+      source: "login_shell",
+    });
+    return {
+      cliDetected: true,
+      error: null,
+      cliPath: shellResolution.cliPath,
+      env: shellResolution.env,
+    };
+  }
+
+  log.warn("copilot_cli_not_found", {
+    checkedPaths: {
+      envOverride: overridePath ?? null,
+      managedPathHit: directCommand,
+      workspaceCommand,
+      shellResolvedPath,
+      windowsWherePath,
+    },
+  });
+
+  return {
+    cliDetected: false,
+    error:
+      "GitHub Copilot CLI was not found on this machine. Install the Copilot CLI or set SENTINEL_COPILOT_PATH to its executable path.",
+    cliPath: null,
+    env: process.env,
+  };
 }
 
 export async function resolveCopilotRuntime() {
@@ -575,6 +1003,7 @@ class CopilotClientManager {
       autoStart: false,
       ...(runtime.cliPath ? { cliPath: runtime.cliPath } : {}),
       cwd: process.cwd(),
+      env: runtime.env,
       logLevel: process.env.NODE_ENV === "development" ? "debug" : "error",
     });
   }
@@ -583,7 +1012,8 @@ class CopilotClientManager {
     const runtime = await resolveCopilotRuntime();
     if (!runtime.cliDetected || !runtime.cliPath) {
       throw new Error(
-        "GitHub Copilot runtime was not detected in this Sentinel session.",
+        runtime.error ??
+          "GitHub Copilot runtime was not detected in this Sentinel session.",
       );
     }
 
@@ -645,7 +1075,8 @@ async function probeCopilotEngineStatus(): Promise<CopilotEngineStatus> {
       cliPath: null,
       cliVersion: null,
       error:
-        "GitHub Copilot runtime was not detected. Install the bundled Copilot CLI package for this machine.",
+        runtime.error ??
+        "GitHub Copilot CLI was not found on this machine. Install the Copilot CLI or set SENTINEL_COPILOT_PATH to its executable path.",
       lastSuccessfulProbeAt: null,
       state: "missing_runtime",
       usedCachedStatus: false,

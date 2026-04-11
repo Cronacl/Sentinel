@@ -1930,7 +1930,7 @@ export async function runCodexThreadChat(
       effort: request.reasoningEffort ?? null,
     });
 
-    const startTurnParams = {
+    const startTurnParams: Parameters<typeof codex.startTurn>[0] = {
       approvalPolicy,
       cwd: workspaceRoot,
       effort: request.reasoningEffort ?? null,

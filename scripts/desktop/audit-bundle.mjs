@@ -2,9 +2,13 @@ import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { access, readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { findMissingServerRuntimeFiles } from "./audit-bundle-utils.mjs";
 
 const require = createRequire(import.meta.url);
 const { listPackage } = require("@electron/asar");
+const {
+  getExpectedPackagedCopilotFiles,
+} = require("./copilot-runtime-packaging.cjs");
 
 const projectRoot = process.cwd();
 const distRoot = path.join(projectRoot, "dist");
@@ -250,6 +254,9 @@ for (const unpackedAppPath of unpackedAppPaths) {
   const shellNodePtyFiles = (await pathExists(shellNodePtyPath))
     ? await collectFiles(shellNodePtyPath)
     : [];
+  const serverFiles = (await pathExists(serverPath))
+    ? await collectFiles(serverPath)
+    : [];
   const hasShellNodePtyEntrypoint = shellNodePtyFiles.some((filePath) =>
     normalizePathForMatch(filePath).endsWith("/lib/index.js"),
   );
@@ -311,6 +318,20 @@ for (const unpackedAppPath of unpackedAppPaths) {
   if (!hasShellNodePtySpawnHelper) {
     failures.push(
       `${unpackedAppPath}: desktop shell dependency is missing spawn-helper at ${shellNodePtyPath}.`,
+    );
+  }
+
+  const missingCopilotRuntimeFiles = findMissingServerRuntimeFiles({
+    requiredFiles: getExpectedPackagedCopilotFiles({
+      serverNodeModulesPath: path.join(serverPath, "node_modules"),
+    }),
+    serverFiles,
+    serverPath,
+  });
+
+  if (missingCopilotRuntimeFiles.length > 0) {
+    failures.push(
+      `${unpackedAppPath}: packaged server is missing Copilot runtime files:\n${missingCopilotRuntimeFiles.join("\n")}`,
     );
   }
 }
