@@ -88,4 +88,31 @@ describe("mergeThreadChatEngineState", () => {
       },
     });
   });
+  it("preserves Copilot state when repo metadata is updated", () => {
+    expect(
+      mergeThreadChatEngineState(
+        buildThreadChatEngineState("copilot", {
+          cwd: "/tmp/project",
+          modelId: "gpt-5",
+          reasoningEffort: "medium",
+          sessionId: "copilot-session-1",
+        }),
+        {
+          repo: {
+            activeBranch: "feature/copilot",
+          },
+        },
+      ),
+    ).toEqual({
+      copilot: {
+        cwd: "/tmp/project",
+        modelId: "gpt-5",
+        reasoningEffort: "medium",
+        sessionId: "copilot-session-1",
+      },
+      repo: {
+        activeBranch: "feature/copilot",
+      },
+    });
+  });
 });

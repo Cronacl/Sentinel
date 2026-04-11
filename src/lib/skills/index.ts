@@ -15,9 +15,11 @@ const SOURCE_PRECEDENCE = [
   { container: ".sentinel/skills", scope: "workspace", sourceKind: "sentinel" },
   { container: ".agents/skills", scope: "workspace", sourceKind: "agents" },
   { container: ".claude/skills", scope: "workspace", sourceKind: "claude" },
+  { container: ".github/skills", scope: "workspace", sourceKind: "copilot" },
   { container: ".sentinel/skills", scope: "global", sourceKind: "sentinel" },
   { container: ".agents/skills", scope: "global", sourceKind: "agents" },
   { container: ".claude/skills", scope: "global", sourceKind: "claude" },
+  { container: ".copilot/skills", scope: "global", sourceKind: "copilot" },
 ] as const;
 
 export type SkillScope = (typeof SOURCE_PRECEDENCE)[number]["scope"];
@@ -25,7 +27,7 @@ export type SkillSourceKind =
   | (typeof SOURCE_PRECEDENCE)[number]["sourceKind"]
   | typeof CODEX_SOURCE_KIND;
 export type SkillInstallOrigin = "external" | "sentinel";
-export type SkillTarget = "claude" | "codex" | "sentinel";
+export type SkillTarget = "claude" | "codex" | "copilot" | "sentinel";
 
 export type SkillMetadata = {
   description: string;
@@ -59,7 +61,7 @@ export type SkillSnapshot = {
   updatedAt: number;
 };
 
-type SkillLookupTarget = "sentinel" | "codex" | "claude";
+type SkillLookupTarget = "sentinel" | "codex" | "claude" | "copilot";
 
 type ConventionalSkillRoot = {
   containerDirectory: string;
@@ -192,6 +194,10 @@ function getTargetForSourceKind(sourceKind: SkillSourceKind): SkillTarget {
     return "claude";
   }
 
+  if (sourceKind === "copilot") {
+    return "copilot";
+  }
+
   return "sentinel";
 }
 
@@ -203,8 +209,10 @@ function getSourceKindSortRank(sourceKind: SkillSourceKind) {
       return 1;
     case "claude":
       return 2;
-    case "codex":
+    case "copilot":
       return 3;
+    case "codex":
+      return 4;
     default:
       return 99;
   }
@@ -871,7 +879,9 @@ export async function loadSkillByName({
   const allowedSourceKinds =
     target === "claude"
       ? new Set<SkillSourceKind>(["claude"])
-      : new Set<SkillSourceKind>(["sentinel", "agents"]);
+      : target === "copilot"
+        ? new Set<SkillSourceKind>(["copilot"])
+        : new Set<SkillSourceKind>(["sentinel", "agents"]);
   const seenRealFiles = new Set<string>();
   let bestMatch: LoadedSkill | null = null;
 

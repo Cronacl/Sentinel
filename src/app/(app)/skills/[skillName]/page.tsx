@@ -18,7 +18,9 @@ export default async function SkillDetailPage({
           ? "codex"
           : target === "claude"
             ? "claude"
-            : "sentinel"
+            : target === "copilot"
+              ? "copilot"
+              : "sentinel"
       }
     />
   );

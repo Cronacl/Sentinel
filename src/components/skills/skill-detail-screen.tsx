@@ -46,6 +46,7 @@ import { SidebarToggle, useShell } from "../shell";
 const SOURCE_LABEL = {
   agents: "Agents",
   claude: "Claude",
+  copilot: "Copilot",
   codex: "Codex",
   sentinel: "Sentinel",
 } as const;
@@ -166,7 +167,7 @@ export function SkillDetailScreen({
   target = "sentinel",
 }: {
   skillName: string;
-  target?: "claude" | "codex" | "sentinel";
+  target?: "claude" | "codex" | "copilot" | "sentinel";
 }) {
   const { leftSidebarOpen } = useShell();
   const [copiedLabel, setCopiedLabel] = useState<"name" | "path" | null>(null);

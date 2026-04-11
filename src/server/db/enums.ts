@@ -20,7 +20,7 @@ export const AI_PROVIDERS = [
 ] as const;
 export type AIProvider = (typeof AI_PROVIDERS)[number];
 
-export const CHAT_ENGINES = ["sentinel", "codex", "claude"] as const;
+export const CHAT_ENGINES = ["sentinel", "codex", "claude", "copilot"] as const;
 export type ChatEngine = (typeof CHAT_ENGINES)[number];
 
 export const SEARCH_PROVIDERS = ["exa", "searxng"] as const;

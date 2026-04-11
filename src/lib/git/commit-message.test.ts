@@ -1,16 +1,20 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 import { EventEmitter } from "node:events";
 import { writeFile } from "node:fs/promises";
 import { PassThrough } from "node:stream";
+import type { SessionConfig } from "@github/copilot-sdk";
 
-import {
+mock.module("server-only", () => ({}));
+
+const {
   buildCommitMessagePrompt,
   formatCommitMessage,
   generateClaudeCommitMessage,
+  generateCopilotCommitMessage,
   generateCodexCommitMessage,
   parseCommitMessage,
   sanitizeCommitSubject,
-} from "./commit-message";
+} = await import("./commit-message");
 
 function createFakeChildProcess(options?: {
   exitCode?: number;
@@ -226,6 +230,133 @@ describe("generateClaudeCommitMessage", () => {
         },
         {
           spawnProcess: () => fakeProcess.child,
+        },
+      ),
+    ).rejects.toBeTruthy();
+  });
+});
+
+describe("generateCopilotCommitMessage", () => {
+  it("creates a tool-free Copilot session, maps reasoning effort, and parses JSON output", async () => {
+    let receivedConfig:
+      | Pick<
+          SessionConfig,
+          | "availableTools"
+          | "clientName"
+          | "model"
+          | "onPermissionRequest"
+          | "reasoningEffort"
+          | "streaming"
+          | "workingDirectory"
+        >
+      | undefined;
+    let didDisconnect = false;
+
+    const result = await generateCopilotCommitMessage(
+      {
+        context: {
+          branch: "feature/copilot-commit",
+          patch: "diff --git a/file.ts b/file.ts",
+          repoRoot: globalThis.process.cwd(),
+          summary: "M file.ts",
+        },
+        modelId: "gpt-5.1-copilot",
+        reasoningEffort: "minimal",
+      },
+      {
+        createSession: async (config) => {
+          receivedConfig = config;
+          return {
+            disconnect: async () => {
+              didDisconnect = true;
+            },
+            sendAndWait: async ({ prompt }) => {
+              expect(prompt).toContain("Branch: feature/copilot-commit");
+              return {
+                data: {
+                  content: JSON.stringify({
+                    body: "- update commit flow",
+                    subject: "Improve Copilot commit generation",
+                  }),
+                },
+              };
+            },
+          };
+        },
+      },
+    );
+
+    expect(receivedConfig).toEqual({
+      availableTools: [],
+      clientName: "sentinel",
+      model: "gpt-5.1-copilot",
+      onPermissionRequest: expect.any(Function),
+      reasoningEffort: "low",
+      streaming: false,
+      workingDirectory: globalThis.process.cwd(),
+    });
+    expect(
+      receivedConfig?.onPermissionRequest(
+        { kind: "read" },
+        { sessionId: "copilot-session" },
+      ),
+    ).toEqual({
+      kind: "denied-no-approval-rule-and-could-not-request-from-user",
+    });
+    expect(didDisconnect).toBe(true);
+    expect(result).toEqual({
+      body: "- update commit flow",
+      message: "Improve Copilot commit generation\n\n- update commit flow",
+      subject: "Improve Copilot commit generation",
+    });
+  });
+
+  it("accepts fenced JSON and throws for invalid Copilot output", async () => {
+    const success = await generateCopilotCommitMessage(
+      {
+        context: {
+          branch: "feature/copilot-commit",
+          patch: "diff --git a/file.ts b/file.ts",
+          repoRoot: globalThis.process.cwd(),
+          summary: "M file.ts",
+        },
+        modelId: "gpt-5.1-copilot",
+      },
+      {
+        createSession: async () => ({
+          disconnect: async () => undefined,
+          sendAndWait: async () => ({
+            data: {
+              content:
+                '```json\n{"subject":"Refine Copilot output","body":"- preserve JSON parsing"}\n```',
+            },
+          }),
+        }),
+      },
+    );
+
+    expect(success.subject).toBe("Refine Copilot output");
+
+    await expect(
+      generateCopilotCommitMessage(
+        {
+          context: {
+            branch: "feature/copilot-commit",
+            patch: "diff --git a/file.ts b/file.ts",
+            repoRoot: globalThis.process.cwd(),
+            summary: "M file.ts",
+          },
+          modelId: "gpt-5.1-copilot",
+        },
+        {
+          createSession: async () => ({
+            disconnect: async () => undefined,
+            sendAndWait: async () => ({
+              data: {
+                content: "not json at all",
+              },
+            }),
+          }),
         },
       ),
     ).rejects.toBeTruthy();

@@ -5,6 +5,7 @@ import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, ListBox, Popover, ScrollShadow } from "@heroui/react";
 
+import { CopilotIcon } from "@/components/icons/copilot-icon";
 import { ProviderIcon } from "@/components/icons/provider-icon";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 
@@ -32,6 +33,10 @@ function renderExternalEngineIcon(
 
   if (engine === "claude") {
     return <ClaudeAIIcon className={className} />;
+  }
+
+  if (engine === "copilot") {
+    return <CopilotIcon className={className} />;
   }
 
   return null;

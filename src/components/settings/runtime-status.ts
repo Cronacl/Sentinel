@@ -8,7 +8,7 @@ type RuntimeStatusLike = {
   usedCachedStatus?: boolean;
 };
 
-type RuntimeStatusKind = "Claude" | "Codex";
+type RuntimeStatusKind = "Claude" | "Codex" | "Copilot";
 
 function formatRuntimeTimestamp(
   value: string,
@@ -88,8 +88,10 @@ function getRuntimeComposerUnavailableMessage(
   if (
     status.state === "missing_binary" ||
     status.state === "missing_cli" ||
+    status.state === "missing_runtime" ||
     (runtime === "Claude" && status.binaryDetected === false) ||
-    (runtime === "Codex" && status.cliDetected === false)
+    ((runtime === "Codex" || runtime === "Copilot") &&
+      status.cliDetected === false)
   ) {
     return `${runtime} runtime was not detected in this Sentinel session.`;
   }
@@ -102,6 +104,7 @@ function getRuntimeComposerUnavailableMessage(
 }
 
 type ClaudeRuntimeStatusLike = RuntimeStatusLike;
+type CopilotRuntimeStatusLike = RuntimeStatusLike;
 type CodexRuntimeStatusLike = RuntimeStatusLike;
 
 export function formatClaudeRuntimeTimestamp(
@@ -151,6 +154,48 @@ export function getClaudeComposerUnavailableMessage(
   status: ClaudeRuntimeStatusLike | null | undefined,
 ) {
   return getRuntimeComposerUnavailableMessage("Claude", status);
+}
+
+export function getCopilotRuntimeBadgeLabel(
+  status: CopilotRuntimeStatusLike | null | undefined,
+  isAvailable: boolean,
+) {
+  return getRuntimeBadgeLabel(status, isAvailable, {
+    detectedKey: "cliDetected",
+    missingState: "missing_runtime",
+  });
+}
+
+export function getCopilotRuntimeBadgeColor(
+  status: CopilotRuntimeStatusLike | null | undefined,
+  isAvailable: boolean,
+) {
+  return getRuntimeBadgeColor(status, isAvailable, {
+    detectedKey: "cliDetected",
+    missingState: "missing_runtime",
+  });
+}
+
+export function getCopilotRuntimeCliLabel(
+  status: CopilotRuntimeStatusLike | null | undefined,
+) {
+  return getRuntimeDetectionLabel(status, {
+    detectedKey: "cliDetected",
+    versionKey: "cliVersion",
+  });
+}
+
+export function getCopilotRuntimeFallbackMessage(
+  status: CopilotRuntimeStatusLike | null | undefined,
+  formatter?: (date: Date) => string,
+) {
+  return getRuntimeFallbackMessage("Copilot", status, formatter);
+}
+
+export function getCopilotComposerUnavailableMessage(
+  status: CopilotRuntimeStatusLike | null | undefined,
+) {
+  return getRuntimeComposerUnavailableMessage("Copilot", status);
 }
 
 export function getCodexRuntimeBadgeLabel(

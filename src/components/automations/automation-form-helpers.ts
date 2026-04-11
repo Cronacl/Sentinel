@@ -80,6 +80,8 @@ function getEngineModelDescription(engine: ChatEngine) {
       return "Codex runtime";
     case "claude":
       return "Claude runtime";
+    case "copilot":
+      return "Copilot runtime";
   }
 }
 

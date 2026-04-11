@@ -109,6 +109,14 @@ async function executeAutomationChat(params: {
         },
         params.userId,
       );
+    case "copilot":
+      return runThreadChat(
+        {
+          ...params.chatInput,
+          engine: "copilot",
+        },
+        params.userId,
+      );
     case "codex":
       return runThreadChat(
         {

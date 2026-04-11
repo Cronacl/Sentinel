@@ -44,6 +44,13 @@ export const claudeThreadStateSchema = z.object({
   sessionId: z.string(),
 });
 
+export const copilotThreadStateSchema = z.object({
+  cwd: z.string().nullish(),
+  modelId: z.string().nullish(),
+  reasoningEffort: z.enum(REASONING_EFFORTS).nullish(),
+  sessionId: z.string(),
+});
+
 const repoComparePullRequestSchema = z.object({
   base: z.string(),
   createdAt: z.string(),
@@ -89,6 +96,7 @@ export const repoThreadStateSchema = z.object({
 export const threadChatEngineStateSchema = z
   .object({
     claude: claudeThreadStateSchema.nullish(),
+    copilot: copilotThreadStateSchema.nullish(),
     codex: codexThreadStateSchema.nullish(),
     repo: repoThreadStateSchema.nullish(),
   })
@@ -96,6 +104,7 @@ export const threadChatEngineStateSchema = z
 
 type ThreadChatEngineStateMap = {
   claude: z.infer<typeof claudeThreadStateSchema>;
+  copilot: z.infer<typeof copilotThreadStateSchema>;
   codex: z.infer<typeof codexThreadStateSchema>;
 };
 
@@ -106,6 +115,7 @@ export type CodexApprovalPolicy = z.infer<typeof codexApprovalPolicySchema>;
 export type CodexSandboxMode = z.infer<typeof codexSandboxModeSchema>;
 export type CodexThreadState = z.infer<typeof codexThreadStateSchema>;
 export type ClaudeThreadState = z.infer<typeof claudeThreadStateSchema>;
+export type CopilotThreadState = z.infer<typeof copilotThreadStateSchema>;
 export type RepoLastPullRequest = z.infer<typeof repoLastPullRequestSchema>;
 export type RepoProjectMode = z.infer<typeof repoProjectModeSchema>;
 export type RepoThreadState = z.infer<typeof repoThreadStateSchema>;
@@ -126,6 +136,12 @@ export function getClaudeThreadState(value: unknown): ClaudeThreadState | null {
   return parseThreadChatEngineState(value)?.claude ?? null;
 }
 
+export function getCopilotThreadState(
+  value: unknown,
+): CopilotThreadState | null {
+  return parseThreadChatEngineState(value)?.copilot ?? null;
+}
+
 export function getRepoThreadState(value: unknown): RepoThreadState | null {
   return parseThreadChatEngineState(value)?.repo ?? null;
 }
@@ -139,7 +155,7 @@ export function mergeThreadChatEngineState(
     ...(patch ?? {}),
   };
 
-  if (!next.claude && !next.codex && !next.repo) {
+  if (!next.claude && !next.copilot && !next.codex && !next.repo) {
     return null;
   }
 
@@ -150,7 +166,12 @@ export function buildThreadChatEngineState(
   engine: ExternalChatEngine,
   value: ThreadChatEngineStateMap[ExternalChatEngine] | null,
 ): ThreadChatEngineState | null {
-  return engine === "codex"
-    ? { codex: value as CodexThreadState | null }
-    : { claude: value as ClaudeThreadState | null };
+  switch (engine) {
+    case "codex":
+      return { codex: value as CodexThreadState | null };
+    case "claude":
+      return { claude: value as ClaudeThreadState | null };
+    case "copilot":
+      return { copilot: value as CopilotThreadState | null };
+  }
 }

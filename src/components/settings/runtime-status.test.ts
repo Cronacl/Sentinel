@@ -9,6 +9,10 @@ import {
   getClaudeRuntimeBadgeLabel,
   getClaudeRuntimeBinaryLabel,
   getClaudeRuntimeFallbackMessage,
+  getCopilotRuntimeBadgeColor,
+  getCopilotRuntimeBadgeLabel,
+  getCopilotRuntimeCliLabel,
+  getCopilotRuntimeFallbackMessage,
 } from "./runtime-status";
 
 describe("Claude runtime settings helpers", () => {
@@ -120,6 +124,50 @@ describe("Codex runtime settings helpers", () => {
       }),
     ).toBe("codex-cli 0.98.0");
     expect(getCodexRuntimeCliLabel({ cliDetected: false })).toBe(
+      "Not detected",
+    );
+  });
+});
+
+describe("Copilot runtime settings helpers", () => {
+  it("renders a ready badge when cached Copilot models are active", () => {
+    const status = {
+      state: "timeout_using_cache",
+      usedCachedStatus: true,
+    };
+
+    expect(getCopilotRuntimeBadgeLabel(status, true)).toBe("Ready");
+    expect(getCopilotRuntimeBadgeColor(status, true)).toBe("success");
+  });
+
+  it("renders a ready badge for transient CLI-detected timeouts without cache", () => {
+    const status = {
+      cliDetected: true,
+      state: "timeout_no_cache",
+      usedCachedStatus: false,
+    };
+
+    expect(getCopilotRuntimeBadgeLabel(status, true)).toBe("Ready");
+    expect(getCopilotRuntimeBadgeColor(status, true)).toBe("success");
+  });
+
+  it("suppresses fallback timeout messaging when Copilot remains usable", () => {
+    const message = getCopilotRuntimeFallbackMessage({
+      state: "timeout_no_cache",
+      usedCachedStatus: false,
+    });
+
+    expect(message).toBeNull();
+  });
+
+  it("shows the verified CLI version when Copilot is detected", () => {
+    expect(
+      getCopilotRuntimeCliLabel({
+        cliDetected: true,
+        cliVersion: "copilot 1.0.24",
+      }),
+    ).toBe("copilot 1.0.24");
+    expect(getCopilotRuntimeCliLabel({ cliDetected: false })).toBe(
       "Not detected",
     );
   });

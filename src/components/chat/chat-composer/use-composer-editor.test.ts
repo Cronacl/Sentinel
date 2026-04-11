@@ -40,6 +40,14 @@ describe("filterSkillsForEngine", () => {
       target: "codex",
     },
     {
+      description: "Copilot primary",
+      directory: "/tmp/copilot/shared",
+      name: "shared",
+      scope: "workspace",
+      sourceKind: "copilot",
+      target: "copilot",
+    },
+    {
       description: "Another sentinel skill",
       directory: "/tmp/sentinel/other",
       name: "other",
@@ -141,12 +149,23 @@ describe("filterSkillsForEngine", () => {
       }),
     ]);
   });
+
+  it("only returns Copilot-targeted installs for the Copilot engine", () => {
+    expect(filterSkillsForEngine(skills, "copilot")).toEqual([
+      expect.objectContaining({
+        name: "shared",
+        sourceKind: "copilot",
+        target: "copilot",
+      }),
+    ]);
+  });
 });
 
 describe("getSkillSuggestionTitle", () => {
   it("returns a visible title for each engine", () => {
     expect(getSkillSuggestionTitle("sentinel")).toBe("Showing Sentinel skills");
     expect(getSkillSuggestionTitle("claude")).toBe("Showing Claude skills");
+    expect(getSkillSuggestionTitle("copilot")).toBe("Showing Copilot skills");
     expect(getSkillSuggestionTitle("codex")).toBe("Showing Codex skills");
   });
 });

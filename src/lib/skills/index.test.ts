@@ -163,6 +163,13 @@ describe("skills", () => {
       description: "Claude version",
       name: "shared-skill",
     });
+    await writeSkill({
+      baseDirectory: workspaceRoot,
+      container: ".github/skills",
+      content: "Copilot workflow.\n",
+      description: "Copilot version",
+      name: "shared-skill",
+    });
 
     const sentinelSkill = await loadSkillByName({
       name: "shared-skill",
@@ -172,6 +179,11 @@ describe("skills", () => {
     const claudeSkill = await loadSkillByName({
       name: "shared-skill",
       target: "claude",
+      workspaceRoot,
+    });
+    const copilotSkill = await loadSkillByName({
+      name: "shared-skill",
+      target: "copilot",
       workspaceRoot,
     });
 
@@ -184,6 +196,12 @@ describe("skills", () => {
       content: "Claude workflow.",
       description: "Claude version",
       sourceKind: "claude",
+    });
+    expect(copilotSkill).toMatchObject({
+      content: "Copilot workflow.",
+      description: "Copilot version",
+      sourceKind: "copilot",
+      target: "copilot",
     });
   });
 
@@ -258,6 +276,39 @@ describe("skills", () => {
         name: "triple-skill",
         sourceKind: "codex",
         target: "codex",
+      }),
+    );
+  });
+
+  it("discovers Copilot skills from workspace and personal Copilot roots", async () => {
+    await writeSkill({
+      baseDirectory: workspaceRoot,
+      container: ".github/skills",
+      managedBySentinel: true,
+      name: "workspace-copilot",
+    });
+    await writeSkill({
+      baseDirectory: homeDirectory,
+      container: ".copilot/skills",
+      name: "global-copilot",
+    });
+
+    const skills = await discoverSkills({ workspaceRoot });
+
+    expect(skills).toContainEqual(
+      expect.objectContaining({
+        name: "workspace-copilot",
+        scope: "workspace",
+        sourceKind: "copilot",
+        target: "copilot",
+      }),
+    );
+    expect(skills).toContainEqual(
+      expect.objectContaining({
+        name: "global-copilot",
+        scope: "global",
+        sourceKind: "copilot",
+        target: "copilot",
       }),
     );
   });

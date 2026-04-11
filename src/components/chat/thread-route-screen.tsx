@@ -57,7 +57,7 @@ export function ThreadRouteScreen({ threadId }: { threadId: string }) {
       </PageWrapper>
     );
   }
-
+  console.log(threadQuery.data.messages);
   return (
     <ThreadScreen
       initialMessages={threadQuery.data.messages}

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
-import { KNOWN_CLAUDE_RENDERER_TOOL_NAMES, resolveRenderer } from "./registry";
+import {
+  KNOWN_CLAUDE_RENDERER_TOOL_NAMES,
+  KNOWN_COPILOT_RENDERER_TOOL_NAMES,
+  resolveRenderer,
+} from "./registry";
 import { CodexRuntimeTool } from "./renderers/codex-runtime";
 import { CodexFileChangeTool } from "./renderers/codex-file-change";
 import { CodexImageViewTool } from "./renderers/codex-image-view";
@@ -36,6 +40,20 @@ import {
   ClaudeWebFetchTool,
   ClaudeWebSearchTool,
 } from "./renderers/claude-web";
+import { CopilotAgentTool } from "./renderers/copilot-agent";
+import {
+  CopilotApplyPatchTool,
+  CopilotEditTool,
+  CopilotViewTool,
+} from "./renderers/copilot-file";
+import { CopilotMemoryTool } from "./renderers/copilot-memory";
+import { CopilotRuntimeTool } from "./renderers/copilot-runtime";
+import { CopilotGlobTool, CopilotGrepTool } from "./renderers/copilot-search";
+import { CopilotSessionUtilityTool } from "./renderers/copilot-session";
+import { CopilotShellTool } from "./renderers/copilot-shell";
+import { CopilotTodoTool } from "./renderers/copilot-todo";
+import { CopilotUserInputTool } from "./renderers/copilot-user-input";
+import { CopilotWebFetchTool } from "./renderers/copilot-web";
 import { SkillTool } from "./renderers/skill";
 import { GenerateVideoTool } from "./renderers/generate-video";
 import { RunSubagentTool } from "./renderers/run-subagent";
@@ -149,6 +167,19 @@ describe("resolveRenderer", () => {
     } as any);
 
     expect(renderer).toBe(RunSubagentTool);
+  });
+
+  it("uses the CopilotUserInputTool renderer for structured Copilot prompts", () => {
+    const renderer = resolveRenderer({
+      approval: { id: "approval-copilot-1" },
+      input: { prompt: "How should I continue?" },
+      state: "approval-requested",
+      toolCallId: "tool-call-copilot-ui",
+      toolName: "copilot_request_user_input",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(CopilotUserInputTool);
   });
 
   it("uses the CodexFileChangeTool renderer for codex_file_change", () => {
@@ -874,6 +905,179 @@ describe("resolveRenderer", () => {
     expect(renderer).toBe(ClaudeRuntimeTool);
   });
 
+  it("uses the CopilotShellTool renderer for copilot_bash", () => {
+    const renderer = resolveRenderer({
+      input: { command: "npm test" },
+      output: { content: "ok" },
+      state: "output-available",
+      toolCallId: "tool-call-copilot-bash",
+      toolName: "copilot_bash",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(CopilotShellTool);
+  });
+
+  it("uses the CopilotViewTool renderer for copilot_view", () => {
+    const renderer = resolveRenderer({
+      input: { path: "src/index.ts", view_range: [1, 20] },
+      output: { content: "console.log('hello')" },
+      state: "output-available",
+      toolCallId: "tool-call-copilot-view",
+      toolName: "copilot_view",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(CopilotViewTool);
+  });
+
+  it("uses the CopilotEditTool renderer for copilot_edit", () => {
+    const renderer = resolveRenderer({
+      input: { path: "src/index.ts", old_str: "old", new_str: "new" },
+      output: { content: "updated" },
+      state: "output-available",
+      toolCallId: "tool-call-copilot-edit",
+      toolName: "copilot_edit",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(CopilotEditTool);
+  });
+
+  it("uses the CopilotApplyPatchTool renderer for copilot_apply_patch", () => {
+    const renderer = resolveRenderer({
+      input: { command: "apply_patch", patch: "*** Begin Patch" },
+      output: { content: "updated" },
+      state: "output-available",
+      toolCallId: "tool-call-copilot-apply-patch",
+      toolName: "copilot_apply_patch",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(CopilotApplyPatchTool);
+  });
+
+  it("uses the CopilotGlobTool renderer for copilot_glob", () => {
+    const renderer = resolveRenderer({
+      input: { pattern: "**/*.ts" },
+      output: { content: "src/index.ts" },
+      state: "output-available",
+      toolCallId: "tool-call-copilot-glob",
+      toolName: "copilot_glob",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(CopilotGlobTool);
+  });
+
+  it("uses the CopilotGrepTool renderer for copilot_grep", () => {
+    const renderer = resolveRenderer({
+      input: { pattern: "TODO" },
+      output: { content: "src/index.ts:1: TODO" },
+      state: "output-available",
+      toolCallId: "tool-call-copilot-grep",
+      toolName: "copilot_grep",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(CopilotGrepTool);
+  });
+
+  it("uses the CopilotWebFetchTool renderer for copilot_web_fetch", () => {
+    const renderer = resolveRenderer({
+      input: { url: "https://docs.github.com", prompt: "Fetch docs" },
+      output: { content: "Docs content" },
+      state: "output-available",
+      toolCallId: "tool-call-copilot-web",
+      toolName: "copilot_web_fetch",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(CopilotWebFetchTool);
+  });
+
+  it("uses the CopilotTodoTool renderer for copilot_update_todo", () => {
+    const renderer = resolveRenderer({
+      input: {
+        todos: [{ content: "Ship feature", status: "pending" }],
+      },
+      output: {
+        newTodos: [{ content: "Ship feature", status: "completed" }],
+      },
+      state: "output-available",
+      toolCallId: "tool-call-copilot-todo",
+      toolName: "copilot_update_todo",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(CopilotTodoTool);
+  });
+
+  it("uses the CopilotMemoryTool renderer for copilot_store_memory", () => {
+    const renderer = resolveRenderer({
+      input: { fact: "The deploy key is rotated weekly." },
+      output: { content: "Stored" },
+      state: "output-available",
+      toolCallId: "tool-call-copilot-memory",
+      toolName: "copilot_store_memory",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(CopilotMemoryTool);
+  });
+
+  it("uses the CopilotAgentTool renderer for copilot_task", () => {
+    const renderer = resolveRenderer({
+      input: { agent_type: "explorer", description: "Inspect repo" },
+      output: { content: "Started" },
+      state: "output-available",
+      toolCallId: "tool-call-copilot-task",
+      toolName: "copilot_task",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(CopilotAgentTool);
+  });
+
+  it("uses the structured user input renderer for copilot_ask_user", () => {
+    const renderer = resolveRenderer({
+      approval: { id: "approval-copilot-ask-user" },
+      input: { prompt: "Pick one" },
+      state: "approval-requested",
+      toolCallId: "tool-call-copilot-ask-user",
+      toolName: "copilot_ask_user",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(CopilotUserInputTool);
+  });
+
+  it("uses the CopilotSessionUtilityTool renderer for copilot_report_intent", () => {
+    const renderer = resolveRenderer({
+      input: { description: "Planning next steps" },
+      output: { content: "Plan recorded" },
+      state: "output-available",
+      toolCallId: "tool-call-copilot-report-intent",
+      toolName: "copilot_report_intent",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(CopilotSessionUtilityTool);
+  });
+
+  it("uses the generic Copilot renderer for unknown copilot tools", () => {
+    const renderer = resolveRenderer({
+      input: { foo: "bar" },
+      output: { success: true },
+      state: "output-available",
+      toolCallId: "tool-call-copilot-unknown",
+      toolName: "copilot_unknown_future_tool",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(CopilotRuntimeTool);
+  });
+
   it("tracks the full known Claude renderer inventory", () => {
     const sdkToolNames = [
       "Agent",
@@ -921,6 +1125,59 @@ describe("resolveRenderer", () => {
 
     expect(KNOWN_CLAUDE_RENDERER_TOOL_NAMES).toEqual(
       [...new Set([...sdkToolNames, ...localAliases])].sort(),
+    );
+  });
+
+  it("tracks the full known Copilot renderer inventory", () => {
+    const cliToolNames = [
+      "apply_patch",
+      "ask_user",
+      "bash",
+      "create",
+      "edit",
+      "exit_plan_mode",
+      "fetch_copilot_cli_documentation",
+      "glob",
+      "grep",
+      "list_agents",
+      "list_bash",
+      "list_powershell",
+      "lsp",
+      "powershell",
+      "read_agent",
+      "read_bash",
+      "read_powershell",
+      "report_intent",
+      "rg",
+      "show_file",
+      "skill",
+      "sql",
+      "stop_bash",
+      "stop_powershell",
+      "store_memory",
+      "task",
+      "task_complete",
+      "update_todo",
+      "view",
+      "web_fetch",
+      "write_bash",
+      "write_powershell",
+    ].map((toolName) => `copilot_${toolName}`);
+    const runtimeBridgeToolNames = [
+      "copilot_custom_tool",
+      "copilot_hook",
+      "copilot_mcp",
+      "copilot_memory",
+      "copilot_read",
+      "copilot_request_user_input",
+      "copilot_runtime",
+      "copilot_shell",
+      "copilot_url",
+      "copilot_write",
+    ];
+
+    expect(KNOWN_COPILOT_RENDERER_TOOL_NAMES).toEqual(
+      [...new Set([...cliToolNames, ...runtimeBridgeToolNames])].sort(),
     );
   });
 });

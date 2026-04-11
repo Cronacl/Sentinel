@@ -7,6 +7,7 @@ import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ChatEngine, ThreadVisibility } from "@/server/db/enums";
 import type {
   ClaudeThreadState,
+  CopilotThreadState,
   CodexThreadState,
   RepoThreadState,
   ThreadChatEngineState,
@@ -287,6 +288,16 @@ export function updateClaudeThreadState(
   updateThreadChatEngineState(
     threadId,
     buildThreadChatEngineState("claude", state),
+  );
+}
+
+export function updateCopilotThreadState(
+  threadId: string,
+  state: CopilotThreadState | null,
+) {
+  updateThreadChatEngineState(
+    threadId,
+    buildThreadChatEngineState("copilot", state),
   );
 }
 

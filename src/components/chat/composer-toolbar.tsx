@@ -13,12 +13,30 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, ListBox, Popover, Switch } from "@heroui/react";
 import { memo, useMemo, useState, type ReactNode } from "react";
 
+import { CopilotIcon } from "@/components/icons/copilot-icon";
+import { ProviderIcon } from "@/components/icons/provider-icon";
 import type { ChatEngine } from "@/server/db/enums";
 
 import { ContextWindowIndicator } from "./chat-composer/context-window-indicator";
 
 const NO_DISABLED_KEYS: string[] = [];
 const PLAN_MODE_DISABLED_KEYS = ["plan-mode"];
+
+function renderEngineMenuIcon(engine: ChatEngine) {
+  if (engine === "codex") {
+    return <ProviderIcon className="size-3.5" provider="openai" />;
+  }
+
+  if (engine === "claude") {
+    return <ProviderIcon className="size-3.5" provider="anthropic" />;
+  }
+
+  if (engine === "copilot") {
+    return <CopilotIcon className="size-3.5" />;
+  }
+
+  return null;
+}
 
 type ComposerToolbarProps = {
   canSend: boolean;
@@ -179,8 +197,9 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                       strokeWidth={1.5}
                     />
                     <span className="flex-1">Engine</span>
-                    <span className="text-[12px] capitalize text-foreground/60">
-                      {selectedEngine}
+                    <span className="flex items-center gap-1.5 text-[12px] capitalize text-foreground/60">
+                      {renderEngineMenuIcon(selectedEngine)}
+                      <span>{selectedEngine}</span>
                     </span>
                     <HugeiconsIcon
                       color="currentColor"
@@ -214,6 +233,9 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                         id={engine.engine}
                         textValue={engine.label}
                       >
+                        {renderEngineMenuIcon(engine.engine) ?? (
+                          <span className="w-3.5" />
+                        )}
                         <span className="capitalize">{engine.label}</span>
                         {!engine.isAvailable && engine.engine !== "sentinel" ? (
                           <span className="ml-auto text-[10px] text-warning">

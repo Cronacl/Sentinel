@@ -15,8 +15,8 @@ export const loadSkillOutputSchema = z.object({
   preview: z.string(),
   scope: z.enum(["global", "workspace"]),
   skillFile: z.string(),
-  sourceKind: z.enum(["agents", "claude", "codex", "sentinel"]),
-  target: z.enum(["sentinel", "codex", "claude"]),
+  sourceKind: z.enum(["agents", "claude", "copilot", "codex", "sentinel"]),
+  target: z.enum(["sentinel", "codex", "claude", "copilot"]),
 });
 
 export type LoadSkillInput = z.infer<typeof loadSkillInputSchema>;

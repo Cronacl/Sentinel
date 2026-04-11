@@ -25,6 +25,7 @@ import { api } from "@/trpc/react";
 
 type CustomSkillInstallDrawerProps = {
   codexAvailable: boolean;
+  copilotAvailable: boolean;
   createSkillHref: string;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
@@ -59,6 +60,12 @@ const TARGET_OPTIONS = [
     label: "Codex",
     value: "codex",
   },
+  {
+    description:
+      "Install under Copilot's .github/skills workspace folder or ~/.copilot/skills home folder.",
+    label: "Copilot",
+    value: "copilot",
+  },
 ] as const;
 
 function createDefaultValues(): CustomSkillInstallFormInputValues {
@@ -75,10 +82,12 @@ function createDefaultValues(): CustomSkillInstallFormInputValues {
 
 function CustomSkillInstallDrawerContent({
   codexAvailable,
+  copilotAvailable,
   createSkillHref,
   onClose,
 }: {
   codexAvailable: boolean;
+  copilotAvailable: boolean;
   createSkillHref: string;
   onClose: () => void;
 }) {
@@ -208,7 +217,9 @@ function CustomSkillInstallDrawerContent({
           name="target"
           options={TARGET_OPTIONS.map((option) => ({
             ...option,
-            isDisabled: option.value === "codex" && !codexAvailable,
+            isDisabled:
+              (option.value === "codex" && !codexAvailable) ||
+              (option.value === "copilot" && !copilotAvailable),
           }))}
         />
 
@@ -217,7 +228,9 @@ function CustomSkillInstallDrawerContent({
           description={
             target === "codex"
               ? "Codex installs are global-only."
-              : "Where this skill should be installed."
+              : target === "copilot"
+                ? "Copilot installs use ~/.copilot/skills globally and .github/skills in a workspace."
+                : "Where this skill should be installed."
           }
           label="Install scope"
           name="scope"
@@ -311,6 +324,7 @@ function CustomSkillInstallDrawerContent({
 
 export function CustomSkillInstallDrawer({
   codexAvailable,
+  copilotAvailable,
   createSkillHref,
   isOpen,
   onOpenChange,
@@ -322,6 +336,7 @@ export function CustomSkillInstallDrawer({
           <Drawer.CloseTrigger />
           <CustomSkillInstallDrawerContent
             codexAvailable={codexAvailable}
+            copilotAvailable={copilotAvailable}
             createSkillHref={createSkillHref}
             onClose={() => onOpenChange(false)}
           />

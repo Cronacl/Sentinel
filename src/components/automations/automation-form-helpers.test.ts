@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import type { AutomationEngineModel } from "./automation-form-helpers";
 import {
+  getAutomationEngineOptions,
   getAutomationModelOptions,
   getAutomationModelsForEngine,
   resolveAutomationSelection,
@@ -23,6 +24,27 @@ const sentinelModel: AutomationEngineModel = {
 };
 
 describe("automation form helpers", () => {
+  it("keeps Copilot visible in generic engine option labels and descriptions", () => {
+    expect(
+      getAutomationEngineOptions([
+        {
+          description: "Copilot runtime",
+          engine: "copilot",
+          isAvailable: true,
+          isCurrent: false,
+          label: "Copilot",
+        },
+      ] as any),
+    ).toEqual([
+      {
+        description: "Copilot runtime",
+        isDisabled: false,
+        label: "Copilot",
+        value: "copilot",
+      },
+    ]);
+  });
+
   it("returns an empty model list when the engine is not selected yet", () => {
     expect(
       getAutomationModelsForEngine(undefined, {

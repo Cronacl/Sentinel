@@ -9,6 +9,13 @@ import {
   resetClaudeEngineStatusCache,
 } from "@/lib/ai/chat/engines/claude-sdk";
 import {
+  type CopilotEngineStatus,
+  getCopilotEngineStatus,
+  isCopilotEngineAvailable,
+  resetCopilotEngineStatusCache,
+  resetCopilotRuntimeCache,
+} from "@/lib/ai/chat/engines/copilot-sdk";
+import {
   type CodexEngineStatus,
   getCodexAppServerManager,
   resetCodexEngineStatusCache,
@@ -21,16 +28,17 @@ import {
   getSupportedReasoningEfforts,
   isKnownModel,
   MODEL_CATALOG,
+  type ReasoningEffort,
 } from "@/lib/ai/providers/models";
 import { getCompositeModelId } from "@/lib/ai/providers/model-selection";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import type { AIProvider } from "@/server/db/enums";
+import type { AIProvider, ChatEngine } from "@/server/db/enums";
 import { CHAT_ENGINES } from "@/server/db/enums";
 import { modelPreferences, providerCredentials } from "@/server/db/schema";
 import { getOwnedThreadOrThrow } from "./workspace-thread-helpers";
 
 const chatEngineSchema = z.enum(CHAT_ENGINES);
-const runtimeEngineSchema = z.enum(["codex", "claude"]);
+const runtimeEngineSchema = z.enum(["codex", "claude", "copilot"]);
 
 function isCodexEngineAvailable(status: CodexEngineStatus) {
   return status.state === "ready" || status.state === "timeout_no_cache";
@@ -83,6 +91,15 @@ function canUseClaudeFallbackModels(status: ClaudeEngineStatus) {
   );
 }
 
+function canUseCopilotFallbackModels(status: CopilotEngineStatus) {
+  return (
+    status.authReady &&
+    status.cliDetected &&
+    status.state === "timeout_no_cache" &&
+    status.availableModels.length === 0
+  );
+}
+
 function shouldExposeRuntimeModels(options: {
   availableModelsCount: number;
   isAvailable: boolean;
@@ -113,6 +130,47 @@ function buildFallbackClaudeModels() {
   }));
 }
 
+function buildFallbackCopilotModels() {
+  return [
+    {
+      contextWindow: undefined,
+      defaultReasoningEffort: "medium" as const,
+      description: "Default GitHub Copilot coding model.",
+      displayName: "GPT-4.1",
+      id: "gpt-4.1-preview",
+      inputModalities: ["text"] as string[],
+      isDefault: true,
+      model: "gpt-4.1-preview",
+      supportedReasoningEfforts: (["low", "medium", "high"] as const).map(
+        (effort) => ({
+          description: `GPT-4.1 supports ${effort} reasoning effort.`,
+          effort,
+          label: effort[0]!.toUpperCase() + effort.slice(1),
+        }),
+      ),
+    },
+  ] satisfies CopilotEngineStatus["availableModels"];
+}
+
+type EngineModelResult = {
+  contextWindow?: number;
+  defaultReasoningEffort: ReasoningEffort | null;
+  description: string;
+  displayName: string;
+  engine: ChatEngine;
+  inputModalities: string[];
+  isConnected: boolean;
+  isEnabled: boolean;
+  modelId: string;
+  provider: AIProvider | null;
+  rawModelId: string;
+  supportedReasoningEfforts: ReasoningEffort[];
+};
+
+function toEngineModelResult(input: EngineModelResult) {
+  return input;
+}
+
 async function resolveCodexThreadId(
   ctx: Parameters<typeof getOwnedThreadOrThrow>[0],
   sentinelThreadId: string,
@@ -128,20 +186,26 @@ async function resolveCodexThreadId(
 function createRuntimeStatusResolver(options?: { forceRefresh?: boolean }) {
   let codexPromise: Promise<CodexEngineStatus> | null = null;
   let claudePromise: Promise<ClaudeEngineStatus> | null = null;
+  let copilotPromise: Promise<CopilotEngineStatus> | null = null;
 
   return {
     all: async () => {
-      const [codex, claude] = await Promise.all([
+      const [codex, claude, copilot] = await Promise.all([
         codexPromise ??
           (codexPromise = getCodexAppServerManager().getStatus(options)),
         claudePromise ?? (claudePromise = getClaudeEngineStatus(options)),
+        copilotPromise ?? (copilotPromise = getCopilotEngineStatus(options)),
       ]);
 
-      return { claude, codex };
+      return { claude, codex, copilot };
     },
     claude: async () => {
       claudePromise ??= getClaudeEngineStatus(options);
       return await claudePromise;
+    },
+    copilot: async () => {
+      copilotPromise ??= getCopilotEngineStatus(options);
+      return await copilotPromise;
     },
     codex: async () => {
       codexPromise ??= getCodexAppServerManager().getStatus(options);
@@ -153,7 +217,7 @@ function createRuntimeStatusResolver(options?: { forceRefresh?: boolean }) {
 export const enginesRouter = createTRPCRouter({
   list: protectedProcedure.query(async () => {
     const runtimeStatuses = createRuntimeStatusResolver();
-    const { codex, claude } = await runtimeStatuses.all();
+    const { codex, claude, copilot } = await runtimeStatuses.all();
 
     return [
       {
@@ -180,6 +244,14 @@ export const enginesRouter = createTRPCRouter({
         label: "Claude",
         status: claude,
       },
+      {
+        description: "Use the locally configured GitHub Copilot SDK runtime.",
+        engine: "copilot" as const,
+        error: copilot.error,
+        isAvailable: isCopilotEngineAvailable(copilot),
+        label: "Copilot",
+        status: copilot,
+      },
     ];
   }),
 
@@ -198,22 +270,24 @@ export const enginesRouter = createTRPCRouter({
           isAvailable: isCodexEngineAvailable(status),
         });
 
-        return models.map((model) => ({
-          contextWindow: undefined as number | undefined,
-          defaultReasoningEffort: model.defaultReasoningEffort,
-          description: model.description,
-          displayName: model.displayName,
-          engine: "codex" as const,
-          inputModalities: model.inputModalities,
-          isConnected,
-          isEnabled: true,
-          modelId: model.id,
-          provider: null,
-          rawModelId: model.model,
-          supportedReasoningEfforts: model.supportedReasoningEfforts.map(
-            (option) => option.effort,
-          ),
-        }));
+        return models.map((model) =>
+          toEngineModelResult({
+            contextWindow: undefined,
+            defaultReasoningEffort: model.defaultReasoningEffort,
+            description: model.description,
+            displayName: model.displayName,
+            engine: "codex",
+            inputModalities: model.inputModalities,
+            isConnected,
+            isEnabled: true,
+            modelId: model.id,
+            provider: null,
+            rawModelId: model.model,
+            supportedReasoningEfforts: model.supportedReasoningEfforts.map(
+              (option) => option.effort,
+            ),
+          }),
+        );
       }
 
       if (input.engine === "claude") {
@@ -226,22 +300,54 @@ export const enginesRouter = createTRPCRouter({
           isAvailable: isClaudeEngineAvailable(status),
         });
 
-        return models.map((model) => ({
-          contextWindow: model.contextWindow,
-          defaultReasoningEffort: model.defaultReasoningEffort,
-          description: model.description,
-          displayName: model.displayName,
-          engine: "claude" as const,
-          inputModalities: model.inputModalities,
-          isConnected,
-          isEnabled: true,
-          modelId: model.id,
-          provider: null,
-          rawModelId: model.model,
-          supportedReasoningEfforts: model.supportedReasoningEfforts.map(
-            (option) => option.effort,
-          ),
-        }));
+        return models.map((model) =>
+          toEngineModelResult({
+            contextWindow: model.contextWindow,
+            defaultReasoningEffort: model.defaultReasoningEffort,
+            description: model.description,
+            displayName: model.displayName,
+            engine: "claude",
+            inputModalities: model.inputModalities,
+            isConnected,
+            isEnabled: true,
+            modelId: model.id,
+            provider: null,
+            rawModelId: model.model,
+            supportedReasoningEfforts: model.supportedReasoningEfforts.map(
+              (option) => option.effort,
+            ),
+          }),
+        );
+      }
+
+      if (input.engine === "copilot") {
+        const status = await runtimeStatuses.copilot();
+        const models = canUseCopilotFallbackModels(status)
+          ? buildFallbackCopilotModels()
+          : status.availableModels;
+        const isConnected = shouldExposeRuntimeModels({
+          availableModelsCount: models.length,
+          isAvailable: isCopilotEngineAvailable(status),
+        });
+
+        return models.map((model) =>
+          toEngineModelResult({
+            contextWindow: model.contextWindow,
+            defaultReasoningEffort: model.defaultReasoningEffort,
+            description: model.description,
+            displayName: model.displayName,
+            engine: "copilot",
+            inputModalities: model.inputModalities,
+            isConnected,
+            isEnabled: true,
+            modelId: model.id,
+            provider: null,
+            rawModelId: model.model,
+            supportedReasoningEfforts: model.supportedReasoningEfforts.map(
+              (option) => option.effort,
+            ),
+          }),
+        );
       }
 
       const userId = ctx.session.user.id;
@@ -268,7 +374,7 @@ export const enginesRouter = createTRPCRouter({
             const compositeId = getCompositeModelId(provider, model.id);
             const pref = prefMap.get(compositeId);
 
-            return {
+            return toEngineModelResult({
               contextWindow: model.contextWindow,
               defaultReasoningEffort: getDefaultReasoningEffort(
                 provider,
@@ -276,7 +382,7 @@ export const enginesRouter = createTRPCRouter({
               ),
               description: model.description,
               displayName: model.displayName,
-              engine: "sentinel" as const,
+              engine: "sentinel",
               inputModalities: model.capabilities.includes("vision")
                 ? ["text", "image"]
                 : ["text"],
@@ -289,7 +395,7 @@ export const enginesRouter = createTRPCRouter({
                 provider,
                 model.id,
               ),
-            };
+            });
           });
 
           const customModels = preferences
@@ -299,26 +405,28 @@ export const enginesRouter = createTRPCRouter({
                 preference.isCustom &&
                 !isKnownModel(provider, preference.modelId),
             )
-            .map((preference) => ({
-              contextWindow: undefined as number | undefined,
-              defaultReasoningEffort: getDefaultReasoningEffort(
+            .map((preference) =>
+              toEngineModelResult({
+                contextWindow: undefined,
+                defaultReasoningEffort: getDefaultReasoningEffort(
+                  provider,
+                  preference.modelId,
+                ),
+                description: "Custom model",
+                displayName: preference.modelId,
+                engine: "sentinel",
+                inputModalities: ["text"],
+                isConnected: connectedSet.has(provider),
+                isEnabled: preference.isEnabled,
+                modelId: getCompositeModelId(provider, preference.modelId),
                 provider,
-                preference.modelId,
-              ),
-              description: "Custom model",
-              displayName: preference.modelId,
-              engine: "sentinel" as const,
-              inputModalities: ["text"] as string[],
-              isConnected: connectedSet.has(provider),
-              isEnabled: preference.isEnabled,
-              modelId: getCompositeModelId(provider, preference.modelId),
-              provider,
-              rawModelId: preference.modelId,
-              supportedReasoningEfforts: getSupportedReasoningEfforts(
-                provider,
-                preference.modelId,
-              ),
-            }));
+                rawModelId: preference.modelId,
+                supportedReasoningEfforts: getSupportedReasoningEfforts(
+                  provider,
+                  preference.modelId,
+                ),
+              }),
+            );
 
           return [...builtIn, ...customModels];
         },
@@ -339,6 +447,17 @@ export const enginesRouter = createTRPCRouter({
 
         return {
           engine: "codex" as const,
+          status,
+        };
+      }
+
+      if (input.engine === "copilot") {
+        resetCopilotRuntimeCache();
+        resetCopilotEngineStatusCache();
+        const status = await runtimeStatuses.copilot();
+
+        return {
+          engine: "copilot" as const,
           status,
         };
       }

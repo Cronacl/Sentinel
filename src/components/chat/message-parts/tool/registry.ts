@@ -140,6 +140,23 @@ import {
   ClaudeWebFetchTool,
   ClaudeWebSearchTool,
 } from "./renderers/claude-web";
+import { CopilotAgentTool } from "./renderers/copilot-agent";
+import {
+  CopilotApplyPatchTool,
+  CopilotCreateTool,
+  CopilotEditTool,
+  CopilotShowFileTool,
+  CopilotViewTool,
+} from "./renderers/copilot-file";
+import { CopilotMemoryTool } from "./renderers/copilot-memory";
+import { CopilotRuntimeTool } from "./renderers/copilot-runtime";
+import { CopilotGlobTool, CopilotGrepTool } from "./renderers/copilot-search";
+import { CopilotSessionUtilityTool } from "./renderers/copilot-session";
+import { CopilotShellTool } from "./renderers/copilot-shell";
+import { CopilotTodoTool } from "./renderers/copilot-todo";
+import { CopilotUserInputTool } from "./renderers/copilot-user-input";
+import { CopilotWebFetchTool } from "./renderers/copilot-web";
+import { GenericTool } from "./generic";
 
 const renderers: Record<string, Renderer> = {
   apply_patch: WorkspaceTool,
@@ -408,6 +425,54 @@ export const KNOWN_CLAUDE_RENDERER_TOOL_NAMES = Object.freeze(
   Object.keys(claudeRenderers).sort(),
 );
 
+const copilotRenderers: Record<string, Renderer> = {
+  copilot_apply_patch: CopilotApplyPatchTool,
+  copilot_ask_user: CopilotUserInputTool,
+  copilot_bash: CopilotShellTool,
+  copilot_create: CopilotCreateTool,
+  copilot_custom_tool: CopilotSessionUtilityTool,
+  copilot_edit: CopilotEditTool,
+  copilot_exit_plan_mode: CopilotSessionUtilityTool,
+  copilot_fetch_copilot_cli_documentation: CopilotWebFetchTool,
+  copilot_glob: CopilotGlobTool,
+  copilot_grep: CopilotGrepTool,
+  copilot_hook: CopilotSessionUtilityTool,
+  copilot_list_agents: CopilotAgentTool,
+  copilot_list_bash: CopilotShellTool,
+  copilot_list_powershell: CopilotShellTool,
+  copilot_lsp: CopilotSessionUtilityTool,
+  copilot_mcp: CopilotSessionUtilityTool,
+  copilot_memory: CopilotMemoryTool,
+  copilot_powershell: CopilotShellTool,
+  copilot_read: CopilotViewTool,
+  copilot_read_agent: CopilotAgentTool,
+  copilot_read_bash: CopilotShellTool,
+  copilot_read_powershell: CopilotShellTool,
+  copilot_request_user_input: CopilotUserInputTool,
+  copilot_report_intent: CopilotSessionUtilityTool,
+  copilot_rg: CopilotGrepTool,
+  copilot_runtime: CopilotSessionUtilityTool,
+  copilot_shell: CopilotShellTool,
+  copilot_show_file: CopilotShowFileTool,
+  copilot_skill: CopilotSessionUtilityTool,
+  copilot_sql: CopilotSessionUtilityTool,
+  copilot_stop_bash: CopilotShellTool,
+  copilot_stop_powershell: CopilotShellTool,
+  copilot_store_memory: CopilotMemoryTool,
+  copilot_task: CopilotAgentTool,
+  copilot_task_complete: CopilotSessionUtilityTool,
+  copilot_update_todo: CopilotTodoTool,
+  copilot_url: CopilotWebFetchTool,
+  copilot_view: CopilotViewTool,
+  copilot_web_fetch: CopilotWebFetchTool,
+  copilot_write: CopilotEditTool,
+  copilot_write_bash: CopilotShellTool,
+  copilot_write_powershell: CopilotShellTool,
+};
+export const KNOWN_COPILOT_RENDERER_TOOL_NAMES = Object.freeze(
+  Object.keys(copilotRenderers).sort(),
+);
+
 function normalizeLooseToolName(name: string) {
   return name.replace(/[^a-z0-9]+/gi, "").toLowerCase();
 }
@@ -417,12 +482,19 @@ function isStructuredUserInputToolName(name: string) {
   const withoutClaudePrefix = normalized.startsWith("claude")
     ? normalized.slice("claude".length)
     : normalized;
+  const withoutCopilotPrefix = normalized.startsWith("copilot")
+    ? normalized.slice("copilot".length)
+    : normalized;
 
   return (
     normalized === "askuserquestion" ||
+    normalized === "askuser" ||
     normalized === "requestuserinput" ||
     withoutClaudePrefix === "askuserquestion" ||
-    withoutClaudePrefix === "requestuserinput"
+    withoutClaudePrefix === "requestuserinput" ||
+    withoutCopilotPrefix === "askuser" ||
+    withoutCopilotPrefix === "askuserquestion" ||
+    withoutCopilotPrefix === "requestuserinput"
   );
 }
 
@@ -469,6 +541,10 @@ export function resolveRenderer(part: ToolPart): Renderer | undefined {
 
   if (part.type === "dynamic-tool") {
     if (isStructuredUserInputToolName(part.toolName)) {
+      if (part.toolName.startsWith("copilot_")) {
+        return CopilotUserInputTool;
+      }
+
       return ClaudeUserInputTool;
     }
 
@@ -480,6 +556,10 @@ export function resolveRenderer(part: ToolPart): Renderer | undefined {
       return claudeRenderers[part.toolName] ?? ClaudeRuntimeTool;
     }
 
+    if (part.toolName.startsWith("copilot_")) {
+      return copilotRenderers[part.toolName] ?? CopilotRuntimeTool;
+    }
+
     return (
       renderers[part.toolName] ?? resolveIntegrationFallback(part.toolName)
     );
@@ -487,6 +567,10 @@ export function resolveRenderer(part: ToolPart): Renderer | undefined {
 
   const staticToolName = part.type.slice(5);
   if (isStructuredUserInputToolName(staticToolName)) {
+    if (staticToolName.startsWith("copilot_")) {
+      return CopilotUserInputTool;
+    }
+
     return ClaudeUserInputTool;
   }
 

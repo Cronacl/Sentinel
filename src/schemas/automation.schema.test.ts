@@ -43,6 +43,16 @@ describe("createAutomationSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("allows raw Copilot model ids for Copilot automations", () => {
+    const result = createAutomationSchema.safeParse({
+      ...validAutomation,
+      chatEngine: "copilot",
+      modelId: "gpt-5.1-copilot",
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it("requires both weekly day and time", () => {
     const result = createAutomationSchema.safeParse({
       ...validAutomation,

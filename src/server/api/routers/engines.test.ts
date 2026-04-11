@@ -52,10 +52,42 @@ const getClaudeEngineStatus = mock(async () => ({
   state: "ready",
   usedCachedStatus: false,
 }));
+const getCopilotEngineStatus = mock(async () => ({
+  account: {
+    authType: "oauth",
+    host: "github.com",
+    login: "octocat",
+    statusMessage: null,
+  },
+  authReady: true,
+  availableModels: [
+    {
+      contextWindow: 128_000,
+      defaultReasoningEffort: "medium",
+      description: "Copilot coding model",
+      displayName: "GPT-4.1",
+      id: "gpt-4.1-preview",
+      inputModalities: ["text"],
+      isDefault: true,
+      model: "gpt-4.1-preview",
+      supportedReasoningEfforts: [{ effort: "medium" }],
+    },
+  ],
+  cliDetected: true,
+  cliPath: "/Users/test/.local/bin/copilot",
+  cliVersion: "copilot 1.0.24",
+  engine: "copilot",
+  error: null,
+  lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
+  state: "ready",
+  usedCachedStatus: false,
+}));
 const resetCodexCliResolutionCache = mock(() => undefined);
 const resetCodexEngineStatusCache = mock(() => undefined);
 const resetClaudeCodeRuntimeCache = mock(() => undefined);
 const resetClaudeEngineStatusCache = mock(() => undefined);
+const resetCopilotRuntimeCache = mock(() => undefined);
+const resetCopilotEngineStatusCache = mock(() => undefined);
 const resolveCodexCli = mock(async () => ({
   command: "/Users/test/.local/bin/codex",
   env: process.env,
@@ -99,6 +131,17 @@ mock.module("@/lib/ai/chat/engines/claude-sdk", () => ({
     status.state === "ready" || status.state === "timeout_no_cache",
   resetClaudeCodeRuntimeCache,
   resetClaudeEngineStatusCache,
+}));
+
+mock.module("@/lib/ai/chat/engines/copilot-sdk", () => ({
+  getCopilotEngineStatus,
+  isCopilotEngineAvailable: (status: any) =>
+    (status.state === "ready" && status.authReady) ||
+    (status.state === "timeout_using_cache" &&
+      status.authReady &&
+      status.availableModels.length > 0),
+  resetCopilotEngineStatusCache,
+  resetCopilotRuntimeCache,
 }));
 
 mock.module("@/lib/ai/chat/engines/codex-cli", () => ({
@@ -172,10 +215,13 @@ beforeEach(() => {
   reloadRuntime.mockReset();
   getStatus.mockReset();
   getClaudeEngineStatus.mockReset();
+  getCopilotEngineStatus.mockReset();
   resetCodexCliResolutionCache.mockReset();
   resetCodexEngineStatusCache.mockReset();
   resetClaudeCodeRuntimeCache.mockReset();
   resetClaudeEngineStatusCache.mockReset();
+  resetCopilotRuntimeCache.mockReset();
+  resetCopilotEngineStatusCache.mockReset();
   resolveCodexCli.mockReset();
   readCodexCliVersion.mockReset();
   spawnCodexCli.mockReset();
@@ -236,6 +282,36 @@ beforeEach(() => {
     state: "ready",
     usedCachedStatus: false,
   }));
+  getCopilotEngineStatus.mockImplementation(async () => ({
+    account: {
+      authType: "oauth",
+      host: "github.com",
+      login: "octocat",
+      statusMessage: null,
+    },
+    authReady: true,
+    availableModels: [
+      {
+        contextWindow: 128_000,
+        defaultReasoningEffort: "medium",
+        description: "Copilot coding model",
+        displayName: "GPT-4.1",
+        id: "gpt-4.1-preview",
+        inputModalities: ["text"],
+        isDefault: true,
+        model: "gpt-4.1-preview",
+        supportedReasoningEfforts: [{ effort: "medium" }],
+      },
+    ],
+    cliDetected: true,
+    cliPath: "/Users/test/.local/bin/copilot",
+    cliVersion: "copilot 1.0.24",
+    engine: "copilot",
+    error: null,
+    lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
+    state: "ready",
+    usedCachedStatus: false,
+  }));
   getOwnedThreadOrThrow.mockImplementation(async () => ({
     chatEngineState: {
       codex: {
@@ -289,6 +365,53 @@ describe("enginesRouter.list", () => {
           }),
         }),
       ]),
+    );
+  });
+
+  it("includes Copilot with normalized availability state", async () => {
+    const result = await enginesRouter.list({});
+
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          description: "Use the locally configured GitHub Copilot SDK runtime.",
+          engine: "copilot",
+          isAvailable: true,
+          label: "Copilot",
+          status: expect.objectContaining({
+            authReady: true,
+            cliDetected: true,
+            state: "ready",
+            usedCachedStatus: false,
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("marks Copilot unavailable when the CLI is detected but auth is not ready", async () => {
+    getCopilotEngineStatus.mockImplementationOnce(async () => ({
+      account: null,
+      authReady: false,
+      availableModels: [],
+      cliDetected: true,
+      cliPath: "/Users/test/.local/bin/copilot",
+      cliVersion: "copilot 1.0.24",
+      engine: "copilot",
+      error: "GitHub Copilot needs authentication before it can be used here.",
+      lastSuccessfulProbeAt: null,
+      state: "auth_unavailable",
+      usedCachedStatus: false,
+    }));
+
+    const result = await enginesRouter.list({});
+
+    expect(result.find((engine: any) => engine.engine === "copilot")).toEqual(
+      expect.objectContaining({
+        error:
+          "GitHub Copilot needs authentication before it can be used here.",
+        isAvailable: false,
+      }),
     );
   });
 
@@ -629,6 +752,58 @@ describe("enginesRouter.models", () => {
     );
   });
 
+  it("returns raw Copilot model ids for the Copilot engine", async () => {
+    const result = await enginesRouter.models({
+      ctx: {
+        db: {},
+        session: { user: { id: "user-1" } },
+      },
+      input: { engine: "copilot" },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        contextWindow: 128_000,
+        defaultReasoningEffort: "medium",
+        displayName: "GPT-4.1",
+        engine: "copilot",
+        inputModalities: ["text"],
+        isConnected: true,
+        isEnabled: true,
+        modelId: "gpt-4.1-preview",
+        provider: null,
+        rawModelId: "gpt-4.1-preview",
+        supportedReasoningEfforts: ["medium"],
+      }),
+    ]);
+  });
+
+  it("does not expose fallback Copilot models when auth is unavailable", async () => {
+    getCopilotEngineStatus.mockImplementationOnce(async () => ({
+      account: null,
+      authReady: false,
+      availableModels: [],
+      cliDetected: true,
+      cliPath: "/Users/test/.local/bin/copilot",
+      cliVersion: "copilot 1.0.24",
+      engine: "copilot",
+      error: "GitHub Copilot needs authentication before it can be used here.",
+      lastSuccessfulProbeAt: null,
+      state: "timeout_no_cache",
+      usedCachedStatus: false,
+    }));
+
+    const result = await enginesRouter.models({
+      ctx: {
+        db: {},
+        session: { user: { id: "user-1" } },
+      },
+      input: { engine: "copilot" },
+    });
+
+    expect(result).toEqual([]);
+  });
+
   it("returns cached Codex models during snapshot-backed mode", async () => {
     getStatus.mockImplementationOnce(async () => ({
       account: {
@@ -756,6 +931,26 @@ describe("enginesRouter.refreshStatus", () => {
     expect(result).toEqual(
       expect.objectContaining({
         engine: "codex",
+        status: expect.objectContaining({
+          cliDetected: true,
+        }),
+      }),
+    );
+  });
+
+  it("forces a fresh Copilot runtime probe", async () => {
+    const result = await enginesRouter.refreshStatus({
+      input: { engine: "copilot" },
+    });
+
+    expect(resetCopilotRuntimeCache).toHaveBeenCalledTimes(1);
+    expect(resetCopilotEngineStatusCache).toHaveBeenCalledTimes(1);
+    expect(getCopilotEngineStatus).toHaveBeenCalledWith({
+      forceRefresh: true,
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        engine: "copilot",
         status: expect.objectContaining({
           cliDetected: true,
         }),

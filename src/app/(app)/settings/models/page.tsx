@@ -10,11 +10,12 @@ import {
   Switch,
 } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useCallback, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { sileo } from "sileo";
 
 import type { AIProvider } from "@/server/db/enums";
+import { CopilotIcon } from "@/components/icons/copilot-icon";
 import { ProviderIcon } from "@/components/icons/provider-icon";
 import {
   ControlledSelectField,
@@ -29,6 +30,10 @@ import {
   getClaudeRuntimeBadgeLabel,
   getClaudeRuntimeBinaryLabel,
   getClaudeRuntimeFallbackMessage,
+  getCopilotRuntimeBadgeColor,
+  getCopilotRuntimeBadgeLabel,
+  getCopilotRuntimeCliLabel,
+  getCopilotRuntimeFallbackMessage,
 } from "@/components/settings/runtime-status";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { PROVIDERS } from "@/lib/ai/providers/registry";
@@ -39,7 +44,7 @@ import {
 import { api } from "@/trpc/react";
 
 type ProviderKey = AIProvider;
-type RuntimeEngineKey = "claude" | "codex";
+type RuntimeEngineKey = "claude" | "codex" | "copilot";
 
 const CAPABILITY_LABEL: Record<string, string> = {
   object_generation: "Structured",
@@ -69,7 +74,7 @@ function RuntimeCard({
   title: string;
   badge: string;
   badgeColor: "success" | "warning" | "danger" | "default";
-  rows: { label: string; value: string }[];
+  rows: { label: string; value: ReactNode }[];
   fallbackMessage: string | null;
   engineError: string | null;
   isRefreshing: boolean;
@@ -133,6 +138,13 @@ export default function ModelsPage() {
   const claudeStatus =
     claudeEngine?.engine === "claude" && "status" in claudeEngine
       ? claudeEngine.status
+      : null;
+  const copilotEngine = enginesQuery.data?.find(
+    (engine) => engine.engine === "copilot",
+  );
+  const copilotStatus =
+    copilotEngine?.engine === "copilot" && "status" in copilotEngine
+      ? copilotEngine.status
       : null;
 
   const enable = api.models.enable.useMutation({
@@ -240,6 +252,7 @@ export default function ModelsPage() {
     useState<RuntimeEngineKey | null>(null);
   const [showCodexAccount, setShowCodexAccount] = useState(false);
   const [showClaudeAccount, setShowClaudeAccount] = useState(false);
+  const [showCopilotAccount, setShowCopilotAccount] = useState(false);
 
   const grouped = models
     ? (Object.entries(
@@ -340,7 +353,9 @@ export default function ModelsPage() {
             description:
               engine === "codex"
                 ? "Codex detection reloaded."
-                : "Claude detection reloaded.",
+                : engine === "claude"
+                  ? "Claude detection reloaded."
+                  : "Copilot detection reloaded.",
           });
         }
       } catch (error) {
@@ -367,10 +382,15 @@ export default function ModelsPage() {
     codexStatus?.availableModels && codexStatus.availableModels.length > 0;
   const hasClaudeModels =
     claudeStatus?.availableModels && claudeStatus.availableModels.length > 0;
+  const hasCopilotModels =
+    copilotStatus?.availableModels && copilotStatus.availableModels.length > 0;
   const isRefreshingCodex = pendingRuntimeRefresh === "codex";
   const isRefreshingClaude = pendingRuntimeRefresh === "claude";
+  const isRefreshingCopilot = pendingRuntimeRefresh === "copilot";
   const codexFallbackMessage = getCodexRuntimeFallbackMessage(codexStatus);
   const claudeFallbackMessage = getClaudeRuntimeFallbackMessage(claudeStatus);
+  const copilotFallbackMessage =
+    getCopilotRuntimeFallbackMessage(copilotStatus);
 
   const codexAccountValue = (() => {
     const raw =
@@ -393,6 +413,25 @@ export default function ModelsPage() {
       ? raw
       : "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
   })();
+  const copilotAccountValue = (() => {
+    const login = copilotStatus?.account?.login ?? null;
+    const host = copilotStatus?.account?.host ?? null;
+    const authType = copilotStatus?.account?.authType ?? null;
+    const raw =
+      (login && host && `${login} @ ${host}`) ||
+      login ||
+      (host && authType && `${authType} @ ${host}`) ||
+      host ||
+      authType;
+
+    if (raw) {
+      return showCopilotAccount
+        ? raw
+        : "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
+    }
+
+    return copilotStatus?.authReady ? "Authenticated" : "Not authenticated";
+  })();
 
   return (
     <SettingsPageWrapper
@@ -410,7 +449,7 @@ export default function ModelsPage() {
           ) : null}
 
           <div className="flex flex-col gap-3">
-            <div className="grid gap-1.5 md:grid-cols-2">
+            <div className="grid gap-1.5">
               <RuntimeCard
                 title="Codex Runtime"
                 badge={getCodexRuntimeBadgeLabel(
@@ -435,7 +474,27 @@ export default function ModelsPage() {
                     label: "Models",
                     value: `${codexStatus?.availableModels.length ?? 0} available`,
                   },
-                  { label: "Account", value: codexAccountValue },
+                  {
+                    label: "Account",
+                    value: (
+                      <div className="flex items-center gap-2">
+                        <span>{codexAccountValue}</span>
+                        {codexAccountValue !== "Not authenticated" &&
+                        codexAccountValue !== "API key" ? (
+                          <Button
+                            className="h-5 min-w-0 px-1.5 text-[10px]"
+                            onPress={() =>
+                              setShowCodexAccount((current) => !current)
+                            }
+                            size="sm"
+                            variant="secondary"
+                          >
+                            {showCodexAccount ? "Hide" : "Show"}
+                          </Button>
+                        ) : null}
+                      </div>
+                    ),
+                  },
                 ]}
                 fallbackMessage={codexFallbackMessage}
                 engineError={
@@ -471,7 +530,26 @@ export default function ModelsPage() {
                     label: "Models",
                     value: `${claudeStatus?.availableModels.length ?? 0} available`,
                   },
-                  { label: "Account", value: claudeAccountValue },
+                  {
+                    label: "Account",
+                    value: (
+                      <div className="flex items-center gap-2">
+                        <span>{claudeAccountValue}</span>
+                        {claudeAccountValue !== "Not authenticated" ? (
+                          <Button
+                            className="h-5 min-w-0 px-1.5 text-[10px]"
+                            onPress={() =>
+                              setShowClaudeAccount((current) => !current)
+                            }
+                            size="sm"
+                            variant="secondary"
+                          >
+                            {showClaudeAccount ? "Hide" : "Show"}
+                          </Button>
+                        ) : null}
+                      </div>
+                    ),
+                  },
                 ]}
                 fallbackMessage={claudeFallbackMessage}
                 engineError={
@@ -484,9 +562,68 @@ export default function ModelsPage() {
                 isRefreshing={isRefreshingClaude}
                 onRefresh={() => void handleRefreshRuntime("claude")}
               />
+              <RuntimeCard
+                title="GitHub Copilot Runtime"
+                badge={getCopilotRuntimeBadgeLabel(
+                  copilotStatus,
+                  copilotEngine?.isAvailable ?? false,
+                )}
+                badgeColor={getCopilotRuntimeBadgeColor(
+                  copilotStatus,
+                  copilotEngine?.isAvailable ?? false,
+                )}
+                rows={[
+                  {
+                    label: "CLI",
+                    value: getCopilotRuntimeCliLabel(copilotStatus),
+                  },
+                  {
+                    label: "Auth",
+                    value: copilotStatus?.authReady ? "Ready" : "Unavailable",
+                  },
+                  {
+                    label: "Models",
+                    value: `${copilotStatus?.availableModels.length ?? 0} available`,
+                  },
+                  {
+                    label: "Account",
+                    value: (
+                      <div className="flex items-center gap-2">
+                        <span>{copilotAccountValue}</span>
+                        {copilotAccountValue !== "Not authenticated" &&
+                        copilotAccountValue !== "Authenticated" ? (
+                          <Button
+                            className="h-5 min-w-0 px-1.5 text-[10px]"
+                            onPress={() =>
+                              setShowCopilotAccount((current) => !current)
+                            }
+                            size="sm"
+                            variant="secondary"
+                          >
+                            {showCopilotAccount ? "Hide" : "Show"}
+                          </Button>
+                        ) : null}
+                      </div>
+                    ),
+                  },
+                ]}
+                fallbackMessage={copilotFallbackMessage}
+                engineError={
+                  !copilotFallbackMessage &&
+                  !copilotEngine?.isAvailable &&
+                  copilotEngine?.error
+                    ? copilotEngine.error
+                    : null
+                }
+                isRefreshing={isRefreshingCopilot}
+                onRefresh={() => void handleRefreshRuntime("copilot")}
+              />
             </div>
 
-            {(hasCodexModels || hasClaudeModels || grouped.length > 0) && (
+            {(hasCodexModels ||
+              hasClaudeModels ||
+              hasCopilotModels ||
+              grouped.length > 0) && (
               <DisclosureGroup
                 allowsMultipleExpanded
                 expandedKeys={expandedProviders}
@@ -573,6 +710,65 @@ export default function ModelsPage() {
                         <Disclosure.Body>
                           <div className="divide-separator/10 divide-y px-3 pb-2">
                             {claudeStatus!.availableModels.map((model) => (
+                              <div
+                                className="flex items-center gap-2.5 py-1.5 pl-9"
+                                key={model.id}
+                              >
+                                <span className="text-foreground shrink-0 text-[13px]">
+                                  {model.displayName}
+                                </span>
+                                {model.isDefault && (
+                                  <Chip color="accent" size="sm" variant="soft">
+                                    Default
+                                  </Chip>
+                                )}
+                                <span className="text-muted min-w-0 flex-1 truncate text-[11px]">
+                                  {model.description}
+                                </span>
+                                <div className="flex shrink-0 gap-1">
+                                  {model.inputModalities.map((modality) => (
+                                    <Chip
+                                      key={modality}
+                                      size="sm"
+                                      variant="soft"
+                                    >
+                                      {modality}
+                                    </Chip>
+                                  ))}
+                                  {model.contextWindow && (
+                                    <Chip size="sm" variant="soft">
+                                      {(model.contextWindow / 1000).toFixed(0)}k
+                                    </Chip>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </Disclosure.Body>
+                      </Disclosure.Content>
+                    </Disclosure>
+                  )}
+
+                  {hasCopilotModels && (
+                    <Disclosure id="runtime-copilot">
+                      <Disclosure.Heading>
+                        <Disclosure.Trigger className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-background/80">
+                            <CopilotIcon className="h-3.5 w-3.5" />
+                          </div>
+                          <span className="text-foreground text-[13px] font-medium">
+                            Copilot Models
+                          </span>
+                          <Chip size="sm" variant="soft">
+                            {copilotStatus!.availableModels.length}
+                          </Chip>
+                          <Disclosure.Indicator className="ml-auto" />
+                        </Disclosure.Trigger>
+                      </Disclosure.Heading>
+                      <Disclosure.Content>
+                        <Disclosure.Body>
+                          <div className="divide-separator/10 divide-y px-3 pb-2">
+                            {copilotStatus!.availableModels.map((model) => (
                               <div
                                 className="flex items-center gap-2.5 py-1.5 pl-9"
                                 key={model.id}
