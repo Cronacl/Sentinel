@@ -72,7 +72,7 @@ describe("appearanceRouter", () => {
     expect(result).toEqual({
       codeFontFamily: '"JetBrains Mono", monospace',
       codeFontSize: 13.5,
-      codeTheme: "catppuccin",
+      codeTheme: "rose-pine",
       themePreference: "dark",
       uiFontFamily: '"Avenir Next", sans-serif',
       uiFontSize: 17,
