@@ -54,8 +54,8 @@ const {
   normalizeCopilotErrorMessage,
   parseCopilotShellLookupOutput,
   resetCopilotRuntimeCache,
-  // @ts-expect-error Bun test-only cache-busting import for module isolation.
   resolveCopilotRuntime,
+  // @ts-expect-error Bun test-only cache-busting import for module isolation.
 } = await import("./copilot-sdk.ts?copilot-sdk-test");
 
 async function writeLaunchableCopilotScript(

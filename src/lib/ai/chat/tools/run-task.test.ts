@@ -94,7 +94,7 @@ describe("run_task", () => {
     await writeFile(
       path.join(defaultDirectory, "package.json"),
       JSON.stringify({
-        packageManager: "npm@10.0.0",
+        packageManager: "bun@1.3.6",
         scripts: {
           test: missingBinary,
         },
