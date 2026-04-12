@@ -303,6 +303,12 @@ export function ChatComposer({
       return;
     }
 
+    const draftDocument = editor.getJSON();
+    editor.commands.clearContent();
+    setPreviewAttachment(null);
+
+    let shouldClearComposer = true;
+
     try {
       if (isBusy) {
         if (followUpBehavior === "queue") {
@@ -314,14 +320,17 @@ export function ChatComposer({
         await onSend(messagePayload);
       }
     } catch (error) {
-      if (!shouldClearComposerAfterSendError(error)) {
+      shouldClearComposer = shouldClearComposerAfterSendError(error);
+      if (!shouldClearComposer) {
+        editor.commands.setContent(draftDocument);
+        editor.commands.focus("end");
         return;
       }
     }
 
-    editor.commands.clearContent();
-    setPreviewAttachment(null);
-    clearAttachments();
+    if (shouldClearComposer) {
+      clearAttachments();
+    }
   }, [
     attachments,
     clearAttachments,

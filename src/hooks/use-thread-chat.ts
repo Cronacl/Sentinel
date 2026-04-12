@@ -24,6 +24,7 @@ import {
   getThreadMessageRevision,
   mergeThreadMessageMetadata,
   normalizeThreadUIMessages,
+  type ThreadMessageMetadata,
   type ThreadUIMessage,
 } from "@/lib/ai/messages/types";
 import type { ThreadMode, ThreadPlanAnswer } from "@/lib/plan";
@@ -113,6 +114,7 @@ type ThreadSessionState = {
   lastAppliedRevision: number;
   lastSyncedAt: number | null;
   messages: ThreadUIMessage[];
+  optimisticQueuedFollowUpIds?: string[];
   queuedFollowUps: QueuedFollowUpSummary[];
   threadId: string;
   threadTitle: string;
@@ -124,6 +126,7 @@ type SessionStore = {
     listener: (snapshot: ThreadSessionSnapshot) => void,
   ): () => void;
   applyLocalMessages(messages: ThreadUIMessage[]): void;
+  replaceLocalQueuedFollowUps(queuedFollowUps: QueuedFollowUpSummary[]): void;
   applyLocalQueuedFollowUp(
     followUp: QueuedFollowUpSummary,
     position: "front" | "tail",
@@ -135,6 +138,7 @@ type SessionStore = {
   getState(): ThreadSessionState;
   hydrate(snapshot: ThreadSessionSnapshot): void;
   markClientTiming(phase: ClientTimingPhase): void;
+  removeLocalMessage(messageId: string): void;
   removeLocalQueuedFollowUp(followUpId: string): void;
   refreshSnapshot(options?: { allowMissing?: boolean }): Promise<void>;
   setRequestError(errorMessage: string): void;
@@ -253,6 +257,11 @@ function areThreadSessionStatesEqual(
       current.lastAppliedRevision === next.lastAppliedRevision &&
       current.lastSyncedAt === next.lastSyncedAt &&
       areMessagesEqual(current.messages, next.messages) &&
+      (current.optimisticQueuedFollowUpIds?.length ?? 0) ===
+        (next.optimisticQueuedFollowUpIds?.length ?? 0) &&
+      (current.optimisticQueuedFollowUpIds ?? []).every(
+        (id, index) => id === (next.optimisticQueuedFollowUpIds ?? [])[index],
+      ) &&
       areQueuedFollowUpsEqual(current.queuedFollowUps, next.queuedFollowUps) &&
       current.threadId === next.threadId &&
       current.threadTitle === next.threadTitle &&
@@ -334,6 +343,79 @@ function insertQueuedFollowUp(
   return position === "front" ? [followUp, ...deduped] : [...deduped, followUp];
 }
 
+function mergeQueuedFollowUpsFromSnapshot(
+  current: ThreadSessionState,
+  snapshotQueuedFollowUps: QueuedFollowUpSummary[],
+) {
+  const optimisticQueuedFollowUpIds = current.optimisticQueuedFollowUpIds ?? [];
+
+  if (
+    optimisticQueuedFollowUpIds.length === 0 ||
+    current.queuedFollowUps.length === 0
+  ) {
+    return {
+      optimisticQueuedFollowUpIds: [],
+      queuedFollowUps: snapshotQueuedFollowUps,
+    };
+  }
+
+  const snapshotById = new Map(
+    snapshotQueuedFollowUps.map((followUp) => [followUp.id, followUp] as const),
+  );
+  const currentById = new Map(
+    current.queuedFollowUps.map((followUp) => [followUp.id, followUp] as const),
+  );
+  const optimisticQueuedFollowUps = optimisticQueuedFollowUpIds
+    .filter((followUpId) => !snapshotById.has(followUpId))
+    .map((followUpId) => currentById.get(followUpId))
+    .filter((followUp): followUp is QueuedFollowUpSummary => followUp != null);
+
+  return {
+    optimisticQueuedFollowUpIds: optimisticQueuedFollowUps.map(
+      (followUp) => followUp.id,
+    ),
+    queuedFollowUps: [...snapshotQueuedFollowUps, ...optimisticQueuedFollowUps],
+  };
+}
+
+function insertOptimisticQueuedFollowUpId(
+  currentIds: string[],
+  followUpId: string,
+) {
+  if (currentIds.includes(followUpId)) {
+    return currentIds;
+  }
+
+  return [...currentIds, followUpId];
+}
+
+function removeOptimisticQueuedFollowUpId(
+  currentIds: string[],
+  followUpId: string,
+) {
+  return currentIds.filter((id) => id !== followUpId);
+}
+
+function replaceOptimisticQueuedFollowUpIds(
+  currentIds: string[],
+  queuedFollowUps: QueuedFollowUpSummary[],
+) {
+  const queuedIds = new Set(queuedFollowUps.map((followUp) => followUp.id));
+  return currentIds.filter((id) => queuedIds.has(id));
+}
+
+export function moveQueuedFollowUpToFront(
+  queuedFollowUps: QueuedFollowUpSummary[],
+  followUpId: string,
+) {
+  const target = queuedFollowUps.find((followUp) => followUp.id === followUpId);
+  if (!target) {
+    return queuedFollowUps;
+  }
+
+  return insertQueuedFollowUp(queuedFollowUps, target, "front");
+}
+
 function normalizeSnapshot(
   snapshot: ThreadSessionSnapshot,
 ): ThreadSessionSnapshot {
@@ -369,6 +451,7 @@ function createInitialState(
       : 0,
     lastSyncedAt: normalizedSnapshot ? Date.now() : null,
     messages: normalizedSnapshot?.messages ?? [],
+    optimisticQueuedFollowUpIds: [],
     queuedFollowUps: normalizedSnapshot?.queuedFollowUps ?? [],
     threadId,
     threadTitle: normalizedSnapshot?.threadTitle ?? "New thread",
@@ -431,6 +514,11 @@ export function mergeThreadSessionStateFromSnapshot(
   streamingConnectionState: ThreadConnectionState,
 ): ThreadSessionState {
   const normalizedSnapshot = normalizeSnapshot(snapshot);
+  const queuedMerge = mergeQueuedFollowUpsFromSnapshot(
+    current,
+    normalizedSnapshot.queuedFollowUps,
+  );
+  const nextQueuedFollowUps = queuedMerge.queuedFollowUps;
   const nextRevision = getMaxMessageRevision(normalizedSnapshot.messages);
   const preserveCurrentMessages =
     current.activeRunId != null &&
@@ -456,10 +544,7 @@ export function mergeThreadSessionStateFromSnapshot(
     current.errorMessage == null &&
     current.lastAppliedRevision === nextLastAppliedRevision &&
     areMessagesEqual(current.messages, nextMessages) &&
-    areQueuedFollowUpsEqual(
-      current.queuedFollowUps,
-      normalizedSnapshot.queuedFollowUps,
-    ) &&
+    areQueuedFollowUpsEqual(current.queuedFollowUps, nextQueuedFollowUps) &&
     current.threadTitle === normalizedSnapshot.threadTitle &&
     current.threadStatus === normalizedSnapshot.threadStatus
   ) {
@@ -475,7 +560,8 @@ export function mergeThreadSessionStateFromSnapshot(
     lastAppliedRevision: nextLastAppliedRevision,
     lastSyncedAt: Date.now(),
     messages: nextMessages,
-    queuedFollowUps: normalizedSnapshot.queuedFollowUps,
+    optimisticQueuedFollowUpIds: queuedMerge.optimisticQueuedFollowUpIds,
+    queuedFollowUps: nextQueuedFollowUps,
     threadTitle: normalizedSnapshot.threadTitle,
     threadStatus: normalizedSnapshot.threadStatus,
   };
@@ -824,11 +910,20 @@ function createSessionStore(
         });
         return;
       case "queue.snapshot":
-        setState((current) => ({
-          ...current,
-          lastSyncedAt: Date.now(),
-          queuedFollowUps: normalizeQueuedFollowUps(event.queuedFollowUps),
-        }));
+        setState((current) => {
+          const queuedMerge = mergeQueuedFollowUpsFromSnapshot(
+            current,
+            normalizeQueuedFollowUps(event.queuedFollowUps),
+          );
+
+          return {
+            ...current,
+            lastSyncedAt: Date.now(),
+            optimisticQueuedFollowUpIds:
+              queuedMerge.optimisticQueuedFollowUpIds,
+            queuedFollowUps: queuedMerge.queuedFollowUps,
+          };
+        });
         return;
       case "run.cancelled":
       case "run.failed":
@@ -968,16 +1063,35 @@ function createSessionStore(
     applyLocalMessages(messages) {
       setState((current) => ({
         ...current,
+        lastSyncedAt: Date.now(),
         messages: normalizeThreadUIMessages(messages),
       }));
     },
-    applyLocalQueuedFollowUp(followUp, position) {
+    replaceLocalQueuedFollowUps(queuedFollowUps) {
+      const normalizedQueuedFollowUps =
+        normalizeQueuedFollowUps(queuedFollowUps);
       setState((current) => ({
         ...current,
         lastSyncedAt: Date.now(),
+        optimisticQueuedFollowUpIds: replaceOptimisticQueuedFollowUpIds(
+          current.optimisticQueuedFollowUpIds ?? [],
+          normalizedQueuedFollowUps,
+        ),
+        queuedFollowUps: normalizedQueuedFollowUps,
+      }));
+    },
+    applyLocalQueuedFollowUp(followUp, position) {
+      const normalizedFollowUp = normalizeQueuedFollowUps([followUp])[0]!;
+      setState((current) => ({
+        ...current,
+        lastSyncedAt: Date.now(),
+        optimisticQueuedFollowUpIds: insertOptimisticQueuedFollowUpId(
+          current.optimisticQueuedFollowUpIds ?? [],
+          normalizedFollowUp.id,
+        ),
         queuedFollowUps: insertQueuedFollowUp(
           current.queuedFollowUps,
-          normalizeQueuedFollowUps([followUp])[0]!,
+          normalizedFollowUp,
           position,
         ),
       }));
@@ -1021,10 +1135,23 @@ function createSessionStore(
       ensureConnected();
     },
     markClientTiming,
+    removeLocalMessage(messageId) {
+      setState((current) => ({
+        ...current,
+        lastSyncedAt: Date.now(),
+        messages: current.messages.filter(
+          (message) => message.id !== messageId,
+        ),
+      }));
+    },
     removeLocalQueuedFollowUp(followUpId) {
       setState((current) => ({
         ...current,
         lastSyncedAt: Date.now(),
+        optimisticQueuedFollowUpIds: removeOptimisticQueuedFollowUpId(
+          current.optimisticQueuedFollowUpIds ?? [],
+          followUpId,
+        ),
         queuedFollowUps: current.queuedFollowUps.filter(
           (followUp) => followUp.id !== followUpId,
         ),
@@ -1083,9 +1210,11 @@ function createUserThreadMessage({
   composerContext,
   files,
   id,
+  metadata,
   text,
 }: Pick<SendThreadMessageInput, "composerContext" | "files" | "text"> & {
   id?: string;
+  metadata?: ThreadMessageMetadata;
 }): ThreadUIMessage {
   const fileParts = files ?? [];
   const hasContext =
@@ -1096,6 +1225,7 @@ function createUserThreadMessage({
     id: id ?? crypto.randomUUID(),
     metadata: {
       ...(hasContext ? { composerContext } : {}),
+      ...(metadata ?? {}),
     },
     parts: [...fileParts, ...(text ? [{ text, type: "text" as const }] : [])],
     role: "user",
@@ -1297,25 +1427,38 @@ export function useThreadChat({
         composerContext,
         files,
         id: crypto.randomUUID(),
+        metadata: {
+          status: "pending",
+          statusLabel: "Sending...",
+        },
         text,
       });
-      return runAction(
-        {
-          ...(draftRepoState ? { draftRepoState } : {}),
-          engine,
-          id: threadId,
-          message,
-          modelId,
-          ...(reasoningEffort ? { reasoningEffort } : {}),
-          ...(threadMode ? { threadMode } : {}),
-          trigger: "submit-user-message",
-          workspaceId: workspaceIdRef.current,
-        },
-        undefined,
-        { committedMessageId: message.id },
-      );
+      const nextMessages = upsertMessage(store.getState().messages, message);
+
+      try {
+        return await runAction(
+          {
+            ...(draftRepoState ? { draftRepoState } : {}),
+            engine,
+            id: threadId,
+            message,
+            modelId,
+            ...(reasoningEffort ? { reasoningEffort } : {}),
+            ...(threadMode ? { threadMode } : {}),
+            trigger: "submit-user-message",
+            workspaceId: workspaceIdRef.current,
+          },
+          nextMessages,
+          { committedMessageId: message.id },
+        );
+      } catch (error) {
+        if (!isCommittedThreadActionError(error)) {
+          store.removeLocalMessage(message.id);
+        }
+        throw error;
+      }
     },
-    [runAction, threadId],
+    [runAction, store, threadId],
   );
 
   const editMessage = useCallback(
@@ -1332,24 +1475,38 @@ export function useThreadChat({
         composerContext,
         files,
         id: crypto.randomUUID(),
+        metadata: {
+          editedFromMessageId: targetMessageId,
+          status: "pending",
+          statusLabel: "Sending...",
+        },
         text,
       });
-      await runAction(
-        {
-          engine,
-          id: threadId,
-          message,
-          messageId: targetMessageId,
-          modelId,
-          ...(reasoningEffort ? { reasoningEffort } : {}),
-          trigger: "edit-user-message",
-          workspaceId: workspaceIdRef.current,
-        },
-        undefined,
-        { committedMessageId: message.id },
-      );
+      const nextMessages = upsertMessage(store.getState().messages, message);
+
+      try {
+        await runAction(
+          {
+            engine,
+            id: threadId,
+            message,
+            messageId: targetMessageId,
+            modelId,
+            ...(reasoningEffort ? { reasoningEffort } : {}),
+            trigger: "edit-user-message",
+            workspaceId: workspaceIdRef.current,
+          },
+          nextMessages,
+          { committedMessageId: message.id },
+        );
+      } catch (error) {
+        if (!isCommittedThreadActionError(error)) {
+          store.removeLocalMessage(message.id);
+        }
+        throw error;
+      }
     },
-    [runAction, threadId],
+    [runAction, store, threadId],
   );
 
   const queueFollowUp = useCallback(
@@ -1531,6 +1688,7 @@ export function useThreadChat({
     editMessage,
     errorMessage: state.errorMessage,
     messages: state.messages,
+    replaceQueuedFollowUpsLocally: store.replaceLocalQueuedFollowUps,
     queueFollowUp,
     queuedFollowUps: state.queuedFollowUps,
     regenerateMessage,

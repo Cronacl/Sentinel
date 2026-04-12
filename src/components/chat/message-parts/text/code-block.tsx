@@ -66,6 +66,14 @@ export function CodeBlock({
   const languageIcon = actualLanguage
     ? (languageToVSCodeIcon[actualLanguage] ?? "vscode-icons:default-file")
     : null;
+  const codeSurfaceStyle = useMemo(
+    () =>
+      ({
+        backgroundColor: "var(--syntax-background)",
+        color: "var(--syntax-foreground)",
+      }) as const,
+    [],
+  );
 
   useEffect(() => {
     setIsCollapsed(isCollapsible);
@@ -186,7 +194,7 @@ export function CodeBlock({
 
       <div className="sentinel-shiki">
         {shouldHighlight && hasBeenVisible && syntaxLines.length > 0 ? (
-          <div className="overflow-x-auto px-2 py-2">
+          <div className="overflow-x-auto px-2 py-2" style={codeSurfaceStyle}>
             <div className="font-mono text-[11px] leading-[18px]">
               {displayedCode.split("\n").map((line, index) => (
                 <div className="whitespace-pre" key={`${index}-${line}`}>
@@ -205,7 +213,10 @@ export function CodeBlock({
             </div>
           </div>
         ) : (
-          <pre>
+          <pre
+            className="m-0 overflow-x-auto px-2 py-2 font-mono text-[11px] leading-[18px]"
+            style={codeSurfaceStyle}
+          >
             <code>{displayedCode}</code>
           </pre>
         )}

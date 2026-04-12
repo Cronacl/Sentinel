@@ -3,6 +3,7 @@ import type { ThemeRegistration } from "shiki";
 
 import {
   CODE_THEME_VALUES,
+  getCodeThemePalette,
   getCodeThemeThemeSource,
   getSentinelCodeThemeRegistrationName,
   type CodeThemeName,
@@ -31,8 +32,16 @@ export function getSentinelCodeThemeRegistration(
   }
 
   const sourceTheme = getCodeThemeThemeSource(codeTheme, resolvedTheme);
+  const palette = getCodeThemePalette(codeTheme, resolvedTheme);
   const registration: ThemeRegistration = {
     ...sourceTheme,
+    bg: palette.background,
+    fg: palette.foreground,
+    colors: {
+      ...(sourceTheme.colors ?? {}),
+      "editor.background": palette.background,
+      "editor.foreground": palette.foreground,
+    },
     name: registrationName,
   };
 
