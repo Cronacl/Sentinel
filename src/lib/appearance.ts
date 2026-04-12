@@ -6,8 +6,20 @@ import everforestDarkTheme from "@shikijs/themes/everforest-dark";
 import everforestLightTheme from "@shikijs/themes/everforest-light";
 import githubDarkTheme from "@shikijs/themes/github-dark";
 import githubLightTheme from "@shikijs/themes/github-light";
+import gruvboxDarkTheme from "@shikijs/themes/gruvbox-dark-medium";
+import gruvboxLightTheme from "@shikijs/themes/gruvbox-light-medium";
+import kanagawaWaveTheme from "@shikijs/themes/kanagawa-wave";
+import kanagawaLotusTheme from "@shikijs/themes/kanagawa-lotus";
+import materialDarkTheme from "@shikijs/themes/material-theme-ocean";
+import materialLightTheme from "@shikijs/themes/material-theme-lighter";
+import minDarkTheme from "@shikijs/themes/min-dark";
+import minLightTheme from "@shikijs/themes/min-light";
 import nightOwlTheme from "@shikijs/themes/night-owl";
 import nightOwlLightTheme from "@shikijs/themes/night-owl-light";
+import oneDarkTheme from "@shikijs/themes/one-dark-pro";
+import oneLightTheme from "@shikijs/themes/one-light";
+import rosePineDarkTheme from "@shikijs/themes/rose-pine";
+import rosePineLightTheme from "@shikijs/themes/rose-pine-dawn";
 import solarizedDarkTheme from "@shikijs/themes/solarized-dark";
 import solarizedLightTheme from "@shikijs/themes/solarized-light";
 import vitesseDarkTheme from "@shikijs/themes/vitesse-dark";
@@ -20,7 +32,13 @@ export const CODE_THEME_VALUES = [
   "ayu",
   "catppuccin",
   "everforest",
+  "gruvbox",
+  "kanagawa",
+  "material",
+  "min",
   "night-owl",
+  "one",
+  "rose-pine",
   "solarized",
   "vitesse",
 ] as const;
@@ -163,6 +181,57 @@ export const CODE_THEME_FAMILIES: Record<CodeThemeName, CodeThemeFamily> = {
       theme: githubLightTheme as ShikiThemeSource,
     },
   },
+  gruvbox: {
+    dark: {
+      id: "gruvbox-dark-medium",
+      theme: gruvboxDarkTheme as ShikiThemeSource,
+    },
+    description:
+      "Retro-groove warm tones inspired by classic terminal palettes.",
+    label: "Gruvbox",
+    light: {
+      id: "gruvbox-light-medium",
+      theme: gruvboxLightTheme as ShikiThemeSource,
+    },
+  },
+  kanagawa: {
+    dark: {
+      id: "kanagawa-wave",
+      theme: kanagawaWaveTheme as ShikiThemeSource,
+    },
+    description:
+      "Inspired by Katsushika Hokusai's iconic wave painting palette.",
+    label: "Kanagawa",
+    light: {
+      id: "kanagawa-lotus",
+      theme: kanagawaLotusTheme as ShikiThemeSource,
+    },
+  },
+  material: {
+    dark: {
+      id: "material-theme-ocean",
+      theme: materialDarkTheme as ShikiThemeSource,
+    },
+    description:
+      "Material Design–inspired ocean blues and softer lighter tones.",
+    label: "Material",
+    light: {
+      id: "material-theme-lighter",
+      theme: materialLightTheme as ShikiThemeSource,
+    },
+  },
+  min: {
+    dark: {
+      id: "min-dark",
+      theme: minDarkTheme as ShikiThemeSource,
+    },
+    description: "Stripped-back minimal syntax with quiet, restrained colors.",
+    label: "Min",
+    light: {
+      id: "min-light",
+      theme: minLightTheme as ShikiThemeSource,
+    },
+  },
   "night-owl": {
     dark: {
       id: "night-owl",
@@ -174,6 +243,30 @@ export const CODE_THEME_FAMILIES: Record<CodeThemeName, CodeThemeFamily> = {
     light: {
       id: "night-owl-light",
       theme: nightOwlLightTheme as ShikiThemeSource,
+    },
+  },
+  one: {
+    dark: {
+      id: "one-dark-pro",
+      theme: oneDarkTheme as ShikiThemeSource,
+    },
+    description: "Atom's classic One Dark and One Light color families.",
+    label: "One",
+    light: {
+      id: "one-light",
+      theme: oneLightTheme as ShikiThemeSource,
+    },
+  },
+  "rose-pine": {
+    dark: {
+      id: "rose-pine",
+      theme: rosePineDarkTheme as ShikiThemeSource,
+    },
+    description: "Soho vibes with muted pastels for all-day readability.",
+    label: "Rosé Pine",
+    light: {
+      id: "rose-pine-dawn",
+      theme: rosePineLightTheme as ShikiThemeSource,
     },
   },
   solarized: {
@@ -219,12 +312,18 @@ const LEGACY_CODE_THEME_ALIASES: Record<string, CodeThemeName> = {
   catppuccin: "catppuccin",
   cursor: "vitesse",
   default: "github",
-  dracula: "catppuccin",
+  dracula: "rose-pine",
   everforest: "everforest",
   github: "github",
+  gruvbox: "gruvbox",
+  kanagawa: "kanagawa",
+  material: "material",
+  min: "min",
   "night-owl": "night-owl",
-  nord: "everforest",
-  "rose-pine": "catppuccin",
+  nord: "gruvbox",
+  one: "one",
+  "one-dark": "one",
+  "rose-pine": "rose-pine",
   solarized: "solarized",
   vercel: "vitesse",
   vitesse: "vitesse",
