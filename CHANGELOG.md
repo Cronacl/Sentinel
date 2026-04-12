@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.32](https://github.com/Cronacl/Sentinel/compare/v0.0.31...v0.0.32) (2026-04-12)
+
+
+### Features
+
+* add new code themes and update theme mappings ([cb80597](https://github.com/Cronacl/Sentinel/commit/cb8059762a21b18716ee38fb8862eb2993d351ed))
+* enhance collaboration mode handling in Codex ([c2574d0](https://github.com/Cronacl/Sentinel/commit/c2574d004d543abcc6cb534e12ac1dc9fcc06564))
+* enhance Copilot SDK integration and add utility functions ([e71ebf9](https://github.com/Cronacl/Sentinel/commit/e71ebf9e9ef9d192fc517b6f263810d4d4129f09))
+
+
+### Bug Fixes
+
+* update code theme in appearance tests ([4df73a0](https://github.com/Cronacl/Sentinel/commit/4df73a07127b1aa85a88866fa21cbf0ae93c37dc))
+* update package manager in tests and adjust import error handling ([943919a](https://github.com/Cronacl/Sentinel/commit/943919abbed4baaa7f6bb341e74accfaa4dd06c5))
+
 ## [0.0.31](https://github.com/Cronacl/Sentinel/compare/v0.0.30...v0.0.31) (2026-04-11)
 
 
