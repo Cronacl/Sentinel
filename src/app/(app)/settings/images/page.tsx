@@ -186,7 +186,7 @@ function ProviderRow({ provider }: { provider: ImageProviderRow }) {
         </Button>
       </div>
 
-      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,13rem)_minmax(0,13rem)_minmax(0,1fr)]">
+      <div className="mt-4 flex flex-col gap-3">
         <div className="border-separator/20 bg-background/60 rounded-xl border px-3 py-2.5">
           <Switch
             className="justify-between gap-3"

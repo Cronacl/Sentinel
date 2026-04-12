@@ -90,6 +90,11 @@ type CodeThemeFamily = {
 
 type CodeThemeDefinition = Record<ResolvedTheme, CodeThemePalette>;
 
+const FIXED_CODE_THEME_BACKGROUNDS: Record<ResolvedTheme, string> = {
+  dark: "#0d0d0d",
+  light: "#f5f5f5",
+};
+
 export const DEFAULT_THEME_PREFERENCE: ThemePreference = "system";
 export const THEME_PREFERENCE_STORAGE_KEY = "sentinel.theme-preference";
 export const APPEARANCE_STORAGE_KEY = "sentinel.appearance";
@@ -227,7 +232,7 @@ const LEGACY_CODE_THEME_ALIASES: Record<string, CodeThemeName> = {
 
 const DEFAULT_CODE_THEME_PALETTES: Record<ResolvedTheme, CodeThemePalette> = {
   dark: {
-    background: "#24292e",
+    background: FIXED_CODE_THEME_BACKGROUNDS.dark,
     foreground: "#e1e4e8",
     "ansi-black": "#586069",
     "ansi-red": "#ea4a5a",
@@ -259,7 +264,7 @@ const DEFAULT_CODE_THEME_PALETTES: Record<ResolvedTheme, CodeThemePalette> = {
     "token-string-expression": "#79b8ff",
   },
   light: {
-    background: "#fff",
+    background: FIXED_CODE_THEME_BACKGROUNDS.light,
     foreground: "#24292e",
     "ansi-black": "#24292e",
     "ansi-red": "#d73a49",
@@ -427,10 +432,9 @@ function extractCodeThemePalette(
     pickThemeColor(theme, "editor.foreground") ??
     pickThemeColor(theme, "foreground") ??
     fallback.foreground;
-  const background =
-    pickThemeColor(theme, "editor.background") ??
-    pickThemeColor(theme, "background") ??
-    fallback.background;
+  // Keep token colors theme-specific, but pin the code block surface to the
+  // app's neutral light/dark background instead of each theme's editor tint.
+  const background = FIXED_CODE_THEME_BACKGROUNDS[resolvedTheme];
 
   const ansiBlack =
     pickThemeColor(theme, "terminal.ansiBlack") ?? fallback["ansi-black"];

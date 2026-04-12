@@ -12,6 +12,7 @@ import {
   isCommittedThreadActionError,
   mergeThreadSessionStateFromSnapshot,
   mergeThreadSessionStateWithError,
+  moveQueuedFollowUpToFront,
   readThreadChatErrorMessage,
 } from "./use-thread-chat";
 
@@ -125,6 +126,77 @@ describe("mergeThreadSessionStateFromSnapshot", () => {
     expect(result.connectionState).toBe("idle");
     expect(result.lastAppliedRevision).toBe(5);
     expect(result.errorMessage).toBeNull();
+  });
+
+  it("preserves newer local queued follow-ups while queue requests are still pending", () => {
+    const queuedOld = createQueuedFollowUp("queued-old", "old queue");
+    const queuedNew = createQueuedFollowUp("queued-new", "new queue");
+    const current = {
+      activeRunId: "run-1",
+      chatEngine: "sentinel" as const,
+      composerState: { pendingActionCount: 2 },
+      connectionState: "connected" as const,
+      errorMessage: null,
+      lastAppliedRevision: 5,
+      lastSyncedAt: null,
+      messages: [createMessage("assistant-1", "working", 5)],
+      optimisticQueuedFollowUpIds: ["queued-new"],
+      queuedFollowUps: [queuedOld, queuedNew],
+      threadId: "thread-1",
+      threadTitle: "Thread title",
+      threadStatus: "streaming" as const,
+    };
+    const snapshot = createSnapshot({
+      activeRunId: "run-1",
+      messages: current.messages,
+      queuedFollowUps: [queuedOld],
+      threadId: "thread-1",
+      threadStatus: "streaming",
+    });
+
+    const result = mergeThreadSessionStateFromSnapshot(
+      current,
+      snapshot,
+      "connected",
+    );
+
+    expect(result.queuedFollowUps).toEqual([queuedOld, queuedNew]);
+  });
+
+  it("drops stale server-owned queued follow-ups while preserving optimistic ones", () => {
+    const staleServerFollowUp = createQueuedFollowUp("queued-stale", "stale");
+    const optimisticFollowUp = createQueuedFollowUp("queued-new", "new queue");
+    const current = {
+      activeRunId: "run-1",
+      chatEngine: "sentinel" as const,
+      composerState: { pendingActionCount: 1 },
+      connectionState: "connected" as const,
+      errorMessage: null,
+      lastAppliedRevision: 5,
+      lastSyncedAt: null,
+      messages: [createMessage("assistant-1", "working", 5)],
+      optimisticQueuedFollowUpIds: ["queued-new"],
+      queuedFollowUps: [staleServerFollowUp, optimisticFollowUp],
+      threadId: "thread-1",
+      threadTitle: "Thread title",
+      threadStatus: "streaming" as const,
+    };
+    const snapshot = createSnapshot({
+      activeRunId: "run-1",
+      messages: current.messages,
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadStatus: "streaming",
+    });
+
+    const result = mergeThreadSessionStateFromSnapshot(
+      current,
+      snapshot,
+      "connected",
+    );
+
+    expect(result.queuedFollowUps).toEqual([optimisticFollowUp]);
+    expect(result.optimisticQueuedFollowUpIds).toEqual(["queued-new"]);
   });
 
   it("replaces messages when the snapshot is newer", () => {
@@ -403,6 +475,30 @@ describe("didSnapshotCommitMessage", () => {
 
     expect(didSnapshotCommitMessage(snapshot, "user-1")).toBe(false);
     expect(didSnapshotCommitMessage(null, "user-1")).toBe(false);
+  });
+});
+
+describe("moveQueuedFollowUpToFront", () => {
+  it("moves the requested follow-up to the front while preserving the rest", () => {
+    const queuedFollowUps = [
+      createQueuedFollowUp("queued-1", "first"),
+      createQueuedFollowUp("queued-2", "second"),
+      createQueuedFollowUp("queued-3", "third"),
+    ];
+
+    expect(
+      moveQueuedFollowUpToFront(queuedFollowUps, "queued-3").map(
+        (followUp) => followUp.id,
+      ),
+    ).toEqual(["queued-3", "queued-1", "queued-2"]);
+  });
+
+  it("returns the existing queue when the follow-up is missing", () => {
+    const queuedFollowUps = [createQueuedFollowUp("queued-1", "first")];
+
+    expect(moveQueuedFollowUpToFront(queuedFollowUps, "missing")).toBe(
+      queuedFollowUps,
+    );
   });
 });
 

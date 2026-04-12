@@ -24,7 +24,9 @@ describe("syntax theme registration", () => {
     const registration = getSentinelCodeThemeRegistration("night-owl", "dark");
 
     expect(registration.name).toBe("sentinel-code-night-owl-dark");
-    expect(registration.colors?.["editor.background"]).toBe("#011627");
+    expect(registration.bg).toBe("#0d0d0d");
+    expect(registration.fg).toBe("#d6deeb");
+    expect(registration.colors?.["editor.background"]).toBe("#0d0d0d");
     expect(registration.colors?.["editor.foreground"]).toBe("#d6deeb");
   });
 });

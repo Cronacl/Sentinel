@@ -33,6 +33,7 @@ import { sileo } from "sileo";
 import { PageWrapper } from "@/components/shell";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import { isCommittedThreadActionError } from "@/hooks/use-thread-chat";
+import { moveQueuedFollowUpToFront } from "@/hooks/use-thread-chat";
 import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
@@ -327,6 +328,7 @@ export function ThreadScreen({
     messages,
     queueFollowUp,
     queuedFollowUps: liveQueuedFollowUps,
+    replaceQueuedFollowUpsLocally,
     regenerateMessage,
     retryMessage,
     sendMessage,
@@ -1221,20 +1223,40 @@ export function ThreadScreen({
               onCancelEdit={handleCancelEdit}
               onQueueFollowUp={handleQueueFollowUp}
               onRemoveQueuedFollowUp={async (id) => {
-                await removeQueuedFollowUp.mutateAsync({
-                  followUpId: id,
-                  threadId: thread.id,
-                });
+                const previousQueue = liveQueuedFollowUps;
+                replaceQueuedFollowUpsLocally(
+                  previousQueue.filter((followUp) => followUp.id !== id),
+                );
+
+                try {
+                  await removeQueuedFollowUp.mutateAsync({
+                    followUpId: id,
+                    threadId: thread.id,
+                  });
+                } catch (error) {
+                  replaceQueuedFollowUpsLocally(previousQueue);
+                  throw error;
+                }
               }}
               onSelectionChange={handleSelectionChange}
               onSend={editingMessage ? handleEditSubmit : handleSend}
               onStop={stopStream}
               onSteerFollowUp={handleSteerFollowUp}
               onSteerQueuedFollowUp={async (id) => {
-                await steerQueuedFollowUp.mutateAsync({
-                  followUpId: id,
-                  threadId: thread.id,
-                });
+                const previousQueue = liveQueuedFollowUps;
+                replaceQueuedFollowUpsLocally(
+                  moveQueuedFollowUpToFront(previousQueue, id),
+                );
+
+                try {
+                  await steerQueuedFollowUp.mutateAsync({
+                    followUpId: id,
+                    threadId: thread.id,
+                  });
+                } catch (error) {
+                  replaceQueuedFollowUpsLocally(previousQueue);
+                  throw error;
+                }
               }}
               promptSeed={editingPromptSeed}
               promptSeedKey={editingMessage?.id ?? "__composer-empty__"}

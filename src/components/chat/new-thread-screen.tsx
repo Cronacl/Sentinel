@@ -18,6 +18,7 @@ import { PageWrapper } from "@/components/shell";
 import { useOutsideClick } from "@/hooks/use-outside-click";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import { isCommittedThreadActionError } from "@/hooks/use-thread-chat";
+import { moveQueuedFollowUpToFront } from "@/hooks/use-thread-chat";
 import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
@@ -267,6 +268,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     messages,
     queueFollowUp,
     queuedFollowUps,
+    replaceQueuedFollowUpsLocally,
     sendMessage,
     status,
     steerFollowUp,
@@ -305,21 +307,51 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   });
   const handleRemoveQueuedFollowUp = useCallback(
     async (id: string) => {
-      await removeQueuedFollowUp.mutateAsync({
-        followUpId: id,
-        threadId: draftThreadId,
-      });
+      const previousQueue = queuedFollowUps;
+      replaceQueuedFollowUpsLocally(
+        previousQueue.filter((followUp) => followUp.id !== id),
+      );
+
+      try {
+        await removeQueuedFollowUp.mutateAsync({
+          followUpId: id,
+          threadId: draftThreadId,
+        });
+      } catch (error) {
+        replaceQueuedFollowUpsLocally(previousQueue);
+        throw error;
+      }
     },
-    [draftThreadId, removeQueuedFollowUp],
+    [
+      draftThreadId,
+      queuedFollowUps,
+      removeQueuedFollowUp,
+      replaceQueuedFollowUpsLocally,
+    ],
   );
   const handleSteerQueuedFollowUp = useCallback(
     async (id: string) => {
-      await steerQueuedFollowUp.mutateAsync({
-        followUpId: id,
-        threadId: draftThreadId,
-      });
+      const previousQueue = queuedFollowUps;
+      replaceQueuedFollowUpsLocally(
+        moveQueuedFollowUpToFront(previousQueue, id),
+      );
+
+      try {
+        await steerQueuedFollowUp.mutateAsync({
+          followUpId: id,
+          threadId: draftThreadId,
+        });
+      } catch (error) {
+        replaceQueuedFollowUpsLocally(previousQueue);
+        throw error;
+      }
     },
-    [draftThreadId, steerQueuedFollowUp],
+    [
+      draftThreadId,
+      queuedFollowUps,
+      replaceQueuedFollowUpsLocally,
+      steerQueuedFollowUp,
+    ],
   );
 
   useEffect(() => {
