@@ -36,7 +36,10 @@ import type { ChatEngine } from "@/server/db/enums";
 import { api } from "@/trpc/react";
 import type { FileUIPart } from "ai";
 
-import { ChatComposer } from "./chat-composer";
+import {
+  ChatComposer,
+  type ChatComposerStartPlanImplementationHandler,
+} from "./chat-composer";
 import { ChatMessage } from "./chat-message";
 import { ChatScrollControl, useChatScrollControl } from "./chat-scroll-control";
 import { buildThreadQueryOptions } from "./thread-query-options";
@@ -90,6 +93,8 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null);
   const hasHandedOffRef = useRef(false);
   const startPlanImplementationLockRef = useRef(false);
+  const startPlanImplementationRef =
+    useRef<ChatComposerStartPlanImplementationHandler | null>(null);
 
   const selectWorkspace = api.workspaces.select.useMutation({
     onMutate: async ({ workspaceId }) => {
@@ -626,94 +631,29 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   );
 
   const handleStartPlanImplementation = useCallback(() => {
-    if (isBusy || startPlanImplementationLockRef.current) {
+    const startPlanImplementation = startPlanImplementationRef.current;
+    if (
+      isBusy ||
+      startPlanImplementationLockRef.current ||
+      !startPlanImplementation
+    ) {
       return;
     }
     startPlanImplementationLockRef.current = true;
 
-    const cachedThread = utils.threads.get.getData({
-      threadId: draftThreadId,
-    })?.thread;
-    const globalSelection = utils.chatPreferences.get.getData();
-    const resolvedSelection = threadDetailsQuery.data
-      ? {
-          engine:
-            threadDetailsQuery.data.thread.chatEngine ??
-            draftThreadSelection?.engine ??
-            "sentinel",
-          modelId:
-            threadDetailsQuery.data.thread.chatModelId ??
-            draftThreadSelection?.modelId ??
-            globalSelection?.modelId ??
-            null,
-          reasoningEffort:
-            (threadDetailsQuery.data.thread
-              .chatReasoningEffort as ReasoningEffort | null) ??
-            draftThreadSelection?.reasoningEffort ??
-            (globalSelection?.reasoningEffort as ReasoningEffort | null) ??
-            null,
-        }
-      : {
-          engine:
-            draftThreadSelection?.engine ??
-            cachedThread?.chatEngine ??
-            globalSelection?.engine ??
-            "sentinel",
-          modelId:
-            draftThreadSelection?.modelId ??
-            cachedThread?.chatModelId ??
-            globalSelection?.modelId ??
-            null,
-          reasoningEffort:
-            draftThreadSelection?.reasoningEffort ??
-            (cachedThread?.chatReasoningEffort as ReasoningEffort | null) ??
-            (globalSelection?.reasoningEffort as ReasoningEffort | null) ??
-            null,
-        };
-
-    if (!resolvedSelection.modelId) {
-      startPlanImplementationLockRef.current = false;
-      setChatError("Select a model before starting implementation.");
-      return;
-    }
-
     setChatError(null);
-    setDraftThreadMode("chat");
-    setDraftThreadSelection({
-      engine: resolvedSelection.engine,
-      modelId: resolvedSelection.modelId,
-      mode: "chat",
-      reasoningEffort: resolvedSelection.reasoningEffort,
+    void startPlanImplementation().catch((error) => {
+      startPlanImplementationLockRef.current = false;
+      setChatError(getErrorMessage(error));
     });
-    applyThreadSettingsCacheUpdate({
-      patch: {
-        chatEngine: resolvedSelection.engine,
-        chatModelId: resolvedSelection.modelId,
-        chatReasoningEffort: resolvedSelection.reasoningEffort,
-        mode: "chat",
-      },
-      threadId: draftThreadId,
-      utils,
-      workspaceId: selectedWorkspace?.id,
-    });
+  }, [isBusy]);
 
-    void sendMessage({
-      engine: resolvedSelection.engine,
-      modelId: resolvedSelection.modelId,
-      reasoningEffort: resolvedSelection.reasoningEffort,
-      text: "Implement Plan",
-      threadMode: "chat",
-    }).catch(() => {});
-    void utils.threads.list.invalidate();
-  }, [
-    draftThreadId,
-    draftThreadSelection,
-    isBusy,
-    selectedWorkspace?.id,
-    sendMessage,
-    threadDetailsQuery.data,
-    utils,
-  ]);
+  const handleRegisterStartPlanImplementation = useCallback(
+    (handler: ChatComposerStartPlanImplementationHandler | null) => {
+      startPlanImplementationRef.current = handler;
+    },
+    [],
+  );
 
   const handleSelectionChange = useCallback(
     ({
@@ -951,8 +891,12 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                 onRemoveQueuedFollowUp={handleRemoveQueuedFollowUp}
                 onDraftPreparedWorktreeChange={setDraftPreparedWorktree}
                 onDraftProjectModeChange={setDraftProjectMode}
+                onRegisterStartPlanImplementation={
+                  handleRegisterStartPlanImplementation
+                }
                 onSelectionChange={handleSelectionChange}
                 onSend={handleSend}
+                onStartPlanImplementationSend={handleSend}
                 onStop={stopStream}
                 onSteerFollowUp={handleSteerFollowUp}
                 onSteerQueuedFollowUp={handleSteerQueuedFollowUp}
@@ -1116,8 +1060,12 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
               onRemoveQueuedFollowUp={handleRemoveQueuedFollowUp}
               onDraftPreparedWorktreeChange={setDraftPreparedWorktree}
               onDraftProjectModeChange={setDraftProjectMode}
+              onRegisterStartPlanImplementation={
+                handleRegisterStartPlanImplementation
+              }
               onSelectionChange={handleSelectionChange}
               onSend={handleSend}
+              onStartPlanImplementationSend={handleSend}
               onStop={stopStream}
               onSteerFollowUp={handleSteerFollowUp}
               onSteerQueuedFollowUp={handleSteerQueuedFollowUp}

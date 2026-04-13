@@ -55,7 +55,10 @@ import {
 import { api } from "@/trpc/react";
 import type { FileUIPart } from "ai";
 
-import { ChatComposer } from "./chat-composer";
+import {
+  ChatComposer,
+  type ChatComposerStartPlanImplementationHandler,
+} from "./chat-composer";
 import { ChatMessage } from "./chat-message";
 import { ChatScrollControl, useChatScrollControl } from "./chat-scroll-control";
 import {
@@ -228,6 +231,8 @@ export function ThreadScreen({
   const archiveShortcutLabel = useShortcutLabel("thread.archive");
   const pinToggleLockRef = useRef(false);
   const startPlanImplementationLockRef = useRef(false);
+  const startPlanImplementationRef =
+    useRef<ChatComposerStartPlanImplementationHandler | null>(null);
 
   const togglePin = api.threads.togglePin.useMutation({
     onMutate: async ({ pinned }) => {
@@ -929,71 +934,29 @@ export function ThreadScreen({
   );
 
   const handleStartPlanImplementation = useCallback(() => {
-    if (isBusy || startPlanImplementationLockRef.current) {
+    const startPlanImplementation = startPlanImplementationRef.current;
+    if (
+      isBusy ||
+      startPlanImplementationLockRef.current ||
+      !startPlanImplementation
+    ) {
       return;
     }
     startPlanImplementationLockRef.current = true;
 
-    const cachedThread = utils.threads.get.getData({
-      threadId: thread.id,
-    })?.thread;
-    const globalSelection = utils.chatPreferences.get.getData();
-    const modelId =
-      threadSelectionState.modelId ??
-      cachedThread?.chatModelId ??
-      globalSelection?.modelId ??
-      null;
-    const engine =
-      threadSelectionState.engine ??
-      cachedThread?.chatEngine ??
-      globalSelection?.engine ??
-      "sentinel";
-    const reasoningEffort =
-      threadSelectionState.reasoningEffort ??
-      (cachedThread?.chatReasoningEffort as ReasoningEffort | null) ??
-      (globalSelection?.reasoningEffort as ReasoningEffort | null) ??
-      null;
-
-    if (!modelId) {
-      startPlanImplementationLockRef.current = false;
-      setChatError("Select a model before starting implementation.");
-      return;
-    }
-
     setChatError(null);
-    setThreadSelectionState({
-      engine,
-      modelId,
-      mode: "chat",
-      reasoningEffort,
+    void startPlanImplementation().catch((error) => {
+      startPlanImplementationLockRef.current = false;
+      setChatError(getErrorMessage(error));
     });
-    applyThreadSettingsCacheUpdate({
-      patch: {
-        chatEngine: engine,
-        chatModelId: modelId,
-        chatReasoningEffort: reasoningEffort,
-        mode: "chat",
-      },
-      threadId: thread.id,
-      utils,
-      workspaceId: workspace.id,
-    });
+  }, [isBusy]);
 
-    void sendMessage({
-      engine,
-      modelId,
-      reasoningEffort,
-      text: "Implement Plan",
-      threadMode: "chat",
-    }).catch(() => {});
-  }, [
-    isBusy,
-    sendMessage,
-    thread.id,
-    threadSelectionState,
-    utils,
-    workspace.id,
-  ]);
+  const handleRegisterStartPlanImplementation = useCallback(
+    (handler: ChatComposerStartPlanImplementationHandler | null) => {
+      startPlanImplementationRef.current = handler;
+    },
+    [],
+  );
 
   const supportsSentinelMessageActions = chatEngine === "sentinel";
   const isBranchSwitchingDisabled =
@@ -1238,8 +1201,12 @@ export function ThreadScreen({
                   throw error;
                 }
               }}
+              onRegisterStartPlanImplementation={
+                handleRegisterStartPlanImplementation
+              }
               onSelectionChange={handleSelectionChange}
               onSend={editingMessage ? handleEditSubmit : handleSend}
+              onStartPlanImplementationSend={handleSend}
               onStop={stopStream}
               onSteerFollowUp={handleSteerFollowUp}
               onSteerQueuedFollowUp={async (id) => {

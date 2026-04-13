@@ -20,6 +20,8 @@ export type ComposerSendInput = {
   threadMode?: "chat" | "plan";
 };
 
+export type ChatComposerStartPlanImplementationHandler = () => Promise<void>;
+
 export type ChatComposerProps = {
   activeWorkspace?: {
     id: string;
@@ -50,6 +52,12 @@ export type ChatComposerProps = {
   onSteerFollowUp?: (input: ComposerSendInput) => Promise<void> | void;
   onSteerQueuedFollowUp?: (id: string) => Promise<void> | void;
   onCancelEdit?: () => void;
+  onRegisterStartPlanImplementation?: (
+    handler: ChatComposerStartPlanImplementationHandler | null,
+  ) => void;
+  onStartPlanImplementationSend?: (
+    input: ComposerSendInput,
+  ) => Promise<unknown> | unknown;
   attachmentSeed?: FileUIPart[];
   isEditing?: boolean;
   promptSeed?: string;

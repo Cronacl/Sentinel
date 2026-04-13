@@ -30,7 +30,10 @@ import { useVoiceInput } from "./use-voice-input";
 import { shouldShowVoiceInputControl } from "./voice-input.helpers";
 import { resolveThreadSelectionSyncInput } from "./thread-selection-sync";
 
-export type { ChatComposerProps } from "./types";
+export type {
+  ChatComposerProps,
+  ChatComposerStartPlanImplementationHandler,
+} from "./types";
 
 let hasComposerBootstrappedThisSession = false;
 
@@ -46,9 +49,11 @@ export function ChatComposer({
   onDraftPreparedWorktreeChange,
   onDraftProjectModeChange,
   onQueueFollowUp,
+  onRegisterStartPlanImplementation,
   onRemoveQueuedFollowUp,
   onSelectionChange,
   onSend,
+  onStartPlanImplementationSend,
   onStop,
   onSteerFollowUp,
   onSteerQueuedFollowUp,
@@ -128,22 +133,23 @@ export function ChatComposer({
   });
 
   const planModeAvailable = true;
-  const { handleTogglePlanMode, planMode, planModeReady } = usePlanMode({
-    canPersistThreadSelection,
-    draftMode,
-    globalSelectionQuery,
-    onSelectionChange,
-    planModeAvailable,
-    persistSelection,
-    selectedEngine,
-    selectedModelKey,
-    selectedReasoningEffort,
-    selectionScopeKey,
-    threadId,
-    threadSelection,
-    updateGlobalSelection,
-    updateThreadSelection,
-  });
+  const { handleTogglePlanMode, planMode, planModeReady, setPlanMode } =
+    usePlanMode({
+      canPersistThreadSelection,
+      draftMode,
+      globalSelectionQuery,
+      onSelectionChange,
+      planModeAvailable,
+      persistSelection,
+      selectedEngine,
+      selectedModelKey,
+      selectedReasoningEffort,
+      selectionScopeKey,
+      threadId,
+      threadSelection,
+      updateGlobalSelection,
+      updateThreadSelection,
+    });
 
   const hasModels = availableModels.length > 0;
   const isLocked = !hasWorkspace;
@@ -267,6 +273,21 @@ export function ChatComposer({
     threadSelection,
   ]);
 
+  const dispatchMessagePayload = useCallback(
+    async (messagePayload: ComposerSendInput) => {
+      if (isBusy) {
+        if (followUpBehavior === "queue") {
+          await onQueueFollowUp?.(messagePayload);
+        } else {
+          await onSteerFollowUp?.(messagePayload);
+        }
+      } else {
+        await onSend?.(messagePayload);
+      }
+    },
+    [followUpBehavior, isBusy, onQueueFollowUp, onSend, onSteerFollowUp],
+  );
+
   const handleSend = useCallback(async () => {
     if (!editor || !selectedModelKey || !onSend || !canSend) return;
     const text = editor.getText().trim();
@@ -310,15 +331,7 @@ export function ChatComposer({
     let shouldClearComposer = true;
 
     try {
-      if (isBusy) {
-        if (followUpBehavior === "queue") {
-          await onQueueFollowUp?.(messagePayload);
-        } else {
-          await onSteerFollowUp?.(messagePayload);
-        }
-      } else {
-        await onSend(messagePayload);
-      }
+      await dispatchMessagePayload(messagePayload);
     } catch (error) {
       shouldClearComposer = shouldClearComposerAfterSendError(error);
       if (!shouldClearComposer) {
@@ -335,15 +348,11 @@ export function ChatComposer({
     attachments,
     clearAttachments,
     convertToFileParts,
+    dispatchMessagePayload,
     draftRepoState,
     editor,
-    followUpBehavior,
-    isBusy,
-    onQueueFollowUp,
     onSend,
-    onSteerFollowUp,
     planMode,
-    planModeAvailable,
     canSend,
     selectedEngine,
     selectedModelKey,
@@ -352,9 +361,48 @@ export function ChatComposer({
     setPreviewAttachment,
   ]);
 
+  const handleStartPlanImplementation = useCallback(async () => {
+    const sendPlanImplementation =
+      onStartPlanImplementationSend ?? onSend ?? null;
+
+    if (!selectedModelKey || !canSend || !sendPlanImplementation) {
+      throw new Error("Select a model before starting implementation.");
+    }
+
+    setAttachmentError("");
+    setPlanMode("chat");
+
+    await sendPlanImplementation({
+      ...(draftRepoState ? { draftRepoState } : {}),
+      engine: selectedEngine,
+      modelId: selectedModelKey,
+      reasoningEffort: selectedReasoningEffort,
+      text: "Implement Plan",
+      threadMode: "chat",
+    });
+  }, [
+    canSend,
+    draftRepoState,
+    onSend,
+    onStartPlanImplementationSend,
+    selectedEngine,
+    selectedModelKey,
+    selectedReasoningEffort,
+    setAttachmentError,
+    setPlanMode,
+  ]);
+
   handleSendRef.current = () => {
     void handleSend();
   };
+
+  useEffect(() => {
+    onRegisterStartPlanImplementation?.(handleStartPlanImplementation);
+
+    return () => {
+      onRegisterStartPlanImplementation?.(null);
+    };
+  }, [handleStartPlanImplementation, onRegisterStartPlanImplementation]);
 
   const disabledMessage =
     selectedEngine === "sentinel" && !modelsQuery.isLoading && !hasModels ? (
