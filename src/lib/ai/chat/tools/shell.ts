@@ -1,11 +1,13 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import crypto from "node:crypto";
 import { existsSync, realpathSync, statSync } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
 import type { PermissionMode } from "@/lib/security";
-import { getPlatformHomeDirectory } from "@/lib/runtime/platform-paths";
+import {
+  buildManagedExecutablePathValue,
+  getPlatformHomeDirectory,
+} from "@/lib/runtime/platform-paths";
 
 const COMMAND_INACTIVITY_TIMEOUT_MS = 5 * 60_000;
 const COMMAND_MAX_DURATION_MS = 30 * 60_000;
@@ -305,13 +307,31 @@ function normalizeShellPath(
   }
 }
 
-function getShellCommand() {
-  if (process.platform === "win32") {
+function getPosixShellArgs(shellPath: string) {
+  const shellName = path.basename(shellPath).toLowerCase();
+
+  if (shellName === "bash" || shellName === "zsh" || shellName === "fish") {
+    return ["-l"];
+  }
+
+  return [];
+}
+
+function isSupportedPosixSessionShell(shellPath: string) {
+  const shellName = path.basename(shellPath).toLowerCase();
+  return shellName === "bash" || shellName === "zsh" || shellName === "sh";
+}
+
+function getShellCommand(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+) {
+  if (platform === "win32") {
     const executable = [
       "pwsh.exe",
       "powershell.exe",
-      process.env.ComSpec?.trim(),
-      process.env.COMSPEC?.trim(),
+      env.ComSpec?.trim(),
+      env.COMSPEC?.trim(),
       "cmd.exe",
     ].find(Boolean) as string;
 
@@ -329,49 +349,57 @@ function getShellCommand() {
     };
   }
 
-  const preferredShell = process.env.SHELL?.trim();
-  const preferredShellName = preferredShell
-    ? path.basename(preferredShell)
-    : null;
+  const preferredShell = env.SHELL?.trim();
+  // The persistent runner sends POSIX shell snippets, so the host shell must
+  // remain POSIX-compatible even when the user's interactive shell is not.
   const shellCandidates = [
-    "bash",
-    "sh",
-    "/bin/bash",
-    "/usr/bin/bash",
-    preferredShell &&
-    (preferredShellName === "bash" ||
-      preferredShellName === "zsh" ||
-      preferredShellName === "fish")
+    preferredShell && isSupportedPosixSessionShell(preferredShell)
       ? preferredShell
       : null,
-    os.platform() === "darwin" ? "/bin/zsh" : null,
+    platform === "darwin" ? "/bin/zsh" : null,
+    "bash",
+    "/bin/bash",
+    "/usr/bin/bash",
+    "sh",
+    "/bin/sh",
+    "/usr/bin/sh",
   ].filter((candidate): candidate is string => Boolean(candidate));
   const executable =
     shellCandidates.find((candidate) =>
       candidate.includes(path.sep) ? existsSync(candidate) : true,
     ) ?? "sh";
-  const shellName = path.basename(executable);
-
-  if (shellName === "bash") {
-    return {
-      args: ["--noprofile", "--norc"],
-      executable,
-      kind: "posix" as const,
-    };
-  }
-
-  if (shellName === "zsh") {
-    return {
-      args: ["-f"],
-      executable,
-      kind: "posix" as const,
-    };
-  }
 
   return {
-    args: [],
+    args: getPosixShellArgs(executable),
     executable,
     kind: "posix" as const,
+  };
+}
+
+async function buildShellSpawnEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+) {
+  if (platform === "win32") {
+    return {
+      ...env,
+      BASH_ENV: "",
+      ENV: "",
+      TERM: "dumb",
+    };
+  }
+
+  const homeDirectory = getPlatformHomeDirectory({ env, platform });
+  const managedPath = await buildManagedExecutablePathValue(env.PATH, {
+    env,
+    platform,
+  });
+
+  return {
+    ...env,
+    HOME: homeDirectory,
+    PATH: managedPath,
+    TERM: "dumb",
   };
 }
 
@@ -609,9 +637,10 @@ function isPathInsideAllowedRoots(
 
 function extractMissingCommand(text: string) {
   const patterns = [
-    /(?:^|\n)\s*([a-z0-9._+-]+): command not found\b/i,
+    /(?:^|\n)(?:bash|zsh|sh):\s*command not found:\s*([a-z0-9._+-]+)\b/i,
     /(?:^|\n)(?:bash|zsh|sh):\s*(?:(?:line\s+)?\d+:\s*)?([a-z0-9._+-]+):\s*(?:not found|command not found)\b/i,
     /(?:^|\n)(?:\/bin\/sh|\/bin\/bash|\/bin\/zsh):\s*(?:(?:line\s+)?\d+:\s*)?([a-z0-9._+-]+):\s*(?:not found|command not found)\b/i,
+    /(?:^|\n)\s*([a-z0-9._+-]+): command not found\b/i,
     /(?:^|\n)The term '([^']+)' is not recognized as the name of a cmdlet, function, script file, or operable program\./i,
     /(?:^|\n)'([^']+)' is not recognized as an internal or external command,/i,
     /(?:^|\n).*CommandNotFoundException.*['"]([^'"]+)['"]/i,
@@ -908,18 +937,16 @@ function buildPowerShellPayload(marker: string, command: string) {
   ].join("\n");
 }
 
-function createShellSession(threadId: string, cwd: string): ShellSession {
+async function createShellSession(
+  threadId: string,
+  cwd: string,
+): Promise<ShellSession> {
   assertShellWorkingDirectoryAvailable(cwd);
   const shell = getShellCommand();
+  const shellEnv = await buildShellSpawnEnv();
   const child = spawn(shell.executable, shell.args, {
     cwd,
-    env: {
-      ...process.env,
-      BASH_ENV: "",
-      ENV: "",
-      TERM: "dumb",
-      ZDOTDIR: os.tmpdir(),
-    },
+    env: shellEnv,
     stdio: "pipe",
     windowsHide: true,
   });
@@ -989,15 +1016,15 @@ function createShellSession(threadId: string, cwd: string): ShellSession {
   return session;
 }
 
-function getOrCreateSession(threadId: string, cwd: string) {
+async function getOrCreateSession(threadId: string, cwd: string) {
   const existing = sessions.get(threadId);
   if (!existing) {
-    return createShellSession(threadId, cwd);
+    return await createShellSession(threadId, cwd);
   }
 
   if (existing.defaultDirectory !== cwd) {
     void disposeShellSession(threadId);
-    return createShellSession(threadId, cwd);
+    return await createShellSession(threadId, cwd);
   }
 
   return existing;
@@ -1174,7 +1201,7 @@ export async function* streamShellCommand({
   threadId: string;
 }): AsyncIterable<ShellCommandStreamEvent> {
   assertShellWorkingDirectoryAvailable(defaultDirectory);
-  const session = getOrCreateSession(threadId, defaultDirectory);
+  const session = await getOrCreateSession(threadId, defaultDirectory);
   await session.queue.catch(() => undefined);
 
   const execution = runCommandInSession(session, command, {
@@ -1277,9 +1304,11 @@ export function getShellSessionCount() {
 }
 
 export const __internal = {
+  buildShellSpawnEnv,
   buildPowerShellPayload,
   classifyShellCommandFailure,
   extractMissingCommand,
+  getShellCommand,
   isPathInsideRoot,
   normalizeShellPath,
   resolvePathStyle,

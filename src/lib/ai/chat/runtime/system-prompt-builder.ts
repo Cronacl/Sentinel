@@ -1,6 +1,7 @@
 import { each, lines, prompt, section, when } from "@/lib/prompt";
 
 import type { ThreadPromptContext } from "../prompt-context";
+import { buildPlanModeSystemPromptLines } from "./plan-mode-instructions";
 
 export const buildSystemPrompt = prompt<{
   personalization: string;
@@ -84,6 +85,11 @@ export const buildSystemPrompt = prompt<{
       "Do not use shell commands for direct file edits when dedicated file tools are the better fit.",
       "Never create commits unless the user explicitly asks for a commit, and avoid destructive git actions unless the user explicitly requests them.",
     ]),
+
+    when(
+      v.promptContext.threadMode === "plan",
+      section("Plan Mode", buildPlanModeSystemPromptLines()),
+    ),
 
     when(
       v.promptContext.memoryPromptLines.length > 0,

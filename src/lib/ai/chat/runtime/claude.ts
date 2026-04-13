@@ -62,6 +62,7 @@ import {
   extractClaudeAssistantToolResultBlock,
   extractClaudeUserToolResults,
 } from "./claude-tool-output";
+import { buildPlanModePromptPreamble } from "./plan-mode-instructions";
 import { serializeComposerContextToText } from "@/lib/composer-context/serialize";
 import { getToolPermissionMode, getWorkspaceRootPath } from "./workspace";
 import { ThreadChatConflictError } from "../errors";
@@ -486,6 +487,7 @@ function parseDataUrl(url: string) {
 function buildClaudeUserPrompt(
   message: ThreadUIMessage,
   sessionId: string,
+  options?: { promptPrefix?: string | null },
 ): SDKUserMessage {
   const textParts = message.parts.filter(
     (
@@ -516,6 +518,10 @@ function buildClaudeUserPrompt(
     if (prefix) {
       text = text ? `${prefix}\n\n${text}` : prefix;
     }
+  }
+
+  if (options?.promptPrefix?.trim()) {
+    text = text ? `${options.promptPrefix}\n\n${text}` : options.promptPrefix;
   }
 
   if (text) {
@@ -1550,6 +1556,12 @@ export async function runClaudeThreadChat(
   );
   const sessionId = existingClaudeState?.sessionId ?? crypto.randomUUID();
   const cwd = workspaceRoot ?? existingClaudeState?.cwd ?? process.cwd();
+  const planModePromptPrefix =
+    threadMode === "plan" && !existingClaudeState?.sessionId
+      ? buildPlanModePromptPreamble(
+          "Plan Mode is active for this fresh Claude session. Follow the full contract below for the first response and continue honoring it until the mode changes.",
+        )
+      : null;
   const { options, permissionMode } = await buildClaudeRuntimeOptions({
     cwd,
     permissionMode: workspacePermissionMode,
@@ -1713,7 +1725,11 @@ export async function runClaudeThreadChat(
     for (const approvalId of pendingQuestions.keys()) {
       ensurePersistedClaudePromptResponseWatcher(control, approvalId);
     }
-    inputQueue.enqueue(buildClaudeUserPrompt(request.message!, sessionId));
+    inputQueue.enqueue(
+      buildClaudeUserPrompt(request.message!, sessionId, {
+        promptPrefix: planModePromptPrefix,
+      }),
+    );
 
     await emitThreadSnapshot(request.threadId, eventChannel);
     eventChannel.emit({ runId, type: "run.started" });
