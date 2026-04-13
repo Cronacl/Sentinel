@@ -36,6 +36,8 @@ export type {
 } from "./types";
 
 let hasComposerBootstrappedThisSession = false;
+const IMPLEMENT_PLAN_PROMPT =
+  "Implement the latest approved plan from this thread. Use the most recent plan response as the source of truth, begin executing it now, and reference that plan directly instead of treating 'Implement Plan' as a literal feature name.";
 
 export function ChatComposer({
   activeWorkspace,
@@ -377,7 +379,7 @@ export function ChatComposer({
       engine: selectedEngine,
       modelId: selectedModelKey,
       reasoningEffort: selectedReasoningEffort,
-      text: "Implement Plan",
+      text: IMPLEMENT_PLAN_PROMPT,
       threadMode: "chat",
     });
   }, [
