@@ -233,6 +233,20 @@ type CodexMirrorState = {
 };
 
 const activeCodexRunControls = new Map<string, ActiveCodexRunControl>();
+const PROPOSED_PLAN_OPEN_TAG = "<proposed_plan>";
+const PROPOSED_PLAN_CLOSE_TAG = "</proposed_plan>";
+
+type CodexAgentMessageSegment =
+  | {
+      text: string;
+      type: "text";
+    }
+  | {
+      blockIndex: number;
+      isCompleted: boolean;
+      text: string;
+      type: "plan";
+    };
 
 function findActiveCodexRunForThread(
   threadId: string,
@@ -816,6 +830,77 @@ function applyApprovalRequest(
   }
 }
 
+function parseCodexAgentMessageSegments(
+  text: string,
+): CodexAgentMessageSegment[] {
+  if (!text.includes(PROPOSED_PLAN_OPEN_TAG)) {
+    return text.trim() ? [{ text, type: "text" }] : [];
+  }
+
+  const segments: CodexAgentMessageSegment[] = [];
+  let cursor = 0;
+  let blockIndex = 0;
+
+  while (cursor < text.length) {
+    const openIndex = text.indexOf(PROPOSED_PLAN_OPEN_TAG, cursor);
+    if (openIndex === -1) {
+      const remaining = text.slice(cursor);
+      if (remaining.trim()) {
+        segments.push({ text: remaining, type: "text" });
+      }
+      break;
+    }
+
+    const before = text.slice(cursor, openIndex);
+    if (before.trim()) {
+      segments.push({ text: before, type: "text" });
+    }
+
+    const contentStart = openIndex + PROPOSED_PLAN_OPEN_TAG.length;
+    const closeIndex = text.indexOf(PROPOSED_PLAN_CLOSE_TAG, contentStart);
+    if (closeIndex === -1) {
+      segments.push({
+        blockIndex,
+        isCompleted: false,
+        text: text.slice(contentStart).trim(),
+        type: "plan",
+      });
+      break;
+    }
+
+    segments.push({
+      blockIndex,
+      isCompleted: true,
+      text: text.slice(contentStart, closeIndex).trim(),
+      type: "plan",
+    });
+    blockIndex += 1;
+    cursor = closeIndex + PROPOSED_PLAN_CLOSE_TAG.length;
+  }
+
+  return segments;
+}
+
+function buildAgentMessageParts(
+  item: Extract<CodexMirrorItem, { type: "agentMessage" }>,
+  planSteps: CodexMirrorState["planSteps"],
+): ThreadUIMessage["parts"] {
+  return parseCodexAgentMessageSegments(item.text).map((segment) => {
+    if (segment.type === "text") {
+      return { text: segment.text, type: "text" as const };
+    }
+
+    return {
+      input: { kind: "plan" },
+      output: { steps: planSteps, text: segment.text },
+      state: segment.isCompleted ? "output-available" : "input-streaming",
+      toolCallId: `${item.id}:proposed-plan:${segment.blockIndex}`,
+      toolName: "codex_plan",
+      type: "dynamic-tool",
+    } as ThreadUIMessage["parts"][number];
+  });
+}
+
 function buildMirrorParts(state: CodexMirrorState) {
   const orderedItems = [...state.items.values()].sort(
     (left, right) => left.order - right.order,
@@ -826,7 +911,7 @@ function buildMirrorParts(state: CodexMirrorState) {
     switch (item.type) {
       case "agentMessage":
         if (item.text) {
-          parts.push({ text: item.text, type: "text" });
+          parts.push(...buildAgentMessageParts(item, state.planSteps));
         }
         break;
       case "reasoning": {
