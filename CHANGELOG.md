@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.36](https://github.com/Cronacl/Sentinel/compare/v0.0.35...v0.0.36) (2026-04-13)
+
+
+### Bug Fixes
+
+* use composer context for implement plan handoff ([92c5546](https://github.com/Cronacl/Sentinel/commit/92c55461532061e5d0b033ea10dbb322ce3235c3))
+
 ## [0.0.35](https://github.com/Cronacl/Sentinel/compare/v0.0.34...v0.0.35) (2026-04-13)
 
 
