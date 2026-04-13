@@ -1554,10 +1554,17 @@ export async function runClaudeThreadChat(
   const existingClaudeState = getClaudeThreadState(
     existingThread?.chatEngineState,
   );
-  const sessionId = existingClaudeState?.sessionId ?? crypto.randomUUID();
+  const didThreadModeChange =
+    existingThread?.mode != null &&
+    normalizeThreadMode(existingThread.mode) !== threadMode;
+  const shouldResumeExistingSession =
+    Boolean(existingClaudeState?.sessionId) && !didThreadModeChange;
+  const sessionId = shouldResumeExistingSession
+    ? existingClaudeState!.sessionId
+    : crypto.randomUUID();
   const cwd = workspaceRoot ?? existingClaudeState?.cwd ?? process.cwd();
   const planModePromptPrefix =
-    threadMode === "plan" && !existingClaudeState?.sessionId
+    threadMode === "plan" && !shouldResumeExistingSession
       ? buildPlanModePromptPreamble(
           "Plan Mode is active for this fresh Claude session. Follow the full contract below for the first response and continue honoring it until the mode changes.",
         )
@@ -1653,8 +1660,8 @@ export async function runClaudeThreadChat(
       options: {
         ...options,
         abortController,
-        ...(existingClaudeState?.sessionId
-          ? { resume: existingClaudeState.sessionId }
+        ...(shouldResumeExistingSession
+          ? { resume: existingClaudeState!.sessionId }
           : { sessionId }),
         canUseTool: async (toolName, input, permissionOptions) => {
           return await new Promise<PermissionResult>((resolve) => {

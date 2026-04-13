@@ -200,4 +200,46 @@ describe("runCopilotThreadChat", () => {
     expect(copilotManager.resumeSession).toHaveBeenCalledTimes(1);
     expect(sentPayloads[0]?.prompt).toBe("Continue the plan.");
   });
+
+  it("creates a fresh session when leaving plan mode to implement", async () => {
+    const response = await runCopilotThreadChat(
+      {
+        message: createUserMessage("Implement Plan"),
+        modelId: "gpt-5.4",
+        threadId: "thread-3",
+        threadMode: "chat",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      {
+        chatEngineState: {
+          copilot: {
+            cwd: "/tmp/workspace",
+            modelId: "gpt-5.4",
+            reasoningEffort: null,
+            sessionId: "session-existing",
+          },
+        },
+        mode: "plan",
+        status: "idle",
+      } as any,
+    );
+
+    expect(response.status).toBe(202);
+    expect(copilotManager.createSession).toHaveBeenCalledTimes(1);
+    expect(copilotManager.resumeSession).not.toHaveBeenCalled();
+    expect(updateThreadChatSettings).toHaveBeenCalledWith("thread-3", {
+      engine: "copilot",
+      mode: "chat",
+      modelId: "gpt-5.4",
+      reasoningEffort: null,
+    });
+    expect(sentPayloads[0]?.prompt).toEqual(expect.any(String));
+    expect(sentPayloads[0]?.prompt).toContain("Current mode: chat.");
+    expect(sentPayloads[0]?.prompt).toContain("USER: Implement Plan");
+    expect(sentPayloads[0]?.prompt).not.toContain(
+      "Plan Mode is active for this fresh Copilot session",
+    );
+  });
 });
