@@ -1818,6 +1818,10 @@ export async function runCodexThreadChat(
   const existingCodexState = getCodexThreadState(
     existingThread?.chatEngineState,
   );
+  const didThreadModeChange =
+    existingThread?.mode != null &&
+    normalizeThreadMode(existingThread.mode) !== threadMode;
+  const resumableCodexState = didThreadModeChange ? null : existingCodexState;
   const runId = generateId();
   const assistantId = crypto.randomUUID();
   const eventChannel = await createThreadEventChannel(runId);
@@ -1860,8 +1864,8 @@ export async function runCodexThreadChat(
     });
 
     const threadStartResponse =
-      existingCodexState?.codexThreadId != null
-        ? await codex.resumeThread(existingCodexState.codexThreadId)
+      resumableCodexState?.codexThreadId != null
+        ? await codex.resumeThread(resumableCodexState.codexThreadId)
         : await codex.startThread({
             approvalPolicy,
             cwd: workspaceRoot,
@@ -1874,7 +1878,7 @@ export async function runCodexThreadChat(
       codexThreadId: threadStartResponse.thread.id,
       requestedModelId:
         request.modelId ??
-        existingCodexState?.modelId ??
+        resumableCodexState?.modelId ??
         threadStartResponse.model ??
         null,
       responseModelId: threadStartResponse.model ?? null,
@@ -1971,13 +1975,13 @@ export async function runCodexThreadChat(
         approvalPolicy,
         cliVersion:
           threadStartResponse.thread.cliVersion ||
-          existingCodexState?.cliVersion,
+          resumableCodexState?.cliVersion,
         codexThreadId: threadStartResponse.thread.id,
         cwd: threadStartResponse.cwd ?? workspaceRoot,
         modelId: request.modelId ?? threadStartResponse.model ?? null,
         modelProvider:
           threadStartResponse.modelProvider ??
-          existingCodexState?.modelProvider ??
+          resumableCodexState?.modelProvider ??
           null,
         pendingTurnId: turnResponse.turn.id,
         reasoningEffort:

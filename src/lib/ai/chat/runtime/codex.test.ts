@@ -300,6 +300,66 @@ describe("runCodexThreadChat editing", () => {
     );
   });
 
+  it("starts a fresh Codex thread when switching from plan mode to chat mode", async () => {
+    const response = await runCodexThreadChat(
+      {
+        message: {
+          id: "user-implement-1",
+          metadata: {},
+          parts: [{ text: "Implement Plan", type: "text" }],
+          role: "user",
+        },
+        modelId: "gpt-5.4",
+        threadId: "thread-chat-handoff",
+        threadMode: "chat",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      {
+        chatEngineState: {
+          approvalPolicy: "default",
+          cliVersion: "1.0.0",
+          codexThreadId: "codex-thread-plan-existing",
+          cwd: "/tmp/workspace",
+          modelId: "gpt-5.4",
+          modelProvider: "openai",
+          pendingTurnId: null,
+          reasoningEffort: null,
+          sandboxMode: "workspace-write",
+        },
+        mode: "plan",
+        status: "idle",
+      } as any,
+    );
+
+    expect(response.status).toBe(202);
+    expect(codexManager.resumeThread).not.toHaveBeenCalled();
+    expect(codexManager.startThread).toHaveBeenCalledTimes(1);
+    expect(codexManager.startTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collaborationMode: {
+          mode: "default",
+          settings: expect.objectContaining({
+            developer_instructions: expect.any(String),
+            model: "gpt-5.4",
+            reasoning_effort: "medium",
+          }),
+        },
+        threadId: "codex-thread-1",
+      }),
+    );
+    expect(updateThreadChatSettings).toHaveBeenCalledWith(
+      "thread-chat-handoff",
+      {
+        engine: "codex",
+        mode: "chat",
+        modelId: "gpt-5.4",
+        reasoningEffort: null,
+      },
+    );
+  });
+
   it("retries without collaboration mode when the runtime does not support it", async () => {
     codexManager.startTurn.mockImplementationOnce(async () => {
       throw new Error(
