@@ -136,7 +136,11 @@ async function emitCodexEvent(event: {
 
 function getLatestAssistantMessage() {
   const assistantCalls = upsertMessage.mock.calls.filter(
-    (call) => call[1]?.role === "assistant",
+    (call: unknown[]) =>
+      typeof call[1] === "object" &&
+      call[1] !== null &&
+      "role" in (call[1] as Record<string, unknown>) &&
+      (call[1] as { role?: unknown }).role === "assistant",
   );
 
   return assistantCalls.at(-1)?.[1] as
