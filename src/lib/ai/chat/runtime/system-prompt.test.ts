@@ -66,6 +66,13 @@ function createPromptContext(memoryPromptLines: string[] = []) {
   });
 }
 
+function createPlanPromptContext() {
+  return buildThreadPromptContext({
+    ...createPromptContext(),
+    threadMode: "plan",
+  });
+}
+
 describe("buildSystemPrompt", () => {
   it("renders the richer coding-first prompt in the expected section order", () => {
     const prompt = buildSystemPrompt({
@@ -143,5 +150,20 @@ describe("buildSystemPrompt", () => {
 
     expect(prompt).not.toContain("## Memory");
     expect(prompt).not.toContain("## Personalization");
+  });
+
+  it("adds strict plan mode guidance when the thread is in plan mode", () => {
+    const prompt = buildSystemPrompt({
+      personalization: "",
+      promptContext: createPlanPromptContext(),
+    });
+
+    expect(prompt).toContain("## Plan Mode");
+    expect(prompt).toContain(
+      "inspection-first planning until the spec is decision complete",
+    );
+    expect(prompt).toContain(
+      "Finalize only when the plan is decision complete, and wrap the final plan in a `<proposed_plan>` block.",
+    );
   });
 });

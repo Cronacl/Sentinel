@@ -51,6 +51,7 @@ import {
   resolveCopilotPromptResponse,
   type CopilotPromptResponse,
 } from "./copilot-event-helpers";
+import { buildPlanModePromptPreamble } from "./plan-mode-instructions";
 import {
   getToolApprovalPolicies,
   getToolPermissionMode,
@@ -591,13 +592,22 @@ function buildTranscriptBootstrapPrompt(
     .filter((entry): entry is string => Boolean(entry))
     .join("\n\n");
 
+  const planModePreamble =
+    threadMode === "plan"
+      ? buildPlanModePromptPreamble(
+          "Plan Mode is active for this fresh Copilot session. Follow the full contract below for the first response and continue honoring it until the mode changes.",
+        )
+      : null;
+
   if (!renderedTranscript) {
-    return null;
+    return planModePreamble;
   }
 
   return [
     "Continue this Sentinel conversation faithfully.",
-    `Current mode: ${threadMode}.`,
+    ...(planModePreamble
+      ? [planModePreamble]
+      : [`Current mode: ${threadMode}.`]),
     "The prior transcript follows. Use it as conversation context, then continue naturally from the final user message.",
     "",
     renderedTranscript,

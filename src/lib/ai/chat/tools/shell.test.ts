@@ -1,7 +1,8 @@
 // @ts-nocheck
 
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdir } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 const {
@@ -14,6 +15,9 @@ const {
 } = await import("./shell.ts");
 
 const workspaceRoot = process.cwd();
+const originalHome = process.env.HOME;
+const originalPath = process.env.PATH;
+const originalShell = process.env.SHELL;
 
 afterEach(async () => {
   await disposeShellSession("thread-shell-test");
@@ -23,9 +27,60 @@ afterEach(async () => {
   await disposeShellSession("thread-shell-tail");
   await disposeShellSession("thread-shell-activity");
   await disposeShellSession("thread-shell-heartbeat");
+  process.env.HOME = originalHome;
+  process.env.PATH = originalPath;
+  process.env.SHELL = originalShell;
 });
 
 describe("shell session manager", () => {
+  it("prefers the configured POSIX user shell and launches it as a login shell", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-shell-"));
+    const preferredShell = path.join(tempRoot, "zsh");
+
+    try {
+      await writeFile(preferredShell, "", "utf8");
+
+      const shell = __internal.getShellCommand(
+        {
+          PATH: "/usr/bin:/bin",
+          SHELL: preferredShell,
+        },
+        "linux",
+      );
+
+      expect(shell).toMatchObject({
+        args: ["-l"],
+        executable: preferredShell,
+        kind: "posix",
+      });
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("recovers managed runtime paths when the inherited PATH is stripped", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-shell-"));
+    const managedBin = path.join(tempRoot, ".bun", "bin");
+
+    try {
+      await mkdir(managedBin, { recursive: true });
+
+      const shellEnv = await __internal.buildShellSpawnEnv(
+        {
+          HOME: tempRoot,
+          PATH: "/usr/bin:/bin",
+        },
+        "linux",
+      );
+
+      expect(shellEnv.HOME).toBe(tempRoot);
+      expect(shellEnv.PATH).toContain(managedBin);
+      expect(shellEnv.PATH).toContain("/usr/bin");
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+
   it("persists shell state across commands in the same thread", async () => {
     const first = await executeShellCommand({
       allowedRoot: workspaceRoot,
@@ -90,6 +145,53 @@ describe("shell session manager", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("0");
     expect(result.stdout).toContain("3");
+  });
+
+  it("resolves commands from recovered managed paths instead of reporting them missing", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-shell-"));
+    const managedBin = path.join(
+      tempRoot,
+      ".local",
+      "share",
+      "fnm",
+      "node-versions",
+      "v21.7.3",
+      "installation",
+      "bin",
+    );
+    const managedCommand = path.join(
+      managedBin,
+      "sentinel-shell-managed-command",
+    );
+
+    try {
+      await mkdir(managedBin, { recursive: true });
+      await writeFile(
+        managedCommand,
+        "#!/bin/sh\nprintf 'managed-shell-command'\n",
+        "utf8",
+      );
+      await chmod(managedCommand, 0o755);
+
+      process.env.HOME = tempRoot;
+      process.env.PATH = "/usr/bin:/bin";
+      process.env.SHELL = "/bin/bash";
+
+      const result = await executeShellCommand({
+        allowedRoot: workspaceRoot,
+        command: "sentinel-shell-managed-command",
+        defaultDirectory: workspaceRoot,
+        permissionMode: "full",
+        threadId: "thread-shell-test",
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.failureKind).toBeNull();
+      expect(result.missingCommand).toBeNull();
+      expect(result.stdout).toBe("managed-shell-command");
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
   });
 
   it("streams running snapshots before the final completed result", async () => {
@@ -269,6 +371,20 @@ describe("shell session manager", () => {
         exitCode: 1,
         stderr:
           "The term 'pnpm' is not recognized as the name of a cmdlet, function, script file, or operable program.",
+        stdout: "",
+      }),
+    ).toEqual({
+      failureKind: "missing_command",
+      missingCommand: "pnpm",
+      suggestedNextAction: "install",
+    });
+  });
+
+  it("classifies zsh missing-command failures for remediation", () => {
+    expect(
+      __internal.classifyShellCommandFailure({
+        exitCode: 127,
+        stderr: "zsh: command not found: pnpm",
         stdout: "",
       }),
     ).toEqual({

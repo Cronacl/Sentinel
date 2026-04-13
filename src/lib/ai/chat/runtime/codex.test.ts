@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 
+import { PLAN_MODE_DEVELOPER_INSTRUCTIONS } from "./plan-mode-instructions";
+
 const upsertMessage = mock(() => {});
 const setActiveMessage = mock(async () => {});
 const clearActiveStream = mock(() => {});
@@ -9,6 +11,8 @@ const loadThreadMessages = mock(async () => []);
 const updateThreadRepoState = mock(() => {});
 const updateThreadChatSettings = mock(async () => {});
 const updateCodexThreadState = mock(() => {});
+const updateClaudeThreadState = mock(() => {});
+const updateCopilotThreadState = mock(() => {});
 const updateMessageMetadata = mock(async () => {});
 const beginThreadRepoCheckpointRun = mock(async () => {});
 const loadThreadSessionSnapshot = mock(async (threadId: string) => ({
@@ -67,6 +71,8 @@ mock.module("../persistence", () => ({
   setActiveMessage,
   setActiveStream,
   setThreadStatus,
+  updateClaudeThreadState,
+  updateCopilotThreadState,
   updateCodexThreadState,
   updateMessageMetadata,
   updateThreadChatSettings,
@@ -101,6 +107,7 @@ mock.module("@/lib/streams", () => ({
 }));
 
 mock.module("./workspace", () => ({
+  getToolApprovalPolicies: mock(async () => ({})),
   getToolPermissionMode: mock(async () => "default"),
   getWorkspaceRootPath: mock(async () => "/tmp/workspace"),
 }));
@@ -246,6 +253,7 @@ describe("runCodexThreadChat editing", () => {
         collaborationMode: {
           mode: "plan",
           settings: expect.objectContaining({
+            developer_instructions: PLAN_MODE_DEVELOPER_INSTRUCTIONS,
             model: "gpt-5.4",
             reasoning_effort: "medium",
           }),
@@ -271,6 +279,7 @@ describe("runCodexThreadChat editing", () => {
         },
         modelId: "gpt-5.4",
         threadId: "thread-3",
+        threadMode: "plan",
         trigger: "submit-user-message",
         userId: "user-1",
         workspaceId: "workspace-1",
@@ -288,12 +297,24 @@ describe("runCodexThreadChat editing", () => {
       1,
       expect.objectContaining({
         collaborationMode: {
-          mode: "default",
+          mode: "plan",
           settings: expect.objectContaining({
+            developer_instructions: PLAN_MODE_DEVELOPER_INSTRUCTIONS,
             model: "gpt-5.4",
             reasoning_effort: "medium",
           }),
         },
+      }),
+    );
+    expect(codexManager.startTurn).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        input: expect.arrayContaining([
+          expect.objectContaining({
+            text: expect.stringContaining("<proposed_plan>"),
+            type: "text",
+          }),
+        ]),
       }),
     );
     expect(codexManager.startTurn).toHaveBeenNthCalledWith(

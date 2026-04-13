@@ -10,6 +10,9 @@ const setThreadStatus = mock(() => {});
 const loadThreadMessages = mock(async () => []);
 const updateThreadRepoState = mock(() => {});
 const updateThreadChatSettings = mock(async () => {});
+const updateCodexThreadState = mock(() => {});
+const updateCopilotThreadState = mock(() => {});
+const updateMessageMetadata = mock(async () => {});
 const beginThreadRepoCheckpointRun = mock(async () => {});
 const loadThreadSessionSnapshot = mock(async (threadId: string) => ({
   activeRunId: "run-1",
@@ -37,7 +40,10 @@ mock.module("../persistence", () => ({
   setActiveMessage,
   setActiveStream: mock(() => {}),
   setThreadStatus,
+  updateCodexThreadState,
   updateClaudeThreadState: mock(() => {}),
+  updateCopilotThreadState,
+  updateMessageMetadata,
   updateThreadRepoState,
   updateThreadChatSettings,
   upsertMessage,
@@ -85,6 +91,7 @@ mock.module("@/lib/streams", () => ({
 }));
 
 mock.module("./workspace", () => ({
+  getToolApprovalPolicies: mock(async () => ({})),
   getToolPermissionMode: mock(async () => "default"),
   getWorkspaceRootPath: mock(async () => "/tmp/workspace"),
 }));
@@ -646,5 +653,32 @@ describe("runClaudeThreadChat approvals", () => {
       modelId: "claude-sonnet-4-20250514",
       reasoningEffort: null,
     });
+    expect(capturedClaudeQueryInput?.options?.permissionMode).toBe("plan");
+
+    const activeRuns = (globalThis as any)
+      .__sentinelActiveClaudeRunControls as Map<
+      string,
+      {
+        inputQueue: {
+          stream: AsyncIterable<unknown>;
+        };
+      }
+    >;
+    const [, control] = [...activeRuns.entries()][0] ?? [];
+    const promptIterator = control?.inputQueue.stream[Symbol.asyncIterator]();
+    const promptMessage = await promptIterator?.next();
+
+    expect(promptMessage?.value).toEqual(
+      expect.objectContaining({
+        message: expect.objectContaining({
+          content: expect.arrayContaining([
+            expect.objectContaining({
+              text: expect.stringContaining("<proposed_plan>"),
+              type: "text",
+            }),
+          ]),
+        }),
+      }),
+    );
   });
 });
