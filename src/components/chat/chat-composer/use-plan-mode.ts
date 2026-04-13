@@ -156,56 +156,77 @@ export function usePlanMode({
     threadSelection?.mode,
   ]);
 
+  const setPlanMode = useCallback(
+    (nextMode: "chat" | "plan") => {
+      if (!planModeAvailable) {
+        return;
+      }
+
+      const nextPlanMode = nextMode === "plan";
+
+      setPlanModeState((prev) => {
+        if (
+          prev.planMode === nextPlanMode &&
+          prev.hydratedScopeKey === selectionScopeKey &&
+          prev.lastSyncedThreadMode === nextMode
+        ) {
+          return prev;
+        }
+
+        onSelectionChange?.({ mode: nextMode });
+        if (selectedModelKey) {
+          persistSelection(selectedModelKey, selectedReasoningEffort, {
+            engine: selectedEngine,
+            mode: nextMode,
+          });
+        } else {
+          updateGlobalSelection.mutate({
+            engine: selectedEngine,
+            mode: nextMode,
+          });
+          if (canPersistThreadSelection && threadId) {
+            updateThreadSelection.mutate({
+              engine: selectedEngine,
+              mode: nextMode,
+              threadId,
+            });
+          }
+        }
+
+        return {
+          ...prev,
+          hydratedScopeKey: selectionScopeKey,
+          lastSyncedThreadMode: nextMode,
+          planMode: nextPlanMode,
+        };
+      });
+    },
+    [
+      canPersistThreadSelection,
+      onSelectionChange,
+      persistSelection,
+      planModeAvailable,
+      selectedEngine,
+      selectedModelKey,
+      selectedReasoningEffort,
+      selectionScopeKey,
+      threadId,
+      updateGlobalSelection,
+      updateThreadSelection,
+    ],
+  );
+
   const handleTogglePlanMode = useCallback(() => {
     if (!planModeAvailable) {
       return;
     }
-
-    setPlanModeState((prev) => {
-      const next = !prev.planMode;
-      onSelectionChange?.({ mode: next ? "plan" : "chat" });
-      if (selectedModelKey) {
-        persistSelection(selectedModelKey, selectedReasoningEffort, {
-          engine: selectedEngine,
-          mode: next ? "plan" : "chat",
-        });
-      } else {
-        updateGlobalSelection.mutate({
-          engine: selectedEngine,
-          mode: next ? "plan" : "chat",
-        });
-        if (canPersistThreadSelection && threadId) {
-          updateThreadSelection.mutate({
-            engine: selectedEngine,
-            mode: next ? "plan" : "chat",
-            threadId,
-          });
-        }
-      }
-      return {
-        ...prev,
-        hydratedScopeKey: selectionScopeKey,
-        lastSyncedThreadMode: next ? "plan" : "chat",
-        planMode: next,
-      };
-    });
-  }, [
-    canPersistThreadSelection,
-    onSelectionChange,
-    planModeAvailable,
-    persistSelection,
-    selectedEngine,
-    selectedModelKey,
-    selectedReasoningEffort,
-    selectionScopeKey,
-    threadId,
-    updateGlobalSelection,
-    updateThreadSelection,
-  ]);
+    setPlanMode(planModeState.planMode ? "chat" : "plan");
+  }, [planModeAvailable, planModeState.planMode, setPlanMode]);
 
   return {
     handleTogglePlanMode,
     planMode: planModeAvailable ? planModeState.planMode : false,
     planModeReady,
+    setPlanMode,
   };
 }
