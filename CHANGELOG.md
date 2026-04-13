@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.33](https://github.com/Cronacl/Sentinel/compare/v0.0.32...v0.0.33) (2026-04-13)
+
+
+### Bug Fixes
+
+* fix plan mode and commnad recognition issues ([3a0b35f](https://github.com/Cronacl/Sentinel/commit/3a0b35f899c09cfd44dfbef7edf0d36e1b91f85f))
+
 ## [0.0.32](https://github.com/Cronacl/Sentinel/compare/v0.0.31...v0.0.32) (2026-04-12)
 
 
