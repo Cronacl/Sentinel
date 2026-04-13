@@ -681,4 +681,67 @@ describe("runClaudeThreadChat approvals", () => {
       }),
     );
   });
+
+  it("starts a fresh Claude session when leaving plan mode to implement", async () => {
+    const response = await runClaudeThreadChat(
+      {
+        message: createUserMessage("Implement Plan"),
+        modelId: "claude-sonnet-4-20250514",
+        threadId: "thread-2",
+        threadMode: "chat",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      {
+        chatEngineState: {
+          claude: {
+            cwd: "/tmp/workspace",
+            modelId: "claude-sonnet-4-20250514",
+            permissionMode: "default",
+            sessionId: "session-existing",
+          },
+        },
+        mode: "plan",
+        status: "idle",
+      } as any,
+    );
+
+    expect(response.status).toBe(202);
+    expect(updateThreadChatSettings).toHaveBeenCalledWith("thread-2", {
+      engine: "claude",
+      mode: "chat",
+      modelId: "claude-sonnet-4-20250514",
+      reasoningEffort: null,
+    });
+    expect(capturedClaudeQueryInput?.options?.permissionMode).toBe("default");
+    expect(capturedClaudeQueryInput?.options?.resume).toBeUndefined();
+    expect(capturedClaudeQueryInput?.options?.sessionId).toEqual(
+      expect.any(String),
+    );
+
+    const activeRuns = (globalThis as any)
+      .__sentinelActiveClaudeRunControls as Map<
+      string,
+      {
+        inputQueue: {
+          stream: AsyncIterable<unknown>;
+        };
+      }
+    >;
+    const [, control] = [...activeRuns.entries()][0] ?? [];
+    const promptIterator = control?.inputQueue.stream[Symbol.asyncIterator]();
+    const promptMessage = await promptIterator?.next();
+    const promptParts = (promptMessage?.value as any)?.message?.content ?? [];
+
+    expect(promptParts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          text: "Implement Plan",
+          type: "text",
+        }),
+      ]),
+    );
+    expect(JSON.stringify(promptParts)).not.toContain("<proposed_plan>");
+  });
 });

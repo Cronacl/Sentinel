@@ -110,9 +110,6 @@ export const CodexPlanTool = memo(function CodexPlanTool({
     () => extractProposedPlan(output?.text ?? ""),
     [output?.text],
   );
-
-  if (!body && !output?.steps?.length) return null;
-
   const hasSteps = output?.steps && output.steps.length > 0;
 
   const handleCopy = useCallback(async () => {
@@ -136,6 +133,8 @@ export const CodexPlanTool = memo(function CodexPlanTool({
     a.click();
     URL.revokeObjectURL(url);
   }, [body]);
+
+  if (!body && !output?.steps?.length) return null;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border/40 bg-(--color-surface)">

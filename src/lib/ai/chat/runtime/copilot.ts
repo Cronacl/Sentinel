@@ -1468,8 +1468,13 @@ export async function runCopilotThreadChat(
   const requestedModelId =
     request.modelId ?? existingCopilotState?.modelId ?? null;
   const cwd = workspaceRoot ?? existingCopilotState?.cwd ?? process.cwd();
+  const didThreadModeChange =
+    existingThread?.mode != null &&
+    normalizeThreadMode(existingThread.mode) !== threadMode;
   const shouldCreateFreshSession =
-    request.trigger === "edit-user-message" || !existingCopilotState?.sessionId;
+    request.trigger === "edit-user-message" ||
+    didThreadModeChange ||
+    !existingCopilotState?.sessionId;
   const bootstrapPrompt =
     shouldCreateFreshSession && request.message
       ? buildTranscriptBootstrapPrompt(modelTranscript, threadMode)
