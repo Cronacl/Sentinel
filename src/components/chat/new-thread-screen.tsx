@@ -100,11 +100,11 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     onMutate: async ({ workspaceId }) => {
       const previousCurrentWorkspace = utils.workspaces.getCurrent.getData();
       const previousWorkspaceList = utils.workspaces.list.getData();
+      const nextWorkspace = previousWorkspaceList?.find(
+        (workspace) => workspace.id === workspaceId,
+      );
 
       utils.workspaces.getCurrent.setData(undefined, () => {
-        const nextWorkspace = previousWorkspaceList?.find(
-          (workspace) => workspace.id === workspaceId,
-        );
         return nextWorkspace
           ? {
               createdAt: nextWorkspace.createdAt,
@@ -116,6 +116,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
               permissionModeOverride:
                 nextWorkspace.permissionModeOverride ?? null,
               rootPath: nextWorkspace.rootPath,
+              sortOrder: nextWorkspace.sortOrder,
               updatedAt: nextWorkspace.updatedAt,
               userId: "",
             }
@@ -154,6 +155,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         name: workspace.name,
         permissionModeOverride: workspace.permissionModeOverride,
         rootPath: workspace.rootPath,
+        sortOrder: workspace.sortOrder,
         updatedAt: workspace.updatedAt,
         userId: workspace.userId,
       });
@@ -173,6 +175,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             name: workspace.name,
             permissionModeOverride: workspace.permissionModeOverride,
             rootPath: workspace.rootPath,
+            sortOrder: workspace.sortOrder,
             threadCount: 0,
             updatedAt: workspace.updatedAt,
           },
