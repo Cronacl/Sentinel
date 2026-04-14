@@ -503,20 +503,19 @@ export default function ScratchpadPage() {
 
       const nextWorkspace = previousList?.find((w) => w.id === workspaceId);
       if (nextWorkspace) {
-        utils.workspaces.getCurrent.setData(undefined, (current) => ({
-          ...(current ?? {
-            createdAt: new Date(),
-            description: null,
-            isArchived: false,
-            isExpanded: false,
-            permissionModeOverride: null,
-            rootPath: null,
-            updatedAt: new Date(),
-            userId: "",
-          }),
+        utils.workspaces.getCurrent.setData(undefined, {
+          createdAt: nextWorkspace.createdAt,
+          description: nextWorkspace.description,
           id: nextWorkspace.id,
+          isArchived: false,
+          isExpanded: nextWorkspace.isExpanded,
           name: nextWorkspace.name,
-        }));
+          permissionModeOverride: nextWorkspace.permissionModeOverride,
+          rootPath: nextWorkspace.rootPath,
+          sortOrder: nextWorkspace.sortOrder,
+          updatedAt: nextWorkspace.updatedAt,
+          userId: "",
+        });
       }
       utils.workspaces.list.setData(undefined, (current) =>
         current?.map((w) => ({ ...w, isSelected: w.id === workspaceId })),

@@ -27,6 +27,7 @@ export function useAppShortcutActions() {
         name: workspace.name,
         permissionModeOverride: workspace.permissionModeOverride,
         rootPath: workspace.rootPath,
+        sortOrder: workspace.sortOrder,
         updatedAt: workspace.updatedAt,
         userId: workspace.userId,
       });
@@ -47,6 +48,7 @@ export function useAppShortcutActions() {
             name: workspace.name,
             permissionModeOverride: workspace.permissionModeOverride,
             rootPath: workspace.rootPath,
+            sortOrder: workspace.sortOrder,
             threadCount: 0,
             updatedAt: workspace.updatedAt,
           },

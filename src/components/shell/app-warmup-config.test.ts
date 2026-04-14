@@ -10,6 +10,7 @@ describe("app warmup config", () => {
     expect(STATIC_APP_WARMUP_ROUTES).toEqual([
       "/",
       "/automations",
+      "/scratchpad",
       "/skills",
       "/settings",
       "/settings/appearance",

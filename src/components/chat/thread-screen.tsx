@@ -180,19 +180,29 @@ export function ThreadScreen({
     onMutate: async ({ workspaceId }) => {
       const previousCurrentWorkspace = utils.workspaces.getCurrent.getData();
       const previousWorkspaces = utils.workspaces.list.getData();
+      const nextWorkspace = previousWorkspaces?.find(
+        (item) => item.id === workspaceId,
+      );
 
-      utils.workspaces.getCurrent.setData(undefined, {
-        createdAt: workspace.createdAt,
-        description: workspace.description,
-        id: workspace.id,
-        isArchived: false,
-        isExpanded: false,
-        name: workspace.name,
-        permissionModeOverride: workspace.permissionModeOverride,
-        rootPath: workspace.rootPath,
-        updatedAt: workspace.updatedAt,
-        userId: "",
-      });
+      utils.workspaces.getCurrent.setData(
+        undefined,
+        nextWorkspace
+          ? {
+              createdAt: nextWorkspace.createdAt,
+              description: nextWorkspace.description,
+              id: nextWorkspace.id,
+              isArchived: false,
+              isExpanded: nextWorkspace.isExpanded,
+              name: nextWorkspace.name,
+              permissionModeOverride:
+                nextWorkspace.permissionModeOverride ?? null,
+              rootPath: nextWorkspace.rootPath,
+              sortOrder: nextWorkspace.sortOrder,
+              updatedAt: nextWorkspace.updatedAt,
+              userId: "",
+            }
+          : (previousCurrentWorkspace ?? null),
+      );
       utils.workspaces.list.setData(undefined, (current) =>
         current?.map((item) => ({
           ...item,
