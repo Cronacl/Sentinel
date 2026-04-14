@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.37](https://github.com/Cronacl/Sentinel/compare/v0.0.36...v0.0.37) (2026-04-14)
+
+
+### Features
+
+* add Scratchpad feature with task management and shortcuts ([c23bd0f](https://github.com/Cronacl/Sentinel/commit/c23bd0f5c8a2d082d7467a784dfb4301dc123c82))
+* update 'Implement Plan' prompt and enhance thread handling in Codex ([27ff763](https://github.com/Cronacl/Sentinel/commit/27ff7633ae2ee1cab4dca701de721356c559f34f))
+
 ## [0.0.36](https://github.com/Cronacl/Sentinel/compare/v0.0.35...v0.0.36) (2026-04-13)
 
 
