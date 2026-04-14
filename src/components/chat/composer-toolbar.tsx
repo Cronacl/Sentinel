@@ -118,10 +118,7 @@ export const ComposerToolbar = memo(function ComposerToolbar({
             </Button>
           </Popover.Trigger>
 
-          <Popover.Content
-            className="w-52 border border-border/20 bg-overlay p-0 shadow-overlay/5"
-            placement="top start"
-          >
+          <Popover.Content className="w-52" placement="top start">
             <Popover.Dialog className="p-1">
               <ListBox
                 aria-label="Composer actions"

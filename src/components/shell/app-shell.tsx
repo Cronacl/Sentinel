@@ -108,6 +108,7 @@ function AppShellShortcutBindings() {
   const {
     handleCreateWorkspace,
     handleOpenAutomations,
+    handleOpenScratchpad,
     handleOpenSettings,
     handleOpenSkills,
     handleStartNewThread,
@@ -116,6 +117,7 @@ function AppShellShortcutBindings() {
   useShortcutAction("thread.new", handleStartNewThread);
   useShortcutAction("workspace.create", handleCreateWorkspace);
   useShortcutAction("automations.open", handleOpenAutomations);
+  useShortcutAction("scratchpad.open", handleOpenScratchpad);
   useShortcutAction("skills.open", handleOpenSkills);
   useShortcutAction("settings.open", handleOpenSettings);
   useShortcutAction("sidebar.left.toggle", toggleLeftSidebar);

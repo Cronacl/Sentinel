@@ -24,6 +24,7 @@ import {
   MCP_TRANSPORTS,
   PERMISSION_MODES,
   PERSONALITY_PRESETS,
+  SCRATCHPAD_TASK_STATUSES,
   SEARCH_PROVIDERS,
   THEME_PREFERENCES,
   THREAD_LIST_ORGANIZE_BY,
@@ -177,6 +178,7 @@ export const workspaces = sqliteTable(
     isExpanded: integer("is_expanded", { mode: "boolean" })
       .notNull()
       .default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .$defaultFn(() => new Date()),
@@ -191,6 +193,73 @@ export const workspaces = sqliteTable(
   ],
 );
 
+export const scratchpads = sqliteTable(
+  "scratchpad",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    hubThreadId: text("hub_thread_id"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("scratchpad_workspace_user_unique").on(
+      table.workspaceId,
+      table.userId,
+    ),
+    index("scratchpad_workspace_id_idx").on(table.workspaceId),
+    index("scratchpad_user_id_idx").on(table.userId),
+  ],
+);
+
+export const scratchpadTasks = sqliteTable(
+  "scratchpad_task",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => createId()),
+    scratchpadId: text("scratchpad_id")
+      .notNull()
+      .references(() => scratchpads.id),
+    title: text("title").notNull(),
+    progressText: text("progress_text"),
+    status: text("status", { enum: SCRATCHPAD_TASK_STATUSES })
+      .notNull()
+      .default("pending"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    virtualThreadId: text("virtual_thread_id"),
+    visibleThreadId: text("visible_thread_id"),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    index("scratchpad_task_scratchpad_id_idx").on(table.scratchpadId),
+    index("scratchpad_task_scratchpad_sort_idx").on(
+      table.scratchpadId,
+      table.sortOrder,
+    ),
+    index("scratchpad_task_virtual_thread_idx").on(table.virtualThreadId),
+    index("scratchpad_task_visible_thread_idx").on(table.visibleThreadId),
+  ],
+);
+
 export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
   user: one(users, {
     fields: [workspaces.userId],
@@ -198,9 +267,32 @@ export const workspacesRelations = relations(workspaces, ({ one, many }) => ({
     relationName: "ownedWorkspaces",
   }),
   selectedByUsers: many(users, { relationName: "selectedWorkspace" }),
+  scratchpads: many(scratchpads),
   threads: many(threads),
   automations: many(automations),
 }));
+
+export const scratchpadsRelations = relations(scratchpads, ({ one, many }) => ({
+  workspace: one(workspaces, {
+    fields: [scratchpads.workspaceId],
+    references: [workspaces.id],
+  }),
+  user: one(users, {
+    fields: [scratchpads.userId],
+    references: [users.id],
+  }),
+  tasks: many(scratchpadTasks),
+}));
+
+export const scratchpadTasksRelations = relations(
+  scratchpadTasks,
+  ({ one }) => ({
+    scratchpad: one(scratchpads, {
+      fields: [scratchpadTasks.scratchpadId],
+      references: [scratchpads.id],
+    }),
+  }),
+);
 
 export const threads = sqliteTable(
   "thread",

@@ -18,6 +18,7 @@ import { planRouter } from "@/server/api/routers/plan";
 import { personalizationRouter } from "@/server/api/routers/personalization";
 import { providersRouter } from "@/server/api/routers/providers";
 import { repoRouter } from "@/server/api/routers/repo";
+import { scratchpadRouter } from "@/server/api/routers/scratchpad";
 import { searchProvidersRouter } from "@/server/api/routers/search-providers";
 import { searchSettingsRouter } from "@/server/api/routers/search-settings";
 import { securityRouter } from "@/server/api/routers/security";
@@ -56,6 +57,7 @@ export const appRouter = createTRPCRouter({
   personalization: personalizationRouter,
   providers: providersRouter,
   repo: repoRouter,
+  scratchpad: scratchpadRouter,
   searchProviders: searchProvidersRouter,
   searchSettings: searchSettingsRouter,
   security: securityRouter,

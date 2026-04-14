@@ -99,10 +99,7 @@ export function ModelSelector({
             />
           </Button>
         </Popover.Trigger>
-        <Popover.Content
-          className="w-56 border border-border/20 bg-overlay p-0 shadow-overlay/5"
-          placement="top"
-        >
+        <Popover.Content className="w-56" placement="top">
           <Popover.Dialog className="p-1">
             <ScrollShadow className="max-h-[240px]">
               <ListBox
@@ -147,10 +144,7 @@ export function ModelSelector({
               />
             </Button>
           </Popover.Trigger>
-          <Popover.Content
-            className="w-28 border border-border/20 bg-overlay p-0 shadow-overlay/5"
-            placement="top"
-          >
+          <Popover.Content className="w-28" placement="top">
             <Popover.Dialog className="p-1">
               <ListBox
                 aria-label="Reasoning effort"

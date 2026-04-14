@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import { TRPCError } from "@trpc/server";
-import { and, count, eq, isNull, max, ne, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, max, ne, sql } from "drizzle-orm";
 
 import { z } from "zod";
 
@@ -79,7 +79,10 @@ export const workspacesRouter = createTRPCRouter({
         eq(workspaces.isArchived, false),
         eq(workspaces.userId, userId),
       ),
-      orderBy: (workspaces, { desc }) => [desc(workspaces.createdAt)],
+      orderBy: (workspaces, { asc, desc }) => [
+        asc(workspaces.sortOrder),
+        desc(workspaces.createdAt),
+      ],
     });
 
     const threadStats = ctx.db
@@ -121,6 +124,7 @@ export const workspacesRouter = createTRPCRouter({
         name: workspace.name,
         permissionModeOverride: workspace.permissionModeOverride,
         rootPath: workspace.rootPath,
+        sortOrder: workspace.sortOrder,
         threadCount: stats?.threadCount ?? 0,
         updatedAt: workspace.updatedAt,
       };
@@ -356,5 +360,59 @@ export const workspacesRouter = createTRPCRouter({
         .run();
 
       return { isExpanded: next, workspaceId: input.workspaceId };
+    }),
+
+  setAllExpanded: protectedProcedure
+    .input(z.object({ expanded: z.boolean() }))
+    .mutation(({ ctx, input }) => {
+      ctx.db
+        .update(workspaces)
+        .set({ isExpanded: input.expanded })
+        .where(
+          and(
+            eq(workspaces.userId, ctx.session.user.id),
+            eq(workspaces.isArchived, false),
+          ),
+        )
+        .run();
+
+      return { expanded: input.expanded };
+    }),
+
+  reorder: protectedProcedure
+    .input(
+      z.object({
+        workspaceIds: z
+          .array(z.string().min(1))
+          .min(1, "At least one workspace id is required."),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+
+      const ownedRows = await ctx.db.query.workspaces.findMany({
+        where: and(
+          eq(workspaces.userId, userId),
+          eq(workspaces.isArchived, false),
+          inArray(workspaces.id, input.workspaceIds),
+        ),
+        columns: { id: true },
+      });
+      const ownedIds = ownedRows.map((w) => w.id);
+
+      const ownedIdSet = new Set(ownedIds);
+
+      ctx.db.transaction((tx) => {
+        for (let index = 0; index < input.workspaceIds.length; index++) {
+          const workspaceId = input.workspaceIds[index]!;
+          if (!ownedIdSet.has(workspaceId)) continue;
+          tx.update(workspaces)
+            .set({ sortOrder: index })
+            .where(eq(workspaces.id, workspaceId))
+            .run();
+        }
+      });
+
+      return { success: true };
     }),
 });

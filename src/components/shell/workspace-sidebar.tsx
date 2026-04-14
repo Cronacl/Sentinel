@@ -22,8 +22,10 @@ import {
   Archive02Icon,
   ArrowDown01Icon,
   BrushIcon,
+  CheckListIcon,
   Clock01Icon,
   ComputerIcon,
+  DiagonalScrollPoint01Icon,
   FilterMailIcon,
   Folder03Icon,
   FolderAddIcon,
@@ -39,9 +41,29 @@ import {
   Settings01Icon,
   Sun03Icon,
   Tick02Icon,
+  ExpandIcon,
+  CollapseIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { formatDistanceToNowStrict } from "date-fns";
+import { FolderGit2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { usePathname, useRouter } from "next/navigation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -99,6 +121,7 @@ type SortBy = "created" | "updated";
 const PRIMARY_NAV = [
   { href: "/", icon: PencilEdit02Icon, label: "New thread" },
   { href: "/automations", icon: Clock01Icon, label: "Automations" },
+  { href: "/scratchpad", icon: CheckListIcon, label: "Scratchpad" },
   { href: "/skills", icon: AiIdeaIcon, label: "Skills" },
 ] as const;
 
@@ -124,6 +147,7 @@ function toCurrentWorkspace(
         name: string;
         permissionModeOverride?: "default" | "full" | null;
         rootPath: string | null;
+        sortOrder?: number;
         updatedAt: Date;
       }
     | null
@@ -142,6 +166,7 @@ function toCurrentWorkspace(
     name: workspace.name,
     permissionModeOverride: workspace.permissionModeOverride ?? null,
     rootPath: workspace.rootPath,
+    sortOrder: workspace.sortOrder ?? 0,
     updatedAt: workspace.updatedAt,
     userId: "",
   };
@@ -740,14 +765,206 @@ function areThreadRowsEqual(
   );
 }
 
-const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
+const WorkspaceHeader = memo(function WorkspaceHeader({
+  group,
+  isExpanded,
+  onArchiveWorkspace,
+  onRelocateWorkspace,
+  onRenameWorkspace,
+  onToggleWorkspace,
+}: {
+  group: ThreadGroup[number];
+  isExpanded: boolean;
+  onArchiveWorkspace: (workspaceId: string) => void;
+  onRelocateWorkspace: (workspaceId: string) => void;
+  onRenameWorkspace: (workspaceId: string) => void;
+  onToggleWorkspace: (workspaceId: string) => void;
+}) {
+  const hasLinkedFolder = Boolean(group.workspace.rootPath);
+
+  const handleClick = useCallback(() => {
+    onToggleWorkspace(group.workspace.id);
+  }, [group.workspace.id, onToggleWorkspace]);
+
+  const workspaceRow = (
+    <button
+      className="text-foreground/70 hover:bg-default/60 hover:text-foreground group/ws flex h-7 w-full cursor-pointer items-center justify-start gap-0 rounded-xl pr-10 pl-2 text-left text-sm font-normal transition-colors"
+      onClick={handleClick}
+      type="button"
+    >
+      <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
+        {hasLinkedFolder ? (
+          <FolderGit2
+            className="shrink-0 transition-opacity duration-150 group-hover/ws:opacity-0"
+            size={16}
+            strokeWidth={1.5}
+          />
+        ) : (
+          <HugeiconsIcon
+            className="transition-opacity duration-150 group-hover/ws:opacity-0"
+            color="currentColor"
+            icon={Folder03Icon}
+            size={18}
+            strokeWidth={1.5}
+          />
+        )}
+        <HugeiconsIcon
+          className={`absolute transition-all duration-150 ${
+            isExpanded ? "rotate-0" : "-rotate-90"
+          } opacity-0 group-hover/ws:opacity-100`}
+          color="currentColor"
+          icon={ArrowDown01Icon}
+          size={16}
+          strokeWidth={1.8}
+        />
+      </span>
+      <span className="ml-1 min-w-0 truncate">{group.workspace.name}</span>
+    </button>
+  );
+
+  return (
+    <div className="group relative">
+      {hasLinkedFolder ? (
+        <Tooltip.Root delay={1200}>
+          <Tooltip.Trigger>{workspaceRow}</Tooltip.Trigger>
+          <Tooltip.Content
+            className={WORKSPACE_TOOLTIP_CLASSNAME}
+            offset={12}
+            placement="right"
+          >
+            <p className="text-xs font-medium text-muted">Linked folder</p>
+            <p className="mt-1 break-all font-mono text-xs text-foreground">
+              {group.workspace.rootPath}
+            </p>
+          </Tooltip.Content>
+        </Tooltip.Root>
+      ) : (
+        workspaceRow
+      )}
+      <WorkspaceItemActions
+        hasLinkedFolder={hasLinkedFolder}
+        onArchive={() => onArchiveWorkspace(group.workspace.id)}
+        onRelocate={() => onRelocateWorkspace(group.workspace.id)}
+        onRename={() => onRenameWorkspace(group.workspace.id)}
+        workspaceName={group.workspace.name}
+      />
+    </div>
+  );
+});
+
+const WorkspaceThreadsDisclosure = memo(function WorkspaceThreadsDisclosure({
+  group,
+  isExpanded,
+  onArchive,
+  onPin,
+  onPressThread,
+  onRenameThread,
+  onWarmThread,
+  selectedThreadId,
+}: {
+  group: ThreadGroup[number];
+  isExpanded: boolean;
+  onArchive: (threadId: string) => void;
+  onPin: (threadId: string) => void;
+  onPressThread: (workspaceId: string, threadId: string) => void;
+  onRenameThread: (threadId: string) => void;
+  onWarmThread: WarmThreadHandler;
+  selectedThreadId: string | null;
+}) {
+  const [showOverflowThreads, setShowOverflowThreads] = useState(false);
+  const allThreads = useMemo(
+    () => group.threads.filter((thread) => thread.pinnedAt == null),
+    [group.threads],
+  );
+  const visibleThreads = allThreads.slice(0, THREADS_PER_PAGE);
+  const overflowThreads = allThreads.slice(THREADS_PER_PAGE);
+
+  useEffect(() => {
+    if (!isExpanded) {
+      setShowOverflowThreads(false);
+    }
+  }, [isExpanded]);
+
+  return (
+    <SidebarCollapsible isOpen={isExpanded}>
+      <div className="mt-1 flex flex-col gap-0.5 pl-1">
+        {visibleThreads.length > 0 ? (
+          <>
+            {visibleThreads.map((thread) => (
+              <ThreadRow
+                isPinned={thread.pinnedAt != null}
+                key={thread.id}
+                onArchive={onArchive}
+                onPin={onPin}
+                onPressThread={onPressThread}
+                onRenameThread={onRenameThread}
+                onWarmThread={onWarmThread}
+                selectedThreadId={selectedThreadId}
+                thread={thread}
+                workspaceId={group.workspace.id}
+              />
+            ))}
+
+            {overflowThreads.length > 0 ? (
+              <>
+                <button
+                  className={`flex w-full items-center gap-1 text-left text-sm text-foreground/40 hover:text-foreground ${SIDEBAR_ITEM_INSET} py-1.5 transition-colors`}
+                  onClick={() => setShowOverflowThreads((current) => !current)}
+                  type="button"
+                >
+                  <HugeiconsIcon
+                    className={`transition-transform duration-150 ${
+                      showOverflowThreads ? "rotate-0" : "-rotate-90"
+                    }`}
+                    color="currentColor"
+                    icon={ArrowDown01Icon}
+                    size={12}
+                    strokeWidth={1.8}
+                  />
+                  <span>
+                    {showOverflowThreads
+                      ? "Hide extra threads"
+                      : `Show ${overflowThreads.length} more`}
+                  </span>
+                </button>
+                <SidebarCollapsible isOpen={showOverflowThreads}>
+                  <div className="flex flex-col gap-0.5">
+                    {overflowThreads.map((thread) => (
+                      <ThreadRow
+                        isPinned={thread.pinnedAt != null}
+                        key={thread.id}
+                        onArchive={onArchive}
+                        onPin={onPin}
+                        onPressThread={onPressThread}
+                        onRenameThread={onRenameThread}
+                        onWarmThread={onWarmThread}
+                        selectedThreadId={selectedThreadId}
+                        thread={thread}
+                        workspaceId={group.workspace.id}
+                      />
+                    ))}
+                  </div>
+                </SidebarCollapsible>
+              </>
+            ) : null}
+          </>
+        ) : (
+          <div className="text-foreground/40 px-3 py-2 text-xs">
+            No threads yet.
+          </div>
+        )}
+      </div>
+    </SidebarCollapsible>
+  );
+});
+
+const SortableWorkspaceSection = memo(function SortableWorkspaceSection({
   group,
   isExpanded,
   onArchive,
   onArchiveWorkspace,
   onPin,
   onPressThread,
-  onPressWorkspace,
   onRelocateWorkspace,
   onRenameThread,
   onRenameWorkspace,
@@ -761,7 +978,6 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
   onArchiveWorkspace: (workspaceId: string) => void;
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
-  onPressWorkspace: (workspaceId: string) => void;
   onRelocateWorkspace: (workspaceId: string) => void;
   onRenameThread: (threadId: string) => void;
   onRenameWorkspace: (workspaceId: string) => void;
@@ -769,160 +985,45 @@ const WorkspaceThreadSection = memo(function WorkspaceThreadSection({
   onWarmThread: WarmThreadHandler;
   selectedThreadId: string | null;
 }) {
-  const [showOverflowThreads, setShowOverflowThreads] = useState(false);
-  const allThreads = useMemo(
-    () => group.threads.filter((thread) => thread.pinnedAt == null),
-    [group.threads],
-  );
-  const visibleThreads = allThreads.slice(0, THREADS_PER_PAGE);
-  const overflowThreads = allThreads.slice(THREADS_PER_PAGE);
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: group.workspace.id });
 
-  const workspaceButton = (
-    <Button
-      className="text-foreground/70 h-7 hover:bg-default/60 hover:text-foreground justify-start rounded-xl pl-2 pr-10"
-      fullWidth
-      onPress={() => {
-        onPressWorkspace(group.workspace.id);
-        onToggleWorkspace(group.workspace.id);
-        if (document.activeElement instanceof HTMLElement) {
-          document.activeElement.blur();
-        }
-      }}
-      size="sm"
-      variant="ghost"
-    >
-      <div className="flex w-full min-w-0 items-center gap-1">
-        <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
-          <HugeiconsIcon
-            className="transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0"
-            color="currentColor"
-            icon={Folder03Icon}
-            size={18}
-            strokeWidth={1.5}
-          />
-          <HugeiconsIcon
-            className={`absolute transition-all duration-150 ${
-              isExpanded ? "rotate-0" : "-rotate-90"
-            } opacity-0 group-hover:opacity-100 group-focus-within:opacity-100`}
-            color="currentColor"
-            icon={ArrowDown01Icon}
-            size={16}
-            strokeWidth={1.8}
-          />
-        </span>
-        <span className="truncate text-sm font-normal">
-          {group.workspace.name}
-        </span>
-      </div>
-    </Button>
-  );
-
-  useEffect(() => {
-    if (!isExpanded) {
-      setShowOverflowThreads(false);
-    }
-  }, [isExpanded]);
+  const sectionStyle: React.CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    transition: isDragging ? "opacity 150ms ease" : transition,
+    opacity: isDragging ? 0.5 : 1,
+    position: "relative",
+    zIndex: isDragging ? 10 : undefined,
+  };
 
   return (
-    <section>
-      <div className="group relative">
-        {group.workspace.rootPath ? (
-          <Tooltip.Root delay={450}>
-            <Tooltip.Trigger>{workspaceButton}</Tooltip.Trigger>
-            <Tooltip.Content
-              className={WORKSPACE_TOOLTIP_CLASSNAME}
-              offset={12}
-              placement="right"
-            >
-              <p className="text-xs font-medium text-muted">Linked folder</p>
-              <p className="mt-1 break-all font-mono text-xs text-foreground">
-                {group.workspace.rootPath}
-              </p>
-            </Tooltip.Content>
-          </Tooltip.Root>
-        ) : (
-          workspaceButton
-        )}
-        <WorkspaceItemActions
-          hasLinkedFolder={Boolean(group.workspace.rootPath)}
-          onArchive={() => onArchiveWorkspace(group.workspace.id)}
-          onRelocate={() => onRelocateWorkspace(group.workspace.id)}
-          onRename={() => onRenameWorkspace(group.workspace.id)}
-          workspaceName={group.workspace.name}
+    <section ref={setNodeRef} style={sectionStyle}>
+      <div {...attributes} {...listeners}>
+        <WorkspaceHeader
+          group={group}
+          isExpanded={isExpanded}
+          onArchiveWorkspace={onArchiveWorkspace}
+          onRelocateWorkspace={onRelocateWorkspace}
+          onRenameWorkspace={onRenameWorkspace}
+          onToggleWorkspace={onToggleWorkspace}
         />
       </div>
-
-      <SidebarCollapsible isOpen={isExpanded}>
-        <div className="mt-1 flex flex-col gap-0.5 pl-1">
-          {visibleThreads.length > 0 ? (
-            <>
-              {visibleThreads.map((thread) => (
-                <ThreadRow
-                  isPinned={thread.pinnedAt != null}
-                  key={thread.id}
-                  onArchive={onArchive}
-                  onPin={onPin}
-                  onPressThread={onPressThread}
-                  onRenameThread={onRenameThread}
-                  onWarmThread={onWarmThread}
-                  selectedThreadId={selectedThreadId}
-                  thread={thread}
-                  workspaceId={group.workspace.id}
-                />
-              ))}
-
-              {overflowThreads.length > 0 ? (
-                <>
-                  <button
-                    className={`flex w-full items-center gap-1 text-left text-sm text-foreground/40 hover:text-foreground ${SIDEBAR_ITEM_INSET} py-1.5 transition-colors`}
-                    onClick={() =>
-                      setShowOverflowThreads((current) => !current)
-                    }
-                    type="button"
-                  >
-                    <HugeiconsIcon
-                      className={`transition-transform duration-150 ${
-                        showOverflowThreads ? "rotate-0" : "-rotate-90"
-                      }`}
-                      color="currentColor"
-                      icon={ArrowDown01Icon}
-                      size={12}
-                      strokeWidth={1.8}
-                    />
-                    <span>
-                      {showOverflowThreads
-                        ? "Hide extra threads"
-                        : `Show ${overflowThreads.length} more`}
-                    </span>
-                  </button>
-                  <SidebarCollapsible isOpen={showOverflowThreads}>
-                    <div className="flex flex-col gap-0.5">
-                      {overflowThreads.map((thread) => (
-                        <ThreadRow
-                          isPinned={thread.pinnedAt != null}
-                          key={thread.id}
-                          onArchive={onArchive}
-                          onPin={onPin}
-                          onPressThread={onPressThread}
-                          onRenameThread={onRenameThread}
-                          onWarmThread={onWarmThread}
-                          selectedThreadId={selectedThreadId}
-                          thread={thread}
-                          workspaceId={group.workspace.id}
-                        />
-                      ))}
-                    </div>
-                  </SidebarCollapsible>
-                </>
-              ) : null}
-            </>
-          ) : (
-            <div className="text-foreground/40 px-3 py-2 text-xs">
-              No threads yet.
-            </div>
-          )}
-        </div>
-      </SidebarCollapsible>
+      <WorkspaceThreadsDisclosure
+        group={group}
+        isExpanded={isExpanded}
+        onArchive={onArchive}
+        onPin={onPin}
+        onPressThread={onPressThread}
+        onRenameThread={onRenameThread}
+        onWarmThread={onWarmThread}
+        selectedThreadId={selectedThreadId}
+      />
     </section>
   );
 });
@@ -931,13 +1032,13 @@ const ThreadList = memo(function ThreadList({
   groups,
   onArchiveWorkspace,
   onPressThread,
-  onPressWorkspace,
   onRelocateWorkspace,
   onRenameThread,
   onRenameWorkspace,
   expandedWorkspaceIds,
   onPin,
   onArchive,
+  onReorderWorkspaces,
   onToggleWorkspace,
   onWarmThread,
   selectedThreadId,
@@ -948,36 +1049,84 @@ const ThreadList = memo(function ThreadList({
   onArchiveWorkspace: (workspaceId: string) => void;
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
-  onPressWorkspace: (workspaceId: string) => void;
   onRelocateWorkspace: (workspaceId: string) => void;
   onRenameThread: (threadId: string) => void;
   onRenameWorkspace: (workspaceId: string) => void;
+  onReorderWorkspaces: (orderedIds: string[]) => void;
   selectedThreadId: string | null;
   onToggleWorkspace: (workspaceId: string) => void;
   onWarmThread: WarmThreadHandler;
 }) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const [orderedGroups, setOrderedGroups] = useState(groups);
+  useEffect(() => {
+    setOrderedGroups(groups);
+  }, [groups]);
+
+  const workspaceIds = useMemo(
+    () => orderedGroups.map((g) => g.workspace.id),
+    [orderedGroups],
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+
+      setOrderedGroups((prev) => {
+        const oldIndex = prev.findIndex(
+          (g) => g.workspace.id === String(active.id),
+        );
+        const newIndex = prev.findIndex(
+          (g) => g.workspace.id === String(over.id),
+        );
+        if (oldIndex < 0 || newIndex < 0) return prev;
+        const next = arrayMove(prev, oldIndex, newIndex);
+        onReorderWorkspaces(next.map((g) => g.workspace.id));
+        return next;
+      });
+    },
+    [onReorderWorkspaces],
+  );
+
   return (
     <ScrollShadow className="max-h-full px-2 py-1 pb-4" orientation="vertical">
-      <div className="flex flex-col gap-1">
-        {groups.map((group) => (
-          <WorkspaceThreadSection
-            group={group}
-            isExpanded={expandedWorkspaceIds.has(group.workspace.id)}
-            key={group.workspace.id}
-            onArchive={onArchive}
-            onArchiveWorkspace={onArchiveWorkspace}
-            onPin={onPin}
-            onPressThread={onPressThread}
-            onPressWorkspace={onPressWorkspace}
-            onRelocateWorkspace={onRelocateWorkspace}
-            onRenameThread={onRenameThread}
-            onRenameWorkspace={onRenameWorkspace}
-            onToggleWorkspace={onToggleWorkspace}
-            onWarmThread={onWarmThread}
-            selectedThreadId={selectedThreadId}
-          />
-        ))}
-      </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={workspaceIds}
+          strategy={verticalListSortingStrategy}
+        >
+          <div className="flex flex-col gap-1">
+            {orderedGroups.map((group) => (
+              <SortableWorkspaceSection
+                group={group}
+                isExpanded={expandedWorkspaceIds.has(group.workspace.id)}
+                key={group.workspace.id}
+                onArchive={onArchive}
+                onArchiveWorkspace={onArchiveWorkspace}
+                onPin={onPin}
+                onPressThread={onPressThread}
+                onRelocateWorkspace={onRelocateWorkspace}
+                onRenameThread={onRenameThread}
+                onRenameWorkspace={onRenameWorkspace}
+                onToggleWorkspace={onToggleWorkspace}
+                onWarmThread={onWarmThread}
+                selectedThreadId={selectedThreadId}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
     </ScrollShadow>
   );
 });
@@ -1139,6 +1288,7 @@ export function WorkspaceSidebar() {
   const {
     handleCreateWorkspace,
     handleOpenAutomations,
+    handleOpenScratchpad,
     handleOpenSettings,
     handleOpenSkills,
     handleStartNewThread,
@@ -1843,20 +1993,89 @@ export function WorkspaceSidebar() {
     },
   });
 
-  const handlePressWorkspace = useCallback(
-    (workspaceId: string) => {
-      if (selectedWorkspaceId !== workspaceId) {
-        void selectWorkspace.mutate({ workspaceId });
-      }
+  const setAllExpanded = api.workspaces.setAllExpanded.useMutation({
+    onMutate: async ({ expanded }) => {
+      const previous = utils.workspaces.list.getData();
+      utils.workspaces.list.setData(undefined, (current) =>
+        current?.map((w) => ({ ...w, isExpanded: expanded })),
+      );
+      return { previous };
     },
-    [selectWorkspace, selectedWorkspaceId],
-  );
+    onError: (_error, _variables, context) => {
+      utils.workspaces.list.setData(undefined, context?.previous ?? []);
+    },
+  });
+
+  const reorderWorkspaces = api.workspaces.reorder.useMutation({
+    onError: () => {
+      void utils.workspaces.list.invalidate();
+      void utils.threads.list.invalidate();
+    },
+  });
 
   const handleToggleWorkspace = useCallback(
     (workspaceId: string) => {
       void toggleExpanded.mutate({ workspaceId });
     },
     [toggleExpanded],
+  );
+
+  const allWorkspacesExpanded = useMemo(
+    () =>
+      (workspaces.data ?? []).length > 0 &&
+      (workspaces.data ?? []).every((w) => w.isExpanded),
+    [workspaces.data],
+  );
+
+  const handleToggleAllExpanded = useCallback(() => {
+    void setAllExpanded.mutate({ expanded: !allWorkspacesExpanded });
+  }, [allWorkspacesExpanded, setAllExpanded]);
+
+  const handleReorderWorkspaces = useCallback(
+    (orderedIds: string[]) => {
+      const orderMap = new Map(orderedIds.map((id, i) => [id, i]));
+
+      utils.workspaces.list.setData(undefined, (current) => {
+        if (!current) return current;
+        const sorted = [...current];
+        sorted.sort(
+          (a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0),
+        );
+        return sorted.map((w, i) => ({ ...w, sortOrder: i }));
+      });
+
+      utils.threads.list.setData(
+        { organizeBy: effectiveOrganizeBy, sortBy: effectiveSortBy },
+        (current) => {
+          if (!current || !("groups" in current) || !current.groups)
+            return current;
+          const reordered = [...current.groups];
+          reordered.sort(
+            (a, b) =>
+              (orderMap.get(a.workspace.id) ?? 0) -
+              (orderMap.get(b.workspace.id) ?? 0),
+          );
+          return { ...current, groups: reordered };
+        },
+      );
+
+      void reorderWorkspaces.mutateAsync({ workspaceIds: orderedIds }).then(
+        () => {
+          void utils.threads.list.invalidate();
+        },
+        () => {
+          void utils.workspaces.list.invalidate();
+          void utils.threads.list.invalidate();
+        },
+      );
+    },
+    [
+      effectiveOrganizeBy,
+      effectiveSortBy,
+      reorderWorkspaces,
+      utils.threads.list,
+      utils.workspaces.list,
+    ],
   );
 
   const warmThreadNow = useCallback(
@@ -2265,6 +2484,16 @@ export function WorkspaceSidebar() {
         subtitle: "Jump to recurring tasks and run history",
       },
       {
+        icon: CheckListIcon,
+        id: "open-scratchpad",
+        keywords: ["scratchpad", "quick tasks", "checklist", "todo"],
+        label: "Scratchpad",
+        onSelect: handleOpenScratchpad,
+        shortcutActionId: "scratchpad.open" as const,
+        subtitle:
+          "Capture quick tasks and let agents run them in the background",
+      },
+      {
         icon: AiIdeaIcon,
         id: "open-skills",
         keywords: ["agents", "skills", "capabilities"],
@@ -2349,6 +2578,7 @@ export function WorkspaceSidebar() {
       currentThemePreference,
       handleCreateWorkspace,
       handleOpenAutomations,
+      handleOpenScratchpad,
       handleOpenSettings,
       handleOpenSkills,
       handleSetThemePreference,
@@ -2453,6 +2683,33 @@ export function WorkspaceSidebar() {
             <span className="px-3">Threads</span>
           </h2>
         </div>
+
+        {organizeBy === "workspace" && groups.length > 0 ? (
+          <Tooltip.Root delay={450}>
+            <Tooltip.Trigger>
+              <Button
+                isIconOnly
+                onPress={handleToggleAllExpanded}
+                size="sm"
+                className="h-6 w-6 min-w-6"
+                variant="ghost"
+              >
+                <HugeiconsIcon
+                  className={`transition-transform duration-150`}
+                  color="currentColor"
+                  icon={allWorkspacesExpanded ? CollapseIcon : ExpandIcon}
+                  size={8}
+                  strokeWidth={1.5}
+                />
+              </Button>
+            </Tooltip.Trigger>
+            <Tooltip.Content offset={8} placement="bottom">
+              {allWorkspacesExpanded
+                ? "Collapse all workspaces"
+                : "Expand all workspaces"}
+            </Tooltip.Content>
+          </Tooltip.Root>
+        ) : null}
 
         <Button
           isIconOnly
@@ -2574,10 +2831,10 @@ export function WorkspaceSidebar() {
                 onArchiveWorkspace={handleOpenDeleteWorkspace}
                 onPin={handlePin}
                 onPressThread={handlePressThread}
-                onPressWorkspace={handlePressWorkspace}
                 onRelocateWorkspace={handleRelocateWorkspace}
                 onRenameThread={handleOpenRenameThread}
                 onRenameWorkspace={handleOpenRenameWorkspace}
+                onReorderWorkspaces={handleReorderWorkspaces}
                 onWarmThread={handleWarmThread}
                 selectedThreadId={selectedThreadId}
                 onToggleWorkspace={handleToggleWorkspace}

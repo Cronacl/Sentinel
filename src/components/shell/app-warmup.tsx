@@ -55,6 +55,9 @@ export function AppWarmupCoordinator() {
         void utils.automations.list.prefetch();
       },
       () => {
+        void utils.scratchpad.getCurrent.prefetch();
+      },
+      () => {
         void utils.skills.list.prefetch();
         void utils.skills.registry.prefetch();
         void utils.engines.list.prefetch();

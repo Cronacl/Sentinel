@@ -1282,7 +1282,6 @@ export function ThreadRepoActions({
                     strokeWidth={1.5}
                   />
                 )}
-                <span>Commit</span>
               </>
             )}
           </Button>
@@ -1422,7 +1421,7 @@ export function ThreadRepoActions({
       <Modal.Root state={commitModalState}>
         <Modal.Backdrop>
           <Modal.Container placement="center" size="sm">
-            <Modal.Dialog className="border-border/60 w-full border sm:max-w-[380px]">
+            <Modal.Dialog>
               <div className="">
                 <div className="flex items-start justify-between">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/40 bg-content1">
@@ -1658,7 +1657,7 @@ export function ThreadRepoActions({
       <Modal.Root state={pushModalState}>
         <Modal.Backdrop>
           <Modal.Container placement="center" size="sm">
-            <Modal.Dialog className="border-border/60 w-full border sm:max-w-[380px]">
+            <Modal.Dialog>
               <div className="">
                 <div className="flex items-start justify-between">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/40 bg-content1">
@@ -1718,7 +1717,7 @@ export function ThreadRepoActions({
       <Modal.Root state={branchModalState}>
         <Modal.Backdrop>
           <Modal.Container placement="center" size="sm">
-            <Modal.Dialog className="border-border/60 w-full border sm:max-w-[380px]">
+            <Modal.Dialog>
               <form className="" onSubmit={(e) => void handleBranchSubmit(e)}>
                 <div className="flex items-start justify-between">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/40 bg-content1">
@@ -1781,7 +1780,7 @@ export function ThreadRepoActions({
       <Modal.Root state={prBranchModalState}>
         <Modal.Backdrop>
           <Modal.Container placement="center" size="sm">
-            <Modal.Dialog className="border-border/60 w-full border sm:max-w-[380px]">
+            <Modal.Dialog>
               <form className="" onSubmit={(e) => void handlePrBranchSubmit(e)}>
                 <div className="flex items-start justify-between">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/40 bg-content1">

@@ -16,6 +16,7 @@ export const SHORTCUT_ACTION_IDS = [
   "thread.new",
   "workspace.create",
   "automations.open",
+  "scratchpad.open",
   "skills.open",
   "settings.open",
   "sidebar.left.toggle",

@@ -91,6 +91,10 @@ export function useAppShortcutActions() {
     router.push("/automations");
   }, [router]);
 
+  const handleOpenScratchpad = useCallback(() => {
+    router.push("/scratchpad");
+  }, [router]);
+
   const handleOpenSkills = useCallback(() => {
     router.push("/skills");
   }, [router]);
@@ -102,6 +106,7 @@ export function useAppShortcutActions() {
   return {
     handleCreateWorkspace,
     handleOpenAutomations,
+    handleOpenScratchpad,
     handleOpenSettings,
     handleOpenSkills,
     handleStartNewThread,
