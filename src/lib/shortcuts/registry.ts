@@ -66,6 +66,13 @@ export const SHORTCUT_DEFINITIONS: Record<
     label: "Open automations",
     scope: "global",
   },
+  "scratchpad.open": {
+    defaultBindings: { default: ["shift+mod+t"] },
+    description: "Open Scratchpad.",
+    id: "scratchpad.open",
+    label: "Open Scratchpad",
+    scope: "global",
+  },
   "skills.open": {
     defaultBindings: { default: ["shift+mod+k"] },
     description: "Open skills.",

@@ -1,6 +1,7 @@
 export const STATIC_APP_WARMUP_ROUTES = [
   "/",
   "/automations",
+  "/scratchpad",
   "/skills",
   "/settings",
   "/settings/appearance",

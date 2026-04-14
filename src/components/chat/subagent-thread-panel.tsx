@@ -51,7 +51,15 @@ function StatusIndicator({
   );
 }
 
-function SubagentThreadConversation({ data }: { data: ThreadDetails }) {
+function SubagentThreadConversation({
+  data,
+  overrideTitle,
+  hideDescription,
+}: {
+  data: ThreadDetails;
+  overrideTitle?: string;
+  hideDescription?: boolean;
+}) {
   const utils = api.useUtils();
   const { close } = useRightSidebar();
   const [chatError, setChatError] = useState<string | null>(null);
@@ -179,9 +187,13 @@ function SubagentThreadConversation({ data }: { data: ThreadDetails }) {
           <div className="flex min-w-0 items-center gap-2.5">
             <div className="min-w-0">
               <h2 className="truncate text-sm font-medium text-foreground/85">
-                {threadTitle}
+                {overrideTitle ?? threadTitle}
               </h2>
-              <p className="text-[11px] text-foreground/40">Sub-agent thread</p>
+              {hideDescription ? null : (
+                <p className="text-[11px] text-foreground/40">
+                  Sub-agent thread
+                </p>
+              )}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -249,7 +261,15 @@ function SubagentThreadConversation({ data }: { data: ThreadDetails }) {
   );
 }
 
-export function SubagentThreadPanel({ threadId }: { threadId: string }) {
+export function SubagentThreadPanel({
+  hideDescription,
+  overrideTitle,
+  threadId,
+}: {
+  hideDescription?: boolean;
+  overrideTitle?: string;
+  threadId: string;
+}) {
   const utils = api.useUtils();
   const cachedThread = utils.threads.getSubagent.getData({ threadId });
   const threadQuery = api.threads.getSubagent.useQuery(
@@ -282,5 +302,11 @@ export function SubagentThreadPanel({ threadId }: { threadId: string }) {
     );
   }
 
-  return <SubagentThreadConversation data={threadQuery.data} />;
+  return (
+    <SubagentThreadConversation
+      data={threadQuery.data}
+      hideDescription={hideDescription}
+      overrideTitle={overrideTitle}
+    />
+  );
 }

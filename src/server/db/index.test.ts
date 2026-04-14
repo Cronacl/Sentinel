@@ -149,6 +149,20 @@ const LEGACY_THREAD_COLUMNS = CURRENT_THREAD_COLUMNS.filter(
   ({ name }) => name !== "delegation_id",
 );
 
+const CURRENT_WORKSPACE_COLUMNS = [
+  { name: "id" },
+  { name: "user_id" },
+  { name: "name" },
+  { name: "root_path" },
+  { name: "description" },
+  { name: "permission_mode_override" },
+  { name: "is_archived" },
+  { name: "is_expanded" },
+  { name: "sort_order" },
+  { name: "created_at" },
+  { name: "updated_at" },
+];
+
 function serializeRunSql(statement: unknown): string {
   if (
     statement &&
@@ -179,10 +193,12 @@ function createMocks({
   userColumns = CURRENT_USER_COLUMNS,
   automationColumns = CURRENT_AUTOMATION_COLUMNS,
   threadColumns = CURRENT_THREAD_COLUMNS,
+  workspaceColumns = CURRENT_WORKSPACE_COLUMNS,
 }: {
   userColumns?: Array<{ name: string }>;
   automationColumns?: Array<{ name: string }>;
   threadColumns?: Array<{ name: string }>;
+  workspaceColumns?: Array<{ name: string }>;
 } = {}) {
   const operations: string[] = [];
   const sqlite = {
@@ -202,6 +218,10 @@ function createMocks({
 
         if (sql.includes('PRAGMA table_info("thread")')) {
           return threadColumns;
+        }
+
+        if (sql.includes('PRAGMA table_info("workspace")')) {
+          return workspaceColumns;
         }
 
         return [];
@@ -397,6 +417,48 @@ describe("ensureTables", () => {
       )
       .get("thread_parent_delegation_unique") as { name: string } | undefined;
     expect(delegationIndex?.name).toBe("thread_parent_delegation_unique");
+
+    sqlite.close();
+  });
+
+  it("adds workspace sort_order to legacy sqlite databases without rebuilding the table", () => {
+    const sqlite = new SQLiteDatabase(":memory:");
+    sqlite.exec(`
+      CREATE TABLE "workspace" (
+        "id" text PRIMARY KEY NOT NULL,
+        "user_id" text NOT NULL,
+        "name" text NOT NULL,
+        "root_path" text,
+        "description" text,
+        "is_archived" integer DEFAULT false NOT NULL,
+        "is_expanded" integer DEFAULT false NOT NULL,
+        "created_at" integer NOT NULL,
+        "updated_at" integer NOT NULL,
+        "permission_mode_override" text
+      );
+    `);
+    const db = drizzle(sqlite, { schema });
+
+    expect(() => ensureTables(db as never, sqlite as never)).not.toThrow();
+
+    const workspaceColumns = sqlite
+      .prepare(`PRAGMA table_info("workspace")`)
+      .all() as Array<{
+      dflt_value: string | null;
+      name: string;
+      notnull: number;
+    }>;
+    const sortOrderColumn = workspaceColumns.find(
+      ({ name }) => name === "sort_order",
+    );
+
+    expect(sortOrderColumn).toEqual(
+      expect.objectContaining({
+        dflt_value: "0",
+        name: "sort_order",
+        notnull: 1,
+      }),
+    );
 
     sqlite.close();
   });

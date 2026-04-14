@@ -154,7 +154,10 @@ export const threadsRouter = createTRPCRouter({
               eq(workspaces.userId, ctx.session.user.id),
             ].filter(Boolean),
           ),
-          orderBy: (workspaces, { desc }) => [desc(workspaces.createdAt)],
+          orderBy: (workspaces, { asc, desc }) => [
+            asc(workspaces.sortOrder),
+            desc(workspaces.createdAt),
+          ],
           columns: workspaceSelect,
           with: {
             threads: {

@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
+import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { sql } from "drizzle-orm";
@@ -20,7 +21,6 @@ function getVectorDbPath(): string {
 
 function ensureDirectory(filePath: string) {
   const dir = path.dirname(filePath);
-  const fs = require("node:fs") as typeof import("node:fs");
   fs.mkdirSync(dir, { recursive: true });
 }
 
@@ -144,6 +144,17 @@ export function ensureTables(
   db.run(
     sql`CREATE INDEX IF NOT EXISTS "workspace_user_id_archived_idx" ON "workspace" ("user_id", "is_archived")`,
   );
+  ensureTableColumns(sqlite, "workspace", [
+    { name: "permission_mode_override", definition: "text" },
+    {
+      name: "is_expanded",
+      definition: "integer DEFAULT false NOT NULL",
+    },
+    {
+      name: "sort_order",
+      definition: "integer DEFAULT 0 NOT NULL",
+    },
+  ]);
 
   db.run(sql`CREATE TABLE IF NOT EXISTS "thread" (
     "id" text PRIMARY KEY NOT NULL,
@@ -335,22 +346,6 @@ export function ensureTables(
   try {
     db.run(
       sql`ALTER TABLE "user" ADD COLUMN "last_project_open_target_id" text`,
-    );
-  } catch {
-    // column already exists
-  }
-
-  try {
-    db.run(
-      sql`ALTER TABLE "workspace" ADD COLUMN "permission_mode_override" text`,
-    );
-  } catch {
-    // column already exists
-  }
-
-  try {
-    db.run(
-      sql`ALTER TABLE "workspace" ADD COLUMN "is_expanded" integer DEFAULT false NOT NULL`,
     );
   } catch {
     // column already exists
@@ -604,6 +599,49 @@ export function ensureTables(
   );
   db.run(
     sql`CREATE INDEX IF NOT EXISTS "thread_plan_question_thread_status_idx" ON "thread_plan_question" ("thread_id", "status")`,
+  );
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS "scratchpad" (
+    "id" text PRIMARY KEY NOT NULL,
+    "workspace_id" text NOT NULL,
+    "user_id" text NOT NULL,
+    "hub_thread_id" text,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS "scratchpad_workspace_user_unique" ON "scratchpad" ("workspace_id", "user_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "scratchpad_workspace_id_idx" ON "scratchpad" ("workspace_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "scratchpad_user_id_idx" ON "scratchpad" ("user_id")`,
+  );
+
+  db.run(sql`CREATE TABLE IF NOT EXISTS "scratchpad_task" (
+    "id" text PRIMARY KEY NOT NULL,
+    "scratchpad_id" text NOT NULL,
+    "title" text NOT NULL,
+    "progress_text" text,
+    "status" text DEFAULT 'pending' NOT NULL,
+    "sort_order" integer DEFAULT 0 NOT NULL,
+    "virtual_thread_id" text,
+    "visible_thread_id" text,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL
+  )`);
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "scratchpad_task_scratchpad_id_idx" ON "scratchpad_task" ("scratchpad_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "scratchpad_task_scratchpad_sort_idx" ON "scratchpad_task" ("scratchpad_id", "sort_order")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "scratchpad_task_virtual_thread_idx" ON "scratchpad_task" ("virtual_thread_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "scratchpad_task_visible_thread_idx" ON "scratchpad_task" ("visible_thread_id")`,
   );
 
   db.run(sql`CREATE TABLE IF NOT EXISTS "provider_credential" (
@@ -1036,6 +1074,10 @@ function getDb() {
   }
 
   return globalForDb.db;
+}
+
+export function syncDatabaseSchema() {
+  return getDb();
 }
 
 export const db = new Proxy({} as ReturnType<typeof createDatabase>, {

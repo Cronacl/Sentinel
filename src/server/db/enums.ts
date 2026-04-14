@@ -93,6 +93,15 @@ export type ThreadPlanQuestionStatus =
 export const THREAD_PLAN_AUDIENCES = ["technical", "general"] as const;
 export type ThreadPlanAudience = (typeof THREAD_PLAN_AUDIENCES)[number];
 
+export const SCRATCHPAD_TASK_STATUSES = [
+  "pending",
+  "running",
+  "completed",
+  "blocked",
+  "failed",
+] as const;
+export type ScratchpadTaskStatus = (typeof SCRATCHPAD_TASK_STATUSES)[number];
+
 export const FOLLOW_UP_BEHAVIORS = ["queue", "steer"] as const;
 export type FollowUpBehavior = (typeof FOLLOW_UP_BEHAVIORS)[number];
 
