@@ -244,6 +244,9 @@ const setThreadStatus = mock(
   },
 );
 const updateThreadChatSettings = mock(() => {});
+const updateClaudeThreadState = mock(() => {});
+const updateCopilotThreadState = mock(() => {});
+const updateCodexThreadState = mock(() => {});
 const updateThreadRepoState = mock(() => {});
 const promoteVirtualThreadToVisibleChild = mock(async () => "child-thread-1");
 const syncThreadFromThread = mock(async () => true);
@@ -1084,6 +1087,9 @@ beforeEach(async () => {
     setActiveStream,
     setThreadStatus,
     syncThreadFromThread,
+    updateClaudeThreadState,
+    updateCopilotThreadState,
+    updateCodexThreadState,
     updateMessageMetadata,
     updateThreadChatSettings,
     updateThreadContextCompactionCheckpoint,
@@ -1114,6 +1120,9 @@ beforeEach(async () => {
     setActiveStream,
     setThreadStatus,
     syncThreadFromThread,
+    updateClaudeThreadState,
+    updateCopilotThreadState,
+    updateCodexThreadState,
     updateMessageMetadata,
     updateThreadChatSettings,
     updateThreadContextCompactionCheckpoint,
@@ -1324,6 +1333,38 @@ describe("runThreadChat bootstrap failure recovery", () => {
       "thread-1",
       expect.any(String),
     );
+  });
+});
+
+describe("runThreadChat bootstrap titles", () => {
+  it("returns the fallback title in the first snapshot for placeholder threads", async () => {
+    loadThread.mockImplementation(async () => ({
+      archivedAt: null,
+      id: "thread-1",
+      mode: "chat",
+      title: "New thread",
+    }));
+    loadThreadMessages.mockImplementation(async () => []);
+
+    const response = await runThreadChat(
+      createSubmitRequest({
+        message: createUserMessage("Fix sidebar thread title updates"),
+      }),
+      "user-1",
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(202);
+    expect(updateThreadTitle).toHaveBeenCalledWith(
+      "thread-1",
+      "Fix sidebar thread title updates",
+    );
+    expect(payload).toMatchObject({
+      snapshot: {
+        threadId: "thread-1",
+        threadTitle: "Fix sidebar thread title updates",
+      },
+    });
   });
 });
 

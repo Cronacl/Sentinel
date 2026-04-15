@@ -14,6 +14,7 @@ import {
   generateThreadBranchName,
   getHeadCommitMessage,
   getCommitMessageContext,
+  getRepoDiffPanelBundleData,
   getRepoDiffPanelData,
   initializeRepository,
   isWorktreeClean,
@@ -435,6 +436,65 @@ describe("repo actions", () => {
     expect(result.mode).toBe("staged");
     expect(result.files).toHaveLength(1);
     expect(result.files[0]?.path).toBe("file.ts");
+  });
+
+  it("returns an empty diff bundle instead of throwing for a non-git directory", async () => {
+    const directory = await createDirectory("sentinel-no-git-");
+
+    const result = await getRepoDiffPanelBundleData(directory, {
+      emptyReason:
+        "Repo diff is temporarily unavailable while this thread is loading.",
+      onMissingRepo: "empty",
+    });
+
+    expect(result.isGitRepo).toBe(false);
+    expect(result.diffs.unstaged.disabledReason).toContain(
+      "temporarily unavailable",
+    );
+    expect(result.diffs.staged.fileCount).toBe(0);
+    expect(result.diffs.branch.fileCount).toBe(0);
+  });
+
+  it("reuses the same in-flight bundle promise for concurrent requests", async () => {
+    const repoRoot = await createRepo();
+    await writeFile(
+      path.join(repoRoot, "file.ts"),
+      "export const value = 2;\n",
+    );
+
+    const [first, second] = await Promise.all([
+      getRepoDiffPanelBundleData(repoRoot, {
+        dedupeKey: `bundle:${repoRoot}:feature/test`,
+      }),
+      getRepoDiffPanelBundleData(repoRoot, {
+        dedupeKey: `bundle:${repoRoot}:feature/test`,
+      }),
+    ]);
+
+    expect(first).toBe(second);
+    expect(first.diffs.unstaged.fileCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("keeps concurrent bundle work separate for different repo roots", async () => {
+    const firstRepoRoot = await createRepo();
+    const secondRepoRoot = await createRepo();
+
+    const [first, second] = await Promise.all([
+      getRepoDiffPanelBundleData(firstRepoRoot, {
+        dedupeKey: `bundle:${firstRepoRoot}:main`,
+      }),
+      getRepoDiffPanelBundleData(secondRepoRoot, {
+        dedupeKey: `bundle:${secondRepoRoot}:main`,
+      }),
+    ]);
+
+    expect(first).not.toBe(second);
+    expect(path.basename(first.repoRoot ?? "")).toBe(
+      path.basename(firstRepoRoot),
+    );
+    expect(path.basename(second.repoRoot ?? "")).toBe(
+      path.basename(secondRepoRoot),
+    );
   });
 
   it("stages, unstages, and reverts files by path", async () => {

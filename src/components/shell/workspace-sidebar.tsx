@@ -99,6 +99,7 @@ import {
 import {
   BACKGROUND_REPO_WARMUP_INTERVAL_MS,
   queueRepoBackgroundWarmup,
+  warmRepoDiffBundleCandidate,
 } from "@/components/chat/repo-background-warmup";
 
 import { SidebarCommandPalette } from "./sidebar-command-palette";
@@ -135,7 +136,6 @@ const THEME_ACTION_ICONS = {
   light: Sun03Icon,
   system: ComputerIcon,
 } as const;
-const MAX_BACKGROUND_REPO_PRELOADS = 4;
 
 function toCurrentWorkspace(
   workspace:
@@ -1477,7 +1477,7 @@ export function WorkspaceSidebar() {
       collectRepoDiffPreloadCandidates({
         groups,
         items,
-        maxCandidates: MAX_BACKGROUND_REPO_PRELOADS,
+        maxCandidates: Number.MAX_SAFE_INTEGER,
         selectedThreadId,
       }),
     [groups, items, selectedThreadId],
@@ -2079,7 +2079,7 @@ export function WorkspaceSidebar() {
   );
 
   const warmThreadNow = useCallback(
-    (threadId: string) => {
+    (workspaceId: string, threadId: string) => {
       if (selectedThreadId === threadId) {
         return;
       }
@@ -2098,8 +2098,14 @@ export function WorkspaceSidebar() {
 
       void utils.threads.get.prefetch({ threadId });
       void router.prefetch(`/thread/${threadId}`);
+      void warmRepoDiffBundleCandidate({
+        candidate: { threadId, workspaceId },
+        modes: REPO_DIFF_PRELOAD_MODES,
+        strategy: "prefetch",
+        utils,
+      });
     },
-    [router, selectedThreadId, utils.threads.get],
+    [router, selectedThreadId, utils],
   );
 
   const handleWarmThread = useCallback<WarmThreadHandler>(
@@ -2114,7 +2120,7 @@ export function WorkspaceSidebar() {
           window.clearTimeout(hoverWarmTimeoutRef.current);
           hoverWarmTimeoutRef.current = null;
         }
-        warmThreadNow(threadId);
+        warmThreadNow(_workspaceId, threadId);
         return;
       }
 
@@ -2136,7 +2142,7 @@ export function WorkspaceSidebar() {
           return;
         }
         pendingHoverWarmRef.current = null;
-        warmThreadNow(threadId);
+        warmThreadNow(_workspaceId, threadId);
       }, THREAD_WARM_HOVER_DELAY_MS);
     },
     [selectedThreadId, warmThreadNow],

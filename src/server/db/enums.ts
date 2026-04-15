@@ -129,10 +129,12 @@ export const AUTOMATION_RUN_STATUSES = [
 export type AutomationRunStatus = (typeof AUTOMATION_RUN_STATUSES)[number];
 
 export const AUTOMATION_REASONING_EFFORTS = [
+  "none",
   "minimal",
   "low",
   "medium",
   "high",
+  "xhigh",
 ] as const;
 export type AutomationReasoningEffort =
   (typeof AUTOMATION_REASONING_EFFORTS)[number];

@@ -27,7 +27,11 @@ import {
 } from "@/lib/ai/messages/types";
 import { createLogger } from "@/lib/logger";
 import { normalizeThreadMode } from "@/lib/plan";
-import { streamContext } from "@/lib/streams";
+import {
+  safelyCloseReadableStreamController,
+  safelyEnqueueReadableStreamController,
+  streamContext,
+} from "@/lib/streams";
 
 import * as persist from "../persistence";
 import {
@@ -44,6 +48,7 @@ import type { ThreadStreamEvent } from "../session-types";
 import type { ThreadChatRequest } from "../types";
 import {
   buildActiveThreadMessages,
+  buildFirstUserMessageTitle,
   getFirstUserText,
   getUserParentMessageId,
   truncateTranscriptAtMessage,
@@ -318,6 +323,7 @@ async function waitForPersistedClaudePromptResponse(input: {
 
 async function createThreadEventChannel(runId: string) {
   let controller: ReadableStreamDefaultController<string> | null = null;
+  let closed = false;
 
   await streamContext.createNewResumableStream(
     runId,
@@ -331,11 +337,28 @@ async function createThreadEventChannel(runId: string) {
 
   return {
     close() {
-      controller?.close();
+      if (closed) {
+        return;
+      }
+
+      closed = true;
+      safelyCloseReadableStreamController(controller);
       controller = null;
     },
     emit(event: ThreadStreamEvent) {
-      controller?.enqueue(serializeThreadStreamEvent(event));
+      if (closed) {
+        return;
+      }
+
+      const didEnqueue = safelyEnqueueReadableStreamController(
+        controller,
+        serializeThreadStreamEvent(event),
+      );
+
+      if (!didEnqueue) {
+        closed = true;
+        controller = null;
+      }
     },
   };
 }
@@ -869,6 +892,46 @@ async function emitThreadSnapshot(
       type: "thread.snapshot",
     });
   }
+}
+
+function shouldGenerateRuntimeThreadTitle(input: {
+  existingTitle?: string | null;
+  messageCount: number;
+  trigger: ThreadChatRequest["trigger"];
+}) {
+  return (
+    input.trigger === "submit-user-message" &&
+    input.messageCount === 0 &&
+    (!input.existingTitle || input.existingTitle === "New thread")
+  );
+}
+
+function launchClaudeThreadTitleGeneration(input: {
+  eventChannel: ThreadEventChannel;
+  existingThreadTitle?: string | null;
+  messageCount: number;
+  request: Pick<ThreadChatRequest, "message" | "threadId" | "trigger">;
+}) {
+  if (
+    !shouldGenerateRuntimeThreadTitle({
+      existingTitle: input.existingThreadTitle,
+      messageCount: input.messageCount,
+      trigger: input.request.trigger,
+    })
+  ) {
+    return;
+  }
+
+  const firstUserText = getFirstUserText(
+    input.request.message ? [input.request.message] : [],
+  );
+  const title = buildFirstUserMessageTitle(firstUserText);
+  if (title === "New thread") {
+    return;
+  }
+
+  persist.updateThreadTitle(input.request.threadId, title);
+  void emitThreadSnapshot(input.request.threadId, input.eventChannel);
 }
 
 async function drainQueuedClaudeFollowUp(
@@ -1528,9 +1591,9 @@ export async function runClaudeThreadChat(
     allRecords,
   );
   const assistantParentMessageId = request.message?.id ?? userParentMessageId;
-  const fallbackTitle =
-    getFirstUserText(request.message ? [request.message] : [])?.slice(0, 100) ??
-    "New thread";
+  const fallbackTitle = buildFirstUserMessageTitle(
+    getFirstUserText(request.message ? [request.message] : []),
+  );
 
   await persist.ensureThread(
     request.threadId,
@@ -1555,6 +1618,8 @@ export async function runClaudeThreadChat(
   const existingClaudeState = getClaudeThreadState(
     existingThread?.chatEngineState,
   );
+  const requestedModelId =
+    request.modelId ?? existingClaudeState?.modelId ?? null;
   const didThreadModeChange =
     existingThread?.mode != null &&
     normalizeThreadMode(existingThread.mode) !== threadMode;
@@ -1573,7 +1638,7 @@ export async function runClaudeThreadChat(
   const { options, permissionMode } = await buildClaudeRuntimeOptions({
     cwd,
     permissionMode: workspacePermissionMode,
-    requestedModelId: request.modelId ?? existingClaudeState?.modelId ?? null,
+    requestedModelId,
     sessionId,
     threadMode,
     workspaceRoot,
@@ -1586,8 +1651,8 @@ export async function runClaudeThreadChat(
   const inputQueue = createClaudeInputQueue<SDKUserMessage>();
   const mirror = createClaudeMirrorState({
     assistantId,
-    requestedModelId: request.modelId ?? existingClaudeState?.modelId ?? null,
-    responseModelId: request.modelId ?? existingClaudeState?.modelId ?? null,
+    requestedModelId,
+    responseModelId: requestedModelId,
     sessionId,
     threadId: request.threadId,
   });
@@ -1609,8 +1674,7 @@ export async function runClaudeThreadChat(
       buildAssistantPlaceholder({
         assistantId,
         parentMessageId: assistantParentMessageId,
-        requestedModelId:
-          request.modelId ?? existingClaudeState?.modelId ?? null,
+        requestedModelId,
         runId,
       }),
     );
@@ -1619,7 +1683,7 @@ export async function runClaudeThreadChat(
     persist.setThreadStatus(request.threadId, "streaming");
     await persist.updateThreadChatSettings(request.threadId, {
       engine: "claude",
-      modelId: request.modelId ?? existingClaudeState?.modelId ?? null,
+      modelId: requestedModelId,
       mode: threadMode,
       reasoningEffort: request.reasoningEffort ?? null,
     });
@@ -1632,11 +1696,17 @@ export async function runClaudeThreadChat(
       request.threadId,
       buildClaudeThreadState({
         cwd,
-        modelId: request.modelId ?? existingClaudeState?.modelId ?? null,
+        modelId: requestedModelId,
         permissionMode,
         sessionId,
       }),
     );
+    launchClaudeThreadTitleGeneration({
+      eventChannel,
+      existingThreadTitle: existingThread?.title ?? null,
+      messageCount: allRecords.length,
+      request,
+    });
 
     const pendingApprovals = new Map<
       string,

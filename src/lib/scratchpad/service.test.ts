@@ -434,6 +434,103 @@ describe("scratchpad service", () => {
     expect(result.tasks[0]?.visibleThreadId).toBe("visible-thread-1");
   });
 
+  it("hydrates scratchpad titles with the normal thread bootstrap logic", async () => {
+    const { drizzleDb } = createScratchpadTestDb();
+    const now = new Date("2026-04-14T00:00:00.000Z");
+
+    drizzleDb
+      .insert(schema.scratchpads)
+      .values({
+        createdAt: now,
+        hubThreadId: "hub-thread-1",
+        id: "scratchpad-1",
+        updatedAt: now,
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      })
+      .run();
+
+    drizzleDb
+      .insert(schema.threads)
+      .values([
+        {
+          chatEngine: "codex",
+          createdAt: now,
+          id: "virtual-thread-1",
+          mode: "chat",
+          parentThreadId: "hub-thread-1",
+          status: "idle",
+          title: "Scratchpad: please help me fix scratchpad title generation",
+          updatedAt: now,
+          userId: "user-1",
+          visibility: "virtual",
+          workspaceId: "workspace-1",
+        },
+        {
+          chatEngine: "codex",
+          createdAt: now,
+          id: "visible-thread-1",
+          mode: "chat",
+          parentThreadId: "hub-thread-1",
+          sourceVirtualThreadId: "virtual-thread-1",
+          status: "idle",
+          title: "please help me fix scratchpad title generation",
+          updatedAt: new Date("2026-04-14T00:01:00.000Z"),
+          userId: "user-1",
+          visibility: "visible",
+          workspaceId: "workspace-1",
+        },
+      ])
+      .run();
+
+    drizzleDb
+      .insert(schema.scratchpadTasks)
+      .values({
+        createdAt: now,
+        id: "task-1",
+        progressText: "Thinking",
+        scratchpadId: "scratchpad-1",
+        sortOrder: 0,
+        status: "running",
+        title: "please help me fix scratchpad title generation",
+        updatedAt: now,
+        virtualThreadId: "virtual-thread-1",
+        visibleThreadId: "visible-thread-1",
+      })
+      .run();
+
+    drizzleDb
+      .insert(schema.threadMessages)
+      .values({
+        createdAt: now,
+        id: "message-row-1",
+        messageId: "message-1",
+        metadata: { status: "completed" },
+        parts: [
+          {
+            text: "please help me fix scratchpad title generation",
+            type: "text",
+          },
+        ],
+        role: "user",
+        threadId: "visible-thread-1",
+        updatedAt: now,
+      })
+      .run();
+
+    const result = await listScratchpad({
+      database: drizzleDb,
+      userId: "user-1",
+      workspaceId: "workspace-1",
+    });
+    const storedVisibleThread = await drizzleDb.query.threads.findFirst({
+      where: (table, { eq }) => eq(table.id, "visible-thread-1"),
+    });
+
+    expect(result.tasks[0]?.title).toBe("Fix Scratchpad Title Generation");
+    expect(storedVisibleThread?.title).toBe("Fix Scratchpad Title Generation");
+  });
+
   it("prefers a visible child thread and persists that linkage", async () => {
     const { drizzleDb } = createScratchpadTestDb();
     const now = new Date("2026-04-14T00:00:00.000Z");

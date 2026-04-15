@@ -77,6 +77,13 @@ const getRepoDiffPanelData = mock(async (rootPath, mode: string) => ({
   totalAdditions: 1,
   totalDeletions: 1,
 }));
+const getRepoDiffPanelBundleData = mock(async (rootPath) => ({
+  diffs: {
+    branch: await getRepoDiffPanelData(rootPath, "branch"),
+    staged: await getRepoDiffPanelData(rootPath, "staged"),
+    unstaged: await getRepoDiffPanelData(rootPath, "unstaged"),
+  },
+}));
 const buildFallbackCommitMessage = mock(() => "Update file");
 const commitAllChanges = mock(async () => ({
   commit: "1234567",
@@ -212,6 +219,7 @@ mock.module("@/lib/git/repo", () => ({
   commitAllChanges,
   createAndCheckoutBranch,
   ensureThreadWorktree,
+  getRepoDiffPanelBundleData,
   getCommitMessageContext,
   getRepoDiffPanelData,
   getHeadCommitMessage,
@@ -288,6 +296,7 @@ beforeEach(() => {
   getOwnedThreadOrThrow.mockClear();
   resolveRepoContext.mockClear();
   getCommitMessageContext.mockClear();
+  getRepoDiffPanelBundleData.mockClear();
   getRepoDiffPanelData.mockClear();
   getHeadCommitMessage.mockClear();
   buildFallbackCommitMessage.mockClear();
@@ -936,6 +945,182 @@ describe("repoRouter.createPullRequest", () => {
       true,
     );
   });
+
+  it("creates a PR from workspace repo state when the draft thread does not exist yet", async () => {
+    getOwnedThreadOrThrow.mockImplementationOnce(async () => {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "Thread not found.",
+      });
+    });
+
+    resolveRepoContext
+      .mockImplementationOnce(async () => ({
+        aheadCount: 0,
+        branch: "feature/test",
+        changedFileCount: 1,
+        deletions: 0,
+        githubRemote: {
+          defaultBranch: "main",
+          owner: "openai",
+          pullRequestUrl:
+            "https://github.com/openai/sentinel/compare/main...feature/test?expand=1",
+          pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+          remoteName: "origin",
+          remoteUrl: "git@github.com:openai/sentinel.git",
+          repo: "sentinel",
+          repositoryUrl: "https://github.com/openai/sentinel",
+        },
+        hasChanges: true,
+        hasCommits: true,
+        hasRemotes: true,
+        hasUpstream: false,
+        insertions: 0,
+        isDefaultBranch: false,
+        isGitRepo: true,
+        pushRemoteName: "origin",
+        repoRoot: "/tmp/workspace",
+      }))
+      .mockImplementationOnce(async () => ({
+        aheadCount: 1,
+        branch: "feature/test",
+        changedFileCount: 0,
+        deletions: 0,
+        githubRemote: {
+          defaultBranch: "main",
+          owner: "openai",
+          pullRequestUrl:
+            "https://github.com/openai/sentinel/compare/main...feature/test?expand=1",
+          pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+          remoteName: "origin",
+          remoteUrl: "git@github.com:openai/sentinel.git",
+          repo: "sentinel",
+          repositoryUrl: "https://github.com/openai/sentinel",
+        },
+        hasChanges: false,
+        hasCommits: true,
+        hasRemotes: true,
+        hasUpstream: false,
+        insertions: 0,
+        isDefaultBranch: false,
+        isGitRepo: true,
+        pushRemoteName: "origin",
+        repoRoot: "/tmp/workspace",
+      }))
+      .mockImplementationOnce(async () => ({
+        aheadCount: 0,
+        branch: "feature/test",
+        changedFileCount: 0,
+        deletions: 0,
+        githubRemote: {
+          defaultBranch: "main",
+          owner: "openai",
+          pullRequestUrl:
+            "https://github.com/openai/sentinel/compare/main...feature/test?expand=1",
+          pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+          remoteName: "origin",
+          remoteUrl: "git@github.com:openai/sentinel.git",
+          repo: "sentinel",
+          repositoryUrl: "https://github.com/openai/sentinel",
+        },
+        hasChanges: false,
+        hasCommits: true,
+        hasRemotes: true,
+        hasUpstream: true,
+        insertions: 0,
+        isDefaultBranch: false,
+        isGitRepo: true,
+        pushRemoteName: "origin",
+        repoRoot: "/tmp/workspace",
+      }));
+
+    const result = await repoRouter.createPullRequest({
+      ctx: {
+        db: {
+          query: {
+            integrations: {
+              findFirst: findGithubIntegration,
+            },
+          },
+        },
+        session: { user: { id: "user-draft" } },
+        user: {
+          defaultChatModelId: "openai:gpt-4.1-mini",
+          id: "user-draft",
+        },
+      },
+      input: {
+        threadId: "draft-thread",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(generateGitCommitMessage).toHaveBeenCalledWith({
+      context: {
+        branch: "feature/test",
+        changes: [{ path: "file.ts", type: "modified" }],
+        patch:
+          "diff --git a/file.ts b/file.ts\n+export const updated = true;\n",
+        repoRoot: "/tmp/workspace",
+        summary: "M file.ts",
+      },
+      defaultChatModelId: "openai:gpt-4.1-mini",
+      engine: "sentinel",
+      modelId: null,
+      reasoningEffort: null,
+      userId: "user-draft",
+    });
+    expect(commitAllChanges).toHaveBeenCalledWith(
+      "/tmp/workspace",
+      "Add generated message\n\n- add tests",
+      true,
+    );
+    expect(updateThreadRepoState).not.toHaveBeenCalled();
+    expect(result.pullRequestUrl).toContain("/compare/main...feature/test");
+    expect(result.repoContext.lastPullRequest).toMatchObject({
+      kind: "compare",
+    });
+  });
+});
+
+describe("repoRouter.commit", () => {
+  it("creates a commit from the workspace repo when the draft thread is missing", async () => {
+    getOwnedThreadOrThrow.mockImplementationOnce(async () => {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "Thread not found.",
+      });
+    });
+
+    const result = await repoRouter.commit({
+      ctx: {
+        db: {
+          query: {
+            integrations: {
+              findFirst: findGithubIntegration,
+            },
+          },
+        },
+        session: { user: { id: "user-draft" } },
+        user: {
+          id: "user-draft",
+          lastProjectOpenTargetId: null,
+        },
+      },
+      input: {
+        message: "Commit from new thread",
+        threadId: "draft-thread",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(commitAllChanges).toHaveBeenCalledWith(
+      "/tmp/workspace",
+      "Commit from new thread",
+      true,
+    );
+    expect(result.repoContext.isGitRepo).toBe(true);
+  });
 });
 
 describe("repoRouter workspace PR status queries", () => {
@@ -1409,6 +1594,45 @@ describe("repoRouter.generateCommitMessage", () => {
       code: "BAD_REQUEST",
     });
   });
+
+  it("falls back to workspace repo generation when the draft thread is missing", async () => {
+    getOwnedThreadOrThrow.mockImplementationOnce(async () => {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "Thread not found.",
+      });
+    });
+
+    await repoRouter.generateCommitMessage({
+      ctx: {
+        session: { user: { id: "user-draft" } },
+        user: {
+          defaultChatModelId: "openai:gpt-4.1",
+          id: "user-draft",
+        },
+      },
+      input: {
+        threadId: "draft-thread",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(generateGitCommitMessage).toHaveBeenCalledWith({
+      context: {
+        branch: "feature/test",
+        changes: [{ path: "file.ts", type: "modified" }],
+        patch:
+          "diff --git a/file.ts b/file.ts\n+export const updated = true;\n",
+        repoRoot: "/tmp/workspace",
+        summary: "M file.ts",
+      },
+      defaultChatModelId: "openai:gpt-4.1",
+      engine: "sentinel",
+      modelId: null,
+      reasoningEffort: null,
+      userId: "user-draft",
+    });
+  });
 });
 
 describe("repoRouter.setPreferredOpenTarget", () => {
@@ -1444,6 +1668,36 @@ describe("repoRouter.setPreferredOpenTarget", () => {
 });
 
 describe("repoRouter.diff panel", () => {
+  it("returns the aggregated diff bundle for a thread workspace pair", async () => {
+    const result = await repoRouter.getDiffPanelBundle({
+      ctx: {
+        session: { user: { id: "user-1" } },
+        user: {
+          id: "user-1",
+          lastProjectOpenTargetId: "cursor",
+        },
+      },
+      input: {
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(getRepoDiffPanelBundleData).toHaveBeenCalledWith(
+      "/tmp/workspace",
+      expect.objectContaining({
+        dedupeKey: expect.any(String),
+        emptyReason: undefined,
+        onMissingRepo: "empty",
+      }),
+    );
+    expect(result.diffs.staged).toMatchObject({
+      fileCount: 1,
+      mode: "staged",
+    });
+    expect(result.repoContext.preferredOpenTargetId).toBe("cursor");
+  });
+
   it("returns diff data for the selected mode with refreshed repo context", async () => {
     const result = await repoRouter.getDiffPanelData({
       ctx: {
@@ -1460,9 +1714,16 @@ describe("repoRouter.diff panel", () => {
       },
     });
 
-    expect(getRepoDiffPanelData).toHaveBeenCalledWith(
+    expect(getRepoDiffPanelBundleData).toHaveBeenCalledWith(
       "/tmp/workspace",
-      "staged",
+      expect.objectContaining({
+        dedupeKey: expect.any(String),
+        emptyReason: undefined,
+        onMissingRepo: "empty",
+        repoContext: expect.objectContaining({
+          branch: "feature/test",
+        }),
+      }),
     );
     expect(result.diff).toMatchObject({
       fileCount: 1,
@@ -1495,9 +1756,12 @@ describe("repoRouter.diff panel", () => {
       },
     });
 
-    expect(getRepoDiffPanelData).toHaveBeenCalledWith(
+    expect(getRepoDiffPanelBundleData).toHaveBeenCalledWith(
       "/tmp/workspace",
-      "unstaged",
+      expect.objectContaining({
+        dedupeKey: expect.any(String),
+        onMissingRepo: "empty",
+      }),
     );
     expect(result.diff.mode).toBe("unstaged");
     expect(result.repoContext.isGitRepo).toBe(true);

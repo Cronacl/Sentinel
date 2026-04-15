@@ -64,19 +64,19 @@ type PendingRequest = {
   resolve: (value: unknown) => void;
 };
 
-type CodexWireReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
+type CodexWireReasoningEffort = ReasoningEffort;
 
 function normalizeCodexReasoningEffort(
   effort: string | null | undefined,
 ): ReasoningEffort {
   switch (effort) {
+    case "none":
+    case "xhigh":
     case "low":
     case "medium":
     case "high":
     case "minimal":
       return effort;
-    case "xhigh":
-      return "high";
     default:
       return "medium";
   }

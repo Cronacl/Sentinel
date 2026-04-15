@@ -1,6 +1,6 @@
 "use client";
 
-import { type SVGProps, useState } from "react";
+import { type ReactNode, type SVGProps, useState } from "react";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, ListBox, Popover, ScrollShadow } from "@heroui/react";
@@ -42,6 +42,22 @@ function renderExternalEngineIcon(
   return null;
 }
 
+function ModelIcon({
+  children,
+  sizeClass,
+}: {
+  children: ReactNode;
+  sizeClass: string;
+}) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center justify-center ${sizeClass}`}
+    >
+      {children}
+    </span>
+  );
+}
+
 type ModelSelectorProps = {
   availableModels: ChatComposerModel[];
   isLoading?: boolean;
@@ -79,14 +95,19 @@ export function ModelSelector({
             variant="ghost"
           >
             <span className="flex min-w-0 items-center gap-2">
-              {selectedModel?.provider ? (
-                <ProviderIcon
-                  className="size-3"
-                  provider={selectedModel.provider}
-                />
-              ) : (
-                renderExternalEngineIcon(selectedModel?.engine, "size-3")
-              )}
+              <ModelIcon sizeClass="h-[13px] w-[13px]">
+                {selectedModel?.provider ? (
+                  <ProviderIcon
+                    className="h-[13px] w-[13px] shrink-0"
+                    provider={selectedModel.provider}
+                  />
+                ) : (
+                  renderExternalEngineIcon(
+                    selectedModel?.engine,
+                    "h-[13px] w-[13px] shrink-0",
+                  )
+                )}
+              </ModelIcon>
               <span className="max-w-[160px] truncate">
                 {selectedModel?.displayName ?? selectedModelKey ?? "Model"}
               </span>
@@ -144,7 +165,7 @@ export function ModelSelector({
               />
             </Button>
           </Popover.Trigger>
-          <Popover.Content className="w-28" placement="top">
+          <Popover.Content className="w-36" placement="top">
             <Popover.Dialog className="p-1">
               <ListBox
                 aria-label="Reasoning effort"
@@ -166,7 +187,9 @@ export function ModelSelector({
                     id={effort}
                     textValue={getReasoningEffortLabel(effort)}
                   >
-                    {getReasoningEffortLabel(effort)}
+                    <span className="whitespace-nowrap">
+                      {getReasoningEffortLabel(effort)}
+                    </span>
                     <ListBox.ItemIndicator />
                   </ListBox.Item>
                 ))}
@@ -187,10 +210,18 @@ function ModelSelectorItem({ model }: { model: ChatComposerModel }) {
       textValue={model.displayName}
     >
       {model.provider ? (
-        <ProviderIcon className="size-4" provider={model.provider} />
+        <ModelIcon sizeClass="h-[15px] w-[15px]">
+          <ProviderIcon
+            className="h-[15px] w-[15px] shrink-0"
+            provider={model.provider}
+          />
+        </ModelIcon>
       ) : (
-        (renderExternalEngineIcon(model.engine, "size-4") ?? (
-          <span className="w-4 text-center text-[10px] font-medium text-foreground/60">
+        (renderExternalEngineIcon(
+          model.engine,
+          "h-[15px] w-[15px] shrink-0",
+        ) ?? (
+          <span className="w-[15px] text-center text-[10px] font-medium text-foreground/60">
             {model.engine.slice(0, 1)}
           </span>
         ))

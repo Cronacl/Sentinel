@@ -5,24 +5,38 @@ import { PLAN_MODE_DEVELOPER_INSTRUCTIONS } from "./plan-mode-instructions";
 const upsertMessage = mock(() => {});
 const setActiveMessage = mock(async () => {});
 const clearActiveStream = mock(() => {});
-const setThreadStatus = mock(() => {});
-const setActiveStream = mock(() => {});
+const sessionSnapshotState = {
+  activeRunId: "run-1" as string | null,
+  threadStatus: "streaming" as "idle" | "streaming" | "awaiting_approval",
+  threadTitle: "Codex Thread",
+};
+const setThreadStatus = mock(
+  (_threadId: string, status: "idle" | "streaming" | "awaiting_approval") => {
+    sessionSnapshotState.threadStatus = status;
+  },
+);
+const setActiveStream = mock((_threadId: string, streamId: string) => {
+  sessionSnapshotState.activeRunId = streamId;
+});
 const loadThreadMessages = mock(async () => []);
 const updateThreadRepoState = mock(() => {});
 const updateThreadChatSettings = mock(async () => {});
 const updateCodexThreadState = mock(() => {});
 const updateClaudeThreadState = mock(() => {});
 const updateCopilotThreadState = mock(() => {});
+const updateThreadTitle = mock((_threadId: string, title: string) => {
+  sessionSnapshotState.threadTitle = title;
+});
 const updateMessageMetadata = mock(async () => {});
 const beginThreadRepoCheckpointRun = mock(async () => {});
 const loadThreadSessionSnapshot = mock(async (threadId: string) => ({
-  activeRunId: "run-1",
+  activeRunId: sessionSnapshotState.activeRunId,
   chatEngine: "codex",
   messages: [],
   queuedFollowUps: [],
   threadId,
-  threadTitle: "Codex Thread",
-  threadStatus: "streaming",
+  threadTitle: sessionSnapshotState.threadTitle,
+  threadStatus: sessionSnapshotState.threadStatus,
 }));
 let codexSubscriptionHandler: ((event: any) => void) | null = null;
 
@@ -68,21 +82,26 @@ mock.module("@/lib/ai/chat/engines/codex-app-server", () => ({
   getCodexAppServerManager: () => codexManager,
 }));
 
-mock.module("../persistence", () => ({
+const persistenceModuleMock = () => ({
   clearActiveStream,
   ensureThread: mock(async () => ({ created: true })),
   loadThreadMessages,
   setActiveMessage,
   setActiveStream,
   setThreadStatus,
-  updateClaudeThreadState,
-  updateCopilotThreadState,
-  updateCodexThreadState,
+  updateClaudeThreadState: updateClaudeThreadState,
+  updateCopilotThreadState: updateCopilotThreadState,
+  updateCodexThreadState: updateCodexThreadState,
   updateMessageMetadata,
   updateThreadChatSettings,
+  updateThreadTitle,
   updateThreadRepoState,
   upsertMessage,
-}));
+});
+
+mock.module("../persistence", persistenceModuleMock);
+mock.module("../persistence.ts", persistenceModuleMock);
+mock.module("@/lib/ai/chat/persistence", persistenceModuleMock);
 
 mock.module("../repo-checkpoints", () => ({
   beginThreadRepoCheckpointRun,
@@ -157,12 +176,16 @@ describe("runCodexThreadChat editing", () => {
     clearActiveStream.mockClear();
     loadThreadMessages.mockClear();
     loadThreadSessionSnapshot.mockClear();
+    sessionSnapshotState.activeRunId = "run-1";
+    sessionSnapshotState.threadStatus = "streaming";
+    sessionSnapshotState.threadTitle = "Codex Thread";
     setActiveMessage.mockClear();
     setActiveStream.mockClear();
     setThreadStatus.mockClear();
     updateCodexThreadState.mockClear();
     updateMessageMetadata.mockClear();
     updateThreadChatSettings.mockClear();
+    updateThreadTitle.mockClear();
     updateThreadRepoState.mockClear();
     upsertMessage.mockClear();
     codexManager.resumeThread.mockClear();
@@ -298,6 +321,46 @@ describe("runCodexThreadChat editing", () => {
         },
       }),
     );
+  });
+
+  it("bootstraps placeholder Codex threads with a title before the first snapshot", async () => {
+    sessionSnapshotState.threadTitle = "New thread";
+
+    const response = await runCodexThreadChat(
+      {
+        message: {
+          id: "user-title-1",
+          metadata: {},
+          parts: [{ text: "Fix codex sidebar title", type: "text" }],
+          role: "user",
+        },
+        modelId: "gpt-5.4",
+        threadId: "thread-title-1",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      {
+        chatEngineState: null,
+        mode: "chat",
+        status: "idle",
+        title: "New thread",
+      } as any,
+    );
+
+    const payload = await response.json();
+
+    expect(response.status).toBe(202);
+    expect(updateThreadTitle).toHaveBeenCalledWith(
+      "thread-title-1",
+      "Fix Codex Sidebar Title",
+    );
+    expect(payload).toMatchObject({
+      snapshot: {
+        threadId: "thread-title-1",
+        threadTitle: "Fix Codex Sidebar Title",
+      },
+    });
   });
 
   it("starts a fresh Codex thread when switching from plan mode to chat mode", async () => {

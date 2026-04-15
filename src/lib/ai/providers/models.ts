@@ -23,7 +23,14 @@ export type ModelMeta = {
   reasoning?: ReasoningConfig;
 };
 
-export const REASONING_EFFORTS = ["minimal", "low", "medium", "high"] as const;
+export const REASONING_EFFORTS = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+] as const;
 
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
@@ -42,7 +49,7 @@ type ReasoningConfig = {
   supportedEfforts: readonly ReasoningEffort[];
 };
 
-const OPENAI_GPT_5_REASONING_CONFIG: ReasoningConfig = {
+const OPENAI_LEGACY_GPT_5_REASONING_CONFIG: ReasoningConfig = {
   defaultEffort: "minimal",
   providerValueMap: {
     minimal: "none",
@@ -53,7 +60,31 @@ const OPENAI_GPT_5_REASONING_CONFIG: ReasoningConfig = {
 };
 
 const OPENAI_GPT_5_1_REASONING_CONFIG: ReasoningConfig = {
-  ...OPENAI_GPT_5_REASONING_CONFIG,
+  defaultEffort: "none",
+  reasoningSummary: "detailed",
+  strategy: "openai-reasoning-effort",
+  supportedEfforts: ["none", "low", "medium", "high"],
+};
+
+const OPENAI_GPT_5_2_AND_5_4_REASONING_CONFIG: ReasoningConfig = {
+  defaultEffort: "none",
+  reasoningSummary: "detailed",
+  strategy: "openai-reasoning-effort",
+  supportedEfforts: ["none", "low", "medium", "high", "xhigh"],
+};
+
+const OPENAI_GPT_5_2_PRO_REASONING_CONFIG: ReasoningConfig = {
+  defaultEffort: "medium",
+  reasoningSummary: "detailed",
+  strategy: "openai-reasoning-effort",
+  supportedEfforts: ["medium", "high", "xhigh"],
+};
+
+const OPENAI_GPT_5_PRO_REASONING_CONFIG: ReasoningConfig = {
+  defaultEffort: "high",
+  reasoningSummary: "detailed",
+  strategy: "openai-reasoning-effort",
+  supportedEfforts: ["high"],
 };
 
 const OPENAI_REASONING_CONFIG: ReasoningConfig = {
@@ -144,7 +175,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       description: "Latest frontier agentic coding model.",
       capabilities: ["vision", "tool_use", "object_generation"],
       contextWindow: 128_000,
-      reasoning: OPENAI_GPT_5_REASONING_CONFIG,
+      reasoning: OPENAI_GPT_5_2_AND_5_4_REASONING_CONFIG,
     },
     {
       id: "gpt-5.4-mini",
@@ -152,7 +183,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       description: "Smaller frontier agentic coding model.",
       capabilities: ["vision", "tool_use", "object_generation"],
       contextWindow: 128_000,
-      reasoning: OPENAI_GPT_5_REASONING_CONFIG,
+      reasoning: OPENAI_GPT_5_2_AND_5_4_REASONING_CONFIG,
     },
     {
       id: "gpt-5.3-codex",
@@ -160,7 +191,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       description: "Frontier Codex-optimized agentic coding model.",
       capabilities: ["tool_use", "object_generation"],
       contextWindow: 128_000,
-      reasoning: OPENAI_REASONING_CONFIG,
+      reasoning: OPENAI_GPT_5_2_AND_5_4_REASONING_CONFIG,
     },
     {
       id: "gpt-5.2-pro",
@@ -168,7 +199,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       description: "Most capable GPT-5.2 variant.",
       capabilities: ["vision", "tool_use", "object_generation"],
       contextWindow: 128_000,
-      reasoning: OPENAI_GPT_5_REASONING_CONFIG,
+      reasoning: OPENAI_GPT_5_2_PRO_REASONING_CONFIG,
     },
     {
       id: "gpt-5.2",
@@ -176,7 +207,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       description: "Latest GPT-5.2 model.",
       capabilities: ["vision", "tool_use", "object_generation"],
       contextWindow: 128_000,
-      reasoning: OPENAI_GPT_5_REASONING_CONFIG,
+      reasoning: OPENAI_GPT_5_2_AND_5_4_REASONING_CONFIG,
     },
     {
       id: "gpt-5.1",
@@ -208,7 +239,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       description: "High-performance GPT-5.",
       capabilities: ["vision", "tool_use", "object_generation"],
       contextWindow: 128_000,
-      reasoning: OPENAI_REASONING_CONFIG,
+      reasoning: OPENAI_GPT_5_PRO_REASONING_CONFIG,
     },
     {
       id: "gpt-5",
@@ -216,7 +247,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       description: "GPT-5 flagship model.",
       capabilities: ["vision", "tool_use", "object_generation"],
       contextWindow: 128_000,
-      reasoning: OPENAI_GPT_5_REASONING_CONFIG,
+      reasoning: OPENAI_LEGACY_GPT_5_REASONING_CONFIG,
     },
     {
       id: "gpt-5-mini",
@@ -224,7 +255,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       description: "Compact GPT-5 variant.",
       capabilities: ["vision", "tool_use", "object_generation"],
       contextWindow: 128_000,
-      reasoning: OPENAI_GPT_5_REASONING_CONFIG,
+      reasoning: OPENAI_LEGACY_GPT_5_REASONING_CONFIG,
     },
     {
       id: "gpt-5-nano",
@@ -232,7 +263,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       description: "Fastest GPT-5 for simple tasks.",
       capabilities: ["vision", "tool_use", "object_generation"],
       contextWindow: 128_000,
-      reasoning: OPENAI_GPT_5_REASONING_CONFIG,
+      reasoning: OPENAI_LEGACY_GPT_5_REASONING_CONFIG,
     },
     {
       id: "gpt-5-codex",
@@ -240,7 +271,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       description: "Code-optimized GPT-5.",
       capabilities: ["vision", "tool_use", "object_generation"],
       contextWindow: 128_000,
-      reasoning: OPENAI_REASONING_CONFIG,
+      reasoning: OPENAI_LEGACY_GPT_5_REASONING_CONFIG,
     },
     {
       id: "gpt-5-chat-latest",
@@ -1087,9 +1118,34 @@ function getCustomOpenAIReasoningConfig(
     };
   }
 
+  if (modelId.startsWith("gpt-5.2-pro")) {
+    return {
+      ...OPENAI_GPT_5_2_PRO_REASONING_CONFIG,
+      forceReasoning: true,
+    };
+  }
+
+  if (modelId.startsWith("gpt-5-pro")) {
+    return {
+      ...OPENAI_GPT_5_PRO_REASONING_CONFIG,
+      forceReasoning: true,
+    };
+  }
+
+  if (
+    modelId.startsWith("gpt-5.4") ||
+    modelId.startsWith("gpt-5.3") ||
+    modelId.startsWith("gpt-5.2")
+  ) {
+    return {
+      ...OPENAI_GPT_5_2_AND_5_4_REASONING_CONFIG,
+      forceReasoning: true,
+    };
+  }
+
   if (modelId.startsWith("gpt-5")) {
     return {
-      ...OPENAI_GPT_5_REASONING_CONFIG,
+      ...OPENAI_LEGACY_GPT_5_REASONING_CONFIG,
       forceReasoning: true,
     };
   }

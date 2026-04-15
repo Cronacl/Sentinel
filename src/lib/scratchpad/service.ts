@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
 import { runThreadChat } from "@/lib/ai/chat";
 import type {
@@ -8,13 +8,22 @@ import type {
 } from "@/lib/ai/chat/engines/types";
 import { ensureThreadWorktree, resolveRepoContext } from "@/lib/git/repo";
 import { disposeShellSession } from "@/lib/ai/chat/tools/shell";
-import { normalizeThreadMessageMetadata } from "@/lib/ai/messages/types";
 import { getErrorMessage } from "@/lib/errors";
 import { createLogger } from "@/lib/logger";
 import type { PermissionMode } from "@/lib/security";
+import { buildCodexBootstrapTitle } from "@/lib/ai/chat/runtime/codex-helpers";
+import { buildFirstUserMessageTitle } from "@/lib/ai/chat/runtime/transcript";
 import { db, type Database } from "@/server/db";
-import type { ChatEngine, ScratchpadTaskStatus } from "@/server/db/enums";
+import type {
+  ChatEngine,
+  ScratchpadTaskStatus,
+  ThreadStatus,
+} from "@/server/db/enums";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import {
+  deriveScratchpadTaskStatus,
+  deriveScratchpadTaskTitle,
+} from "@/lib/scratchpad/derived";
 import {
   scratchpadTasks,
   scratchpads,
@@ -39,7 +48,7 @@ type ScratchpadMessageRow = Pick<
 >;
 type ScratchpadThreadStateRow = Pick<
   ScratchpadThreadRow,
-  "activeStreamId" | "id" | "status" | "title"
+  "activeStreamId" | "chatEngine" | "id" | "status" | "title"
 >;
 
 type LaunchScratchpadTaskRunInput = {
@@ -61,6 +70,10 @@ type DerivedScratchpadTask = {
   isClickable: boolean;
   progressText: string | null;
   status: ScratchpadTaskStatus;
+  threadActiveRunId: string | null;
+  threadChatEngine: ChatEngine | null;
+  threadStatus: ThreadStatus | null;
+  threadTitle: string | null;
   title: string;
   updatedAt: Date;
   virtualThreadId: string | null;
@@ -207,6 +220,7 @@ async function loadDerivedThreadState(params: {
       where: inArray(threads.id, virtualThreadIds),
       columns: {
         activeStreamId: true,
+        chatEngine: true,
         id: true,
         status: true,
         title: true,
@@ -216,6 +230,7 @@ async function loadDerivedThreadState(params: {
       where: inArray(threads.sourceVirtualThreadId, virtualThreadIds),
       columns: {
         activeStreamId: true,
+        chatEngine: true,
         id: true,
         sourceVirtualThreadId: true,
         status: true,
@@ -291,6 +306,10 @@ async function loadDerivedThreadState(params: {
     recentMessagesByThreadId.set(message.threadId, current);
   }
 
+  for (const [threadId, messages] of recentMessagesByThreadId) {
+    recentMessagesByThreadId.set(threadId, [...messages].reverse());
+  }
+
   return {
     pendingQuestionThreadIds: new Set(
       pendingQuestionRows.map((row) => row.threadId),
@@ -302,148 +321,95 @@ async function loadDerivedThreadState(params: {
   };
 }
 
-function getLatestAssistantMessage(
-  messages: ScratchpadMessageRow[] | undefined,
-) {
-  return (
-    (messages ?? []).find((message) => message.role === "assistant") ?? null
-  );
-}
+async function hydrateScratchpadThreadTitles(params: {
+  database: Database;
+  targetThreadIds: string[];
+  threadById: Map<string, ScratchpadThreadStateRow>;
+}) {
+  const candidateThreadIds = params.targetThreadIds.filter((threadId) => {
+    const thread = params.threadById.get(threadId);
+    if (!thread) {
+      return false;
+    }
 
-function getLatestStatusLabel(messages: ScratchpadMessageRow[] | undefined) {
-  for (const message of messages ?? []) {
-    const metadata = normalizeThreadMessageMetadata(message.metadata as never);
-    if (metadata.statusLabel) {
-      return metadata.statusLabel.trim() || null;
+    return thread.title === "New thread" || thread.chatEngine === "codex";
+  });
+
+  if (candidateThreadIds.length === 0) {
+    return;
+  }
+
+  const userMessages = await params.database.query.threadMessages.findMany({
+    where: and(
+      inArray(threadMessages.threadId, candidateThreadIds),
+      eq(threadMessages.role, "user"),
+    ),
+    columns: {
+      parts: true,
+      threadId: true,
+    },
+    orderBy: (table, { asc }) => [asc(table.createdAt)],
+  });
+
+  const firstUserTextByThreadId = new Map<string, string>();
+  for (const message of userMessages) {
+    if (firstUserTextByThreadId.has(message.threadId)) {
+      continue;
+    }
+
+    const text = (
+      (message.parts as Array<{ text?: string; type: string }>) ?? []
+    ).find(
+      (part): part is { text: string; type: string } =>
+        part.type === "text" && typeof part.text === "string",
+    )?.text;
+
+    if (text) {
+      firstUserTextByThreadId.set(message.threadId, text);
     }
   }
-  return null;
-}
 
-function getLatestErrorMessage(messages: ScratchpadMessageRow[] | undefined) {
-  for (const message of messages ?? []) {
-    const metadata = normalizeThreadMessageMetadata(message.metadata as never);
-    if (metadata.errorMessage) {
-      return metadata.errorMessage.trim() || null;
+  const nextTitleByThreadId = new Map<string, string>();
+  for (const threadId of candidateThreadIds) {
+    const thread = params.threadById.get(threadId);
+    if (!thread) {
+      continue;
     }
-  }
-  return null;
-}
 
-function getLatestAssistantSummary(
-  messages: ScratchpadMessageRow[] | undefined,
-) {
-  const assistant = getLatestAssistantMessage(messages);
-  if (!assistant) {
-    return null;
-  }
+    const firstUserText = firstUserTextByThreadId.get(threadId) ?? null;
+    const rawFirstUserTitle = buildFirstUserMessageTitle(firstUserText);
+    const bootstrapTitle =
+      thread.chatEngine === "codex"
+        ? buildCodexBootstrapTitle(firstUserText)
+        : rawFirstUserTitle;
+    const shouldBootstrapTitle =
+      thread.title === "New thread" && bootstrapTitle !== "New thread";
+    const shouldNormalizeCodexTitle =
+      thread.chatEngine === "codex" &&
+      thread.title === rawFirstUserTitle &&
+      bootstrapTitle !== thread.title;
 
-  const raw = (
-    (assistant.parts as Array<{ text?: string; type: string }>) ?? []
-  )
-    .filter((part) => part.type === "text" && typeof part.text === "string")
-    .map((part) => trimToString(part.text))
-    .filter(Boolean)
-    .join(" ");
+    if (!shouldBootstrapTitle && !shouldNormalizeCodexTitle) {
+      continue;
+    }
 
-  const text = raw
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/\*{1,3}([^*]+)\*{1,3}/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/[-*] /g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!text) {
-    return null;
+    nextTitleByThreadId.set(threadId, bootstrapTitle);
+    params.threadById.set(threadId, {
+      ...thread,
+      title: bootstrapTitle,
+    });
   }
 
-  return text.length > 100 ? `${text.slice(0, 97).trimEnd()}...` : text;
-}
-
-function deriveScratchpadTaskStatus(params: {
-  pendingQuestionThreadIds: Set<string>;
-  recentMessages: ScratchpadMessageRow[] | undefined;
-  task: ScratchpadTaskRow;
-  targetThread: ScratchpadThreadStateRow | undefined;
-}) {
-  const { recentMessages, targetThread } = params;
-  const latestError = getLatestErrorMessage(recentMessages);
-  const latestStatusLabel = getLatestStatusLabel(recentMessages);
-  const latestAssistantSummary = getLatestAssistantSummary(recentMessages);
-  const persistedProgress = trimToString(params.task.progressText) || null;
-
-  if (!targetThread) {
-    return {
-      progressText: persistedProgress,
-      status: params.task.status,
-    };
+  for (const [threadId, title] of nextTitleByThreadId) {
+    params.database
+      .update(threads)
+      .set({
+        title,
+        updatedAt: new Date(),
+      })
+      .where(eq(threads.id, threadId))
+      .run();
   }
-
-  if (
-    targetThread.status === "streaming" ||
-    targetThread.activeStreamId != null
-  ) {
-    return {
-      progressText: latestStatusLabel ?? persistedProgress ?? "Thinking",
-      status: "running" as const,
-    };
-  }
-
-  if (targetThread.status === "awaiting_approval") {
-    return {
-      progressText: "Awaiting approval",
-      status: "blocked" as const,
-    };
-  }
-
-  if (params.pendingQuestionThreadIds.has(targetThread.id)) {
-    return {
-      progressText: "Needs input",
-      status: "blocked" as const,
-    };
-  }
-
-  if (latestError) {
-    return {
-      progressText: latestError,
-      status: "failed" as const,
-    };
-  }
-
-  if (latestAssistantSummary) {
-    return {
-      progressText: latestAssistantSummary,
-      status: "completed" as const,
-    };
-  }
-
-  return {
-    progressText: latestStatusLabel ?? persistedProgress,
-    status: params.task.status,
-  };
-}
-
-function deriveScratchpadTaskTitle(params: {
-  targetThread: ScratchpadThreadStateRow | undefined;
-  task: ScratchpadTaskRow;
-}) {
-  const taskTitle = trimToString(params.task.title);
-  const targetThreadTitle = trimToString(params.targetThread?.title);
-
-  if (!targetThreadTitle || targetThreadTitle === "New thread") {
-    return taskTitle || "Scratchpad task";
-  }
-
-  if (targetThreadTitle.startsWith("Scratchpad: ")) {
-    const strippedTitle = trimToString(
-      targetThreadTitle.slice("Scratchpad: ".length),
-    );
-    return strippedTitle || taskTitle || "Scratchpad task";
-  }
-
-  return targetThreadTitle;
 }
 
 async function buildScratchpadThreadState(params: {
@@ -590,6 +556,11 @@ export async function listScratchpad(params: {
     : [];
 
   const threadState = await loadDerivedThreadState({ database, tasks });
+  await hydrateScratchpadThreadTitles({
+    database,
+    targetThreadIds: [...new Set(threadState.targetThreadIdByTaskId.values())],
+    threadById: threadState.threadById,
+  });
 
   const derivedTasks = tasks
     .map((task) => {
@@ -599,13 +570,17 @@ export async function listScratchpad(params: {
           ? undefined
           : threadState.threadById.get(targetThreadId);
       const derived = deriveScratchpadTaskStatus({
-        pendingQuestionThreadIds: threadState.pendingQuestionThreadIds,
-        recentMessages:
+        activeRunId: targetThread?.activeStreamId ?? null,
+        messages:
           targetThreadId == null
             ? undefined
             : threadState.recentMessagesByThreadId.get(targetThreadId),
-        task,
-        targetThread,
+        pendingQuestion:
+          targetThread != null &&
+          threadState.pendingQuestionThreadIds.has(targetThread.id),
+        persistedProgressText: task.progressText,
+        status: task.status,
+        threadStatus: targetThread?.status,
       });
 
       return {
@@ -614,7 +589,14 @@ export async function listScratchpad(params: {
         isClickable: Boolean(task.virtualThreadId || task.visibleThreadId),
         progressText: derived.progressText,
         status: derived.status,
-        title: deriveScratchpadTaskTitle({ targetThread, task }),
+        threadActiveRunId: targetThread?.activeStreamId ?? null,
+        threadChatEngine: targetThread?.chatEngine ?? null,
+        threadStatus: targetThread?.status ?? null,
+        threadTitle: targetThread?.title ?? null,
+        title: deriveScratchpadTaskTitle({
+          taskTitle: task.title,
+          threadTitle: targetThread?.title,
+        }),
         updatedAt: task.updatedAt,
         virtualThreadId: task.virtualThreadId,
         visibleThreadId:

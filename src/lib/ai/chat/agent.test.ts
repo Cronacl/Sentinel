@@ -118,12 +118,18 @@ mock.module("@/lib/ai/providers/resolver", () => ({
   getLanguageModel: getLanguageModelMock,
 }));
 
-mock.module("@/lib/ai/providers/models", () => ({
-  REASONING_EFFORTS: ["minimal", "low", "medium", "high"],
-  getReasoningProviderOptions: getReasoningProviderOptionsMock,
-  toCompositeModelId: (provider: string, model: string) =>
-    `${provider}:${model}`,
-}));
+mock.module("@/lib/ai/providers/models", async () => {
+  // @ts-expect-error Bun test-only cache-busting import for module isolation.
+  const actual = await import("@/lib/ai/providers/models.ts?agent-test-actual");
+
+  return {
+    ...actual,
+    REASONING_EFFORTS: ["none", "minimal", "low", "medium", "high", "xhigh"],
+    getReasoningProviderOptions: getReasoningProviderOptionsMock,
+    toCompositeModelId: (provider: string, model: string) =>
+      `${provider}:${model}`,
+  };
+});
 
 mock.module("@/lib/integrations/runtime", () => {
   const prefixes: Record<string, string> = {

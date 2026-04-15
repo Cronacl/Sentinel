@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import {
   buildThreadChatEngineState,
   mergeThreadChatEngineState,
+  parseThreadChatEngineState,
 } from "./types";
 
 describe("mergeThreadChatEngineState", () => {
@@ -112,6 +113,30 @@ describe("mergeThreadChatEngineState", () => {
       },
       repo: {
         activeBranch: "feature/copilot",
+      },
+    });
+  });
+
+  it("parses expanded reasoning efforts for runtime thread state", () => {
+    expect(
+      parseThreadChatEngineState({
+        codex: {
+          codexThreadId: "codex-thread-1",
+          reasoningEffort: "xhigh",
+        },
+        copilot: {
+          reasoningEffort: "none",
+          sessionId: "copilot-session-1",
+        },
+      }),
+    ).toEqual({
+      codex: {
+        codexThreadId: "codex-thread-1",
+        reasoningEffort: "xhigh",
+      },
+      copilot: {
+        reasoningEffort: "none",
+        sessionId: "copilot-session-1",
       },
     });
   });

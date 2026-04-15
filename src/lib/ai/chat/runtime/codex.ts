@@ -21,7 +21,11 @@ import {
 } from "@/lib/ai/messages/types";
 import { createLogger } from "@/lib/logger";
 import { normalizeThreadMode } from "@/lib/plan";
-import { streamContext } from "@/lib/streams";
+import {
+  safelyCloseReadableStreamController,
+  safelyEnqueueReadableStreamController,
+  streamContext,
+} from "@/lib/streams";
 
 import * as persist from "../persistence";
 import {
@@ -261,6 +265,7 @@ function findActiveCodexRunForThread(
 
 async function createThreadEventChannel(runId: string) {
   let controller: ReadableStreamDefaultController<string> | null = null;
+  let closed = false;
 
   await streamContext.createNewResumableStream(
     runId,
@@ -274,11 +279,28 @@ async function createThreadEventChannel(runId: string) {
 
   return {
     close() {
-      controller?.close();
+      if (closed) {
+        return;
+      }
+
+      closed = true;
+      safelyCloseReadableStreamController(controller);
       controller = null;
     },
     emit(event: ThreadStreamEvent) {
-      controller?.enqueue(serializeThreadStreamEvent(event));
+      if (closed) {
+        return;
+      }
+
+      const didEnqueue = safelyEnqueueReadableStreamController(
+        controller,
+        serializeThreadStreamEvent(event),
+      );
+
+      if (!didEnqueue) {
+        closed = true;
+        controller = null;
+      }
     },
   };
 }
@@ -1800,6 +1822,14 @@ export async function runCodexThreadChat(
     "codex",
     request.draftRepoState ? { repo: request.draftRepoState } : null,
   );
+  if (
+    request.trigger === "submit-user-message" &&
+    allRecords.length === 0 &&
+    existingThread?.title === "New thread" &&
+    fallbackTitle !== "New thread"
+  ) {
+    persist.updateThreadTitle(request.threadId, fallbackTitle);
+  }
 
   const workspaceRoot = await getWorkspaceRootPath(
     request.workspaceId,

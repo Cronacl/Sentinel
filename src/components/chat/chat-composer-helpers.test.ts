@@ -6,8 +6,10 @@ import type { ChatComposerModel } from "./chat-composer-helpers";
 import {
   FALLBACK_CHAT_ENGINE_OPTIONS,
   filterSelectableModels,
+  getReasoningEffortLabel,
   haveSameEngineOptionSet,
   haveSameSelectableModelSet,
+  resolveReasoningEffort,
   resolveStableEngineOptions,
   resolveStableSelectableModels,
   shouldClearComposerAfterSend,
@@ -109,5 +111,23 @@ describe("chat composer model helpers", () => {
 
   it("clears the composer after successful sends", () => {
     expect(shouldClearComposerAfterSend()).toBe(true);
+  });
+
+  it("renders human-friendly labels for the expanded effort set", () => {
+    expect(getReasoningEffortLabel("none")).toBe("None");
+    expect(getReasoningEffortLabel("minimal")).toBe("Minimal");
+    expect(getReasoningEffortLabel("xhigh")).toBe("Extra high");
+  });
+
+  it("falls back to a supported reasoning effort when switching models", () => {
+    expect(
+      resolveReasoningEffort(
+        createModel({
+          defaultReasoningEffort: "none",
+          supportedReasoningEfforts: ["none", "low", "medium", "high"],
+        }),
+        "xhigh",
+      ),
+    ).toBe("none");
   });
 });

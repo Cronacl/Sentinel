@@ -7,7 +7,6 @@ import {
   CircleIcon,
   Delete02Icon,
   LaptopProgrammingIcon,
-  Loading03Icon,
   Cancel01Icon,
   Shield01Icon,
 } from "@hugeicons/core-free-icons";
@@ -21,15 +20,27 @@ import { getReasoningEffortLabel } from "@/components/chat/chat-composer-helpers
 import { usePersistSelection } from "@/components/chat/chat-composer/use-persist-selection";
 import { ProviderIcon } from "@/components/icons/provider-icon";
 import { SubagentThreadPanel } from "@/components/chat/subagent-thread-panel";
+import { useThreadChat } from "@/hooks/use-thread-chat";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { SidebarToggle, useRightSidebar, useShell } from "@/components/shell";
 import { getErrorMessage } from "@/lib/errors";
+import {
+  applyThreadStatusCacheUpdate,
+  applyThreadTitleCacheUpdate,
+} from "@/lib/threads/cache";
+import {
+  deriveScratchpadTaskStatus,
+  deriveScratchpadTaskTitle,
+} from "@/lib/scratchpad/derived";
 import type { PermissionMode } from "@/lib/security";
 import type { ChatEngine } from "@/server/db/enums";
 import { api, type RouterOutputs } from "@/trpc/react";
 
 type ScratchpadTask =
   RouterOutputs["scratchpad"]["getCurrent"]["tasks"][number];
+
+const EMPTY_THREAD_MESSAGES: [] = [];
+const EMPTY_QUEUED_FOLLOW_UPS: [] = [];
 
 function formatTaskTime(date: Date) {
   return date.toLocaleTimeString([], {
@@ -47,7 +58,7 @@ function getProjectModeLabel(value: RepoProjectMode) {
   return value === "worktree" ? "Worktree" : "Local";
 }
 
-function FilledCheckCircle({ size = 18 }: { size?: number }) {
+function FilledCheckCircle({ size = 16 }: { size?: number }) {
   return (
     <svg
       className="text-foreground/70"
@@ -72,18 +83,7 @@ function TaskIndicator({ status }: { status: ScratchpadTask["status"] }) {
   }
 
   if (status === "running") {
-    return (
-      <span className="relative inline-flex h-[18px] w-[18px] items-center justify-center">
-        <span className="absolute h-[18px] w-[18px] rounded-full border border-foreground/25" />
-        <HugeiconsIcon
-          className="sentinel-thinking-shimmer text-foreground/60"
-          color="currentColor"
-          icon={Loading03Icon}
-          size={11}
-          strokeWidth={2}
-        />
-      </span>
-    );
+    return <Spinner color="current" size="sm" />;
   }
 
   if (status === "blocked" || status === "failed") {
@@ -92,7 +92,7 @@ function TaskIndicator({ status }: { status: ScratchpadTask["status"] }) {
         className={status === "failed" ? "text-danger" : "text-warning"}
         color="currentColor"
         icon={Cancel01Icon}
-        size={18}
+        size={16}
         strokeWidth={1.8}
       />
     );
@@ -103,7 +103,7 @@ function TaskIndicator({ status }: { status: ScratchpadTask["status"] }) {
       className="text-foreground/20"
       color="currentColor"
       icon={CircleIcon}
-      size={18}
+      size={16}
       strokeWidth={1.5}
     />
   );
@@ -128,20 +128,20 @@ function ScratchpadRow({
   return (
     <div className="group flex items-center">
       <button
-        className="flex min-w-0 flex-1 items-center gap-3 py-1 text-left"
+        className="flex min-w-0 flex-1 items-center gap-3 py-1.5 text-left"
         onClick={() => task.isClickable && onOpen(task)}
         type="button"
       >
-        <span className="shrink-0">
+        <span className="flex h-4 w-4 shrink-0 items-center justify-center">
           <TaskIndicator status={task.status} />
         </span>
-        <span className="flex min-w-0 flex-1 items-baseline gap-2">
-          <span className={`shrink-0 text-[14.5px] leading-snug ${titleClass}`}>
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span className={`shrink-0 text-[14.5px] leading-none ${titleClass}`}>
             {task.title}
           </span>
           {task.status !== "completed" && task.progressText ? (
             <span
-              className={`min-w-0 truncate text-[13px] leading-snug ${
+              className={`min-w-0 truncate text-[13px] leading-none ${
                 task.status === "running"
                   ? "sentinel-thinking-shimmer"
                   : task.status === "blocked"
@@ -157,7 +157,7 @@ function ScratchpadRow({
         </span>
       </button>
 
-      <span className="ml-2 hidden shrink-0 text-[11px] tabular-nums text-foreground/20 lg:block">
+      <span className="ml-2 hidden shrink-0 self-center text-[11px] leading-none tabular-nums text-foreground/20 lg:block">
         {formatTaskTime(task.createdAt)}
       </span>
 
@@ -208,15 +208,15 @@ function ScratchpadComposer({
         className="shrink-0 text-foreground/20"
         color="currentColor"
         icon={CircleIcon}
-        size={18}
+        size={16}
         strokeWidth={1.5}
       />
       <input
         autoComplete="off"
-        className="w-full bg-transparent text-[14.5px] leading-snug text-foreground/80 outline-none placeholder:text-foreground/20"
+        className="w-full bg-transparent text-[14.5px] leading-none text-foreground/80 outline-none placeholder:text-foreground/20"
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Add a task or follow-up"
+        placeholder="Add a task"
         ref={inputRef}
         value={value}
       />
@@ -508,10 +508,12 @@ function ScratchpadToolbar({
                   textValue={model.displayName}
                 >
                   {model.provider ? (
-                    <ProviderIcon
-                      className="size-3.5"
-                      provider={model.provider}
-                    />
+                    <span className="inline-flex h-[10px] w-[10px] shrink-0 items-center justify-center">
+                      <ProviderIcon
+                        className="h-[10px] w-[10px] shrink-0"
+                        provider={model.provider}
+                      />
+                    </span>
                   ) : null}
                   <span className="truncate text-[12px]">
                     {model.displayName}
@@ -581,9 +583,161 @@ function ScratchpadToolbar({
   );
 }
 
+function ScratchpadLiveTaskObserver({
+  task,
+  workspaceId,
+}: {
+  task: ScratchpadTask;
+  workspaceId: string;
+}) {
+  const utils = api.useUtils();
+  const initialSeedRef = useRef({
+    activeRunId: task.threadActiveRunId,
+    chatEngine: task.threadChatEngine ?? "sentinel",
+    threadTitle: task.threadTitle ?? task.title,
+    threadStatus: task.threadStatus ?? "idle",
+  });
+  const handleObserverError = useCallback(() => {
+    void utils.scratchpad.getCurrent.invalidate();
+  }, [utils]);
+  const chat = useThreadChat({
+    initialActiveRunId: initialSeedRef.current.activeRunId,
+    initialChatEngine: initialSeedRef.current.chatEngine,
+    initialMessages: EMPTY_THREAD_MESSAGES,
+    initialQueuedFollowUps: EMPTY_QUEUED_FOLLOW_UPS,
+    initialThreadStatus: initialSeedRef.current.threadStatus,
+    initialThreadTitle: initialSeedRef.current.threadTitle,
+    onError: handleObserverError,
+    threadId: task.visibleThreadId ?? task.virtualThreadId ?? task.id,
+    workspaceId,
+  });
+  const derivedStatus = useMemo(
+    () =>
+      deriveScratchpadTaskStatus({
+        activeRunId: chat.activeRunId,
+        messages: chat.messages,
+        persistedProgressText: task.progressText,
+        status: task.status,
+        threadStatus: chat.threadStatus,
+      }),
+    [
+      chat.activeRunId,
+      chat.messages,
+      chat.threadStatus,
+      task.progressText,
+      task.status,
+    ],
+  );
+  const derivedTitle = useMemo(
+    () =>
+      deriveScratchpadTaskTitle({
+        taskTitle: task.title,
+        threadTitle: chat.threadTitle,
+      }),
+    [chat.threadTitle, task.title],
+  );
+  const previousRunIdRef = useRef(task.threadActiveRunId);
+  const previousThreadCacheSyncRef = useRef<{
+    status: typeof chat.threadStatus;
+    title: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!task.visibleThreadId) {
+      return;
+    }
+
+    utils.scratchpad.getCurrent.setData(undefined, (current) => {
+      if (!current) {
+        return current;
+      }
+
+      let changed = false;
+      const tasks = current.tasks.map((currentTask) => {
+        if (currentTask.id !== task.id) {
+          return currentTask;
+        }
+
+        const nextTask = {
+          ...currentTask,
+          progressText: derivedStatus.progressText,
+          status: derivedStatus.status,
+          threadActiveRunId: chat.activeRunId,
+          threadStatus: chat.threadStatus,
+          threadTitle: chat.threadTitle,
+          title: derivedTitle,
+        };
+
+        if (
+          currentTask.progressText === nextTask.progressText &&
+          currentTask.status === nextTask.status &&
+          currentTask.threadActiveRunId === nextTask.threadActiveRunId &&
+          currentTask.threadStatus === nextTask.threadStatus &&
+          currentTask.threadTitle === nextTask.threadTitle &&
+          currentTask.title === nextTask.title
+        ) {
+          return currentTask;
+        }
+
+        changed = true;
+        return nextTask;
+      });
+
+      return changed ? { ...current, tasks } : current;
+    });
+
+    const previousThreadCacheSync = previousThreadCacheSyncRef.current;
+    if (
+      previousThreadCacheSync?.status !== chat.threadStatus ||
+      previousThreadCacheSync.title !== derivedTitle
+    ) {
+      applyThreadStatusCacheUpdate({
+        status: chat.threadStatus,
+        threadId: task.visibleThreadId,
+        utils,
+        workspaceId,
+      });
+      applyThreadTitleCacheUpdate({
+        threadId: task.visibleThreadId,
+        title: derivedTitle,
+        utils,
+        workspaceId,
+      });
+      previousThreadCacheSyncRef.current = {
+        status: chat.threadStatus,
+        title: derivedTitle,
+      };
+    }
+  }, [
+    chat.activeRunId,
+    chat.threadStatus,
+    chat.threadTitle,
+    derivedStatus.progressText,
+    derivedStatus.status,
+    derivedTitle,
+    handleObserverError,
+    task.id,
+    task.visibleThreadId,
+    utils,
+    workspaceId,
+  ]);
+
+  useEffect(() => {
+    if (previousRunIdRef.current && !chat.activeRunId) {
+      void utils.scratchpad.getCurrent.invalidate();
+      void utils.threads.list.invalidate();
+      void utils.threads.search.invalidate();
+    }
+
+    previousRunIdRef.current = chat.activeRunId;
+  }, [chat.activeRunId, utils]);
+
+  return null;
+}
+
 export default function ScratchpadPage() {
   const { leftSidebarOpen } = useShell();
-  const { open } = useRightSidebar();
+  const { close, isOpen, open } = useRightSidebar();
   const utils = api.useUtils();
   const composerRef = useRef<HTMLInputElement>(null);
   const workspace = api.workspaces.getCurrent.useQuery(undefined, {
@@ -597,6 +751,13 @@ export default function ScratchpadPage() {
   });
   const [draft, setDraft] = useState("");
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+  const [openScratchpadTaskId, setOpenScratchpadTaskId] = useState<
+    string | null
+  >(null);
+  const [openScratchpadThreadId, setOpenScratchpadThreadId] = useState<
+    string | null
+  >(null);
+  const syncedTaskTitlesRef = useRef(new Map<string, string>());
   const [permissionMode, setPermissionMode] = useState<PermissionMode>("full");
   const [projectMode, setProjectMode] = useState<RepoProjectMode>("local");
 
@@ -678,6 +839,10 @@ export default function ScratchpadPage() {
             isClickable: false,
             progressText: "Thinking",
             status: "running" as const,
+            threadActiveRunId: null,
+            threadChatEngine: null,
+            threadStatus: null,
+            threadTitle: title,
             title,
             updatedAt: now,
             virtualThreadId: null,
@@ -786,6 +951,45 @@ export default function ScratchpadPage() {
   );
 
   useEffect(() => {
+    if (isOpen) {
+      return;
+    }
+
+    setOpenScratchpadTaskId(null);
+    setOpenScratchpadThreadId(null);
+  }, [isOpen]);
+
+  useEffect(() => {
+    const nextSyncedTitles = new Map<string, string>();
+    const workspaceId = scratchpad.data?.workspaceId ?? workspace.data?.id;
+
+    for (const task of allTasks) {
+      const visibleThreadId = task.visibleThreadId;
+      const title = task.title.trim();
+      const signature = `${visibleThreadId ?? "none"}:${title}`;
+
+      nextSyncedTitles.set(task.id, signature);
+
+      if (
+        !visibleThreadId ||
+        !title ||
+        syncedTaskTitlesRef.current.get(task.id) === signature
+      ) {
+        continue;
+      }
+
+      applyThreadTitleCacheUpdate({
+        threadId: visibleThreadId,
+        title,
+        utils,
+        workspaceId,
+      });
+    }
+
+    syncedTaskTitlesRef.current = nextSyncedTitles;
+  }, [allTasks, scratchpad.data?.workspaceId, utils, workspace.data?.id]);
+
+  useEffect(() => {
     if (
       projectMode === "worktree" &&
       !(repoContext.data?.isGitRepo && repoContext.data?.branch) &&
@@ -847,19 +1051,69 @@ export default function ScratchpadPage() {
 
   const handleDeleteTask = useCallback(
     (taskId: string) => {
+      const task = allTasks.find((item) => item.id === taskId);
+      if (!task) {
+        return;
+      }
+
       setDeletingTaskId(taskId);
-      deleteTask.mutate(
-        { taskId },
-        {
-          onError: (error) => {
-            sileo.error({
-              description: getErrorMessage(error, "Unable to remove the task."),
+
+      void (async () => {
+        const isOpenDeletedTask =
+          isOpen &&
+          openScratchpadTaskId === taskId &&
+          openScratchpadThreadId != null;
+
+        if (isOpenDeletedTask) {
+          try {
+            const response = await fetch("/api/chat", {
+              body: JSON.stringify({
+                id: openScratchpadThreadId,
+                trigger: "stop-stream",
+                workspaceId:
+                  scratchpad.data?.workspaceId ?? workspace.data?.id ?? "",
+              }),
+              headers: { "Content-Type": "application/json" },
+              method: "POST",
             });
+
+            if (!response.ok) {
+              throw new Error("Unable to stop the Scratchpad task.");
+            }
+          } catch {
+            // Deleting the task is the primary action; continue even if stop fails.
+          }
+
+          close();
+          setOpenScratchpadTaskId(null);
+          setOpenScratchpadThreadId(null);
+        }
+
+        deleteTask.mutate(
+          { taskId },
+          {
+            onError: (error) => {
+              sileo.error({
+                description: getErrorMessage(
+                  error,
+                  "Unable to remove the task.",
+                ),
+              });
+            },
           },
-        },
-      );
+        );
+      })();
     },
-    [deleteTask],
+    [
+      allTasks,
+      close,
+      deleteTask,
+      isOpen,
+      openScratchpadTaskId,
+      openScratchpadThreadId,
+      scratchpad.data?.workspaceId,
+      workspace.data?.id,
+    ],
   );
 
   const handleToggleComplete = useCallback(
@@ -887,6 +1141,8 @@ export default function ScratchpadPage() {
           return;
         }
 
+        setOpenScratchpadTaskId(task.id);
+        setOpenScratchpadThreadId(result.threadId);
         open(
           <SubagentThreadPanel hideDescription threadId={result.threadId} />,
           { size: "wide" },
@@ -940,6 +1196,21 @@ export default function ScratchpadPage() {
       ) : null}
 
       <div className="relative">
+        {allTasks
+          .filter(
+            (task) =>
+              Boolean(task.visibleThreadId) && Boolean(task.threadActiveRunId),
+          )
+          .map((task) => (
+            <ScratchpadLiveTaskObserver
+              key={`${task.id}:${task.threadActiveRunId ?? "idle"}`}
+              task={task}
+              workspaceId={
+                scratchpad.data?.workspaceId ?? workspace.data?.id ?? ""
+              }
+            />
+          ))}
+
         {scratchpad.isPending && !scratchpad.data ? (
           <div className="flex items-center gap-2 py-1 text-sm text-foreground/40">
             <Spinner color="current" size="sm" />

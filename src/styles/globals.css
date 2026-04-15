@@ -103,7 +103,7 @@
 .dark,
 [data-theme="dark"] {
   --background: #111;
-  --surface: #000;
+  --surface: #080808;
   --accent: oklch(100% 0 0);
   --accent-foreground: oklch(0% 0 0);
   --default-hover: #202020;

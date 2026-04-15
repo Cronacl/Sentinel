@@ -18,7 +18,10 @@ import type {
   ThreadStreamEvent,
 } from "./session-types";
 import { buildCodexBootstrapTitle } from "./runtime/codex-helpers";
-import { getFirstUserText } from "./runtime/transcript";
+import {
+  buildFirstUserMessageTitle,
+  getFirstUserText,
+} from "./runtime/transcript";
 
 const log = createLogger("ThreadSession");
 
@@ -82,20 +85,26 @@ export async function loadThreadSessionSnapshot(
     });
     return mapThreadMessagesToUIMessagesBestEffort(messages as any[]);
   });
-  const rawFirstUserTitle =
-    getFirstUserText(uiMessages)?.slice(0, 100) ?? "New thread";
-  const normalizedCodexTitle =
+  const firstUserText = getFirstUserText(uiMessages);
+  const rawFirstUserTitle = buildFirstUserMessageTitle(firstUserText);
+  const bootstrapTitle =
     thread.chatEngine === "codex"
-      ? buildCodexBootstrapTitle(getFirstUserText(uiMessages))
-      : thread.title;
+      ? buildCodexBootstrapTitle(firstUserText)
+      : rawFirstUserTitle;
+  const shouldBootstrapTitle =
+    thread.title === "New thread" && bootstrapTitle !== "New thread";
   const shouldNormalizeCodexTitle =
     thread.chatEngine === "codex" &&
     thread.title === rawFirstUserTitle &&
-    normalizedCodexTitle !== thread.title;
+    bootstrapTitle !== thread.title;
+  const nextThreadTitle =
+    shouldBootstrapTitle || shouldNormalizeCodexTitle
+      ? bootstrapTitle
+      : thread.title;
 
-  if (shouldNormalizeCodexTitle) {
+  if (shouldBootstrapTitle || shouldNormalizeCodexTitle) {
     db.update(threads)
-      .set({ title: normalizedCodexTitle, updatedAt: new Date() })
+      .set({ title: nextThreadTitle, updatedAt: new Date() })
       .where(eq(threads.id, thread.id))
       .run();
   }
@@ -109,9 +118,7 @@ export async function loadThreadSessionSnapshot(
       .filter((followUp) => followUp.status === "queued")
       .map(summarizeQueuedFollowUp),
     threadId: thread.id,
-    threadTitle: shouldNormalizeCodexTitle
-      ? normalizedCodexTitle
-      : thread.title,
+    threadTitle: nextThreadTitle,
     threadStatus: thread.status,
   };
 }

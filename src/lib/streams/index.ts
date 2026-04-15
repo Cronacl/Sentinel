@@ -10,14 +10,18 @@ type StreamListener = {
 
 type ActiveStreamRecord = {
   chunks: string[];
+  chunkBytes: number[];
   completion: Promise<void>;
   done: boolean;
   error: unknown;
   listeners: Set<StreamListener>;
   cleanupTimer: NodeJS.Timeout | null;
+  retainedBytes: number;
 };
 
 const STREAM_TTL_MS = 60_000;
+const MAX_RETAINED_STREAM_BYTES = 512 * 1024;
+const MAX_RETAINED_STREAM_CHUNKS = 128;
 
 declare global {
   // eslint-disable-next-line no-var
@@ -27,6 +31,69 @@ declare global {
 const activeStreams =
   globalThis.__sentinelActiveStreams ??
   (globalThis.__sentinelActiveStreams = new Map<string, ActiveStreamRecord>());
+
+function isSettledControllerError(error: unknown) {
+  return error instanceof TypeError;
+}
+
+export function safelyCloseReadableStreamController<T>(
+  controller: ReadableStreamDefaultController<T> | null | undefined,
+) {
+  if (!controller) {
+    return false;
+  }
+
+  try {
+    controller.close();
+    return true;
+  } catch (error) {
+    if (isSettledControllerError(error)) {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+export function safelyEnqueueReadableStreamController<T>(
+  controller: ReadableStreamDefaultController<T> | null | undefined,
+  chunk: T,
+) {
+  if (!controller) {
+    return false;
+  }
+
+  try {
+    controller.enqueue(chunk);
+    return true;
+  } catch (error) {
+    if (isSettledControllerError(error)) {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+export function safelyErrorReadableStreamController<T>(
+  controller: ReadableStreamDefaultController<T> | null | undefined,
+  error: unknown,
+) {
+  if (!controller) {
+    return false;
+  }
+
+  try {
+    controller.error(error);
+    return true;
+  } catch (controllerError) {
+    if (isSettledControllerError(controllerError)) {
+      return false;
+    }
+
+    throw controllerError;
+  }
+}
 
 function scheduleCleanup(streamId: string) {
   const record = activeStreams.get(streamId);
@@ -52,6 +119,26 @@ function clearScheduledCleanup(record: ActiveStreamRecord) {
   record.cleanupTimer = null;
 }
 
+function trimRetainedChunks(record: ActiveStreamRecord) {
+  while (
+    record.chunks.length > 1 &&
+    (record.retainedBytes > MAX_RETAINED_STREAM_BYTES ||
+      record.chunks.length > MAX_RETAINED_STREAM_CHUNKS)
+  ) {
+    record.chunks.shift();
+    const droppedBytes = record.chunkBytes.shift() ?? 0;
+    record.retainedBytes = Math.max(0, record.retainedBytes - droppedBytes);
+  }
+}
+
+function retainChunk(record: ActiveStreamRecord, chunk: string) {
+  const chunkBytes = Buffer.byteLength(chunk, "utf8");
+  record.chunks.push(chunk);
+  record.chunkBytes.push(chunkBytes);
+  record.retainedBytes += chunkBytes;
+  trimRetainedChunks(record);
+}
+
 function createReplayStream(record: ActiveStreamRecord) {
   let listener: StreamListener | undefined;
 
@@ -60,14 +147,17 @@ function createReplayStream(record: ActiveStreamRecord) {
       let closed = false;
 
       for (const chunk of record.chunks) {
-        controller.enqueue(chunk);
+        if (!safelyEnqueueReadableStreamController(controller, chunk)) {
+          closed = true;
+          return;
+        }
       }
 
       if (record.done) {
         if (record.error != null) {
-          controller.error(record.error);
+          safelyErrorReadableStreamController(controller, record.error);
         } else {
-          controller.close();
+          safelyCloseReadableStreamController(controller);
         }
         return;
       }
@@ -78,21 +168,24 @@ function createReplayStream(record: ActiveStreamRecord) {
             return;
           }
           closed = true;
-          controller.close();
+          safelyCloseReadableStreamController(controller);
           record.listeners.delete(currentListener);
         },
         enqueue(chunk) {
           if (closed) {
             return;
           }
-          controller.enqueue(chunk);
+          if (!safelyEnqueueReadableStreamController(controller, chunk)) {
+            closed = true;
+            record.listeners.delete(currentListener);
+          }
         },
         error(error) {
           if (closed) {
             return;
           }
           closed = true;
-          controller.error(error);
+          safelyErrorReadableStreamController(controller, error);
           record.listeners.delete(currentListener);
         },
       };
@@ -124,7 +217,7 @@ async function consumeStream(
         break;
       }
 
-      record.chunks.push(value);
+      retainChunk(record, value);
       for (const listener of record.listeners) {
         listener.enqueue(value);
       }
@@ -158,11 +251,13 @@ export const streamContext = {
     const stream = makeStream();
     const record: ActiveStreamRecord = {
       chunks: [],
+      chunkBytes: [],
       cleanupTimer: null,
       completion: Promise.resolve(),
       done: false,
       error: null,
       listeners: new Set(),
+      retainedBytes: 0,
     };
 
     const streamLog = createLogger("Stream");

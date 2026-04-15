@@ -149,4 +149,29 @@ describe("parseRequest", () => {
       reason: "User denied command",
     });
   });
+
+  it("accepts none and xhigh reasoning effort values", async () => {
+    const noneResult = await parseRequest(
+      {
+        id: "thread-1",
+        reasoningEffort: "none",
+        trigger: "stop-stream",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+
+    const xhighResult = await parseRequest(
+      {
+        id: "thread-2",
+        reasoningEffort: "xhigh",
+        trigger: "stop-stream",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+
+    expect(noneResult.reasoningEffort).toBe("none");
+    expect(xhighResult.reasoningEffort).toBe("xhigh");
+  });
 });

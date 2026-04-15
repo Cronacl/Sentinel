@@ -12,6 +12,7 @@ const updateThreadRepoState = mock(() => {});
 const updateThreadChatSettings = mock(async () => {});
 const updateCodexThreadState = mock(() => {});
 const updateCopilotThreadState = mock(() => {});
+const updateThreadTitle = mock(() => {});
 const updateMessageMetadata = mock(async () => {});
 const beginThreadRepoCheckpointRun = mock(async () => {});
 const loadThreadSessionSnapshot = mock(async (threadId: string) => ({
@@ -46,6 +47,7 @@ mock.module("../persistence", () => ({
   updateMessageMetadata,
   updateThreadRepoState,
   updateThreadChatSettings,
+  updateThreadTitle,
   upsertMessage,
 }));
 
@@ -159,6 +161,7 @@ describe("runClaudeThreadChat approvals", () => {
     setThreadStatus.mockClear();
     updateThreadChatSettings.mockClear();
     updateThreadRepoState.mockClear();
+    updateThreadTitle.mockClear();
     upsertMessage.mockClear();
     if (!(globalThis as any).__sentinelActiveClaudeRunControls) {
       (globalThis as any).__sentinelActiveClaudeRunControls = new Map();
@@ -344,6 +347,31 @@ describe("runClaudeThreadChat approvals", () => {
       }),
     });
     expect(setThreadStatus).toHaveBeenCalledWith("thread-1", "streaming");
+  });
+
+  it("generates a thread title for fresh Claude threads", async () => {
+    const response = await runClaudeThreadChat(
+      {
+        message: createUserMessage("Hi"),
+        modelId: "anthropic:claude-sonnet-4",
+        threadId: "thread-title-1",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      {
+        activeStreamId: null,
+        chatEngineState: null,
+        mode: "chat",
+        status: "idle",
+        title: "New thread",
+      } as any,
+    );
+
+    await Promise.resolve();
+
+    expect(response.status).toBe(202);
+    expect(updateThreadTitle).toHaveBeenCalledWith("thread-title-1", "Hi");
   });
 
   it("resumes a live Claude approval using the explicit approval payload", async () => {

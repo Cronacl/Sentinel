@@ -12,22 +12,88 @@ type RepoWarmupStrategy = "fetch" | "prefetch";
 
 type RepoWarmupUtils = {
   repo: {
-    getContext: Record<
-      RepoWarmupStrategy,
-      (input: { threadId: string; workspaceId: string }) => Promise<unknown>
-    >;
-    getDiffPanelData: Record<
-      RepoWarmupStrategy,
-      (input: {
-        mode: RepoDiffMode;
-        threadId: string;
-        workspaceId: string;
-      }) => Promise<unknown>
-    >;
+    getContext: {
+      setData: (...args: any[]) => void;
+    };
+    getDiffPanelBundle: {
+      fetch: (...args: any[]) => Promise<{
+        diffs: Record<RepoDiffMode, unknown>;
+        repoContext: unknown;
+      }>;
+      getData: (...args: any[]) =>
+        | {
+            diffs: Record<RepoDiffMode, unknown>;
+            repoContext: unknown;
+          }
+        | undefined;
+      prefetch: (...args: any[]) => Promise<unknown>;
+    };
+    getDiffPanelData: {
+      setData: (...args: any[]) => void;
+    };
   };
 };
 
 export const BACKGROUND_REPO_WARMUP_INTERVAL_MS = 45_000;
+
+export function hydrateRepoDiffBundleCaches(args: {
+  bundle: {
+    diffs: Record<RepoDiffMode, unknown>;
+    repoContext: unknown;
+  };
+  candidate: RepoWarmupCandidate;
+  modes: RepoDiffMode[];
+  utils: RepoWarmupUtils;
+}) {
+  const { threadId, workspaceId } = args.candidate;
+
+  args.utils.repo.getContext.setData(
+    { threadId, workspaceId },
+    args.bundle.repoContext,
+  );
+
+  for (const mode of args.modes) {
+    args.utils.repo.getDiffPanelData.setData(
+      { mode, threadId, workspaceId },
+      {
+        diff: args.bundle.diffs[mode],
+        repoContext: args.bundle.repoContext,
+      },
+    );
+  }
+}
+
+export async function warmRepoDiffBundleCandidate(args: {
+  candidate: RepoWarmupCandidate;
+  modes: RepoDiffMode[];
+  strategy: RepoWarmupStrategy;
+  utils: RepoWarmupUtils;
+}) {
+  const bundleInput = {
+    threadId: args.candidate.threadId,
+    workspaceId: args.candidate.workspaceId,
+  };
+
+  const bundle =
+    args.strategy === "prefetch"
+      ? await args.utils.repo.getDiffPanelBundle
+          .prefetch(bundleInput)
+          .then(
+            () =>
+              args.utils.repo.getDiffPanelBundle.getData(bundleInput) ??
+              args.utils.repo.getDiffPanelBundle.fetch(bundleInput),
+          )
+      : await args.utils.repo.getDiffPanelBundle.fetch(bundleInput);
+
+  hydrateRepoDiffBundleCaches({
+    bundle,
+    candidate: args.candidate,
+    modes: args.modes,
+    utils: args.utils,
+  });
+
+  return bundle;
+}
 
 export function queueRepoBackgroundWarmup(args: {
   candidates: RepoWarmupCandidate[];
@@ -40,22 +106,15 @@ export function queueRepoBackgroundWarmup(args: {
 
   for (const { threadId, workspaceId } of args.candidates) {
     enqueueBackgroundTask({
-      key: `repo-context:${workspaceId}:${threadId}`,
+      key: `repo-diff-bundle:${workspaceId}:${threadId}`,
       minIntervalMs: args.minIntervalMs,
-      run: () => args.utils.repo.getContext[method]({ threadId, workspaceId }),
+      run: () =>
+        warmRepoDiffBundleCandidate({
+          candidate: { threadId, workspaceId },
+          modes: args.modes,
+          strategy: method,
+          utils: args.utils,
+        }),
     });
-
-    for (const mode of args.modes) {
-      enqueueBackgroundTask({
-        key: `repo-diff:${workspaceId}:${threadId}:${mode}`,
-        minIntervalMs: args.minIntervalMs,
-        run: () =>
-          args.utils.repo.getDiffPanelData[method]({
-            mode,
-            threadId,
-            workspaceId,
-          }),
-      });
-    }
   }
 }

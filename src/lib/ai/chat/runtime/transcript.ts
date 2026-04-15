@@ -21,6 +21,18 @@ export function getFirstUserText(messages: ThreadUIMessage[]): string | null {
   );
 }
 
+export function buildFirstUserMessageTitle(
+  firstUserText: string | null,
+  maxLength = 100,
+) {
+  const normalized = firstUserText?.replace(/\s+/g, " ").trim() ?? "";
+  if (!normalized) {
+    return "New thread";
+  }
+
+  return normalized.slice(0, maxLength).trim() || "New thread";
+}
+
 export function truncateTranscriptAtMessage(
   transcript: ThreadUIMessage[],
   messageId: string | null | undefined,

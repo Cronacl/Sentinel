@@ -6,7 +6,11 @@ import {
   smoothStream,
 } from "ai";
 
-import { streamContext } from "@/lib/streams";
+import {
+  safelyCloseReadableStreamController,
+  safelyEnqueueReadableStreamController,
+  streamContext,
+} from "@/lib/streams";
 import { getErrorMessage } from "@/lib/errors";
 import { createLogger } from "@/lib/logger";
 import {
@@ -53,6 +57,7 @@ import { runClaudeThreadChat, stopClaudeThreadRun } from "./claude";
 import { runCopilotThreadChat, stopCopilotThreadRun } from "./copilot";
 import {
   buildActiveThreadMessages,
+  buildFirstUserMessageTitle,
   buildModelTranscript,
   getFirstUserText,
   getParentMessageId,
@@ -408,6 +413,7 @@ async function streamStillOwnsThread(
 
 async function createThreadEventChannel(runId: string) {
   let controller: ReadableStreamDefaultController<string> | null = null;
+  let closed = false;
 
   await streamContext.createNewResumableStream(
     runId,
@@ -421,11 +427,28 @@ async function createThreadEventChannel(runId: string) {
 
   return {
     close() {
-      controller?.close();
+      if (closed) {
+        return;
+      }
+
+      closed = true;
+      safelyCloseReadableStreamController(controller);
       controller = null;
     },
     emit(event: ThreadStreamEvent) {
-      controller?.enqueue(serializeThreadStreamEvent(event));
+      if (closed) {
+        return;
+      }
+
+      const didEnqueue = safelyEnqueueReadableStreamController(
+        controller,
+        serializeThreadStreamEvent(event),
+      );
+
+      if (!didEnqueue) {
+        closed = true;
+        controller = null;
+      }
     },
   };
 }
@@ -1493,8 +1516,9 @@ async function runParsedThreadChat(
         ? [request.message]
         : [];
 
-  const fallbackTitle =
-    getFirstUserText(baseMessages)?.slice(0, 100) ?? "New thread";
+  const fallbackTitle = buildFirstUserMessageTitle(
+    getFirstUserText(baseMessages),
+  );
   const shouldGenerateTitle =
     request.trigger === "submit-user-message" &&
     allRecords.length === 0 &&
@@ -1510,6 +1534,13 @@ async function runParsedThreadChat(
     engine,
     request.draftRepoState ? { repo: request.draftRepoState } : null,
   );
+  if (
+    shouldGenerateTitle &&
+    existingThread?.title === "New thread" &&
+    fallbackTitle !== "New thread"
+  ) {
+    persist.updateThreadTitle(request.threadId, fallbackTitle);
+  }
   let activeRunId: string | null = null;
   let assistantId: string | null = null;
   let parentId: string | null = null;

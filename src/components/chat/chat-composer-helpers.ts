@@ -114,7 +114,16 @@ export function resolveStableEngineOptions(
 }
 
 export function getReasoningEffortLabel(effort: ReasoningEffort) {
-  return effort.charAt(0).toUpperCase() + effort.slice(1);
+  switch (effort) {
+    case "none":
+      return "None";
+    case "minimal":
+      return "Minimal";
+    case "xhigh":
+      return "Extra high";
+    default:
+      return effort.charAt(0).toUpperCase() + effort.slice(1);
+  }
 }
 
 export function resolveReasoningEffort(

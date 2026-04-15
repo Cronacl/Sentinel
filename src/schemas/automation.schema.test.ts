@@ -78,4 +78,20 @@ describe("createAutomationSchema", () => {
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]?.path).toEqual(["scheduleCron"]);
   });
+
+  it("accepts the expanded reasoning effort values", () => {
+    expect(
+      createAutomationSchema.safeParse({
+        ...validAutomation,
+        reasoningEffort: "none",
+      }).success,
+    ).toBe(true);
+
+    expect(
+      createAutomationSchema.safeParse({
+        ...validAutomation,
+        reasoningEffort: "xhigh",
+      }).success,
+    ).toBe(true);
+  });
 });

@@ -167,9 +167,13 @@ export function ThreadRepoActions({
     branchModalState.isOpen ||
     prBranchModalState.isOpen;
   const repoDiffSidebarState = useRepoDiffSidebarState();
+  const cachedRepoContext = utils.repo.getContext.getData(
+    repoContextQueryInput,
+  );
 
   const repoContextQuery = api.repo.getContext.useQuery(repoContextQueryInput, {
     enabled: isDesktop && Boolean(workspaceRootPath),
+    ...(cachedRepoContext ? { initialData: cachedRepoContext } : {}),
     refetchInterval:
       isDesktop && workspaceRootPath && !anyModalOpen ? 2500 : false,
     refetchOnWindowFocus: !anyModalOpen,
@@ -181,6 +185,7 @@ export function ThreadRepoActions({
     repoContext?.repoRoot ??
     workspaceRootPath ??
     null;
+  const isRepoContextLoading = repoContextQuery.isLoading && !repoContext;
   const isBrowserSidebarActive =
     rightSidebar.isOpen &&
     rightSidebar.panelId === "browser" &&
@@ -227,7 +232,9 @@ export function ThreadRepoActions({
   );
 
   const isRepoVisible = Boolean(
-    isDesktop && workspaceRootPath && repoContext?.isGitRepo,
+    isDesktop &&
+    workspaceRootPath &&
+    (repoContext?.isGitRepo || isRepoContextLoading),
   );
 
   useEffect(() => {
@@ -996,28 +1003,6 @@ export function ThreadRepoActions({
     return null;
   }
 
-  if (repoContextQuery.isLoading && !repoContext) {
-    return (
-      <div className="flex items-center gap-2">
-        <TerminalToggleButton cwd={workspaceRootPath} />
-        <BrowserToggleButton />
-        <WorkspaceRunCommandButton
-          cwd={workspaceRootPath}
-          workspaceId={workspaceId}
-        />
-        <Button
-          isDisabled
-          size="sm"
-          className="max-h-7 min-w-24"
-          variant="tertiary"
-        >
-          <Spinner className="size-3.5 min-w-3.5" color="current" size="sm" />
-          <span>Loading repo</span>
-        </Button>
-      </div>
-    );
-  }
-
   if (!repoContextQuery.isLoading && repoContext && !repoContext.isGitRepo) {
     return (
       <div className="flex items-center gap-2">
@@ -1088,7 +1073,10 @@ export function ThreadRepoActions({
       ? (repoContext?.githubRemote?.pullRequestUrl ?? null)
       : null);
   const isRepoActionDisabled =
-    isGitBusy || projectModeBusy || isThreadContextMisaligned;
+    isRepoContextLoading ||
+    isGitBusy ||
+    projectModeBusy ||
+    isThreadContextMisaligned;
 
   const handleViewPullRequest = async () => {
     if (!desktop || !pullRequestOpenUrl) {
@@ -1289,7 +1277,7 @@ export function ThreadRepoActions({
           <Dropdown>
             <Button
               className="max-h-7 max-w-6 rounded-l-none"
-              isDisabled={isGitBusy || projectModeBusy}
+              isDisabled={isRepoActionDisabled}
               isIconOnly
               {...{ [BUTTON_GROUP_CHILD]: true }}
               variant="tertiary"

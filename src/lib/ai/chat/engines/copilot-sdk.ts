@@ -225,12 +225,13 @@ function toSentinelReasoningEffort(
   effort: ModelInfo["defaultReasoningEffort"] | undefined,
 ): ReasoningEffort | null {
   switch (effort) {
+    case "none":
+    case "minimal":
     case "low":
     case "medium":
     case "high":
-      return effort;
     case "xhigh":
-      return "high";
+      return effort;
     default:
       return null;
   }

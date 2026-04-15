@@ -151,43 +151,57 @@ mock.module("@/lib/ai/chat/engines/codex-cli", () => ({
   spawnCodexCli,
 }));
 
-mock.module("@/lib/ai/chat/engines/types", () => ({
-  getCodexThreadState: (value: any) => value?.codex ?? null,
-}));
+mock.module("@/lib/ai/chat/engines/types", async () => {
+  // @ts-expect-error Bun test-only cache-busting import for module isolation.
+  const actual =
+    await import("@/lib/ai/chat/engines/types.ts?engines-router-test-actual");
 
-mock.module("@/lib/ai/providers/models", () => ({
-  MODEL_CATALOG: {},
-  getDefaultReasoningEffort: () => "medium",
-  getModelsForProvider: (provider: string) =>
-    provider === "anthropic"
-      ? [
-          {
-            capabilities: ["vision", "tool_use", "object_generation"],
-            contextWindow: 200_000,
-            description: "Balanced performance and speed.",
-            displayName: "Claude Sonnet 4.5",
-            id: "claude-sonnet-4-5",
-          },
-        ]
-      : provider === "openai"
+  return {
+    ...actual,
+    getCodexThreadState: (value: any) => value?.codex ?? null,
+  };
+});
+
+mock.module("@/lib/ai/providers/models", async () => {
+  // @ts-expect-error Bun test-only cache-busting import for module isolation.
+  const actual =
+    await import("@/lib/ai/providers/models.ts?engines-router-test-actual");
+
+  return {
+    ...actual,
+    MODEL_CATALOG: {},
+    getDefaultReasoningEffort: () => "medium",
+    getModelsForProvider: (provider: string) =>
+      provider === "anthropic"
         ? [
             {
-              capabilities: ["tool_use", "object_generation"],
-              description: "Codex flagship model.",
-              displayName: "GPT-5 Codex",
-              id: "gpt-5-codex",
-            },
-            {
-              capabilities: ["tool_use", "object_generation"],
-              description: "Compact Codex model.",
-              displayName: "Codex Mini Latest",
-              id: "codex-mini-latest",
+              capabilities: ["vision", "tool_use", "object_generation"],
+              contextWindow: 200_000,
+              description: "Balanced performance and speed.",
+              displayName: "Claude Sonnet 4.5",
+              id: "claude-sonnet-4-5",
             },
           ]
-        : [],
-  getSupportedReasoningEfforts: () => ["medium"],
-  isKnownModel: () => false,
-}));
+        : provider === "openai"
+          ? [
+              {
+                capabilities: ["tool_use", "object_generation"],
+                description: "Codex flagship model.",
+                displayName: "GPT-5 Codex",
+                id: "gpt-5-codex",
+              },
+              {
+                capabilities: ["tool_use", "object_generation"],
+                description: "Compact Codex model.",
+                displayName: "Codex Mini Latest",
+                id: "codex-mini-latest",
+              },
+            ]
+          : [],
+    getSupportedReasoningEfforts: () => ["medium"],
+    isKnownModel: () => false,
+  };
+});
 
 mock.module("@/lib/ai/providers/model-selection", () => ({
   getCompositeModelId: (provider: string, modelId: string) =>
@@ -1004,5 +1018,99 @@ describe("enginesRouter.refreshStatus", () => {
         }),
       }),
     );
+  });
+});
+
+describe("enginesRouter.models reasoning effort normalization", () => {
+  it("preserves xhigh from Codex runtime model lists", async () => {
+    getStatus.mockImplementationOnce(async () => ({
+      authReady: true,
+      availableModels: [
+        {
+          defaultReasoningEffort: "xhigh",
+          description: "Codex frontier model",
+          displayName: "GPT-5.3 Codex",
+          id: "gpt-5.3-codex",
+          inputModalities: ["text"],
+          isDefault: true,
+          model: "gpt-5.3-codex",
+          supportedReasoningEfforts: [{ effort: "xhigh" }],
+        },
+      ],
+      cliDetected: true,
+      cliVersion: "codex-cli 0.98.0",
+      error: null,
+      isDesktopRuntime: true,
+      lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
+      requiresOpenaiAuth: false,
+      serverReachable: true,
+      state: "ready",
+      usedCachedStatus: false,
+    }));
+
+    const result = await enginesRouter.models({
+      ctx: {
+        db: { query: {} },
+        session: { user: { id: "user-1" } },
+      },
+      input: { engine: "codex" },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        defaultReasoningEffort: "xhigh",
+        modelId: "gpt-5.3-codex",
+        supportedReasoningEfforts: ["xhigh"],
+      }),
+    ]);
+  });
+
+  it("preserves xhigh from Copilot runtime model lists", async () => {
+    getCopilotEngineStatus.mockImplementationOnce(async () => ({
+      account: {
+        authType: "oauth",
+        host: "github.com",
+        login: "octocat",
+        statusMessage: null,
+      },
+      authReady: true,
+      availableModels: [
+        {
+          contextWindow: 128_000,
+          defaultReasoningEffort: "xhigh",
+          description: "Copilot frontier model",
+          displayName: "GPT-5.4",
+          id: "gpt-5.4",
+          inputModalities: ["text"],
+          isDefault: true,
+          model: "gpt-5.4",
+          supportedReasoningEfforts: [{ effort: "xhigh" }],
+        },
+      ],
+      cliDetected: true,
+      cliPath: "/Users/test/.local/bin/copilot",
+      cliVersion: "copilot 1.0.24",
+      engine: "copilot",
+      error: null,
+      lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
+      state: "ready",
+      usedCachedStatus: false,
+    }));
+
+    const result = await enginesRouter.models({
+      ctx: {
+        db: { query: {} },
+        session: { user: { id: "user-1" } },
+      },
+      input: { engine: "copilot" },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        defaultReasoningEffort: "xhigh",
+        modelId: "gpt-5.4",
+        supportedReasoningEfforts: ["xhigh"],
+      }),
+    ]);
   });
 });

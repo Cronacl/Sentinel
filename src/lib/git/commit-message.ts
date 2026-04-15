@@ -369,7 +369,9 @@ function mapClaudeEffort(effort: ReasoningEffort | null | undefined) {
     case "medium":
       return "medium";
     case "high":
+    case "xhigh":
       return "high";
+    case "none":
     case "minimal":
     case "low":
       return "low";
@@ -383,7 +385,9 @@ function mapCopilotEffort(effort: ReasoningEffort | null | undefined) {
     case "medium":
       return "medium";
     case "high":
+    case "xhigh":
       return "high";
+    case "none":
     case "minimal":
     case "low":
       return "low";

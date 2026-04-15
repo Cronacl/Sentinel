@@ -93,6 +93,13 @@ const DIFF_PANEL_UNSAFE_CSS = `
   background-color: var(--diffs-bg) !important;
 }
 
+[data-line],
+[data-column-number],
+[data-no-newline] {
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+}
+
 [data-line-type='change-addition'][data-line] span {
   color: color-mix(in srgb, currentColor 76%, var(--syntax-token-inserted)) !important;
 }
@@ -398,9 +405,11 @@ export function RepoDiffSidebar() {
   const diffPanelQuery = api.repo.getDiffPanelData.useQuery(
     queryInput ?? skipToken,
     {
-      refetchOnReconnect: false,
-      refetchOnWindowFocus: false,
-      staleTime: 15_000,
+      placeholderData: (previousData) => previousData,
+      refetchOnMount: "always",
+      refetchOnReconnect: true,
+      refetchOnWindowFocus: true,
+      staleTime: 0,
     },
   );
 
@@ -648,20 +657,13 @@ export function RepoDiffSidebar() {
               type="button"
               variant="ghost"
             >
-              {diffPanelQuery.isFetching ? (
-                <Spinner
-                  className="size-3.5 min-w-3.5"
-                  color="current"
-                  size="sm"
-                />
-              ) : (
-                <HugeiconsIcon
-                  color="currentColor"
-                  icon={ArrowReloadHorizontalIcon}
-                  size={14}
-                  strokeWidth={1.6}
-                />
-              )}
+              <HugeiconsIcon
+                className={diffPanelQuery.isFetching ? "opacity-45" : undefined}
+                color="currentColor"
+                icon={ArrowReloadHorizontalIcon}
+                size={14}
+                strokeWidth={1.6}
+              />
             </Button>
             <Tooltip.Content
               className="rounded-xl border border-border/60 bg-overlay px-2 py-1 text-xs shadow-overlay"
@@ -850,7 +852,7 @@ export function RepoDiffSidebar() {
                       }}
                     />
                   ) : shouldRenderDiff ? (
-                    <pre className="overflow-auto rounded-b-lg bg-background/70 p-3 font-mono text-[11px] leading-relaxed text-foreground/80 whitespace-pre-wrap break-words">
+                    <pre className="overflow-auto rounded-b-lg bg-background/70 p-3 font-mono text-[10px] leading-relaxed text-foreground/80 whitespace-pre-wrap break-words">
                       {file.patch}
                     </pre>
                   ) : (

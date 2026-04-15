@@ -10,6 +10,7 @@ const setThreadStatus = mock(() => {});
 const updateCodexThreadState = mock(() => {});
 const updateClaudeThreadState = mock(() => {});
 const updateMessageMetadata = mock(async () => {});
+const updateThreadTitle = mock(() => {});
 const updateThreadChatSettings = mock(async () => {});
 const updateThreadRepoState = mock(() => {});
 const upsertMessage = mock(() => {});
@@ -62,6 +63,7 @@ mock.module("../persistence", () => ({
   updateMessageMetadata,
   updateThreadChatSettings,
   updateThreadRepoState,
+  updateThreadTitle,
   upsertMessage,
 }));
 
@@ -123,6 +125,7 @@ describe("runCopilotThreadChat", () => {
     setThreadStatus.mockClear();
     updateThreadChatSettings.mockClear();
     updateThreadRepoState.mockClear();
+    updateThreadTitle.mockClear();
     upsertMessage.mockClear();
     mockSession.disconnect.mockClear();
     mockSession.send.mockClear();
@@ -169,6 +172,31 @@ describe("runCopilotThreadChat", () => {
       "Plan Mode is active for this fresh Copilot session",
     );
     expect(sentPayloads[0]?.prompt).toContain("<proposed_plan>");
+  });
+
+  it("generates a thread title for fresh Copilot threads", async () => {
+    const response = await runCopilotThreadChat(
+      {
+        message: createUserMessage("Hi"),
+        modelId: "openai:gpt-5.4",
+        threadId: "thread-title-1",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      {
+        activeStreamId: null,
+        chatEngineState: null,
+        mode: "chat",
+        status: "idle",
+        title: "New thread",
+      } as any,
+    );
+
+    await Promise.resolve();
+
+    expect(response.status).toBe(202);
+    expect(updateThreadTitle).toHaveBeenCalledWith("thread-title-1", "Hi");
   });
 
   it("does not re-bootstrap resumed plan sessions", async () => {

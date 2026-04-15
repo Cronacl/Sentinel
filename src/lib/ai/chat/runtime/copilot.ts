@@ -23,7 +23,11 @@ import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import { serializeComposerContextToText } from "@/lib/composer-context/serialize";
 import { createLogger } from "@/lib/logger";
 import { normalizeThreadMode } from "@/lib/plan";
-import { streamContext } from "@/lib/streams";
+import {
+  safelyCloseReadableStreamController,
+  safelyEnqueueReadableStreamController,
+  streamContext,
+} from "@/lib/streams";
 
 import { ThreadChatConflictError } from "../errors";
 import * as persist from "../persistence";
@@ -42,6 +46,7 @@ import type { ThreadChatRequest } from "../types";
 import type { ToolApprovalPolicyMap } from "../tool-approval-policy";
 import {
   buildActiveThreadMessages,
+  buildFirstUserMessageTitle,
   buildModelTranscript,
   getFirstUserText,
   getUserParentMessageId,
@@ -283,6 +288,7 @@ function resolveActiveCopilotRunControl(input: {
 
 async function createThreadEventChannel(runId: string) {
   let controller: ReadableStreamDefaultController<string> | null = null;
+  let closed = false;
 
   await streamContext.createNewResumableStream(
     runId,
@@ -296,11 +302,28 @@ async function createThreadEventChannel(runId: string) {
 
   return {
     close() {
-      controller?.close();
+      if (closed) {
+        return;
+      }
+
+      closed = true;
+      safelyCloseReadableStreamController(controller);
       controller = null;
     },
     emit(event: ThreadStreamEvent) {
-      controller?.enqueue(serializeThreadStreamEvent(event));
+      if (closed) {
+        return;
+      }
+
+      const didEnqueue = safelyEnqueueReadableStreamController(
+        controller,
+        serializeThreadStreamEvent(event),
+      );
+
+      if (!didEnqueue) {
+        closed = true;
+        controller = null;
+      }
     },
   };
 }
@@ -758,6 +781,46 @@ async function emitThreadSnapshot(
       type: "thread.snapshot",
     });
   }
+}
+
+function shouldGenerateRuntimeThreadTitle(input: {
+  existingTitle?: string | null;
+  messageCount: number;
+  trigger: ThreadChatRequest["trigger"];
+}) {
+  return (
+    input.trigger === "submit-user-message" &&
+    input.messageCount === 0 &&
+    (!input.existingTitle || input.existingTitle === "New thread")
+  );
+}
+
+function launchCopilotThreadTitleGeneration(input: {
+  eventChannel: ThreadEventChannel;
+  existingThreadTitle?: string | null;
+  messageCount: number;
+  request: Pick<ThreadChatRequest, "message" | "threadId" | "trigger">;
+}) {
+  if (
+    !shouldGenerateRuntimeThreadTitle({
+      existingTitle: input.existingThreadTitle,
+      messageCount: input.messageCount,
+      trigger: input.request.trigger,
+    })
+  ) {
+    return;
+  }
+
+  const firstUserText = getFirstUserText(
+    input.request.message ? [input.request.message] : [],
+  );
+  const title = buildFirstUserMessageTitle(firstUserText);
+  if (title === "New thread") {
+    return;
+  }
+
+  persist.updateThreadTitle(input.request.threadId, title);
+  void emitThreadSnapshot(input.request.threadId, input.eventChannel);
 }
 
 function requiresApprovalForCopilotPermission(input: {
@@ -1327,12 +1390,15 @@ function normalizePersistedCopilotReasoningEffort(
   reasoningEffort: ThreadChatRequest["reasoningEffort"] | null | undefined,
 ): ReasoningEffort | undefined {
   switch (reasoningEffort) {
+    case "none":
     case "minimal":
       return "low";
     case "low":
     case "medium":
     case "high":
       return reasoningEffort;
+    case "xhigh":
+      return "high";
     default:
       return undefined;
   }
@@ -1346,6 +1412,9 @@ function toCopilotSdkReasoningEffort(
     case "medium":
     case "high":
       return reasoningEffort;
+    case "xhigh":
+      return "high";
+    case "none":
     case "minimal":
       return "low";
     default:
@@ -1438,9 +1507,9 @@ export async function runCopilotThreadChat(
     allRecords,
   );
   const assistantParentMessageId = request.message?.id ?? userParentMessageId;
-  const fallbackTitle =
-    getFirstUserText(request.message ? [request.message] : [])?.slice(0, 100) ??
-    "New thread";
+  const fallbackTitle = buildFirstUserMessageTitle(
+    getFirstUserText(request.message ? [request.message] : []),
+  );
 
   await persist.ensureThread(
     request.threadId,
@@ -1691,6 +1760,12 @@ export async function runCopilotThreadChat(
         sessionId,
       }),
     );
+    launchCopilotThreadTitleGeneration({
+      eventChannel,
+      existingThreadTitle: existingThread?.title ?? null,
+      messageCount: allRecords.length,
+      request,
+    });
 
     if (!request.message) {
       throw new Error("GitHub Copilot turns require a user message.");

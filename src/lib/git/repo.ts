@@ -61,6 +61,13 @@ export type RepoDiffPanelData = {
   totalDeletions: number;
 };
 
+export type RepoDiffPanelBundleData = {
+  branch: string | null;
+  diffs: Record<RepoDiffMode, RepoDiffPanelData>;
+  isGitRepo: boolean;
+  repoRoot: string | null;
+};
+
 export type RepoWorktree = {
   branch: string | null;
   detached: boolean;
@@ -90,6 +97,11 @@ const GENERATED_THREAD_BRANCH_NAMES = [
   "zephyr",
 ] as const;
 
+const inflightRepoDiffBundles = new Map<
+  string,
+  Promise<RepoDiffPanelBundleData>
+>();
+
 type RepoFileChange = {
   path: string;
   type: "added" | "deleted" | "modified" | "renamed" | "untracked";
@@ -112,6 +124,90 @@ function emptyRepoContext(): RepoContext {
     pushRemoteName: null,
     repoRoot: null,
   };
+}
+
+function buildEmptyRepoDiffPanelData(input: {
+  branch?: string | null;
+  disabledReason?: string | null;
+  mode: RepoDiffMode;
+  sourceLabel?: string;
+}) {
+  return {
+    branch: input.branch ?? null,
+    disabledReason: input.disabledReason ?? null,
+    fileCount: 0,
+    files: [],
+    mode: input.mode,
+    sourceLabel:
+      input.sourceLabel ??
+      (input.mode === "unstaged"
+        ? "Unstaged"
+        : input.mode === "staged"
+          ? "Staged"
+          : "Branch"),
+    totalAdditions: 0,
+    totalDeletions: 0,
+  } satisfies RepoDiffPanelData;
+}
+
+function buildEmptyRepoDiffPanelBundle(input?: {
+  branch?: string | null;
+  disabledReason?: string | null;
+  repoRoot?: string | null;
+}) {
+  return {
+    branch: input?.branch ?? null,
+    diffs: {
+      unstaged: buildEmptyRepoDiffPanelData({
+        branch: input?.branch,
+        disabledReason: input?.disabledReason,
+        mode: "unstaged",
+      }),
+      staged: buildEmptyRepoDiffPanelData({
+        branch: input?.branch,
+        disabledReason: input?.disabledReason,
+        mode: "staged",
+      }),
+      branch: buildEmptyRepoDiffPanelData({
+        branch: input?.branch,
+        disabledReason: input?.disabledReason,
+        mode: "branch",
+      }),
+    },
+    isGitRepo: false,
+    repoRoot: input?.repoRoot ?? null,
+  } satisfies RepoDiffPanelBundleData;
+}
+
+function buildRepoDiffPanelData(input: {
+  branch: string | null;
+  disabledReason?: string | null;
+  mode: RepoDiffMode;
+  patch: string;
+  sourceLabel: string;
+  untrackedPaths?: Set<string>;
+}) {
+  const files = splitPatchIntoFiles(input.patch, {
+    untrackedPaths: input.untrackedPaths,
+  });
+  const totals = files.reduce(
+    (acc, file) => ({
+      additions: acc.additions + file.additions,
+      deletions: acc.deletions + file.deletions,
+    }),
+    { additions: 0, deletions: 0 },
+  );
+
+  return {
+    branch: input.branch,
+    disabledReason: input.disabledReason ?? null,
+    fileCount: files.length,
+    files,
+    mode: input.mode,
+    sourceLabel: input.sourceLabel,
+    totalAdditions: totals.additions,
+    totalDeletions: totals.deletions,
+  } satisfies RepoDiffPanelData;
 }
 
 export function parseShortStat(output: string) {
@@ -450,9 +546,9 @@ async function assertPathSelection(paths: string[]) {
   return normalized;
 }
 
-async function resolveBranchDiffSpec(repoRoot: string) {
-  const context = await resolveRepoContext(repoRoot);
-  if (!context.branch) {
+async function resolveBranchDiffSpec(repoRoot: string, context?: RepoContext) {
+  const resolvedContext = context ?? (await resolveRepoContext(repoRoot));
+  if (!resolvedContext.branch) {
     return {
       branch: null,
       baseRef: null,
@@ -462,11 +558,11 @@ async function resolveBranchDiffSpec(repoRoot: string) {
     };
   }
 
-  const defaultBranch = context.githubRemote?.defaultBranch;
-  const remoteName = context.githubRemote?.remoteName;
+  const defaultBranch = resolvedContext.githubRemote?.defaultBranch;
+  const remoteName = resolvedContext.githubRemote?.remoteName;
   if (!defaultBranch || !remoteName) {
     return {
-      branch: context.branch,
+      branch: resolvedContext.branch,
       baseRef: null,
       disabledReason:
         "Branch diff requires a GitHub remote with a resolvable default branch.",
@@ -482,11 +578,11 @@ async function resolveBranchDiffSpec(repoRoot: string) {
   );
   if (remoteRefResult.code !== 0) {
     return {
-      branch: context.branch,
+      branch: resolvedContext.branch,
       baseRef: null,
       disabledReason: `Branch diff requires the remote ref ${remoteRef}.`,
       diffRef: null,
-      sourceLabel: `${context.branch} -> ${remoteRef}`,
+      sourceLabel: `${resolvedContext.branch} -> ${remoteRef}`,
     };
   }
 
@@ -496,11 +592,11 @@ async function resolveBranchDiffSpec(repoRoot: string) {
   );
   if (mergeBaseResult.code !== 0 || !mergeBaseResult.stdout.trim()) {
     return {
-      branch: context.branch,
+      branch: resolvedContext.branch,
       baseRef: null,
       disabledReason: `Branch diff could not resolve a merge base with ${remoteRef}.`,
       diffRef: null,
-      sourceLabel: `${context.branch} -> ${remoteRef}`,
+      sourceLabel: `${resolvedContext.branch} -> ${remoteRef}`,
     };
   }
 
@@ -508,10 +604,10 @@ async function resolveBranchDiffSpec(repoRoot: string) {
 
   return {
     baseRef: mergeBase,
-    branch: context.branch,
+    branch: resolvedContext.branch,
     disabledReason: null,
     diffRef: `${remoteRef}...HEAD`,
-    sourceLabel: `${context.branch} -> ${remoteRef}`,
+    sourceLabel: `${resolvedContext.branch} -> ${remoteRef}`,
   };
 }
 
@@ -1344,103 +1440,171 @@ export async function getRepoDiffPanelData(
   pathValue: string | null | undefined,
   mode: RepoDiffMode,
 ): Promise<RepoDiffPanelData> {
-  const repoRoot = await resolveRepoRootOrThrow(pathValue);
-  const context = await resolveRepoContext(repoRoot);
+  const bundle = await getRepoDiffPanelBundleData(pathValue);
+  return bundle.diffs[mode];
+}
 
-  if (!context.isGitRepo) {
-    throw new Error("The selected workspace root is not a git repository.");
+export async function getRepoDiffPanelBundleData(
+  pathValue: string | null | undefined,
+  options?: {
+    dedupeKey?: string;
+    emptyReason?: string;
+    onMissingRepo?: "empty" | "throw";
+    repoContext?: RepoContext;
+  },
+): Promise<RepoDiffPanelBundleData> {
+  const dedupeKey =
+    options?.dedupeKey?.trim() ||
+    `repo-diff:${pathValue?.trim() || options?.repoContext?.repoRoot || "missing"}`;
+  const cached = inflightRepoDiffBundles.get(dedupeKey);
+  if (cached) {
+    return await cached;
   }
 
-  let patch = "";
-  let sourceLabel =
-    mode === "unstaged" ? "Unstaged" : mode === "staged" ? "Staged" : "Branch";
-  let disabledReason: string | null = null;
-  let untrackedPaths = new Set<string>();
+  const promise = (async () => {
+    const repoRoot =
+      options?.repoContext?.repoRoot ??
+      (await resolveRepoRoot(pathValue ?? ""));
+    if (!repoRoot) {
+      if (options?.onMissingRepo === "empty") {
+        return buildEmptyRepoDiffPanelBundle({
+          disabledReason:
+            options.emptyReason ??
+            "Repo diff is temporarily unavailable while this thread is loading.",
+        });
+      }
 
-  if (mode === "unstaged") {
-    const [statusResult, patchResult] = await Promise.all([
-      runGit(["status", "--porcelain=v1"], repoRoot),
-      runGit(["diff", "--patch", "--minimal"], repoRoot),
-    ]);
+      throw new Error("The selected workspace root is not a git repository.");
+    }
+
+    const context =
+      options?.repoContext?.repoRoot === repoRoot
+        ? options.repoContext
+        : await resolveRepoContext(repoRoot);
+
+    if (!context.isGitRepo) {
+      if (options?.onMissingRepo === "empty") {
+        return buildEmptyRepoDiffPanelBundle({
+          branch: context.branch,
+          disabledReason:
+            options.emptyReason ?? "This workspace is not a git repository.",
+          repoRoot: context.repoRoot,
+        });
+      }
+
+      throw new Error("The selected workspace root is not a git repository.");
+    }
+
+    const unstagedStatusPromise = runGit(
+      ["status", "--porcelain=v1"],
+      repoRoot,
+    );
+    const unstagedPatchPromise = runGit(
+      ["diff", "--patch", "--minimal"],
+      repoRoot,
+    );
+    const stagedPatchPromise = runGit(
+      ["diff", "--cached", "--patch", "--minimal"],
+      repoRoot,
+    );
+    const branchSpecPromise = resolveBranchDiffSpec(repoRoot, context);
+
+    const [statusResult, unstagedPatchResult, stagedPatchResult, branchSpec] =
+      await Promise.all([
+        unstagedStatusPromise,
+        unstagedPatchPromise,
+        stagedPatchPromise,
+        branchSpecPromise,
+      ]);
+
     if (statusResult.code !== 0) {
       throw new Error(statusResult.stderr || "Failed to inspect git status.");
     }
-    if (patchResult.code !== 0) {
+    if (unstagedPatchResult.code !== 0) {
       throw new Error(
-        patchResult.stderr || "Failed to generate unstaged diff.",
+        unstagedPatchResult.stderr || "Failed to generate unstaged diff.",
+      );
+    }
+    if (stagedPatchResult.code !== 0) {
+      throw new Error(
+        stagedPatchResult.stderr || "Failed to generate staged diff.",
       );
     }
 
-    untrackedPaths = collectUntrackedPaths(statusResult.stdout);
+    const untrackedPaths = collectUntrackedPaths(statusResult.stdout);
     const untrackedPatches = await Promise.all(
       [...untrackedPaths].map((filePath) =>
         buildUntrackedPatch(repoRoot, filePath),
       ),
     );
-    patch = [
-      patchResult.stdout.trim(),
+    const unstagedPatch = [
+      unstagedPatchResult.stdout.trim(),
       ...untrackedPatches.filter((entry): entry is string =>
         Boolean(entry?.trim()),
       ),
     ]
       .filter(Boolean)
       .join("\n\n");
-  } else if (mode === "staged") {
-    const patchResult = await runGit(
-      ["diff", "--cached", "--patch", "--minimal"],
-      repoRoot,
-    );
-    if (patchResult.code !== 0) {
-      throw new Error(patchResult.stderr || "Failed to generate staged diff.");
-    }
-    patch = patchResult.stdout.trim();
-  } else {
-    const branchSpec = await resolveBranchDiffSpec(repoRoot);
-    sourceLabel = branchSpec.sourceLabel;
-    disabledReason = branchSpec.disabledReason;
 
-    if (!branchSpec.diffRef) {
-      return {
+    let branchDiff: RepoDiffPanelData = buildEmptyRepoDiffPanelData({
+      branch: branchSpec.branch,
+      disabledReason: branchSpec.disabledReason,
+      mode: "branch",
+      sourceLabel: branchSpec.sourceLabel,
+    });
+
+    if (branchSpec.diffRef) {
+      const branchPatchResult = await runGit(
+        ["diff", "--patch", "--minimal", branchSpec.diffRef],
+        repoRoot,
+      );
+      if (branchPatchResult.code !== 0) {
+        throw new Error(
+          branchPatchResult.stderr || "Failed to generate branch diff.",
+        );
+      }
+
+      branchDiff = buildRepoDiffPanelData({
         branch: branchSpec.branch,
-        disabledReason,
-        fileCount: 0,
-        files: [],
-        mode,
-        sourceLabel,
-        totalAdditions: 0,
-        totalDeletions: 0,
-      };
+        disabledReason: branchSpec.disabledReason,
+        mode: "branch",
+        patch: branchPatchResult.stdout.trim(),
+        sourceLabel: branchSpec.sourceLabel,
+      });
     }
 
-    const patchResult = await runGit(
-      ["diff", "--patch", "--minimal", branchSpec.diffRef],
-      repoRoot,
-    );
-    if (patchResult.code !== 0) {
-      throw new Error(patchResult.stderr || "Failed to generate branch diff.");
+    return {
+      branch: context.branch,
+      diffs: {
+        unstaged: buildRepoDiffPanelData({
+          branch: context.branch,
+          mode: "unstaged",
+          patch: unstagedPatch,
+          sourceLabel: "Unstaged",
+          untrackedPaths,
+        }),
+        staged: buildRepoDiffPanelData({
+          branch: context.branch,
+          mode: "staged",
+          patch: stagedPatchResult.stdout.trim(),
+          sourceLabel: "Staged",
+        }),
+        branch: branchDiff,
+      },
+      isGitRepo: true,
+      repoRoot: context.repoRoot,
+    };
+  })();
+
+  inflightRepoDiffBundles.set(dedupeKey, promise);
+
+  try {
+    return await promise;
+  } finally {
+    if (inflightRepoDiffBundles.get(dedupeKey) === promise) {
+      inflightRepoDiffBundles.delete(dedupeKey);
     }
-    patch = patchResult.stdout.trim();
   }
-
-  const files = splitPatchIntoFiles(patch, { untrackedPaths });
-  const totals = files.reduce(
-    (acc, file) => ({
-      additions: acc.additions + file.additions,
-      deletions: acc.deletions + file.deletions,
-    }),
-    { additions: 0, deletions: 0 },
-  );
-
-  return {
-    branch: context.branch,
-    disabledReason,
-    fileCount: files.length,
-    files,
-    mode,
-    sourceLabel,
-    totalAdditions: totals.additions,
-    totalDeletions: totals.deletions,
-  };
 }
 
 export async function stageFiles(
