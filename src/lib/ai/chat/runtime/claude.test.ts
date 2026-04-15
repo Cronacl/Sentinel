@@ -86,19 +86,13 @@ mock.module("@/lib/ai/chat/engines/claude-sdk", async () => {
   };
 });
 
-mock.module("@/lib/streams", async () => {
-  // @ts-expect-error Bun test-only cache-busting import for module isolation.
-  const actual =
-    await import("@/lib/streams/index.ts?claude-runtime-test-actual");
-
-  return {
-    ...actual,
-    streamContext: {
-      ...actual.streamContext,
-      createNewResumableStream: mock(async () => {}),
-    },
-  };
-});
+mock.module("@/lib/streams", () => ({
+  safelyCloseReadableStreamController: mock(() => true),
+  safelyEnqueueReadableStreamController: mock(() => true),
+  streamContext: {
+    createNewResumableStream: mock(async () => {}),
+  },
+}));
 
 mock.module("./workspace", () => ({
   getToolApprovalPolicies: mock(async () => ({})),
