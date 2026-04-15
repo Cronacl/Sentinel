@@ -2,10 +2,16 @@ import { createId } from "@paralleldrive/cuid2";
 import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { runThreadChat } from "@/lib/ai/chat";
+import type {
+  RepoProjectMode,
+  ThreadChatEngineState,
+} from "@/lib/ai/chat/engines/types";
+import { ensureThreadWorktree, resolveRepoContext } from "@/lib/git/repo";
 import { disposeShellSession } from "@/lib/ai/chat/tools/shell";
 import { normalizeThreadMessageMetadata } from "@/lib/ai/messages/types";
 import { getErrorMessage } from "@/lib/errors";
 import { createLogger } from "@/lib/logger";
+import type { PermissionMode } from "@/lib/security";
 import { db, type Database } from "@/server/db";
 import type { ChatEngine, ScratchpadTaskStatus } from "@/server/db/enums";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
@@ -15,6 +21,7 @@ import {
   threadMessages,
   threadPlanQuestions,
   threads,
+  workspaces,
 } from "@/server/db/schema";
 
 const log = createLogger("Scratchpad");
@@ -439,6 +446,60 @@ function deriveScratchpadTaskTitle(params: {
   return targetThreadTitle;
 }
 
+async function buildScratchpadThreadState(params: {
+  database: Database;
+  permissionModeOverride: PermissionMode;
+  projectMode: RepoProjectMode;
+  threadId: string;
+  workspaceId: string;
+}): Promise<ThreadChatEngineState | null> {
+  const state: ThreadChatEngineState = {
+    permissionModeOverride: params.permissionModeOverride,
+  };
+
+  if (params.projectMode !== "worktree") {
+    return state;
+  }
+
+  const workspace = await params.database.query.workspaces.findFirst({
+    where: eq(workspaces.id, params.workspaceId),
+    columns: {
+      rootPath: true,
+    },
+  });
+
+  const rootPath = trimToString(workspace?.rootPath);
+  if (!rootPath) {
+    throw new Error("This workspace does not have a root path.");
+  }
+
+  const repoContext = await resolveRepoContext(rootPath);
+  if (!repoContext.isGitRepo) {
+    throw new Error("This workspace is not a git repository.");
+  }
+
+  if (!repoContext.branch) {
+    throw new Error(
+      "This workspace does not have an active branch for a worktree.",
+    );
+  }
+
+  const worktree = await ensureThreadWorktree(
+    rootPath,
+    params.threadId,
+    repoContext.branch,
+  );
+
+  return {
+    ...state,
+    repo: {
+      activeBranch: repoContext.branch,
+      projectMode: "worktree",
+      worktreePath: worktree.path,
+    },
+  };
+}
+
 async function defaultLaunchScratchpadTaskRun(
   input: LaunchScratchpadTaskRunInput,
 ) {
@@ -591,6 +652,8 @@ export async function createScratchpadTask(params: {
   database?: Database;
   engine?: ChatEngine;
   modelId?: string;
+  permissionModeOverride?: PermissionMode;
+  projectMode?: RepoProjectMode;
   reasoningEffort?: ReasoningEffort;
   scheduleTaskRun?: (input: LaunchScratchpadTaskRunInput) => void;
   title: string;
@@ -615,11 +678,21 @@ export async function createScratchpadTask(params: {
   const taskId = createId();
   const virtualThreadId = crypto.randomUUID();
   const visibleThreadId = crypto.randomUUID();
+  const permissionModeOverride = params.permissionModeOverride ?? "full";
+  const projectMode = params.projectMode ?? "local";
+  const threadState = await buildScratchpadThreadState({
+    database,
+    permissionModeOverride,
+    projectMode,
+    threadId: virtualThreadId,
+    workspaceId: params.workspaceId,
+  });
 
   database.transaction((tx) => {
     tx.insert(threads)
       .values({
         chatEngine: params.engine ?? SCRATCHPAD_ENGINE,
+        ...(threadState ? { chatEngineState: threadState } : {}),
         ...(params.modelId ? { chatModelId: params.modelId } : {}),
         ...(params.reasoningEffort
           ? { chatReasoningEffort: params.reasoningEffort }
@@ -638,6 +711,7 @@ export async function createScratchpadTask(params: {
     tx.insert(threads)
       .values({
         chatEngine: params.engine ?? SCRATCHPAD_ENGINE,
+        ...(threadState ? { chatEngineState: threadState } : {}),
         ...(params.modelId ? { chatModelId: params.modelId } : {}),
         ...(params.reasoningEffort
           ? { chatReasoningEffort: params.reasoningEffort }

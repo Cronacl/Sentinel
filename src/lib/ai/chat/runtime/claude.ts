@@ -1550,6 +1550,7 @@ export async function runClaudeThreadChat(
   const workspacePermissionMode = await getToolPermissionMode(
     request.userId,
     request.workspaceId,
+    request.threadId,
   );
   const existingClaudeState = getClaudeThreadState(
     existingThread?.chatEngineState,

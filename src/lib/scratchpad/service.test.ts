@@ -1,6 +1,6 @@
 // @ts-nocheck
 
-import { describe, expect, it, mock } from "bun:test";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { Database as SQLiteDatabase } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 
@@ -12,9 +12,25 @@ mock.module("@/server/db", () => ({
 }));
 
 const disposeShellSession = mock(async () => {});
+const ensureThreadWorktree = mock(
+  async (_rootPath: string, threadId: string, branchName: string) => ({
+    branch: branchName,
+    created: true,
+    path: `/tmp/.sentinel-worktrees/${threadId}`,
+  }),
+);
+const resolveRepoContext = mock(async () => ({
+  branch: "main",
+  isGitRepo: true,
+}));
 
 mock.module("@/lib/ai/chat", () => ({
   runThreadChat: mock(async () => new Response(null, { status: 200 })),
+}));
+
+mock.module("@/lib/git/repo", () => ({
+  ensureThreadWorktree,
+  resolveRepoContext,
 }));
 
 mock.module("@/lib/ai/chat/tools/shell", () => ({
@@ -32,6 +48,20 @@ mock.restore();
 function createScratchpadTestDb() {
   const sqlite = new SQLiteDatabase(":memory:");
   sqlite.exec(`
+    CREATE TABLE "workspace" (
+      "id" text PRIMARY KEY NOT NULL,
+      "user_id" text NOT NULL,
+      "name" text NOT NULL,
+      "root_path" text,
+      "description" text,
+      "permission_mode_override" text,
+      "is_archived" integer DEFAULT 0 NOT NULL,
+      "is_expanded" integer DEFAULT 0 NOT NULL,
+      "sort_order" integer DEFAULT 0 NOT NULL,
+      "created_at" integer NOT NULL,
+      "updated_at" integer NOT NULL
+    );
+
     CREATE TABLE "thread" (
       "id" text PRIMARY KEY NOT NULL,
       "workspace_id" text NOT NULL,
@@ -110,6 +140,24 @@ function createScratchpadTestDb() {
   };
 }
 
+beforeEach(() => {
+  disposeShellSession.mockReset();
+  ensureThreadWorktree.mockReset();
+  resolveRepoContext.mockReset();
+
+  ensureThreadWorktree.mockImplementation(
+    async (_rootPath: string, threadId: string, branchName: string) => ({
+      branch: branchName,
+      created: true,
+      path: `/tmp/.sentinel-worktrees/${threadId}`,
+    }),
+  );
+  resolveRepoContext.mockImplementation(async () => ({
+    branch: "main",
+    isGitRepo: true,
+  }));
+});
+
 describe("scratchpad service", () => {
   it("creates tasks, schedules runs, and reuses the workspace hub thread", async () => {
     const { drizzleDb } = createScratchpadTestDb();
@@ -154,6 +202,13 @@ describe("scratchpad service", () => {
     expect(visibleChildThreads).toHaveLength(2);
     expect(virtualThreads).toHaveLength(2);
     expect(
+      hubThreads.every(
+        (thread) =>
+          (thread.chatEngineState as { permissionModeOverride?: string } | null)
+            ?.permissionModeOverride === "full",
+      ),
+    ).toBe(true);
+    expect(
       visibleChildThreads.every((thread) => thread.title === "New thread"),
     ).toBe(true);
     expect(taskRows.every((task) => task.visibleThreadId)).toBe(true);
@@ -163,6 +218,67 @@ describe("scratchpad service", () => {
     expect(second.visibleThreadId).toBeTruthy();
     expect(scheduleTaskRun).toHaveBeenCalledTimes(2);
     expect(scheduleTaskRun.mock.calls[0]?.[0]?.workspaceId).toBe("workspace-1");
+  });
+
+  it("stores worktree repo state when a task opts into a worktree", async () => {
+    const { drizzleDb } = createScratchpadTestDb();
+    const now = new Date("2026-04-14T00:00:00.000Z");
+
+    drizzleDb
+      .insert(schema.workspaces)
+      .values({
+        createdAt: now,
+        id: "workspace-1",
+        isArchived: false,
+        isExpanded: false,
+        name: "Sentinel",
+        permissionModeOverride: null,
+        rootPath: "/tmp/sentinel",
+        sortOrder: 0,
+        updatedAt: now,
+        userId: "user-1",
+      })
+      .run();
+
+    const created = await createScratchpadTask({
+      database: drizzleDb,
+      projectMode: "worktree",
+      title: "Inspect the branch in isolation",
+      userId: "user-1",
+      workspaceId: "workspace-1",
+    });
+
+    const virtualThread = await drizzleDb.query.threads.findFirst({
+      where: (table, { eq }) => eq(table.id, created.virtualThreadId),
+    });
+    const visibleThread = await drizzleDb.query.threads.findFirst({
+      where: (table, { eq }) => eq(table.id, created.visibleThreadId),
+    });
+
+    expect(resolveRepoContext).toHaveBeenCalledWith("/tmp/sentinel");
+    expect(ensureThreadWorktree).toHaveBeenCalledWith(
+      "/tmp/sentinel",
+      created.virtualThreadId,
+      "main",
+    );
+    expect(
+      (
+        virtualThread?.chatEngineState as {
+          permissionModeOverride?: string;
+          repo?: { projectMode?: string; worktreePath?: string };
+        } | null
+      )?.repo,
+    ).toMatchObject({
+      projectMode: "worktree",
+      worktreePath: `/tmp/.sentinel-worktrees/${created.virtualThreadId}`,
+    });
+    expect(
+      (
+        visibleThread?.chatEngineState as {
+          permissionModeOverride?: string;
+        } | null
+      )?.permissionModeOverride,
+    ).toBe("full");
   });
 
   it("derives completed state and summary text from the backing thread", async () => {

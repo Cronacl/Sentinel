@@ -67,6 +67,10 @@ export const scratchpadRouter = createTRPCRouter({
         database: ctx.db,
         ...(input.engine ? { engine: input.engine } : {}),
         ...(input.modelId ? { modelId: input.modelId } : {}),
+        ...(input.permissionModeOverride
+          ? { permissionModeOverride: input.permissionModeOverride }
+          : {}),
+        ...(input.projectMode ? { projectMode: input.projectMode } : {}),
         ...(input.reasoningEffort
           ? { reasoningEffort: input.reasoningEffort }
           : {}),

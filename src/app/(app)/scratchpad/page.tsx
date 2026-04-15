@@ -3,15 +3,19 @@
 import { ListBox, Popover, ScrollShadow, Spinner } from "@heroui/react";
 import {
   ArrowDown01Icon,
+  FolderTreeIcon,
   CircleIcon,
   Delete02Icon,
+  LaptopProgrammingIcon,
   Loading03Icon,
   Cancel01Icon,
+  Shield01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sileo } from "sileo";
 
+import type { RepoProjectMode } from "@/lib/ai/chat/engines/types";
 import { useModelSelection } from "@/components/chat/chat-composer/use-model-selection";
 import { getReasoningEffortLabel } from "@/components/chat/chat-composer-helpers";
 import { usePersistSelection } from "@/components/chat/chat-composer/use-persist-selection";
@@ -20,7 +24,7 @@ import { SubagentThreadPanel } from "@/components/chat/subagent-thread-panel";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { SidebarToggle, useRightSidebar, useShell } from "@/components/shell";
 import { getErrorMessage } from "@/lib/errors";
-import { applyThreadTitleCacheUpdate } from "@/lib/threads/cache";
+import type { PermissionMode } from "@/lib/security";
 import type { ChatEngine } from "@/server/db/enums";
 import { api, type RouterOutputs } from "@/trpc/react";
 
@@ -33,6 +37,14 @@ function formatTaskTime(date: Date) {
     hour12: false,
     minute: "2-digit",
   });
+}
+
+function getPermissionModeLabel(value: PermissionMode) {
+  return value === "full" ? "Full" : "Workspace";
+}
+
+function getProjectModeLabel(value: RepoProjectMode) {
+  return value === "worktree" ? "Worktree" : "Local";
 }
 
 function FilledCheckCircle({ size = 18 }: { size?: number }) {
@@ -204,7 +216,7 @@ function ScratchpadComposer({
         className="w-full bg-transparent text-[14.5px] leading-snug text-foreground/80 outline-none placeholder:text-foreground/20"
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-        placeholder="Add a task, or tab for a follow up"
+        placeholder="Add a task or follow-up"
         ref={inputRef}
         value={value}
       />
@@ -256,26 +268,36 @@ function ToolbarPicker({
 }
 
 function ScratchpadToolbar({
+  currentWorkspace,
   engineOptions,
+  onSelectPermissionMode,
+  onSelectProjectMode,
   onSelectEngine,
   onSelectWorkspace,
-  selectedEngine,
   modelSelection,
+  permissionMode,
+  projectMode,
+  selectedEngine,
+  supportsWorktreeMode,
   workspaces,
-  currentWorkspace,
 }: {
+  currentWorkspace: { id: string; name: string } | null;
   engineOptions: Array<{
     engine: ChatEngine;
     error: string | null;
     isAvailable: boolean;
     label: string;
   }>;
+  onSelectPermissionMode: (mode: PermissionMode) => void;
+  onSelectProjectMode: (mode: RepoProjectMode) => void;
   onSelectEngine: (engine: ChatEngine) => void;
   onSelectWorkspace: (workspaceId: string) => void;
-  selectedEngine: ChatEngine;
   modelSelection: ReturnType<typeof useModelSelection>;
+  permissionMode: PermissionMode;
+  projectMode: RepoProjectMode;
+  selectedEngine: ChatEngine;
+  supportsWorktreeMode: boolean;
   workspaces: Array<{ id: string; name: string; isSelected: boolean }>;
-  currentWorkspace: { id: string; name: string } | null;
 }) {
   const disabledEngineKeys = useMemo(
     () =>
@@ -319,6 +341,99 @@ function ScratchpadToolbar({
               ))}
             </ListBox>
           </ScrollShadow>
+        )}
+      </ToolbarPicker>
+
+      <span className="text-foreground/15">/</span>
+
+      <ToolbarPicker
+        ariaLabel="Permissions"
+        label={
+          <span className="inline-flex items-center gap-1">
+            <HugeiconsIcon
+              className="text-foreground/30"
+              color="currentColor"
+              icon={Shield01Icon}
+              size={11}
+              strokeWidth={1.8}
+            />
+            {getPermissionModeLabel(permissionMode)}
+          </span>
+        }
+      >
+        {(close) => (
+          <ListBox
+            aria-label="Permissions"
+            selectedKeys={[permissionMode]}
+            selectionMode="single"
+            onSelectionChange={(keys) => {
+              const key = [...keys][0];
+              if (key != null) {
+                onSelectPermissionMode(String(key) as PermissionMode);
+                close();
+              }
+            }}
+          >
+            <ListBox.Item id="full" key="full" textValue="Full permissions">
+              <span className="text-[12px]">Full permissions</span>
+              <ListBox.ItemIndicator />
+            </ListBox.Item>
+            <ListBox.Item
+              id="default"
+              key="default"
+              textValue="Workspace permissions"
+            >
+              <span className="text-[12px]">Workspace permissions</span>
+              <ListBox.ItemIndicator />
+            </ListBox.Item>
+          </ListBox>
+        )}
+      </ToolbarPicker>
+
+      <span className="text-foreground/15">/</span>
+
+      <ToolbarPicker
+        ariaLabel="Project mode"
+        label={
+          <span className="inline-flex items-center gap-1">
+            <HugeiconsIcon
+              className="text-foreground/30"
+              color="currentColor"
+              icon={
+                projectMode === "worktree"
+                  ? FolderTreeIcon
+                  : LaptopProgrammingIcon
+              }
+              size={11}
+              strokeWidth={1.8}
+            />
+            {getProjectModeLabel(projectMode)}
+          </span>
+        }
+      >
+        {(close) => (
+          <ListBox
+            aria-label="Project mode"
+            disabledKeys={supportsWorktreeMode ? [] : ["worktree"]}
+            selectedKeys={[projectMode]}
+            selectionMode="single"
+            onSelectionChange={(keys) => {
+              const key = [...keys][0];
+              if (key != null) {
+                onSelectProjectMode(String(key) as RepoProjectMode);
+                close();
+              }
+            }}
+          >
+            <ListBox.Item id="local" key="local" textValue="Local project">
+              <span className="text-[12px]">Local project</span>
+              <ListBox.ItemIndicator />
+            </ListBox.Item>
+            <ListBox.Item id="worktree" key="worktree" textValue="Worktree">
+              <span className="text-[12px]">Worktree</span>
+              <ListBox.ItemIndicator />
+            </ListBox.Item>
+          </ListBox>
         )}
       </ToolbarPicker>
 
@@ -482,7 +597,8 @@ export default function ScratchpadPage() {
   });
   const [draft, setDraft] = useState("");
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
-  const syncedTaskTitlesRef = useRef(new Map<string, string>());
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>("full");
+  const [projectMode, setProjectMode] = useState<RepoProjectMode>("local");
 
   const persistHook = usePersistSelection({
     activeWorkspaceId: workspace.data?.id,
@@ -495,6 +611,13 @@ export default function ScratchpadPage() {
     persistSelection: persistHook.persistSelection,
     selectionScopeKey: "scratchpad",
   });
+  const repoContext = api.repo.getContext.useQuery(
+    { workspaceId: workspace.data?.id ?? "" },
+    {
+      enabled: Boolean(workspace.data?.id),
+      staleTime: 15_000,
+    },
+  );
 
   const selectWorkspace = api.workspaces.select.useMutation({
     onMutate: async ({ workspaceId }) => {
@@ -663,34 +786,20 @@ export default function ScratchpadPage() {
   );
 
   useEffect(() => {
-    const nextSyncedTitles = new Map<string, string>();
-    const workspaceId = scratchpad.data?.workspaceId ?? workspace.data?.id;
-
-    for (const task of allTasks) {
-      const visibleThreadId = task.visibleThreadId;
-      const title = task.title.trim();
-      const signature = `${visibleThreadId ?? "none"}:${title}`;
-
-      nextSyncedTitles.set(task.id, signature);
-
-      if (
-        !visibleThreadId ||
-        !title ||
-        syncedTaskTitlesRef.current.get(task.id) === signature
-      ) {
-        continue;
-      }
-
-      applyThreadTitleCacheUpdate({
-        threadId: visibleThreadId,
-        title,
-        utils,
-        workspaceId,
-      });
+    if (
+      projectMode === "worktree" &&
+      !(repoContext.data?.isGitRepo && repoContext.data?.branch) &&
+      !repoContext.isFetching
+    ) {
+      setProjectMode("local");
     }
-
-    syncedTaskTitlesRef.current = nextSyncedTitles;
-  }, [allTasks, scratchpad.data?.workspaceId, utils, workspace.data?.id]);
+  }, [
+    projectMode,
+    repoContext.data?.branch,
+    repoContext.data?.isGitRepo,
+    repoContext.isFetching,
+    setProjectMode,
+  ]);
 
   const handleCreateTask = useCallback(() => {
     const title = draft.trim();
@@ -708,6 +817,8 @@ export default function ScratchpadPage() {
         ...(modelSelection.selectedModelKey
           ? { modelId: modelSelection.selectedModelKey }
           : {}),
+        permissionModeOverride: permissionMode,
+        projectMode,
         ...(modelSelection.selectedReasoningEffort
           ? { reasoningEffort: modelSelection.selectedReasoningEffort }
           : {}),
@@ -730,6 +841,8 @@ export default function ScratchpadPage() {
     modelSelection.selectedEngine,
     modelSelection.selectedModelKey,
     modelSelection.selectedReasoningEffort,
+    permissionMode,
+    projectMode,
   ]);
 
   const handleDeleteTask = useCallback(
@@ -775,11 +888,7 @@ export default function ScratchpadPage() {
         }
 
         open(
-          <SubagentThreadPanel
-            hideDescription
-            overrideTitle={task.title}
-            threadId={result.threadId}
-          />,
+          <SubagentThreadPanel hideDescription threadId={result.threadId} />,
           { size: "wide" },
         );
       } catch (error) {
@@ -862,15 +971,22 @@ export default function ScratchpadPage() {
           currentWorkspace={currentWorkspace}
           engineOptions={modelSelection.engineOptions}
           modelSelection={modelSelection}
+          onSelectPermissionMode={setPermissionMode}
+          onSelectProjectMode={setProjectMode}
           onSelectEngine={modelSelection.handleSelectEngine}
           onSelectWorkspace={handleSelectWorkspace}
+          permissionMode={permissionMode}
+          projectMode={projectMode}
           selectedEngine={modelSelection.selectedEngine}
+          supportsWorktreeMode={Boolean(
+            repoContext.data?.isGitRepo && repoContext.data?.branch,
+          )}
           workspaces={workspaces}
         />
 
         {!scratchpad.isPending && allTasks.length === 0 ? (
           <p className="pb-6 pt-2 text-[13px] text-foreground/22">
-            Drop in a quick task and it starts running right away.
+            Hit Enter to run it.
           </p>
         ) : null}
       </div>

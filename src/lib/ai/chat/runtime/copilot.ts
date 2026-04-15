@@ -1460,6 +1460,7 @@ export async function runCopilotThreadChat(
   const workspacePermissionMode = await getToolPermissionMode(
     request.userId,
     request.workspaceId,
+    request.threadId,
   );
   const toolApprovalPolicies = await getToolApprovalPolicies(request.userId);
   const existingCopilotState = getCopilotThreadState(

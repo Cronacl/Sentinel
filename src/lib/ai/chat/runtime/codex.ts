@@ -1809,6 +1809,7 @@ export async function runCodexThreadChat(
   const permissionMode = await getToolPermissionMode(
     request.userId,
     request.workspaceId,
+    request.threadId,
   );
   const approvalPolicy = getCodexApprovalPolicy(permissionMode);
   const sandboxMode = getCodexSandboxMode(permissionMode, workspaceRoot);

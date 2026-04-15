@@ -127,12 +127,16 @@ describe("scratchpadRouter", () => {
         workspace: { id: "workspace-1" },
       },
       input: {
+        permissionModeOverride: "full",
+        projectMode: "worktree",
         title: "Check release notes",
       },
     });
 
     expect(createScratchpadTask).toHaveBeenCalledWith({
       database: {},
+      permissionModeOverride: "full",
+      projectMode: "worktree",
       title: "Check release notes",
       userId: "user-1",
       workspaceId: "workspace-1",

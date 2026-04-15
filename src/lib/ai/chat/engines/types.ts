@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-import { CHAT_ENGINES, type ChatEngine } from "@/server/db/enums";
+import {
+  CHAT_ENGINES,
+  PERMISSION_MODES,
+  type ChatEngine,
+  type PermissionMode,
+} from "@/server/db/enums";
 import { REASONING_EFFORTS } from "@/lib/ai/providers/models";
 
 export const chatEngineSchema = z.enum(CHAT_ENGINES);
@@ -98,6 +103,7 @@ export const threadChatEngineStateSchema = z
     claude: claudeThreadStateSchema.nullish(),
     copilot: copilotThreadStateSchema.nullish(),
     codex: codexThreadStateSchema.nullish(),
+    permissionModeOverride: z.enum(PERMISSION_MODES).nullish(),
     repo: repoThreadStateSchema.nullish(),
   })
   .partial();
@@ -144,6 +150,10 @@ export function getCopilotThreadState(
 
 export function getRepoThreadState(value: unknown): RepoThreadState | null {
   return parseThreadChatEngineState(value)?.repo ?? null;
+}
+
+export function getThreadPermissionMode(value: unknown): PermissionMode | null {
+  return parseThreadChatEngineState(value)?.permissionModeOverride ?? null;
 }
 
 export function mergeThreadChatEngineState(

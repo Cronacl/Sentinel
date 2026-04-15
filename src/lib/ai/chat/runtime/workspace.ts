@@ -1,5 +1,8 @@
 import { and, eq } from "drizzle-orm";
-import { getRepoThreadState } from "@/lib/ai/chat/engines/types";
+import {
+  getRepoThreadState,
+  getThreadPermissionMode,
+} from "@/lib/ai/chat/engines/types";
 
 import {
   buildToolApprovalOverrideMap,
@@ -215,7 +218,10 @@ export async function getThreadRuntimeBootstrap(
           DEFAULT_CONTEXT_COMPACTION_WINDOW_PERCENT,
       },
       permissionMode:
-        workspace?.permissionModeOverride ?? user?.permissionMode ?? "default",
+        getThreadPermissionMode(thread?.chatEngineState) ??
+        workspace?.permissionModeOverride ??
+        user?.permissionMode ??
+        "default",
       personalizationPrompt: user
         ? buildPersonalizationPrompt({
             aboutUser: user.aboutUser,
@@ -268,13 +274,20 @@ export async function getWorkspaceRootPath(
 export async function getToolPermissionMode(
   userId: string,
   workspaceId?: string | null,
+  threadId?: string | null,
 ): Promise<PermissionMode> {
-  const { user, workspace } = await loadThreadRuntimeBootstrapRows(
+  const { thread, user, workspace } = await loadThreadRuntimeBootstrapRows(
     userId,
     workspaceId,
+    threadId,
   );
 
-  return workspace?.permissionModeOverride ?? user?.permissionMode ?? "default";
+  return (
+    getThreadPermissionMode(thread?.chatEngineState) ??
+    workspace?.permissionModeOverride ??
+    user?.permissionMode ??
+    "default"
+  );
 }
 
 export async function getWebFetchSettings(
