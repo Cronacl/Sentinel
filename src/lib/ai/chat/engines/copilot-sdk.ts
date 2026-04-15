@@ -222,7 +222,7 @@ function getCopilotReasoningEfforts(model: ModelInfo) {
 }
 
 function toSentinelReasoningEffort(
-  effort: ModelInfo["defaultReasoningEffort"] | undefined,
+  effort: string | null | undefined,
 ): ReasoningEffort | null {
   switch (effort) {
     case "none":

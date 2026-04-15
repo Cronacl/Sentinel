@@ -755,11 +755,18 @@ mock.module("./session-server", () => ({
   serializeThreadStreamEvent,
 }));
 
-mock.module("@/lib/streams", () => ({
-  streamContext: {
-    createNewResumableStream,
-  },
-}));
+mock.module("@/lib/streams", async () => {
+  // @ts-expect-error Bun test-only cache-busting import for module isolation.
+  const actual = await import("@/lib/streams/index.ts?chat-index-test-actual");
+
+  return {
+    ...actual,
+    streamContext: {
+      ...actual.streamContext,
+      createNewResumableStream,
+    },
+  };
+});
 
 mock.module("@/lib/mcp/tools", () => ({
   loadMcpTools,
