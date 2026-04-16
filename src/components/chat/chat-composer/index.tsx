@@ -2,7 +2,14 @@
 
 import { EditorContent } from "@tiptap/react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent as ReactDragEvent,
+} from "react";
 import { Button } from "@heroui/react";
 import { DEFAULT_FOLLOW_UP_BEHAVIOR } from "@/schemas/general-settings.schema";
 import { getExactContextWindowUsage } from "@/lib/ai/chat/context-window";
@@ -496,87 +503,112 @@ export function ChatComposer({
   }, [hideUntilReady, isComposerReady]);
 
   useEffect(() => {
-    if (isLocked) return;
+    if (!isDraggingOver) {
+      dragCounterRef.current = 0;
+    }
+  }, [isDraggingOver]);
 
-    const handleDragEnter = (e: DragEvent) => {
-      if (!e.dataTransfer?.types.includes("Files")) return;
-      e.preventDefault();
+  const isFileDragEvent = useCallback(
+    (event: ReactDragEvent<HTMLElement>) =>
+      event.dataTransfer?.types.includes("Files") ?? false,
+    [],
+  );
+
+  const handleComposerDragEnter = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (isLocked || !isFileDragEvent(event)) return;
+      event.preventDefault();
       dragCounterRef.current += 1;
-      if (dragCounterRef.current === 1) setIsDraggingOver(true);
-    };
+      if (dragCounterRef.current === 1) {
+        setIsDraggingOver(true);
+      }
+    },
+    [isFileDragEvent, isLocked],
+  );
 
-    const handleDragLeave = (e: DragEvent) => {
-      if (!e.dataTransfer?.types.includes("Files")) return;
-      e.preventDefault();
+  const handleComposerDragLeave = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (isLocked || !isFileDragEvent(event)) return;
+      event.preventDefault();
       dragCounterRef.current -= 1;
       if (dragCounterRef.current <= 0) {
         dragCounterRef.current = 0;
         setIsDraggingOver(false);
       }
-    };
+    },
+    [isFileDragEvent, isLocked],
+  );
 
-    const handleDragOver = (e: DragEvent) => {
-      if (!e.dataTransfer?.types.includes("Files")) return;
-      e.preventDefault();
-    };
+  const handleComposerDragOver = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (isLocked || !isFileDragEvent(event)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    },
+    [isFileDragEvent, isLocked],
+  );
 
-    const handleDrop = (e: DragEvent) => {
-      e.preventDefault();
+  const handleComposerDrop = useCallback(
+    (event: ReactDragEvent<HTMLDivElement>) => {
+      if (isLocked || !isFileDragEvent(event)) return;
+      event.preventDefault();
       dragCounterRef.current = 0;
       setIsDraggingOver(false);
-      const files = e.dataTransfer?.files;
-      if (files && files.length > 0) {
+      const files = event.dataTransfer.files;
+      if (files.length > 0) {
         addBrowserFiles(Array.from(files));
       }
-    };
-
-    window.addEventListener("dragenter", handleDragEnter);
-    window.addEventListener("dragleave", handleDragLeave);
-    window.addEventListener("dragover", handleDragOver);
-    window.addEventListener("drop", handleDrop);
-
-    return () => {
-      window.removeEventListener("dragenter", handleDragEnter);
-      window.removeEventListener("dragleave", handleDragLeave);
-      window.removeEventListener("dragover", handleDragOver);
-      window.removeEventListener("drop", handleDrop);
-    };
-  }, [addBrowserFiles, isLocked]);
+    },
+    [addBrowserFiles, isFileDragEvent, isLocked],
+  );
 
   return (
     <>
-      {isDraggingOver ? (
-        <div className="pointer-events-none fixed inset-0 z-100 flex items-center justify-center bg-background/60 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3 rounded-3xl border-1 border-dashed border-separator/50 bg-surface px-12 py-10">
-            <svg
-              className="size-10 text-accent"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.5}
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M12 16V4m0 0-4 4m4-4 4 4M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <p className="text-sm font-medium text-foreground">
-              Drop files to attach
-            </p>
-          </div>
-        </div>
-      ) : null}
-
       <div
         aria-hidden={hideUntilReady ? true : undefined}
-        className="pointer-events-auto w-full rounded-[24px] border border-border/50 bg-background shadow-[0_0_10px_rgba(0,0,0,0.05)] transition-opacity duration-150 dark:border-border/20 dark:bg-surface"
+        className="pointer-events-auto relative w-full overflow-hidden rounded-[24px] border border-border/50 bg-background shadow-[0_0_10px_rgba(0,0,0,0.05)] transition-opacity duration-150 dark:border-border/20 dark:bg-surface"
+        onDragEnter={handleComposerDragEnter}
+        onDragLeave={handleComposerDragLeave}
+        onDragOver={handleComposerDragOver}
+        onDrop={handleComposerDrop}
         style={{
           opacity: hideUntilReady ? 0 : 1,
           visibility: hideUntilReady ? "hidden" : "visible",
         }}
       >
-        <div className="px-2.5 py-2">
+        {isDraggingOver ? (
+          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-background/88 p-6 backdrop-blur-sm dark:bg-surface/90">
+            <div className="flex flex-col items-center justify-center gap-3 text-center">
+              <svg
+                className="size-10 text-accent"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.5}
+                viewBox="0 0 24 24"
+              >
+                <path
+                  d="M12 16V4m0 0-4 4m4-4 4 4M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <div className="space-y-1">
+                <p className="text-sm font-medium tracking-[0.01em] text-foreground">
+                  Drop files to attach
+                </p>
+                <p className="text-xs text-muted">
+                  Release here to add them to this message
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <div
+          className={`px-2.5 py-2 transition-opacity duration-150 ${
+            isDraggingOver ? "opacity-0" : "opacity-100"
+          }`}
+        >
           <AttachmentManager
             attachmentError={attachmentError}
             attachments={attachments}

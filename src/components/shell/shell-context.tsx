@@ -20,6 +20,10 @@ import { DEFAULT_BROWSER_SESSION_PERSISTENCE_ENABLED } from "@/schemas/general-s
 import { api } from "@/trpc/react";
 
 import {
+  resolveShellRouteState,
+  type ShellNavigationOptions,
+} from "./shell-route";
+import {
   clearRightSidebarState,
   DEFAULT_RIGHT_SIDEBAR_STATE,
   type RightSidebarPanelId,
@@ -35,6 +39,16 @@ type RightSidebarOptions = {
 };
 
 interface ShellContextValue {
+  pathname: string;
+  selectedThreadId: string | null;
+  isHomeRoute: boolean;
+  isThreadRoute: boolean;
+  navigateHome: (options?: ShellNavigationOptions) => void;
+  navigateToThread: (
+    threadId: string,
+    options?: ShellNavigationOptions,
+  ) => void;
+
   leftSidebarOpen: boolean;
   toggleLeftSidebar: () => void;
   setLeftSidebarOpen: (open: boolean) => void;
@@ -56,7 +70,8 @@ interface ShellContextValue {
 const ShellContext = createContext<ShellContextValue | null>(null);
 
 export function ShellProvider({ children }: PropsWithChildren) {
-  const pathname = usePathname();
+  const nextPathname = usePathname();
+  const [pathname, setPathname] = useState(nextPathname);
   const initialPathRef = useRef(pathname);
   const generalSettings = api.generalSettings.get.useQuery();
 
@@ -72,6 +87,25 @@ export function ShellProvider({ children }: PropsWithChildren) {
     DEFAULT_RIGHT_SIDEBAR_STATE.size,
   );
   const rightSidebarDrawerMode = useMediaQuery(RIGHT_SIDEBAR_DRAWER_BREAKPOINT);
+
+  useEffect(() => {
+    setPathname(nextPathname);
+  }, [nextPathname]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handlePopState = () => {
+      setPathname(window.location.pathname);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
 
   useEffect(() => {
     setBrowserSessionPersistenceEnabled(
@@ -113,6 +147,38 @@ export function ShellProvider({ children }: PropsWithChildren) {
     }
     initialPathRef.current = pathname;
   }, [closeRightSidebar, pathname]);
+
+  const navigatePath = useCallback(
+    (nextPath: string, options?: ShellNavigationOptions) => {
+      if (typeof window === "undefined") {
+        return;
+      }
+
+      const historyMethod = options?.replace ? "replaceState" : "pushState";
+      window.history[historyMethod](null, "", nextPath);
+      setPathname(nextPath);
+    },
+    [],
+  );
+
+  const navigateHome = useCallback(
+    (options?: ShellNavigationOptions) => {
+      navigatePath("/", options);
+    },
+    [navigatePath],
+  );
+
+  const navigateToThread = useCallback(
+    (threadId: string, options?: ShellNavigationOptions) => {
+      navigatePath(`/thread/${threadId}`, options);
+    },
+    [navigatePath],
+  );
+
+  const routeState = useMemo(
+    () => resolveShellRouteState(pathname),
+    [pathname],
+  );
 
   const toggleLeftSidebar = useCallback(
     () => setLeftSidebarOpen((prev) => !prev),
@@ -162,6 +228,12 @@ export function ShellProvider({ children }: PropsWithChildren) {
 
   const value = useMemo<ShellContextValue>(
     () => ({
+      pathname: routeState.pathname,
+      selectedThreadId: routeState.selectedThreadId,
+      isHomeRoute: routeState.isHomeRoute,
+      isThreadRoute: routeState.isThreadRoute,
+      navigateHome,
+      navigateToThread,
       leftSidebarOpen,
       toggleLeftSidebar,
       setLeftSidebarOpen,
@@ -176,6 +248,12 @@ export function ShellProvider({ children }: PropsWithChildren) {
       setRightSidebarContent: updateRightSidebarContent,
     }),
     [
+      routeState.pathname,
+      routeState.selectedThreadId,
+      routeState.isHomeRoute,
+      routeState.isThreadRoute,
+      navigateHome,
+      navigateToThread,
       leftSidebarOpen,
       toggleLeftSidebar,
       setLeftSidebarOpen,

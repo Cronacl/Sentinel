@@ -3,11 +3,10 @@
 import type { ReactNode } from "react";
 import { memo, useCallback, useMemo } from "react";
 import { Button } from "@heroui/react";
-import { usePathname } from "next/navigation";
 import { Icon } from "@iconify/react";
 
 import { SubagentThreadPanel } from "@/components/chat/subagent-thread-panel";
-import { useRightSidebar } from "@/components/shell/shell-context";
+import { useRightSidebar, useShell } from "@/components/shell/shell-context";
 import { api } from "@/trpc/react";
 
 import type { RendererProps } from "../../renderer";
@@ -150,7 +149,7 @@ export const RunSubagentTool = memo(function RunSubagentTool({
   part,
 }: RendererProps) {
   const { open } = useRightSidebar();
-  const pathname = usePathname();
+  const { selectedThreadId } = useShell();
   const input =
     "input" in part && isRunSubagentInput(part.input) ? part.input : null;
   const output =
@@ -165,10 +164,10 @@ export const RunSubagentTool = memo(function RunSubagentTool({
     defaultExpanded: Boolean(output?.status && output.status !== "completed"),
     toolCallId: part.toolCallId,
   });
-  const parentThreadId = useMemo(() => {
-    const match = pathname?.match(/\/thread\/([^/?#]+)/);
-    return match?.[1] ?? null;
-  }, [pathname]);
+  const parentThreadId = useMemo(
+    () => selectedThreadId ?? null,
+    [selectedThreadId],
+  );
   const resolvedSubagentThreadQuery = api.threads.resolveSubagent.useQuery(
     parentThreadId && input
       ? {

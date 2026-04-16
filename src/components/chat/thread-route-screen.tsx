@@ -1,9 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { PageWrapper } from "@/components/shell";
+import { useShell } from "@/components/shell/shell-context";
 import { api } from "@/trpc/react";
 
 import { closeRepoDiffSidebarForThreadChange } from "./repo-diff-sidebar-store";
@@ -12,7 +12,7 @@ import { buildThreadQueryOptions } from "./thread-query-options";
 import { Spinner } from "@heroui/react";
 
 export function ThreadRouteScreen({ threadId }: { threadId: string }) {
-  const router = useRouter();
+  const { navigateHome } = useShell();
   const utils = api.useUtils();
   const cachedThread = utils.threads.get.getData({ threadId });
   const threadQuery = api.threads.get.useQuery(
@@ -22,9 +22,9 @@ export function ThreadRouteScreen({ threadId }: { threadId: string }) {
 
   useEffect(() => {
     if (threadQuery.error?.data?.code === "NOT_FOUND" && !threadQuery.data) {
-      router.replace("/");
+      navigateHome({ replace: true });
     }
-  }, [router, threadQuery.error?.data?.code, threadQuery.data]);
+  }, [navigateHome, threadQuery.error?.data?.code, threadQuery.data]);
 
   useEffect(() => {
     return () => {

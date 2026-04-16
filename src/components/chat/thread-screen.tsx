@@ -27,10 +27,10 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
-import { useRouter } from "next/navigation";
 import { sileo } from "sileo";
 
 import { PageWrapper } from "@/components/shell";
+import { useShell } from "@/components/shell/shell-context";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import { isCommittedThreadActionError } from "@/hooks/use-thread-chat";
 import { moveQueuedFollowUpToFront } from "@/hooks/use-thread-chat";
@@ -99,7 +99,7 @@ export function ThreadScreen({
   thread,
   workspace,
 }: ThreadScreenProps) {
-  const router = useRouter();
+  const { navigateHome } = useShell();
   const utils = api.useUtils();
   const [threadTitle, setThreadTitle] = useState(thread.title);
   const [threadSelectionState, setThreadSelectionState] = useState({
@@ -286,7 +286,7 @@ export function ThreadScreen({
   const archiveThread = api.threads.archive.useMutation({
     onSuccess: () => {
       void utils.threads.list.invalidate();
-      router.push("/");
+      navigateHome();
     },
   });
   const setActiveBranch = api.threads.setActiveBranch.useMutation({

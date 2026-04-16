@@ -3,10 +3,11 @@
 import { Button, ScrollShadow } from "@heroui/react";
 import { ArrowLeft02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { type PropsWithChildren, useEffect, useRef } from "react";
 
+import { NewThreadScreen } from "@/components/chat/new-thread-screen";
+import { ThreadRouteScreen } from "@/components/chat/thread-route-screen";
 import { getDesktopApi } from "@/lib/desktop/client";
 import { ShortcutProvider, useShortcutAction } from "@/lib/shortcuts/provider";
 import { api } from "@/trpc/react";
@@ -40,8 +41,8 @@ function ShellWarmCache() {
 }
 
 function SidebarContent() {
-  const pathname = usePathname();
   const router = useRouter();
+  const { navigateHome, pathname } = useShell();
   const isSettings = pathname.startsWith("/settings");
 
   if (isSettings) {
@@ -53,9 +54,10 @@ function SidebarContent() {
     return (
       <div className="flex h-full min-h-0 flex-col">
         <div className="shrink-0 px-3 pt-3 pb-1">
-          <Link
+          <button
             className="text-muted hover:text-foreground inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors"
-            href="/"
+            onClick={() => navigateHome()}
+            type="button"
           >
             <HugeiconsIcon
               color="currentColor"
@@ -64,7 +66,7 @@ function SidebarContent() {
               strokeWidth={1.5}
             />
             Back to app
-          </Link>
+          </button>
         </div>
 
         <ScrollShadow
@@ -131,7 +133,7 @@ function AppShellShortcutBindings() {
 }
 
 function AppShellRouteEffects() {
-  const pathname = usePathname();
+  const { pathname } = useShell();
   const previousPathnameRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -147,6 +149,20 @@ function AppShellRouteEffects() {
   }, [pathname]);
 
   return null;
+}
+
+function AppShellContent({ children }: PropsWithChildren) {
+  const { isHomeRoute, isThreadRoute, selectedThreadId } = useShell();
+
+  if (isThreadRoute && selectedThreadId) {
+    return <ThreadRouteScreen threadId={selectedThreadId} />;
+  }
+
+  if (isHomeRoute) {
+    return <NewThreadScreen />;
+  }
+
+  return <>{children}</>;
 }
 
 export function AppShell({ children }: PropsWithChildren) {
@@ -176,7 +192,9 @@ export function AppShell({ children }: PropsWithChildren) {
             </LeftSidebar>
 
             <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip">
-              <div className="min-h-0 flex-1">{children}</div>
+              <div className="min-h-0 flex-1">
+                <AppShellContent>{children}</AppShellContent>
+              </div>
               <TerminalPanel />
             </main>
 

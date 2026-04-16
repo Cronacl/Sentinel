@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useCallback } from "react";
 import { sileo } from "sileo";
 
@@ -11,9 +11,11 @@ import {
 } from "@/lib/workspaces/picker";
 import { api } from "@/trpc/react";
 
+import { useShell } from "./shell-context";
+
 export function useAppShortcutActions() {
-  const pathname = usePathname();
   const router = useRouter();
+  const { isHomeRoute, navigateHome } = useShell();
   const utils = api.useUtils();
 
   const createWorkspace = api.workspaces.create.useMutation({
@@ -84,10 +86,10 @@ export function useAppShortcutActions() {
 
   const handleStartNewThread = useCallback(() => {
     window.dispatchEvent(new Event("sentinel:new-thread"));
-    if (pathname !== "/") {
-      router.push("/");
+    if (!isHomeRoute) {
+      navigateHome();
     }
-  }, [pathname, router]);
+  }, [isHomeRoute, navigateHome]);
 
   const handleOpenAutomations = useCallback(() => {
     router.push("/automations");

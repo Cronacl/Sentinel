@@ -65,7 +65,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { formatDistanceToNowStrict } from "date-fns";
 import { FolderGit2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sileo } from "sileo";
 
@@ -1255,9 +1255,15 @@ function PreferenceMenuItem({
 }
 
 export function WorkspaceSidebar() {
-  const { leftSidebarOpen, toggleLeftSidebar } = useShell();
+  const {
+    leftSidebarOpen,
+    navigateHome,
+    navigateToThread: navigateToShellThread,
+    pathname,
+    selectedThreadId,
+    toggleLeftSidebar,
+  } = useShell();
   const commandShortcutLabel = useShortcutLabel("commandPalette.toggle");
-  const pathname = usePathname();
   const router = useRouter();
   const utils = api.useUtils();
   const cachedPreferences = utils.workspaces.getPreferences.getData();
@@ -1369,10 +1375,6 @@ export function WorkspaceSidebar() {
     [workspaces.data],
   );
 
-  const selectedThreadId = useMemo(() => {
-    const match = pathname.match(/\/thread\/([^/]+)/);
-    return match?.[1] ?? null;
-  }, [pathname]);
   const effectiveOrganizeBy = preferences.data?.organizeBy ?? organizeBy;
   const effectiveSortBy = preferences.data?.sortBy ?? sortBy;
 
@@ -1578,7 +1580,7 @@ export function WorkspaceSidebar() {
     onSuccess: (_data, variables) => {
       void utils.threads.list.invalidate();
       if (variables.threadId === selectedThreadId) {
-        router.push("/");
+        navigateHome();
       }
     },
   });
@@ -1776,7 +1778,7 @@ export function WorkspaceSidebar() {
           selectedWorkspaceId == null) &&
         pathname !== "/"
       ) {
-        router.push("/");
+        navigateHome();
       }
 
       deleteWorkspaceState.close();
@@ -2155,9 +2157,14 @@ export function WorkspaceSidebar() {
       }
 
       handleWarmThread(workspaceId, threadId, "press");
-      router.push(`/thread/${threadId}`);
+      navigateToShellThread(threadId);
     },
-    [handleWarmThread, router, selectWorkspace, selectedWorkspaceId],
+    [
+      handleWarmThread,
+      navigateToShellThread,
+      selectWorkspace,
+      selectedWorkspaceId,
+    ],
   );
 
   const finalizeThreadSwitch = useCallback(

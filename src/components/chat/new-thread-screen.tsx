@@ -15,6 +15,7 @@ import { sileo } from "sileo";
 
 import { SentinelLogoBadge } from "@/components/shared/logo";
 import { PageWrapper } from "@/components/shell";
+import { useShell } from "@/components/shell/shell-context";
 import { useOutsideClick } from "@/hooks/use-outside-click";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import { isCommittedThreadActionError } from "@/hooks/use-thread-chat";
@@ -52,6 +53,7 @@ type NewThreadScreenProps = {
 
 export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   const router = useRouter();
+  const { navigateToThread } = useShell();
   const utils = api.useUtils();
   const currentWorkspace = api.workspaces.getCurrent.useQuery(undefined, {
     staleTime: 30_000,
@@ -490,8 +492,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
 
         if (!threadId && !hasHandedOffRef.current) {
           hasHandedOffRef.current = true;
-          window.history.replaceState(null, "", `/thread/${draftThreadId}`);
-          router.replace(`/thread/${draftThreadId}`);
+          navigateToThread(draftThreadId, { replace: true });
         }
       } catch (error) {
         if (
@@ -500,8 +501,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
           isCommittedThreadActionError(error)
         ) {
           hasHandedOffRef.current = true;
-          window.history.replaceState(null, "", `/thread/${draftThreadId}`);
-          router.replace(`/thread/${draftThreadId}`);
+          navigateToThread(draftThreadId, { replace: true });
         }
 
         throw error;
@@ -510,8 +510,8 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     [
       draftThreadId,
       messages,
+      navigateToThread,
       queuedFollowUps,
-      router,
       selectedWorkspace,
       sendMessage,
       threadId,
