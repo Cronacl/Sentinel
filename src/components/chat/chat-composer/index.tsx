@@ -577,10 +577,10 @@ export function ChatComposer({
         }}
       >
         {isDraggingOver ? (
-          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-background/88 p-6 backdrop-blur-sm dark:bg-surface/90">
-            <div className="flex flex-col items-center justify-center gap-3 text-center">
+          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[24px] bg-background/88 backdrop-blur-sm dark:bg-surface/90">
+            <div className="flex items-center gap-3 px-6 py-4">
               <svg
-                className="size-10 text-accent"
+                className="size-6 shrink-0 text-accent"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth={1.5}
@@ -592,7 +592,7 @@ export function ChatComposer({
                   strokeLinejoin="round"
                 />
               </svg>
-              <div className="space-y-1">
+              <div>
                 <p className="text-sm font-medium tracking-[0.01em] text-foreground">
                   Drop files to attach
                 </p>

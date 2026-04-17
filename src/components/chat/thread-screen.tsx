@@ -122,10 +122,6 @@ export function ThreadScreen({
   }, [thread.title]);
 
   const handleError = useCallback((error: Error) => {
-    if (isCommittedThreadActionError(error)) {
-      return;
-    }
-
     setChatError(error.message);
   }, []);
   const repoContextQueryInput = useMemo(
@@ -375,6 +371,18 @@ export function ThreadScreen({
 
   const isBusy = status === "submitted" || status === "streaming";
   const visibleChatError = chatError ?? errorMessage;
+  const chatErrorBanner = visibleChatError ? (
+    <div className="mx-auto w-full max-w-2xl px-6 pb-2">
+      <div className="rounded-2xl border border-danger-soft-hover bg-danger-soft px-3 py-2.5">
+        <p className="text-[11px] font-medium text-danger-soft-foreground">
+          Request failed
+        </p>
+        <p className="mt-1 text-xs text-danger-soft-foreground whitespace-pre-wrap">
+          {visibleChatError}
+        </p>
+      </div>
+    </div>
+  ) : null;
 
   useEffect(() => {
     if (status === "submitted" || status === "streaming") {
@@ -1215,16 +1223,9 @@ export function ThreadScreen({
                   workspaceRootPath={workspace.rootPath}
                 />
               ))}
-
-              {visibleChatError && (
-                <div className="rounded-lg border border-danger-soft-hover bg-danger-soft px-3 py-2.5">
-                  <p className="text-xs text-danger-soft-foreground">
-                    {visibleChatError}
-                  </p>
-                </div>
-              )}
             </div>
           </div>
+          {chatErrorBanner}
           <div
             ref={composerDockRef}
             className="pointer-events-none sticky bottom-0 z-50 mx-auto w-full max-w-2xl px-6 pb-3 pt-2"

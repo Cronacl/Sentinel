@@ -85,9 +85,10 @@ function shouldPassthroughFile(input: {
 
   if (
     textExtensions.has(extension) ||
+    normalizedMediaType === "application/json" ||
     normalizedMediaType.startsWith("text/")
   ) {
-    return input.capabilities.supportsTextFiles;
+    return false;
   }
 
   return false;

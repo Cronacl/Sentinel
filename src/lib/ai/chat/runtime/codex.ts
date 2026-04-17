@@ -22,6 +22,10 @@ import {
 import { createLogger } from "@/lib/logger";
 import { normalizeThreadMode } from "@/lib/plan";
 import {
+  buildDocumentModelText,
+  loadInlineAttachmentDocument,
+} from "@/lib/documents/loader";
+import {
   safelyCloseReadableStreamController,
   safelyEnqueueReadableStreamController,
   streamContext,
@@ -1541,7 +1545,7 @@ async function handleCodexServerEvent(
   }
 }
 
-function buildCodexUserInput(
+async function buildCodexUserInput(
   message: ThreadUIMessage | undefined,
   options?: { promptPrefix?: string | null },
 ) {
@@ -1596,9 +1600,19 @@ function buildCodexUserInput(
     }
 
     if (!part.mediaType.startsWith("image/")) {
-      throw new Error(
-        "Codex-backed threads currently support image attachments only.",
-      );
+      const loaded = await loadInlineAttachmentDocument({
+        filename: part.filename ?? "attachment",
+        mediaType: part.mediaType,
+        sourceKind: "message_attachment",
+        url: part.url,
+      });
+
+      inputs.push({
+        text: buildDocumentModelText(loaded),
+        text_elements: [],
+        type: "text",
+      });
+      continue;
     }
 
     if (part.url.startsWith("/")) {
@@ -1770,7 +1784,7 @@ export async function runCodexThreadChat(
 
   const activeControl = findActiveCodexRunForThread(request.threadId);
   if (activeControl?.codexTurnId) {
-    const codexInput = buildCodexUserInput(request.message);
+    const codexInput = await buildCodexUserInput(request.message);
     const steerRunId = generateId();
     const existingCodexState = getCodexThreadState(
       existingThread?.chatEngineState,
@@ -1845,7 +1859,7 @@ export async function runCodexThreadChat(
   const sandboxMode = getCodexSandboxMode(permissionMode, workspaceRoot);
   const sandboxPolicy = buildCodexSandboxPolicy(sandboxMode, workspaceRoot);
   const codex = getCodexAppServerManager();
-  const codexInput = buildCodexUserInput(request.message);
+  const codexInput = await buildCodexUserInput(request.message);
   const existingCodexState = getCodexThreadState(
     existingThread?.chatEngineState,
   );
@@ -1984,7 +1998,7 @@ export async function runCodexThreadChat(
         threadMode === "plan"
           ? {
               ...startTurnParams,
-              input: buildCodexUserInput(request.message, {
+              input: await buildCodexUserInput(request.message, {
                 promptPrefix: buildPlanModePromptPreamble(
                   "Native Codex collaboration mode could not be enabled. Apply the full Plan Mode contract below for this turn instead.",
                 ),

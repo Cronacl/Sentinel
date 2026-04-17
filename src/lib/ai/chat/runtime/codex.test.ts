@@ -172,6 +172,10 @@ function getLatestAssistantMessage() {
     | undefined;
 }
 
+function toDataUrl(content: string, mediaType: string) {
+  return `data:${mediaType};base64,${Buffer.from(content).toString("base64")}`;
+}
+
 describe("runCodexThreadChat editing", () => {
   beforeEach(() => {
     beginThreadRepoCheckpointRun.mockClear();
@@ -321,6 +325,57 @@ describe("runCodexThreadChat editing", () => {
             reasoning_effort: "medium",
           }),
         },
+      }),
+    );
+  });
+
+  it("converts non-image attachments into text input instead of rejecting them", async () => {
+    const response = await runCodexThreadChat(
+      {
+        message: {
+          id: "user-file-1",
+          metadata: {},
+          parts: [
+            {
+              filename: "README.md",
+              mediaType: "text/markdown",
+              type: "file",
+              url: toDataUrl("# Hello\n\nThis is a readme.\n", "text/markdown"),
+            },
+            { text: "summarize this", type: "text" },
+          ],
+          role: "user",
+        },
+        modelId: "gpt-5.4",
+        threadId: "thread-file-1",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      {
+        chatEngineState: null,
+        mode: "chat",
+        status: "idle",
+      } as any,
+    );
+
+    expect(response.status).toBe(202);
+    expect(codexManager.startTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.arrayContaining([
+          expect.objectContaining({
+            text: "summarize this",
+            type: "text",
+          }),
+          expect.objectContaining({
+            text: expect.stringContaining("Document: README.md"),
+            type: "text",
+          }),
+          expect.objectContaining({
+            text: expect.stringContaining("# Hello"),
+            type: "text",
+          }),
+        ]),
       }),
     );
   });

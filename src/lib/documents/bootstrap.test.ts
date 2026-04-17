@@ -64,8 +64,8 @@ describe("document bootstrap normalization", () => {
     ).toContain("Attached document: attachment");
   });
 
-  it("passes through native text files only for models with text-file support", async () => {
-    const passthrough = await normalizeTranscriptDocumentsForModel({
+  it("normalizes text files instead of passing them through as raw file parts", async () => {
+    const normalizedKnownModel = await normalizeTranscriptDocumentsForModel({
       messages: [
         {
           id: "message-1",
@@ -85,7 +85,13 @@ describe("document bootstrap normalization", () => {
       responseModelId: "gpt-5.2",
     });
 
-    expect(passthrough[0]?.parts[0]?.type).toBe("file");
+    expect(normalizedKnownModel[0]?.parts[0]?.type).toBe("text");
+    expect(
+      normalizedKnownModel[0]?.parts[0] &&
+        "text" in normalizedKnownModel[0].parts[0]
+        ? normalizedKnownModel[0].parts[0].text
+        : "",
+    ).toContain("Attached document: notes.txt");
 
     const normalized = await normalizeTranscriptDocumentsForModel({
       messages: [
@@ -162,6 +168,34 @@ describe("document bootstrap normalization", () => {
         },
         filename: "report.pdf",
         mediaType: "application/pdf",
+        providerId: "openai",
+      }),
+    ).toBe(false);
+  });
+
+  it("never passes through markdown and other text-based attachments", () => {
+    expect(
+      __internal.shouldPassthroughFile({
+        capabilities: {
+          supportsImages: true,
+          supportsPdf: true,
+          supportsTextFiles: true,
+        },
+        filename: "README.md",
+        mediaType: "text/markdown",
+        providerId: "openai",
+      }),
+    ).toBe(false);
+
+    expect(
+      __internal.shouldPassthroughFile({
+        capabilities: {
+          supportsImages: true,
+          supportsPdf: true,
+          supportsTextFiles: true,
+        },
+        filename: "payload.json",
+        mediaType: "application/json",
         providerId: "openai",
       }),
     ).toBe(false);

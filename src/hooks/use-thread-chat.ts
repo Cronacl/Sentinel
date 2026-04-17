@@ -1399,10 +1399,8 @@ export function useThreadChat({
           committed,
         });
 
-        if (!committed) {
-          store.setRequestError(baseErrorMessage);
-          onError?.(nextError);
-        }
+        store.setRequestError(baseErrorMessage);
+        onError?.(nextError);
 
         throw nextError;
       } finally {
