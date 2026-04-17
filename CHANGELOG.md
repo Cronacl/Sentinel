@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.38](https://github.com/Cronacl/Sentinel/compare/v0.0.37...v0.0.38) (2026-04-17)
+
+
+### Bug Fixes
+
+* remove extra blank line in root layout ([b2904a0](https://github.com/Cronacl/Sentinel/commit/b2904a09d90c1fc3ac627a6a36939be41e22fc7d))
+
 ## [0.0.37](https://github.com/Cronacl/Sentinel/compare/v0.0.36...v0.0.37) (2026-04-17)
 
 
