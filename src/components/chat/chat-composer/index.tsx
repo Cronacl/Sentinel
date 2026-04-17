@@ -717,7 +717,7 @@ export function ChatComposer({
           )}
         </div>
 
-        {activeWorkspace ? (
+        {activeWorkspace && activeWorkspace.kind !== "quick_chat" ? (
           <div className="overflow-hidden rounded-b-[24px] border-t border-border/25">
             <ComposerWorkspaceBar
               activeWorkspace={activeWorkspace}

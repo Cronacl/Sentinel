@@ -70,6 +70,7 @@ import {
   videoGenerationSettings,
   workspaces,
 } from "@/server/db/schema";
+import { ensureQuickChatRootDirectory } from "@/lib/workspaces/quick-chat";
 import { resolveAvailableWorkspaceRootPath } from "./workspace-path";
 
 type BootstrapUserRecord = {
@@ -89,6 +90,7 @@ type BootstrapUserRecord = {
 };
 
 type BootstrapWorkspaceRecord = {
+  kind: "project" | "quick_chat";
   permissionModeOverride: PermissionMode | null;
   rootPath: string | null;
 };
@@ -153,6 +155,7 @@ async function loadThreadRuntimeBootstrapRows(
             eq(workspaces.isArchived, false),
           ),
           columns: {
+            kind: true,
             permissionModeOverride: true,
             rootPath: true,
           },
@@ -197,11 +200,15 @@ export async function getThreadRuntimeBootstrap(
       threadId,
     );
     const repoThreadState = getRepoThreadState(thread?.chatEngineState);
+    const resolvedWorkspaceRoot =
+      workspace?.kind === "quick_chat" && workspace.rootPath
+        ? ensureQuickChatRootDirectory()
+        : (workspace?.rootPath ?? null);
     const effectiveWorkspaceRoot =
       repoThreadState?.projectMode === "worktree" &&
       repoThreadState.worktreePath
         ? repoThreadState.worktreePath
-        : (workspace?.rootPath ?? null);
+        : resolvedWorkspaceRoot;
 
     return {
       contextCompactionSettings: {
@@ -264,10 +271,14 @@ export async function getWorkspaceRootPath(
     threadId,
   );
   const repoThreadState = getRepoThreadState(thread?.chatEngineState);
+  const resolvedWorkspaceRoot =
+    workspace?.kind === "quick_chat" && workspace.rootPath
+      ? ensureQuickChatRootDirectory()
+      : (workspace?.rootPath ?? null);
   return await resolveAvailableWorkspaceRootPath(
     repoThreadState?.projectMode === "worktree" && repoThreadState.worktreePath
       ? repoThreadState.worktreePath
-      : workspace?.rootPath,
+      : resolvedWorkspaceRoot,
   );
 }
 

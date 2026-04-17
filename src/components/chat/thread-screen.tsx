@@ -86,6 +86,7 @@ type ThreadScreenProps = {
     createdAt: Date;
     description: string | null;
     id: string;
+    kind: "project" | "quick_chat";
     name: string;
     permissionModeOverride: "default" | "full" | null;
     rootPath: string | null;
@@ -101,6 +102,7 @@ export function ThreadScreen({
 }: ThreadScreenProps) {
   const { navigateHome } = useShell();
   const utils = api.useUtils();
+  const isQuickChat = workspace.kind === "quick_chat";
   const [threadTitle, setThreadTitle] = useState(thread.title);
   const [threadSelectionState, setThreadSelectionState] = useState({
     engine: thread.chatEngine,
@@ -193,6 +195,7 @@ export function ThreadScreen({
               id: nextWorkspace.id,
               isArchived: false,
               isExpanded: nextWorkspace.isExpanded,
+              kind: nextWorkspace.kind,
               name: nextWorkspace.name,
               permissionModeOverride:
                 nextWorkspace.permissionModeOverride ?? null,
@@ -251,6 +254,7 @@ export function ThreadScreen({
         threadId: thread.id,
         utils,
         workspaceId: workspace.id,
+        workspaceKind: workspace.kind,
       });
     },
     onSuccess: (updatedThread) => {
@@ -259,6 +263,7 @@ export function ThreadScreen({
         threadId: thread.id,
         utils,
         workspaceId: workspace.id,
+        workspaceKind: workspace.kind,
       });
     },
     onError: (_error, _variables, context) => {
@@ -268,6 +273,9 @@ export function ThreadScreen({
       pinToggleLockRef.current = false;
       void utils.threads.get.invalidate({ threadId: thread.id });
       void utils.threads.list.invalidate();
+      if (isQuickChat) {
+        void utils.threads.listQuickChats.invalidate();
+      }
     },
   });
   const renameThread = api.threads.rename.useMutation({
@@ -278,6 +286,7 @@ export function ThreadScreen({
         title: nextThread.title,
         utils,
         workspaceId: workspace.id,
+        workspaceKind: workspace.kind,
       });
       void utils.threads.list.invalidate();
       void utils.threads.get.invalidate({ threadId: thread.id });
@@ -286,6 +295,9 @@ export function ThreadScreen({
   const archiveThread = api.threads.archive.useMutation({
     onSuccess: () => {
       void utils.threads.list.invalidate();
+      if (isQuickChat) {
+        void utils.threads.listQuickChats.invalidate();
+      }
       navigateHome();
     },
   });
@@ -311,6 +323,9 @@ export function ThreadScreen({
     onSuccess: () => {
       void utils.threads.get.invalidate({ threadId: thread.id });
       void utils.threads.list.invalidate();
+      if (isQuickChat) {
+        void utils.threads.listQuickChats.invalidate();
+      }
     },
   });
   const {
@@ -353,7 +368,7 @@ export function ThreadScreen({
     threadStatus,
   } = chat;
   const repoContextQuery = api.repo.getContext.useQuery(repoContextQueryInput, {
-    enabled: Boolean(workspace.rootPath),
+    enabled: !isQuickChat && Boolean(workspace.rootPath),
   });
   const resetCheckpointMutation = api.repo.resetCheckpoint.useMutation();
   const toggleCheckpointMutation = api.repo.toggleCheckpoint.useMutation();
@@ -368,10 +383,14 @@ export function ThreadScreen({
         threadId: thread.id,
         utils,
         workspaceId: workspace.id,
+        workspaceKind: workspace.kind,
       });
       void utils.threads.list.invalidate();
+      if (isQuickChat) {
+        void utils.threads.listQuickChats.invalidate();
+      }
     }
-  }, [status, thread.id, utils, workspace.id]);
+  }, [isQuickChat, status, thread.id, utils, workspace.id, workspace.kind]);
 
   useEffect(() => {
     void utils.threads.search.invalidate();
@@ -418,6 +437,7 @@ export function ThreadScreen({
         threadId: thread.id,
         utils,
         workspaceId: workspace.id,
+        workspaceKind: workspace.kind,
       });
       await sendMessage({
         composerContext,
@@ -429,7 +449,14 @@ export function ThreadScreen({
         threadMode: threadMode ?? threadSelectionState.mode,
       });
     },
-    [sendMessage, thread.id, threadSelectionState.mode, utils, workspace.id],
+    [
+      sendMessage,
+      thread.id,
+      threadSelectionState.mode,
+      utils,
+      workspace.id,
+      workspace.kind,
+    ],
   );
 
   const handleQueueFollowUp = useCallback(
@@ -461,8 +488,11 @@ export function ThreadScreen({
         threadMode: threadMode ?? threadSelectionState.mode,
       });
       void utils.threads.list.invalidate();
+      if (isQuickChat) {
+        void utils.threads.listQuickChats.invalidate();
+      }
     },
-    [queueFollowUp, threadSelectionState.mode, utils],
+    [isQuickChat, queueFollowUp, threadSelectionState.mode, utils],
   );
 
   const handleSteerFollowUp = useCallback(
@@ -494,8 +524,11 @@ export function ThreadScreen({
         threadMode: threadMode ?? threadSelectionState.mode,
       });
       void utils.threads.list.invalidate();
+      if (isQuickChat) {
+        void utils.threads.listQuickChats.invalidate();
+      }
     },
-    [steerFollowUp, threadSelectionState.mode, utils],
+    [isQuickChat, steerFollowUp, threadSelectionState.mode, utils],
   );
 
   const handleApproveTool = useCallback(
@@ -973,6 +1006,10 @@ export function ThreadScreen({
     status === "submitted" || status === "streaming";
 
   useEffect(() => {
+    if (isQuickChat) {
+      return;
+    }
+
     if (
       currentWorkspace.isLoading ||
       currentWorkspace.data?.id === workspace.id ||
@@ -985,6 +1022,7 @@ export function ThreadScreen({
   }, [
     currentWorkspace.data,
     currentWorkspace.isLoading,
+    isQuickChat,
     selectWorkspace,
     selectWorkspace.isPending,
     workspace.id,
@@ -993,11 +1031,13 @@ export function ThreadScreen({
   return (
     <PageWrapper
       actions={
-        <ThreadRepoActions
-          threadId={thread.id}
-          workspaceId={workspace.id}
-          workspaceRootPath={workspace.rootPath}
-        />
+        isQuickChat ? undefined : (
+          <ThreadRepoActions
+            threadId={thread.id}
+            workspaceId={workspace.id}
+            workspaceRootPath={workspace.rootPath}
+          />
+        )
       }
       title={
         <span className="flex min-w-0 max-w-[min(36vw,22rem)] items-center gap-1.5">
@@ -1239,7 +1279,7 @@ export function ThreadScreen({
               promptSeedKey={editingMessage?.id ?? "__composer-empty__"}
               queuedFollowUps={liveQueuedFollowUps}
               repoThreadId={thread.id}
-              showBranchSwitcher
+              showBranchSwitcher={!isQuickChat}
               status={status}
               threadId={thread.id}
               threadSelection={{

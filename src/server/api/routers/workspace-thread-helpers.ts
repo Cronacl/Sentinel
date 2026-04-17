@@ -2,6 +2,10 @@ import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 
 import type { ThreadListInput } from "@/schemas/workspace-thread.schema";
+import {
+  ensureQuickChatRootDirectory,
+  QUICK_CHAT_WORKSPACE_NAME,
+} from "@/lib/workspaces/quick-chat";
 import type { Database } from "@/server/db";
 import { threads, workspaces } from "@/server/db/schema";
 import type { LocalSession } from "@/server/local-profile";
@@ -30,6 +34,61 @@ export async function getOwnedWorkspaceOrThrow(
   }
 
   return workspace;
+}
+
+export function assertProjectWorkspace(
+  workspace: Awaited<ReturnType<typeof getOwnedWorkspaceOrThrow>>,
+) {
+  if (workspace.kind !== "project") {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "Quick chats are internal and cannot be used as project workspaces.",
+    });
+  }
+
+  return workspace;
+}
+
+export async function getOwnedProjectWorkspaceOrThrow(
+  ctx: ProtectedTRPCContext,
+  workspaceId: string,
+) {
+  return assertProjectWorkspace(
+    await getOwnedWorkspaceOrThrow(ctx, workspaceId),
+  );
+}
+
+export async function getOrCreateQuickChatWorkspace(
+  ctx: ProtectedTRPCContext,
+  userId = ctx.session.user.id,
+) {
+  const existingWorkspace = await ctx.db.query.workspaces.findFirst({
+    where: and(
+      eq(workspaces.userId, userId),
+      eq(workspaces.kind, "quick_chat"),
+      eq(workspaces.isArchived, false),
+    ),
+  });
+
+  if (existingWorkspace) {
+    ensureQuickChatRootDirectory();
+    return existingWorkspace;
+  }
+
+  const [workspace] = await ctx.db
+    .insert(workspaces)
+    .values({
+      description: "Hidden workspace for lightweight quick chats.",
+      kind: "quick_chat",
+      name: QUICK_CHAT_WORKSPACE_NAME,
+      rootPath: ensureQuickChatRootDirectory(),
+      userId,
+    })
+    .returning()
+    .all();
+
+  return workspace!;
 }
 
 export async function getOwnedThreadOrThrow(

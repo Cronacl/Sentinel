@@ -26,6 +26,7 @@ import type { DraftProjectMode } from "./draft-thread-project-mode";
 type ComposerWorkspaceBarProps = {
   activeWorkspace: {
     id: string;
+    kind?: "project" | "quick_chat";
     name: string;
     permissionModeOverride?: PermissionMode | null;
     rootPath?: string | null;

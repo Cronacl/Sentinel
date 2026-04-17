@@ -25,6 +25,7 @@ export type ChatComposerStartPlanImplementationHandler = () => Promise<void>;
 export type ChatComposerProps = {
   activeWorkspace?: {
     id: string;
+    kind?: "project" | "quick_chat";
     name: string;
     permissionModeOverride?: "default" | "full" | null;
     rootPath?: string | null;

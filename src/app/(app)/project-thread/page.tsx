@@ -2,6 +2,6 @@
 
 import { NewThreadScreen } from "@/components/chat/new-thread-screen";
 
-export default function HomePage() {
+export default function ProjectThreadPage() {
   return <NewThreadScreen variant="project" />;
 }

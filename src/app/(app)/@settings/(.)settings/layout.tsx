@@ -44,7 +44,7 @@ export default function SettingsModalLayout({ children }: PropsWithChildren) {
       {isWindows ? <DesktopTitleBar platform="win32" /> : null}
       <div className="flex min-h-0 flex-1">
         <aside
-          className="border-separator bg-surface flex h-full min-h-0 shrink-0 flex-col border-r"
+          className="border-separator bg-surface flex h-full min-h-0 shrink-0 flex-col"
           style={{ width: SETTINGS_SIDEBAR_WIDTH }}
         >
           <div
@@ -58,9 +58,9 @@ export default function SettingsModalLayout({ children }: PropsWithChildren) {
             }}
           />
 
-          <div className="shrink-0 px-3 pb-1">
+          <div className="shrink-0 px-2.5 pb-1">
             <button
-              className="text-muted hover:text-foreground inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors"
+              className="text-foreground/60 hover:text-foreground inline-flex items-center gap-2 rounded-xl px-2.5 py-1 text-xs transition-colors"
               onClick={close}
               type="button"
             >
@@ -75,7 +75,7 @@ export default function SettingsModalLayout({ children }: PropsWithChildren) {
           </div>
 
           <ScrollShadow
-            className="min-h-0 flex-1 px-3 pt-1 pb-3"
+            className="min-h-0 flex-1 px-2.5 pt-1 pb-3"
             hideScrollBar
             orientation="vertical"
           >
@@ -85,8 +85,12 @@ export default function SettingsModalLayout({ children }: PropsWithChildren) {
                   key={item.href}
                   size="sm"
                   fullWidth
-                  variant={isActive(item.href) ? "tertiary" : "ghost"}
-                  className="justify-start rounded-lg"
+                  variant="ghost"
+                  className={`justify-start rounded-xl px-2.5 ${
+                    isActive(item.href)
+                      ? "bg-default/70 text-foreground"
+                      : "text-foreground/80 hover:bg-default/40 hover:text-foreground"
+                  }`}
                   onPress={() => router.replace(item.href)}
                 >
                   <HugeiconsIcon

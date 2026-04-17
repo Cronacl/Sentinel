@@ -129,6 +129,7 @@ export function ensureTables(
     "id" text PRIMARY KEY NOT NULL,
     "user_id" text NOT NULL,
     "name" text NOT NULL,
+    "kind" text DEFAULT 'project' NOT NULL,
     "root_path" text,
     "description" text,
     "permission_mode_override" text,
@@ -145,6 +146,7 @@ export function ensureTables(
     sql`CREATE INDEX IF NOT EXISTS "workspace_user_id_archived_idx" ON "workspace" ("user_id", "is_archived")`,
   );
   ensureTableColumns(sqlite, "workspace", [
+    { name: "kind", definition: "text DEFAULT 'project' NOT NULL" },
     { name: "permission_mode_override", definition: "text" },
     {
       name: "is_expanded",
@@ -155,6 +157,12 @@ export function ensureTables(
       definition: "integer DEFAULT 0 NOT NULL",
     },
   ]);
+  db.run(
+    sql`UPDATE "workspace" SET "kind" = 'project' WHERE "kind" IS NULL OR trim("kind") = ''`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "workspace_user_kind_archived_idx" ON "workspace" ("user_id", "kind", "is_archived")`,
+  );
 
   db.run(sql`CREATE TABLE IF NOT EXISTS "thread" (
     "id" text PRIMARY KEY NOT NULL,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCallback } from "react";
 import { sileo } from "sileo";
 
@@ -15,7 +15,8 @@ import { useShell } from "./shell-context";
 
 export function useAppShortcutActions() {
   const router = useRouter();
-  const { isHomeRoute, navigateHome } = useShell();
+  const pathname = usePathname();
+  const { isHomeRoute } = useShell();
   const utils = api.useUtils();
 
   const createWorkspace = api.workspaces.create.useMutation({
@@ -26,6 +27,7 @@ export function useAppShortcutActions() {
         id: workspace.id,
         isArchived: workspace.isArchived,
         isExpanded: workspace.isExpanded,
+        kind: workspace.kind,
         name: workspace.name,
         permissionModeOverride: workspace.permissionModeOverride,
         rootPath: workspace.rootPath,
@@ -46,6 +48,7 @@ export function useAppShortcutActions() {
             id: workspace.id,
             isExpanded: workspace.isExpanded,
             isSelected: true,
+            kind: workspace.kind,
             latestThreadUpdatedAt: null,
             name: workspace.name,
             permissionModeOverride: workspace.permissionModeOverride,
@@ -84,12 +87,27 @@ export function useAppShortcutActions() {
     })();
   }, [createWorkspace]);
 
-  const handleStartNewThread = useCallback(() => {
-    window.dispatchEvent(new Event("sentinel:new-thread"));
-    if (!isHomeRoute) {
-      navigateHome();
+  const handleStartQuickChat = useCallback(() => {
+    if (pathname === "/quick-chat") {
+      window.dispatchEvent(new Event("sentinel:new-thread"));
+      return;
     }
-  }, [isHomeRoute, navigateHome]);
+
+    router.push("/quick-chat");
+  }, [pathname, router]);
+
+  const handleStartNewProjectThread = useCallback(() => {
+    router.push("/project-thread");
+  }, [router]);
+
+  const handleStartNewThread = useCallback(() => {
+    if (isHomeRoute || pathname === "/project-thread") {
+      window.dispatchEvent(new Event("sentinel:new-thread"));
+      return;
+    }
+
+    router.push("/project-thread");
+  }, [isHomeRoute, pathname, router]);
 
   const handleOpenAutomations = useCallback(() => {
     router.push("/automations");
@@ -113,7 +131,9 @@ export function useAppShortcutActions() {
     handleOpenScratchpad,
     handleOpenSettings,
     handleOpenSkills,
+    handleStartQuickChat,
     handleStartNewThread,
+    handleStartNewProjectThread,
     isCreatingWorkspace: createWorkspace.isPending,
   };
 }

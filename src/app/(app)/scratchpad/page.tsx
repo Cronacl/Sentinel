@@ -789,6 +789,7 @@ export default function ScratchpadPage() {
           id: nextWorkspace.id,
           isArchived: false,
           isExpanded: nextWorkspace.isExpanded,
+          kind: nextWorkspace.kind,
           name: nextWorkspace.name,
           permissionModeOverride: nextWorkspace.permissionModeOverride,
           rootPath: nextWorkspace.rootPath,

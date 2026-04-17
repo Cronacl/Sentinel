@@ -126,9 +126,11 @@ const PRIMARY_NAV = [
   { href: "/skills", icon: AiIdeaIcon, label: "Skills" },
 ] as const;
 
-const SIDEBAR_SECTION_INSET = "px-2";
+const SIDEBAR_SECTION_INSET = "px-2.5";
 const SIDEBAR_ITEM_INSET = "px-2.5";
-const SIDEBAR_ITEM_ROW = "rounded-xl px-1.5 py-1 transition-colors";
+const SIDEBAR_ITEM_ROW =
+  "rounded-xl px-2 py-1 transition-[color,background-color] duration-120 ease-[cubic-bezier(0.25,0.1,0.25,1)]";
+const SIDEBAR_ICON_BTN = "h-6 w-6 min-w-6 rounded-lg";
 
 const WORKSPACE_TOOLTIP_CLASSNAME = "max-w-[320px]";
 const THEME_ACTION_ICONS = {
@@ -144,6 +146,7 @@ function toCurrentWorkspace(
         description: string | null;
         id: string;
         isExpanded?: boolean;
+        kind?: "project" | "quick_chat";
         name: string;
         permissionModeOverride?: "default" | "full" | null;
         rootPath: string | null;
@@ -163,6 +166,7 @@ function toCurrentWorkspace(
     id: workspace.id,
     isArchived: false,
     isExpanded: workspace.isExpanded ?? false,
+    kind: workspace.kind ?? "project",
     name: workspace.name,
     permissionModeOverride: workspace.permissionModeOverride ?? null,
     rootPath: workspace.rootPath,
@@ -220,20 +224,13 @@ function getToggledThemePreference(themePreference: ThemePreference) {
 
 type ThreadWarmStrategy = "hover" | "focus" | "press";
 
-function WorkspaceSidebarLoadingState() {
-  return (
-    <div className="flex min-h-48 items-center justify-center px-4 py-6">
-      <Spinner color="current" size="sm" />
-    </div>
-  );
-}
-
 type ThreadGroup = NonNullable<
   Extract<RouterOutputs["threads"]["list"], { groups: unknown[] }>["groups"]
 >;
 type ChronologicalThreadItem = NonNullable<
   Extract<RouterOutputs["threads"]["list"], { items: unknown[] }>["items"]
 >;
+type QuickChatThreadItem = RouterOutputs["threads"]["listQuickChats"];
 type PendingThreadSwitch = RouterOutputs["repo"]["inspectThreadSwitch"] & {
   workspaceId: string;
 };
@@ -242,32 +239,43 @@ function findThreadState(
   threadId: string,
   groups: ThreadGroup,
   items: ChronologicalThreadItem,
+  quickChats: QuickChatThreadItem = [],
 ) {
   for (const group of groups) {
     const thread = group.threads.find((item) => item.id === threadId);
     if (thread) {
       return {
         pinnedAt: thread.pinnedAt,
+        workspaceKind: "project" as const,
         workspaceId: group.workspace.id,
       };
     }
   }
 
   const item = items.find((entry) => entry.id === threadId);
-  if (!item) {
-    return null;
+  if (item) {
+    return {
+      pinnedAt: item.pinnedAt,
+      workspaceKind: "project" as const,
+      workspaceId: item.workspace.id,
+    };
   }
 
-  return {
-    pinnedAt: item.pinnedAt,
-    workspaceId: item.workspace.id,
-  };
+  const quickChat = quickChats.find((entry) => entry.id === threadId);
+  return quickChat
+    ? {
+        pinnedAt: quickChat.pinnedAt,
+        workspaceKind: "quick_chat" as const,
+        workspaceId: quickChat.workspace.id,
+      }
+    : null;
 }
 
 function findThreadListItem(
   threadId: string,
   groups: ThreadGroup,
   items: ChronologicalThreadItem,
+  quickChats: QuickChatThreadItem = [],
 ) {
   for (const group of groups) {
     const thread = group.threads.find((item) => item.id === threadId);
@@ -280,14 +288,20 @@ function findThreadListItem(
   }
 
   const item = items.find((entry) => entry.id === threadId);
-  if (!item) {
-    return null;
+  if (item) {
+    return {
+      title: item.title,
+      workspaceId: item.workspace.id,
+    };
   }
 
-  return {
-    title: item.title,
-    workspaceId: item.workspace.id,
-  };
+  const quickChat = quickChats.find((entry) => entry.id === threadId);
+  return quickChat
+    ? {
+        title: quickChat.title,
+        workspaceId: quickChat.workspace.id,
+      }
+    : null;
 }
 
 function ThreadItemActions({
@@ -305,15 +319,15 @@ function ThreadItemActions({
 }) {
   return (
     <span
-      className={`thread-actions flex items-center gap-0.5 transition-opacity duration-150 ${
+      className={`thread-actions flex items-center gap-0.5 transition-opacity duration-120 ease-out ${
         alwaysVisible
           ? "pointer-events-auto opacity-100"
-          : "pointer-events-none absolute inset-y-0 right-0 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+          : "pointer-events-none absolute inset-y-0 right-0 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
       }`}
     >
       <button
         aria-label={isPinned ? "Unpin thread" : "Pin thread"}
-        className="hover:bg-default flex h-6 w-6 items-center justify-center rounded-lg transition-colors"
+        className="hover:bg-default/60 flex h-6 w-6 items-center justify-center rounded-md transition-colors duration-120 ease-out"
         onClick={(e) => {
           e.stopPropagation();
           e.preventDefault();
@@ -330,7 +344,7 @@ function ThreadItemActions({
       </button>
       <button
         aria-label="Archive thread"
-        className="hover:bg-default flex h-6 w-6 items-center justify-center rounded-lg transition-colors"
+        className="hover:bg-default/60 flex h-6 w-6 items-center justify-center rounded-md transition-colors duration-120 ease-out"
         onClick={(e) => {
           e.stopPropagation();
           e.preventDefault();
@@ -407,12 +421,12 @@ function ThreadItemTrailing({
       }`}
     >
       {hasTimestamp ? (
-        <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center text-xs text-foreground/40 transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0">
+        <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center text-xs text-foreground/40 transition-opacity duration-120 ease-out group-hover:opacity-0">
           {formatRelativeTime(updatedAt)}
         </span>
       ) : null}
       {showStatusIndicator || showPinnedIndicator ? (
-        <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center text-foreground/60 transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0">
+        <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center text-foreground/60 transition-opacity duration-120 ease-out group-hover:opacity-0">
           {indicator}
         </span>
       ) : null}
@@ -430,26 +444,53 @@ function ThreadItemTrailing({
 function WorkspaceItemActions({
   hasLinkedFolder,
   onArchive,
+  onCreateThread,
   onRelocate,
   onRename,
   workspaceName,
 }: {
   hasLinkedFolder: boolean;
   onArchive: () => void;
+  onCreateThread: () => void;
   onRelocate: () => void;
   onRename: () => void;
   workspaceName: string;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const relocateLabel = hasLinkedFolder
     ? "Relocate workspace path"
     : "Link workspace path";
 
   return (
-    <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-1 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+    <span
+      className={`absolute inset-y-0 right-1 flex items-center transition-opacity duration-120 ease-out ${
+        menuOpen
+          ? "pointer-events-auto opacity-100"
+          : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
+      }`}
+    >
+      <Button
+        aria-label={`New thread in ${workspaceName}`}
+        className="h-6 w-6 min-w-6 rounded-md"
+        isIconOnly
+        size="sm"
+        variant="ghost"
+        onClick={(event) => {
+          event.stopPropagation();
+          onCreateThread();
+        }}
+      >
+        <HugeiconsIcon
+          color="currentColor"
+          icon={PencilEdit02Icon}
+          size={13}
+          strokeWidth={1.5}
+        />
+      </Button>
       <Dropdown>
         <Button
           aria-label={`Workspace actions for ${workspaceName}`}
-          className="h-7 w-7 min-w-7"
+          className="h-6 w-6 min-w-6 rounded-md"
           isIconOnly
           size="sm"
           variant="ghost"
@@ -460,11 +501,15 @@ function WorkspaceItemActions({
           <HugeiconsIcon
             color="currentColor"
             icon={MoreHorizontalIcon}
-            size={16}
+            size={13}
             strokeWidth={1.5}
           />
         </Button>
-        <Dropdown.Popover className="min-w-[180px]" placement="bottom end">
+        <Dropdown.Popover
+          className="min-w-[180px]"
+          onOpenChange={setMenuOpen}
+          placement="bottom end"
+        >
           <Dropdown.Menu
             onAction={(key) => {
               if (key === "rename") onRename();
@@ -512,7 +557,7 @@ type WarmThreadHandler = (
   strategy?: ThreadWarmStrategy,
 ) => void;
 
-const PinnedThreadsList = memo(function PinnedThreadsList({
+const QuickChatsList = memo(function QuickChatsList({
   threads,
   selectedThreadId,
   onPressThread,
@@ -523,18 +568,11 @@ const PinnedThreadsList = memo(function PinnedThreadsList({
 }: {
   onArchive: (threadId: string) => void;
   onPin: (threadId: string) => void;
-  onPressThread: (workspaceId: string, threadId: string) => void;
+  onPressThread: (threadId: string) => void;
   onRenameThread: (threadId: string) => void;
-  onWarmThread: WarmThreadHandler;
+  onWarmThread: (threadId: string, strategy?: ThreadWarmStrategy) => void;
   selectedThreadId: string | null;
-  threads: Array<{
-    id: string;
-    pinnedAt: Date | null;
-    status: ThreadStatusValue;
-    title: string;
-    updatedAt: Date;
-    workspace: { id: string; name: string };
-  }>;
+  threads: QuickChatThreadItem;
 }) {
   if (threads.length === 0) return null;
 
@@ -545,19 +583,15 @@ const PinnedThreadsList = memo(function PinnedThreadsList({
           const isActive = selectedThreadId === thread.id;
           return (
             <div
-              className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 text-sm ${SIDEBAR_ITEM_ROW} ${
+              className={`group flex min-w-0 cursor-pointer items-center justify-between gap-2 text-sm ${SIDEBAR_ITEM_ROW} ${
                 isActive
-                  ? "bg-default text-foreground"
-                  : "text-foreground hover:text-foreground"
+                  ? "bg-default/70 text-foreground"
+                  : "text-foreground/80 hover:bg-default/40 hover:text-foreground focus-visible:bg-default/40 focus-visible:text-foreground"
               }`}
               key={thread.id}
-              onFocus={() =>
-                onWarmThread(thread.workspace.id, thread.id, "focus")
-              }
-              onMouseEnter={() =>
-                onWarmThread(thread.workspace.id, thread.id, "hover")
-              }
-              onClick={() => onPressThread(thread.workspace.id, thread.id)}
+              onFocus={() => onWarmThread(thread.id, "focus")}
+              onMouseEnter={() => onWarmThread(thread.id, "hover")}
+              onClick={() => onPressThread(thread.id)}
               onDoubleClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -565,10 +599,10 @@ const PinnedThreadsList = memo(function PinnedThreadsList({
               }}
               role="button"
               tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onPressThread(thread.workspace.id, thread.id);
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onPressThread(thread.id);
                 }
               }}
             >
@@ -581,12 +615,12 @@ const PinnedThreadsList = memo(function PinnedThreadsList({
                 </span>
               </span>
               <ThreadItemTrailing
-                alwaysVisible
-                isPinned
+                isPinned={thread.pinnedAt != null}
                 onArchive={onArchive}
                 onPin={onPin}
                 threadId={thread.id}
                 threadStatus={thread.status}
+                updatedAt={thread.updatedAt}
               />
             </div>
           );
@@ -600,8 +634,8 @@ const THREADS_PER_PAGE = 6;
 const THREAD_WARM_HOVER_DELAY_MS = 120;
 const MAX_WARMED_THREAD_ENTRIES = 48;
 const SIDEBAR_COLLAPSE_TRANSITION = {
-  duration: 0.18,
-  ease: [0.22, 1, 0.36, 1],
+  duration: 0.15,
+  ease: [0.25, 0.1, 0.25, 1],
 } as const;
 
 const SidebarCollapsible = memo(function SidebarCollapsible({
@@ -691,10 +725,10 @@ const ThreadRow = memo(function ThreadRow({
 
   return (
     <div
-      className={`group hover:bg-default/60 flex min-w-0 cursor-pointer items-center justify-between gap-2 text-xs ${SIDEBAR_ITEM_ROW} ${
+      className={`group flex min-w-0 cursor-pointer items-center justify-between gap-2 text-xs ${SIDEBAR_ITEM_ROW} ${
         isActive
-          ? "bg-default text-foreground"
-          : "text-foreground hover:text-foreground"
+          ? "bg-default/70 text-foreground"
+          : "text-foreground/80 hover:bg-default/40 hover:text-foreground focus-visible:bg-default/40 focus-visible:text-foreground"
       }`}
       onFocus={handleWarmOnFocus}
       onMouseEnter={handleWarmOnHover}
@@ -769,6 +803,7 @@ const WorkspaceHeader = memo(function WorkspaceHeader({
   group,
   isExpanded,
   onArchiveWorkspace,
+  onCreateThread,
   onRelocateWorkspace,
   onRenameWorkspace,
   onToggleWorkspace,
@@ -776,6 +811,7 @@ const WorkspaceHeader = memo(function WorkspaceHeader({
   group: ThreadGroup[number];
   isExpanded: boolean;
   onArchiveWorkspace: (workspaceId: string) => void;
+  onCreateThread: (workspaceId: string) => void;
   onRelocateWorkspace: (workspaceId: string) => void;
   onRenameWorkspace: (workspaceId: string) => void;
   onToggleWorkspace: (workspaceId: string) => void;
@@ -788,20 +824,20 @@ const WorkspaceHeader = memo(function WorkspaceHeader({
 
   const workspaceRow = (
     <button
-      className="text-foreground/70 hover:bg-default/60 hover:text-foreground group/ws flex h-7 w-full cursor-pointer items-center justify-start gap-0 rounded-xl pr-10 pl-2 text-left text-sm font-normal transition-colors"
+      className="text-foreground/60 hover:text-foreground focus-visible:text-foreground focus-visible:outline-none group/ws flex h-7 w-full cursor-pointer items-center justify-start gap-0 rounded-xl pr-18 pl-2 text-left text-sm font-normal transition-colors duration-120 ease-out"
       onClick={handleClick}
       type="button"
     >
       <span className="relative flex h-5 w-5 shrink-0 items-center justify-center">
         {hasLinkedFolder ? (
           <FolderGit2
-            className="shrink-0 transition-opacity duration-150 group-hover/ws:opacity-0"
+            className="shrink-0 transition-opacity duration-120 ease-out group-hover/ws:opacity-0"
             size={16}
             strokeWidth={1.5}
           />
         ) : (
           <HugeiconsIcon
-            className="transition-opacity duration-150 group-hover/ws:opacity-0"
+            className="transition-opacity duration-120 ease-out group-hover/ws:opacity-0"
             color="currentColor"
             icon={Folder03Icon}
             size={18}
@@ -809,7 +845,7 @@ const WorkspaceHeader = memo(function WorkspaceHeader({
           />
         )}
         <HugeiconsIcon
-          className={`absolute transition-all duration-150 ${
+          className={`absolute transition-all duration-120 ease-out ${
             isExpanded ? "rotate-0" : "-rotate-90"
           } opacity-0 group-hover/ws:opacity-100`}
           color="currentColor"
@@ -844,6 +880,7 @@ const WorkspaceHeader = memo(function WorkspaceHeader({
       <WorkspaceItemActions
         hasLinkedFolder={hasLinkedFolder}
         onArchive={() => onArchiveWorkspace(group.workspace.id)}
+        onCreateThread={() => onCreateThread(group.workspace.id)}
         onRelocate={() => onRelocateWorkspace(group.workspace.id)}
         onRename={() => onRenameWorkspace(group.workspace.id)}
         workspaceName={group.workspace.name}
@@ -908,12 +945,12 @@ const WorkspaceThreadsDisclosure = memo(function WorkspaceThreadsDisclosure({
             {overflowThreads.length > 0 ? (
               <>
                 <button
-                  className={`flex w-full items-center gap-1 text-left text-sm text-foreground/40 hover:text-foreground ${SIDEBAR_ITEM_INSET} py-1.5 transition-colors`}
+                  className={`flex w-full items-center gap-1 text-left text-sm text-foreground/30 hover:text-foreground/60 ${SIDEBAR_ITEM_INSET} py-1.5 transition-colors duration-120 ease-out`}
                   onClick={() => setShowOverflowThreads((current) => !current)}
                   type="button"
                 >
                   <HugeiconsIcon
-                    className={`transition-transform duration-150 ${
+                    className={`transition-transform duration-120 ease-out ${
                       showOverflowThreads ? "rotate-0" : "-rotate-90"
                     }`}
                     color="currentColor"
@@ -963,6 +1000,7 @@ const SortableWorkspaceSection = memo(function SortableWorkspaceSection({
   isExpanded,
   onArchive,
   onArchiveWorkspace,
+  onCreateThread,
   onPin,
   onPressThread,
   onRelocateWorkspace,
@@ -976,6 +1014,7 @@ const SortableWorkspaceSection = memo(function SortableWorkspaceSection({
   isExpanded: boolean;
   onArchive: (threadId: string) => void;
   onArchiveWorkspace: (workspaceId: string) => void;
+  onCreateThread: (workspaceId: string) => void;
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
   onRelocateWorkspace: (workspaceId: string) => void;
@@ -1009,6 +1048,7 @@ const SortableWorkspaceSection = memo(function SortableWorkspaceSection({
           group={group}
           isExpanded={isExpanded}
           onArchiveWorkspace={onArchiveWorkspace}
+          onCreateThread={onCreateThread}
           onRelocateWorkspace={onRelocateWorkspace}
           onRenameWorkspace={onRenameWorkspace}
           onToggleWorkspace={onToggleWorkspace}
@@ -1031,6 +1071,7 @@ const SortableWorkspaceSection = memo(function SortableWorkspaceSection({
 const ThreadList = memo(function ThreadList({
   groups,
   onArchiveWorkspace,
+  onCreateThread,
   onPressThread,
   onRelocateWorkspace,
   onRenameThread,
@@ -1047,6 +1088,7 @@ const ThreadList = memo(function ThreadList({
   groups: ThreadGroup;
   onArchive: (threadId: string) => void;
   onArchiveWorkspace: (workspaceId: string) => void;
+  onCreateThread: (workspaceId: string) => void;
   onPin: (threadId: string) => void;
   onPressThread: (workspaceId: string, threadId: string) => void;
   onRelocateWorkspace: (workspaceId: string) => void;
@@ -1096,7 +1138,10 @@ const ThreadList = memo(function ThreadList({
   );
 
   return (
-    <ScrollShadow className="max-h-full px-2 py-1 pb-4" orientation="vertical">
+    <ScrollShadow
+      className="max-h-full px-2.5 py-1 pb-4"
+      orientation="vertical"
+    >
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -1114,6 +1159,7 @@ const ThreadList = memo(function ThreadList({
                 key={group.workspace.id}
                 onArchive={onArchive}
                 onArchiveWorkspace={onArchiveWorkspace}
+                onCreateThread={onCreateThread}
                 onPin={onPin}
                 onPressThread={onPressThread}
                 onRelocateWorkspace={onRelocateWorkspace}
@@ -1153,7 +1199,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
   const overflowItems = items.slice(THREADS_PER_PAGE);
 
   return (
-    <ScrollShadow className="max-h-full px-2 py-1" orientation="vertical">
+    <ScrollShadow className="max-h-full px-2.5 py-1" orientation="vertical">
       <div className="flex flex-col gap-1">
         {visibleItems.map((item) => (
           <ThreadRow
@@ -1172,12 +1218,12 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
         {overflowItems.length > 0 ? (
           <>
             <button
-              className={`flex w-full items-center gap-1 text-left text-sm text-foreground/40 hover:text-foreground ${SIDEBAR_ITEM_INSET} py-1.5 transition-colors`}
+              className={`flex w-full items-center gap-1 text-left text-sm text-foreground/30 hover:text-foreground/60 ${SIDEBAR_ITEM_INSET} py-1.5 transition-colors duration-120 ease-out`}
               onClick={() => setShowOverflowThreads((current) => !current)}
               type="button"
             >
               <HugeiconsIcon
-                className={`transition-transform duration-150 ${
+                className={`transition-transform duration-120 ease-out ${
                   showOverflowThreads ? "rotate-0" : "-rotate-90"
                 }`}
                 color="currentColor"
@@ -1229,7 +1275,7 @@ function PreferenceMenuItem({
 }) {
   return (
     <button
-      className="hover:bg-default/60 flex w-full items-center cursor-pointer justify-between gap-3 rounded-xl px-2 py-2 text-left text-xs transition-colors"
+      className="hover:bg-default/40 flex w-full items-center cursor-pointer justify-between gap-3 rounded-xl px-2 py-2 text-left text-xs transition-colors duration-120 ease-out"
       onClick={onPress}
       type="button"
     >
@@ -1297,6 +1343,8 @@ export function WorkspaceSidebar() {
     handleOpenScratchpad,
     handleOpenSettings,
     handleOpenSkills,
+    handleStartQuickChat,
+    handleStartNewProjectThread,
     handleStartNewThread,
     isCreatingWorkspace,
   } = useAppShortcutActions();
@@ -1396,49 +1444,29 @@ export function WorkspaceSidebar() {
       },
     },
   );
+  const quickChats = api.threads.listQuickChats.useQuery(undefined, {
+    refetchInterval: (query) =>
+      query.state.data?.some((thread) => thread.status !== "idle")
+        ? 2_000
+        : false,
+  });
 
   const groups: ThreadGroup =
     threads.data && "groups" in threads.data ? (threads.data.groups ?? []) : [];
   const items: ChronologicalThreadItem =
     threads.data && "items" in threads.data ? (threads.data.items ?? []) : [];
-
-  const pinnedThreads = useMemo(() => {
-    const pinned: Array<{
-      id: string;
-      pinnedAt: Date | null;
-      status: ThreadStatusValue;
-      title: string;
-      updatedAt: Date;
-      workspace: { id: string; name: string };
-    }> = [];
-
-    if (organizeBy === "workspace") {
-      for (const group of groups) {
-        for (const thread of group.threads) {
-          if (thread.pinnedAt) {
-            pinned.push({
-              ...thread,
-              workspace: { id: group.workspace.id, name: group.workspace.name },
-            });
-          }
+  const quickChatItems = useMemo(
+    () =>
+      [...(quickChats.data ?? [])].sort((left, right) => {
+        if (left.pinnedAt && right.pinnedAt) {
+          return right.pinnedAt.getTime() - left.pinnedAt.getTime();
         }
-      }
-    } else {
-      for (const item of items) {
-        if (item.pinnedAt) {
-          pinned.push({
-            ...item,
-            workspace: { id: item.workspace.id, name: item.workspace.name },
-          });
-        }
-      }
-    }
-
-    return pinned.sort(
-      (a, b) =>
-        new Date(b.pinnedAt!).getTime() - new Date(a.pinnedAt!).getTime(),
-    );
-  }, [groups, items, organizeBy]);
+        if (left.pinnedAt) return -1;
+        if (right.pinnedAt) return 1;
+        return right.updatedAt.getTime() - left.updatedAt.getTime();
+      }),
+    [quickChats.data],
+  );
 
   const commandPaletteRecentThreads = useMemo(() => {
     const recent = new Map<
@@ -1535,17 +1563,20 @@ export function WorkspaceSidebar() {
   const togglePin = api.threads.togglePin.useMutation({
     onMutate: async ({ pinned, threadId }) => {
       const currentThread =
-        findThreadState(threadId, groups, items) ??
+        findThreadState(threadId, groups, items, quickChatItems) ??
         (() => {
-          const thread = utils.threads.get.getData({ threadId })?.thread;
+          const threadDetails = utils.threads.get.getData({ threadId });
+          const thread = threadDetails?.thread;
+          const workspace = threadDetails?.workspace;
 
-          if (!thread) {
+          if (!thread || !workspace) {
             return null;
           }
 
           return {
             pinnedAt: thread.pinnedAt,
-            workspaceId: currentWorkspace.data?.id,
+            workspaceId: workspace.id,
+            workspaceKind: workspace.kind,
           };
         })();
 
@@ -1553,16 +1584,23 @@ export function WorkspaceSidebar() {
         pinnedAt: pinned ? (currentThread?.pinnedAt ?? new Date()) : null,
         threadId,
         utils,
+        workspaceKind: currentThread?.workspaceKind,
         workspaceId: currentThread?.workspaceId,
       });
     },
     onSuccess: (updatedThread, variables) => {
-      const currentThread = findThreadState(variables.threadId, groups, items);
+      const currentThread = findThreadState(
+        variables.threadId,
+        groups,
+        items,
+        quickChatItems,
+      );
 
       applyOptimisticThreadPinUpdate({
         pinnedAt: updatedThread.pinnedAt,
         threadId: variables.threadId,
         utils,
+        workspaceKind: currentThread?.workspaceKind,
         workspaceId: currentThread?.workspaceId ?? currentWorkspace.data?.id,
       });
     },
@@ -1572,6 +1610,7 @@ export function WorkspaceSidebar() {
     onSettled: (_data, _error, variables) => {
       pinActionLockRef.current.delete(variables.threadId);
       void utils.threads.list.invalidate();
+      void utils.threads.listQuickChats.invalidate();
       void utils.threads.get.invalidate({ threadId: variables.threadId });
     },
   });
@@ -1579,6 +1618,7 @@ export function WorkspaceSidebar() {
   const archiveThread = api.threads.archive.useMutation({
     onSuccess: (_data, variables) => {
       void utils.threads.list.invalidate();
+      void utils.threads.listQuickChats.invalidate();
       if (variables.threadId === selectedThreadId) {
         navigateHome();
       }
@@ -1587,15 +1627,18 @@ export function WorkspaceSidebar() {
   const renameThread = api.threads.rename.useMutation({
     onSuccess: (nextThread) => {
       const threadState =
-        findThreadState(nextThread.id, groups, items) ??
+        findThreadState(nextThread.id, groups, items, quickChatItems) ??
         (() => {
-          const thread = utils.threads.get.getData({
+          const threadDetails = utils.threads.get.getData({
             threadId: nextThread.id,
-          })?.thread;
-          return thread
+          });
+          const thread = threadDetails?.thread;
+          const workspace = threadDetails?.workspace;
+          return thread && workspace
             ? {
                 pinnedAt: thread.pinnedAt,
-                workspaceId: currentWorkspace.data?.id,
+                workspaceId: workspace.id,
+                workspaceKind: workspace.kind,
               }
             : null;
         })();
@@ -1604,9 +1647,11 @@ export function WorkspaceSidebar() {
         threadId: nextThread.id,
         title: nextThread.title,
         utils,
+        workspaceKind: threadState?.workspaceKind,
         workspaceId: threadState?.workspaceId,
       });
       void utils.threads.list.invalidate();
+      void utils.threads.listQuickChats.invalidate();
       void utils.threads.get.invalidate({ threadId: nextThread.id });
       renameThreadState.close();
     },
@@ -1619,17 +1664,20 @@ export function WorkspaceSidebar() {
       }
 
       const currentThread =
-        findThreadState(threadId, groups, items) ??
+        findThreadState(threadId, groups, items, quickChatItems) ??
         (() => {
-          const thread = utils.threads.get.getData({ threadId })?.thread;
+          const threadDetails = utils.threads.get.getData({ threadId });
+          const thread = threadDetails?.thread;
+          const workspace = threadDetails?.workspace;
 
-          if (!thread) {
+          if (!thread || !workspace) {
             return null;
           }
 
           return {
             pinnedAt: thread.pinnedAt,
-            workspaceId: currentWorkspace.data?.id,
+            workspaceId: workspace.id,
+            workspaceKind: workspace.kind,
           };
         })();
 
@@ -1639,7 +1687,14 @@ export function WorkspaceSidebar() {
         threadId,
       });
     },
-    [currentWorkspace.data?.id, groups, items, togglePin, utils.threads.get],
+    [
+      currentWorkspace.data?.id,
+      groups,
+      items,
+      quickChatItems,
+      togglePin,
+      utils.threads.get,
+    ],
   );
 
   const handleArchiveThread = useCallback(
@@ -1659,8 +1714,11 @@ export function WorkspaceSidebar() {
     for (const item of items) {
       if (item.id === archiveThreadId) return item.title;
     }
+    for (const item of quickChatItems) {
+      if (item.id === archiveThreadId) return item.title;
+    }
     return null;
-  }, [archiveThreadId, groups, items]);
+  }, [archiveThreadId, groups, items, quickChatItems]);
 
   const renameTargetThread = useMemo(() => {
     if (!renameThreadId) return null;
@@ -1683,22 +1741,25 @@ export function WorkspaceSidebar() {
         };
       }
     }
+    for (const item of quickChatItems) {
+      if (item.id === renameThreadId) {
+        return {
+          id: item.id,
+          title: item.title,
+          workspaceId: item.workspace.id,
+        };
+      }
+    }
     const thread = renameThreadId
-      ? utils.threads.get.getData({ threadId: renameThreadId })?.thread
+      ? utils.threads.get.getData({ threadId: renameThreadId })
       : null;
     if (!thread) return null;
     return {
-      id: thread.id,
-      title: thread.title,
-      workspaceId: currentWorkspace.data?.id ?? "",
+      id: thread.thread.id,
+      title: thread.thread.title,
+      workspaceId: thread.workspace.id,
     };
-  }, [
-    currentWorkspace.data?.id,
-    groups,
-    items,
-    renameThreadId,
-    utils.threads.get,
-  ]);
+  }, [groups, items, quickChatItems, renameThreadId, utils.threads.get]);
 
   const handleConfirmArchiveThread = useCallback(() => {
     if (!archiveThreadId) return;
@@ -1748,7 +1809,7 @@ export function WorkspaceSidebar() {
   const archiveWorkspace = api.workspaces.archive.useMutation({
     onSuccess: ({ selectedWorkspaceId, workspaceId }) => {
       const selectedThreadState = selectedThreadId
-        ? findThreadState(selectedThreadId, groups, items)
+        ? findThreadState(selectedThreadId, groups, items, quickChatItems)
         : null;
       const knownWorkspaces = utils.workspaces.list.getData() ?? [];
       const nextSelectedWorkspace =
@@ -2033,6 +2094,17 @@ export function WorkspaceSidebar() {
     void setAllExpanded.mutate({ expanded: !allWorkspacesExpanded });
   }, [allWorkspacesExpanded, setAllExpanded]);
 
+  const handleStartWorkspaceProjectThread = useCallback(
+    async (workspaceId: string) => {
+      try {
+        await selectWorkspace.mutateAsync({ workspaceId });
+      } finally {
+        router.push("/project-thread");
+      }
+    },
+    [router, selectWorkspace],
+  );
+
   const handleReorderWorkspaces = useCallback(
     (orderedIds: string[]) => {
       const orderMap = new Map(orderedIds.map((id, i) => [id, i]));
@@ -2150,6 +2222,70 @@ export function WorkspaceSidebar() {
     [selectedThreadId, warmThreadNow],
   );
 
+  const warmQuickChatNow = useCallback(
+    (threadId: string) => {
+      if (selectedThreadId === threadId) {
+        return;
+      }
+
+      if (warmedThreadIdsRef.current.has(threadId)) {
+        return;
+      }
+
+      warmedThreadIdsRef.current.add(threadId);
+      if (warmedThreadIdsRef.current.size > MAX_WARMED_THREAD_ENTRIES) {
+        const oldestThreadId = warmedThreadIdsRef.current.values().next().value;
+        if (oldestThreadId) {
+          warmedThreadIdsRef.current.delete(oldestThreadId);
+        }
+      }
+
+      void utils.threads.get.prefetch({ threadId });
+      void router.prefetch(`/thread/${threadId}`);
+    },
+    [router, selectedThreadId, utils],
+  );
+
+  const handleWarmQuickChat = useCallback(
+    (threadId: string, strategy: ThreadWarmStrategy = "hover") => {
+      if (selectedThreadId === threadId) {
+        return;
+      }
+
+      if (strategy !== "hover") {
+        pendingHoverWarmRef.current = null;
+        if (hoverWarmTimeoutRef.current != null) {
+          window.clearTimeout(hoverWarmTimeoutRef.current);
+          hoverWarmTimeoutRef.current = null;
+        }
+        warmQuickChatNow(threadId);
+        return;
+      }
+
+      if (
+        warmedThreadIdsRef.current.has(threadId) ||
+        pendingHoverWarmRef.current === threadId
+      ) {
+        return;
+      }
+
+      pendingHoverWarmRef.current = threadId;
+      if (hoverWarmTimeoutRef.current != null) {
+        window.clearTimeout(hoverWarmTimeoutRef.current);
+      }
+
+      hoverWarmTimeoutRef.current = window.setTimeout(() => {
+        hoverWarmTimeoutRef.current = null;
+        if (pendingHoverWarmRef.current !== threadId) {
+          return;
+        }
+        pendingHoverWarmRef.current = null;
+        warmQuickChatNow(threadId);
+      }, THREAD_WARM_HOVER_DELAY_MS);
+    },
+    [selectedThreadId, warmQuickChatNow],
+  );
+
   const navigateToThread = useCallback(
     (workspaceId: string, threadId: string) => {
       if (selectedWorkspaceId !== workspaceId) {
@@ -2165,6 +2301,14 @@ export function WorkspaceSidebar() {
       selectWorkspace,
       selectedWorkspaceId,
     ],
+  );
+
+  const navigateToQuickChat = useCallback(
+    (threadId: string) => {
+      handleWarmQuickChat(threadId, "press");
+      navigateToShellThread(threadId);
+    },
+    [handleWarmQuickChat, navigateToShellThread],
   );
 
   const finalizeThreadSwitch = useCallback(
@@ -2287,19 +2431,40 @@ export function WorkspaceSidebar() {
     ],
   );
 
+  const handlePressQuickChat = useCallback(
+    (threadId: string) => {
+      if (selectedThreadId === threadId) {
+        return;
+      }
+
+      navigateToQuickChat(threadId);
+    },
+    [navigateToQuickChat, selectedThreadId],
+  );
+
   const pendingThreadSwitchSource = useMemo(
     () =>
       pendingThreadSwitch
-        ? findThreadListItem(pendingThreadSwitch.sourceThreadId, groups, items)
+        ? findThreadListItem(
+            pendingThreadSwitch.sourceThreadId,
+            groups,
+            items,
+            quickChatItems,
+          )
         : null,
-    [groups, items, pendingThreadSwitch],
+    [groups, items, pendingThreadSwitch, quickChatItems],
   );
   const pendingThreadSwitchTarget = useMemo(
     () =>
       pendingThreadSwitch
-        ? findThreadListItem(pendingThreadSwitch.targetThreadId, groups, items)
+        ? findThreadListItem(
+            pendingThreadSwitch.targetThreadId,
+            groups,
+            items,
+            quickChatItems,
+          )
         : null,
-    [groups, items, pendingThreadSwitch],
+    [groups, items, pendingThreadSwitch, quickChatItems],
   );
   const handleConfirmThreadMigration = useCallback(() => {
     if (!pendingThreadSwitch) {
@@ -2472,11 +2637,19 @@ export function WorkspaceSidebar() {
       {
         icon: PencilEdit02Icon,
         id: "new-thread",
-        keywords: ["create", "compose", "chat"],
-        label: "New thread",
+        keywords: ["create", "compose", "chat", "quick"],
+        label: "New quick chat",
+        onSelect: handleStartQuickChat,
+        subtitle: "Start a fresh conversation outside any project",
+      },
+      {
+        icon: PencilEdit02Icon,
+        id: "new-project-thread",
+        keywords: ["project", "workspace", "thread"],
+        label: "New project thread",
         onSelect: handleStartNewThread,
         shortcutActionId: "thread.new" as const,
-        subtitle: "Start a fresh conversation",
+        subtitle: "Start a thread tied to one of your projects",
       },
       {
         icon: FolderAddIcon,
@@ -2594,6 +2767,8 @@ export function WorkspaceSidebar() {
       handleOpenScratchpad,
       handleOpenSettings,
       handleOpenSkills,
+      handleStartQuickChat,
+      handleStartNewProjectThread,
       handleSetThemePreference,
       handleStartNewThread,
       handleToggleTheme,
@@ -2604,9 +2779,11 @@ export function WorkspaceSidebar() {
     ],
   );
 
-  const isEmpty =
+  const projectListIsEmpty =
     organizeBy === "workspace" ? groups.length === 0 : items.length === 0;
+  const quickChatListIsEmpty = quickChatItems.length === 0;
   const showSidebarLoading = threads.isPending || preferences.isPending;
+  const showQuickChatsLoading = quickChats.isPending;
   const showSidebarRefreshing =
     !showSidebarLoading && (threads.isFetching || preferences.isFetching);
 
@@ -2616,9 +2793,9 @@ export function WorkspaceSidebar() {
         <nav className="flex flex-col">
           <Button
             className={`justify-start rounded-xl ${SIDEBAR_ITEM_INSET} ${
-              pathname === "/"
-                ? "bg-default text-foreground"
-                : "text-foreground hover:text-foreground"
+              pathname === "/" || pathname === "/project-thread"
+                ? "bg-default/70 text-foreground"
+                : "text-foreground/80 hover:bg-default/40 hover:text-foreground"
             }`}
             fullWidth
             onPress={handleStartNewThread}
@@ -2635,7 +2812,7 @@ export function WorkspaceSidebar() {
           </Button>
 
           <Button
-            className={`justify-start rounded-xl ${SIDEBAR_ITEM_INSET} text-foreground hover:text-foreground`}
+            className={`justify-start rounded-xl ${SIDEBAR_ITEM_INSET} text-foreground/80 hover:bg-default/40 hover:text-foreground`}
             fullWidth
             onPress={() => setIsCommandPaletteOpen(true)}
             size="sm"
@@ -2664,8 +2841,8 @@ export function WorkspaceSidebar() {
               <Button
                 className={`justify-start rounded-xl ${SIDEBAR_ITEM_INSET} ${
                   isActive
-                    ? "bg-default text-foreground"
-                    : "text-foreground hover:text-foreground"
+                    ? "bg-default/70 text-foreground"
+                    : "text-foreground/80 hover:bg-default/40 hover:text-foreground"
                 }`}
                 fullWidth
                 key={item.href}
@@ -2688,151 +2865,146 @@ export function WorkspaceSidebar() {
         </nav>
       </div>
 
-      <div
-        className={`flex shrink-0 items-center gap-1 ${SIDEBAR_SECTION_INSET}`}
-      >
-        <div className="min-w-0 flex-1">
-          <h2 className="text-foreground/45 flex items-center gap-1.5 text-xs font-medium">
-            <span className="px-3">Threads</span>
-          </h2>
-        </div>
-
-        {organizeBy === "workspace" && groups.length > 0 ? (
-          <Tooltip.Root delay={450}>
-            <Tooltip.Trigger>
-              <Button
-                isIconOnly
-                onPress={handleToggleAllExpanded}
-                size="sm"
-                className="h-6 w-6 min-w-6"
-                variant="ghost"
-              >
-                <HugeiconsIcon
-                  className={`transition-transform duration-150`}
-                  color="currentColor"
-                  icon={allWorkspacesExpanded ? CollapseIcon : ExpandIcon}
-                  size={8}
-                  strokeWidth={1.5}
-                />
-              </Button>
-            </Tooltip.Trigger>
-            <Tooltip.Content offset={8} placement="bottom">
-              {allWorkspacesExpanded
-                ? "Collapse all workspaces"
-                : "Expand all workspaces"}
-            </Tooltip.Content>
-          </Tooltip.Root>
-        ) : null}
-
-        <Button
-          isIconOnly
-          isDisabled={isCreatingWorkspace}
-          onPress={handleCreateWorkspace}
-          size="sm"
-          className="h-6 w-6 min-w-6"
-          variant="ghost"
-        >
-          <HugeiconsIcon
-            color="currentColor"
-            icon={FolderAddIcon}
-            size={8}
-            strokeWidth={1.5}
-          />
-        </Button>
-
-        <div className="relative" ref={preferencesRef}>
-          <Button
-            isIconOnly
-            onPress={() => setIsPreferencesOpen((open) => !open)}
-            size="sm"
-            className="h-6 w-6 min-w-6"
-            variant="ghost"
-          >
-            <HugeiconsIcon
-              color="currentColor"
-              icon={FilterMailIcon}
-              size={8}
-              strokeWidth={1.5}
-            />
-          </Button>
-
-          <AnimatePresence>
-            {isPreferencesOpen ? (
-              <motion.div
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                className="absolute top-9 right-0 z-30 w-40 overflow-hidden rounded-2xl border border-border bg-overlay p-1.5 text-foreground shadow-overlay"
-                exit={{ opacity: 0, scale: 0.97, y: -10 }}
-                initial={{ opacity: 0, scale: 0.97, y: -10 }}
-                transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <div className="space-y-1 px-2 pt-1 pb-2">
-                  <p className="text-[11px] font-medium text-muted">Organize</p>
-                </div>
-                <PreferenceMenuItem
-                  icon={Folder03Icon}
-                  isSelected={organizeBy === "workspace"}
-                  label="By project"
-                  onPress={() =>
-                    void handlePreferencesChange({ organizeBy: "workspace" })
-                  }
-                />
-                <PreferenceMenuItem
-                  icon={Clock01Icon}
-                  isSelected={organizeBy === "chronological"}
-                  label="Chronologically"
-                  onPress={() =>
-                    void handlePreferencesChange({
-                      organizeBy: "chronological",
-                    })
-                  }
-                />
-
-                <div className="mx-2 my-3 h-px bg-separator" />
-
-                <div className="space-y-1 px-2 pb-2">
-                  <p className="text-[11px] font-medium text-muted">Sort by</p>
-                </div>
-                <PreferenceMenuItem
-                  icon={AddCircleHalfDotIcon}
-                  isSelected={sortBy === "created"}
-                  label="Created"
-                  onPress={() =>
-                    void handlePreferencesChange({ sortBy: "created" })
-                  }
-                />
-                <PreferenceMenuItem
-                  icon={PencilEdit02Icon}
-                  isSelected={sortBy === "updated"}
-                  label="Updated"
-                  onPress={() =>
-                    void handlePreferencesChange({ sortBy: "updated" })
-                  }
-                />
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
-        </div>
-      </div>
-
       <div className="min-h-0 flex-1">
         <ScrollShadow
           className="sentinel-scroll-shell h-full pb-4"
           orientation="vertical"
         >
           <div className="sentinel-scroll-area h-full">
-            {showSidebarLoading ? <WorkspaceSidebarLoadingState /> : null}
+            <div
+              className={`flex shrink-0 items-center gap-1 ${SIDEBAR_SECTION_INSET}`}
+            >
+              <div className="min-w-0 flex-1">
+                <h2 className="text-foreground/40 flex items-center gap-1.5 px-1 text-xs font-medium">
+                  Projects
+                </h2>
+              </div>
 
-            {!showSidebarLoading && pinnedThreads.length > 0 ? (
-              <PinnedThreadsList
-                onArchive={handleArchiveThread}
-                onPin={handlePin}
-                onPressThread={handlePressThread}
-                onRenameThread={handleOpenRenameThread}
-                onWarmThread={handleWarmThread}
-                selectedThreadId={selectedThreadId}
-                threads={pinnedThreads}
-              />
-            ) : null}
+              {organizeBy === "workspace" && groups.length > 0 ? (
+                <Tooltip.Root delay={450}>
+                  <Tooltip.Trigger>
+                    <Button
+                      isIconOnly
+                      onPress={handleToggleAllExpanded}
+                      size="sm"
+                      className={SIDEBAR_ICON_BTN}
+                      variant="ghost"
+                    >
+                      <HugeiconsIcon
+                        className={`transition-transform duration-120 ease-out`}
+                        color="currentColor"
+                        icon={allWorkspacesExpanded ? CollapseIcon : ExpandIcon}
+                        size={8}
+                        strokeWidth={1.5}
+                      />
+                    </Button>
+                  </Tooltip.Trigger>
+                  <Tooltip.Content offset={8} placement="bottom">
+                    {allWorkspacesExpanded
+                      ? "Collapse all projects"
+                      : "Expand all projects"}
+                  </Tooltip.Content>
+                </Tooltip.Root>
+              ) : null}
+
+              <Button
+                isIconOnly
+                isDisabled={isCreatingWorkspace}
+                onPress={handleCreateWorkspace}
+                size="sm"
+                className={SIDEBAR_ICON_BTN}
+                variant="ghost"
+              >
+                <HugeiconsIcon
+                  color="currentColor"
+                  icon={FolderAddIcon}
+                  size={8}
+                  strokeWidth={1.5}
+                />
+              </Button>
+
+              <div className="relative" ref={preferencesRef}>
+                <Button
+                  isIconOnly
+                  onPress={() => setIsPreferencesOpen((open) => !open)}
+                  size="sm"
+                  className={SIDEBAR_ICON_BTN}
+                  variant="ghost"
+                >
+                  <HugeiconsIcon
+                    color="currentColor"
+                    icon={FilterMailIcon}
+                    size={8}
+                    strokeWidth={1.5}
+                  />
+                </Button>
+
+                <AnimatePresence>
+                  {isPreferencesOpen ? (
+                    <motion.div
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      className="absolute top-9 right-0 z-30 w-40 overflow-hidden rounded-2xl border border-border bg-overlay p-1.5 text-foreground shadow-overlay"
+                      exit={{ opacity: 0, scale: 0.97, y: -10 }}
+                      initial={{ opacity: 0, scale: 0.97, y: -10 }}
+                      transition={{
+                        duration: 0.15,
+                        ease: [0.25, 0.1, 0.25, 1],
+                      }}
+                    >
+                      <div className="space-y-1 px-2 pt-1 pb-2">
+                        <p className="text-[11px] font-medium text-muted">
+                          Organize
+                        </p>
+                      </div>
+                      <PreferenceMenuItem
+                        icon={Folder03Icon}
+                        isSelected={organizeBy === "workspace"}
+                        label="By project"
+                        onPress={() =>
+                          void handlePreferencesChange({
+                            organizeBy: "workspace",
+                          })
+                        }
+                      />
+                      <PreferenceMenuItem
+                        icon={Clock01Icon}
+                        isSelected={organizeBy === "chronological"}
+                        label="Chronologically"
+                        onPress={() =>
+                          void handlePreferencesChange({
+                            organizeBy: "chronological",
+                          })
+                        }
+                      />
+
+                      <div className="mx-2 my-3 h-px bg-separator" />
+
+                      <div className="space-y-1 px-2 pb-2">
+                        <p className="text-[11px] font-medium text-muted">
+                          Sort by
+                        </p>
+                      </div>
+                      <PreferenceMenuItem
+                        icon={AddCircleHalfDotIcon}
+                        isSelected={sortBy === "created"}
+                        label="Created"
+                        onPress={() =>
+                          void handlePreferencesChange({ sortBy: "created" })
+                        }
+                      />
+                      <PreferenceMenuItem
+                        icon={PencilEdit02Icon}
+                        isSelected={sortBy === "updated"}
+                        label="Updated"
+                        onPress={() =>
+                          void handlePreferencesChange({ sortBy: "updated" })
+                        }
+                      />
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+              </div>
+            </div>
 
             {!showSidebarLoading &&
             organizeBy === "workspace" &&
@@ -2842,6 +3014,7 @@ export function WorkspaceSidebar() {
                 groups={groups}
                 onArchive={handleArchiveThread}
                 onArchiveWorkspace={handleOpenDeleteWorkspace}
+                onCreateThread={handleStartWorkspaceProjectThread}
                 onPin={handlePin}
                 onPressThread={handlePressThread}
                 onRelocateWorkspace={handleRelocateWorkspace}
@@ -2868,32 +3041,45 @@ export function WorkspaceSidebar() {
               />
             ) : null}
 
-            {!showSidebarLoading && isEmpty ? (
-              <div className="px-6 py-4">
-                <div className="border-separator bg-background rounded-2xl border p-4">
-                  <p className="text-foreground text-sm font-medium">
-                    {organizeBy === "workspace"
-                      ? "No workspaces yet"
-                      : "No threads found"}
-                  </p>
-                  <p className="text-foreground/45 mt-1 text-xs">
-                    {organizeBy === "workspace"
-                      ? "Create a workspace to start grouping threads by project root."
-                      : "No threads match the current sidebar filters yet."}
-                  </p>
-                  {organizeBy === "workspace" ? (
-                    <Button
-                      className="mt-4"
-                      isDisabled={isCreatingWorkspace}
-                      onPress={handleCreateWorkspace}
-                      size="sm"
-                      variant="secondary"
-                    >
-                      Create Workspace
-                    </Button>
-                  ) : null}
-                </div>
+            <div
+              className={`flex shrink-0 items-center gap-1 pt-2 ${SIDEBAR_SECTION_INSET}`}
+            >
+              <div className="min-w-0 flex-1">
+                <h2 className="text-foreground/40 flex items-center gap-1.5 px-1 text-xs font-medium">
+                  Chats
+                </h2>
               </div>
+
+              <Button
+                isIconOnly
+                onPress={handleStartQuickChat}
+                size="sm"
+                className={SIDEBAR_ICON_BTN}
+                variant="ghost"
+              >
+                <HugeiconsIcon
+                  color="currentColor"
+                  icon={PencilEdit02Icon}
+                  size={8}
+                  strokeWidth={1.5}
+                />
+              </Button>
+            </div>
+
+            {!showQuickChatsLoading && !quickChatListIsEmpty ? (
+              <QuickChatsList
+                onArchive={handleArchiveThread}
+                onPin={handlePin}
+                onPressThread={handlePressQuickChat}
+                onRenameThread={handleOpenRenameThread}
+                onWarmThread={handleWarmQuickChat}
+                selectedThreadId={selectedThreadId}
+                threads={quickChatItems}
+              />
+            ) : null}
+
+            {!showQuickChatsLoading && quickChatListIsEmpty ? (
+              <p className="px-4 pt-2 text-sm text-foreground/30">No chats</p>
             ) : null}
           </div>
         </ScrollShadow>
@@ -2901,7 +3087,7 @@ export function WorkspaceSidebar() {
 
       <div className={`shrink-0 ${SIDEBAR_SECTION_INSET} pb-3`}>
         <Button
-          className={`text-foreground hover:text-foreground justify-start rounded-xl ${SIDEBAR_ITEM_INSET}`}
+          className={`text-foreground/80 hover:bg-default/40 hover:text-foreground justify-start rounded-xl ${SIDEBAR_ITEM_INSET}`}
           fullWidth
           onPress={handleOpenSettings}
           size="sm"

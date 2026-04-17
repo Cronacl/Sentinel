@@ -159,7 +159,7 @@ function AppShellContent({ children }: PropsWithChildren) {
   }
 
   if (isHomeRoute) {
-    return <NewThreadScreen />;
+    return <NewThreadScreen variant="project" />;
   }
 
   return <>{children}</>;

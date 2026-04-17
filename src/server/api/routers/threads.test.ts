@@ -3,16 +3,31 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 
 const findMany = mock(async () => []);
+const findFirst = mock(async () => null);
 const getOwnedThreadOrThrow = mock(async () => ({
   id: "thread-1",
 }));
 const getOwnedSubagentThreadOrThrow = mock(async () => ({
   id: "thread-virtual-1",
 }));
-const getOwnedWorkspaceOrThrow = mock(async () => ({
+const getOrCreateQuickChatWorkspace = mock(async () => ({
+  id: "quick-chat-workspace",
+  isArchived: false,
+  kind: "quick_chat",
+}));
+const getOwnedProjectWorkspaceOrThrow = mock(async () => ({
   id: "workspace-1",
   isArchived: false,
+  kind: "project",
 }));
+const insertAll = mock(() => [
+  {
+    id: "thread-created-1",
+  },
+]);
+const insertReturning = mock(() => ({ all: insertAll }));
+const insertValues = mock(() => ({ returning: insertReturning }));
+const insert = mock(() => ({ values: insertValues }));
 
 mock.module("@/server/api/trpc", () => ({
   createTRPCRouter: (routes: Record<string, any>) => routes,
@@ -26,9 +41,10 @@ mock.module("@/server/api/trpc", () => ({
 }));
 
 mock.module("./workspace-thread-helpers", () => ({
+  getOrCreateQuickChatWorkspace,
   getOwnedSubagentThreadOrThrow,
   getOwnedThreadOrThrow,
-  getOwnedWorkspaceOrThrow,
+  getOwnedProjectWorkspaceOrThrow,
   getThreadListSettings: () => ({
     organizeBy: "workspace",
     sortBy: "updated",
@@ -92,6 +108,7 @@ mock.module("@/server/db/schema", () => ({
     description: "workspaces.description",
     id: "workspaces.id",
     isArchived: "workspaces.isArchived",
+    kind: "workspaces.kind",
     name: "workspaces.name",
     permissionModeOverride: "workspaces.permissionModeOverride",
     rootPath: "workspaces.rootPath",
@@ -104,9 +121,20 @@ const { threadsRouter } = await import("./threads");
 
 beforeEach(() => {
   findMany.mockReset();
+  findFirst.mockReset();
+  getOrCreateQuickChatWorkspace.mockClear();
   getOwnedSubagentThreadOrThrow.mockClear();
   getOwnedThreadOrThrow.mockClear();
-  getOwnedWorkspaceOrThrow.mockClear();
+  getOwnedProjectWorkspaceOrThrow.mockClear();
+  insert.mockClear();
+  insertValues.mockClear();
+  insertReturning.mockClear();
+  insertAll.mockClear();
+  insertAll.mockReturnValue([
+    {
+      id: "thread-created-1",
+    },
+  ]);
 });
 
 describe("threadsRouter.search", () => {
@@ -119,6 +147,7 @@ describe("threadsRouter.search", () => {
         title: "Release handoff",
         updatedAt: new Date("2026-03-31T12:00:00.000Z"),
         workspace: {
+          kind: "project",
           id: "workspace-1",
           name: "Sentinel",
         },
@@ -130,6 +159,7 @@ describe("threadsRouter.search", () => {
         title: "Palette keyboard shortcuts",
         updatedAt: new Date("2026-02-01T12:00:00.000Z"),
         workspace: {
+          kind: "project",
           id: "workspace-2",
           name: "Desktop",
         },
@@ -172,6 +202,19 @@ describe("threadsRouter.search", () => {
         title: "Archived palette thread",
         updatedAt: new Date("2026-03-20T12:00:00.000Z"),
         workspace: {
+          kind: "quick_chat",
+          id: "workspace-9",
+          name: "Archive",
+        },
+      },
+      {
+        archivedAt: null,
+        id: "quick-chat-thread",
+        summary: "Search me three",
+        title: "Quick palette thread",
+        updatedAt: new Date("2026-03-22T12:00:00.000Z"),
+        workspace: {
+          kind: "quick_chat",
           id: "workspace-9",
           name: "Archive",
         },
@@ -183,6 +226,7 @@ describe("threadsRouter.search", () => {
         title: "Active palette thread",
         updatedAt: new Date("2026-03-21T12:00:00.000Z"),
         workspace: {
+          kind: "project",
           id: "workspace-1",
           name: "Sentinel",
         },
@@ -213,8 +257,138 @@ describe("threadsRouter.search", () => {
     expect(result[0]).toMatchObject({
       id: "active-thread",
       workspace: {
+        kind: "project",
         id: "workspace-1",
         name: "Sentinel",
+      },
+    });
+  });
+});
+
+describe("threadsRouter.listQuickChats", () => {
+  it("returns only quick chat threads for the hidden workspace", async () => {
+    findMany.mockResolvedValueOnce([
+      {
+        archivedAt: null,
+        createdAt: new Date("2026-03-20T12:00:00.000Z"),
+        id: "quick-chat-thread",
+        mode: "chat",
+        pinnedAt: null,
+        status: "idle",
+        summary: "Quick chat summary",
+        title: "Quick chat thread",
+        updatedAt: new Date("2026-03-21T12:00:00.000Z"),
+        workspace: {
+          createdAt: new Date("2026-03-20T12:00:00.000Z"),
+          description: null,
+          id: "quick-chat-workspace",
+          kind: "quick_chat",
+          name: "Quick chats",
+          permissionModeOverride: null,
+          rootPath: "/tmp/sentinel/chats",
+          updatedAt: new Date("2026-03-20T12:00:00.000Z"),
+        },
+      },
+    ]);
+
+    const result = await threadsRouter.listQuickChats({
+      ctx: {
+        db: {
+          query: {
+            threads: {
+              findMany,
+            },
+          },
+        },
+        session: {
+          user: {
+            id: "user-1",
+          },
+        },
+      },
+      input: undefined,
+    });
+
+    expect(getOrCreateQuickChatWorkspace).toHaveBeenCalled();
+    expect(findMany).toHaveBeenCalled();
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      id: "quick-chat-thread",
+      workspace: {
+        id: "quick-chat-workspace",
+        kind: "quick_chat",
+      },
+    });
+  });
+});
+
+describe("threadsRouter.createQuickChat", () => {
+  it("creates a thread in the hidden quick chat workspace", async () => {
+    findFirst.mockResolvedValueOnce({
+      archivedAt: null,
+      chatEngine: "codex",
+      chatEngineState: null,
+      chatModelId: null,
+      chatReasoningEffort: null,
+      createdAt: new Date("2026-03-20T12:00:00.000Z"),
+      id: "thread-created-1",
+      mode: "chat",
+      pinnedAt: null,
+      status: "idle",
+      summary: "Created in quick chat",
+      title: "Quick chat thread",
+      updatedAt: new Date("2026-03-20T12:00:00.000Z"),
+      workspace: {
+        createdAt: new Date("2026-03-20T12:00:00.000Z"),
+        description: null,
+        id: "quick-chat-workspace",
+        kind: "quick_chat",
+        name: "Quick chats",
+        permissionModeOverride: null,
+        rootPath: "/tmp/sentinel/chats",
+        updatedAt: new Date("2026-03-20T12:00:00.000Z"),
+      },
+    });
+
+    const result = await threadsRouter.createQuickChat({
+      ctx: {
+        db: {
+          insert,
+          query: {
+            threads: {
+              findFirst,
+            },
+          },
+        },
+        session: {
+          user: {
+            id: "user-1",
+          },
+        },
+      },
+      input: {
+        engine: "codex",
+        mode: "chat",
+        summary: "  Created in quick chat  ",
+        title: "  Quick chat thread  ",
+      },
+    });
+
+    expect(getOrCreateQuickChatWorkspace).toHaveBeenCalled();
+    expect(insert).toHaveBeenCalled();
+    expect(insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({
+        summary: "Created in quick chat",
+        title: "Quick chat thread",
+        userId: "user-1",
+        workspaceId: "quick-chat-workspace",
+      }),
+    );
+    expect(result).toMatchObject({
+      id: "thread-created-1",
+      workspace: {
+        id: "quick-chat-workspace",
+        kind: "quick_chat",
       },
     });
   });

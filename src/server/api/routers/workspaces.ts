@@ -16,7 +16,10 @@ import {
 import { threads, users, workspaces } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
-import { getOwnedWorkspaceOrThrow } from "./workspace-thread-helpers";
+import {
+  getOrCreateQuickChatWorkspace,
+  getOwnedProjectWorkspaceOrThrow,
+} from "./workspace-thread-helpers";
 
 function normalizeWorkspaceRootPath(rootPath: string | null | undefined) {
   if (!rootPath) {
@@ -77,6 +80,7 @@ export const workspacesRouter = createTRPCRouter({
     const allWorkspaces = await ctx.db.query.workspaces.findMany({
       where: and(
         eq(workspaces.isArchived, false),
+        eq(workspaces.kind, "project"),
         eq(workspaces.userId, userId),
       ),
       orderBy: (workspaces, { asc, desc }) => [
@@ -119,6 +123,7 @@ export const workspacesRouter = createTRPCRouter({
         description: workspace.description,
         id: workspace.id,
         isExpanded: workspace.isExpanded,
+        kind: workspace.kind,
         isSelected: ctx.user.selectedWorkspaceId === workspace.id,
         latestThreadUpdatedAt: stats?.latestThreadUpdatedAt ?? null,
         name: workspace.name,
@@ -143,6 +148,7 @@ export const workspacesRouter = createTRPCRouter({
         .insert(workspaces)
         .values({
           description: input.description.trim() || null,
+          kind: "project",
           name: input.name.trim(),
           rootPath,
           userId,
@@ -164,7 +170,7 @@ export const workspacesRouter = createTRPCRouter({
   update: protectedProcedure
     .input(workspaceUpdateSchema)
     .mutation(async ({ ctx, input }) => {
-      await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      await getOwnedProjectWorkspaceOrThrow(ctx, input.workspaceId);
       const rootPath = normalizeWorkspaceRootPath(input.rootPath);
 
       await assertWorkspaceRootPathAvailable(
@@ -191,7 +197,10 @@ export const workspacesRouter = createTRPCRouter({
   archive: protectedProcedure
     .input(workspaceArchiveSchema)
     .mutation(async ({ ctx, input }) => {
-      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const workspace = await getOwnedProjectWorkspaceOrThrow(
+        ctx,
+        input.workspaceId,
+      );
 
       let nextSelectedWorkspaceId = ctx.user.selectedWorkspaceId;
       if (ctx.user.selectedWorkspaceId === workspace.id) {
@@ -199,6 +208,7 @@ export const workspacesRouter = createTRPCRouter({
           where: and(
             ne(workspaces.id, workspace.id),
             eq(workspaces.isArchived, false),
+            eq(workspaces.kind, "project"),
             eq(workspaces.userId, ctx.session.user.id),
           ),
           orderBy: (workspaces, { desc }) => [desc(workspaces.createdAt)],
@@ -246,7 +256,10 @@ export const workspacesRouter = createTRPCRouter({
   select: protectedProcedure
     .input(workspaceSelectSchema)
     .mutation(async ({ ctx, input }) => {
-      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const workspace = await getOwnedProjectWorkspaceOrThrow(
+        ctx,
+        input.workspaceId,
+      );
 
       if (workspace.isArchived) {
         throw new TRPCError({
@@ -268,7 +281,7 @@ export const workspacesRouter = createTRPCRouter({
     }),
 
   getCurrent: protectedProcedure.query(async ({ ctx }) => {
-    if (ctx.workspace) {
+    if (ctx.workspace?.kind === "project") {
       return ctx.workspace;
     }
 
@@ -279,6 +292,7 @@ export const workspacesRouter = createTRPCRouter({
     const fallbackWorkspace = await ctx.db.query.workspaces.findFirst({
       where: and(
         eq(workspaces.isArchived, false),
+        eq(workspaces.kind, "project"),
         eq(workspaces.userId, ctx.session.user.id),
       ),
       orderBy: (workspaces, { desc }) => [desc(workspaces.createdAt)],
@@ -330,7 +344,7 @@ export const workspacesRouter = createTRPCRouter({
   updatePermissionOverride: protectedProcedure
     .input(workspacePermissionOverrideSchema)
     .mutation(async ({ ctx, input }) => {
-      await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      await getOwnedProjectWorkspaceOrThrow(ctx, input.workspaceId);
 
       const [updated] = ctx.db
         .update(workspaces)
@@ -347,10 +361,17 @@ export const workspacesRouter = createTRPCRouter({
       };
     }),
 
+  getQuickChat: protectedProcedure.query(async ({ ctx }) => {
+    return await getOrCreateQuickChatWorkspace(ctx);
+  }),
+
   toggleExpanded: protectedProcedure
     .input(z.object({ workspaceId: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
-      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
+      const workspace = await getOwnedProjectWorkspaceOrThrow(
+        ctx,
+        input.workspaceId,
+      );
       const next = !workspace.isExpanded;
 
       ctx.db
@@ -372,6 +393,7 @@ export const workspacesRouter = createTRPCRouter({
           and(
             eq(workspaces.userId, ctx.session.user.id),
             eq(workspaces.isArchived, false),
+            eq(workspaces.kind, "project"),
           ),
         )
         .run();
@@ -394,6 +416,7 @@ export const workspacesRouter = createTRPCRouter({
         where: and(
           eq(workspaces.userId, userId),
           eq(workspaces.isArchived, false),
+          eq(workspaces.kind, "project"),
           inArray(workspaces.id, input.workspaceIds),
         ),
         columns: { id: true },

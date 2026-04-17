@@ -25,6 +25,7 @@ function createUtils() {
       createdAt: new Date("2026-03-12T00:00:00.000Z"),
       description: null,
       id: "workspace-1",
+      kind: "project" as const,
       name: "Workspace",
       rootPath: "/tmp/workspace-1",
       updatedAt: new Date("2026-03-12T00:00:00.000Z"),
@@ -48,6 +49,7 @@ function createUtils() {
           createdAt: new Date("2026-03-12T00:00:00.000Z"),
           description: null,
           id: "workspace-1",
+          kind: "project" as const,
           name: "Workspace",
           rootPath: "/tmp/workspace-1",
           updatedAt: new Date("2026-03-12T00:00:00.000Z"),
@@ -79,6 +81,7 @@ function createUtils() {
           createdAt: new Date("2026-03-12T00:00:00.000Z"),
           description: null,
           id: "workspace-1",
+          kind: "project" as const,
           name: "Workspace",
           rootPath: "/tmp/workspace-1",
           updatedAt: new Date("2026-03-12T00:00:00.000Z"),
@@ -102,6 +105,31 @@ function createUtils() {
       workspaceData,
     ],
     [JSON.stringify({ workspaceId: "workspace-1" }), chronologicalData],
+  ]);
+  const quickChatStore = new Map<string, any>([
+    [
+      JSON.stringify(null),
+      [
+        {
+          archivedAt: null,
+          chatModelId: "openai:gpt-5.2",
+          chatReasoningEffort: "medium",
+          createdAt: new Date("2026-03-12T00:00:00.000Z"),
+          id: "quick-thread-1",
+          mode: "chat" as const,
+          pinnedAt: null,
+          status: "idle" as const,
+          summary: null,
+          title: "Quick Thread",
+          updatedAt: new Date("2026-03-12T00:00:00.000Z"),
+          workspace: {
+            id: "quick-workspace-1",
+            kind: "quick_chat" as const,
+            name: "Quick chats",
+          },
+        },
+      ],
+    ],
   ]);
 
   return {
@@ -130,6 +158,19 @@ function createUtils() {
         },
         getData(input: unknown) {
           return listStore.get(JSON.stringify(input ?? null));
+        },
+      },
+      listQuickChats: {
+        setData(input: unknown, updater: any) {
+          const key = JSON.stringify(input ?? null);
+          const current = quickChatStore.get(key);
+          quickChatStore.set(
+            key,
+            typeof updater === "function" ? updater(current) : updater,
+          );
+        },
+        getData(input: unknown) {
+          return quickChatStore.get(JSON.stringify(input ?? null));
         },
       },
     },
@@ -226,4 +267,20 @@ it("updates thread status across list caches", () => {
     utils.threads.list.getData({ organizeBy: "workspace", sortBy: "updated" })
       ?.groups[0]?.threads[0]?.status,
   ).toBe("streaming");
+});
+
+it("updates quick chat titles in the quick chat cache", () => {
+  const utils = createUtils();
+
+  applyThreadTitleCacheUpdate({
+    threadId: "quick-thread-1",
+    title: "Renamed quick chat",
+    utils: utils as never,
+    workspaceId: "quick-workspace-1",
+    workspaceKind: "quick_chat",
+  });
+
+  expect(utils.threads.listQuickChats.getData(undefined)?.[0]?.title).toBe(
+    "Renamed quick chat",
+  );
 });

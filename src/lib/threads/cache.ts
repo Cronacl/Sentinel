@@ -5,6 +5,7 @@ import type { ChatEngine } from "@/server/db/enums";
 type TrpcUtils = ReturnType<typeof api.useUtils>;
 type ThreadGetData = RouterOutputs["threads"]["get"];
 type ThreadListData = RouterOutputs["threads"]["list"];
+type QuickChatListData = RouterOutputs["threads"]["listQuickChats"];
 type ThreadGetThread = ThreadGetData["thread"];
 type ThreadGetWorkspace = ThreadGetData["workspace"];
 type ThreadSettingsPatch = {
@@ -87,6 +88,16 @@ function updateThreadPinInListData<T extends ThreadListData | undefined>(
   } as T;
 }
 
+function updateThreadPinInQuickChatListData(
+  data: QuickChatListData | undefined,
+  threadId: string,
+  pinnedAt: Date | null,
+) {
+  return data?.map((item) =>
+    item.id === threadId ? { ...item, pinnedAt } : item,
+  );
+}
+
 function applyThreadSettingsPatch<
   T extends {
     chatModelId: string | null;
@@ -167,15 +178,81 @@ function updateThreadTitleInListData<T extends ThreadListData | undefined>(
   } as T;
 }
 
+function upsertThreadInQuickChatListData(
+  data: QuickChatListData | undefined,
+  thread: ThreadGetThread,
+  workspace?: ThreadGetWorkspace,
+) {
+  if (!data || workspace?.kind !== "quick_chat") {
+    return data;
+  }
+
+  const existingIndex = data.findIndex((item) => item.id === thread.id);
+  const nextItem: QuickChatListData[number] = {
+    ...(buildThreadListItem(thread) as Omit<
+      QuickChatListData[number],
+      "workspace"
+    >),
+    workspace: {
+      createdAt: workspace.createdAt,
+      description: workspace.description,
+      id: workspace.id,
+      kind: workspace.kind,
+      name: workspace.name,
+      permissionModeOverride: workspace.permissionModeOverride,
+      rootPath: workspace.rootPath,
+      updatedAt: workspace.updatedAt,
+    },
+  };
+
+  if (existingIndex === -1) {
+    return [nextItem, ...data];
+  }
+
+  return data.map((item) => (item.id === thread.id ? nextItem : item));
+}
+
+function updateThreadStatusInQuickChatListData(
+  data: QuickChatListData | undefined,
+  threadId: string,
+  status: ThreadStatusValue,
+) {
+  return data?.map((item) =>
+    item.id === threadId ? { ...item, status } : item,
+  );
+}
+
+function updateThreadSettingsInQuickChatListData(
+  data: QuickChatListData | undefined,
+  threadId: string,
+  patch: ThreadSettingsPatch,
+) {
+  return data?.map((item) =>
+    item.id === threadId ? applyThreadSettingsPatch(item, patch) : item,
+  );
+}
+
+function updateThreadTitleInQuickChatListData(
+  data: QuickChatListData | undefined,
+  threadId: string,
+  title: string,
+) {
+  return data?.map((item) =>
+    item.id === threadId ? { ...item, title } : item,
+  );
+}
+
 export function applyOptimisticThreadPinUpdate({
   pinnedAt,
   threadId,
   utils,
   workspaceId,
+  workspaceKind,
 }: {
   pinnedAt: Date | null;
   threadId: string;
   utils: TrpcUtils;
+  workspaceKind?: ThreadGetWorkspace["kind"];
   workspaceId?: string;
 }) {
   const threadInput = { threadId };
@@ -200,10 +277,19 @@ export function applyOptimisticThreadPinUpdate({
       : current,
   );
 
-  for (const input of listInputs) {
-    utils.threads.list.setData(input, (current) =>
-      updateThreadPinInListData(current, threadId, pinnedAt),
+  if (
+    workspaceKind === "quick_chat" ||
+    snapshot.thread?.workspace.kind === "quick_chat"
+  ) {
+    utils.threads.listQuickChats.setData(undefined, (current) =>
+      updateThreadPinInQuickChatListData(current, threadId, pinnedAt),
     );
+  } else {
+    for (const input of listInputs) {
+      utils.threads.list.setData(input, (current) =>
+        updateThreadPinInListData(current, threadId, pinnedAt),
+      );
+    }
   }
 
   return snapshot;
@@ -364,12 +450,21 @@ export function applyThreadStatusCacheUpdate({
   threadId,
   utils,
   workspaceId,
+  workspaceKind,
 }: {
   status: ThreadStatusValue;
   threadId: string;
   utils: TrpcUtils;
+  workspaceKind?: ThreadGetWorkspace["kind"];
   workspaceId?: string;
 }) {
+  if (workspaceKind === "quick_chat") {
+    utils.threads.listQuickChats.setData(undefined, (current) =>
+      updateThreadStatusInQuickChatListData(current, threadId, status),
+    );
+    return;
+  }
+
   for (const input of getThreadListInputs(workspaceId)) {
     utils.threads.list.setData(input, (current) =>
       updateThreadStatusInListData(current, threadId, status),
@@ -441,6 +536,13 @@ export function applyThreadSnapshotCacheUpdate({
     title: snapshot.thread.title,
   };
 
+  if (workspace?.kind === "quick_chat") {
+    utils.threads.listQuickChats.setData(undefined, (current) =>
+      upsertThreadInQuickChatListData(current, nextThread, workspace),
+    );
+    return;
+  }
+
   for (const input of getThreadListInputs(workspaceId ?? workspace?.id)) {
     utils.threads.list.setData(input, (current) =>
       upsertThreadInListData(current, nextThread, workspace),
@@ -453,10 +555,12 @@ export function applyThreadSettingsCacheUpdate({
   threadId,
   utils,
   workspaceId,
+  workspaceKind,
 }: {
   patch: ThreadSettingsPatch;
   threadId: string;
   utils: TrpcUtils;
+  workspaceKind?: ThreadGetWorkspace["kind"];
   workspaceId?: string;
 }) {
   utils.threads.get.setData({ threadId }, (current) =>
@@ -467,6 +571,13 @@ export function applyThreadSettingsCacheUpdate({
         }
       : current,
   );
+
+  if (workspaceKind === "quick_chat") {
+    utils.threads.listQuickChats.setData(undefined, (current) =>
+      updateThreadSettingsInQuickChatListData(current, threadId, patch),
+    );
+    return;
+  }
 
   for (const input of getThreadListInputs(workspaceId)) {
     utils.threads.list.setData(input, (current) =>
@@ -480,10 +591,12 @@ export function applyThreadTitleCacheUpdate({
   title,
   utils,
   workspaceId,
+  workspaceKind,
 }: {
   threadId: string;
   title: string;
   utils: TrpcUtils;
+  workspaceKind?: ThreadGetWorkspace["kind"];
   workspaceId?: string;
 }) {
   utils.threads.get.setData({ threadId }, (current) =>
@@ -497,6 +610,13 @@ export function applyThreadTitleCacheUpdate({
         }
       : current,
   );
+
+  if (workspaceKind === "quick_chat") {
+    utils.threads.listQuickChats.setData(undefined, (current) =>
+      updateThreadTitleInQuickChatListData(current, threadId, title),
+    );
+    return;
+  }
 
   for (const input of getThreadListInputs(workspaceId)) {
     utils.threads.list.setData(input, (current) =>

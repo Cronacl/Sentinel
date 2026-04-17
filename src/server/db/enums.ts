@@ -49,6 +49,9 @@ export type PersonalityPreset = (typeof PERSONALITY_PRESETS)[number];
 export const PERMISSION_MODES = ["default", "full"] as const;
 export type PermissionMode = (typeof PERMISSION_MODES)[number];
 
+export const WORKSPACE_KINDS = ["project", "quick_chat"] as const;
+export type WorkspaceKind = (typeof WORKSPACE_KINDS)[number];
+
 export const THEME_PREFERENCES = ["light", "dark", "system"] as const;
 export type ThemePreference = (typeof THEME_PREFERENCES)[number];
 

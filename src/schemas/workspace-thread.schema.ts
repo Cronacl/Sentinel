@@ -2,7 +2,7 @@ import { z } from "zod";
 import { REASONING_EFFORTS } from "@/lib/ai/providers/models";
 import { THREAD_MODES } from "@/lib/plan";
 import { permissionModeSchema } from "@/schemas/security.schema";
-import { CHAT_ENGINES } from "@/server/db/enums";
+import { CHAT_ENGINES, WORKSPACE_KINDS } from "@/server/db/enums";
 
 export const threadListOrganizeBySchema = z.enum([
   "workspace",
@@ -11,6 +11,7 @@ export const threadListOrganizeBySchema = z.enum([
 
 export const threadListSortBySchema = z.enum(["created", "updated"]);
 export const chatEngineSchema = z.enum(CHAT_ENGINES);
+export const workspaceKindSchema = z.enum(WORKSPACE_KINDS);
 
 export const threadMessageRoleSchema = z.enum(["system", "user", "assistant"]);
 
@@ -111,6 +112,8 @@ export const threadCreateSchema = z.object({
 export const threadGetSchema = z.object({
   threadId: z.string().min(1),
 });
+
+export const quickChatListSchema = z.void().optional();
 
 export const threadRenameSchema = z.object({
   threadId: z.string().min(1),

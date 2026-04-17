@@ -27,6 +27,7 @@ import {
   SCRATCHPAD_TASK_STATUSES,
   SEARCH_PROVIDERS,
   THEME_PREFERENCES,
+  WORKSPACE_KINDS,
   THREAD_LIST_ORGANIZE_BY,
   THREAD_LIST_SORT_BY,
   THREAD_PLAN_AUDIENCES,
@@ -167,6 +168,7 @@ export const workspaces = sqliteTable(
       .$defaultFn(() => createId()),
     userId: text("user_id").notNull(),
     name: text("name").notNull(),
+    kind: text("kind", { enum: WORKSPACE_KINDS }).notNull().default("project"),
     rootPath: text("root_path"),
     description: text("description"),
     permissionModeOverride: text("permission_mode_override", {
@@ -190,6 +192,11 @@ export const workspaces = sqliteTable(
   (table) => [
     index("workspace_user_id_idx").on(table.userId),
     index("workspace_user_id_archived_idx").on(table.userId, table.isArchived),
+    index("workspace_user_kind_archived_idx").on(
+      table.userId,
+      table.kind,
+      table.isArchived,
+    ),
   ],
 );
 

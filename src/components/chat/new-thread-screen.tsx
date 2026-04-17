@@ -49,16 +49,27 @@ import { type DraftProjectMode } from "./draft-thread-project-mode";
 
 type NewThreadScreenProps = {
   threadId?: string;
+  variant?: "project" | "quick";
 };
 
-export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
+export function NewThreadScreen({
+  threadId,
+  variant = "quick",
+}: NewThreadScreenProps) {
   const router = useRouter();
   const { navigateToThread } = useShell();
   const utils = api.useUtils();
+  const isQuickChat = variant === "quick";
   const currentWorkspace = api.workspaces.getCurrent.useQuery(undefined, {
+    enabled: !isQuickChat,
+    staleTime: 30_000,
+  });
+  const quickChatWorkspace = api.workspaces.getQuickChat.useQuery(undefined, {
+    enabled: isQuickChat,
     staleTime: 30_000,
   });
   const workspaces = api.workspaces.list.useQuery(undefined, {
+    enabled: !isQuickChat,
     staleTime: 30_000,
   });
   const [isWorkspaceMenuOpen, setIsWorkspaceMenuOpen] = useState(false);
@@ -114,6 +125,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
               id: nextWorkspace.id,
               isArchived: false,
               isExpanded: nextWorkspace.isExpanded,
+              kind: nextWorkspace.kind,
               name: nextWorkspace.name,
               permissionModeOverride:
                 nextWorkspace.permissionModeOverride ?? null,
@@ -154,6 +166,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         id: workspace.id,
         isArchived: workspace.isArchived,
         isExpanded: workspace.isExpanded,
+        kind: workspace.kind,
         name: workspace.name,
         permissionModeOverride: workspace.permissionModeOverride,
         rootPath: workspace.rootPath,
@@ -173,6 +186,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             id: workspace.id,
             isExpanded: workspace.isExpanded,
             isSelected: true,
+            kind: workspace.kind,
             latestThreadUpdatedAt: null,
             name: workspace.name,
             permissionModeOverride: workspace.permissionModeOverride,
@@ -193,7 +207,9 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
     },
   });
 
-  const selectedWorkspace = currentWorkspace.data;
+  const selectedWorkspace = isQuickChat
+    ? quickChatWorkspace.data
+    : currentWorkspace.data;
   const handleCreateWorkspace = useCallback(() => {
     void (async () => {
       try {
@@ -254,7 +270,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         workspaceId: selectedWorkspace?.id,
       });
     },
-    [draftThreadId, selectedWorkspace?.id, utils],
+    [draftThreadId, selectedWorkspace?.id, selectedWorkspace?.kind, utils],
   );
 
   const chat = useThreadChat({
@@ -289,13 +305,14 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   const hasMessages = messages.length > 0;
   const isBusy = status === "submitted" || status === "streaming";
   const visibleChatError = chatError ?? errorMessage;
-  const pageActions = selectedWorkspace ? (
-    <ThreadRepoActions
-      threadId={draftThreadId}
-      workspaceId={selectedWorkspace.id}
-      workspaceRootPath={selectedWorkspace.rootPath}
-    />
-  ) : undefined;
+  const pageActions =
+    selectedWorkspace && !isQuickChat ? (
+      <ThreadRepoActions
+        threadId={draftThreadId}
+        workspaceId={selectedWorkspace.id}
+        workspaceRootPath={selectedWorkspace.rootPath}
+      />
+    ) : undefined;
   const threadDetailsQuery = api.threads.get.useQuery(
     { threadId: draftThreadId },
     {
@@ -371,10 +388,21 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         threadId: draftThreadId,
         utils,
         workspaceId: selectedWorkspace?.id,
+        workspaceKind: selectedWorkspace?.kind,
       });
       void utils.threads.list.invalidate();
+      if (isQuickChat) {
+        void utils.threads.listQuickChats.invalidate();
+      }
     }
-  }, [draftThreadId, selectedWorkspace?.id, status, utils]);
+  }, [
+    draftThreadId,
+    isQuickChat,
+    selectedWorkspace?.id,
+    selectedWorkspace?.kind,
+    status,
+    utils,
+  ]);
 
   useEffect(() => {
     void utils.threads.search.invalidate();
@@ -442,6 +470,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             createdAt: selectedWorkspace.createdAt,
             description: selectedWorkspace.description,
             id: selectedWorkspace.id,
+            kind: selectedWorkspace.kind,
             name: selectedWorkspace.name,
             permissionModeOverride:
               selectedWorkspace.permissionModeOverride ?? null,
@@ -591,8 +620,11 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         threadMode,
       });
       void utils.threads.list.invalidate();
+      if (isQuickChat) {
+        void utils.threads.listQuickChats.invalidate();
+      }
     },
-    [queueFollowUp, utils.threads.list],
+    [isQuickChat, queueFollowUp, utils.threads.list],
   );
 
   const handleSteerFollowUp = useCallback(
@@ -629,8 +661,11 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
         threadMode,
       });
       void utils.threads.list.invalidate();
+      if (isQuickChat) {
+        void utils.threads.listQuickChats.invalidate();
+      }
     },
-    [steerFollowUp, utils.threads.list],
+    [isQuickChat, steerFollowUp, utils.threads.list],
   );
 
   const handleStartPlanImplementation = useCallback(() => {
@@ -910,7 +945,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
                 repoThreadId={
                   draftThreadInitialized || threadId ? draftThreadId : undefined
                 }
-                showBranchSwitcher
+                showBranchSwitcher={!isQuickChat}
                 status={status}
                 threadId={draftThreadId}
                 threadSelection={resolvedThreadSelection}
@@ -929,7 +964,11 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
   }
 
   return (
-    <PageWrapper actions={pageActions} title="New Thread" flush>
+    <PageWrapper
+      actions={pageActions}
+      title={isQuickChat ? "New Chat" : "New Project Thread"}
+      flush
+    >
       <div className="sentinel-scroll-shell h-full min-h-0">
         <div className="sentinel-scroll-area flex h-full flex-col">
           <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-6">
@@ -939,117 +978,124 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
             />
 
             <h2 className="text-2xl font-medium text-foreground">
-              What can I help you with?
+              {isQuickChat
+                ? "What can I help you with?"
+                : "What project do you want to work in?"}
             </h2>
+            {isQuickChat ? (
+              quickChatWorkspace.isLoading ? (
+                <Spinner color="current" size="sm" />
+              ) : null
+            ) : (
+              <div className="relative" ref={workspaceMenuRef}>
+                <button
+                  className="flex cursor-pointer items-center gap-1.5 disabled:opacity-40"
+                  disabled={
+                    archiveDraftThread.isPending ||
+                    createWorkspace.isPending ||
+                    discardPreparedDraftWorktree.isPending ||
+                    selectWorkspace.isPending
+                  }
+                  onClick={() => setIsWorkspaceMenuOpen((open) => !open)}
+                  type="button"
+                >
+                  {currentWorkspace.isLoading ? (
+                    <Spinner color="current" size="sm" />
+                  ) : (
+                    <span className="max-w-[240px] truncate text-lg font-medium text-muted">
+                      {selectedWorkspace?.name ?? "Choose workspace"}
+                    </span>
+                  )}
+                  <HugeiconsIcon
+                    className={`text-muted transition-transform ${isWorkspaceMenuOpen ? "" : "rotate-180"}`}
+                    color="currentColor"
+                    icon={ArrowUp01Icon}
+                    size={14}
+                    strokeWidth={2}
+                  />
+                </button>
 
-            <div className="relative" ref={workspaceMenuRef}>
-              <button
-                className="flex cursor-pointer items-center gap-1.5 disabled:opacity-40"
-                disabled={
-                  archiveDraftThread.isPending ||
-                  createWorkspace.isPending ||
-                  discardPreparedDraftWorktree.isPending ||
-                  selectWorkspace.isPending
-                }
-                onClick={() => setIsWorkspaceMenuOpen((open) => !open)}
-                type="button"
-              >
-                {currentWorkspace.isLoading ? (
-                  <Spinner color="current" size="sm" />
-                ) : (
-                  <span className="max-w-[240px] truncate text-lg font-medium text-muted">
-                    {selectedWorkspace?.name ?? "Choose workspace"}
-                  </span>
-                )}
-                <HugeiconsIcon
-                  className={`text-muted transition-transform ${isWorkspaceMenuOpen ? "" : "rotate-180"}`}
-                  color="currentColor"
-                  icon={ArrowUp01Icon}
-                  size={14}
-                  strokeWidth={2}
-                />
-              </button>
-
-              <AnimatePresence>
-                {isWorkspaceMenuOpen && (
-                  <motion.div
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    className="absolute left-1/2 top-10 z-[200] max-h-64 w-[220px] -translate-x-1/2 overflow-y-auto rounded-3xl border border-separator/50 bg-surface p-1.5 shadow-overlay"
-                    exit={{ opacity: 0, scale: 0.97, y: -6 }}
-                    initial={{ opacity: 0, scale: 0.97, y: -6 }}
-                    transition={{
-                      duration: 0.15,
-                      ease: [0.22, 1, 0.36, 1],
-                    }}
-                  >
-                    <p className="px-2.5 pb-1.5 pt-1 text-xs text-muted">
-                      Select your project
-                    </p>
-                    <ScrollShadow className="max-h-40 pb-2">
-                      {(workspaces.data ?? []).map((workspace) => {
-                        const isSelected =
-                          workspace.id === selectedWorkspace?.id;
-                        return (
-                          <button
-                            className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-sm transition-colors ${
-                              isSelected
-                                ? "text-foreground"
-                                : "text-muted hover:bg-default hover:text-foreground"
-                            }`}
-                            key={workspace.id}
-                            onClick={() => {
-                              void handleWorkspaceSelect(workspace.id);
-                            }}
-                            type="button"
-                          >
-                            <HugeiconsIcon
-                              className="shrink-0"
-                              color="currentColor"
-                              icon={Folder01Icon}
-                              size={16}
-                              strokeWidth={1.5}
-                            />
-                            <span className="min-w-0 truncate">
-                              {workspace.name}
-                            </span>
-                            {isSelected && (
-                              <HugeiconsIcon
-                                className="ml-auto shrink-0 text-foreground"
-                                color="currentColor"
-                                icon={Tick02Icon}
-                                size={16}
-                                strokeWidth={2}
-                              />
-                            )}
-                          </button>
-                        );
-                      })}
-                    </ScrollShadow>
-
-                    <div className="mx-2 my-1 h-px bg-separator" />
-
-                    <button
-                      className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-sm text-muted transition-colors hover:bg-default hover:text-foreground disabled:opacity-40"
-                      disabled={createWorkspace.isPending}
-                      onClick={() => {
-                        setIsWorkspaceMenuOpen(false);
-                        handleCreateWorkspace();
+                <AnimatePresence>
+                  {isWorkspaceMenuOpen && (
+                    <motion.div
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      className="absolute left-1/2 top-10 z-[200] max-h-64 w-[220px] -translate-x-1/2 overflow-y-auto rounded-3xl border border-separator/50 bg-surface p-1.5 shadow-overlay"
+                      exit={{ opacity: 0, scale: 0.97, y: -6 }}
+                      initial={{ opacity: 0, scale: 0.97, y: -6 }}
+                      transition={{
+                        duration: 0.15,
+                        ease: [0.22, 1, 0.36, 1],
                       }}
-                      type="button"
                     >
-                      <HugeiconsIcon
-                        className="shrink-0"
-                        color="currentColor"
-                        icon={FolderAddIcon}
-                        size={16}
-                        strokeWidth={1.5}
-                      />
-                      <span>Add new project</span>
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+                      <p className="px-2.5 pb-1.5 pt-1 text-xs text-muted">
+                        Select your project
+                      </p>
+                      <ScrollShadow className="max-h-40 pb-2">
+                        {(workspaces.data ?? []).map((workspace) => {
+                          const isSelected =
+                            workspace.id === selectedWorkspace?.id;
+                          return (
+                            <button
+                              className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-sm transition-colors ${
+                                isSelected
+                                  ? "text-foreground"
+                                  : "text-muted hover:bg-default hover:text-foreground"
+                              }`}
+                              key={workspace.id}
+                              onClick={() => {
+                                void handleWorkspaceSelect(workspace.id);
+                              }}
+                              type="button"
+                            >
+                              <HugeiconsIcon
+                                className="shrink-0"
+                                color="currentColor"
+                                icon={Folder01Icon}
+                                size={16}
+                                strokeWidth={1.5}
+                              />
+                              <span className="min-w-0 truncate">
+                                {workspace.name}
+                              </span>
+                              {isSelected && (
+                                <HugeiconsIcon
+                                  className="ml-auto shrink-0 text-foreground"
+                                  color="currentColor"
+                                  icon={Tick02Icon}
+                                  size={16}
+                                  strokeWidth={2}
+                                />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </ScrollShadow>
+
+                      <div className="mx-2 my-1 h-px bg-separator" />
+
+                      <button
+                        className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-sm text-muted transition-colors hover:bg-default hover:text-foreground disabled:opacity-40"
+                        disabled={createWorkspace.isPending}
+                        onClick={() => {
+                          setIsWorkspaceMenuOpen(false);
+                          handleCreateWorkspace();
+                        }}
+                        type="button"
+                      >
+                        <HugeiconsIcon
+                          className="shrink-0"
+                          color="currentColor"
+                          icon={FolderAddIcon}
+                          size={16}
+                          strokeWidth={1.5}
+                        />
+                        <span>Add new project</span>
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
           </div>
 
           <div className="pointer-events-none sticky bottom-0 z-50 mx-auto w-full max-w-2xl px-6 pb-3 pt-2">
@@ -1075,7 +1121,7 @@ export function NewThreadScreen({ threadId }: NewThreadScreenProps) {
               persistThreadSelection={draftThreadInitialized}
               queuedFollowUps={queuedFollowUps}
               repoThreadId={draftThreadInitialized ? draftThreadId : undefined}
-              showBranchSwitcher
+              showBranchSwitcher={!isQuickChat}
               status={status}
               threadId={draftThreadId}
               threadSelection={draftThreadSelection}

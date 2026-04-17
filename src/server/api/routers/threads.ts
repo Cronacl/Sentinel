@@ -3,6 +3,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import {
+  quickChatListSchema,
   threadArchiveSchema,
   threadCreateSchema,
   threadGetSchema,
@@ -36,8 +37,9 @@ import {
 
 import {
   getOwnedThreadOrThrow,
+  getOwnedProjectWorkspaceOrThrow,
   getOwnedSubagentThreadOrThrow,
-  getOwnedWorkspaceOrThrow,
+  getOrCreateQuickChatWorkspace,
   getThreadListSettings,
 } from "./workspace-thread-helpers";
 import {
@@ -65,6 +67,7 @@ const workspaceSelect = {
   createdAt: true,
   description: true,
   id: true,
+  kind: true,
   name: true,
   permissionModeOverride: true,
   rootPath: true,
@@ -125,6 +128,7 @@ async function buildThreadDetails(
       createdAt: thread.workspace.createdAt,
       description: thread.workspace.description,
       id: thread.workspace.id,
+      kind: thread.workspace.kind,
       name: thread.workspace.name,
       permissionModeOverride: thread.workspace.permissionModeOverride,
       rootPath: thread.workspace.rootPath,
@@ -140,7 +144,7 @@ export const threadsRouter = createTRPCRouter({
       const settings = getThreadListSettings(ctx.user, input);
 
       if (settings.workspaceId) {
-        await getOwnedWorkspaceOrThrow(ctx, settings.workspaceId);
+        await getOwnedProjectWorkspaceOrThrow(ctx, settings.workspaceId);
       }
 
       if (settings.organizeBy === "workspace") {
@@ -151,6 +155,7 @@ export const threadsRouter = createTRPCRouter({
                 ? eq(workspaces.id, settings.workspaceId)
                 : undefined,
               eq(workspaces.isArchived, false),
+              eq(workspaces.kind, "project"),
               eq(workspaces.userId, ctx.session.user.id),
             ].filter(Boolean),
           ),
@@ -186,6 +191,7 @@ export const threadsRouter = createTRPCRouter({
               createdAt: workspace.createdAt,
               description: workspace.description,
               id: workspace.id,
+              kind: workspace.kind,
               name: workspace.name,
               permissionModeOverride: workspace.permissionModeOverride,
               rootPath: workspace.rootPath,
@@ -220,10 +226,35 @@ export const threadsRouter = createTRPCRouter({
       });
 
       return {
-        items: items.map(withLinkedPullRequest),
+        items: items
+          .filter((item) => item.workspace.kind === "project")
+          .map(withLinkedPullRequest),
         organizeBy: settings.organizeBy,
         sortBy: settings.sortBy,
       };
+    }),
+
+  listQuickChats: protectedProcedure
+    .input(quickChatListSchema)
+    .query(async ({ ctx }) => {
+      const workspace = await getOrCreateQuickChatWorkspace(ctx);
+      const items = await ctx.db.query.threads.findMany({
+        where: and(
+          isNull(threads.archivedAt),
+          eq(threads.visibility, "visible"),
+          eq(threads.userId, ctx.session.user.id),
+          eq(threads.workspaceId, workspace.id),
+        ),
+        orderBy: (threads, { desc }) => [desc(threads.updatedAt)],
+        columns: threadSelect,
+        with: {
+          workspace: {
+            columns: workspaceSelect,
+          },
+        },
+      });
+
+      return items.map(withLinkedPullRequest);
     }),
 
   create: protectedProcedure
@@ -238,7 +269,7 @@ export const threadsRouter = createTRPCRouter({
         });
       }
 
-      const workspace = await getOwnedWorkspaceOrThrow(ctx, workspaceId);
+      const workspace = await getOwnedProjectWorkspaceOrThrow(ctx, workspaceId);
       if (workspace.isArchived) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -246,6 +277,37 @@ export const threadsRouter = createTRPCRouter({
         });
       }
 
+      const [thread] = ctx.db
+        .insert(threads)
+        .values({
+          chatEngine: input.engine,
+          ...(input.threadId ? { id: input.threadId } : {}),
+          mode: input.mode,
+          summary: input.summary.trim() || null,
+          title: input.title.trim(),
+          userId: ctx.session.user.id,
+          workspaceId: workspace.id,
+        })
+        .returning()
+        .all();
+
+      const result = await ctx.db.query.threads.findFirst({
+        where: eq(threads.id, thread!.id),
+        columns: threadSelect,
+        with: {
+          workspace: {
+            columns: workspaceSelect,
+          },
+        },
+      });
+
+      return result!;
+    }),
+
+  createQuickChat: protectedProcedure
+    .input(threadCreateSchema)
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await getOrCreateQuickChatWorkspace(ctx);
       const [thread] = ctx.db
         .insert(threads)
         .values({
@@ -376,6 +438,7 @@ export const threadsRouter = createTRPCRouter({
       });
 
       return sortThreadSearchResults(matchedThreads, normalizedQuery)
+        .filter((thread) => thread.workspace.kind === "project")
         .map(withLinkedPullRequest)
         .slice(0, 50);
     }),
