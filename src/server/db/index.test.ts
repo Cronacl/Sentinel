@@ -153,6 +153,7 @@ const CURRENT_WORKSPACE_COLUMNS = [
   { name: "id" },
   { name: "user_id" },
   { name: "name" },
+  { name: "kind" },
   { name: "root_path" },
   { name: "description" },
   { name: "permission_mode_override" },
