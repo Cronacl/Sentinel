@@ -2,6 +2,7 @@ import path from "node:path";
 import { z } from "zod";
 
 import { runCommand } from "@/lib/process/run-command";
+import { buildManagedExecutablePathValue } from "@/lib/runtime/platform-paths";
 import type { PermissionMode } from "@/lib/security";
 
 import { resolveToolPath } from "./paths";
@@ -130,6 +131,8 @@ export type GitInput = z.infer<typeof gitInputSchema>;
 export type GitOutput = z.infer<typeof gitOutputSchema>;
 
 async function runGit(args: string[], cwd: string) {
+  const managedPath = await buildManagedExecutablePathValue(process.env.PATH);
+
   return await runCommand({
     args,
     command: "git",
@@ -137,6 +140,7 @@ async function runGit(args: string[], cwd: string) {
     env: {
       ...process.env,
       GIT_TERMINAL_PROMPT: "0",
+      PATH: managedPath,
     },
   });
 }
