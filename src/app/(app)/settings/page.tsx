@@ -292,7 +292,7 @@ export default function GeneralSettingsPage() {
                     />
                   ) : null}
 
-                  <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-3 text-xs text-muted">
+                  <div className="rounded-xl border border-border/20 bg-background/70 px-4 py-3 text-xs text-muted">
                     Current policy:{" "}
                     {`compaction enabled once the estimated prompt reaches ${contextCompactionWindowPercent}% of the ${
                       contextCompactionUseFixedWindow

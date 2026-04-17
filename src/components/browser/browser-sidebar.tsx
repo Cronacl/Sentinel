@@ -61,8 +61,26 @@ type BrowserWebviewEvent = Event & {
 };
 
 const TAB_MOTION_TRANSITION = {
-  duration: 0.18,
-  ease: [0.22, 1, 0.36, 1] as const,
+  opacity: {
+    duration: 0.16,
+    ease: [0.32, 0.72, 0, 1] as const,
+  },
+  scale: {
+    duration: 0.22,
+    ease: [0.16, 1, 0.3, 1] as const,
+  },
+  width: {
+    duration: 0.24,
+    ease: [0.16, 1, 0.3, 1] as const,
+  },
+  x: {
+    duration: 0.22,
+    ease: [0.16, 1, 0.3, 1] as const,
+  },
+  layout: {
+    duration: 0.24,
+    ease: [0.16, 1, 0.3, 1] as const,
+  },
 };
 
 function hasWebviewNavigationApi(
@@ -361,31 +379,28 @@ function BrowserTabButton({
     <motion.div
       animate={{ opacity: 1, scale: 1, width: "auto", x: 0 }}
       className="shrink-0 overflow-hidden"
-      exit={{ opacity: 0, scale: 0.98, width: 0, x: -6 }}
-      initial={{ opacity: 0, scale: 0.98, width: 0, x: 6 }}
+      exit={{ opacity: 0, scale: 0.94, width: 0, x: -10 }}
+      initial={{ opacity: 0, scale: 0.94, width: 0, x: 10 }}
       layout="position"
       style={{ originX: 0.5 }}
       transition={TAB_MOTION_TRANSITION}
     >
       <div
-        className={`group relative flex min-w-0 max-w-40 items-center rounded-[14px] px-0.5 py-0.5 transition-[max-width,background-color,color] duration-200 ease-out hover:max-w-52 focus-within:max-w-52 ${
+        className={`group relative flex min-h-[24px] min-w-0 max-w-28 items-center rounded-full border p-[1px] px-[4px] transition-[background-color,color,border-color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           isActive
-            ? "bg-default dark:bg-surface/70 text-foreground"
-            : "bg-transparent text-muted hover:bg-content1/50 hover:text-foreground dark:hover:bg-surface/20"
+            ? "border-border bg-foreground/[0.04] text-foreground dark:bg-foreground/[0.06]"
+            : "border-transparent text-muted hover:bg-foreground/[0.02] hover:text-foreground dark:hover:bg-foreground/[0.03]"
         }`}
       >
-        {isActive ? (
-          <div className="pointer-events-none absolute inset-y-1 left-0 w-px bg-default dark:bg-surface/70" />
-        ) : null}
         <button
           aria-selected={isActive}
-          className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-[12px] px-2 py-0.5 pr-2 text-center transition-[padding] duration-200 ease-out group-hover:pr-7 group-focus-within:pr-7"
+          className="flex h-[16px] min-w-0 flex-1 items-center justify-start gap-1 rounded-full px-[4px] py-0 text-left transition-[padding,color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
           onClick={onSelect}
           style={{ fontFamily: "var(--font-display)" }}
           type="button"
         >
           {faviconUrl ? (
-            <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-content2/80 text-[9px] text-foreground/80">
+            <span className="flex h-2.5 w-2.5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-content2/80 text-[9px] text-foreground/80">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 alt=""
@@ -395,13 +410,17 @@ function BrowserTabButton({
               />
             </span>
           ) : null}
-          <span className="min-w-0 truncate text-xs font-medium">
+          <span className="min-w-0 truncate text-[10px] font-medium leading-[1.15]">
             {getTabTitle(tab)}
           </span>
         </button>
         <button
           aria-label={`Close tab ${getTabTitle(tab)}`}
-          className="absolute top-1/2 right-1 translate-x-1 -translate-y-1/2 rounded-sm p-1 text-muted opacity-0 transition-[opacity,transform,background-color,color] duration-200 ease-out hover:bg-content2 hover:text-foreground group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100"
+          className={`flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full transition-[opacity,background-color,color,transform] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-foreground/[0.05] hover:text-foreground active:scale-95 ${
+            isActive
+              ? "opacity-100 text-foreground/70"
+              : "opacity-0 text-muted group-hover:opacity-100 group-focus-within:opacity-100"
+          }`}
           onClick={onClose}
           type="button"
         >
@@ -565,7 +584,7 @@ export function BrowserSidebar() {
   return (
     <div className="flex h-full w-full flex-col bg-background">
       <header
-        className="app-region-drag shrink-0 border-b border-border/40 bg-background"
+        className="app-region-drag shrink-0 border-b border-border/40 bg-background py-0.5"
         style={browserChromeStyle}
       >
         <div className="flex min-h-9 items-center gap-2 px-2 py-1">
@@ -590,26 +609,26 @@ export function BrowserSidebar() {
                   />
                 ))}
               </AnimatePresence>
-              <Tooltip.Root delay={150}>
-                <Button
-                  aria-label="New tab"
-                  className="h-7 w-7 min-h-7 min-w-7 shrink-0 rounded-sm bg-transparent"
-                  isIconOnly
-                  onPress={handleNewTab}
-                  size="sm"
-                  variant="ghost"
-                >
-                  <HugeiconsIcon
-                    color="currentColor"
-                    icon={Add01Icon}
-                    size={14}
-                  />
-                </Button>
-                <Tooltip.Content offset={10}>New tab</Tooltip.Content>
-              </Tooltip.Root>
             </motion.div>
           </ScrollShadow>
-          <div className="app-region-no-drag">
+          <div className="app-region-no-drag flex items-center gap-1">
+            <Tooltip.Root delay={150}>
+              <Button
+                aria-label="New tab"
+                className="size-6 shrink-0"
+                isIconOnly
+                onPress={handleNewTab}
+                size="sm"
+                variant="tertiary"
+              >
+                <HugeiconsIcon
+                  color="currentColor"
+                  icon={Add01Icon}
+                  size={13}
+                />
+              </Button>
+              <Tooltip.Content offset={10}>New tab</Tooltip.Content>
+            </Tooltip.Root>
             <CloseButton
               aria-label="Close browser sidebar"
               className="shrink-0"

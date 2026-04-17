@@ -6,7 +6,7 @@ import {
   FolderTreeIcon,
   CircleIcon,
   Delete02Icon,
-  LaptopProgrammingIcon,
+  LaptopIcon,
   Cancel01Icon,
   Shield01Icon,
 } from "@hugeicons/core-free-icons";
@@ -141,7 +141,7 @@ function ScratchpadRow({
           </span>
           {task.status !== "completed" && task.progressText ? (
             <span
-              className={`min-w-0 truncate text-[13px] leading-none ${
+              className={`min-w-0 truncate text-xs ${
                 task.status === "running"
                   ? "sentinel-thinking-shimmer"
                   : task.status === "blocked"
@@ -399,11 +399,7 @@ function ScratchpadToolbar({
             <HugeiconsIcon
               className="text-foreground/30"
               color="currentColor"
-              icon={
-                projectMode === "worktree"
-                  ? FolderTreeIcon
-                  : LaptopProgrammingIcon
-              }
+              icon={projectMode === "worktree" ? FolderTreeIcon : LaptopIcon}
               size={11}
               strokeWidth={1.8}
             />

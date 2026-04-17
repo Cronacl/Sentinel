@@ -5,7 +5,7 @@ import {
   ArrowDown01Icon,
   FolderTreeIcon,
   GitBranchIcon,
-  LaptopProgrammingIcon,
+  LaptopIcon,
   Shield01Icon,
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
@@ -243,9 +243,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
     repoContextQuery.data?.branchResumeStatus ?? "matched";
   const branchResumeReason = repoContextQuery.data?.branchResumeReason ?? null;
   const projectModeLabel = isUsingWorktree ? "Worktree" : "Local";
-  const projectModeIcon = isUsingWorktree
-    ? FolderTreeIcon
-    : LaptopProgrammingIcon;
+  const projectModeIcon = isUsingWorktree ? FolderTreeIcon : LaptopIcon;
   const isProjectModeLoading =
     repoContextQuery.isLoading ||
     resumeThreadBranchMutation.isPending ||
@@ -690,10 +688,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
               </Button>
             </Popover.Trigger>
 
-            <Popover.Content
-              className="w-64 border border-border/60 bg-overlay shadow-overlay"
-              placement="top start"
-            >
+            <Popover.Content className="w-64 " placement="top start">
               <Popover.Dialog className="flex flex-col gap-1 p-1">
                 {hasDraftProjectMode ? (
                   <>
@@ -852,10 +847,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
             </Button>
           </Popover.Trigger>
 
-          <Popover.Content
-            className="w-56 border border-border/60 bg-overlay shadow-overlay"
-            placement="top start"
-          >
+          <Popover.Content className="w-56 " placement="top start">
             <Popover.Dialog className="flex flex-col gap-1 p-1">
               <button
                 className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
@@ -962,10 +954,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
               </Button>
             </Popover.Trigger>
 
-            <Popover.Content
-              className="w-64 border border-border/60 bg-overlay p-0 shadow-overlay"
-              placement="top end"
-            >
+            <Popover.Content className="w-64 " placement="top end">
               <Popover.Dialog className="p-2">
                 {branchMode === "list" ? (
                   <div className="flex flex-col gap-3">

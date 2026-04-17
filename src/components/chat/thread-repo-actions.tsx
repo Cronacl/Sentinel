@@ -1570,10 +1570,10 @@ export function ThreadRepoActions({
                           key={option.id}
                           className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors ${
                             isSelected
-                              ? "bg-content2 text-foreground bg-background"
+                              ? "bg-content2 text-foreground bg-surface"
                               : isOptionDisabled
                                 ? "cursor-not-allowed text-muted/50"
-                                : "text-muted hover:bg-content1 hover:text-foreground"
+                                : "text-muted hover:bg-surface/50 hover:text-foreground"
                           }`}
                           disabled={isOptionDisabled}
                           onClick={() => setCommitNextStep(option.id)}

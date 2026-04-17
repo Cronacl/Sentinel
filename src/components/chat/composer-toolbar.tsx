@@ -104,7 +104,7 @@ export const ComposerToolbar = memo(function ComposerToolbar({
         >
           <Popover.Trigger>
             <Button
-              className="h-8 w-8 min-w-0 rounded-xl border border-border/50 bg-surface p-0 text-muted transition-colors hover:text-foreground dark:bg-background"
+              className="h-8 w-8 min-w-0 rounded-2xl border border-border dark:border-border/20 bg-surface dark:bg-background/80 p-0 text-muted transition-colors hover:text-foreground dark:bg-background"
               isDisabled={!hasWorkspace}
               size="sm"
               variant="ghost"

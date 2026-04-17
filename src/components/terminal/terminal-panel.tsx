@@ -6,7 +6,7 @@ import {
   ComputerTerminal01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, CloseButton } from "@heroui/react";
+import { Button, CloseButton, ScrollShadow } from "@heroui/react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   type PointerEvent as ReactPointerEvent,
@@ -30,6 +30,28 @@ import {
 } from "./terminal-store";
 
 const RESIZE_HANDLE_HEIGHT = 12;
+const TAB_MOTION_TRANSITION = {
+  opacity: {
+    duration: 0.16,
+    ease: [0.32, 0.72, 0, 1] as const,
+  },
+  scale: {
+    duration: 0.22,
+    ease: [0.16, 1, 0.3, 1] as const,
+  },
+  width: {
+    duration: 0.24,
+    ease: [0.16, 1, 0.3, 1] as const,
+  },
+  x: {
+    duration: 0.22,
+    ease: [0.16, 1, 0.3, 1] as const,
+  },
+  layout: {
+    duration: 0.24,
+    ease: [0.16, 1, 0.3, 1] as const,
+  },
+};
 
 export function TerminalPanel() {
   const { activeSessionId, isOpen, panelHeight, sessions } = useTerminalState(
@@ -141,63 +163,96 @@ export function TerminalPanel() {
 
             {/* Tab bar */}
             <div className="flex items-center gap-1.5 border-b border-separator/30 px-2 py-1.5">
-              <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto">
-                {sessions.map((session) => {
-                  const isActive = session.id === activeSession?.id;
+              <ScrollShadow
+                className="min-w-0 flex-1"
+                hideScrollBar
+                orientation="horizontal"
+              >
+                <motion.div
+                  className="flex min-w-max items-center gap-1 pr-2"
+                  layout
+                  transition={TAB_MOTION_TRANSITION}
+                >
+                  <AnimatePresence initial={false} mode="popLayout">
+                    {sessions.map((session) => {
+                      const isActive = session.id === activeSession?.id;
 
-                  return (
-                    <div
-                      key={session.id}
-                      className={`group flex min-w-0 items-center gap-0.5 rounded-md px-2 py-1 transition-colors ${
-                        isActive
-                          ? "bg-foreground/[0.06] text-foreground"
-                          : "text-muted hover:bg-foreground/[0.03] hover:text-foreground"
-                      }`}
-                    >
-                      <button
-                        className="flex min-w-0 items-center gap-1.5 text-left"
-                        onClick={() => setActiveTerminalSession(session.id)}
-                        type="button"
-                      >
-                        <HugeiconsIcon
-                          color="currentColor"
-                          icon={ComputerTerminal01Icon}
-                          size={13}
-                          strokeWidth={1.8}
-                        />
-                        <span className="truncate text-xs font-medium">
-                          {session.label}
-                        </span>
-                        {session.exited ? (
-                          <span className="text-[10px] text-danger/70">
-                            exited
-                          </span>
-                        ) : null}
-                      </button>
+                      return (
+                        <motion.div
+                          key={session.id}
+                          animate={{
+                            opacity: 1,
+                            scale: 1,
+                            width: "auto",
+                            x: 0,
+                          }}
+                          className="shrink-0 overflow-hidden"
+                          exit={{ opacity: 0, scale: 0.94, width: 0, x: -10 }}
+                          initial={{ opacity: 0, scale: 0.94, width: 0, x: 10 }}
+                          layout="position"
+                          style={{ originX: 0.5 }}
+                          transition={TAB_MOTION_TRANSITION}
+                        >
+                          <div
+                            className={`group relative flex min-h-[24px] min-w-0 max-w-36 items-center rounded-full p-[1px] transition-[background-color,color,border-color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                              isActive
+                                ? "border border-border bg-foreground/[0.04] text-foreground dark:bg-foreground/[0.06]"
+                                : "border border-transparent text-muted hover:bg-foreground/[0.02] hover:text-foreground dark:hover:bg-foreground/[0.03]"
+                            }`}
+                          >
+                            <button
+                              className="flex h-[20px] min-w-0 flex-1 items-center justify-start gap-1 rounded-full px-[4px] py-0 text-left transition-[color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                              onClick={() =>
+                                setActiveTerminalSession(session.id)
+                              }
+                              type="button"
+                            >
+                              <HugeiconsIcon
+                                color="currentColor"
+                                icon={ComputerTerminal01Icon}
+                                size={11}
+                                strokeWidth={1.9}
+                              />
+                              <span className="truncate text-[10px] font-medium leading-[1.15]">
+                                {session.label}
+                              </span>
+                              {session.exited ? (
+                                <span className="shrink-0 text-[9px] uppercase tracking-[0.08em] text-danger/70">
+                                  exited
+                                </span>
+                              ) : null}
+                            </button>
 
-                      <button
-                        className="ml-0.5 rounded p-0.5 text-muted opacity-0 transition-all hover:text-foreground group-hover:opacity-100"
-                        disabled={closingSessionId === session.id}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void handleCloseSession(session.id);
-                        }}
-                        type="button"
-                      >
-                        <HugeiconsIcon
-                          color="currentColor"
-                          icon={Cancel01Icon}
-                          size={11}
-                          strokeWidth={2}
-                        />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+                            <button
+                              className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full transition-[opacity,background-color,color,transform] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-foreground/[0.05] hover:text-foreground active:scale-95 ${
+                                isActive
+                                  ? "text-foreground/70 opacity-100"
+                                  : "text-muted opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+                              }`}
+                              disabled={closingSessionId === session.id}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleCloseSession(session.id);
+                              }}
+                              type="button"
+                            >
+                              <HugeiconsIcon
+                                color="currentColor"
+                                icon={Cancel01Icon}
+                                size={10}
+                                strokeWidth={2}
+                              />
+                            </button>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </AnimatePresence>
+                </motion.div>
+              </ScrollShadow>
 
               <Button
-                className="shrink-0 h-6 min-w-6 gap-1 px-1.5"
+                className="size-6 shrink-0"
                 isDisabled={!defaultCwd}
                 isPending={isCreatingSession}
                 onPress={() => {

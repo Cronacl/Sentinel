@@ -89,7 +89,7 @@ export function ModelSelector({
       <Popover.Root isOpen={modelOpen} onOpenChange={setModelOpen}>
         <Popover.Trigger>
           <Button
-            className="h-8 justify-between gap-1 rounded-xl border border-border/50 bg-background px-2.5 text-[13px] text-muted shadow-none hover:bg-default hover:text-foreground disabled:opacity-30"
+            className="h-8 justify-between gap-1 rounded-2xl border border-border dark:border-border/20 bg-surface dark:bg-background/80 px-2.5 text-[13px] text-muted shadow-none hover:bg-default hover:text-foreground disabled:opacity-30"
             isDisabled={!hasModels}
             size="sm"
             variant="ghost"
@@ -148,7 +148,7 @@ export function ModelSelector({
         <Popover.Root isOpen={reasoningOpen} onOpenChange={setReasoningOpen}>
           <Popover.Trigger>
             <Button
-              className="h-8 gap-1 rounded-xl border border-border/50 bg-background px-2.5 text-[13px] text-muted shadow-none hover:bg-default hover:text-foreground"
+              className="h-8 gap-1 rounded-2xl border border-border dark:border-border/20 bg-surface dark:bg-background/80 px-2.5 text-[13px] text-muted shadow-none hover:bg-default hover:text-foreground"
               size="sm"
               variant="ghost"
             >

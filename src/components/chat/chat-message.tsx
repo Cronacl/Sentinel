@@ -252,12 +252,7 @@ function MessageActionButton({
   return (
     <Tooltip.Root delay={150}>
       <Tooltip.Trigger>{button}</Tooltip.Trigger>
-      <Tooltip.Content
-        className="rounded-xl border border-border/60 bg-overlay px-2 py-1 text-xs shadow-overlay"
-        offset={10}
-      >
-        {tooltip}
-      </Tooltip.Content>
+      <Tooltip.Content offset={10}>{tooltip}</Tooltip.Content>
     </Tooltip.Root>
   );
 }

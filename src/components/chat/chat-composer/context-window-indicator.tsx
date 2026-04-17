@@ -107,11 +107,7 @@ export function ContextWindowIndicator({
         </button>
       </Tooltip.Trigger>
 
-      <Tooltip.Content
-        className="max-w-[280px] rounded-2xl border border-border/60 bg-overlay px-4 py-3 text-sm shadow-overlay"
-        offset={12}
-        placement="top"
-      >
+      <Tooltip.Content className="max-w-[280px] " offset={12} placement="top">
         <div className="space-y-2">
           <div>
             <p className="text-xs font-medium text-muted">

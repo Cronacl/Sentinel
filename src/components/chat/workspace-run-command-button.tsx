@@ -203,7 +203,7 @@ export function WorkspaceRunCommandButton({
       <Modal.Root state={modalState}>
         <Modal.Backdrop>
           <Modal.Container placement="center" size="sm">
-            <Modal.Dialog className="border-border/60 w-full border sm:max-w-[440px]">
+            <Modal.Dialog>
               <div>
                 <div className="flex items-start justify-between">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/40 bg-content1">

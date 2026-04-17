@@ -168,6 +168,7 @@ const MODE_LABELS: Record<RepoDiffSidebarMode, string> = {
   staged: "Staged",
   unstaged: "Unstaged",
 };
+const DIFF_BODY_REVEAL_DELAY_MS = 220;
 
 ensureSentinelDiffThemesRegistered();
 const EMPTY_SOURCE_FILES: RepoDiffSourceFile[] = [];
@@ -277,10 +278,7 @@ function IconActionButton({
           strokeWidth={strokeWidth}
         />
       </Button>
-      <Tooltip.Content
-        className="rounded-xl border border-border/60 bg-overlay px-2 py-1 text-xs shadow-overlay"
-        offset={10}
-      >
+      <Tooltip.Content className="rounded-xl" offset={10}>
         {ariaLabel}
       </Tooltip.Content>
     </Tooltip.Root>
@@ -375,13 +373,15 @@ function getCachedRenderableFile(args: {
 export function RepoDiffSidebar() {
   const desktop = getDesktopApi();
   const isDesktop = isDesktopRuntime();
-  const { close } = useRightSidebar();
+  const rightSidebar = useRightSidebar();
+  const { close } = rightSidebar;
   const utils = api.useUtils();
   const resolvedTheme = useResolvedTheme();
   const sidebarState = useRepoDiffSidebarState();
   const [openTargets, setOpenTargets] = useState<DesktopOpenTarget[]>([]);
   const [isLoadingTargets, setIsLoadingTargets] = useState(false);
   const [visibleFileCount, setVisibleFileCount] = useState(0);
+  const [isBodyReady, setIsBodyReady] = useState(false);
   const renderableFileCacheRef = useRef(new Map<string, RenderableDiffFile>());
 
   const threadId =
@@ -452,6 +452,21 @@ export function RepoDiffSidebar() {
       cancelled = true;
     };
   }, [desktop, repoRoot]);
+
+  useEffect(() => {
+    if (!(rightSidebar.isOpen && rightSidebar.panelId === "repo-diff")) {
+      setIsBodyReady(false);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setIsBodyReady(true);
+    }, DIFF_BODY_REVEAL_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [rightSidebar.isOpen, rightSidebar.panelId, threadId, workspaceId]);
 
   const preferredEditorTarget = useMemo(
     () => getPreferredEditorTarget(openTargets, preferredOpenTargetId),
@@ -731,7 +746,11 @@ export function RepoDiffSidebar() {
       </header>
 
       <div className="min-h-0 flex-1">
-        {diffPanelQuery.isPending && !diff ? (
+        {!isBodyReady ? (
+          <div className="flex h-full items-center justify-center px-6 text-sm text-muted">
+            <Spinner color="current" size="sm" />
+          </div>
+        ) : diffPanelQuery.isPending && !diff ? (
           <div className="flex h-full items-center justify-center px-6 text-sm text-muted">
             <Spinner color="current" size="sm" />
           </div>

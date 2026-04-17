@@ -226,7 +226,7 @@ samp {
 }
 
 [data-slot="modal-dialog"] {
-  background-color: var(--surface);
+  background-color: var(--background);
 }
 
 [data-sileo-toast] {

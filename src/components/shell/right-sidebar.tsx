@@ -1,5 +1,6 @@
 "use client";
 
+import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useMediaQuery } from "@/hooks/use-media-query";
@@ -15,6 +16,15 @@ const DRAWER_BREAKPOINT = "(max-width: 1024px)";
 const DESKTOP_MIN_WIDTH = 320;
 const DESKTOP_MAX_WIDTH = 920;
 const DESKTOP_BROWSER_MAX_WIDTH = 1180;
+const SIDEBAR_SPRING = {
+  duration: 0.28,
+  ease: [0.16, 1, 0.3, 1] as const,
+};
+const SIDEBAR_CONTENT_TRANSITION = {
+  duration: 0.22,
+  ease: [0.22, 1, 0.36, 1] as const,
+};
+const SIDEBAR_CLOSE_DELAY_MS = 280;
 
 export function RightSidebar() {
   const {
@@ -30,10 +40,13 @@ export function RightSidebar() {
     narrow: SIDEBAR_WIDTHS.narrow,
     wide: SIDEBAR_WIDTHS.wide,
   });
+  const closeTimeoutRef = useRef<number | null>(null);
   const [desktopWidth, setDesktopWidth] = useState(
     widthBySizeRef.current[rightSidebarSize],
   );
   const [isResizing, setIsResizing] = useState(false);
+  const [renderedContent, setRenderedContent] = useState(rightSidebarContent);
+  const [renderedSize, setRenderedSize] = useState(rightSidebarSize);
 
   const getMinDesktopWidth = useCallback(() => {
     if (rightSidebarPanelId === "browser") return 420;
@@ -66,12 +79,39 @@ export function RightSidebar() {
   );
 
   useEffect(() => {
-    const nextWidth = clampDesktopWidth(
-      widthBySizeRef.current[rightSidebarSize],
-    );
-    widthBySizeRef.current[rightSidebarSize] = nextWidth;
+    if (closeTimeoutRef.current !== null) {
+      window.clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+
+    if (rightSidebarContent !== null) {
+      setRenderedContent(rightSidebarContent);
+      setRenderedSize(rightSidebarSize);
+      return;
+    }
+
+    if (!rightSidebarOpen) {
+      closeTimeoutRef.current = window.setTimeout(() => {
+        setRenderedContent(null);
+        setRenderedSize("narrow");
+        closeTimeoutRef.current = null;
+      }, SIDEBAR_CLOSE_DELAY_MS);
+    }
+  }, [rightSidebarContent, rightSidebarOpen, rightSidebarSize]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current !== null) {
+        window.clearTimeout(closeTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const nextWidth = clampDesktopWidth(widthBySizeRef.current[renderedSize]);
+    widthBySizeRef.current[renderedSize] = nextWidth;
     setDesktopWidth(nextWidth);
-  }, [clampDesktopWidth, rightSidebarSize]);
+  }, [clampDesktopWidth, renderedSize]);
 
   useEffect(() => {
     if (isDrawerMode) {
@@ -81,14 +121,14 @@ export function RightSidebar() {
     const handleResize = () => {
       setDesktopWidth((current) => {
         const nextWidth = clampDesktopWidth(current);
-        widthBySizeRef.current[rightSidebarSize] = nextWidth;
+        widthBySizeRef.current[renderedSize] = nextWidth;
         return nextWidth;
       });
     };
 
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [clampDesktopWidth, isDrawerMode, rightSidebarSize]);
+  }, [clampDesktopWidth, isDrawerMode, renderedSize]);
 
   const resizeHandleProps = useMemo(
     () => ({
@@ -110,7 +150,7 @@ export function RightSidebar() {
         const handlePointerMove = (moveEvent: PointerEvent) => {
           const delta = startX - moveEvent.clientX;
           const nextWidth = clampDesktopWidth(startWidth + delta);
-          widthBySizeRef.current[rightSidebarSize] = nextWidth;
+          widthBySizeRef.current[renderedSize] = nextWidth;
           setDesktopWidth(nextWidth);
         };
 
@@ -132,70 +172,94 @@ export function RightSidebar() {
       desktopWidth,
       isDrawerMode,
       rightSidebarOpen,
-      rightSidebarSize,
+      renderedSize,
     ],
   );
 
   const sidebarWidth = isDrawerMode
-    ? SIDEBAR_WIDTHS[rightSidebarSize]
+    ? SIDEBAR_WIDTHS[renderedSize]
     : desktopWidth;
 
-  if (!rightSidebarContent) return null;
+  if (!renderedContent) return null;
 
   if (isDrawerMode) {
     return (
-      <>
-        {/* backdrop */}
-        <div
+      <AnimatePresence initial={false}>
+        <motion.div
           aria-hidden
-          className={`fixed inset-0 z-40 bg-black/40 transition-opacity duration-300 ${
-            rightSidebarOpen
-              ? "pointer-events-auto opacity-100"
-              : "pointer-events-none opacity-0"
-          }`}
+          animate={{
+            opacity: rightSidebarOpen ? 1 : 0,
+            pointerEvents: rightSidebarOpen ? "auto" : "none",
+          }}
+          className="fixed inset-0 z-40 bg-black/40"
+          initial={false}
           onClick={closeRightSidebar}
+          transition={SIDEBAR_CONTENT_TRANSITION}
         />
 
-        {/* drawer panel */}
-        <aside
-          className="bg-surface border-separator/20 ease-out-quart fixed top-0 right-0 z-50 flex h-dvh flex-col border-l shadow-xl transition-transform duration-300"
+        <motion.aside
+          animate={{
+            opacity: rightSidebarOpen ? 1 : 0.98,
+            x: rightSidebarOpen ? 0 : 24,
+          }}
+          className="bg-surface border-separator/20 fixed top-0 right-0 z-50 flex h-dvh flex-col border-l shadow-xl"
+          initial={false}
           style={{
             width: sidebarWidth,
             maxWidth: "90vw",
-            transform: rightSidebarOpen ? "translateX(0)" : `translateX(100%)`,
           }}
+          transition={SIDEBAR_SPRING}
         >
-          <div className="flex h-full flex-col">
+          <motion.div
+            animate={{
+              opacity: rightSidebarOpen ? 1 : 0,
+              x: rightSidebarOpen ? 0 : 8,
+            }}
+            className="flex h-full flex-col"
+            initial={false}
+            transition={SIDEBAR_CONTENT_TRANSITION}
+          >
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              {rightSidebarContent}
+              {renderedContent}
             </div>
-          </div>
-        </aside>
-      </>
+          </motion.div>
+        </motion.aside>
+      </AnimatePresence>
     );
   }
 
   return (
-    <aside
-      className={`border-separator/50 bg-surface relative flex h-full shrink-0 flex-col overflow-clip border-l ${
-        isResizing ? "" : "ease-out-quart transition-[width] duration-300"
-      }`}
-      style={{ width: rightSidebarOpen ? sidebarWidth : 0 }}
+    <motion.aside
+      animate={{
+        width: rightSidebarOpen ? sidebarWidth : 0,
+      }}
+      className="border-separator/50 bg-surface relative flex h-full shrink-0 flex-col overflow-clip border-l"
+      initial={false}
+      transition={isResizing ? { duration: 0 } : SIDEBAR_SPRING}
     >
       <div
         aria-hidden
-        className={`absolute inset-y-0 left-0 z-20 w-3 cursor-col-resize transition-opacity ${
+        className={`absolute inset-y-0 left-0 z-20 w-3 cursor-col-resize transition-opacity duration-200 ${
           rightSidebarOpen ? "opacity-100" : "pointer-events-none opacity-0"
         } ${isDrawerMode ? "pointer-events-none opacity-0" : ""}`}
         {...resizeHandleProps}
       >
         <div className="h-full w-px scale-x-50 bg-border/40 origin-left" />
       </div>
-      <div className="flex h-full flex-col" style={{ width: sidebarWidth }}>
+      <motion.div
+        animate={{
+          opacity: rightSidebarOpen ? 1 : 0,
+          x: rightSidebarOpen ? 0 : 10,
+        }}
+        className="flex h-full flex-col"
+        initial={false}
+        style={{ width: sidebarWidth }}
+        transition={isResizing ? { duration: 0 } : SIDEBAR_CONTENT_TRANSITION}
+      >
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {rightSidebarContent}
+          {renderedContent}
         </div>
-      </div>
-    </aside>
+      </motion.div>
+    </motion.aside>
   );
 }
