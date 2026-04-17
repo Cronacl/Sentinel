@@ -333,9 +333,13 @@ function TerminalOutput({ text }: { text: string }) {
         />
       </button>
       <ScrollShadow className="max-h-[200px] overflow-x-auto">
-        <div className="font-mono text-[11px] leading-[18px]">
+        <div className="min-w-0 font-mono text-[11px] leading-[18px]">
           {codeLines.map((line, idx) => (
-            <div key={idx} className="whitespace-pre pr-6">
+            <div
+              key={idx}
+              className="whitespace-pre-wrap pr-6"
+              style={{ overflowWrap: "anywhere" }}
+            >
               {syntaxLines[idx] ? (
                 syntaxLines[idx].map((seg, si) => (
                   <span

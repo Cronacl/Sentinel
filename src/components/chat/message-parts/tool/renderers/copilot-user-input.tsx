@@ -317,7 +317,10 @@ export const CopilotUserInputTool = memo(function CopilotUserInputTool({
               {currentQuestion ? (
                 <>
                   <div className="space-y-3">
-                    <p className="whitespace-pre-wrap text-[14px] leading-6 text-foreground">
+                    <p
+                      className="whitespace-pre-wrap break-words text-[14px] leading-6 text-foreground"
+                      style={{ overflowWrap: "anywhere" }}
+                    >
                       {currentQuestion.question}
                     </p>
 

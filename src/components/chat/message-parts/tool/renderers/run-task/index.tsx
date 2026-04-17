@@ -298,7 +298,10 @@ export const RunTaskTool = memo(function RunTaskTool({
         </>
       }
     >
-      <ScrollShadow className="max-h-[160px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground/70">
+      <ScrollShadow
+        className="max-h-[160px] overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-foreground/70"
+        style={{ overflowWrap: "anywhere" }}
+      >
         {terminalText}
       </ScrollShadow>
     </ToolLayout>

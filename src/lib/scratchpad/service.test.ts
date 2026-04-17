@@ -52,6 +52,7 @@ function createScratchpadTestDb() {
       "id" text PRIMARY KEY NOT NULL,
       "user_id" text NOT NULL,
       "name" text NOT NULL,
+      "kind" text DEFAULT 'project' NOT NULL,
       "root_path" text,
       "description" text,
       "permission_mode_override" text,

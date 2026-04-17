@@ -874,7 +874,7 @@ function UserMessage({
         ) : null}
 
         {textParts.length > 0 ? (
-          <div className="inline-flex border border-border/50 max-w-[82%] rounded-xl bg-surface-secondary/50 dark:bg-surface px-3 py-1">
+          <div className="inline-flex min-w-0 border border-border/50 max-w-[82%] rounded-xl bg-surface-secondary/50 dark:bg-surface px-3 py-1">
             <div className="flex flex-col gap-2">
               <div
                 className="flex flex-col gap-2 overflow-hidden"
@@ -888,8 +888,9 @@ function UserMessage({
               >
                 {textParts.map((part, index) => (
                   <p
-                    className="whitespace-pre-wrap text-[13px] text-foreground/96"
+                    className="whitespace-pre-wrap break-words text-[13px] text-foreground/96"
                     key={`${message.id}:text:${index}`}
+                    style={{ overflowWrap: "anywhere" }}
                   >
                     {renderUserText(
                       part.text,
