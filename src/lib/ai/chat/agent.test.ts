@@ -53,6 +53,7 @@ const getLanguageModelMock = mock(async (_userId, compositeId) => ({
   compositeId,
   kind: "router-model",
 }));
+const getProviderConfigMock = mock(async () => ({}));
 const getReasoningProviderOptionsMock = mock(
   (provider, modelId, reasoningEffort) => ({
     [provider === "google_vertex" ? "google" : provider]: {
@@ -116,6 +117,7 @@ mock.module("server-only", () => ({}));
 mock.module("@/lib/ai/providers/resolver", () => ({
   getEnabledModels: getEnabledModelsMock,
   getLanguageModel: getLanguageModelMock,
+  getProviderConfig: getProviderConfigMock,
 }));
 
 mock.module("@/lib/ai/providers/models", async () => {
