@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.39](https://github.com/Cronacl/Sentinel/compare/v0.0.38...v0.0.39) (2026-04-18)
+
+
+### Features
+
+* enhance native module rebuilding and add workspace bar helpers ([0f16071](https://github.com/Cronacl/Sentinel/commit/0f160711ad4bcfe2d97c5a6186be0db54642df79))
+
 ## [0.0.38](https://github.com/Cronacl/Sentinel/compare/v0.0.37...v0.0.38) (2026-04-17)
 
 
