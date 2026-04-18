@@ -43,6 +43,8 @@ import {
 } from "./chat-composer";
 import { ChatMessage } from "./chat-message";
 import { ChatScrollControl, useChatScrollControl } from "./chat-scroll-control";
+import { resolveDraftThreadRepoThreadId } from "./new-thread-screen.helpers";
+import { buildOptimisticWorktreeRepoContext } from "./thread-repo-actions.helpers";
 import { buildThreadQueryOptions } from "./thread-query-options";
 import { ThreadRepoActions } from "./thread-repo-actions";
 import { type DraftProjectMode } from "./draft-thread-project-mode";
@@ -95,6 +97,8 @@ export function NewThreadScreen({
   const [draftThreadInitialized, setDraftThreadInitialized] = useState(() =>
     Boolean(threadId),
   );
+  const [isDraftThreadHandoffPending, setIsDraftThreadHandoffPending] =
+    useState(false);
   const {
     buttonDirection,
     composerDockRef,
@@ -301,6 +305,12 @@ export function NewThreadScreen({
   const hasMessages = messages.length > 0;
   const isBusy = status === "submitted" || status === "streaming";
   const visibleChatError = chatError ?? errorMessage;
+  const repoThreadId = resolveDraftThreadRepoThreadId({
+    draftThreadId,
+    draftThreadInitialized,
+    handoffPending: isDraftThreadHandoffPending,
+    threadId,
+  });
   const chatErrorBanner = visibleChatError ? (
     <div className="mx-auto w-full max-w-2xl px-6 pb-2">
       <div className="rounded-2xl border border-danger-soft-hover bg-danger-soft px-3 py-2.5">
@@ -314,9 +324,10 @@ export function NewThreadScreen({
     </div>
   ) : null;
   const pageActions =
-    selectedWorkspace && !isQuickChat ? (
+    selectedWorkspace && !isQuickChat && repoThreadId ? (
       <ThreadRepoActions
-        threadId={draftThreadId}
+        deferRepoContextFetch={isDraftThreadHandoffPending && !threadId}
+        threadId={repoThreadId}
         workspaceId={selectedWorkspace.id}
         workspaceRootPath={selectedWorkspace.rootPath}
       />
@@ -487,6 +498,43 @@ export function NewThreadScreen({
           },
         }));
       }
+      const repoContextQueryInput = selectedWorkspace
+        ? {
+            threadId: draftThreadId,
+            workspaceId: selectedWorkspace.id,
+          }
+        : null;
+      const previousThreadRepoContext = repoContextQueryInput
+        ? (utils.repo.getContext.getData(repoContextQueryInput) ??
+          utils.repo.getContext.getData({
+            workspaceId: selectedWorkspace?.id ?? "",
+          }) ??
+          null)
+        : null;
+      if (repoContextQueryInput && previousThreadRepoContext) {
+        utils.repo.getContext.setData(
+          repoContextQueryInput,
+          previousThreadRepoContext as never,
+        );
+      }
+      if (
+        repoContextQueryInput &&
+        draftPreparedWorktree &&
+        draftRepoState?.projectMode === "worktree"
+      ) {
+        utils.repo.getContext.setData(
+          repoContextQueryInput,
+          buildOptimisticWorktreeRepoContext({
+            baseContext: previousThreadRepoContext as never,
+            branch: draftPreparedWorktree.branch,
+            workspaceRootPath: selectedWorkspace?.rootPath ?? null,
+            worktreePath: draftPreparedWorktree.path,
+          }) as never,
+        );
+      }
+      if (!threadId && !draftThreadInitialized) {
+        setIsDraftThreadHandoffPending(true);
+      }
       const pendingBootstrap = sendMessage({
         composerContext,
         ...(draftRepoState ? { draftRepoState } : {}),
@@ -525,7 +573,12 @@ export function NewThreadScreen({
 
       try {
         const bootstrap = await pendingBootstrap;
+        setIsDraftThreadHandoffPending(false);
+        setDraftThreadInitialized(true);
         applyBootstrapSnapshot(bootstrap);
+        if (threadId && repoContextQueryInput) {
+          void utils.repo.getContext.invalidate(repoContextQueryInput);
+        }
 
         if (!threadId && !hasHandedOffRef.current) {
           hasHandedOffRef.current = true;
@@ -537,14 +590,19 @@ export function NewThreadScreen({
           !hasHandedOffRef.current &&
           isCommittedThreadActionError(error)
         ) {
+          setIsDraftThreadHandoffPending(false);
+          setDraftThreadInitialized(true);
           hasHandedOffRef.current = true;
           navigateToThread(draftThreadId, { replace: true });
         }
+
+        setIsDraftThreadHandoffPending(false);
 
         throw error;
       }
     },
     [
+      draftThreadInitialized,
       draftThreadId,
       messages,
       navigateToThread,
@@ -800,6 +858,7 @@ export function NewThreadScreen({
   useEffect(() => {
     if (!threadId) return;
     hasHandedOffRef.current = false;
+    setIsDraftThreadHandoffPending(false);
     setDraftThreadId(threadId);
     setDraftThreadInitialized(true);
   }, [threadId]);
@@ -819,6 +878,7 @@ export function NewThreadScreen({
 
       hasHandedOffRef.current = false;
       setChatError(null);
+      setIsDraftThreadHandoffPending(false);
       setDraftPreparedWorktree(null);
       setDraftProjectMode("local");
       setDraftThreadMode(utils.chatPreferences.get.getData()?.mode ?? null);
@@ -943,9 +1003,8 @@ export function NewThreadScreen({
                   draftThreadInitialized || Boolean(threadDetailsQuery.data)
                 }
                 queuedFollowUps={queuedFollowUps}
-                repoThreadId={
-                  draftThreadInitialized || threadId ? draftThreadId : undefined
-                }
+                deferRepoContextFetch={isDraftThreadHandoffPending && !threadId}
+                repoThreadId={repoThreadId ?? undefined}
                 showBranchSwitcher={!isQuickChat}
                 status={status}
                 threadId={draftThreadId}
@@ -1122,7 +1181,8 @@ export function NewThreadScreen({
               onSteerQueuedFollowUp={handleSteerQueuedFollowUp}
               persistThreadSelection={draftThreadInitialized}
               queuedFollowUps={queuedFollowUps}
-              repoThreadId={draftThreadInitialized ? draftThreadId : undefined}
+              deferRepoContextFetch={isDraftThreadHandoffPending && !threadId}
+              repoThreadId={repoThreadId ?? undefined}
               showBranchSwitcher={!isQuickChat}
               status={status}
               threadId={draftThreadId}

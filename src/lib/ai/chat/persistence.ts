@@ -31,6 +31,7 @@ import {
   type ThreadUIMessage,
 } from "../messages/types";
 import { serializeThreadUIMessage } from "../messages/ui";
+import { invalidateThreadRuntimeBootstrap } from "./runtime/workspace";
 
 export type PersistedThreadFollowUpRecord = {
   createdAt: Date;
@@ -81,6 +82,8 @@ export async function ensureThread(
       })
       .onConflictDoNothing({ target: threads.id })
       .run();
+  } else if (chatEngineState?.repo) {
+    updateThreadRepoState(threadId, chatEngineState.repo);
   }
 
   return { created: !existing };
@@ -224,6 +227,8 @@ export function updateThreadChatEngineState(
   const existing = db
     .select({
       chatEngineState: threads.chatEngineState,
+      userId: threads.userId,
+      workspaceId: threads.workspaceId,
     })
     .from(threads)
     .where(eq(threads.id, threadId))
@@ -240,6 +245,14 @@ export function updateThreadChatEngineState(
     })
     .where(eq(threads.id, threadId))
     .run();
+
+  if (existing?.userId) {
+    invalidateThreadRuntimeBootstrap(
+      existing.userId,
+      existing.workspaceId,
+      threadId,
+    );
+  }
 }
 
 export function updateThreadRepoState(

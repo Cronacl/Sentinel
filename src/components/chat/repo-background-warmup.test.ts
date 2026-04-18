@@ -25,6 +25,7 @@ function createWarmupUtils() {
   const fetch = mock(async () => bundle);
   const getData = mock(() => bundle);
   const prefetch = mock(async () => undefined);
+  const setBundleData = mock(() => undefined);
   const setContextData = mock(() => undefined);
   const setDiffData = mock(() => undefined);
 
@@ -37,6 +38,7 @@ function createWarmupUtils() {
         fetch,
         getData,
         prefetch,
+        setData: setBundleData,
       },
       getDiffPanelData: {
         setData: setDiffData,
@@ -46,6 +48,7 @@ function createWarmupUtils() {
       fetch,
       getData,
       prefetch,
+      setBundleData,
       setContextData,
       setDiffData,
     },
@@ -70,6 +73,10 @@ describe("repo background warmup", () => {
     expect(spies.setContextData).toHaveBeenCalledWith(
       { threadId: "thread-1", workspaceId: "workspace-1" },
       bundle.repoContext,
+    );
+    expect(spies.setBundleData).toHaveBeenCalledWith(
+      { threadId: "thread-1", workspaceId: "workspace-1" },
+      bundle,
     );
     expect(spies.setDiffData).toHaveBeenCalledTimes(3);
     expect(spies.setDiffData).toHaveBeenCalledWith(

@@ -5,8 +5,20 @@ import path from "node:path";
 
 const projectRoot = process.cwd();
 const require = createRequire(import.meta.url);
-const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
 const NATIVE_MODULES = ["better-sqlite3", "node-pty"];
+const nodeGypCliPath = path.join(
+  projectRoot,
+  "node_modules",
+  "node-gyp",
+  "bin",
+  "node-gyp.js",
+);
+const prebuildInstallCliPath = path.join(
+  projectRoot,
+  "node_modules",
+  "prebuild-install",
+  "bin.js",
+);
 
 function canLoadNativeModule(moduleName) {
   try {
@@ -51,6 +63,76 @@ function run(command, args, options = {}) {
 
     child.on("error", reject);
   });
+}
+
+async function runNodeCli(cliPath, args, options = {}) {
+  if (!existsSync(cliPath)) {
+    throw new Error(`Expected CLI entrypoint at ${cliPath}.`);
+  }
+
+  await run(process.execPath, [cliPath, ...args], options);
+}
+
+function getModuleRoot(moduleName) {
+  return path.join(projectRoot, "node_modules", moduleName);
+}
+
+async function rebuildBetterSqlite3() {
+  const moduleRoot = getModuleRoot("better-sqlite3");
+
+  try {
+    await runNodeCli(prebuildInstallCliPath, [], {
+      cwd: moduleRoot,
+      env: {
+        ...process.env,
+        npm_config_build_from_source: "true",
+      },
+    });
+  } catch {
+    // Fall back to a local source build when a matching prebuild is unavailable.
+  }
+
+  await runNodeCli(nodeGypCliPath, ["rebuild", "--release"], {
+    cwd: moduleRoot,
+    env: {
+      ...process.env,
+      npm_config_build_from_source: "true",
+    },
+  });
+}
+
+async function rebuildNodePty(needsSourceRebuild) {
+  const moduleRoot = getModuleRoot("node-pty");
+  const rebuildEnv = needsSourceRebuild
+    ? {
+        ...process.env,
+        npm_config_build_from_source: "true",
+      }
+    : process.env;
+
+  await runNodeCli(nodeGypCliPath, ["rebuild"], {
+    cwd: moduleRoot,
+    env: rebuildEnv,
+  });
+
+  await run(process.execPath, ["scripts/post-install.js"], {
+    cwd: moduleRoot,
+    env: rebuildEnv,
+  });
+}
+
+async function rebuildNativeModule(moduleName, options = {}) {
+  if (moduleName === "better-sqlite3") {
+    await rebuildBetterSqlite3();
+    return;
+  }
+
+  if (moduleName === "node-pty") {
+    await rebuildNodePty(Boolean(options.needsSourceRebuild));
+    return;
+  }
+
+  throw new Error(`Unsupported native module rebuild target: ${moduleName}`);
 }
 
 function getNodePtySpawnHelperCandidates() {
@@ -114,15 +196,8 @@ for (const moduleName of NATIVE_MODULES) {
     !hasNodePtySpawnHelper();
 
   if (!canLoadNativeModule(moduleName) || needsNodePtySourceRebuild) {
-    const rebuildEnv = needsNodePtySourceRebuild
-      ? {
-          ...process.env,
-          npm_config_build_from_source: "true",
-        }
-      : process.env;
-
-    await run(npmExecutable, ["rebuild", moduleName], {
-      env: rebuildEnv,
+    await rebuildNativeModule(moduleName, {
+      needsSourceRebuild: needsNodePtySourceRebuild,
     });
   }
 

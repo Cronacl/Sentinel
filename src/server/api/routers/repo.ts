@@ -11,7 +11,6 @@ import {
   ensureThreadWorktree,
   getCommitMessageContext,
   getRepoDiffPanelBundleData,
-  getRepoDiffPanelData,
   getHeadCommitMessage,
   initializeRepository,
   listBranches,
@@ -587,6 +586,33 @@ async function buildRepoDiffBundleResponse(input: {
   };
 }
 
+async function buildRepoDiffMutationResponse(input: {
+  githubService: GitHubService | null;
+  mode: z.infer<typeof repoDiffModeSchema>;
+  paths: string[];
+  preferredOpenTargetId: string | null;
+  rootPath: string;
+  thread?: { chatEngineState?: unknown; id: string } | null;
+  userId: string;
+  workspaceId: string;
+}) {
+  const bundle = await buildRepoDiffBundleResponse({
+    githubService: input.githubService,
+    preferredOpenTargetId: input.preferredOpenTargetId,
+    rootPath: input.rootPath,
+    thread: input.thread,
+    userId: input.userId,
+    workspaceId: input.workspaceId,
+  });
+
+  return {
+    diff: bundle.diffs[input.mode],
+    diffs: bundle.diffs,
+    paths: input.paths,
+    repoContext: bundle.repoContext,
+  };
+}
+
 async function inspectThreadSwitchState(input: {
   rootPath: string;
   sourceThread: { chatEngineState?: unknown; id: string };
@@ -1040,20 +1066,18 @@ export const repoRouter = createTRPCRouter({
       });
       const githubService = await resolveGitHubService(ctx);
 
-      await stageFiles(projectPath, input.paths);
+      const result = await stageFiles(projectPath, input.paths);
 
-      return {
-        diff: await getRepoDiffPanelData(projectPath, input.mode),
-        paths: input.paths,
-        repoContext: await buildRepoContextResponse({
-          githubService,
-          pathValue: rootPath,
-          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
-          thread,
-          userId: ctx.session.user.id,
-          workspaceId: workspace.id,
-        }),
-      };
+      return await buildRepoDiffMutationResponse({
+        githubService,
+        mode: input.mode,
+        paths: result.paths,
+        preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+        rootPath,
+        thread,
+        userId: ctx.session.user.id,
+        workspaceId: workspace.id,
+      });
     }),
 
   unstageFiles: protectedProcedure
@@ -1068,20 +1092,18 @@ export const repoRouter = createTRPCRouter({
       });
       const githubService = await resolveGitHubService(ctx);
 
-      await unstageFiles(projectPath, input.paths);
+      const result = await unstageFiles(projectPath, input.paths);
 
-      return {
-        diff: await getRepoDiffPanelData(projectPath, input.mode),
-        paths: input.paths,
-        repoContext: await buildRepoContextResponse({
-          githubService,
-          pathValue: rootPath,
-          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
-          thread,
-          userId: ctx.session.user.id,
-          workspaceId: workspace.id,
-        }),
-      };
+      return await buildRepoDiffMutationResponse({
+        githubService,
+        mode: input.mode,
+        paths: result.paths,
+        preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+        rootPath,
+        thread,
+        userId: ctx.session.user.id,
+        workspaceId: workspace.id,
+      });
     }),
 
   revertFiles: protectedProcedure
@@ -1100,20 +1122,18 @@ export const repoRouter = createTRPCRouter({
       });
       const githubService = await resolveGitHubService(ctx);
 
-      await revertFiles(projectPath, input.paths, input.mode);
+      const result = await revertFiles(projectPath, input.paths, input.mode);
 
-      return {
-        diff: await getRepoDiffPanelData(projectPath, input.mode),
-        paths: input.paths,
-        repoContext: await buildRepoContextResponse({
-          githubService,
-          pathValue: rootPath,
-          preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
-          thread,
-          userId: ctx.session.user.id,
-          workspaceId: workspace.id,
-        }),
-      };
+      return await buildRepoDiffMutationResponse({
+        githubService,
+        mode: input.mode,
+        paths: result.paths,
+        preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+        rootPath,
+        thread,
+        userId: ctx.session.user.id,
+        workspaceId: workspace.id,
+      });
     }),
 
   toggleCheckpoint: protectedProcedure

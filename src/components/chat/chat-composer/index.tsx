@@ -49,6 +49,7 @@ const IMPLEMENT_PLAN_PROMPT =
 export function ChatComposer({
   activeWorkspace,
   attachmentSeed = [],
+  deferRepoContextFetch = false,
   draftPreparedWorktree = null,
   draftProjectMode = "local",
   draftThreadId,
@@ -721,6 +722,7 @@ export function ChatComposer({
           <div className="overflow-hidden rounded-b-[24px] border-t border-border/25">
             <ComposerWorkspaceBar
               activeWorkspace={activeWorkspace}
+              deferRepoContextFetch={deferRepoContextFetch}
               draftPreparedWorktree={draftPreparedWorktree}
               draftProjectMode={draftProjectMode}
               draftThreadId={draftThreadId}

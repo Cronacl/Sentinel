@@ -4,6 +4,8 @@ import type { RepoPullRequestStatus } from "@/lib/git/pull-request-status";
 
 type RepoDiffPreloadContext = {
   branch?: string | null;
+  branchResumeReason?: string | null;
+  branchResumeStatus?: string | null;
   changedFileCount?: number;
   deletions?: number;
   effectiveProjectPath?: string | null;
@@ -16,6 +18,33 @@ type RepoDiffPreloadContext = {
   threadProjectMode?: string | null;
   worktreeStatus?: string | null;
 };
+
+export function buildOptimisticWorktreeRepoContext<
+  T extends RepoDiffPreloadContext & Record<string, unknown>,
+>(input: {
+  baseContext?: T | null;
+  branch: string;
+  worktreePath: string;
+  workspaceRootPath?: string | null;
+}) {
+  return {
+    ...(input.baseContext ?? {}),
+    branch: input.branch,
+    branchResumeReason: null,
+    branchResumeStatus: "matched",
+    effectiveProjectPath: input.worktreePath,
+    effectiveRootPath:
+      input.baseContext?.effectiveRootPath ??
+      input.baseContext?.repoRoot ??
+      input.workspaceRootPath ??
+      null,
+    isGitRepo: input.baseContext?.isGitRepo ?? true,
+    repoRoot: input.baseContext?.repoRoot ?? input.workspaceRootPath ?? null,
+    threadBranch: input.branch,
+    threadProjectMode: "worktree",
+    worktreeStatus: "ready",
+  };
+}
 
 type RepoDiffPreloadCandidateInput = {
   groups?: Array<{

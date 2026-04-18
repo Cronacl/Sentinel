@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  buildOptimisticWorktreeRepoContext,
   buildRepoDiffPreloadKey,
   buildCreatePullRequestInput,
   buildGenerateCommitMessageInput,
@@ -54,6 +55,35 @@ describe("thread repo action helpers", () => {
       }),
     ).not.toBe(buildRepoDiffPreloadKey(base));
     expect(buildRepoDiffPreloadKey({ isGitRepo: false })).toBeNull();
+  });
+
+  it("builds an optimistic worktree repo context for thread handoff", () => {
+    expect(
+      buildOptimisticWorktreeRepoContext({
+        baseContext: {
+          branch: "main",
+          effectiveRootPath: "/workspace/root",
+          isGitRepo: true,
+          repoRoot: "/workspace/root",
+          threadProjectMode: "local",
+          worktreeStatus: "none",
+        },
+        branch: "thread/handoff-a1b2c3",
+        worktreePath: "/workspace/root/.worktrees/thread-1",
+        workspaceRootPath: "/workspace/root",
+      }),
+    ).toMatchObject({
+      branch: "thread/handoff-a1b2c3",
+      branchResumeReason: null,
+      branchResumeStatus: "matched",
+      effectiveProjectPath: "/workspace/root/.worktrees/thread-1",
+      effectiveRootPath: "/workspace/root",
+      isGitRepo: true,
+      repoRoot: "/workspace/root",
+      threadBranch: "thread/handoff-a1b2c3",
+      threadProjectMode: "worktree",
+      worktreeStatus: "ready",
+    });
   });
 
   it("collects one background diff preload candidate per workspace", () => {

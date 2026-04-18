@@ -1320,6 +1320,114 @@ describe("repoRouter workspace PR status queries", () => {
     );
   });
 
+  it("returns worktree repo context when the thread is already pinned to a worktree", async () => {
+    getOwnedThreadOrThrow.mockImplementationOnce(async () => ({
+      chatEngine: "codex",
+      chatEngineState: {
+        repo: {
+          activeBranch: "thread/atlas-a1b2c3",
+          projectMode: "worktree",
+          worktreePath: "/tmp/.sentinel-worktrees/sentinel/thread-1",
+        },
+      },
+      chatModelId: "gpt-5.4",
+      chatReasoningEffort: "high",
+      id: "thread-1",
+      workspaceId: "workspace-1",
+    }));
+    resolveRepoContext.mockImplementation((pathValue) =>
+      Promise.resolve(
+        pathValue === "/tmp/.sentinel-worktrees/sentinel/thread-1"
+          ? {
+              aheadCount: 0,
+              branch: "thread/atlas-a1b2c3",
+              changedFileCount: 0,
+              deletions: 0,
+              githubRemote: {
+                defaultBranch: "main",
+                owner: "openai",
+                pullRequestUrl:
+                  "https://github.com/openai/sentinel/compare/main...thread/atlas-a1b2c3?expand=1",
+                pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+                remoteName: "origin",
+                remoteUrl: "git@github.com:openai/sentinel.git",
+                repo: "sentinel",
+                repositoryUrl: "https://github.com/openai/sentinel",
+              },
+              hasChanges: false,
+              hasCommits: true,
+              hasRemotes: true,
+              hasUpstream: true,
+              insertions: 0,
+              isDefaultBranch: false,
+              isGitRepo: true,
+              pushRemoteName: "origin",
+              repoRoot: "/tmp/.sentinel-worktrees/sentinel/thread-1",
+            }
+          : {
+              aheadCount: 0,
+              branch: "main",
+              changedFileCount: 0,
+              deletions: 0,
+              githubRemote: {
+                defaultBranch: "main",
+                owner: "openai",
+                pullRequestUrl:
+                  "https://github.com/openai/sentinel/compare/main...main?expand=1",
+                pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+                remoteName: "origin",
+                remoteUrl: "git@github.com:openai/sentinel.git",
+                repo: "sentinel",
+                repositoryUrl: "https://github.com/openai/sentinel",
+              },
+              hasChanges: false,
+              hasCommits: true,
+              hasRemotes: true,
+              hasUpstream: true,
+              insertions: 0,
+              isDefaultBranch: true,
+              isGitRepo: true,
+              pushRemoteName: "origin",
+              repoRoot: "/tmp/workspace",
+            },
+      ),
+    );
+
+    const result = await repoRouter.getContext({
+      ctx: {
+        db: {
+          query: {
+            integrations: {
+              findFirst: findGithubIntegration,
+            },
+          },
+        },
+        session: { user: { id: "user-worktree" } },
+        user: {
+          defaultChatModelId: null,
+          id: "user-worktree",
+          lastProjectOpenTargetId: null,
+        },
+      },
+      input: {
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(result.branch).toBe("thread/atlas-a1b2c3");
+    expect(result.threadBranch).toBe("thread/atlas-a1b2c3");
+    expect(result.threadProjectMode).toBe("worktree");
+    expect(result.worktreeStatus).toBe("ready");
+    expect(result.effectiveProjectPath).toBe(
+      "/tmp/.sentinel-worktrees/sentinel/thread-1",
+    );
+    expect(result.effectiveRootPath).toBe(
+      "/tmp/.sentinel-worktrees/sentinel/thread-1",
+    );
+    expect(result.branchResumeStatus).toBe("matched");
+  });
+
   it("matches checkpoint availability against the thread project path instead of the repo root", async () => {
     getOwnedThreadOrThrow.mockImplementationOnce(async () => ({
       chatEngine: "codex",
@@ -1805,12 +1913,32 @@ describe("repoRouter.diff panel", () => {
     });
 
     expect(stageFiles).toHaveBeenCalledWith("/tmp/workspace", ["file.ts"]);
+    expect(getRepoDiffPanelBundleData).toHaveBeenCalledWith(
+      "/tmp/workspace",
+      expect.objectContaining({
+        dedupeKey: expect.any(String),
+        onMissingRepo: "empty",
+        repoContext: expect.objectContaining({
+          branch: "feature/test",
+        }),
+      }),
+    );
     expect(stageResult.diff).toMatchObject({
       mode: "unstaged",
+    });
+    expect(stageResult.diffs).toMatchObject({
+      branch: { mode: "branch" },
+      staged: { mode: "staged" },
+      unstaged: { mode: "unstaged" },
     });
     expect(unstageFiles).toHaveBeenCalledWith("/tmp/workspace", ["file.ts"]);
     expect(unstageResult.diff).toMatchObject({
       mode: "staged",
+    });
+    expect(unstageResult.diffs).toMatchObject({
+      branch: { mode: "branch" },
+      staged: { mode: "staged" },
+      unstaged: { mode: "unstaged" },
     });
     expect(revertFiles).toHaveBeenCalledWith(
       "/tmp/workspace",
@@ -1819,6 +1947,11 @@ describe("repoRouter.diff panel", () => {
     );
     expect(revertResult.diff).toMatchObject({
       mode: "unstaged",
+    });
+    expect(revertResult.diffs).toMatchObject({
+      branch: { mode: "branch" },
+      staged: { mode: "staged" },
+      unstaged: { mode: "unstaged" },
     });
   });
 

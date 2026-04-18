@@ -60,6 +60,7 @@ export type ChatComposerProps = {
     input: ComposerSendInput,
   ) => Promise<unknown> | unknown;
   attachmentSeed?: FileUIPart[];
+  deferRepoContextFetch?: boolean;
   isEditing?: boolean;
   promptSeed?: string;
   promptSeedKey?: string | number;

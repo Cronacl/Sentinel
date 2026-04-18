@@ -105,6 +105,28 @@ const threadRuntimeBootstrapCache = new Map<
   { expiresAt: number; promise: Promise<ThreadRuntimeBootstrap> }
 >();
 
+function buildThreadRuntimeBootstrapCacheKey(
+  userId: string,
+  workspaceId?: string | null,
+  threadId?: string | null,
+) {
+  return `${userId}:${workspaceId ?? "__none__"}:${threadId ?? "__none__"}`;
+}
+
+export function invalidateThreadRuntimeBootstrap(
+  userId: string,
+  workspaceId?: string | null,
+  threadId?: string | null,
+) {
+  threadRuntimeBootstrapCache.delete(
+    buildThreadRuntimeBootstrapCacheKey(userId, workspaceId, threadId),
+  );
+}
+
+export function clearThreadRuntimeBootstrapCache() {
+  threadRuntimeBootstrapCache.clear();
+}
+
 export type ThreadRuntimeBootstrap = {
   contextCompactionSettings: {
     enabled: boolean;
@@ -187,7 +209,11 @@ export async function getThreadRuntimeBootstrap(
   workspaceId?: string | null,
   threadId?: string | null,
 ): Promise<ThreadRuntimeBootstrap> {
-  const cacheKey = `${userId}:${workspaceId ?? "__none__"}:${threadId ?? "__none__"}`;
+  const cacheKey = buildThreadRuntimeBootstrapCacheKey(
+    userId,
+    workspaceId,
+    threadId,
+  );
   const cached = threadRuntimeBootstrapCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     return await cached.promise;

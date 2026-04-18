@@ -78,6 +78,7 @@ import {
 } from "./thread-repo-actions.helpers";
 
 type ThreadRepoActionsProps = {
+  deferRepoContextFetch?: boolean;
   threadId: string;
   workspaceId: string;
   workspaceRootPath: string | null;
@@ -117,6 +118,7 @@ const NEXT_STEP_OPTIONS: {
 ];
 
 export function ThreadRepoActions({
+  deferRepoContextFetch = false,
   threadId,
   workspaceId,
   workspaceRootPath,
@@ -172,11 +174,13 @@ export function ThreadRepoActions({
   );
 
   const repoContextQuery = api.repo.getContext.useQuery(repoContextQueryInput, {
-    enabled: isDesktop && Boolean(workspaceRootPath),
+    enabled: isDesktop && Boolean(workspaceRootPath) && !deferRepoContextFetch,
     ...(cachedRepoContext ? { initialData: cachedRepoContext } : {}),
     refetchInterval:
-      isDesktop && workspaceRootPath && !anyModalOpen ? 2500 : false,
-    refetchOnWindowFocus: !anyModalOpen,
+      isDesktop && workspaceRootPath && !anyModalOpen && !deferRepoContextFetch
+        ? 2500
+        : false,
+    refetchOnWindowFocus: !anyModalOpen && !deferRepoContextFetch,
   });
 
   const repoContext = repoContextQuery.data;

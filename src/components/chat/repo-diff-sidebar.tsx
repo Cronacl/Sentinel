@@ -47,7 +47,11 @@ import {
 import { useResolvedTheme } from "@/lib/syntax/use-resolved-theme";
 import { api } from "@/trpc/react";
 
-import { formatRepoActionErrorMessage } from "./thread-repo-actions.helpers";
+import {
+  formatRepoActionErrorMessage,
+  REPO_DIFF_PRELOAD_MODES,
+} from "./thread-repo-actions.helpers";
+import { hydrateRepoDiffBundleCaches } from "./repo-background-warmup";
 import {
   buildRenderableDiffCacheKey,
   getInitialRenderableFileCount,
@@ -473,28 +477,21 @@ export function RepoDiffSidebar() {
     [openTargets, preferredOpenTargetId],
   );
 
-  const applyRepoContext = useCallback(
-    (repoContext: unknown) => {
-      if (!threadId || !workspaceId) {
-        return;
-      }
-      utils.repo.getContext.setData(
-        { threadId, workspaceId },
-        repoContext as never,
-      );
-    },
-    [threadId, utils, workspaceId],
-  );
-  const applyDiffPanelData = useCallback(
-    (nextData: unknown, mode: RepoDiffSidebarMode) => {
+  const hydrateDiffBundle = useCallback(
+    (bundle: {
+      diffs: Record<RepoDiffSidebarMode, unknown>;
+      repoContext: unknown;
+    }) => {
       if (!threadId || !workspaceId) {
         return;
       }
 
-      utils.repo.getDiffPanelData.setData(
-        { mode, threadId, workspaceId },
-        nextData as never,
-      );
+      hydrateRepoDiffBundleCaches({
+        bundle,
+        candidate: { threadId, workspaceId },
+        modes: REPO_DIFF_PRELOAD_MODES,
+        utils,
+      });
     },
     [threadId, utils, workspaceId],
   );
@@ -514,22 +511,28 @@ export function RepoDiffSidebar() {
   const stageMutation = api.repo.stageFiles.useMutation({
     onError: (error) => handleMutationError(error, "Unable to stage files."),
     onSuccess: (result) => {
-      applyRepoContext(result.repoContext);
-      applyDiffPanelData(result, result.diff.mode);
+      hydrateDiffBundle({
+        diffs: result.diffs,
+        repoContext: result.repoContext,
+      });
     },
   });
   const unstageMutation = api.repo.unstageFiles.useMutation({
     onError: (error) => handleMutationError(error, "Unable to unstage files."),
     onSuccess: (result) => {
-      applyRepoContext(result.repoContext);
-      applyDiffPanelData(result, result.diff.mode);
+      hydrateDiffBundle({
+        diffs: result.diffs,
+        repoContext: result.repoContext,
+      });
     },
   });
   const revertMutation = api.repo.revertFiles.useMutation({
     onError: (error) => handleMutationError(error, "Unable to revert files."),
     onSuccess: (result) => {
-      applyRepoContext(result.repoContext);
-      applyDiffPanelData(result, result.diff.mode);
+      hydrateDiffBundle({
+        diffs: result.diffs,
+        repoContext: result.repoContext,
+      });
     },
   });
 
@@ -575,10 +578,26 @@ export function RepoDiffSidebar() {
   const currentMode = prefs?.mode ?? "unstaged";
   const diff = diffPanelQuery.data?.diff;
   const diffFiles = diff?.files ?? EMPTY_SOURCE_FILES;
+  const renderableDiffSnapshotKey = useMemo(
+    () =>
+      [
+        currentMode,
+        diff?.branch ?? "",
+        diff?.sourceLabel ?? "",
+        ...diffFiles.map((file) =>
+          buildRenderableDiffCacheKey(currentMode, file),
+        ),
+      ].join("|"),
+    [currentMode, diff?.branch, diff?.sourceLabel, diffFiles],
+  );
 
   useEffect(() => {
     setVisibleFileCount(getInitialRenderableFileCount(diffFiles.length));
   }, [currentMode, diffFiles]);
+
+  useEffect(() => {
+    renderableFileCacheRef.current.clear();
+  }, [renderableDiffSnapshotKey]);
 
   const effectiveVisibleFileCount =
     visibleFileCount === 0 && diffFiles.length > 0

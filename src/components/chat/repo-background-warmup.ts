@@ -27,6 +27,7 @@ type RepoWarmupUtils = {
           }
         | undefined;
       prefetch: (...args: any[]) => Promise<unknown>;
+      setData: (...args: any[]) => void;
     };
     getDiffPanelData: {
       setData: (...args: any[]) => void;
@@ -50,6 +51,10 @@ export function hydrateRepoDiffBundleCaches(args: {
   args.utils.repo.getContext.setData(
     { threadId, workspaceId },
     args.bundle.repoContext,
+  );
+  args.utils.repo.getDiffPanelBundle.setData(
+    { threadId, workspaceId },
+    args.bundle,
   );
 
   for (const mode of args.modes) {

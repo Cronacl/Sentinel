@@ -21,6 +21,11 @@ import {
   type PermissionMode,
 } from "@/lib/security";
 import { api } from "@/trpc/react";
+import {
+  resolveComposerWorkspaceBarDisplayState,
+  resolveComposerWorkspaceBarLiveState,
+  type ComposerWorkspaceBarDisplayState,
+} from "./composer-workspace-bar.helpers";
 import type { DraftProjectMode } from "./draft-thread-project-mode";
 
 type ComposerWorkspaceBarProps = {
@@ -31,6 +36,7 @@ type ComposerWorkspaceBarProps = {
     permissionModeOverride?: PermissionMode | null;
     rootPath?: string | null;
   };
+  deferRepoContextFetch?: boolean;
   draftPreparedWorktree?: {
     branch: string;
     path: string;
@@ -55,6 +61,7 @@ function getPermissionModeLabel(value: PermissionMode) {
 
 export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
   activeWorkspace,
+  deferRepoContextFetch = false,
   draftPreparedWorktree = null,
   draftProjectMode = "local",
   draftThreadId,
@@ -76,23 +83,34 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
   const [branchSearch, setBranchSearch] = useState("");
   const [branchName, setBranchName] = useState("");
   const [branchError, setBranchError] = useState("");
+  const [stableDisplayState, setStableDisplayState] =
+    useState<ComposerWorkspaceBarDisplayState | null>(null);
 
   const securityQuery = api.security.get.useQuery();
   const repoContextInput = repoThreadId
     ? { threadId: repoThreadId, workspaceId: activeWorkspace.id }
     : { workspaceId: activeWorkspace.id };
+  const cachedRepoContext = utils.repo.getContext.getData(repoContextInput);
   const repoContextQuery = api.repo.getContext.useQuery(repoContextInput, {
-    enabled: showBranchSwitcher && Boolean(activeWorkspace.rootPath),
+    ...(cachedRepoContext ? { initialData: cachedRepoContext } : {}),
+    enabled:
+      showBranchSwitcher &&
+      Boolean(activeWorkspace.rootPath) &&
+      !deferRepoContextFetch,
     refetchInterval:
-      showBranchSwitcher && activeWorkspace.rootPath && repoThreadId
+      showBranchSwitcher &&
+      activeWorkspace.rootPath &&
+      repoThreadId &&
+      !deferRepoContextFetch
         ? 2500
         : false,
-    refetchOnWindowFocus: Boolean(repoThreadId),
+    refetchOnWindowFocus: Boolean(repoThreadId) && !deferRepoContextFetch,
     staleTime: repoThreadId ? 2_500 : 15_000,
   });
   const listBranchesQuery = api.repo.listBranches.useQuery(repoContextInput, {
     enabled: Boolean(
       branchPopoverOpen &&
+      !deferRepoContextFetch &&
       showBranchSwitcher &&
       activeWorkspace.rootPath &&
       repoContextQuery.data?.isGitRepo,
@@ -227,32 +245,50 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
     branchSwitcherVisible &&
     (canConfigureThreadEnvironment || hasDraftProjectMode),
   );
-  const threadBranch = repoThreadId
-    ? (repoContextQuery.data?.threadBranch ??
-      repoContextQuery.data?.branch ??
-      null)
-    : (draftPreparedWorktree?.branch ?? repoContextQuery.data?.branch ?? null);
-  const isUsingWorktree = repoThreadId
-    ? repoContextQuery.data?.threadProjectMode === "worktree"
-    : draftProjectMode === "worktree";
-  const displayBranch = isUsingWorktree
-    ? (threadBranch ?? repoContextQuery.data?.branch ?? null)
-    : (repoContextQuery.data?.branch ?? threadBranch ?? null);
-  const hasReadyWorktree =
-    Boolean(repoThreadId) && repoContextQuery.data?.worktreeStatus === "ready";
-  const branchResumeStatus =
-    repoContextQuery.data?.branchResumeStatus ?? "matched";
-  const branchResumeReason = repoContextQuery.data?.branchResumeReason ?? null;
-  const projectModeLabel = isUsingWorktree ? "Worktree" : "Local";
-  const projectModeIcon = isUsingWorktree ? FolderTreeIcon : LaptopIcon;
   const isProjectModeLoading =
-    repoContextQuery.isLoading ||
+    (repoContextQuery.isLoading && !repoContextQuery.data) ||
     resumeThreadBranchMutation.isPending ||
     enableThreadWorktreeMutation.isPending ||
     prepareThreadWorktreeMutation.isPending ||
     discardPreparedThreadWorktreeMutation.isPending ||
     useLocalProjectMutation.isPending ||
     removeThreadWorktreeMutation.isPending;
+  const liveDisplayState = useMemo(
+    () =>
+      resolveComposerWorkspaceBarLiveState({
+        draftPreparedWorktree,
+        draftProjectMode,
+        repoContext: repoContextQuery.data,
+        repoThreadId,
+      }),
+    [
+      draftPreparedWorktree,
+      draftProjectMode,
+      repoContextQuery.data,
+      repoThreadId,
+    ],
+  );
+  const isRepoStatePending = Boolean(
+    repoContextQuery.isFetching || isProjectModeLoading,
+  );
+  const displayState = useMemo(
+    () =>
+      resolveComposerWorkspaceBarDisplayState({
+        isRepoStatePending,
+        liveState: liveDisplayState,
+        previousStableState: stableDisplayState,
+      }),
+    [isRepoStatePending, liveDisplayState, stableDisplayState],
+  );
+  const threadBranch = displayState.threadBranch;
+  const isUsingWorktree = displayState.isUsingWorktree;
+  const displayBranch = displayState.displayBranch;
+  const hasReadyWorktree = displayState.hasReadyWorktree;
+  const branchResumeStatus =
+    repoContextQuery.data?.branchResumeStatus ?? "matched";
+  const branchResumeReason = repoContextQuery.data?.branchResumeReason ?? null;
+  const projectModeLabel = displayState.projectModeLabel;
+  const projectModeIcon = isUsingWorktree ? FolderTreeIcon : LaptopIcon;
   const isBranchLoading =
     repoContextQuery.isLoading ||
     listBranchesQuery.isLoading ||
@@ -276,6 +312,12 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
   useEffect(() => {
     onSetupPendingChange?.(isSetupPending);
   }, [isSetupPending, onSetupPendingChange]);
+
+  useEffect(() => {
+    if (!isRepoStatePending) {
+      setStableDisplayState(liveDisplayState);
+    }
+  }, [isRepoStatePending, liveDisplayState]);
 
   const handlePrepareDraftWorktree = useCallback(async () => {
     if (!draftThreadId || !onDraftProjectModeChange) {
