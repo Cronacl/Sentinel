@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.41](https://github.com/Cronacl/Sentinel/compare/v0.0.40...v0.0.41) (2026-04-19)
+
+
+### Bug Fixes
+
+* handle mixed-scope thread switching ([3b2c1e4](https://github.com/Cronacl/Sentinel/commit/3b2c1e47c272e2b25c8373a891049c3d5e2ed46a))
+* handle mixed-scope thread switching ([5151a94](https://github.com/Cronacl/Sentinel/commit/5151a94fbf0d9a63b315e987c2e2d39d8b167e9b))
+
 ## [0.0.40](https://github.com/Cronacl/Sentinel/compare/v0.0.39...v0.0.40) (2026-04-18)
 
 
