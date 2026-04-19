@@ -205,6 +205,38 @@ async function getOptionalOwnedThreadForWorkspace(
   }
 }
 
+function canUseRepoThreadSwitch(input: {
+  sourceThread: Awaited<ReturnType<typeof getOwnedThreadOrThrow>>;
+  targetThread: Awaited<ReturnType<typeof getOwnedThreadOrThrow>>;
+}) {
+  return (
+    input.sourceThread.workspace.kind === "project" &&
+    input.targetThread.workspace.kind === "project" &&
+    input.sourceThread.workspaceId === input.targetThread.workspaceId
+  );
+}
+
+function buildUnsupportedThreadSwitchInspection(input: {
+  sourceThread: { chatEngineState?: unknown; id: string };
+  targetThread: { chatEngineState?: unknown; id: string };
+}) {
+  const sourceState = normalizeThreadRepoState(input.sourceThread);
+  const targetState = normalizeThreadRepoState(input.targetThread);
+
+  return {
+    currentBranch: sourceState.activeBranch ?? targetState.activeBranch,
+    isDirty: false,
+    requiresBranchSwitch: false,
+    shouldPrompt: false,
+    sourceBranch: sourceState.activeBranch,
+    sourceProjectMode: sourceState.projectMode,
+    sourceThreadId: input.sourceThread.id,
+    targetBranch: targetState.activeBranch,
+    targetProjectMode: targetState.projectMode,
+    targetThreadId: input.targetThread.id,
+  } as const;
+}
+
 function normalizeThreadRepoState(
   thread: { chatEngineState?: unknown } | null,
 ): RepoThreadState {
@@ -1370,22 +1402,26 @@ export const repoRouter = createTRPCRouter({
   inspectThreadSwitch: protectedProcedure
     .input(threadSwitchInspectInputSchema)
     .query(async ({ ctx, input }) => {
-      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
-      const sourceThread = await getOwnedThreadForWorkspace(ctx, {
-        threadId: input.sourceThreadId,
-        workspaceId: input.workspaceId,
-      });
-      const targetThread = await getOwnedThreadForWorkspace(ctx, {
-        threadId: input.targetThreadId,
-        workspaceId: input.workspaceId,
-      });
-      if (!sourceThread || !targetThread) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Both source and target threads are required.",
+      const sourceThread = await getOwnedThreadOrThrow(
+        ctx,
+        input.sourceThreadId,
+      );
+      const targetThread = await getOwnedThreadOrThrow(
+        ctx,
+        input.targetThreadId,
+      );
+
+      if (!canUseRepoThreadSwitch({ sourceThread, targetThread })) {
+        return buildUnsupportedThreadSwitchInspection({
+          sourceThread,
+          targetThread,
         });
       }
 
+      const workspace = await getOwnedWorkspaceOrThrow(
+        ctx,
+        targetThread.workspaceId,
+      );
       const rootPath = assertWorkspaceRootPath(workspace.rootPath);
       return await inspectThreadSwitchState({
         rootPath,
@@ -1397,22 +1433,27 @@ export const repoRouter = createTRPCRouter({
   handoffThreadSwitch: protectedProcedure
     .input(threadSwitchHandoffInputSchema)
     .mutation(async ({ ctx, input }) => {
-      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
-      const sourceThread = await getOwnedThreadForWorkspace(ctx, {
-        threadId: input.sourceThreadId,
-        workspaceId: input.workspaceId,
-      });
-      const targetThread = await getOwnedThreadForWorkspace(ctx, {
-        threadId: input.targetThreadId,
-        workspaceId: input.workspaceId,
-      });
-      if (!sourceThread || !targetThread) {
+      const sourceThread = await getOwnedThreadOrThrow(
+        ctx,
+        input.sourceThreadId,
+      );
+      const targetThread = await getOwnedThreadOrThrow(
+        ctx,
+        input.targetThreadId,
+      );
+
+      if (!canUseRepoThreadSwitch({ sourceThread, targetThread })) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Both source and target threads are required.",
+          message:
+            "Repo handoff only applies when both threads are in the same project workspace.",
         });
       }
 
+      const workspace = await getOwnedWorkspaceOrThrow(
+        ctx,
+        targetThread.workspaceId,
+      );
       const rootPath = assertWorkspaceRootPath(workspace.rootPath);
       const githubService = await resolveGitHubService(ctx);
       const inspection = await inspectThreadSwitchState({

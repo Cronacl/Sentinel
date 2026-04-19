@@ -103,6 +103,7 @@ import {
 } from "@/components/chat/repo-background-warmup";
 
 import { SidebarCommandPalette } from "./sidebar-command-palette";
+import { shouldUseRepoThreadSwitch } from "./workspace-sidebar.helpers";
 import {
   ThreadStatusIndicator,
   type ThreadStatusValue,
@@ -2374,7 +2375,36 @@ export function WorkspaceSidebar() {
           return;
         }
 
-        if (!selectedThreadId || selectedWorkspaceId !== workspaceId) {
+        if (!selectedThreadId) {
+          navigateToThread(workspaceId, threadId);
+          return;
+        }
+
+        const sourceThreadState =
+          findThreadState(selectedThreadId, groups, items, quickChatItems) ??
+          (() => {
+            const cachedThread = utils.threads.get.getData({
+              threadId: selectedThreadId,
+            });
+            return cachedThread?.workspace
+              ? {
+                  pinnedAt: cachedThread.thread.pinnedAt,
+                  workspaceId: cachedThread.workspace.id,
+                  workspaceKind: cachedThread.workspace.kind,
+                }
+              : null;
+          })();
+        const targetThreadState = {
+          workspaceId,
+          workspaceKind: "project" as const,
+        };
+
+        if (
+          !shouldUseRepoThreadSwitch({
+            sourceThread: sourceThreadState,
+            targetThread: targetThreadState,
+          })
+        ) {
           navigateToThread(workspaceId, threadId);
           return;
         }
@@ -2424,10 +2454,13 @@ export function WorkspaceSidebar() {
     [
       finalizeThreadSwitch,
       navigateToThread,
+      groups,
+      items,
+      quickChatItems,
       selectedThreadId,
-      selectedWorkspaceId,
       threadSwitchState,
       utils.repo.inspectThreadSwitch,
+      utils.threads.get,
     ],
   );
 

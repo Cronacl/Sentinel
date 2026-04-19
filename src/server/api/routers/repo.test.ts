@@ -5,7 +5,9 @@ import { beforeEach, describe, expect, it, mock } from "bun:test";
 
 const getOwnedWorkspaceOrThrow = mock(async () => ({
   id: "workspace-1",
+  kind: "project",
   rootPath: "/tmp/workspace",
+  userId: "user-1",
 }));
 const getOwnedThreadOrThrow = mock(async () => ({
   chatEngine: "codex",
@@ -13,6 +15,12 @@ const getOwnedThreadOrThrow = mock(async () => ({
   chatModelId: "gpt-5.4",
   chatReasoningEffort: "high",
   id: "thread-1",
+  workspace: {
+    id: "workspace-1",
+    kind: "project",
+    rootPath: "/tmp/workspace",
+    userId: "user-1",
+  },
   workspaceId: "workspace-1",
 }));
 const run = mock(() => undefined);
@@ -2260,6 +2268,12 @@ describe("repoRouter.branch actions", () => {
         chatModelId: "gpt-5.4",
         chatReasoningEffort: "high",
         id: "thread-source",
+        workspace: {
+          id: "workspace-1",
+          kind: "project",
+          rootPath: "/tmp/workspace",
+          userId: "user-1",
+        },
         workspaceId: "workspace-1",
       }))
       .mockImplementationOnce(async () => ({
@@ -2273,6 +2287,12 @@ describe("repoRouter.branch actions", () => {
         chatModelId: "gpt-5.4",
         chatReasoningEffort: "high",
         id: "thread-target",
+        workspace: {
+          id: "workspace-1",
+          kind: "project",
+          rootPath: "/tmp/workspace",
+          userId: "user-1",
+        },
         workspaceId: "workspace-1",
       }));
     resolveRepoContext.mockImplementation(async () => ({
@@ -2338,6 +2358,12 @@ describe("repoRouter.branch actions", () => {
         chatModelId: "gpt-5.4",
         chatReasoningEffort: "high",
         id: "thread-source",
+        workspace: {
+          id: "workspace-1",
+          kind: "project",
+          rootPath: "/tmp/workspace",
+          userId: "user-1",
+        },
         workspaceId: "workspace-1",
       }))
       .mockImplementationOnce(async () => ({
@@ -2351,6 +2377,12 @@ describe("repoRouter.branch actions", () => {
         chatModelId: "gpt-5.4",
         chatReasoningEffort: "high",
         id: "thread-target",
+        workspace: {
+          id: "workspace-1",
+          kind: "project",
+          rootPath: "/tmp/workspace",
+          userId: "user-1",
+        },
         workspaceId: "workspace-1",
       }));
     resolveRepoContext.mockImplementation(async () => ({
@@ -2425,6 +2457,12 @@ describe("repoRouter.branch actions", () => {
         chatModelId: "gpt-5.4",
         chatReasoningEffort: "high",
         id: "thread-source",
+        workspace: {
+          id: "workspace-1",
+          kind: "project",
+          rootPath: "/tmp/workspace",
+          userId: "user-1",
+        },
         workspaceId: "workspace-1",
       }))
       .mockImplementationOnce(async () => ({
@@ -2438,6 +2476,12 @@ describe("repoRouter.branch actions", () => {
         chatModelId: "gpt-5.4",
         chatReasoningEffort: "high",
         id: "thread-target",
+        workspace: {
+          id: "workspace-1",
+          kind: "project",
+          rootPath: "/tmp/workspace",
+          userId: "user-1",
+        },
         workspaceId: "workspace-1",
       }));
     resolveRepoContext.mockImplementation(async () => ({
@@ -2491,6 +2535,121 @@ describe("repoRouter.branch actions", () => {
     );
     expect(result.action).toBe("migrate");
     expect(result.branch).toBe("main");
+  });
+
+  it("returns a safe no-op inspection for mixed-scope thread switches", async () => {
+    getOwnedThreadOrThrow
+      .mockImplementationOnce(async () => ({
+        chatEngine: "codex",
+        chatEngineState: {
+          repo: {
+            activeBranch: "quick-chat-branch",
+            projectMode: "local",
+          },
+        },
+        chatModelId: "gpt-5.4",
+        chatReasoningEffort: "high",
+        id: "thread-source",
+        workspace: {
+          id: "quick-chat-workspace",
+          kind: "quick_chat",
+          rootPath: "/tmp/quick-chat",
+          userId: "user-1",
+        },
+        workspaceId: "quick-chat-workspace",
+      }))
+      .mockImplementationOnce(async () => ({
+        chatEngine: "codex",
+        chatEngineState: {
+          repo: {
+            activeBranch: "feature/target",
+            projectMode: "local",
+          },
+        },
+        chatModelId: "gpt-5.4",
+        chatReasoningEffort: "high",
+        id: "thread-target",
+        workspace: {
+          id: "workspace-1",
+          kind: "project",
+          rootPath: "/tmp/workspace",
+          userId: "user-1",
+        },
+        workspaceId: "workspace-1",
+      }));
+
+    const result = await repoRouter.inspectThreadSwitch({
+      ctx: {
+        session: { user: { id: "user-1" } },
+        user: { id: "user-1" },
+      },
+      input: {
+        sourceThreadId: "thread-source",
+        targetThreadId: "thread-target",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(result).toMatchObject({
+      isDirty: false,
+      requiresBranchSwitch: false,
+      shouldPrompt: false,
+      sourceThreadId: "thread-source",
+      targetThreadId: "thread-target",
+    });
+    expect(resolveRepoContext).not.toHaveBeenCalled();
+  });
+
+  it("rejects mixed-scope handoffs with a clear error", async () => {
+    getOwnedThreadOrThrow
+      .mockImplementationOnce(async () => ({
+        chatEngine: "codex",
+        chatEngineState: null,
+        chatModelId: "gpt-5.4",
+        chatReasoningEffort: "high",
+        id: "thread-source",
+        workspace: {
+          id: "quick-chat-workspace",
+          kind: "quick_chat",
+          rootPath: "/tmp/quick-chat",
+          userId: "user-1",
+        },
+        workspaceId: "quick-chat-workspace",
+      }))
+      .mockImplementationOnce(async () => ({
+        chatEngine: "codex",
+        chatEngineState: null,
+        chatModelId: "gpt-5.4",
+        chatReasoningEffort: "high",
+        id: "thread-target",
+        workspace: {
+          id: "workspace-1",
+          kind: "project",
+          rootPath: "/tmp/workspace",
+          userId: "user-1",
+        },
+        workspaceId: "workspace-1",
+      }));
+
+    await expect(
+      repoRouter.handoffThreadSwitch({
+        ctx: {
+          session: { user: { id: "user-1" } },
+          user: { id: "user-1", lastProjectOpenTargetId: null },
+        },
+        input: {
+          sourceThreadId: "thread-source",
+          strategy: "stash",
+          stashName: "mixed-scope",
+          targetThreadId: "thread-target",
+          workspaceId: "workspace-1",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message:
+        "Repo handoff only applies when both threads are in the same project workspace.",
+    });
   });
 
   it("creates a thread worktree and switches the thread into it", async () => {
