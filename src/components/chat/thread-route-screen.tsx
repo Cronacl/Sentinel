@@ -1,5 +1,6 @@
 "use client";
 
+import { Spinner } from "@heroui/react";
 import { useEffect } from "react";
 
 import { PageWrapper } from "@/components/shell";
@@ -13,9 +14,9 @@ import { peekThreadRouteHandoff } from "./thread-route-handoff";
 import {
   resolveThreadRouteComposerUiState,
   resolveThreadRouteData,
+  shouldRefreshThreadRouteData,
 } from "./thread-route-screen.helpers";
 import { buildThreadQueryOptions } from "./thread-query-options";
-import { Spinner } from "@heroui/react";
 
 export function ThreadRouteScreen({ threadId }: { threadId: string }) {
   const { navigateHome } = useShell();
@@ -25,15 +26,12 @@ export function ThreadRouteScreen({ threadId }: { threadId: string }) {
   const handoffState = peekThreadRouteHandoff(threadId);
   const threadQuery = api.threads.get.useQuery(
     { threadId },
-    buildThreadQueryOptions(cachedThread),
+    buildThreadQueryOptions(cachedThread, {
+      refreshOnMount: shouldRefreshThreadRouteData(cachedThread, liveSnapshot),
+    }),
   );
-  const hasFreshBaseThread =
-    threadQuery.isFetchedAfterMount || cachedThread == null;
-  const threadData = resolveThreadRouteData(
-    threadQuery.data ?? cachedThread,
-    liveSnapshot,
-    { hasFreshBaseThread },
-  );
+  const baseThread = threadQuery.data ?? cachedThread;
+  const threadData = resolveThreadRouteData(baseThread, liveSnapshot);
   const initialComposerUiState = resolveThreadRouteComposerUiState(
     threadData,
     handoffState,

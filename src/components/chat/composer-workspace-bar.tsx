@@ -22,15 +22,15 @@ import {
 } from "@/lib/security";
 import { api } from "@/trpc/react";
 import {
-  resolveComposerWorkspaceBarDisplayState,
   resolveComposerWorkspaceBarLiveState,
-  type ComposerWorkspaceBarDisplayState,
+  type ComposerWorkspaceBarRepoContext,
 } from "./composer-workspace-bar.helpers";
 import type { DraftProjectMode } from "./draft-thread-project-mode";
 import {
+  type KeyedStableState,
+  resolveKeyedStableState,
   resolveRepoThreadUiState,
-  resolveStableRepoThreadUiState,
-  type RepoThreadUiState,
+  type RepoThreadUiContext,
 } from "./repo-thread-ui-state";
 
 type ComposerWorkspaceBarProps = {
@@ -56,6 +56,10 @@ type ComposerWorkspaceBarProps = {
   repoThreadId?: string;
   showBranchSwitcher: boolean;
 };
+
+type ComposerRepoContextSnapshot =
+  | (ComposerWorkspaceBarRepoContext & RepoThreadUiContext)
+  | null;
 
 function getPermissionModeLabel(value: PermissionMode) {
   return (
@@ -88,15 +92,14 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
   const [branchSearch, setBranchSearch] = useState("");
   const [branchName, setBranchName] = useState("");
   const [branchError, setBranchError] = useState("");
-  const [stableDisplayState, setStableDisplayState] =
-    useState<ComposerWorkspaceBarDisplayState | null>(null);
-  const [stableThreadUiState, setStableThreadUiState] =
-    useState<RepoThreadUiState | null>(null);
+  const [stableRepoContext, setStableRepoContext] =
+    useState<KeyedStableState<ComposerRepoContextSnapshot> | null>(null);
 
   const securityQuery = api.security.get.useQuery();
   const repoContextInput = repoThreadId
     ? { threadId: repoThreadId, workspaceId: activeWorkspace.id }
     : { workspaceId: activeWorkspace.id };
+  const repoStateKey = `${activeWorkspace.id}:${repoThreadId ?? "__workspace__"}`;
   const cachedRepoContext = utils.repo.getContext.getData(repoContextInput);
   const repoContextQuery = api.repo.getContext.useQuery(repoContextInput, {
     ...(cachedRepoContext ? { initialData: cachedRepoContext } : {}),
@@ -112,6 +115,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
         ? 2500
         : false,
     refetchOnWindowFocus: Boolean(repoThreadId) && !deferRepoContextFetch,
+    placeholderData: () => undefined,
     staleTime: repoThreadId ? 2_500 : 15_000,
   });
   const listBranchesQuery = api.repo.listBranches.useQuery(repoContextInput, {
@@ -129,8 +133,20 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
     setPermissionOverride(activeWorkspace.permissionModeOverride ?? null);
   }, [activeWorkspace.id, activeWorkspace.permissionModeOverride]);
 
+  const seedStableRepoContext = useCallback(
+    (nextThreadId: string | null | undefined, repoContext: unknown) => {
+      const key = `${activeWorkspace.id}:${nextThreadId ?? "__workspace__"}`;
+      setStableRepoContext({
+        key,
+        state: repoContext as ComposerRepoContextSnapshot,
+      });
+    },
+    [activeWorkspace.id],
+  );
+
   const applyRepoContext = useCallback(
     (nextThreadId: string | null | undefined, repoContext: unknown) => {
+      seedStableRepoContext(nextThreadId, repoContext);
       utils.repo.getContext.setData(
         nextThreadId
           ? { threadId: nextThreadId, workspaceId: activeWorkspace.id }
@@ -138,7 +154,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
         repoContext as never,
       );
     },
-    [activeWorkspace.id, utils.repo.getContext],
+    [activeWorkspace.id, seedStableRepoContext, utils.repo.getContext],
   );
 
   const updatePermissionOverrideMutation =
@@ -260,6 +276,18 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
     discardPreparedThreadWorktreeMutation.isPending ||
     useLocalProjectMutation.isPending ||
     removeThreadWorktreeMutation.isPending;
+  const isRepoStatePending = Boolean(
+    repoContextQuery.isFetching || isProjectModeLoading,
+  );
+  const stableOrCachedRepoContext = resolveKeyedStableState({
+    cachedState:
+      (cachedRepoContext as ComposerRepoContextSnapshot | undefined) ?? null,
+    currentKey: repoStateKey,
+    stableState: stableRepoContext,
+  });
+  const effectiveRepoContext = isRepoStatePending
+    ? (stableOrCachedRepoContext ?? repoContextQuery.data)
+    : repoContextQuery.data;
   const liveDisplayState = useMemo(
     () =>
       resolveComposerWorkspaceBarLiveState({
@@ -275,30 +303,24 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
       repoThreadId,
     ],
   );
-  const isRepoStatePending = Boolean(
-    repoContextQuery.isFetching || isProjectModeLoading,
-  );
   const displayState = useMemo(
     () =>
-      resolveComposerWorkspaceBarDisplayState({
-        isRepoStatePending,
-        liveState: liveDisplayState,
-        previousStableState: stableDisplayState,
+      resolveComposerWorkspaceBarLiveState({
+        draftPreparedWorktree,
+        draftProjectMode,
+        repoContext: effectiveRepoContext,
+        repoThreadId,
       }),
-    [isRepoStatePending, liveDisplayState, stableDisplayState],
-  );
-  const liveThreadUiState = useMemo(
-    () => resolveRepoThreadUiState(repoContextQuery.data),
-    [repoContextQuery.data],
+    [
+      draftPreparedWorktree,
+      draftProjectMode,
+      effectiveRepoContext,
+      repoThreadId,
+    ],
   );
   const threadUiState = useMemo(
-    () =>
-      resolveStableRepoThreadUiState({
-        isPending: isRepoStatePending,
-        liveState: liveThreadUiState,
-        previousStableState: stableThreadUiState,
-      }),
-    [isRepoStatePending, liveThreadUiState, stableThreadUiState],
+    () => resolveRepoThreadUiState(effectiveRepoContext),
+    [effectiveRepoContext],
   );
   const threadBranch = displayState.threadBranch;
   const isUsingWorktree = displayState.isUsingWorktree;
@@ -334,10 +356,14 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
 
   useEffect(() => {
     if (!isRepoStatePending) {
-      setStableDisplayState(liveDisplayState);
-      setStableThreadUiState(liveThreadUiState);
+      setStableRepoContext({
+        key: repoStateKey,
+        state:
+          (repoContextQuery.data as ComposerRepoContextSnapshot | undefined) ??
+          null,
+      });
     }
-  }, [isRepoStatePending, liveDisplayState, liveThreadUiState]);
+  }, [isRepoStatePending, repoContextQuery.data, repoStateKey]);
 
   const handlePrepareDraftWorktree = useCallback(async () => {
     if (!draftThreadId || !onDraftProjectModeChange) {
@@ -1046,7 +1072,9 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                             disabled={isBranchMutating}
                             key={branch.name}
                             onClick={() => {
-                              if (branch.name === displayBranch) {
+                              if (
+                                branch.name === liveDisplayState.displayBranch
+                              ) {
                                 setBranchSearch("");
                                 setBranchPopoverOpen(false);
                                 return;

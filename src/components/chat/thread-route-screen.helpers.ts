@@ -48,19 +48,8 @@ function shouldPreferLiveSnapshot(
 export function resolveThreadRouteData(
   baseThread: ThreadDetails | undefined,
   liveSnapshot: ThreadSessionSnapshot | null,
-  options?: {
-    hasFreshBaseThread?: boolean;
-  },
 ): ThreadDetails | undefined {
   if (!baseThread) {
-    return undefined;
-  }
-
-  if (
-    !liveSnapshot &&
-    !options?.hasFreshBaseThread &&
-    hasOptimisticThreadActivity(baseThread)
-  ) {
     return undefined;
   }
 
@@ -80,6 +69,15 @@ export function resolveThreadRouteData(
     },
     workspace: baseThread.workspace,
   };
+}
+
+export function shouldRefreshThreadRouteData(
+  baseThread: ThreadDetails | undefined,
+  liveSnapshot: ThreadSessionSnapshot | null,
+) {
+  return Boolean(
+    baseThread && !liveSnapshot && hasOptimisticThreadActivity(baseThread),
+  );
 }
 
 export function resolveThreadRouteComposerUiState(

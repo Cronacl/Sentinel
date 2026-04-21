@@ -41,4 +41,17 @@ describe("shouldInspectWorkspaceThreadSwitch", () => {
       }),
     ).toBeTrue();
   });
+
+  it("runs same-workspace project inspection after navigation", () => {
+    expect(
+      shouldInspectWorkspaceThreadSwitch({
+        selectedThreadId: "thread-1",
+        selectedThreadState: {
+          workspaceId: "workspace-1",
+          workspaceKind: "project",
+        },
+        targetWorkspaceId: "workspace-1",
+      }),
+    ).toBeTrue();
+  });
 });

@@ -10,6 +10,7 @@ import {
 import {
   resolveThreadRouteComposerUiState,
   resolveThreadRouteData,
+  shouldRefreshThreadRouteData,
 } from "./thread-route-screen.helpers";
 
 type ThreadDetails = RouterOutputs["threads"]["get"];
@@ -69,6 +70,30 @@ function createLiveSnapshot(): ThreadSessionSnapshot {
   };
 }
 
+function createActiveThreadDetails(): ThreadDetails {
+  const baseThread = createThreadDetails();
+
+  return {
+    ...baseThread,
+    messages: [
+      {
+        id: "assistant-1",
+        metadata: {
+          status: "pending" as const,
+          statusLabel: "Working...",
+        },
+        parts: [{ text: " ", type: "text" as const }],
+        role: "assistant" as const,
+      },
+    ],
+    thread: {
+      ...baseThread.thread,
+      activeRunId: "run-1",
+      status: "streaming" as const,
+    },
+  };
+}
+
 function createHandoffState(
   overrides: Partial<ThreadRouteHandoffState> = {},
 ): ThreadRouteHandoffState {
@@ -107,56 +132,19 @@ describe("resolveThreadRouteData", () => {
     expect(resolveThreadRouteData(baseThread, null)).toEqual(baseThread);
   });
 
-  it("waits for fresh data when cached thread metadata still looks active", () => {
-    const baseThread = {
-      ...createThreadDetails(),
-      messages: [
-        {
-          id: "assistant-1",
-          metadata: {
-            status: "pending" as const,
-            statusLabel: "Working...",
-          },
-          parts: [{ text: " ", type: "text" as const }],
-          role: "assistant" as const,
-        },
-      ],
-      thread: {
-        ...createThreadDetails().thread,
-        activeRunId: "run-1",
-        status: "streaming" as const,
-      },
-    };
+  it("renders active-looking cached thread data immediately", () => {
+    const baseThread = createActiveThreadDetails();
 
-    expect(
-      resolveThreadRouteData(baseThread, null, { hasFreshBaseThread: false }),
-    ).toBeUndefined();
+    expect(resolveThreadRouteData(baseThread, null)).toEqual(baseThread);
   });
 
-  it("keeps active thread metadata when it comes from a fresh query", () => {
-    const baseThread = {
-      ...createThreadDetails(),
-      messages: [
-        {
-          id: "assistant-1",
-          metadata: {
-            status: "pending" as const,
-            statusLabel: "Working...",
-          },
-          parts: [{ text: " ", type: "text" as const }],
-          role: "assistant" as const,
-        },
-      ],
-      thread: {
-        ...createThreadDetails().thread,
-        activeRunId: "run-1",
-        status: "streaming" as const,
-      },
-    };
+  it("requests a background refresh for active-looking cached thread data", () => {
+    const baseThread = createActiveThreadDetails();
 
+    expect(shouldRefreshThreadRouteData(baseThread, null)).toBeTrue();
     expect(
-      resolveThreadRouteData(baseThread, null, { hasFreshBaseThread: true }),
-    ).toEqual(baseThread);
+      shouldRefreshThreadRouteData(baseThread, createLiveSnapshot()),
+    ).toBeFalse();
   });
 
   it("returns the base thread when the live snapshot is not ahead", () => {

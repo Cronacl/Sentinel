@@ -17,6 +17,26 @@ export type RepoThreadUiState = {
   threadBranch: string | null;
 };
 
+export type KeyedStableState<T> = {
+  key: string;
+  state: T;
+};
+
+export function resolveKeyedStableState<T>(input: {
+  cachedState?: T | null;
+  currentKey: string;
+  stableState?: KeyedStableState<T> | null;
+}) {
+  if (
+    input.stableState?.key === input.currentKey &&
+    input.stableState.state != null
+  ) {
+    return input.stableState.state;
+  }
+
+  return input.cachedState ?? null;
+}
+
 export function resolveRepoThreadUiState(
   input: RepoThreadUiContext | null | undefined,
 ): RepoThreadUiState {
@@ -42,16 +62,4 @@ export function resolveRepoThreadUiState(
       !isUsingWorktree && branchResumeStatus === "needs_checkout",
     threadBranch,
   };
-}
-
-export function resolveStableRepoThreadUiState(input: {
-  isPending: boolean;
-  liveState: RepoThreadUiState;
-  previousStableState?: RepoThreadUiState | null;
-}) {
-  if (input.isPending && input.previousStableState) {
-    return input.previousStableState;
-  }
-
-  return input.liveState;
 }

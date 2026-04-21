@@ -2379,6 +2379,8 @@ export function WorkspaceSidebar() {
           return;
         }
 
+        navigateToThread(workspaceId, threadId);
+
         const sourceThreadId = selectedThreadId;
         const effectiveSelectedThreadState =
           selectedThreadState ??
@@ -2403,58 +2405,31 @@ export function WorkspaceSidebar() {
             targetWorkspaceId: workspaceId,
           })
         ) {
-          navigateToThread(workspaceId, threadId);
           return;
         }
 
         try {
-          const inspection = await utils.repo.inspectThreadSwitch.fetch({
+          await utils.repo.inspectThreadSwitch.fetch({
             sourceThreadId,
             targetThreadId: threadId,
             workspaceId,
           });
-
-          if (
-            !inspection.requiresBranchSwitch ||
-            inspection.targetProjectMode !== "local"
-          ) {
-            navigateToThread(workspaceId, threadId);
-            return;
-          }
-
-          const nextSwitchState = {
-            ...inspection,
-            workspaceId,
-          } satisfies PendingThreadSwitch;
-
-          if (!inspection.shouldPrompt) {
-            await finalizeThreadSwitch(nextSwitchState);
-            return;
-          }
-
-          setThreadSwitchError("");
-          setThreadSwitchStashName(
-            `${inspection.sourceBranch ?? "thread"}-handoff`,
-          );
-          setPendingThreadSwitch(nextSwitchState);
-          threadSwitchState.open();
+          await utils.repo.getContext.invalidate({ threadId, workspaceId });
         } catch (error) {
-          sileo.error({
-            description: getErrorMessage(
-              error,
-              "Unable to prepare this thread switch.",
-            ),
-            title: "Thread switch failed",
+          console.debug("Unable to inspect thread switch after navigation.", {
+            error,
+            sourceThreadId,
+            targetThreadId: threadId,
+            workspaceId,
           });
         }
       })();
     },
     [
-      finalizeThreadSwitch,
       navigateToThread,
       selectedThreadState,
       selectedThreadId,
-      threadSwitchState,
+      utils.repo.getContext,
       utils.repo.inspectThreadSwitch,
       utils.threads.get,
     ],

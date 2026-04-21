@@ -77,9 +77,10 @@ import {
   getThreadLinkedPullRequest,
 } from "./thread-repo-actions.helpers";
 import {
+  type KeyedStableState,
+  resolveKeyedStableState,
   resolveRepoThreadUiState,
-  resolveStableRepoThreadUiState,
-  type RepoThreadUiState,
+  type RepoThreadUiContext,
 } from "./repo-thread-ui-state";
 
 type ThreadRepoActionsProps = {
@@ -142,8 +143,8 @@ export function ThreadRepoActions({
   const [preferredLaunchTargetId, setPreferredLaunchTargetId] = useState<
     string | null
   >(null);
-  const [stableThreadUiState, setStableThreadUiState] =
-    useState<RepoThreadUiState | null>(null);
+  const [stableRepoContext, setStableRepoContext] =
+    useState<KeyedStableState<RepoThreadUiContext | null> | null>(null);
 
   const commitModalState = useOverlayState({});
   const pushModalState = useOverlayState({});
@@ -169,6 +170,7 @@ export function ThreadRepoActions({
     }),
     [threadId, workspaceId],
   );
+  const repoStateKey = `${workspaceId}:${threadId}`;
 
   const anyModalOpen =
     commitModalState.isOpen ||
@@ -188,6 +190,7 @@ export function ThreadRepoActions({
         ? 2500
         : false,
     refetchOnWindowFocus: !anyModalOpen && !deferRepoContextFetch,
+    placeholderData: () => undefined,
   });
 
   const repoContext = repoContextQuery.data;
@@ -230,10 +233,6 @@ export function ThreadRepoActions({
     snapshotRef.current = repoContext;
   }
   const modalContext = anyModalOpen ? snapshotRef.current : repoContext;
-  const liveThreadUiState = useMemo(
-    () => resolveRepoThreadUiState(repoContext),
-    [repoContext],
-  );
 
   const primaryLaunchTarget = useMemo(
     () =>
@@ -269,10 +268,14 @@ export function ThreadRepoActions({
 
   const applyRepoContext = useCallback(
     (nextRepoContext: typeof repoContext) => {
+      setStableRepoContext({
+        key: repoStateKey,
+        state: nextRepoContext as RepoThreadUiContext | null,
+      });
       utils.repo.getContext.setData(repoContextQueryInput, nextRepoContext);
       void utils.repo.listWorkspaceStatuses.invalidate();
     },
-    [repoContextQueryInput, utils],
+    [repoContextQueryInput, repoStateKey, utils],
   );
 
   const commitMutation = api.repo.commit.useMutation({
@@ -479,14 +482,18 @@ export function ThreadRepoActions({
   const isRepoStatePending = Boolean(
     repoContextQuery.isFetching || projectModeBusy,
   );
+  const stableOrCachedRepoContext = resolveKeyedStableState({
+    cachedState:
+      (cachedRepoContext as RepoThreadUiContext | null | undefined) ?? null,
+    currentKey: repoStateKey,
+    stableState: stableRepoContext,
+  });
+  const effectiveRepoContext = isRepoStatePending
+    ? (stableOrCachedRepoContext ?? repoContext)
+    : repoContext;
   const threadUiState = useMemo(
-    () =>
-      resolveStableRepoThreadUiState({
-        isPending: isRepoStatePending,
-        liveState: liveThreadUiState,
-        previousStableState: stableThreadUiState,
-      }),
-    [isRepoStatePending, liveThreadUiState, stableThreadUiState],
+    () => resolveRepoThreadUiState(effectiveRepoContext),
+    [effectiveRepoContext],
   );
   const threadBranch = threadUiState.threadBranch;
   const isUsingWorktree = threadUiState.isUsingWorktree;
@@ -496,9 +503,12 @@ export function ThreadRepoActions({
 
   useEffect(() => {
     if (!isRepoStatePending) {
-      setStableThreadUiState(liveThreadUiState);
+      setStableRepoContext({
+        key: repoStateKey,
+        state: (repoContext as RepoThreadUiContext | null | undefined) ?? null,
+      });
     }
-  }, [isRepoStatePending, liveThreadUiState]);
+  }, [isRepoStatePending, repoContext, repoStateKey]);
 
   const handleResumeThreadBranch = useCallback(
     async (options?: { silent?: boolean }) => {
