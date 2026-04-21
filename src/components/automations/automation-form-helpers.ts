@@ -4,7 +4,10 @@ import type { RouterOutputs } from "@/trpc/react";
 
 import {
   getReasoningEffortLabel,
+  isUnstableChatEngine,
   resolveReasoningEffort,
+  UNSTABLE_CHAT_ENGINE_DESCRIPTION,
+  UNSTABLE_CHAT_ENGINE_LABEL,
   type ChatComposerModel,
 } from "@/components/chat/chat-composer-helpers";
 import type { SelectOption } from "@/components/forms/controlled-fields";
@@ -17,12 +20,18 @@ export type AutomationEngineModel = ChatComposerModel &
 export function getAutomationEngineOptions(
   engines: EngineStatus[],
 ): SelectOption[] {
-  return engines.map((engine) => ({
-    description: engine.description,
-    isDisabled: !engine.isAvailable,
-    label: engine.label,
-    value: engine.engine,
-  }));
+  return engines.map((engine) => {
+    const descriptionSuffix = engine.description.endsWith(".") ? " " : ". ";
+
+    return {
+      description: isUnstableChatEngine(engine.engine)
+        ? `${engine.description}${descriptionSuffix}${UNSTABLE_CHAT_ENGINE_DESCRIPTION}`
+        : engine.description,
+      isDisabled: !engine.isAvailable,
+      label: engine.label,
+      value: engine.engine,
+    };
+  });
 }
 
 export function getAvailableAutomationModels(
@@ -82,6 +91,10 @@ function getEngineModelDescription(engine: ChatEngine) {
       return "Claude runtime";
     case "copilot":
       return "Copilot runtime";
+    case "cursor":
+      return `Cursor runtime (${UNSTABLE_CHAT_ENGINE_LABEL})`;
+    case "opencode":
+      return "OpenCode runtime";
   }
 }
 

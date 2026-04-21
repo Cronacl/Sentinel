@@ -39,11 +39,17 @@ import type { FileUIPart } from "ai";
 
 import {
   ChatComposer,
+  type ChatComposerOpenCodeSelection,
   type ChatComposerStartPlanImplementationHandler,
+  type ChatComposerThreadSelection,
 } from "./chat-composer";
 import { ChatMessage } from "./chat-message";
 import { ChatScrollControl, useChatScrollControl } from "./chat-scroll-control";
 import { resolveDraftThreadRepoThreadId } from "./new-thread-screen.helpers";
+import {
+  clearThreadRouteHandoff,
+  setThreadRouteHandoff,
+} from "./thread-route-handoff";
 import { buildOptimisticWorktreeRepoContext } from "./thread-repo-actions.helpers";
 import { buildThreadQueryOptions } from "./thread-query-options";
 import { ThreadRepoActions } from "./thread-repo-actions";
@@ -85,12 +91,13 @@ export function NewThreadScreen({
     branch: string;
     path: string;
   } | null>(null);
-  const [draftThreadSelection, setDraftThreadSelection] = useState<{
-    engine: ChatEngine;
-    modelId: string | null;
-    mode: "chat" | "plan";
-    reasoningEffort: ReasoningEffort | null;
-  } | null>(null);
+  const [draftThreadSelection, setDraftThreadSelection] =
+    useState<ChatComposerThreadSelection | null>(null);
+  const [draftOpenCodeSelection, setDraftOpenCodeSelection] =
+    useState<ChatComposerOpenCodeSelection>({
+      agent: null,
+      variant: null,
+    });
   const [draftThreadId, setDraftThreadId] = useState(
     () => threadId ?? crypto.randomUUID(),
   );
@@ -433,6 +440,44 @@ export function NewThreadScreen({
     }
   }, [isBusy]);
 
+  const writeThreadRouteHandoffSnapshot = useCallback(
+    (
+      nextThreadSelection?: ChatComposerThreadSelection | null,
+      nextOpenCodeSelection?: ChatComposerOpenCodeSelection,
+    ) => {
+      if (threadId) {
+        return;
+      }
+
+      const resolvedThreadSelection =
+        nextThreadSelection ?? draftThreadSelection;
+      if (!resolvedThreadSelection) {
+        return;
+      }
+
+      setThreadRouteHandoff({
+        draftPreparedWorktree,
+        draftProjectMode,
+        openCodeSelection: nextOpenCodeSelection ?? draftOpenCodeSelection,
+        threadId: draftThreadId,
+        threadSelection: resolvedThreadSelection,
+        updatedAt: Date.now(),
+      });
+    },
+    [
+      draftOpenCodeSelection,
+      draftPreparedWorktree,
+      draftProjectMode,
+      draftThreadId,
+      draftThreadSelection,
+      threadId,
+    ],
+  );
+
+  useEffect(() => {
+    writeThreadRouteHandoffSnapshot();
+  }, [writeThreadRouteHandoffSnapshot]);
+
   const handleSend = useCallback(
     async ({
       composerContext,
@@ -440,6 +485,7 @@ export function NewThreadScreen({
       engine,
       files,
       modelId,
+      openCode,
       reasoningEffort,
       text,
       threadMode = "chat",
@@ -451,6 +497,7 @@ export function NewThreadScreen({
       engine: ChatEngine;
       files?: FileUIPart[];
       modelId: string;
+      openCode?: { agent?: string | null; variant?: string | null };
       reasoningEffort?: ReasoningEffort | null;
       text: string;
       threadMode?: "chat" | "plan";
@@ -463,6 +510,18 @@ export function NewThreadScreen({
         mode: threadMode,
         reasoningEffort: reasoningEffort ?? null,
       });
+      writeThreadRouteHandoffSnapshot(
+        {
+          engine,
+          modelId,
+          mode: threadMode,
+          reasoningEffort: reasoningEffort ?? null,
+        },
+        {
+          agent: openCode?.agent ?? null,
+          variant: openCode?.variant ?? null,
+        },
+      );
       if (selectedWorkspace) {
         const now = new Date();
         utils.threads.get.setData({ threadId: draftThreadId }, (current) => ({
@@ -541,10 +600,16 @@ export function NewThreadScreen({
         engine,
         files,
         modelId,
+        ...(openCode ? { openCode } : {}),
         reasoningEffort,
         text,
         threadMode,
       });
+      if (!threadId && !hasHandedOffRef.current) {
+        hasHandedOffRef.current = true;
+        setDraftThreadInitialized(true);
+        navigateToThread(draftThreadId, { replace: true });
+      }
       const applyBootstrapSnapshot = (
         bootstrap: Awaited<ReturnType<typeof sendMessage>> | null | undefined,
       ) => {
@@ -579,11 +644,6 @@ export function NewThreadScreen({
         if (threadId && repoContextQueryInput) {
           void utils.repo.getContext.invalidate(repoContextQueryInput);
         }
-
-        if (!threadId && !hasHandedOffRef.current) {
-          hasHandedOffRef.current = true;
-          navigateToThread(draftThreadId, { replace: true });
-        }
       } catch (error) {
         if (
           !threadId &&
@@ -612,6 +672,7 @@ export function NewThreadScreen({
       threadId,
       utils.threads.get,
       utils,
+      writeThreadRouteHandoffSnapshot,
     ],
   );
 
@@ -659,6 +720,7 @@ export function NewThreadScreen({
       engine,
       files,
       modelId,
+      openCode,
       reasoningEffort,
       text,
       threadMode = "chat",
@@ -670,6 +732,7 @@ export function NewThreadScreen({
       engine: ChatEngine;
       files?: FileUIPart[];
       modelId: string;
+      openCode?: { agent?: string | null; variant?: string | null };
       reasoningEffort?: ReasoningEffort | null;
       text: string;
       threadMode?: "chat" | "plan";
@@ -681,6 +744,7 @@ export function NewThreadScreen({
         engine,
         files,
         modelId,
+        ...(openCode ? { openCode } : {}),
         reasoningEffort,
         text,
         threadMode,
@@ -700,6 +764,7 @@ export function NewThreadScreen({
       engine,
       files,
       modelId,
+      openCode,
       reasoningEffort,
       text,
       threadMode = "chat",
@@ -711,6 +776,7 @@ export function NewThreadScreen({
       engine: ChatEngine;
       files?: FileUIPart[];
       modelId: string;
+      openCode?: { agent?: string | null; variant?: string | null };
       reasoningEffort?: ReasoningEffort | null;
       text: string;
       threadMode?: "chat" | "plan";
@@ -722,6 +788,7 @@ export function NewThreadScreen({
         engine,
         files,
         modelId,
+        ...(openCode ? { openCode } : {}),
         reasoningEffort,
         text,
         threadMode,
@@ -771,15 +838,17 @@ export function NewThreadScreen({
       mode?: "chat" | "plan";
       reasoningEffort?: ReasoningEffort | null;
     }) => {
-      setDraftThreadSelection((current) => ({
-        engine: engine ?? current?.engine ?? "sentinel",
-        modelId: modelId !== undefined ? modelId : (current?.modelId ?? null),
-        mode: mode ?? current?.mode ?? draftThreadMode ?? "chat",
-        reasoningEffort:
-          reasoningEffort !== undefined
-            ? reasoningEffort
-            : (current?.reasoningEffort ?? null),
-      }));
+      setDraftThreadSelection(
+        (current: ChatComposerThreadSelection | null) => ({
+          engine: engine ?? current?.engine ?? "sentinel",
+          modelId: modelId !== undefined ? modelId : (current?.modelId ?? null),
+          mode: mode ?? current?.mode ?? draftThreadMode ?? "chat",
+          reasoningEffort:
+            reasoningEffort !== undefined
+              ? reasoningEffort
+              : (current?.reasoningEffort ?? null),
+        }),
+      );
       if (mode) {
         setDraftThreadMode(mode);
       }
@@ -798,6 +867,9 @@ export function NewThreadScreen({
       }
 
       setIsWorkspaceMenuOpen(false);
+      if (!threadId) {
+        clearThreadRouteHandoff(draftThreadId);
+      }
 
       if (
         !threadId &&
@@ -817,6 +889,7 @@ export function NewThreadScreen({
 
       if (!threadId && draftThreadInitialized) {
         const previousDraftThreadId = draftThreadId;
+        clearThreadRouteHandoff(previousDraftThreadId);
         setDraftThreadId(crypto.randomUUID());
         setDraftThreadInitialized(false);
 
@@ -883,6 +956,11 @@ export function NewThreadScreen({
       setDraftProjectMode("local");
       setDraftThreadMode(utils.chatPreferences.get.getData()?.mode ?? null);
       setDraftThreadSelection(null);
+      setDraftOpenCodeSelection({
+        agent: null,
+        variant: null,
+      });
+      clearThreadRouteHandoff(draftThreadId);
       setDraftThreadId(crypto.randomUUID());
       setDraftThreadInitialized(false);
     };
@@ -986,10 +1064,12 @@ export function NewThreadScreen({
                 draftProjectMode={draftProjectMode}
                 draftThreadId={draftThreadId}
                 draftMode={resolvedThreadSelection?.mode ?? draftThreadMode}
+                openCodeSelection={draftOpenCodeSelection}
                 onQueueFollowUp={handleQueueFollowUp}
                 onRemoveQueuedFollowUp={handleRemoveQueuedFollowUp}
                 onDraftPreparedWorktreeChange={setDraftPreparedWorktree}
                 onDraftProjectModeChange={setDraftProjectMode}
+                onOpenCodeSelectionChange={setDraftOpenCodeSelection}
                 onRegisterStartPlanImplementation={
                   handleRegisterStartPlanImplementation
                 }
@@ -1166,10 +1246,12 @@ export function NewThreadScreen({
               draftProjectMode={draftProjectMode}
               draftThreadId={draftThreadId}
               draftMode={draftThreadMode}
+              openCodeSelection={draftOpenCodeSelection}
               onQueueFollowUp={handleQueueFollowUp}
               onRemoveQueuedFollowUp={handleRemoveQueuedFollowUp}
               onDraftPreparedWorktreeChange={setDraftPreparedWorktree}
               onDraftProjectModeChange={setDraftProjectMode}
+              onOpenCodeSelectionChange={setDraftOpenCodeSelection}
               onRegisterStartPlanImplementation={
                 handleRegisterStartPlanImplementation
               }

@@ -24,7 +24,10 @@ import { ComposerToolbar } from "../composer-toolbar";
 import { ComposerWorkspaceBar } from "../composer-workspace-bar";
 import { ModelSelector } from "../model-selector";
 import { QueuedMessages } from "../queued-messages";
-import { shouldClearComposerAfterSendError } from "../chat-composer-helpers";
+import {
+  resolveOpenCodeTraitValueForThreadMode,
+  shouldClearComposerAfterSendError,
+} from "../chat-composer-helpers";
 import { VoiceRecorderPanel } from "./voice-recorder-panel";
 
 import type { ChatComposerProps, ComposerSendInput } from "./types";
@@ -38,8 +41,10 @@ import { shouldShowVoiceInputControl } from "./voice-input.helpers";
 import { resolveThreadSelectionSyncInput } from "./thread-selection-sync";
 
 export type {
+  ChatComposerOpenCodeSelection,
   ChatComposerProps,
   ChatComposerStartPlanImplementationHandler,
+  ChatComposerThreadSelection,
 } from "./types";
 
 let hasComposerBootstrappedThisSession = false;
@@ -55,9 +60,11 @@ export function ChatComposer({
   draftThreadId,
   draftMode = null,
   isEditing = false,
+  openCodeSelection = null,
   onCancelEdit,
   onDraftPreparedWorktreeChange,
   onDraftProjectModeChange,
+  onOpenCodeSelectionChange,
   onQueueFollowUp,
   onRegisterStartPlanImplementation,
   onRemoveQueuedFollowUp,
@@ -125,16 +132,22 @@ export function ChatComposer({
     engineOptions,
     handleSelectEngine,
     handleSelectModel,
+    handleSelectOpenCodeAgent,
+    handleSelectOpenCodeVariant,
     handleSelectReasoningEffort,
     modelsQuery,
     selectedEngine,
     selectedModel,
     selectedModelKey,
+    selectedOpenCodeAgent,
+    selectedOpenCodeVariant,
     selectedReasoningEffort,
     supportedReasoningEfforts,
     threadPersistenceReadyRef,
   } = useModelSelection({
     globalSelectionQuery,
+    openCodeSelection,
+    onOpenCodeSelectionChange,
     onSelectionChange,
     persistEngineSelection,
     persistSelection,
@@ -243,6 +256,19 @@ export function ChatComposer({
             generalSettingsQuery.data?.contextCompactionUseFixedWindow,
         })
       : null;
+  const openCodeTraits =
+    selectedModel?.engine === "opencode" ? selectedModel.openCode : undefined;
+  const effectiveSelectedOpenCodeAgent = resolveOpenCodeTraitValueForThreadMode(
+    openCodeTraits?.agentOptions,
+    selectedOpenCodeAgent,
+    planMode ? "plan" : "chat",
+  );
+  const effectiveSelectedOpenCodeVariant =
+    resolveOpenCodeTraitValueForThreadMode(
+      openCodeTraits?.variantOptions,
+      selectedOpenCodeVariant,
+      planMode ? "plan" : "chat",
+    );
 
   useEffect(() => {
     if (!canPersistThreadSelection || !threadSelection) {
@@ -283,6 +309,28 @@ export function ChatComposer({
     threadSelection,
   ]);
 
+  useEffect(() => {
+    if (selectedModel?.engine !== "opencode") {
+      return;
+    }
+
+    if (effectiveSelectedOpenCodeAgent !== selectedOpenCodeAgent) {
+      handleSelectOpenCodeAgent(effectiveSelectedOpenCodeAgent);
+    }
+
+    if (effectiveSelectedOpenCodeVariant !== selectedOpenCodeVariant) {
+      handleSelectOpenCodeVariant(effectiveSelectedOpenCodeVariant);
+    }
+  }, [
+    effectiveSelectedOpenCodeAgent,
+    effectiveSelectedOpenCodeVariant,
+    handleSelectOpenCodeAgent,
+    handleSelectOpenCodeVariant,
+    selectedModel?.engine,
+    selectedOpenCodeAgent,
+    selectedOpenCodeVariant,
+  ]);
+
   const dispatchMessagePayload = useCallback(
     async (messagePayload: ComposerSendInput) => {
       if (isBusy) {
@@ -321,6 +369,14 @@ export function ChatComposer({
         engine: selectedEngine,
         ...(files.length > 0 ? { files } : {}),
         modelId: selectedModelKey,
+        ...(selectedEngine === "opencode"
+          ? {
+              openCode: {
+                agent: effectiveSelectedOpenCodeAgent,
+                variant: effectiveSelectedOpenCodeVariant,
+              },
+            }
+          : {}),
         reasoningEffort: selectedReasoningEffort,
         text,
         threadMode: (planMode ? "plan" : "chat") as "chat" | "plan",
@@ -366,6 +422,8 @@ export function ChatComposer({
     canSend,
     selectedEngine,
     selectedModelKey,
+    effectiveSelectedOpenCodeAgent,
+    effectiveSelectedOpenCodeVariant,
     selectedReasoningEffort,
     setAttachmentError,
     setPreviewAttachment,
@@ -386,6 +444,22 @@ export function ChatComposer({
       ...(draftRepoState ? { draftRepoState } : {}),
       engine: selectedEngine,
       modelId: selectedModelKey,
+      ...(selectedEngine === "opencode"
+        ? {
+            openCode: {
+              agent: resolveOpenCodeTraitValueForThreadMode(
+                selectedModel?.openCode?.agentOptions,
+                selectedOpenCodeAgent,
+                "chat",
+              ),
+              variant: resolveOpenCodeTraitValueForThreadMode(
+                selectedModel?.openCode?.variantOptions,
+                selectedOpenCodeVariant,
+                "chat",
+              ),
+            },
+          }
+        : {}),
       reasoningEffort: selectedReasoningEffort,
       text: IMPLEMENT_PLAN_PROMPT,
       threadMode: "chat",
@@ -397,6 +471,10 @@ export function ChatComposer({
     onStartPlanImplementationSend,
     selectedEngine,
     selectedModelKey,
+    selectedModel?.openCode?.agentOptions,
+    selectedModel?.openCode?.variantOptions,
+    selectedOpenCodeAgent,
+    selectedOpenCodeVariant,
     selectedReasoningEffort,
     setAttachmentError,
     setPlanMode,
@@ -452,7 +530,11 @@ export function ChatComposer({
         availableModels={availableModels}
         isLoading={modelsQuery.isLoading && availableModels.length === 0}
         onSelectModel={handleSelectModel}
+        onSelectOpenCodeAgent={handleSelectOpenCodeAgent}
+        onSelectOpenCodeVariant={handleSelectOpenCodeVariant}
         onSelectReasoningEffort={handleSelectReasoningEffort}
+        selectedOpenCodeAgent={effectiveSelectedOpenCodeAgent}
+        selectedOpenCodeVariant={effectiveSelectedOpenCodeVariant}
         selectedModel={selectedModel}
         selectedModelKey={selectedModelKey}
         selectedReasoningEffort={selectedReasoningEffort}
@@ -462,8 +544,12 @@ export function ChatComposer({
     [
       availableModels,
       handleSelectModel,
+      handleSelectOpenCodeAgent,
+      handleSelectOpenCodeVariant,
       handleSelectReasoningEffort,
       modelsQuery.isLoading,
+      effectiveSelectedOpenCodeAgent,
+      effectiveSelectedOpenCodeVariant,
       selectedModel,
       selectedModelKey,
       selectedReasoningEffort,

@@ -10,4 +10,12 @@ describe("CHAT_ENGINES", () => {
   it("includes Copilot as a supported chat engine", () => {
     expect(CHAT_ENGINES).toContain("copilot");
   });
+
+  it("includes Cursor as a supported chat engine", () => {
+    expect(CHAT_ENGINES).toContain("cursor");
+  });
+
+  it("includes OpenCode as a supported chat engine", () => {
+    expect(CHAT_ENGINES).toContain("opencode");
+  });
 });

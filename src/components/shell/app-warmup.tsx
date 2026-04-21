@@ -35,6 +35,7 @@ export function AppWarmupCoordinator() {
     void utils.engines.models.prefetch({ engine: "codex" });
     void utils.engines.models.prefetch({ engine: "claude" });
     void utils.engines.models.prefetch({ engine: "copilot" });
+    void utils.engines.models.prefetch({ engine: "cursor" });
     void utils.workspaces.getCurrent.prefetch();
     void preflightMicrophonePermissionOnStartup().catch(() => {});
 

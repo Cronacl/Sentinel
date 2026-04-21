@@ -277,6 +277,18 @@ export function NewAutomationModal({
     },
     { enabled: isOpen },
   );
+  const cursorModelsQuery = api.engines.models.useQuery(
+    {
+      engine: "cursor",
+    },
+    { enabled: isOpen },
+  );
+  const openCodeModelsQuery = api.engines.models.useQuery(
+    {
+      engine: "opencode",
+    },
+    { enabled: isOpen },
+  );
   const chatPreferencesQuery = api.chatPreferences.get.useQuery(undefined, {
     enabled: isOpen,
   });
@@ -298,6 +310,14 @@ export function NewAutomationModal({
     () => getAvailableAutomationModels(copilotModelsQuery.data ?? []),
     [copilotModelsQuery.data],
   );
+  const availableCursorModels = useMemo(
+    () => getAvailableAutomationModels(cursorModelsQuery.data ?? []),
+    [cursorModelsQuery.data],
+  );
+  const availableOpenCodeModels = useMemo(
+    () => getAvailableAutomationModels(openCodeModelsQuery.data ?? []),
+    [openCodeModelsQuery.data],
+  );
   const globalDefaults = useMemo(() => {
     const preferredEngine = chatPreferencesQuery.data?.engine ?? "sentinel";
     const preferredReasoningEffort =
@@ -309,6 +329,8 @@ export function NewAutomationModal({
       claude: availableClaudeModels,
       copilot: availableCopilotModels,
       codex: availableCodexModels,
+      cursor: availableCursorModels,
+      opencode: availableOpenCodeModels,
       sentinel: availableSentinelModels,
     });
 
@@ -321,6 +343,8 @@ export function NewAutomationModal({
       claude: availableClaudeModels,
       copilot: availableCopilotModels,
       codex: availableCodexModels,
+      cursor: availableCursorModels,
+      opencode: availableOpenCodeModels,
       sentinel: availableSentinelModels,
     });
     const selection = resolveAutomationSelection(
@@ -338,6 +362,8 @@ export function NewAutomationModal({
     availableClaudeModels,
     availableCopilotModels,
     availableCodexModels,
+    availableCursorModels,
+    availableOpenCodeModels,
     availableSentinelModels,
     chatPreferencesQuery.data?.engine,
     chatPreferencesQuery.data?.modelId,
@@ -415,12 +441,16 @@ export function NewAutomationModal({
         claude: availableClaudeModels,
         copilot: availableCopilotModels,
         codex: availableCodexModels,
+        cursor: availableCursorModels,
+        opencode: availableOpenCodeModels,
         sentinel: availableSentinelModels,
       }),
     [
       availableClaudeModels,
       availableCopilotModels,
       availableCodexModels,
+      availableCursorModels,
+      availableOpenCodeModels,
       availableSentinelModels,
       selectedEngine,
     ],
@@ -504,7 +534,9 @@ export function NewAutomationModal({
     sentinelModelsQuery.isLoading ||
     codexModelsQuery.isLoading ||
     claudeModelsQuery.isLoading ||
-    copilotModelsQuery.isLoading;
+    copilotModelsQuery.isLoading ||
+    cursorModelsQuery.isLoading ||
+    openCodeModelsQuery.isLoading;
 
   const handleCreate = async (values: AutomationFormValues) => {
     setSubmitError("");

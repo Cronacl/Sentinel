@@ -485,6 +485,12 @@ function isStructuredUserInputToolName(name: string) {
   const withoutCopilotPrefix = normalized.startsWith("copilot")
     ? normalized.slice("copilot".length)
     : normalized;
+  const withoutCursorPrefix = normalized.startsWith("cursor")
+    ? normalized.slice("cursor".length)
+    : normalized;
+  const withoutOpenCodePrefix = normalized.startsWith("opencode")
+    ? normalized.slice("opencode".length)
+    : normalized;
 
   return (
     normalized === "askuserquestion" ||
@@ -494,7 +500,15 @@ function isStructuredUserInputToolName(name: string) {
     withoutClaudePrefix === "requestuserinput" ||
     withoutCopilotPrefix === "askuser" ||
     withoutCopilotPrefix === "askuserquestion" ||
-    withoutCopilotPrefix === "requestuserinput"
+    withoutCopilotPrefix === "requestuserinput" ||
+    withoutCursorPrefix === "askquestion" ||
+    withoutCursorPrefix === "askuser" ||
+    withoutCursorPrefix === "askuserquestion" ||
+    withoutCursorPrefix === "requestuserinput" ||
+    withoutOpenCodePrefix === "askquestion" ||
+    withoutOpenCodePrefix === "askuser" ||
+    withoutOpenCodePrefix === "askuserquestion" ||
+    withoutOpenCodePrefix === "requestuserinput"
   );
 }
 
@@ -558,6 +572,10 @@ export function resolveRenderer(part: ToolPart): Renderer | undefined {
 
     if (part.toolName.startsWith("copilot_")) {
       return copilotRenderers[part.toolName] ?? CopilotRuntimeTool;
+    }
+
+    if (part.toolName.startsWith("opencode_")) {
+      return GenericTool;
     }
 
     return (

@@ -94,6 +94,7 @@ async function executeAutomationChat(params: {
     };
     modelId?: string;
     reasoningEffort?: ReasoningEffort;
+    toolsEnabled?: boolean;
     trigger: "submit-user-message";
     workspaceId: string;
   };
@@ -122,6 +123,24 @@ async function executeAutomationChat(params: {
         {
           ...params.chatInput,
           engine: "codex",
+        },
+        params.userId,
+      );
+    case "cursor":
+      return runThreadChat(
+        {
+          ...params.chatInput,
+          engine: "cursor",
+          toolsEnabled: false,
+        },
+        params.userId,
+      );
+    case "opencode":
+      return runThreadChat(
+        {
+          ...params.chatInput,
+          engine: "opencode",
+          toolsEnabled: false,
         },
         params.userId,
       );

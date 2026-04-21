@@ -27,6 +27,11 @@ import {
   type ComposerWorkspaceBarDisplayState,
 } from "./composer-workspace-bar.helpers";
 import type { DraftProjectMode } from "./draft-thread-project-mode";
+import {
+  resolveRepoThreadUiState,
+  resolveStableRepoThreadUiState,
+  type RepoThreadUiState,
+} from "./repo-thread-ui-state";
 
 type ComposerWorkspaceBarProps = {
   activeWorkspace: {
@@ -85,6 +90,8 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
   const [branchError, setBranchError] = useState("");
   const [stableDisplayState, setStableDisplayState] =
     useState<ComposerWorkspaceBarDisplayState | null>(null);
+  const [stableThreadUiState, setStableThreadUiState] =
+    useState<RepoThreadUiState | null>(null);
 
   const securityQuery = api.security.get.useQuery();
   const repoContextInput = repoThreadId
@@ -280,13 +287,25 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
       }),
     [isRepoStatePending, liveDisplayState, stableDisplayState],
   );
+  const liveThreadUiState = useMemo(
+    () => resolveRepoThreadUiState(repoContextQuery.data),
+    [repoContextQuery.data],
+  );
+  const threadUiState = useMemo(
+    () =>
+      resolveStableRepoThreadUiState({
+        isPending: isRepoStatePending,
+        liveState: liveThreadUiState,
+        previousStableState: stableThreadUiState,
+      }),
+    [isRepoStatePending, liveThreadUiState, stableThreadUiState],
+  );
   const threadBranch = displayState.threadBranch;
   const isUsingWorktree = displayState.isUsingWorktree;
   const displayBranch = displayState.displayBranch;
   const hasReadyWorktree = displayState.hasReadyWorktree;
-  const branchResumeStatus =
-    repoContextQuery.data?.branchResumeStatus ?? "matched";
-  const branchResumeReason = repoContextQuery.data?.branchResumeReason ?? null;
+  const branchResumeStatus = threadUiState.branchResumeStatus;
+  const branchResumeReason = threadUiState.branchResumeReason;
   const projectModeLabel = displayState.projectModeLabel;
   const projectModeIcon = isUsingWorktree ? FolderTreeIcon : LaptopIcon;
   const isBranchLoading =
@@ -316,8 +335,9 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
   useEffect(() => {
     if (!isRepoStatePending) {
       setStableDisplayState(liveDisplayState);
+      setStableThreadUiState(liveThreadUiState);
     }
-  }, [isRepoStatePending, liveDisplayState]);
+  }, [isRepoStatePending, liveDisplayState, liveThreadUiState]);
 
   const handlePrepareDraftWorktree = useCallback(async () => {
     if (!draftThreadId || !onDraftProjectModeChange) {
@@ -1026,7 +1046,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                             disabled={isBranchMutating}
                             key={branch.name}
                             onClick={() => {
-                              if (branch.current) {
+                              if (branch.name === displayBranch) {
                                 setBranchSearch("");
                                 setBranchPopoverOpen(false);
                                 return;
@@ -1084,7 +1104,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                               />
                               <span className="truncate">{branch.name}</span>
                             </span>
-                            {branch.current ? (
+                            {branch.name === displayBranch ? (
                               <HugeiconsIcon
                                 color="currentColor"
                                 icon={Tick02Icon}

@@ -56,6 +56,21 @@ export const copilotThreadStateSchema = z.object({
   sessionId: z.string(),
 });
 
+export const cursorThreadStateSchema = z.object({
+  cwd: z.string().nullish(),
+  modelId: z.string().nullish(),
+  reasoningEffort: z.enum(REASONING_EFFORTS).nullish(),
+  sessionId: z.string(),
+});
+
+export const openCodeThreadStateSchema = z.object({
+  cwd: z.string().nullish(),
+  modelId: z.string().nullish(),
+  selectedAgent: z.string().nullish(),
+  selectedVariant: z.string().nullish(),
+  sessionId: z.string(),
+});
+
 const repoComparePullRequestSchema = z.object({
   base: z.string(),
   createdAt: z.string(),
@@ -103,6 +118,8 @@ export const threadChatEngineStateSchema = z
     claude: claudeThreadStateSchema.nullish(),
     copilot: copilotThreadStateSchema.nullish(),
     codex: codexThreadStateSchema.nullish(),
+    cursor: cursorThreadStateSchema.nullish(),
+    opencode: openCodeThreadStateSchema.nullish(),
     permissionModeOverride: z.enum(PERMISSION_MODES).nullish(),
     repo: repoThreadStateSchema.nullish(),
   })
@@ -112,6 +129,8 @@ type ThreadChatEngineStateMap = {
   claude: z.infer<typeof claudeThreadStateSchema>;
   copilot: z.infer<typeof copilotThreadStateSchema>;
   codex: z.infer<typeof codexThreadStateSchema>;
+  cursor: z.infer<typeof cursorThreadStateSchema>;
+  opencode: z.infer<typeof openCodeThreadStateSchema>;
 };
 
 type ExternalChatEngine = Exclude<ChatEngine, "sentinel">;
@@ -122,6 +141,8 @@ export type CodexSandboxMode = z.infer<typeof codexSandboxModeSchema>;
 export type CodexThreadState = z.infer<typeof codexThreadStateSchema>;
 export type ClaudeThreadState = z.infer<typeof claudeThreadStateSchema>;
 export type CopilotThreadState = z.infer<typeof copilotThreadStateSchema>;
+export type CursorThreadState = z.infer<typeof cursorThreadStateSchema>;
+export type OpenCodeThreadState = z.infer<typeof openCodeThreadStateSchema>;
 export type RepoLastPullRequest = z.infer<typeof repoLastPullRequestSchema>;
 export type RepoProjectMode = z.infer<typeof repoProjectModeSchema>;
 export type RepoThreadState = z.infer<typeof repoThreadStateSchema>;
@@ -148,6 +169,16 @@ export function getCopilotThreadState(
   return parseThreadChatEngineState(value)?.copilot ?? null;
 }
 
+export function getCursorThreadState(value: unknown): CursorThreadState | null {
+  return parseThreadChatEngineState(value)?.cursor ?? null;
+}
+
+export function getOpenCodeThreadState(
+  value: unknown,
+): OpenCodeThreadState | null {
+  return parseThreadChatEngineState(value)?.opencode ?? null;
+}
+
 export function getRepoThreadState(value: unknown): RepoThreadState | null {
   return parseThreadChatEngineState(value)?.repo ?? null;
 }
@@ -165,7 +196,14 @@ export function mergeThreadChatEngineState(
     ...(patch ?? {}),
   };
 
-  if (!next.claude && !next.copilot && !next.codex && !next.repo) {
+  if (
+    !next.claude &&
+    !next.copilot &&
+    !next.codex &&
+    !next.cursor &&
+    !next.opencode &&
+    !next.repo
+  ) {
     return null;
   }
 
@@ -183,5 +221,9 @@ export function buildThreadChatEngineState(
       return { claude: value as ClaudeThreadState | null };
     case "copilot":
       return { copilot: value as CopilotThreadState | null };
+    case "cursor":
+      return { cursor: value as CursorThreadState | null };
+    case "opencode":
+      return { opencode: value as OpenCodeThreadState | null };
   }
 }

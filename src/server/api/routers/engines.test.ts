@@ -82,12 +82,69 @@ const getCopilotEngineStatus = mock(async () => ({
   state: "ready",
   usedCachedStatus: false,
 }));
+const getCursorEngineStatus = mock(async () => ({
+  authReady: true,
+  availableModels: [
+    {
+      contextWindow: undefined,
+      defaultReasoningEffort: "medium",
+      description: "Cursor Agent model",
+      displayName: "GPT-5.4",
+      id: "gpt-5.4",
+      inputModalities: ["text"],
+      isDefault: true,
+      model: "gpt-5.4",
+      supportedReasoningEfforts: [{ effort: "medium" }],
+    },
+  ],
+  cliDetected: true,
+  cliPath: "/Users/test/.local/bin/agent",
+  cliVersion: "agent 1.0.0",
+  engine: "cursor",
+  error: null,
+  lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
+  parameterizedModelPicker: true,
+  state: "ready",
+  usedCachedStatus: false,
+}));
+const getOpenCodeEngineStatus = mock(async () => ({
+  authReady: true,
+  availableModels: [
+    {
+      contextWindow: undefined,
+      defaultReasoningEffort: null,
+      description: "OpenCode model",
+      displayName: "GPT-5",
+      id: "openai/gpt-5",
+      inputModalities: ["text"],
+      isDefault: true,
+      model: "openai/gpt-5",
+      openCode: {
+        agentOptions: [{ isDefault: true, label: "Build", value: "build" }],
+        variantOptions: [{ isDefault: true, label: "Medium", value: "medium" }],
+      },
+      supportedReasoningEfforts: [],
+    },
+  ],
+  cliDetected: true,
+  cliPath: "/Users/test/.local/bin/opencode",
+  cliVersion: "opencode 1.0.0",
+  engine: "opencode",
+  error: null,
+  lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
+  state: "ready",
+  usedCachedStatus: false,
+}));
 const resetCodexCliResolutionCache = mock(() => undefined);
 const resetCodexEngineStatusCache = mock(() => undefined);
 const resetClaudeCodeRuntimeCache = mock(() => undefined);
 const resetClaudeEngineStatusCache = mock(() => undefined);
 const resetCopilotRuntimeCache = mock(() => undefined);
 const resetCopilotEngineStatusCache = mock(() => undefined);
+const resetCursorRuntimeCache = mock(() => undefined);
+const resetCursorEngineStatusCache = mock(() => undefined);
+const resetOpenCodeRuntimeCache = mock(() => undefined);
+const resetOpenCodeEngineStatusCache = mock(() => undefined);
 const resolveCodexCli = mock(async () => ({
   command: "/Users/test/.local/bin/codex",
   env: process.env,
@@ -142,6 +199,25 @@ mock.module("@/lib/ai/chat/engines/copilot-sdk", () => ({
       status.availableModels.length > 0),
   resetCopilotEngineStatusCache,
   resetCopilotRuntimeCache,
+}));
+
+mock.module("@/lib/ai/chat/engines/cursor-acp", () => ({
+  getCursorEngineStatus,
+  isCursorEngineAvailable: (status: any) =>
+    (status.state === "ready" && status.authReady) ||
+    (status.state === "timeout_using_cache" &&
+      status.authReady &&
+      status.availableModels.length > 0),
+  resetCursorEngineStatusCache,
+  resetCursorRuntimeCache,
+}));
+
+mock.module("@/lib/ai/chat/engines/opencode-sdk", () => ({
+  getOpenCodeEngineStatus,
+  isOpenCodeEngineAvailable: (status: any) =>
+    status.state === "ready" || status.state === "timeout_no_cache",
+  resetOpenCodeEngineStatusCache,
+  resetOpenCodeRuntimeCache,
 }));
 
 mock.module("@/lib/ai/chat/engines/codex-cli", () => ({
@@ -230,12 +306,18 @@ beforeEach(() => {
   getStatus.mockReset();
   getClaudeEngineStatus.mockReset();
   getCopilotEngineStatus.mockReset();
+  getCursorEngineStatus.mockReset();
+  getOpenCodeEngineStatus.mockReset();
   resetCodexCliResolutionCache.mockReset();
   resetCodexEngineStatusCache.mockReset();
   resetClaudeCodeRuntimeCache.mockReset();
   resetClaudeEngineStatusCache.mockReset();
   resetCopilotRuntimeCache.mockReset();
   resetCopilotEngineStatusCache.mockReset();
+  resetCursorRuntimeCache.mockReset();
+  resetCursorEngineStatusCache.mockReset();
+  resetOpenCodeRuntimeCache.mockReset();
+  resetOpenCodeEngineStatusCache.mockReset();
   resolveCodexCli.mockReset();
   readCodexCliVersion.mockReset();
   spawnCodexCli.mockReset();
@@ -326,6 +408,61 @@ beforeEach(() => {
     state: "ready",
     usedCachedStatus: false,
   }));
+  getCursorEngineStatus.mockImplementation(async () => ({
+    authReady: true,
+    availableModels: [
+      {
+        contextWindow: undefined,
+        defaultReasoningEffort: "medium",
+        description: "Cursor Agent model",
+        displayName: "GPT-5.4",
+        id: "gpt-5.4",
+        inputModalities: ["text"],
+        isDefault: true,
+        model: "gpt-5.4",
+        supportedReasoningEfforts: [{ effort: "medium" }],
+      },
+    ],
+    cliDetected: true,
+    cliPath: "/Users/test/.local/bin/agent",
+    cliVersion: "agent 1.0.0",
+    engine: "cursor",
+    error: null,
+    lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
+    parameterizedModelPicker: true,
+    state: "ready",
+    usedCachedStatus: false,
+  }));
+  getOpenCodeEngineStatus.mockImplementation(async () => ({
+    authReady: true,
+    availableModels: [
+      {
+        contextWindow: undefined,
+        defaultReasoningEffort: null,
+        description: "OpenCode model",
+        displayName: "GPT-5",
+        id: "openai/gpt-5",
+        inputModalities: ["text"],
+        isDefault: true,
+        model: "openai/gpt-5",
+        openCode: {
+          agentOptions: [{ isDefault: true, label: "Build", value: "build" }],
+          variantOptions: [
+            { isDefault: true, label: "Medium", value: "medium" },
+          ],
+        },
+        supportedReasoningEfforts: [],
+      },
+    ],
+    cliDetected: true,
+    cliPath: "/Users/test/.local/bin/opencode",
+    cliVersion: "opencode 1.0.0",
+    engine: "opencode",
+    error: null,
+    lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
+    state: "ready",
+    usedCachedStatus: false,
+  }));
   getOwnedThreadOrThrow.mockImplementation(async () => ({
     chatEngineState: {
       codex: {
@@ -392,6 +529,49 @@ describe("enginesRouter.list", () => {
           engine: "copilot",
           isAvailable: true,
           label: "Copilot",
+          status: expect.objectContaining({
+            authReady: true,
+            cliDetected: true,
+            state: "ready",
+            usedCachedStatus: false,
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("includes Cursor with normalized availability state", async () => {
+    const result = await enginesRouter.list({});
+
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          description: "Use the locally configured Cursor Agent runtime.",
+          engine: "cursor",
+          isAvailable: true,
+          label: "Cursor",
+          status: expect.objectContaining({
+            authReady: true,
+            cliDetected: true,
+            parameterizedModelPicker: true,
+            state: "ready",
+            usedCachedStatus: false,
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("includes OpenCode with normalized availability state", async () => {
+    const result = await enginesRouter.list({});
+
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          description: "Use the locally configured OpenCode runtime.",
+          engine: "opencode",
+          isAvailable: true,
+          label: "OpenCode",
           status: expect.objectContaining({
             authReady: true,
             cliDetected: true,
@@ -559,6 +739,49 @@ describe("enginesRouter.list", () => {
         isAvailable: true,
         status: expect.objectContaining({
           state: "ready",
+          usedCachedStatus: true,
+        }),
+      }),
+    );
+  });
+
+  it("marks Cursor available when cached models are reused after a timeout", async () => {
+    getCursorEngineStatus.mockImplementationOnce(async () => ({
+      authReady: true,
+      availableModels: [
+        {
+          contextWindow: undefined,
+          defaultReasoningEffort: "medium",
+          description: "Cursor model",
+          displayName: "Auto",
+          id: "default",
+          inputModalities: ["text"],
+          isDefault: true,
+          model: "default",
+          supportedReasoningEfforts: [{ effort: "medium" }],
+        },
+      ],
+      cliDetected: true,
+      cliPath: "/Users/test/.local/bin/agent",
+      cliVersion: "agent 1.0.0",
+      engine: "cursor",
+      error:
+        "Cursor Agent took too long to respond. Showing the most recent cached model list.",
+      lastSuccessfulProbeAt: "2026-03-29T10:00:00.000Z",
+      parameterizedModelPicker: true,
+      state: "timeout_using_cache",
+      usedCachedStatus: true,
+    }));
+
+    const result = await enginesRouter.list({});
+
+    expect(result.find((engine: any) => engine.engine === "cursor")).toEqual(
+      expect.objectContaining({
+        isAvailable: true,
+        status: expect.objectContaining({
+          authReady: true,
+          cliDetected: true,
+          state: "timeout_using_cache",
           usedCachedStatus: true,
         }),
       }),
@@ -792,6 +1015,64 @@ describe("enginesRouter.models", () => {
     ]);
   });
 
+  it("returns engine-scoped Cursor models", async () => {
+    const result = await enginesRouter.models({
+      ctx: {
+        db: {},
+        session: { user: { id: "user-1" } },
+      },
+      input: { engine: "cursor" },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        defaultReasoningEffort: "medium",
+        displayName: "GPT-5.4",
+        engine: "cursor",
+        inputModalities: ["text"],
+        isConnected: true,
+        isEnabled: true,
+        modelId: "gpt-5.4",
+        provider: null,
+        rawModelId: "gpt-5.4",
+        supportedReasoningEfforts: ["medium"],
+      }),
+    ]);
+  });
+
+  it("returns engine-scoped OpenCode models with traits", async () => {
+    const result = await enginesRouter.models({
+      ctx: {
+        db: {},
+        session: { user: { id: "user-1" } },
+      },
+      input: { engine: "opencode" },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        defaultReasoningEffort: null,
+        displayName: "GPT-5",
+        engine: "opencode",
+        inputModalities: ["text"],
+        isConnected: true,
+        isEnabled: true,
+        modelId: "openai/gpt-5",
+        openCode: expect.objectContaining({
+          agentOptions: [
+            expect.objectContaining({ label: "Build", value: "build" }),
+          ],
+          variantOptions: [
+            expect.objectContaining({ label: "Medium", value: "medium" }),
+          ],
+        }),
+        provider: null,
+        rawModelId: "openai/gpt-5",
+        supportedReasoningEfforts: [],
+      }),
+    ]);
+  });
+
   it("does not expose fallback Copilot models when auth is unavailable", async () => {
     getCopilotEngineStatus.mockImplementationOnce(async () => ({
       account: null,
@@ -967,6 +1248,48 @@ describe("enginesRouter.refreshStatus", () => {
         engine: "copilot",
         status: expect.objectContaining({
           cliDetected: true,
+        }),
+      }),
+    );
+  });
+
+  it("refreshes Cursor status via the runtime resolver", async () => {
+    const result = await enginesRouter.refreshStatus({
+      input: { engine: "cursor" },
+    });
+
+    expect(resetCursorRuntimeCache).toHaveBeenCalledTimes(1);
+    expect(resetCursorEngineStatusCache).toHaveBeenCalledTimes(1);
+    expect(getCursorEngineStatus).toHaveBeenCalledWith({
+      forceRefresh: true,
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        engine: "cursor",
+        status: expect.objectContaining({
+          cliDetected: true,
+          state: "ready",
+        }),
+      }),
+    );
+  });
+
+  it("refreshes OpenCode status via the runtime resolver", async () => {
+    const result = await enginesRouter.refreshStatus({
+      input: { engine: "opencode" },
+    });
+
+    expect(resetOpenCodeRuntimeCache).toHaveBeenCalledTimes(1);
+    expect(resetOpenCodeEngineStatusCache).toHaveBeenCalledTimes(1);
+    expect(getOpenCodeEngineStatus).toHaveBeenCalledWith({
+      forceRefresh: true,
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        engine: "opencode",
+        status: expect.objectContaining({
+          cliDetected: true,
+          state: "ready",
         }),
       }),
     );

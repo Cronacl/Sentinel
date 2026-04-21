@@ -103,7 +103,7 @@ import {
 } from "@/components/chat/repo-background-warmup";
 
 import { SidebarCommandPalette } from "./sidebar-command-palette";
-import { shouldUseRepoThreadSwitch } from "./workspace-sidebar.helpers";
+import { shouldInspectWorkspaceThreadSwitch } from "./workspace-sidebar.helpers";
 import {
   ThreadStatusIndicator,
   type ThreadStatusValue,
@@ -1809,9 +1809,6 @@ export function WorkspaceSidebar() {
 
   const archiveWorkspace = api.workspaces.archive.useMutation({
     onSuccess: ({ selectedWorkspaceId, workspaceId }) => {
-      const selectedThreadState = selectedThreadId
-        ? findThreadState(selectedThreadId, groups, items, quickChatItems)
-        : null;
       const knownWorkspaces = utils.workspaces.list.getData() ?? [];
       const nextSelectedWorkspace =
         knownWorkspaces.find(
@@ -1947,6 +1944,13 @@ export function WorkspaceSidebar() {
   }, [isPreferencesOpen]);
 
   const selectedWorkspaceId = currentWorkspace.data?.id ?? null;
+  const selectedThreadState = useMemo(
+    () =>
+      selectedThreadId
+        ? findThreadState(selectedThreadId, groups, items, quickChatItems)
+        : null,
+    [groups, items, quickChatItems, selectedThreadId],
+  );
   const renameTargetWorkspace = useMemo(
     () =>
       (workspaces.data ?? []).find(
@@ -2375,16 +2379,12 @@ export function WorkspaceSidebar() {
           return;
         }
 
-        if (!selectedThreadId) {
-          navigateToThread(workspaceId, threadId);
-          return;
-        }
-
-        const sourceThreadState =
-          findThreadState(selectedThreadId, groups, items, quickChatItems) ??
+        const sourceThreadId = selectedThreadId;
+        const effectiveSelectedThreadState =
+          selectedThreadState ??
           (() => {
             const cachedThread = utils.threads.get.getData({
-              threadId: selectedThreadId,
+              threadId: sourceThreadId ?? "",
             });
             return cachedThread?.workspace
               ? {
@@ -2394,15 +2394,13 @@ export function WorkspaceSidebar() {
                 }
               : null;
           })();
-        const targetThreadState = {
-          workspaceId,
-          workspaceKind: "project" as const,
-        };
 
         if (
-          !shouldUseRepoThreadSwitch({
-            sourceThread: sourceThreadState,
-            targetThread: targetThreadState,
+          !sourceThreadId ||
+          !shouldInspectWorkspaceThreadSwitch({
+            selectedThreadId: sourceThreadId,
+            selectedThreadState: effectiveSelectedThreadState,
+            targetWorkspaceId: workspaceId,
           })
         ) {
           navigateToThread(workspaceId, threadId);
@@ -2411,7 +2409,7 @@ export function WorkspaceSidebar() {
 
         try {
           const inspection = await utils.repo.inspectThreadSwitch.fetch({
-            sourceThreadId: selectedThreadId,
+            sourceThreadId,
             targetThreadId: threadId,
             workspaceId,
           });
@@ -2454,9 +2452,7 @@ export function WorkspaceSidebar() {
     [
       finalizeThreadSwitch,
       navigateToThread,
-      groups,
-      items,
-      quickChatItems,
+      selectedThreadState,
       selectedThreadId,
       threadSwitchState,
       utils.repo.inspectThreadSwitch,

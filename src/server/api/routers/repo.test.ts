@@ -1,5 +1,7 @@
 // @ts-nocheck
 
+import { mkdir } from "node:fs/promises";
+
 import { TRPCError } from "@trpc/server";
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 
@@ -299,7 +301,9 @@ mock.module("@/lib/integrations/providers/github/service", () => ({
 
 const { repoRouter } = await import("./repo");
 
-beforeEach(() => {
+beforeEach(async () => {
+  await mkdir("/tmp/workspace", { recursive: true });
+
   getOwnedWorkspaceOrThrow.mockClear();
   getOwnedThreadOrThrow.mockClear();
   resolveRepoContext.mockClear();
@@ -2255,6 +2259,122 @@ describe("repoRouter.branch actions", () => {
     expect(result.repoContext.threadBranch).toBe("main");
   });
 
+  it("resumes a thread back onto its linked local branch", async () => {
+    getOwnedThreadOrThrow.mockImplementationOnce(async () => ({
+      chatEngine: "codex",
+      chatEngineState: {
+        repo: {
+          activeBranch: "main",
+          projectMode: "local",
+        },
+      },
+      chatModelId: "gpt-5.4",
+      chatReasoningEffort: "high",
+      id: "thread-1",
+      workspaceId: "workspace-1",
+    }));
+    resolveRepoContext
+      .mockImplementationOnce(async () => ({
+        aheadCount: 0,
+        branch: "fix/pre-launch",
+        changedFileCount: 0,
+        deletions: 0,
+        githubRemote: {
+          defaultBranch: "main",
+          owner: "openai",
+          pullRequestUrl:
+            "https://github.com/openai/sentinel/compare/main...fix/pre-launch?expand=1",
+          pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+          remoteName: "origin",
+          remoteUrl: "git@github.com:openai/sentinel.git",
+          repo: "sentinel",
+          repositoryUrl: "https://github.com/openai/sentinel",
+        },
+        hasChanges: false,
+        hasCommits: true,
+        hasRemotes: true,
+        hasUpstream: true,
+        insertions: 0,
+        isDefaultBranch: false,
+        isGitRepo: true,
+        pushRemoteName: "origin",
+        repoRoot: "/tmp/workspace",
+      }))
+      .mockImplementationOnce(async () => ({
+        aheadCount: 0,
+        branch: "main",
+        changedFileCount: 0,
+        deletions: 0,
+        githubRemote: {
+          defaultBranch: "main",
+          owner: "openai",
+          pullRequestUrl:
+            "https://github.com/openai/sentinel/compare/main...main?expand=1",
+          pullRequestsUrl: "https://github.com/openai/sentinel/pulls",
+          remoteName: "origin",
+          remoteUrl: "git@github.com:openai/sentinel.git",
+          repo: "sentinel",
+          repositoryUrl: "https://github.com/openai/sentinel",
+        },
+        hasChanges: false,
+        hasCommits: true,
+        hasRemotes: true,
+        hasUpstream: true,
+        insertions: 0,
+        isDefaultBranch: true,
+        isGitRepo: true,
+        pushRemoteName: "origin",
+        repoRoot: "/tmp/workspace",
+      }));
+
+    const result = await repoRouter.resumeThreadBranch({
+      ctx: {
+        session: { user: { id: "user-1" } },
+        user: { id: "user-1", lastProjectOpenTargetId: null },
+      },
+      input: {
+        threadId: "thread-1",
+        workspaceId: "workspace-1",
+      },
+    });
+
+    expect(checkoutBranch).toHaveBeenCalledWith("/tmp/workspace", "main");
+    expect(updateThreadRepoState).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        activeBranch: "main",
+        projectMode: "local",
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(result.branch).toBe("main");
+    expect(result.repoContext.threadBranch).toBe("main");
+    expect(result.repoContext.branchResumeStatus).toBe("matched");
+  });
+
+  it("rejects resume when the workspace root path is unavailable", async () => {
+    getOwnedWorkspaceOrThrow.mockImplementationOnce(async () => ({
+      id: "workspace-1",
+      rootPath: "/tmp/sentinel-missing-workspace-root",
+    }));
+
+    await expect(
+      repoRouter.resumeThreadBranch({
+        ctx: {
+          session: { user: { id: "user-1" } },
+          user: { id: "user-1", lastProjectOpenTargetId: null },
+        },
+        input: {
+          threadId: "thread-1",
+          workspaceId: "workspace-1",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Workspace root path is not available.",
+    });
+  });
+
   it("inspects a dirty local thread switch that needs a branch change", async () => {
     getOwnedThreadOrThrow
       .mockImplementationOnce(async () => ({
@@ -2442,6 +2562,31 @@ describe("repoRouter.branch actions", () => {
       }),
     );
     expect(result.action).toBe("stash");
+  });
+
+  it("rejects thread handoff when the workspace root path is unavailable", async () => {
+    getOwnedWorkspaceOrThrow.mockImplementationOnce(async () => ({
+      id: "workspace-1",
+      rootPath: "/tmp/sentinel-missing-workspace-root",
+    }));
+
+    await expect(
+      repoRouter.handoffThreadSwitch({
+        ctx: {
+          session: { user: { id: "user-1" } },
+          user: { id: "user-1", lastProjectOpenTargetId: null },
+        },
+        input: {
+          sourceThreadId: "thread-source",
+          strategy: "migrate",
+          targetThreadId: "thread-target",
+          workspaceId: "workspace-1",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Workspace root path is not available.",
+    });
   });
 
   it("moves dirty local changes to the target thread by adopting the current branch", async () => {

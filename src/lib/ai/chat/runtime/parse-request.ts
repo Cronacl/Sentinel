@@ -56,6 +56,24 @@ function parseToolApprovalResponse(
   };
 }
 
+function parseOpenCodeOptions(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const input = value as Record<string, unknown>;
+  const agent = str(input.agent);
+  const variant = str(input.variant);
+  if (!agent && !variant) {
+    return undefined;
+  }
+
+  return {
+    ...(agent ? { agent } : {}),
+    ...(variant ? { variant } : {}),
+  };
+}
+
 export async function parseRequest(
   raw: unknown,
   userId: string,
@@ -89,6 +107,7 @@ export async function parseRequest(
   const toolApprovalResponse = parseToolApprovalResponse(
     input.toolApprovalResponse,
   );
+  const openCode = parseOpenCodeOptions(input.openCode);
   const reasoningEffort = str(input.reasoningEffort) as
     | ThreadChatRequest["reasoningEffort"]
     | undefined;
@@ -152,6 +171,7 @@ export async function parseRequest(
     ...(engine ? { engine } : {}),
     ...(messageId ? { messageId } : {}),
     ...(modelId ? { modelId } : {}),
+    ...(openCode ? { openCode } : {}),
     ...(rawPlanAnswers ? { planAnswers: rawPlanAnswers } : {}),
     ...(planQuestionSetId ? { planQuestionSetId } : {}),
     ...(reasoningEffort ? { reasoningEffort } : {}),

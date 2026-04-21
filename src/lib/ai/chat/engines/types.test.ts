@@ -117,6 +117,64 @@ describe("mergeThreadChatEngineState", () => {
     });
   });
 
+  it("preserves Cursor state when repo metadata is updated", () => {
+    expect(
+      mergeThreadChatEngineState(
+        buildThreadChatEngineState("cursor", {
+          cwd: "/tmp/project",
+          modelId: "gpt-5.4",
+          reasoningEffort: "medium",
+          sessionId: "cursor-session-1",
+        }),
+        {
+          repo: {
+            activeBranch: "feature/cursor",
+          },
+        },
+      ),
+    ).toEqual({
+      cursor: {
+        cwd: "/tmp/project",
+        modelId: "gpt-5.4",
+        reasoningEffort: "medium",
+        sessionId: "cursor-session-1",
+      },
+      repo: {
+        activeBranch: "feature/cursor",
+      },
+    });
+  });
+
+  it("preserves OpenCode state when repo metadata is updated", () => {
+    expect(
+      mergeThreadChatEngineState(
+        buildThreadChatEngineState("opencode", {
+          cwd: "/tmp/project",
+          modelId: "anthropic/claude-sonnet-4-5",
+          selectedAgent: "build",
+          selectedVariant: "high",
+          sessionId: "opencode-session-1",
+        }),
+        {
+          repo: {
+            activeBranch: "feature/opencode",
+          },
+        },
+      ),
+    ).toEqual({
+      opencode: {
+        cwd: "/tmp/project",
+        modelId: "anthropic/claude-sonnet-4-5",
+        selectedAgent: "build",
+        selectedVariant: "high",
+        sessionId: "opencode-session-1",
+      },
+      repo: {
+        activeBranch: "feature/opencode",
+      },
+    });
+  });
+
   it("parses expanded reasoning efforts for runtime thread state", () => {
     expect(
       parseThreadChatEngineState({
@@ -128,6 +186,16 @@ describe("mergeThreadChatEngineState", () => {
           reasoningEffort: "none",
           sessionId: "copilot-session-1",
         },
+        cursor: {
+          reasoningEffort: "medium",
+          sessionId: "cursor-session-1",
+        },
+        opencode: {
+          modelId: "openai/gpt-5",
+          selectedAgent: "build",
+          selectedVariant: "medium",
+          sessionId: "opencode-session-1",
+        },
       }),
     ).toEqual({
       codex: {
@@ -137,6 +205,16 @@ describe("mergeThreadChatEngineState", () => {
       copilot: {
         reasoningEffort: "none",
         sessionId: "copilot-session-1",
+      },
+      cursor: {
+        reasoningEffort: "medium",
+        sessionId: "cursor-session-1",
+      },
+      opencode: {
+        modelId: "openai/gpt-5",
+        selectedAgent: "build",
+        selectedVariant: "medium",
+        sessionId: "opencode-session-1",
       },
     });
   });

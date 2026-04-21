@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ChatEngine } from "@/server/db/enums";
 import { api } from "@/trpc/react";
+import type { ChatComposerOpenCodeSelection } from "./types";
 
 import {
   FALLBACK_CHAT_ENGINE_OPTIONS,
@@ -14,6 +15,7 @@ import {
   resolveStableSelectableModels,
   type ChatComposerEngineOption,
 } from "../chat-composer-helpers";
+import { resolveOpenCodeTraitSelectionValue } from "./use-model-selection.helpers";
 
 import type { usePersistSelection } from "./use-persist-selection";
 
@@ -22,11 +24,15 @@ const MODEL_SELECTION_ENGINES = [
   "claude",
   "codex",
   "copilot",
+  "cursor",
+  "opencode",
   "sentinel",
 ] as const;
 
 export function useModelSelection({
   globalSelectionQuery,
+  openCodeSelection,
+  onOpenCodeSelectionChange,
   onSelectionChange,
   persistEngineSelection,
   persistSelection,
@@ -34,6 +40,10 @@ export function useModelSelection({
   threadSelection,
 }: {
   globalSelectionQuery: PersistSelectionReturn["globalSelectionQuery"];
+  openCodeSelection?: ChatComposerOpenCodeSelection | null;
+  onOpenCodeSelectionChange?: (
+    selection: ChatComposerOpenCodeSelection,
+  ) => void;
   onSelectionChange?: (input: {
     engine?: ChatEngine;
     modelId?: string | null;
@@ -66,6 +76,10 @@ export function useModelSelection({
     utils.engines.models.getData({ engine: "claude" }) ?? [];
   const cachedCopilotModels =
     utils.engines.models.getData({ engine: "copilot" }) ?? [];
+  const cachedCursorModels =
+    utils.engines.models.getData({ engine: "cursor" }) ?? [];
+  const cachedOpenCodeModels =
+    utils.engines.models.getData({ engine: "opencode" }) ?? [];
 
   const enginesQuery = api.engines.list.useQuery(undefined, {
     initialData: cachedEngines.length > 0 ? cachedEngines : undefined,
@@ -110,6 +124,26 @@ export function useModelSelection({
       staleTime: 60_000,
     },
   );
+  const cursorModelsQuery = api.engines.models.useQuery(
+    {
+      engine: "cursor",
+    },
+    {
+      initialData:
+        cachedCursorModels.length > 0 ? cachedCursorModels : undefined,
+      staleTime: 60_000,
+    },
+  );
+  const openCodeModelsQuery = api.engines.models.useQuery(
+    {
+      engine: "opencode",
+    },
+    {
+      initialData:
+        cachedOpenCodeModels.length > 0 ? cachedOpenCodeModels : undefined,
+      staleTime: 60_000,
+    },
+  );
   const [cachedEngineOptions, setCachedEngineOptions] = useState<
     ChatComposerEngineOption[]
   >(() =>
@@ -123,6 +157,8 @@ export function useModelSelection({
         claude: filterSelectableModels(cachedClaudeModels),
         codex: filterSelectableModels(cachedCodexModels),
         copilot: filterSelectableModels(cachedCopilotModels),
+        cursor: filterSelectableModels(cachedCursorModels),
+        opencode: filterSelectableModels(cachedOpenCodeModels),
         sentinel: filterSelectableModels(cachedSentinelModels),
       }),
     );
@@ -140,6 +176,8 @@ export function useModelSelection({
     ? (threadSelection?.reasoningEffort ?? null)
     : ((globalSelectionQuery.data?.reasoningEffort as ReasoningEffort | null) ??
       null);
+  const preferredOpenCodeAgent = openCodeSelection?.agent ?? null;
+  const preferredOpenCodeVariant = openCodeSelection?.variant ?? null;
   const [selectedEngine, setSelectedEngine] = useState<ChatEngine>(
     () => preferredEngine,
   );
@@ -148,6 +186,12 @@ export function useModelSelection({
   );
   const [selectedReasoningEffort, setSelectedReasoningEffort] =
     useState<ReasoningEffort | null>(() => preferredReasoningEffort);
+  const [selectedOpenCodeAgent, setSelectedOpenCodeAgent] = useState<
+    string | null
+  >(() => preferredOpenCodeAgent);
+  const [selectedOpenCodeVariant, setSelectedOpenCodeVariant] = useState<
+    string | null
+  >(() => preferredOpenCodeVariant);
   const preferencesReady =
     Boolean(threadSelection?.engine) ||
     hasThreadSelection ||
@@ -173,12 +217,16 @@ export function useModelSelection({
     claude: claudeModelsQuery.data ?? [],
     codex: codexModelsQuery.data ?? [],
     copilot: copilotModelsQuery.data ?? [],
+    cursor: cursorModelsQuery.data ?? [],
+    opencode: openCodeModelsQuery.data ?? [],
     sentinel: sentinelModelsQuery.data ?? [],
   };
   const modelsQueryByEngine = {
     claude: claudeModelsQuery,
     codex: codexModelsQuery,
     copilot: copilotModelsQuery,
+    cursor: cursorModelsQuery,
+    opencode: openCodeModelsQuery,
     sentinel: sentinelModelsQuery,
   };
   const selectedEngineModels = modelsByEngine[selectedEngine];
@@ -188,12 +236,16 @@ export function useModelSelection({
       claude: filterSelectableModels(modelsByEngine.claude),
       codex: filterSelectableModels(modelsByEngine.codex),
       copilot: filterSelectableModels(modelsByEngine.copilot),
+      cursor: filterSelectableModels(modelsByEngine.cursor),
+      opencode: filterSelectableModels(modelsByEngine.opencode),
       sentinel: filterSelectableModels(modelsByEngine.sentinel),
     }),
     [
       modelsByEngine.claude,
       modelsByEngine.codex,
       modelsByEngine.copilot,
+      modelsByEngine.cursor,
+      modelsByEngine.opencode,
       modelsByEngine.sentinel,
     ],
   );
@@ -211,6 +263,14 @@ export function useModelSelection({
         modelsByEngine.copilot,
         cachedAvailableModelsByEngine.copilot,
       ),
+      cursor: resolveStableSelectableModels(
+        modelsByEngine.cursor,
+        cachedAvailableModelsByEngine.cursor,
+      ),
+      opencode: resolveStableSelectableModels(
+        modelsByEngine.opencode,
+        cachedAvailableModelsByEngine.opencode,
+      ),
       sentinel: resolveStableSelectableModels(
         modelsByEngine.sentinel,
         cachedAvailableModelsByEngine.sentinel,
@@ -220,10 +280,14 @@ export function useModelSelection({
       cachedAvailableModelsByEngine.claude,
       cachedAvailableModelsByEngine.codex,
       cachedAvailableModelsByEngine.copilot,
+      cachedAvailableModelsByEngine.cursor,
+      cachedAvailableModelsByEngine.opencode,
       cachedAvailableModelsByEngine.sentinel,
       modelsByEngine.claude,
       modelsByEngine.codex,
       modelsByEngine.copilot,
+      modelsByEngine.cursor,
+      modelsByEngine.opencode,
       modelsByEngine.sentinel,
     ],
   );
@@ -238,11 +302,52 @@ export function useModelSelection({
     selectedModel?.supportedReasoningEfforts ?? [];
 
   useEffect(() => {
+    if (selectedModel?.engine !== "opencode") {
+      if (selectedOpenCodeAgent !== null) {
+        setSelectedOpenCodeAgent(null);
+      }
+      if (selectedOpenCodeVariant !== null) {
+        setSelectedOpenCodeVariant(null);
+      }
+      return;
+    }
+
+    const agentOptions = selectedModel.openCode?.agentOptions ?? [];
+    const variantOptions = selectedModel.openCode?.variantOptions ?? [];
+    const nextAgent = resolveOpenCodeTraitSelectionValue(
+      agentOptions,
+      selectedOpenCodeAgent,
+      preferredOpenCodeAgent,
+    );
+    const nextVariant = resolveOpenCodeTraitSelectionValue(
+      variantOptions,
+      selectedOpenCodeVariant,
+      preferredOpenCodeVariant,
+    );
+
+    if (nextAgent !== selectedOpenCodeAgent) {
+      setSelectedOpenCodeAgent(nextAgent);
+    }
+
+    if (nextVariant !== selectedOpenCodeVariant) {
+      setSelectedOpenCodeVariant(nextVariant);
+    }
+  }, [
+    preferredOpenCodeAgent,
+    preferredOpenCodeVariant,
+    selectedModel,
+    selectedOpenCodeAgent,
+    selectedOpenCodeVariant,
+  ]);
+
+  useEffect(() => {
     if (initializedSelectionScopeRef.current !== selectionScopeKey) {
       initializedSelectionScopeRef.current = null;
       threadPersistenceReadyRef.current = false;
+      setSelectedOpenCodeAgent(preferredOpenCodeAgent);
+      setSelectedOpenCodeVariant(preferredOpenCodeVariant);
     }
-  }, [selectionScopeKey]);
+  }, [preferredOpenCodeAgent, preferredOpenCodeVariant, selectionScopeKey]);
 
   useEffect(() => {
     setCachedEngineOptions((currentCache) => {
@@ -587,16 +692,56 @@ export function useModelSelection({
     [onSelectionChange, persistSelection, selectedEngine, selectedModelKey],
   );
 
+  const handleSelectOpenCodeAgent = useCallback((agent: string | null) => {
+    setSelectedOpenCodeAgent(agent);
+  }, []);
+
+  const handleSelectOpenCodeVariant = useCallback((variant: string | null) => {
+    setSelectedOpenCodeVariant(variant);
+  }, []);
+
+  const effectiveSelectedOpenCodeAgent =
+    selectedModel?.engine === "opencode"
+      ? resolveOpenCodeTraitSelectionValue(
+          selectedModel.openCode?.agentOptions,
+          selectedOpenCodeAgent,
+          preferredOpenCodeAgent,
+        )
+      : null;
+  const effectiveSelectedOpenCodeVariant =
+    selectedModel?.engine === "opencode"
+      ? resolveOpenCodeTraitSelectionValue(
+          selectedModel.openCode?.variantOptions,
+          selectedOpenCodeVariant,
+          preferredOpenCodeVariant,
+        )
+      : null;
+
+  useEffect(() => {
+    onOpenCodeSelectionChange?.({
+      agent: effectiveSelectedOpenCodeAgent,
+      variant: effectiveSelectedOpenCodeVariant,
+    });
+  }, [
+    effectiveSelectedOpenCodeAgent,
+    effectiveSelectedOpenCodeVariant,
+    onOpenCodeSelectionChange,
+  ]);
+
   return {
     availableModels,
     engineOptions,
     enginesQuery,
     handleSelectEngine,
     handleSelectModel,
+    handleSelectOpenCodeAgent,
+    handleSelectOpenCodeVariant,
     handleSelectReasoningEffort,
     modelsQuery,
     selectedEngine,
     selectedEngineStatus,
+    selectedOpenCodeAgent: effectiveSelectedOpenCodeAgent,
+    selectedOpenCodeVariant: effectiveSelectedOpenCodeVariant,
     selectedModel,
     selectedModelKey,
     selectedReasoningEffort,

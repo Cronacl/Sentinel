@@ -55,6 +55,8 @@ import { parseRequest } from "./parse-request";
 import { runCodexThreadChat, stopCodexThreadRun } from "./codex";
 import { runClaudeThreadChat, stopClaudeThreadRun } from "./claude";
 import { runCopilotThreadChat, stopCopilotThreadRun } from "./copilot";
+import { runCursorThreadChat, stopCursorThreadRun } from "./cursor";
+import { runOpenCodeThreadChat, stopOpenCodeThreadRun } from "./opencode";
 import {
   buildActiveThreadMessages,
   buildFirstUserMessageTitle,
@@ -280,6 +282,14 @@ async function handleFollowUpAction(
 
     if (engine === "copilot") {
       return stopCopilotThreadRun(stopRequest, latestThread);
+    }
+
+    if (engine === "cursor") {
+      return stopCursorThreadRun(stopRequest, latestThread);
+    }
+
+    if (engine === "opencode") {
+      return stopOpenCodeThreadRun(stopRequest, latestThread);
     }
 
     return handleStopStream(stopRequest);
@@ -1468,6 +1478,14 @@ async function runParsedThreadChat(
       return stopCopilotThreadRun(request, existingThread);
     }
 
+    if (engine === "cursor") {
+      return stopCursorThreadRun(request, existingThread);
+    }
+
+    if (engine === "opencode") {
+      return stopOpenCodeThreadRun(request, existingThread);
+    }
+
     return handleStopStream(request);
   }
 
@@ -1489,6 +1507,14 @@ async function runParsedThreadChat(
 
   if (engine === "copilot") {
     return runCopilotThreadChat(request, existingThread);
+  }
+
+  if (engine === "cursor") {
+    return runCursorThreadChat(request, existingThread);
+  }
+
+  if (engine === "opencode") {
+    return runOpenCodeThreadChat(request, existingThread);
   }
 
   const allRecords = await persist.loadThreadMessages(request.threadId);

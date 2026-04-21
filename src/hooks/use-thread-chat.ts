@@ -50,6 +50,10 @@ type SendThreadMessageInput = {
   engine: ChatEngine;
   files?: FileUIPart[];
   modelId: string;
+  openCode?: {
+    agent?: string | null;
+    variant?: string | null;
+  };
   reasoningEffort?: ReasoningEffort | null;
   text: string;
   threadMode?: ThreadMode;
@@ -150,6 +154,26 @@ type SessionStore = {
 };
 
 const sessionStores = new Map<string, SessionStore>();
+
+export function peekThreadSessionSnapshot(
+  threadId: string,
+): ThreadSessionSnapshot | null {
+  const store = sessionStores.get(threadId);
+  if (!store) {
+    return null;
+  }
+
+  const state = store.getState();
+  return {
+    activeRunId: state.activeRunId,
+    chatEngine: state.chatEngine,
+    messages: state.messages,
+    queuedFollowUps: state.queuedFollowUps,
+    threadId: state.threadId,
+    threadTitle: state.threadTitle,
+    threadStatus: state.threadStatus,
+  };
+}
 
 export function hasActiveThreadRun(
   activeRunId: string | null | undefined,
@@ -1417,6 +1441,7 @@ export function useThreadChat({
       engine,
       files,
       modelId,
+      openCode,
       reasoningEffort,
       text,
       threadMode,
@@ -1441,6 +1466,7 @@ export function useThreadChat({
             id: threadId,
             message,
             modelId,
+            ...(openCode ? { openCode } : {}),
             ...(reasoningEffort ? { reasoningEffort } : {}),
             ...(threadMode ? { threadMode } : {}),
             trigger: "submit-user-message",
@@ -1465,6 +1491,7 @@ export function useThreadChat({
       engine,
       files,
       modelId,
+      openCode,
       reasoningEffort,
       targetMessageId,
       text,
@@ -1490,6 +1517,7 @@ export function useThreadChat({
             message,
             messageId: targetMessageId,
             modelId,
+            ...(openCode ? { openCode } : {}),
             ...(reasoningEffort ? { reasoningEffort } : {}),
             trigger: "edit-user-message",
             workspaceId: workspaceIdRef.current,
@@ -1514,6 +1542,7 @@ export function useThreadChat({
       engine,
       files,
       modelId,
+      openCode,
       reasoningEffort,
       text,
       threadMode,
@@ -1536,6 +1565,7 @@ export function useThreadChat({
           id: threadId,
           message,
           modelId,
+          ...(openCode ? { openCode } : {}),
           ...(reasoningEffort ? { reasoningEffort } : {}),
           ...(threadMode ? { threadMode } : {}),
           trigger: "queue-follow-up",
@@ -1556,6 +1586,7 @@ export function useThreadChat({
       engine,
       files,
       modelId,
+      openCode,
       reasoningEffort,
       text,
       threadMode,
@@ -1578,6 +1609,7 @@ export function useThreadChat({
           id: threadId,
           message,
           modelId,
+          ...(openCode ? { openCode } : {}),
           ...(reasoningEffort ? { reasoningEffort } : {}),
           ...(threadMode ? { threadMode } : {}),
           trigger: "steer-follow-up",

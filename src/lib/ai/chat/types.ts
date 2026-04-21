@@ -26,6 +26,11 @@ export type ThreadToolApprovalResponse = {
   response?: string;
 };
 
+export type ThreadOpenCodeOptions = {
+  agent?: string | null;
+  variant?: string | null;
+};
+
 export type ThreadChatRequest = {
   draftRepoState?: Partial<RepoThreadState>;
   engine?: ChatEngine;
@@ -33,6 +38,7 @@ export type ThreadChatRequest = {
   messages?: ThreadUIMessage[];
   messageId?: string;
   modelId?: string;
+  openCode?: ThreadOpenCodeOptions;
   planAnswers?: ThreadPlanAnswer[];
   planQuestionSetId?: string;
   reasoningEffort?: ReasoningEffort;

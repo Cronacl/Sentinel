@@ -2,6 +2,19 @@ import type { AIProvider, ChatEngine } from "@/server/db/enums";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import { isCommittedThreadActionError } from "@/hooks/use-thread-chat";
 
+export type ChatComposerOpenCodeTraits = {
+  agentOptions: Array<{
+    isDefault?: boolean;
+    label: string;
+    value: string;
+  }>;
+  variantOptions: Array<{
+    isDefault?: boolean;
+    label: string;
+    value: string;
+  }>;
+};
+
 export type ChatComposerEngineOption = {
   engine: ChatEngine;
   error: string | null;
@@ -19,10 +32,123 @@ export type ChatComposerModel = {
   inputModalities: string[];
   isConnected: boolean;
   isEnabled: boolean;
+  openCode?: ChatComposerOpenCodeTraits;
   provider: AIProvider | null;
   rawModelId: string;
   supportedReasoningEfforts: ReasoningEffort[];
 };
+
+export const UNSTABLE_CHAT_ENGINE_LABEL = "Unstable";
+export const UNSTABLE_CHAT_ENGINE_DESCRIPTION =
+  "Experimental integration; behavior may change or fail unexpectedly.";
+
+export function isUnstableChatEngine(engine: ChatEngine | null | undefined) {
+  return engine === "cursor";
+}
+
+function normalizeOpenCodeTraitToken(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function matchesOpenCodePlanTrait(option: { label: string; value: string }) {
+  const normalizedLabel = normalizeOpenCodeTraitToken(option.label);
+  const normalizedValue = normalizeOpenCodeTraitToken(option.value);
+
+  return (
+    normalizedLabel.includes("plan") ||
+    normalizedValue.includes("plan") ||
+    normalizedLabel.includes("max") ||
+    normalizedValue.includes("max")
+  );
+}
+
+function matchesOpenCodeBuildTrait(option: { label: string; value: string }) {
+  const normalizedLabel = normalizeOpenCodeTraitToken(option.label);
+  const normalizedValue = normalizeOpenCodeTraitToken(option.value);
+
+  return (
+    normalizedLabel.includes("build") ||
+    normalizedValue.includes("build") ||
+    normalizedLabel.includes("chat") ||
+    normalizedValue.includes("chat") ||
+    normalizedLabel.includes("default") ||
+    normalizedValue.includes("default") ||
+    normalizedLabel.includes("medium") ||
+    normalizedValue.includes("medium") ||
+    normalizedLabel.includes("high") ||
+    normalizedValue.includes("high") ||
+    normalizedLabel.includes("implement") ||
+    normalizedValue.includes("implement")
+  );
+}
+
+export function shouldHideOpenCodeTraitSelector(
+  options:
+    | Array<{ isDefault?: boolean; label: string; value: string }>
+    | undefined,
+) {
+  if (!options || options.length < 2) {
+    return false;
+  }
+
+  const hasPlanOption = options.some(matchesOpenCodePlanTrait);
+  const hasBuildOption = options.some(matchesOpenCodeBuildTrait);
+  const onlyContainsModeMappings = options.every(
+    (option) =>
+      matchesOpenCodePlanTrait(option) || matchesOpenCodeBuildTrait(option),
+  );
+
+  return hasPlanOption && hasBuildOption && onlyContainsModeMappings;
+}
+
+export function shouldHideOpenCodeAgentSelector(
+  options:
+    | Array<{ isDefault?: boolean; label: string; value: string }>
+    | undefined,
+) {
+  return shouldHideOpenCodeTraitSelector(options);
+}
+
+export function resolveOpenCodeTraitValueForThreadMode(
+  options:
+    | Array<{ isDefault?: boolean; label: string; value: string }>
+    | undefined,
+  currentValue: string | null | undefined,
+  threadMode: "chat" | "plan",
+) {
+  if (!options || options.length === 0) {
+    return null;
+  }
+
+  const currentOption =
+    (currentValue
+      ? (options.find((option) => option.value === currentValue) ?? null)
+      : null) ?? null;
+  const fallbackOption =
+    options.find((option) => option.isDefault) ?? options[0] ?? null;
+
+  if (threadMode === "plan") {
+    return (
+      options.find(matchesOpenCodePlanTrait)?.value ??
+      currentOption?.value ??
+      fallbackOption?.value ??
+      null
+    );
+  }
+
+  if (currentOption && !matchesOpenCodePlanTrait(currentOption)) {
+    return currentOption.value;
+  }
+
+  return (
+    options.find(matchesOpenCodeBuildTrait)?.value ??
+    fallbackOption?.value ??
+    null
+  );
+}
 
 export const FALLBACK_CHAT_ENGINE_OPTIONS: ChatComposerEngineOption[] = [
   {
@@ -48,6 +174,18 @@ export const FALLBACK_CHAT_ENGINE_OPTIONS: ChatComposerEngineOption[] = [
     error: null,
     isAvailable: true,
     label: "Copilot",
+  },
+  {
+    engine: "cursor",
+    error: null,
+    isAvailable: true,
+    label: "Cursor",
+  },
+  {
+    engine: "opencode",
+    error: null,
+    isAvailable: true,
+    label: "OpenCode",
   },
 ];
 

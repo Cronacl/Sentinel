@@ -1,50 +1,44 @@
 import { describe, expect, it } from "bun:test";
 
-import { shouldUseRepoThreadSwitch } from "./workspace-sidebar.helpers";
+import { shouldInspectWorkspaceThreadSwitch } from "./workspace-sidebar.helpers";
 
-describe("shouldUseRepoThreadSwitch", () => {
-  it("returns false when the source thread is a quick chat", () => {
+describe("shouldInspectWorkspaceThreadSwitch", () => {
+  it("skips handoff for quick chat threads", () => {
     expect(
-      shouldUseRepoThreadSwitch({
-        sourceThread: {
-          workspaceId: "quick-chat-workspace",
+      shouldInspectWorkspaceThreadSwitch({
+        selectedThreadId: "thread-1",
+        selectedThreadState: {
+          workspaceId: "quick-chat",
           workspaceKind: "quick_chat",
         },
-        targetThread: {
-          workspaceId: "workspace-1",
-          workspaceKind: "project",
-        },
+        targetWorkspaceId: "workspace-1",
       }),
-    ).toBe(false);
+    ).toBeFalse();
   });
 
-  it("returns true for project threads in the same workspace", () => {
+  it("skips handoff when the current thread is from another workspace", () => {
     expect(
-      shouldUseRepoThreadSwitch({
-        sourceThread: {
-          workspaceId: "workspace-1",
-          workspaceKind: "project",
-        },
-        targetThread: {
-          workspaceId: "workspace-1",
-          workspaceKind: "project",
-        },
-      }),
-    ).toBe(true);
-  });
-
-  it("returns false for project threads in different workspaces", () => {
-    expect(
-      shouldUseRepoThreadSwitch({
-        sourceThread: {
-          workspaceId: "workspace-1",
-          workspaceKind: "project",
-        },
-        targetThread: {
+      shouldInspectWorkspaceThreadSwitch({
+        selectedThreadId: "thread-1",
+        selectedThreadState: {
           workspaceId: "workspace-2",
           workspaceKind: "project",
         },
+        targetWorkspaceId: "workspace-1",
       }),
-    ).toBe(false);
+    ).toBeFalse();
+  });
+
+  it("allows handoff when both threads belong to the same project workspace", () => {
+    expect(
+      shouldInspectWorkspaceThreadSwitch({
+        selectedThreadId: "thread-1",
+        selectedThreadState: {
+          workspaceId: "workspace-1",
+          workspaceKind: "project",
+        },
+        targetWorkspaceId: "workspace-1",
+      }),
+    ).toBeTrue();
   });
 });

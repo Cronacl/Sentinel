@@ -14,6 +14,10 @@ import { Button, ListBox, Popover, Switch } from "@heroui/react";
 import { memo, useMemo, useState, type ReactNode } from "react";
 
 import type { ChatEngine } from "@/server/db/enums";
+import {
+  isUnstableChatEngine,
+  UNSTABLE_CHAT_ENGINE_LABEL,
+} from "@/components/chat/chat-composer-helpers";
 
 import { ContextWindowIndicator } from "./chat-composer/context-window-indicator";
 
@@ -212,11 +216,19 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                         textValue={engine.label}
                       >
                         <span className="capitalize">{engine.label}</span>
-                        {!engine.isAvailable && engine.engine !== "sentinel" ? (
-                          <span className="ml-auto text-[10px] text-warning">
-                            Unavailable
-                          </span>
-                        ) : null}
+                        <span className="ml-auto flex items-center gap-1.5">
+                          {isUnstableChatEngine(engine.engine) ? (
+                            <span className="text-[10px] text-warning">
+                              {UNSTABLE_CHAT_ENGINE_LABEL}
+                            </span>
+                          ) : null}
+                          {!engine.isAvailable &&
+                          engine.engine !== "sentinel" ? (
+                            <span className="text-[10px] text-warning">
+                              Unavailable
+                            </span>
+                          ) : null}
+                        </span>
                         <ListBox.ItemIndicator />
                       </ListBox.Item>
                     ))}

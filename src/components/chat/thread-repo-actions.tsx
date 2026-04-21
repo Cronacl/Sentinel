@@ -76,6 +76,11 @@ import {
   REPO_DIFF_PRELOAD_MODES,
   getThreadLinkedPullRequest,
 } from "./thread-repo-actions.helpers";
+import {
+  resolveRepoThreadUiState,
+  resolveStableRepoThreadUiState,
+  type RepoThreadUiState,
+} from "./repo-thread-ui-state";
 
 type ThreadRepoActionsProps = {
   deferRepoContextFetch?: boolean;
@@ -137,6 +142,8 @@ export function ThreadRepoActions({
   const [preferredLaunchTargetId, setPreferredLaunchTargetId] = useState<
     string | null
   >(null);
+  const [stableThreadUiState, setStableThreadUiState] =
+    useState<RepoThreadUiState | null>(null);
 
   const commitModalState = useOverlayState({});
   const pushModalState = useOverlayState({});
@@ -223,6 +230,10 @@ export function ThreadRepoActions({
     snapshotRef.current = repoContext;
   }
   const modalContext = anyModalOpen ? snapshotRef.current : repoContext;
+  const liveThreadUiState = useMemo(
+    () => resolveRepoThreadUiState(repoContext),
+    [repoContext],
+  );
 
   const primaryLaunchTarget = useMemo(
     () =>
@@ -462,19 +473,32 @@ export function ThreadRepoActions({
     };
   }, [desktop, isRepoVisible, launchPath]);
 
-  const threadBranch = repoContext?.threadBranch ?? repoContext?.branch ?? null;
-  const isUsingWorktree = repoContext?.threadProjectMode === "worktree";
-  const branchResumeStatus = repoContext?.branchResumeStatus ?? "matched";
-  const branchResumeReason = repoContext?.branchResumeReason ?? null;
-  const needsBranchResume =
-    !isUsingWorktree && branchResumeStatus === "needs_checkout";
-  const isBranchResumeBlocked =
-    !isUsingWorktree && branchResumeStatus === "blocked_dirty";
-  const isThreadContextMisaligned =
-    !isUsingWorktree && branchResumeStatus !== "matched";
   const projectModeBusy =
     resumeThreadBranchMutation.isPending ||
     enableThreadWorktreeMutation.isPending;
+  const isRepoStatePending = Boolean(
+    repoContextQuery.isFetching || projectModeBusy,
+  );
+  const threadUiState = useMemo(
+    () =>
+      resolveStableRepoThreadUiState({
+        isPending: isRepoStatePending,
+        liveState: liveThreadUiState,
+        previousStableState: stableThreadUiState,
+      }),
+    [isRepoStatePending, liveThreadUiState, stableThreadUiState],
+  );
+  const threadBranch = threadUiState.threadBranch;
+  const isUsingWorktree = threadUiState.isUsingWorktree;
+  const branchResumeReason = threadUiState.branchResumeReason;
+  const isBranchResumeBlocked = threadUiState.isBranchResumeBlocked;
+  const isThreadContextMisaligned = threadUiState.isThreadContextMisaligned;
+
+  useEffect(() => {
+    if (!isRepoStatePending) {
+      setStableThreadUiState(liveThreadUiState);
+    }
+  }, [isRepoStatePending, liveThreadUiState]);
 
   const handleResumeThreadBranch = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -1218,9 +1242,11 @@ export function ThreadRepoActions({
           <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-content1/40 px-2 py-1.5">
             <span className="text-xs text-muted">
               {threadBranch
-                ? isBranchResumeBlocked
-                  ? `Resume on ${threadBranch}`
-                  : `Switching to ${threadBranch}`
+                ? resumeThreadBranchMutation.isPending
+                  ? `Switching to ${threadBranch}`
+                  : isBranchResumeBlocked
+                    ? `Resume on ${threadBranch}`
+                    : `Resume on ${threadBranch}`
                 : "Thread branch"}
             </span>
             <Button

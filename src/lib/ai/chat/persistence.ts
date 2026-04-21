@@ -9,6 +9,8 @@ import type {
   ClaudeThreadState,
   CopilotThreadState,
   CodexThreadState,
+  CursorThreadState,
+  OpenCodeThreadState,
   RepoThreadState,
   ThreadChatEngineState,
 } from "@/lib/ai/chat/engines/types";
@@ -311,6 +313,26 @@ export function updateCopilotThreadState(
   updateThreadChatEngineState(
     threadId,
     buildThreadChatEngineState("copilot", state),
+  );
+}
+
+export function updateCursorThreadState(
+  threadId: string,
+  state: CursorThreadState | null,
+) {
+  updateThreadChatEngineState(
+    threadId,
+    buildThreadChatEngineState("cursor", state),
+  );
+}
+
+export function updateOpenCodeThreadState(
+  threadId: string,
+  state: OpenCodeThreadState | null,
+) {
+  updateThreadChatEngineState(
+    threadId,
+    buildThreadChatEngineState("opencode", state),
   );
 }
 

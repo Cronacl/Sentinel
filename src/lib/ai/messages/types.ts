@@ -1,6 +1,8 @@
 import type { UIMessage } from "ai";
 import { z } from "zod";
 
+import { CHAT_ENGINES } from "@/server/db/enums";
+
 export type ThreadUIDataTypes = {
   "thread-invalidation": {
     target: "detail" | "list" | "all";
@@ -31,7 +33,7 @@ const composerPathEntrySchema = z.object({
 
 const composerSkillEntrySchema = z.object({
   directory: z.string().optional(),
-  engine: z.enum(["sentinel", "codex", "claude", "copilot"]),
+  engine: z.enum(CHAT_ENGINES),
   name: z.string(),
   scope: z.enum(["global", "workspace"]).optional(),
   sourceKind: z
