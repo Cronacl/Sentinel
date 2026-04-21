@@ -238,9 +238,16 @@ function canUseRepoThreadSwitch(input: {
   sourceThread: Awaited<ReturnType<typeof getOwnedThreadOrThrow>>;
   targetThread: Awaited<ReturnType<typeof getOwnedThreadOrThrow>>;
 }) {
+  const sourceWorkspaceKind =
+    input.sourceThread.workspace?.kind ??
+    (input.sourceThread.workspaceId ? "project" : null);
+  const targetWorkspaceKind =
+    input.targetThread.workspace?.kind ??
+    (input.targetThread.workspaceId ? "project" : null);
+
   return (
-    input.sourceThread.workspace.kind === "project" &&
-    input.targetThread.workspace.kind === "project" &&
+    sourceWorkspaceKind === "project" &&
+    targetWorkspaceKind === "project" &&
     input.sourceThread.workspaceId === input.targetThread.workspaceId
   );
 }
