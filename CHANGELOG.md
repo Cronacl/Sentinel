@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.45](https://github.com/Cronacl/Sentinel/compare/v0.0.44...v0.0.45) (2026-04-21)
+
+
+### Features
+
+* **chat:** add Cursor and OpenCode engine support ([2af1397](https://github.com/Cronacl/Sentinel/commit/2af1397466bf31800ed39d87a3b271e322c7e8f9))
+
+
+### Bug Fixes
+
+* **chat:** stabilize thread handoff and startup state ([0d2d1b4](https://github.com/Cronacl/Sentinel/commit/0d2d1b4a44e0ee79a6efbfcbefe9cd6ef5050f14))
+* **repo:** tolerate slim thread workspace state ([2695d5f](https://github.com/Cronacl/Sentinel/commit/2695d5f6f49bad2fdcae15267885577dcc3361c6))
+* stabilize thread repo UI ([58409e7](https://github.com/Cronacl/Sentinel/commit/58409e733fa3fd763ec85003087de238c3865ebb))
+* stabilize thread repo UI ([33cd5bd](https://github.com/Cronacl/Sentinel/commit/33cd5bd7e8edd2f077da18aaef053d6d62cfa844))
+
 ## [0.0.44](https://github.com/Cronacl/Sentinel/compare/v0.0.43...v0.0.44) (2026-04-19)
 
 
