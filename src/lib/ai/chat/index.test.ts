@@ -247,6 +247,8 @@ const updateThreadChatSettings = mock(() => {});
 const updateClaudeThreadState = mock(() => {});
 const updateCopilotThreadState = mock(() => {});
 const updateCodexThreadState = mock(() => {});
+const updateCursorThreadState = mock(() => {});
+const updateOpenCodeThreadState = mock(() => {});
 const updateThreadRepoState = mock(() => {});
 const promoteVirtualThreadToVisibleChild = mock(async () => "child-thread-1");
 const syncThreadFromThread = mock(async () => true);
@@ -711,7 +713,9 @@ mock.module("./persistence", () => ({
   setActiveStream,
   setThreadStatus,
   syncThreadFromThread,
+  updateCursorThreadState,
   updateMessageMetadata,
+  updateOpenCodeThreadState,
   updateThreadChatSettings,
   updateThreadContextCompactionCheckpoint,
   updateThreadRepoState,
@@ -742,7 +746,9 @@ mock.module("@/lib/ai/chat/persistence", () => ({
   setActiveStream,
   setThreadStatus,
   syncThreadFromThread,
+  updateCursorThreadState,
   updateMessageMetadata,
+  updateOpenCodeThreadState,
   updateThreadChatSettings,
   updateThreadContextCompactionCheckpoint,
   updateThreadRepoState,

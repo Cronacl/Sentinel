@@ -22,6 +22,7 @@ import {
   type ThreadUIMessage,
 } from "@/lib/ai/messages/types";
 import { serializeComposerContextToText } from "@/lib/composer-context/serialize";
+import { createLogger } from "@/lib/logger";
 import { normalizeThreadMode } from "@/lib/plan";
 import {
   safelyCloseReadableStreamController,
@@ -117,6 +118,29 @@ type ActiveOpenCodeRunControl = {
   userId: string;
   workspaceId: string;
 };
+
+const log = createLogger("ThreadChatOpenCode");
+
+function logRuntimeTiming(
+  phase: "session_start_ready" | "session_start_started",
+  startedAt: number,
+  context: {
+    runId: string;
+    threadId: string;
+    userId: string;
+    workspaceId: string;
+  },
+) {
+  if (process.env.NODE_ENV !== "development") {
+    return;
+  }
+
+  log.debug(`timing:${phase}`, {
+    elapsedMs: Date.now() - startedAt,
+    phase,
+    ...context,
+  });
+}
 
 declare global {
   // eslint-disable-next-line no-var
@@ -863,6 +887,8 @@ export async function runOpenCodeThreadChat(
   request: ThreadChatRequest,
   existingThread: Awaited<ReturnType<typeof persist.loadThread>>,
 ) {
+  const timingStartedAt = Date.now();
+
   if (request.trigger === "submit-tool-approval") {
     const latestAssistant = request.messages
       ? [...request.messages]
@@ -990,6 +1016,7 @@ export async function runOpenCodeThreadChat(
       parentMessageId: assistantParentMessageId,
       runId,
       status: "pending",
+      statusLabel: "Starting OpenCode session...",
     },
     parts: [{ text: " ", type: "text" }],
     role: "assistant",
@@ -1007,6 +1034,12 @@ export async function runOpenCodeThreadChat(
   await emitThreadSnapshot(request.threadId, eventChannel, runId);
   eventChannel.emit({ message: placeholder, runId, type: "message.upsert" });
   eventChannel.emit({ runId, type: "run.started" });
+  logRuntimeTiming("session_start_started", timingStartedAt, {
+    runId,
+    threadId: request.threadId,
+    userId: request.userId,
+    workspaceId: request.workspaceId,
+  });
 
   const permissionMode = await getToolPermissionMode(
     request.userId,
@@ -1026,6 +1059,12 @@ export async function runOpenCodeThreadChat(
     cwd: workspaceRoot,
     fullAccess: permissionMode === "full" && request.toolsEnabled !== false,
     title: fallbackTitle,
+  });
+  logRuntimeTiming("session_start_ready", timingStartedAt, {
+    runId,
+    threadId: request.threadId,
+    userId: request.userId,
+    workspaceId: request.workspaceId,
   });
   const state = createOpenCodeMirrorState({
     assistantId,

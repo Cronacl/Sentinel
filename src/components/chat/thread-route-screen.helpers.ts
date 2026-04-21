@@ -7,6 +7,27 @@ import {
 
 type ThreadDetails = RouterOutputs["threads"]["get"];
 
+function hasOptimisticThreadActivity(baseThread: ThreadDetails) {
+  if (
+    baseThread.thread.activeRunId != null ||
+    baseThread.thread.status === "streaming" ||
+    baseThread.thread.status === "awaiting_approval"
+  ) {
+    return true;
+  }
+
+  return baseThread.messages.some((message) => {
+    const metadata = message.metadata;
+    return (
+      metadata?.status === "pending" ||
+      metadata?.status === "streaming" ||
+      Boolean(metadata?.statusLabel?.trim()) ||
+      metadata?.reasoning?.isActive === true ||
+      metadata?.reasoning?.activeSinceMs != null
+    );
+  });
+}
+
 function shouldPreferLiveSnapshot(
   baseThread: ThreadDetails,
   liveSnapshot: ThreadSessionSnapshot,
@@ -27,8 +48,19 @@ function shouldPreferLiveSnapshot(
 export function resolveThreadRouteData(
   baseThread: ThreadDetails | undefined,
   liveSnapshot: ThreadSessionSnapshot | null,
+  options?: {
+    hasFreshBaseThread?: boolean;
+  },
 ): ThreadDetails | undefined {
   if (!baseThread) {
+    return undefined;
+  }
+
+  if (
+    !liveSnapshot &&
+    !options?.hasFreshBaseThread &&
+    hasOptimisticThreadActivity(baseThread)
+  ) {
     return undefined;
   }
 

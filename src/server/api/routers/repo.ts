@@ -177,6 +177,23 @@ async function assertWorkspaceRootPath(rootPath: string | null) {
   return trimmedRootPath;
 }
 
+async function getWorkspaceRootPathIfAvailable(rootPath: string | null) {
+  try {
+    return await assertWorkspaceRootPath(rootPath);
+  } catch (error) {
+    if (
+      error instanceof TRPCError &&
+      error.code === "BAD_REQUEST" &&
+      (error.message === "This workspace does not have a root path." ||
+        error.message === "Workspace root path is not available.")
+    ) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
 async function getOwnedThreadForWorkspace(
   ctx: Parameters<typeof getOwnedThreadOrThrow>[0],
   input: {
@@ -584,7 +601,7 @@ async function buildRepoDiffBundleResponse(input: {
   githubService: GitHubService | null;
   missingThread?: boolean;
   preferredOpenTargetId: string | null;
-  rootPath: string;
+  rootPath: string | null;
   thread?: { chatEngineState?: unknown; id: string } | null;
   userId: string;
   workspaceId: string;
@@ -607,12 +624,14 @@ async function buildRepoDiffBundleResponse(input: {
   const projectPath = repoContext.effectiveProjectPath ?? input.rootPath;
   const emptyReason = input.missingThread
     ? "Repo diff is temporarily unavailable while this thread is loading."
-    : repoContext.threadProjectMode === "worktree" &&
-        repoContext.worktreeStatus !== "ready"
-      ? "Repo diff is temporarily unavailable while this thread worktree is loading."
-      : !repoContext.isGitRepo
-        ? "This workspace is not a git repository."
-        : undefined;
+    : !input.rootPath
+      ? "Workspace root path is not available."
+      : repoContext.threadProjectMode === "worktree" &&
+          repoContext.worktreeStatus !== "ready"
+        ? "Repo diff is temporarily unavailable while this thread worktree is loading."
+        : !repoContext.isGitRepo
+          ? "This workspace is not a git repository."
+          : undefined;
   const diffBundle = await getRepoDiffPanelBundleData(projectPath, {
     dedupeKey: buildRepoDiffBundleDedupeKey({
       projectPath,
@@ -979,7 +998,9 @@ export const repoRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOptionalOwnedThreadForWorkspace(ctx, input);
-      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await getWorkspaceRootPathIfAvailable(
+        workspace.rootPath,
+      );
       const githubService = await resolveGitHubService(ctx);
 
       return await buildRepoDiffBundleResponse({
@@ -1045,7 +1066,9 @@ export const repoRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOptionalOwnedThreadForWorkspace(ctx, input);
-      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await getWorkspaceRootPathIfAvailable(
+        workspace.rootPath,
+      );
       const githubService = await resolveGitHubService(ctx);
       const bundle = await buildRepoDiffBundleResponse({
         githubService,

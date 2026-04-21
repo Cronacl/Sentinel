@@ -79,6 +79,7 @@ type ThreadConnectionState =
   | "idle";
 
 type ClientTimingPhase =
+  | "first_meaningful_assistant_update"
   | "first_stream_event"
   | "post_complete"
   | "send_start"
@@ -213,6 +214,10 @@ function logClientTiming(
   console.debug(
     formatClientTimingLog(phase, getClientTimingNow() - startedAt, threadId),
   );
+}
+
+export function isMeaningfulAssistantStreamEvent(event: ThreadStreamEvent) {
+  return event.type === "message.status" || event.type === "message.upsert";
 }
 
 function areMessagesEqual(left: ThreadUIMessage[], right: ThreadUIMessage[]) {
@@ -805,6 +810,7 @@ function createSessionStore(
   let state = createInitialState(threadId, initialSnapshot);
   let clientTimingStartAt: number | null = null;
   let firstStreamEventLogged = false;
+  let firstMeaningfulAssistantUpdateLogged = false;
   let subscriberCount = 0;
   let streamAbortController: AbortController | null = null;
   const listeners = new Set<() => void>();
@@ -855,6 +861,7 @@ function createSessionStore(
     if (phase === "send_start") {
       clientTimingStartAt = getClientTimingNow();
       firstStreamEventLogged = false;
+      firstMeaningfulAssistantUpdateLogged = false;
     }
 
     if (clientTimingStartAt == null) {
@@ -876,6 +883,14 @@ function createSessionStore(
     if (!firstStreamEventLogged) {
       firstStreamEventLogged = true;
       markClientTiming("first_stream_event");
+    }
+
+    if (
+      !firstMeaningfulAssistantUpdateLogged &&
+      isMeaningfulAssistantStreamEvent(event)
+    ) {
+      firstMeaningfulAssistantUpdateLogged = true;
+      markClientTiming("first_meaningful_assistant_update");
     }
 
     switch (event.type) {

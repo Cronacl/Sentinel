@@ -27,9 +27,12 @@ export function ThreadRouteScreen({ threadId }: { threadId: string }) {
     { threadId },
     buildThreadQueryOptions(cachedThread),
   );
+  const hasFreshBaseThread =
+    threadQuery.isFetchedAfterMount || cachedThread == null;
   const threadData = resolveThreadRouteData(
     threadQuery.data ?? cachedThread,
     liveSnapshot,
+    { hasFreshBaseThread },
   );
   const initialComposerUiState = resolveThreadRouteComposerUiState(
     threadData,

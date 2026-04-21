@@ -107,6 +107,58 @@ describe("resolveThreadRouteData", () => {
     expect(resolveThreadRouteData(baseThread, null)).toEqual(baseThread);
   });
 
+  it("waits for fresh data when cached thread metadata still looks active", () => {
+    const baseThread = {
+      ...createThreadDetails(),
+      messages: [
+        {
+          id: "assistant-1",
+          metadata: {
+            status: "pending" as const,
+            statusLabel: "Working...",
+          },
+          parts: [{ text: " ", type: "text" as const }],
+          role: "assistant" as const,
+        },
+      ],
+      thread: {
+        ...createThreadDetails().thread,
+        activeRunId: "run-1",
+        status: "streaming" as const,
+      },
+    };
+
+    expect(
+      resolveThreadRouteData(baseThread, null, { hasFreshBaseThread: false }),
+    ).toBeUndefined();
+  });
+
+  it("keeps active thread metadata when it comes from a fresh query", () => {
+    const baseThread = {
+      ...createThreadDetails(),
+      messages: [
+        {
+          id: "assistant-1",
+          metadata: {
+            status: "pending" as const,
+            statusLabel: "Working...",
+          },
+          parts: [{ text: " ", type: "text" as const }],
+          role: "assistant" as const,
+        },
+      ],
+      thread: {
+        ...createThreadDetails().thread,
+        activeRunId: "run-1",
+        status: "streaming" as const,
+      },
+    };
+
+    expect(
+      resolveThreadRouteData(baseThread, null, { hasFreshBaseThread: true }),
+    ).toEqual(baseThread);
+  });
+
   it("returns the base thread when the live snapshot is not ahead", () => {
     const baseThread = createThreadDetails();
     const liveSnapshot: ThreadSessionSnapshot = {
