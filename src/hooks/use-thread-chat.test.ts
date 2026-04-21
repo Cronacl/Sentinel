@@ -10,6 +10,7 @@ import {
   formatClientTimingLog,
   hasActiveThreadRun,
   isCommittedThreadActionError,
+  isMeaningfulAssistantStreamEvent,
   mergeThreadSessionStateFromSnapshot,
   mergeThreadSessionStateWithError,
   moveQueuedFollowUpToFront,
@@ -667,6 +668,44 @@ describe("formatClientTimingLog", () => {
     expect(formatClientTimingLog("first_stream_event", 12.8, "thread-1")).toBe(
       '[ThreadChatClient] {"elapsedMs":13,"phase":"first_stream_event","threadId":"thread-1"}',
     );
+  });
+
+  it("formats meaningful assistant timing separately from transport timing", () => {
+    expect(
+      formatClientTimingLog(
+        "first_meaningful_assistant_update",
+        18.2,
+        "thread-1",
+      ),
+    ).toBe(
+      '[ThreadChatClient] {"elapsedMs":18,"phase":"first_meaningful_assistant_update","threadId":"thread-1"}',
+    );
+  });
+});
+
+describe("isMeaningfulAssistantStreamEvent", () => {
+  it("treats only assistant-bearing stream updates as meaningful", () => {
+    expect(
+      isMeaningfulAssistantStreamEvent({
+        message: createMessage("assistant-1", "thinking", 1),
+        runId: "run-1",
+        type: "message.upsert",
+      }),
+    ).toBe(true);
+    expect(
+      isMeaningfulAssistantStreamEvent({
+        runId: "run-1",
+        status: "streaming",
+        type: "message.status",
+        messageId: "assistant-1",
+      }),
+    ).toBe(true);
+    expect(
+      isMeaningfulAssistantStreamEvent({
+        runId: "run-1",
+        type: "run.started",
+      }),
+    ).toBe(false);
   });
 });
 

@@ -103,7 +103,7 @@ import {
 } from "@/components/chat/repo-background-warmup";
 
 import { SidebarCommandPalette } from "./sidebar-command-palette";
-import { shouldUseRepoThreadSwitch } from "./workspace-sidebar.helpers";
+import { shouldInspectWorkspaceThreadSwitch } from "./workspace-sidebar.helpers";
 import {
   ThreadStatusIndicator,
   type ThreadStatusValue,
@@ -1809,9 +1809,6 @@ export function WorkspaceSidebar() {
 
   const archiveWorkspace = api.workspaces.archive.useMutation({
     onSuccess: ({ selectedWorkspaceId, workspaceId }) => {
-      const selectedThreadState = selectedThreadId
-        ? findThreadState(selectedThreadId, groups, items, quickChatItems)
-        : null;
       const knownWorkspaces = utils.workspaces.list.getData() ?? [];
       const nextSelectedWorkspace =
         knownWorkspaces.find(
@@ -1947,6 +1944,13 @@ export function WorkspaceSidebar() {
   }, [isPreferencesOpen]);
 
   const selectedWorkspaceId = currentWorkspace.data?.id ?? null;
+  const selectedThreadState = useMemo(
+    () =>
+      selectedThreadId
+        ? findThreadState(selectedThreadId, groups, items, quickChatItems)
+        : null,
+    [groups, items, quickChatItems, selectedThreadId],
+  );
   const renameTargetWorkspace = useMemo(
     () =>
       (workspaces.data ?? []).find(
@@ -2375,16 +2379,14 @@ export function WorkspaceSidebar() {
           return;
         }
 
-        if (!selectedThreadId) {
-          navigateToThread(workspaceId, threadId);
-          return;
-        }
+        navigateToThread(workspaceId, threadId);
 
-        const sourceThreadState =
-          findThreadState(selectedThreadId, groups, items, quickChatItems) ??
+        const sourceThreadId = selectedThreadId;
+        const effectiveSelectedThreadState =
+          selectedThreadState ??
           (() => {
             const cachedThread = utils.threads.get.getData({
-              threadId: selectedThreadId,
+              threadId: sourceThreadId ?? "",
             });
             return cachedThread?.workspace
               ? {
@@ -2394,71 +2396,40 @@ export function WorkspaceSidebar() {
                 }
               : null;
           })();
-        const targetThreadState = {
-          workspaceId,
-          workspaceKind: "project" as const,
-        };
 
         if (
-          !shouldUseRepoThreadSwitch({
-            sourceThread: sourceThreadState,
-            targetThread: targetThreadState,
+          !sourceThreadId ||
+          !shouldInspectWorkspaceThreadSwitch({
+            selectedThreadId: sourceThreadId,
+            selectedThreadState: effectiveSelectedThreadState,
+            targetWorkspaceId: workspaceId,
           })
         ) {
-          navigateToThread(workspaceId, threadId);
           return;
         }
 
         try {
-          const inspection = await utils.repo.inspectThreadSwitch.fetch({
-            sourceThreadId: selectedThreadId,
+          await utils.repo.inspectThreadSwitch.fetch({
+            sourceThreadId,
             targetThreadId: threadId,
             workspaceId,
           });
-
-          if (
-            !inspection.requiresBranchSwitch ||
-            inspection.targetProjectMode !== "local"
-          ) {
-            navigateToThread(workspaceId, threadId);
-            return;
-          }
-
-          const nextSwitchState = {
-            ...inspection,
-            workspaceId,
-          } satisfies PendingThreadSwitch;
-
-          if (!inspection.shouldPrompt) {
-            await finalizeThreadSwitch(nextSwitchState);
-            return;
-          }
-
-          setThreadSwitchError("");
-          setThreadSwitchStashName(
-            `${inspection.sourceBranch ?? "thread"}-handoff`,
-          );
-          setPendingThreadSwitch(nextSwitchState);
-          threadSwitchState.open();
+          await utils.repo.getContext.invalidate({ threadId, workspaceId });
         } catch (error) {
-          sileo.error({
-            description: getErrorMessage(
-              error,
-              "Unable to prepare this thread switch.",
-            ),
-            title: "Thread switch failed",
+          console.debug("Unable to inspect thread switch after navigation.", {
+            error,
+            sourceThreadId,
+            targetThreadId: threadId,
+            workspaceId,
           });
         }
       })();
     },
     [
-      finalizeThreadSwitch,
       navigateToThread,
-      groups,
-      items,
-      quickChatItems,
+      selectedThreadState,
       selectedThreadId,
-      threadSwitchState,
+      utils.repo.getContext,
       utils.repo.inspectThreadSwitch,
       utils.threads.get,
     ],

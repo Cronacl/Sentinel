@@ -1,3 +1,5 @@
+import { stat } from "node:fs/promises";
+
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -38,6 +40,7 @@ import type {
   RepoPullRequestStatus,
 } from "@/lib/git/pull-request-status";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import type { ChatEngine } from "@/server/db/enums";
 import {
   resetThreadRepoCheckpoint,
   toggleThreadRepoCheckpoint,
@@ -120,7 +123,7 @@ async function generateWorkspaceCommitMessage({
   includeUnstaged?: boolean;
   rootPath: string;
   thread?: {
-    chatEngine: "claude" | "codex" | "copilot" | "sentinel";
+    chatEngine: ChatEngine;
     chatModelId: string | null;
     chatReasoningEffort: string | null;
   } | null;
@@ -154,15 +157,41 @@ async function generateWorkspaceCommitMessage({
   }
 }
 
-function assertWorkspaceRootPath(rootPath: string | null) {
-  if (!rootPath?.trim()) {
+async function assertWorkspaceRootPath(rootPath: string | null) {
+  const trimmedRootPath = rootPath?.trim();
+  if (!trimmedRootPath) {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "This workspace does not have a root path.",
     });
   }
 
-  return rootPath;
+  const stats = await stat(trimmedRootPath).catch(() => null);
+  if (!stats?.isDirectory()) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Workspace root path is not available.",
+    });
+  }
+
+  return trimmedRootPath;
+}
+
+async function getWorkspaceRootPathIfAvailable(rootPath: string | null) {
+  try {
+    return await assertWorkspaceRootPath(rootPath);
+  } catch (error) {
+    if (
+      error instanceof TRPCError &&
+      error.code === "BAD_REQUEST" &&
+      (error.message === "This workspace does not have a root path." ||
+        error.message === "Workspace root path is not available.")
+    ) {
+      return null;
+    }
+
+    throw error;
+  }
 }
 
 async function getOwnedThreadForWorkspace(
@@ -209,9 +238,16 @@ function canUseRepoThreadSwitch(input: {
   sourceThread: Awaited<ReturnType<typeof getOwnedThreadOrThrow>>;
   targetThread: Awaited<ReturnType<typeof getOwnedThreadOrThrow>>;
 }) {
+  const sourceWorkspaceKind =
+    input.sourceThread.workspace?.kind ??
+    (input.sourceThread.workspaceId ? "project" : null);
+  const targetWorkspaceKind =
+    input.targetThread.workspace?.kind ??
+    (input.targetThread.workspaceId ? "project" : null);
+
   return (
-    input.sourceThread.workspace.kind === "project" &&
-    input.targetThread.workspace.kind === "project" &&
+    sourceWorkspaceKind === "project" &&
+    targetWorkspaceKind === "project" &&
     input.sourceThread.workspaceId === input.targetThread.workspaceId
   );
 }
@@ -572,7 +608,7 @@ async function buildRepoDiffBundleResponse(input: {
   githubService: GitHubService | null;
   missingThread?: boolean;
   preferredOpenTargetId: string | null;
-  rootPath: string;
+  rootPath: string | null;
   thread?: { chatEngineState?: unknown; id: string } | null;
   userId: string;
   workspaceId: string;
@@ -595,12 +631,14 @@ async function buildRepoDiffBundleResponse(input: {
   const projectPath = repoContext.effectiveProjectPath ?? input.rootPath;
   const emptyReason = input.missingThread
     ? "Repo diff is temporarily unavailable while this thread is loading."
-    : repoContext.threadProjectMode === "worktree" &&
-        repoContext.worktreeStatus !== "ready"
-      ? "Repo diff is temporarily unavailable while this thread worktree is loading."
-      : !repoContext.isGitRepo
-        ? "This workspace is not a git repository."
-        : undefined;
+    : !input.rootPath
+      ? "Workspace root path is not available."
+      : repoContext.threadProjectMode === "worktree" &&
+          repoContext.worktreeStatus !== "ready"
+        ? "Repo diff is temporarily unavailable while this thread worktree is loading."
+        : !repoContext.isGitRepo
+          ? "This workspace is not a git repository."
+          : undefined;
   const diffBundle = await getRepoDiffPanelBundleData(projectPath, {
     dedupeKey: buildRepoDiffBundleDedupeKey({
       projectPath,
@@ -967,7 +1005,9 @@ export const repoRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOptionalOwnedThreadForWorkspace(ctx, input);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await getWorkspaceRootPathIfAvailable(
+        workspace.rootPath,
+      );
       const githubService = await resolveGitHubService(ctx);
 
       return await buildRepoDiffBundleResponse({
@@ -1001,7 +1041,7 @@ export const repoRouter = createTRPCRouter({
     .input(workspaceThreadInputSchema)
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       const repoContext = await resolveRepoContext(rootPath);
       const targetBranch = repoContext.branch;
 
@@ -1020,7 +1060,7 @@ export const repoRouter = createTRPCRouter({
     .input(workspaceThreadInputSchema)
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       return await removeThreadWorktree(rootPath, input.threadId);
     }),
 
@@ -1033,7 +1073,9 @@ export const repoRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOptionalOwnedThreadForWorkspace(ctx, input);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await getWorkspaceRootPathIfAvailable(
+        workspace.rootPath,
+      );
       const githubService = await resolveGitHubService(ctx);
       const bundle = await buildRepoDiffBundleResponse({
         githubService,
@@ -1061,7 +1103,7 @@ export const repoRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOptionalOwnedThreadForWorkspace(ctx, input);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       const projectPath = await resolveThreadProjectPath({
         thread,
         workspaceRootPath: rootPath,
@@ -1091,7 +1133,7 @@ export const repoRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOptionalOwnedThreadForWorkspace(ctx, input);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       const projectPath = await resolveThreadProjectPath({
         thread,
         workspaceRootPath: rootPath,
@@ -1117,7 +1159,7 @@ export const repoRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOptionalOwnedThreadForWorkspace(ctx, input);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       const projectPath = await resolveThreadProjectPath({
         thread,
         workspaceRootPath: rootPath,
@@ -1147,7 +1189,7 @@ export const repoRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOptionalOwnedThreadForWorkspace(ctx, input);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       const projectPath = await resolveThreadProjectPath({
         thread,
         workspaceRootPath: rootPath,
@@ -1173,7 +1215,7 @@ export const repoRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOwnedThreadForWorkspace(ctx, input);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       const projectPath = await resolveThreadProjectPath({
         thread,
         workspaceRootPath: rootPath,
@@ -1208,7 +1250,7 @@ export const repoRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOwnedThreadForWorkspace(ctx, input);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       const projectPath = await resolveThreadProjectPath({
         thread,
         workspaceRootPath: rootPath,
@@ -1248,7 +1290,7 @@ export const repoRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOwnedThreadForWorkspace(ctx, input);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       const projectPath = await resolveThreadProjectPath({
         thread,
         workspaceRootPath: rootPath,
@@ -1286,7 +1328,7 @@ export const repoRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOptionalOwnedThreadForWorkspace(ctx, input);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       const projectPath = await resolveThreadProjectPath({
         thread,
         workspaceRootPath: rootPath,
@@ -1303,7 +1345,7 @@ export const repoRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOptionalOwnedThreadForWorkspace(ctx, input);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       const githubService = await resolveGitHubService(ctx);
       const trimmedBranchName = input.branchName.trim();
       const threadState = normalizeThreadRepoState(thread);
@@ -1422,7 +1464,7 @@ export const repoRouter = createTRPCRouter({
         ctx,
         targetThread.workspaceId,
       );
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       return await inspectThreadSwitchState({
         rootPath,
         sourceThread,
@@ -1454,7 +1496,7 @@ export const repoRouter = createTRPCRouter({
         ctx,
         targetThread.workspaceId,
       );
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       const githubService = await resolveGitHubService(ctx);
       const inspection = await inspectThreadSwitchState({
         rootPath,
@@ -1593,7 +1635,7 @@ export const repoRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOptionalOwnedThreadForWorkspace(ctx, input);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       const projectPath = await resolveThreadProjectPath({
         thread,
         workspaceRootPath: rootPath,
@@ -1624,7 +1666,7 @@ export const repoRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOptionalOwnedThreadForWorkspace(ctx, input);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       const projectPath = await resolveThreadProjectPath({
         thread,
         workspaceRootPath: rootPath,
@@ -1852,7 +1894,7 @@ export const repoRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOwnedThreadForWorkspace(ctx, input);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       const githubService = await resolveGitHubService(ctx);
       const threadState = normalizeThreadRepoState(thread);
       const currentRepoContext = await resolveRepoContext(rootPath);
@@ -1922,7 +1964,7 @@ export const repoRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOwnedThreadForWorkspace(ctx, input);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       const githubService = await resolveGitHubService(ctx);
       const currentRepoContext = await resolveRepoContext(rootPath);
       const threadState = normalizeThreadRepoState(thread);
@@ -1973,7 +2015,7 @@ export const repoRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOwnedThreadForWorkspace(ctx, input);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       const githubService = await resolveGitHubService(ctx);
 
       const nextThread = withUpdatedThreadRepoState(thread, {
@@ -2001,7 +2043,7 @@ export const repoRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOwnedThreadForWorkspace(ctx, input);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       const githubService = await resolveGitHubService(ctx);
 
       const removed = await removeThreadWorktree(rootPath, thread!.id);
@@ -2033,7 +2075,7 @@ export const repoRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       return await initializeRepository(
-        assertWorkspaceRootPath(workspace.rootPath),
+        await assertWorkspaceRootPath(workspace.rootPath),
       );
     }),
 
@@ -2042,7 +2084,7 @@ export const repoRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
       const thread = await getOptionalOwnedThreadForWorkspace(ctx, input);
-      const rootPath = assertWorkspaceRootPath(workspace.rootPath);
+      const rootPath = await assertWorkspaceRootPath(workspace.rootPath);
       const projectPath = await resolveThreadProjectPath({
         thread,
         workspaceRootPath: rootPath,

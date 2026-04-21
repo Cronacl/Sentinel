@@ -1,16 +1,19 @@
-export type ThreadWorkspaceScope = {
+export type ThreadWorkspaceState = {
   workspaceId: string;
   workspaceKind: "project" | "quick_chat";
 };
 
-export function shouldUseRepoThreadSwitch(input: {
-  sourceThread: ThreadWorkspaceScope | null;
-  targetThread: ThreadWorkspaceScope;
+export function shouldInspectWorkspaceThreadSwitch(input: {
+  selectedThreadId: string | null;
+  selectedThreadState: ThreadWorkspaceState | null;
+  targetWorkspaceId: string;
 }) {
-  return Boolean(
-    input.sourceThread &&
-    input.sourceThread.workspaceKind === "project" &&
-    input.targetThread.workspaceKind === "project" &&
-    input.sourceThread.workspaceId === input.targetThread.workspaceId,
+  if (!input.selectedThreadId || !input.selectedThreadState) {
+    return false;
+  }
+
+  return (
+    input.selectedThreadState.workspaceKind === "project" &&
+    input.selectedThreadState.workspaceId === input.targetWorkspaceId
   );
 }

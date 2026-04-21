@@ -263,6 +263,12 @@ export function AutomationDetailScreen({
   const copilotModelsQuery = api.engines.models.useQuery({
     engine: "copilot",
   });
+  const cursorModelsQuery = api.engines.models.useQuery({
+    engine: "cursor",
+  });
+  const openCodeModelsQuery = api.engines.models.useQuery({
+    engine: "opencode",
+  });
 
   const automation = automationQuery.data ?? null;
   const statusTone = automation?.status === "active" ? "success" : "warning";
@@ -285,6 +291,14 @@ export function AutomationDetailScreen({
     () => getAvailableAutomationModels(copilotModelsQuery.data ?? []),
     [copilotModelsQuery.data],
   );
+  const availableCursorModels = useMemo(
+    () => getAvailableAutomationModels(cursorModelsQuery.data ?? []),
+    [cursorModelsQuery.data],
+  );
+  const availableOpenCodeModels = useMemo(
+    () => getAvailableAutomationModels(openCodeModelsQuery.data ?? []),
+    [openCodeModelsQuery.data],
+  );
 
   const formDefaults = useMemo<EditFormValues | null>(() => {
     if (!automation) return null;
@@ -294,6 +308,8 @@ export function AutomationDetailScreen({
         claude: availableClaudeModels,
         copilot: availableCopilotModels,
         codex: availableCodexModels,
+        cursor: availableCursorModels,
+        opencode: availableOpenCodeModels,
         sentinel: availableSentinelModels,
       }),
       automation.modelId ?? null,
@@ -320,6 +336,8 @@ export function AutomationDetailScreen({
     availableClaudeModels,
     availableCopilotModels,
     availableCodexModels,
+    availableCursorModels,
+    availableOpenCodeModels,
     availableSentinelModels,
   ]);
 
@@ -378,12 +396,16 @@ export function AutomationDetailScreen({
         claude: availableClaudeModels,
         copilot: availableCopilotModels,
         codex: availableCodexModels,
+        cursor: availableCursorModels,
+        opencode: availableOpenCodeModels,
         sentinel: availableSentinelModels,
       }),
     [
       availableClaudeModels,
       availableCopilotModels,
       availableCodexModels,
+      availableCursorModels,
+      availableOpenCodeModels,
       availableSentinelModels,
       selectedEngine,
     ],

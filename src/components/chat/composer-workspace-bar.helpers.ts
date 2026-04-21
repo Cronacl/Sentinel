@@ -1,6 +1,6 @@
 import type { DraftProjectMode } from "./draft-thread-project-mode";
 
-type ComposerWorkspaceBarRepoContext = {
+export type ComposerWorkspaceBarRepoContext = {
   branch?: string | null;
   threadProjectMode?: DraftProjectMode | null;
   threadBranch?: string | null;
@@ -102,16 +102,4 @@ export function resolveComposerWorkspaceBarLiveState(input: {
     threadBranch,
     worktreeStatus: hasPreparedDraftWorktree ? "ready" : null,
   };
-}
-
-export function resolveComposerWorkspaceBarDisplayState(input: {
-  isRepoStatePending: boolean;
-  liveState: ComposerWorkspaceBarDisplayState;
-  previousStableState?: ComposerWorkspaceBarDisplayState | null;
-}) {
-  if (input.isRepoStatePending && input.previousStableState) {
-    return input.previousStableState;
-  }
-
-  return input.liveState;
 }

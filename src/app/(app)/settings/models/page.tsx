@@ -15,7 +15,13 @@ import { useForm } from "react-hook-form";
 import { sileo } from "sileo";
 
 import type { AIProvider } from "@/server/db/enums";
+import {
+  isUnstableChatEngine,
+  UNSTABLE_CHAT_ENGINE_DESCRIPTION,
+  UNSTABLE_CHAT_ENGINE_LABEL,
+} from "@/components/chat/chat-composer-helpers";
 import { CopilotIcon } from "@/components/icons/copilot-icon";
+import { OpenCodeIcon } from "@/components/icons/open-target-icons";
 import { ProviderIcon } from "@/components/icons/provider-icon";
 import {
   ControlledSelectField,
@@ -34,6 +40,14 @@ import {
   getCopilotRuntimeBadgeLabel,
   getCopilotRuntimeCliLabel,
   getCopilotRuntimeFallbackMessage,
+  getCursorRuntimeBadgeColor,
+  getCursorRuntimeBadgeLabel,
+  getCursorRuntimeCliLabel,
+  getCursorRuntimeFallbackMessage,
+  getOpenCodeRuntimeBadgeColor,
+  getOpenCodeRuntimeBadgeLabel,
+  getOpenCodeRuntimeCliLabel,
+  getOpenCodeRuntimeFallbackMessage,
 } from "@/components/settings/runtime-status";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { PROVIDERS } from "@/lib/ai/providers/registry";
@@ -44,7 +58,7 @@ import {
 import { api } from "@/trpc/react";
 
 type ProviderKey = AIProvider;
-type RuntimeEngineKey = "claude" | "codex" | "copilot";
+type RuntimeEngineKey = "claude" | "codex" | "copilot" | "cursor" | "opencode";
 
 const CAPABILITY_LABEL: Record<string, string> = {
   object_generation: "Structured",
@@ -66,6 +80,8 @@ function RuntimeCard({
   badge,
   badgeColor,
   rows,
+  stabilityDescription,
+  stabilityLabel,
   fallbackMessage,
   engineError,
   isRefreshing,
@@ -75,6 +91,8 @@ function RuntimeCard({
   badge: string;
   badgeColor: "success" | "warning" | "danger" | "default";
   rows: { label: string; value: ReactNode }[];
+  stabilityDescription?: string;
+  stabilityLabel?: string;
   fallbackMessage: string | null;
   engineError: string | null;
   isRefreshing: boolean;
@@ -83,7 +101,21 @@ function RuntimeCard({
   return (
     <div className="border-separator/20 rounded-2xl border bg-surface px-3 py-2.5">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-foreground text-[13px] font-medium">{title}</span>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="text-foreground truncate text-[13px] font-medium">
+            {title}
+          </span>
+          {stabilityLabel ? (
+            <Chip
+              aria-label={stabilityDescription}
+              color="warning"
+              size="sm"
+              variant="soft"
+            >
+              {stabilityLabel}
+            </Chip>
+          ) : null}
+        </div>
         <div className="flex items-center gap-1.5">
           <Button
             isDisabled={isRefreshing}
@@ -145,6 +177,20 @@ export default function ModelsPage() {
   const copilotStatus =
     copilotEngine?.engine === "copilot" && "status" in copilotEngine
       ? copilotEngine.status
+      : null;
+  const cursorEngine = enginesQuery.data?.find(
+    (engine) => engine.engine === "cursor",
+  );
+  const cursorStatus =
+    cursorEngine?.engine === "cursor" && "status" in cursorEngine
+      ? cursorEngine.status
+      : null;
+  const openCodeEngine = enginesQuery.data?.find(
+    (engine) => engine.engine === "opencode",
+  );
+  const openCodeStatus =
+    openCodeEngine?.engine === "opencode" && "status" in openCodeEngine
+      ? openCodeEngine.status
       : null;
 
   const enable = api.models.enable.useMutation({
@@ -355,7 +401,11 @@ export default function ModelsPage() {
                 ? "Codex detection reloaded."
                 : engine === "claude"
                   ? "Claude detection reloaded."
-                  : "Copilot detection reloaded.",
+                  : engine === "cursor"
+                    ? "Cursor detection reloaded."
+                    : engine === "opencode"
+                      ? "OpenCode detection reloaded."
+                      : "Copilot detection reloaded.",
           });
         }
       } catch (error) {
@@ -384,13 +434,21 @@ export default function ModelsPage() {
     claudeStatus?.availableModels && claudeStatus.availableModels.length > 0;
   const hasCopilotModels =
     copilotStatus?.availableModels && copilotStatus.availableModels.length > 0;
+  const hasOpenCodeModels =
+    openCodeStatus?.availableModels &&
+    openCodeStatus.availableModels.length > 0;
   const isRefreshingCodex = pendingRuntimeRefresh === "codex";
   const isRefreshingClaude = pendingRuntimeRefresh === "claude";
   const isRefreshingCopilot = pendingRuntimeRefresh === "copilot";
+  const isRefreshingCursor = pendingRuntimeRefresh === "cursor";
+  const isRefreshingOpenCode = pendingRuntimeRefresh === "opencode";
   const codexFallbackMessage = getCodexRuntimeFallbackMessage(codexStatus);
   const claudeFallbackMessage = getClaudeRuntimeFallbackMessage(claudeStatus);
   const copilotFallbackMessage =
     getCopilotRuntimeFallbackMessage(copilotStatus);
+  const cursorFallbackMessage = getCursorRuntimeFallbackMessage(cursorStatus);
+  const openCodeFallbackMessage =
+    getOpenCodeRuntimeFallbackMessage(openCodeStatus);
 
   const codexAccountValue = (() => {
     const raw =
@@ -563,6 +621,106 @@ export default function ModelsPage() {
                 onRefresh={() => void handleRefreshRuntime("claude")}
               />
               <RuntimeCard
+                title="Cursor Agent Runtime"
+                badge={getCursorRuntimeBadgeLabel(
+                  cursorStatus,
+                  cursorEngine?.isAvailable ?? false,
+                )}
+                badgeColor={getCursorRuntimeBadgeColor(
+                  cursorStatus,
+                  cursorEngine?.isAvailable ?? false,
+                )}
+                rows={[
+                  {
+                    label: "CLI",
+                    value: getCursorRuntimeCliLabel(cursorStatus),
+                  },
+                  {
+                    label: "Auth",
+                    value: cursorStatus?.authReady ? "Ready" : "Unavailable",
+                  },
+                  {
+                    label: "Models",
+                    value: `${cursorStatus?.availableModels.length ?? 0} available`,
+                  },
+                  {
+                    label: "Mode picker",
+                    value: cursorStatus?.parameterizedModelPicker
+                      ? "Parameterized"
+                      : "Basic",
+                  },
+                ]}
+                fallbackMessage={cursorFallbackMessage}
+                engineError={
+                  !cursorFallbackMessage &&
+                  !cursorEngine?.isAvailable &&
+                  cursorEngine?.error
+                    ? cursorEngine.error
+                    : null
+                }
+                stabilityDescription={
+                  isUnstableChatEngine("cursor")
+                    ? UNSTABLE_CHAT_ENGINE_DESCRIPTION
+                    : undefined
+                }
+                stabilityLabel={
+                  isUnstableChatEngine("cursor")
+                    ? UNSTABLE_CHAT_ENGINE_LABEL
+                    : undefined
+                }
+                isRefreshing={isRefreshingCursor}
+                onRefresh={() => void handleRefreshRuntime("cursor")}
+              />
+              <RuntimeCard
+                title="OpenCode Runtime"
+                badge={getOpenCodeRuntimeBadgeLabel(
+                  openCodeStatus,
+                  openCodeEngine?.isAvailable ?? false,
+                )}
+                badgeColor={getOpenCodeRuntimeBadgeColor(
+                  openCodeStatus,
+                  openCodeEngine?.isAvailable ?? false,
+                )}
+                rows={[
+                  {
+                    label: "CLI",
+                    value: getOpenCodeRuntimeCliLabel(openCodeStatus),
+                  },
+                  {
+                    label: "Auth",
+                    value: openCodeStatus?.authReady ? "Ready" : "Unavailable",
+                  },
+                  {
+                    label: "Models",
+                    value: `${openCodeStatus?.availableModels.length ?? 0} available`,
+                  },
+                  {
+                    label: "Agents",
+                    value: `${openCodeStatus?.availableModels[0]?.openCode.agentOptions.length ?? 0} available`,
+                  },
+                ]}
+                fallbackMessage={openCodeFallbackMessage}
+                engineError={
+                  !openCodeFallbackMessage &&
+                  !openCodeEngine?.isAvailable &&
+                  openCodeEngine?.error
+                    ? openCodeEngine.error
+                    : null
+                }
+                stabilityDescription={
+                  isUnstableChatEngine("opencode")
+                    ? UNSTABLE_CHAT_ENGINE_DESCRIPTION
+                    : undefined
+                }
+                stabilityLabel={
+                  isUnstableChatEngine("opencode")
+                    ? UNSTABLE_CHAT_ENGINE_LABEL
+                    : undefined
+                }
+                isRefreshing={isRefreshingOpenCode}
+                onRefresh={() => void handleRefreshRuntime("opencode")}
+              />
+              <RuntimeCard
                 title="GitHub Copilot Runtime"
                 badge={getCopilotRuntimeBadgeLabel(
                   copilotStatus,
@@ -623,6 +781,7 @@ export default function ModelsPage() {
             {(hasCodexModels ||
               hasClaudeModels ||
               hasCopilotModels ||
+              hasOpenCodeModels ||
               grouped.length > 0) && (
               <DisclosureGroup
                 allowsMultipleExpanded
@@ -797,6 +956,72 @@ export default function ModelsPage() {
                                   {model.contextWindow && (
                                     <Chip size="sm" variant="soft">
                                       {(model.contextWindow / 1000).toFixed(0)}k
+                                    </Chip>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </Disclosure.Body>
+                      </Disclosure.Content>
+                    </Disclosure>
+                  )}
+
+                  {hasOpenCodeModels && (
+                    <Disclosure id="runtime-opencode">
+                      <Disclosure.Heading>
+                        <Disclosure.Trigger className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left">
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-background/80">
+                            <OpenCodeIcon className="h-3.5 w-3.5" />
+                          </div>
+                          <span className="text-foreground text-[13px] font-medium">
+                            OpenCode Models
+                          </span>
+                          <Chip size="sm" variant="soft">
+                            {openCodeStatus!.availableModels.length}
+                          </Chip>
+                          <Disclosure.Indicator className="ml-auto" />
+                        </Disclosure.Trigger>
+                      </Disclosure.Heading>
+                      <Disclosure.Content>
+                        <Disclosure.Body>
+                          <div className="divide-separator/10 divide-y px-3 pb-2">
+                            {openCodeStatus!.availableModels.map((model) => (
+                              <div
+                                className="flex items-center gap-2.5 py-1.5 pl-9"
+                                key={model.id}
+                              >
+                                <span className="text-foreground shrink-0 text-[13px]">
+                                  {model.displayName}
+                                </span>
+                                {model.isDefault && (
+                                  <Chip color="accent" size="sm" variant="soft">
+                                    Default
+                                  </Chip>
+                                )}
+                                <span className="text-muted min-w-0 flex-1 truncate text-[11px]">
+                                  {model.description}
+                                </span>
+                                <div className="flex shrink-0 gap-1">
+                                  {model.inputModalities.map((modality) => (
+                                    <Chip
+                                      key={modality}
+                                      size="sm"
+                                      variant="soft"
+                                    >
+                                      {modality}
+                                    </Chip>
+                                  ))}
+                                  {model.openCode.agentOptions.length > 0 && (
+                                    <Chip size="sm" variant="soft">
+                                      {model.openCode.agentOptions.length}{" "}
+                                      agents
+                                    </Chip>
+                                  )}
+                                  {model.openCode.variantOptions.length > 0 && (
+                                    <Chip size="sm" variant="soft">
+                                      {model.openCode.variantOptions.length}{" "}
+                                      variants
                                     </Chip>
                                   )}
                                 </div>

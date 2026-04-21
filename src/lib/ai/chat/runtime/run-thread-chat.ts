@@ -55,6 +55,8 @@ import { parseRequest } from "./parse-request";
 import { runCodexThreadChat, stopCodexThreadRun } from "./codex";
 import { runClaudeThreadChat, stopClaudeThreadRun } from "./claude";
 import { runCopilotThreadChat, stopCopilotThreadRun } from "./copilot";
+import { runCursorThreadChat, stopCursorThreadRun } from "./cursor";
+import { runOpenCodeThreadChat, stopOpenCodeThreadRun } from "./opencode";
 import {
   buildActiveThreadMessages,
   buildFirstUserMessageTitle,
@@ -133,8 +135,13 @@ function logRuntimeTiming(
   phase:
     | "agent_stream_created"
     | "bootstrap_ready"
+    | "compaction_ready"
+    | "documents_normalized"
     | "first_message_upsert"
+    | "optional_preflight_ready"
+    | "optional_preflight_started"
     | "preflight_ready"
+    | "prompt_context_ready"
     | "request_received"
     | "run_failed"
     | "run_finished"
@@ -280,6 +287,14 @@ async function handleFollowUpAction(
 
     if (engine === "copilot") {
       return stopCopilotThreadRun(stopRequest, latestThread);
+    }
+
+    if (engine === "cursor") {
+      return stopCursorThreadRun(stopRequest, latestThread);
+    }
+
+    if (engine === "opencode") {
+      return stopOpenCodeThreadRun(stopRequest, latestThread);
     }
 
     return handleStopStream(stopRequest);
@@ -748,6 +763,7 @@ type BootstrappedThreadRun = {
   shouldGenerateTitle: boolean;
   targetMessage: PersistedThreadMessageRecord | undefined;
   timingStartedAt: number;
+  threadAgentRole: ReturnType<typeof getThreadAgentRole>;
   threadMode: ReturnType<typeof normalizeThreadMode>;
 };
 
@@ -862,6 +878,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
   let latestInputTokens: number | undefined;
 
   try {
+    emitPendingAssistantStatusLabel(run, "Loading workspace context...");
     const resolvedModelPromise = resolveThreadChatModel(
       run.request,
       run.targetMessage,
@@ -910,11 +927,20 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
     } = runtimeBootstrap;
 
     const titleUpdatePromise = launchTitleGeneration(run, resolvedModel);
-    const normalizedModelTranscript =
-      await normalizeTranscriptDocumentsForModel({
+    const normalizedModelTranscriptPromise =
+      normalizeTranscriptDocumentsForModel({
         messages: injectComposerContextIntoTranscript(run.modelTranscript),
         providerId: resolvedModel.providerId,
         responseModelId: resolvedModel.responseModelId,
+      }).then((normalizedModelTranscript) => {
+        logRuntimeTiming("documents_normalized", run.timingStartedAt, {
+          runId: run.runId,
+          threadId: run.request.threadId,
+          trigger: run.request.trigger,
+          userId: run.request.userId,
+          workspaceId: run.request.workspaceId,
+        });
+        return normalizedModelTranscript;
       });
 
     const latestUserText = extractLatestUserText(run.baseMessages);
@@ -923,6 +949,13 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
       run.threadMode === "chat" && enabledIntegrations.length > 0;
     const integrationApprovalFn = (toolName: string) =>
       (toolApprovalPolicies as Record<string, boolean>)[toolName] ?? true;
+    logRuntimeTiming("optional_preflight_started", run.timingStartedAt, {
+      runId: run.runId,
+      threadId: run.request.threadId,
+      trigger: run.request.trigger,
+      userId: run.request.userId,
+      workspaceId: run.request.workspaceId,
+    });
     const projectAwarenessPromise = withOptionalPreflightBudget({
       fallback: fallbackProjectAwareness(workspaceRoot),
       label: "project discovery",
@@ -990,6 +1023,52 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           ),
         })
       : Promise.resolve({});
+    const compactionResultPromise = normalizedModelTranscriptPromise
+      .then((normalizedModelTranscript) =>
+        refreshThreadContextCompactionCheckpoint({
+          contextWindow: resolvedModel.contextWindow,
+          enabled: contextCompactionSettings.enabled,
+          fixedWindowSize: contextCompactionSettings.fixedWindowSize,
+          languageModel: resolvedModel.languageModel,
+          onCompactionStart: async () => {
+            emitPendingAssistantStatusLabel(run, "Compacting context...");
+          },
+          ...(resolvedModel.providerOptions
+            ? { providerOptions: resolvedModel.providerOptions }
+            : {}),
+          threadId: run.request.threadId,
+          transcript: normalizedModelTranscript,
+          useFixedWindow: contextCompactionSettings.useFixedWindow,
+          windowPercent: contextCompactionSettings.windowPercent,
+        }),
+      )
+      .then((compactionResult) => {
+        logRuntimeTiming("compaction_ready", run.timingStartedAt, {
+          runId: run.runId,
+          threadId: run.request.threadId,
+          trigger: run.request.trigger,
+          userId: run.request.userId,
+          workspaceId: run.request.workspaceId,
+        });
+        return compactionResult;
+      })
+      .catch((error) => {
+        log.warn(
+          `Skipping context compaction: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        return normalizedModelTranscriptPromise.then(
+          (normalizedModelTranscript) => ({
+            checkpointWasInvalid: false,
+            didCompact: false,
+            inputTokens: null,
+            thresholdTokens: 0,
+            transcript: prepareMessagesForModel(normalizedModelTranscript),
+            updatedCheckpoint: null,
+          }),
+        );
+      });
 
     const agent = createThreadAgent({
       attachmentDownload: createAttachmentDownloadHandler(),
@@ -1004,6 +1083,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
     });
     let streamErrorMessage: string | undefined;
     let closeMcpTools = async () => {};
+    const normalizedModelTranscript = await normalizedModelTranscriptPromise;
 
     const stream = createUIMessageStream({
       originalMessages: normalizedModelTranscript,
@@ -1016,7 +1096,6 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
             userId: run.request.userId,
             workspaceId: run.request.workspaceId,
           });
-          emitPendingAssistantStatusLabel(run, "Loading workspace context...");
           const [
             projectAwareness,
             skillSnapshot,
@@ -1033,9 +1112,13 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           closeMcpTools = mcpRuntime.closeAll;
           const mcpToolNames = Object.keys(mcpRuntime.tools);
           const integrationToolNames = Object.keys(integrationTools);
-          const currentThreadState = await persist.loadThread(
-            run.request.threadId,
-          );
+          logRuntimeTiming("optional_preflight_ready", run.timingStartedAt, {
+            runId: run.runId,
+            threadId: run.request.threadId,
+            trigger: run.request.trigger,
+            userId: run.request.userId,
+            workspaceId: run.request.workspaceId,
+          });
           logRuntimeTiming("preflight_ready", run.timingStartedAt, {
             runId: run.runId,
             threadId: run.request.threadId,
@@ -1046,7 +1129,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           emitPendingAssistantStatusLabel(run, "Building prompt...");
 
           const promptContext = buildThreadPromptContext({
-            agentRole: getThreadAgentRole(currentThreadState),
+            agentRole: run.threadAgentRole,
             allowedInspectionRoots: [
               ...(workspaceRoot ? [workspaceRoot] : []),
               ...skillSnapshot.skillRoots,
@@ -1140,6 +1223,13 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
             webFetchSettings,
             workspaceRoot,
           });
+          logRuntimeTiming("prompt_context_ready", run.timingStartedAt, {
+            runId: run.runId,
+            threadId: run.request.threadId,
+            trigger: run.request.trigger,
+            userId: run.request.userId,
+            workspaceId: run.request.workspaceId,
+          });
 
           const planPromptLines = buildPlanPromptLines(planState.plan);
           const baseSystemPromptPromise = Promise.resolve(
@@ -1148,37 +1238,6 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
               promptContext,
             }),
           );
-          const compactionResultPromise =
-            refreshThreadContextCompactionCheckpoint({
-              contextWindow: resolvedModel.contextWindow,
-              enabled: contextCompactionSettings.enabled,
-              fixedWindowSize: contextCompactionSettings.fixedWindowSize,
-              languageModel: resolvedModel.languageModel,
-              onCompactionStart: async () => {
-                emitPendingAssistantStatusLabel(run, "Compacting context...");
-              },
-              ...(resolvedModel.providerOptions
-                ? { providerOptions: resolvedModel.providerOptions }
-                : {}),
-              threadId: run.request.threadId,
-              transcript: normalizedModelTranscript,
-              useFixedWindow: contextCompactionSettings.useFixedWindow,
-              windowPercent: contextCompactionSettings.windowPercent,
-            }).catch((error) => {
-              log.warn(
-                `Skipping context compaction: ${
-                  error instanceof Error ? error.message : String(error)
-                }`,
-              );
-              return {
-                checkpointWasInvalid: false,
-                didCompact: false,
-                inputTokens: null,
-                thresholdTokens: 0,
-                transcript: prepareMessagesForModel(normalizedModelTranscript),
-                updatedCheckpoint: null,
-              };
-            });
           const [baseSystemPrompt, compactionResult] = await Promise.all([
             baseSystemPromptPromise,
             compactionResultPromise,
@@ -1206,7 +1265,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
               return streamErrorMessage;
             },
             options: {
-              agentRole: getThreadAgentRole(currentThreadState),
+              agentRole: run.threadAgentRole,
               availableSkills: skillSnapshot.skills,
               ...(workspaceRoot ? { defaultDirectory: workspaceRoot } : {}),
               globalSkillsBasePath: skillsBasePath,
@@ -1468,6 +1527,14 @@ async function runParsedThreadChat(
       return stopCopilotThreadRun(request, existingThread);
     }
 
+    if (engine === "cursor") {
+      return stopCursorThreadRun(request, existingThread);
+    }
+
+    if (engine === "opencode") {
+      return stopOpenCodeThreadRun(request, existingThread);
+    }
+
     return handleStopStream(request);
   }
 
@@ -1489,6 +1556,14 @@ async function runParsedThreadChat(
 
   if (engine === "copilot") {
     return runCopilotThreadChat(request, existingThread);
+  }
+
+  if (engine === "cursor") {
+    return runCursorThreadChat(request, existingThread);
+  }
+
+  if (engine === "opencode") {
+    return runOpenCodeThreadChat(request, existingThread);
   }
 
   const allRecords = await persist.loadThreadMessages(request.threadId);
@@ -1658,6 +1733,7 @@ async function runParsedThreadChat(
       shouldGenerateTitle,
       targetMessage,
       timingStartedAt,
+      threadAgentRole: getThreadAgentRole(existingThread),
       threadMode,
     });
 

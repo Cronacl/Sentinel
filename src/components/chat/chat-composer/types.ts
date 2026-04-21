@@ -9,12 +9,28 @@ import type { DraftProjectMode } from "../draft-thread-project-mode";
 
 export type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
 
+export type ChatComposerOpenCodeSelection = {
+  agent: string | null;
+  variant: string | null;
+};
+
+export type ChatComposerThreadSelection = {
+  engine?: ChatEngine;
+  modelId: string | null;
+  mode?: "chat" | "plan";
+  reasoningEffort?: ReasoningEffort | null;
+};
+
 export type ComposerSendInput = {
   composerContext?: ComposerContext;
   draftRepoState?: Partial<RepoThreadState>;
   engine: ChatEngine;
   files?: FileUIPart[];
   modelId: string;
+  openCode?: {
+    agent?: string | null;
+    variant?: string | null;
+  };
   reasoningEffort?: ReasoningEffort | null;
   text: string;
   threadMode?: "chat" | "plan";
@@ -36,12 +52,16 @@ export type ChatComposerProps = {
   } | null;
   draftThreadId?: string;
   draftProjectMode?: DraftProjectMode;
+  openCodeSelection?: ChatComposerOpenCodeSelection | null;
   onQueueFollowUp?: (input: ComposerSendInput) => Promise<void> | void;
   onRemoveQueuedFollowUp?: (id: string) => Promise<void> | void;
   onDraftPreparedWorktreeChange?: (
     worktree: { branch: string; path: string } | null,
   ) => void;
   onDraftProjectModeChange?: (mode: DraftProjectMode) => void;
+  onOpenCodeSelectionChange?: (
+    selection: ChatComposerOpenCodeSelection,
+  ) => void;
   onSelectionChange?: (input: {
     engine?: ChatEngine;
     modelId?: string | null;
@@ -71,10 +91,5 @@ export type ChatComposerProps = {
   persistThreadSelection?: boolean;
   repoThreadId?: string;
   threadId?: string;
-  threadSelection?: {
-    engine?: ChatEngine;
-    modelId: string | null;
-    mode?: "chat" | "plan";
-    reasoningEffort?: ReasoningEffort | null;
-  } | null;
+  threadSelection?: ChatComposerThreadSelection | null;
 };

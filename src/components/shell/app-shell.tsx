@@ -3,24 +3,22 @@
 import { Button, ScrollShadow } from "@heroui/react";
 import { ArrowLeft02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { type PropsWithChildren, useEffect, useRef } from "react";
 
 import { NewThreadScreen } from "@/components/chat/new-thread-screen";
-import { ThreadRouteScreen } from "@/components/chat/thread-route-screen";
 import { getDesktopApi } from "@/lib/desktop/client";
 import { ShortcutProvider, useShortcutAction } from "@/lib/shortcuts/provider";
 import { api } from "@/trpc/react";
 
 import { SETTINGS_NAV } from "@/components/settings/settings-nav";
-import { TerminalPanel } from "@/components/terminal/terminal-panel";
 import {
   closeTerminal,
   getTerminalDefaultCwd,
   toggleTerminalSession,
 } from "@/components/terminal/terminal-store";
 
-import { WorkspaceSidebar } from "./workspace-sidebar";
 import { LeftSidebar } from "./left-sidebar";
 import { RightSidebar } from "./right-sidebar";
 import { AppWarmupCoordinator } from "./app-warmup";
@@ -31,6 +29,38 @@ import {
   SidebarWindowChrome,
   hasDesktopTitleBar,
 } from "./sidebar-window-chrome";
+
+const ThreadRouteScreen = dynamic(
+  () =>
+    import("@/components/chat/thread-route-screen").then(
+      (mod) => mod.ThreadRouteScreen,
+    ),
+  {
+    loading: () => (
+      <div className="flex h-full items-center justify-center px-4" />
+    ),
+  },
+);
+
+const WorkspaceSidebar = dynamic(
+  () =>
+    import("@/components/shell/workspace-sidebar").then(
+      (mod) => mod.WorkspaceSidebar,
+    ),
+  {
+    loading: () => <div className="h-full" />,
+  },
+);
+
+const TerminalPanel = dynamic(
+  () =>
+    import("@/components/terminal/terminal-panel").then(
+      (mod) => mod.TerminalPanel,
+    ),
+  {
+    loading: () => null,
+  },
+);
 
 function ShellWarmCache() {
   api.workspaces.getCurrent.useQuery();

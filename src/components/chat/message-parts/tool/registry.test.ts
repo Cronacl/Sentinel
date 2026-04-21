@@ -54,6 +54,7 @@ import { CopilotShellTool } from "./renderers/copilot-shell";
 import { CopilotTodoTool } from "./renderers/copilot-todo";
 import { CopilotUserInputTool } from "./renderers/copilot-user-input";
 import { CopilotWebFetchTool } from "./renderers/copilot-web";
+import { GenericTool } from "./generic";
 import { SkillTool } from "./renderers/skill";
 import { GenerateVideoTool } from "./renderers/generate-video";
 import { RunSubagentTool } from "./renderers/run-subagent";
@@ -1050,6 +1051,32 @@ describe("resolveRenderer", () => {
     } as any);
 
     expect(renderer).toBe(CopilotUserInputTool);
+  });
+
+  it("uses the structured user input renderer for OpenCode questions", () => {
+    const renderer = resolveRenderer({
+      approval: { id: "approval-1" },
+      input: { prompt: "Need more detail?" },
+      state: "approval-requested",
+      toolCallId: "tool-call-1",
+      toolName: "opencode_ask_question",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(ClaudeUserInputTool);
+  });
+
+  it("uses the generic renderer for OpenCode permissions", () => {
+    const renderer = resolveRenderer({
+      approval: { id: "approval-1" },
+      input: { command: "bun test" },
+      state: "approval-requested",
+      toolCallId: "tool-call-1",
+      toolName: "opencode_bash",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(GenericTool);
   });
 
   it("uses the CopilotSessionUtilityTool renderer for copilot_report_intent", () => {

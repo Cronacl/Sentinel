@@ -57,10 +57,18 @@ import type { FileUIPart } from "ai";
 
 import {
   ChatComposer,
+  type ChatComposerOpenCodeSelection,
   type ChatComposerStartPlanImplementationHandler,
+  type ChatComposerThreadSelection,
 } from "./chat-composer";
 import { ChatMessage } from "./chat-message";
 import { ChatScrollControl, useChatScrollControl } from "./chat-scroll-control";
+import type { DraftProjectMode } from "./draft-thread-project-mode";
+import {
+  clearThreadRouteHandoff,
+  type ThreadRouteHandoffState,
+} from "./thread-route-handoff";
+import { resolveInitialThreadComposerUiState } from "./thread-screen.helpers";
 import {
   buildRepoDiffPanelInvalidationInputs,
   reapplyUserMessageCheckpoint,
@@ -92,10 +100,12 @@ type ThreadScreenProps = {
     rootPath: string | null;
     updatedAt: Date;
   };
+  initialComposerUiState?: ThreadRouteHandoffState | null;
 };
 
 export function ThreadScreen({
   initialMessages,
+  initialComposerUiState = null,
   queuedFollowUps,
   thread,
   workspace,
@@ -103,14 +113,30 @@ export function ThreadScreen({
   const { navigateHome } = useShell();
   const utils = api.useUtils();
   const isQuickChat = workspace.kind === "quick_chat";
+  const resolvedInitialComposerUiState = useMemo(
+    () =>
+      resolveInitialThreadComposerUiState({
+        initialComposerUiState,
+        thread,
+      }),
+    [initialComposerUiState, thread],
+  );
   const [threadTitle, setThreadTitle] = useState(thread.title);
-  const [threadSelectionState, setThreadSelectionState] = useState({
-    engine: thread.chatEngine,
-    modelId: thread.chatModelId,
-    mode: thread.mode,
-    reasoningEffort:
-      (thread.chatReasoningEffort as ReasoningEffort | null) ?? null,
-  });
+  const [threadSelectionState, setThreadSelectionState] =
+    useState<ChatComposerThreadSelection>(
+      resolvedInitialComposerUiState.threadSelection,
+    );
+  const [openCodeSelectionState, setOpenCodeSelectionState] =
+    useState<ChatComposerOpenCodeSelection>(
+      resolvedInitialComposerUiState.openCodeSelection,
+    );
+  const [draftProjectMode, setDraftProjectMode] = useState<DraftProjectMode>(
+    resolvedInitialComposerUiState.draftProjectMode,
+  );
+  const [draftPreparedWorktree, setDraftPreparedWorktree] = useState<{
+    branch: string;
+    path: string;
+  } | null>(resolvedInitialComposerUiState.draftPreparedWorktree);
   const threadSelectionStateRef = useRef(threadSelectionState);
   threadSelectionStateRef.current = threadSelectionState;
   const [editingMessage, setEditingMessage] = useState<ThreadUIMessage | null>(
@@ -120,6 +146,20 @@ export function ThreadScreen({
   useEffect(() => {
     setThreadTitle(thread.title);
   }, [thread.title]);
+
+  useEffect(() => {
+    setThreadSelectionState(resolvedInitialComposerUiState.threadSelection);
+    setOpenCodeSelectionState(resolvedInitialComposerUiState.openCodeSelection);
+    setDraftProjectMode(resolvedInitialComposerUiState.draftProjectMode);
+    setDraftPreparedWorktree(
+      resolvedInitialComposerUiState.draftPreparedWorktree,
+    );
+    setEditingMessage(null);
+  }, [thread.id]);
+
+  useEffect(() => {
+    clearThreadRouteHandoff(thread.id);
+  }, [thread.id]);
 
   const handleError = useCallback((error: Error) => {
     setChatError(error.message);
@@ -145,7 +185,7 @@ export function ThreadScreen({
         snapshot.mode &&
         snapshot.mode !== threadSelectionStateRef.current.mode
       ) {
-        setThreadSelectionState((prev) => ({
+        setThreadSelectionState((prev: ChatComposerThreadSelection) => ({
           ...prev,
           mode: snapshot.mode!,
         }));
@@ -290,6 +330,7 @@ export function ThreadScreen({
   });
   const archiveThread = api.threads.archive.useMutation({
     onSuccess: () => {
+      clearThreadRouteHandoff(thread.id);
       void utils.threads.list.invalidate();
       if (isQuickChat) {
         void utils.threads.listQuickChats.invalidate();
@@ -416,6 +457,7 @@ export function ThreadScreen({
       files,
       engine,
       modelId,
+      openCode,
       reasoningEffort,
       text,
       threadMode,
@@ -424,6 +466,7 @@ export function ThreadScreen({
       files?: FileUIPart[];
       engine: ChatEngine;
       modelId: string;
+      openCode?: { agent?: string | null; variant?: string | null };
       reasoningEffort?: ReasoningEffort | null;
       text: string;
       threadMode?: "chat" | "plan";
@@ -452,6 +495,7 @@ export function ThreadScreen({
         engine,
         files,
         modelId,
+        ...(openCode ? { openCode } : {}),
         reasoningEffort,
         text,
         threadMode: threadMode ?? threadSelectionState.mode,
@@ -473,6 +517,7 @@ export function ThreadScreen({
       files,
       engine,
       modelId,
+      openCode,
       reasoningEffort,
       text,
       threadMode,
@@ -481,6 +526,7 @@ export function ThreadScreen({
       files?: FileUIPart[];
       engine: ChatEngine;
       modelId: string;
+      openCode?: { agent?: string | null; variant?: string | null };
       reasoningEffort?: ReasoningEffort | null;
       text: string;
       threadMode?: "chat" | "plan";
@@ -491,6 +537,7 @@ export function ThreadScreen({
         engine,
         files,
         modelId,
+        ...(openCode ? { openCode } : {}),
         reasoningEffort,
         text,
         threadMode: threadMode ?? threadSelectionState.mode,
@@ -509,6 +556,7 @@ export function ThreadScreen({
       files,
       engine,
       modelId,
+      openCode,
       reasoningEffort,
       text,
       threadMode,
@@ -517,6 +565,7 @@ export function ThreadScreen({
       files?: FileUIPart[];
       engine: ChatEngine;
       modelId: string;
+      openCode?: { agent?: string | null; variant?: string | null };
       reasoningEffort?: ReasoningEffort | null;
       text: string;
       threadMode?: "chat" | "plan";
@@ -527,6 +576,7 @@ export function ThreadScreen({
         engine,
         files,
         modelId,
+        ...(openCode ? { openCode } : {}),
         reasoningEffort,
         text,
         threadMode: threadMode ?? threadSelectionState.mode,
@@ -608,7 +658,7 @@ export function ThreadScreen({
       mode?: "chat" | "plan";
       reasoningEffort?: ReasoningEffort | null;
     }) => {
-      setThreadSelectionState((current) => ({
+      setThreadSelectionState((current: ChatComposerThreadSelection) => ({
         engine: engine ?? current.engine,
         modelId: modelId !== undefined ? modelId : current.modelId,
         mode: mode ?? current.mode,
@@ -1233,8 +1283,14 @@ export function ThreadScreen({
             <ChatComposer
               activeWorkspace={workspace}
               attachmentSeed={editingAttachmentSeed}
+              draftPreparedWorktree={draftPreparedWorktree}
+              draftProjectMode={draftProjectMode}
               isEditing={editingMessage != null}
+              openCodeSelection={openCodeSelectionState}
               onCancelEdit={handleCancelEdit}
+              onDraftPreparedWorktreeChange={setDraftPreparedWorktree}
+              onDraftProjectModeChange={setDraftProjectMode}
+              onOpenCodeSelectionChange={setOpenCodeSelectionState}
               onQueueFollowUp={handleQueueFollowUp}
               onRemoveQueuedFollowUp={async (id) => {
                 const previousQueue = liveQueuedFollowUps;

@@ -16,6 +16,21 @@ import {
   resetCopilotRuntimeCache,
 } from "@/lib/ai/chat/engines/copilot-sdk";
 import {
+  type CursorEngineStatus,
+  getCursorEngineStatus,
+  isCursorEngineAvailable,
+  resetCursorEngineStatusCache,
+  resetCursorRuntimeCache,
+} from "@/lib/ai/chat/engines/cursor-acp";
+import {
+  type OpenCodeEngineStatus,
+  type OpenCodeModelTraits,
+  getOpenCodeEngineStatus,
+  isOpenCodeEngineAvailable,
+  resetOpenCodeEngineStatusCache,
+  resetOpenCodeRuntimeCache,
+} from "@/lib/ai/chat/engines/opencode-sdk";
+import {
   type CodexEngineStatus,
   getCodexAppServerManager,
   resetCodexEngineStatusCache,
@@ -38,7 +53,13 @@ import { modelPreferences, providerCredentials } from "@/server/db/schema";
 import { getOwnedThreadOrThrow } from "./workspace-thread-helpers";
 
 const chatEngineSchema = z.enum(CHAT_ENGINES);
-const runtimeEngineSchema = z.enum(["codex", "claude", "copilot"]);
+const runtimeEngineSchema = z.enum([
+  "codex",
+  "claude",
+  "copilot",
+  "cursor",
+  "opencode",
+]);
 
 function isCodexEngineAvailable(status: CodexEngineStatus) {
   return status.state === "ready" || status.state === "timeout_no_cache";
@@ -100,6 +121,22 @@ function canUseCopilotFallbackModels(status: CopilotEngineStatus) {
   );
 }
 
+function canUseCursorFallbackModels(status: CursorEngineStatus) {
+  return (
+    status.cliDetected &&
+    status.state === "timeout_no_cache" &&
+    status.availableModels.length === 0
+  );
+}
+
+function canUseOpenCodeFallbackModels(status: OpenCodeEngineStatus) {
+  return (
+    status.cliDetected &&
+    status.state === "timeout_no_cache" &&
+    status.availableModels.length === 0
+  );
+}
+
 function shouldExposeRuntimeModels(options: {
   availableModelsCount: number;
   isAvailable: boolean;
@@ -152,6 +189,48 @@ function buildFallbackCopilotModels() {
   ] satisfies CopilotEngineStatus["availableModels"];
 }
 
+function buildFallbackCursorModels() {
+  return [
+    {
+      contextWindow: undefined,
+      defaultReasoningEffort: "medium" as const,
+      description: "Default Cursor Agent model.",
+      displayName: "Auto",
+      id: "default",
+      inputModalities: ["text"] as string[],
+      isDefault: true,
+      model: "default",
+      supportedReasoningEfforts: (["low", "medium", "high"] as const).map(
+        (effort) => ({
+          description: `Cursor Auto supports ${effort} reasoning effort.`,
+          effort,
+          label: effort[0]!.toUpperCase() + effort.slice(1),
+        }),
+      ),
+    },
+  ] satisfies CursorEngineStatus["availableModels"];
+}
+
+function buildFallbackOpenCodeModels() {
+  return [
+    {
+      contextWindow: undefined,
+      defaultReasoningEffort: null,
+      description: "Default OpenCode model selection.",
+      displayName: "OpenCode Auto",
+      id: "opencode/default",
+      inputModalities: ["text"] as string[],
+      isDefault: true,
+      model: "opencode/default",
+      openCode: {
+        agentOptions: [],
+        variantOptions: [],
+      },
+      supportedReasoningEfforts: [],
+    },
+  ] satisfies OpenCodeEngineStatus["availableModels"];
+}
+
 type EngineModelResult = {
   contextWindow?: number;
   defaultReasoningEffort: ReasoningEffort | null;
@@ -162,6 +241,7 @@ type EngineModelResult = {
   isConnected: boolean;
   isEnabled: boolean;
   modelId: string;
+  openCode?: OpenCodeModelTraits;
   provider: AIProvider | null;
   rawModelId: string;
   supportedReasoningEfforts: ReasoningEffort[];
@@ -187,17 +267,21 @@ function createRuntimeStatusResolver(options?: { forceRefresh?: boolean }) {
   let codexPromise: Promise<CodexEngineStatus> | null = null;
   let claudePromise: Promise<ClaudeEngineStatus> | null = null;
   let copilotPromise: Promise<CopilotEngineStatus> | null = null;
+  let cursorPromise: Promise<CursorEngineStatus> | null = null;
+  let openCodePromise: Promise<OpenCodeEngineStatus> | null = null;
 
   return {
     all: async () => {
-      const [codex, claude, copilot] = await Promise.all([
+      const [codex, claude, copilot, cursor, opencode] = await Promise.all([
         codexPromise ??
           (codexPromise = getCodexAppServerManager().getStatus(options)),
         claudePromise ?? (claudePromise = getClaudeEngineStatus(options)),
         copilotPromise ?? (copilotPromise = getCopilotEngineStatus(options)),
+        cursorPromise ?? (cursorPromise = getCursorEngineStatus(options)),
+        openCodePromise ?? (openCodePromise = getOpenCodeEngineStatus(options)),
       ]);
 
-      return { claude, codex, copilot };
+      return { claude, codex, copilot, cursor, opencode };
     },
     claude: async () => {
       claudePromise ??= getClaudeEngineStatus(options);
@@ -211,13 +295,22 @@ function createRuntimeStatusResolver(options?: { forceRefresh?: boolean }) {
       codexPromise ??= getCodexAppServerManager().getStatus(options);
       return await codexPromise;
     },
+    cursor: async () => {
+      cursorPromise ??= getCursorEngineStatus(options);
+      return await cursorPromise;
+    },
+    opencode: async () => {
+      openCodePromise ??= getOpenCodeEngineStatus(options);
+      return await openCodePromise;
+    },
   };
 }
 
 export const enginesRouter = createTRPCRouter({
   list: protectedProcedure.query(async () => {
     const runtimeStatuses = createRuntimeStatusResolver();
-    const { codex, claude, copilot } = await runtimeStatuses.all();
+    const { codex, claude, copilot, cursor, opencode } =
+      await runtimeStatuses.all();
 
     return [
       {
@@ -251,6 +344,22 @@ export const enginesRouter = createTRPCRouter({
         isAvailable: isCopilotEngineAvailable(copilot),
         label: "Copilot",
         status: copilot,
+      },
+      {
+        description: "Use the locally configured Cursor Agent runtime.",
+        engine: "cursor" as const,
+        error: cursor.error,
+        isAvailable: isCursorEngineAvailable(cursor),
+        label: "Cursor",
+        status: cursor,
+      },
+      {
+        description: "Use the locally configured OpenCode runtime.",
+        engine: "opencode" as const,
+        error: opencode.error,
+        isAvailable: isOpenCodeEngineAvailable(opencode),
+        label: "OpenCode",
+        status: opencode,
       },
     ];
   }),
@@ -346,6 +455,65 @@ export const enginesRouter = createTRPCRouter({
             supportedReasoningEfforts: model.supportedReasoningEfforts.map(
               (option) => option.effort,
             ),
+          }),
+        );
+      }
+
+      if (input.engine === "cursor") {
+        const status = await runtimeStatuses.cursor();
+        const models = canUseCursorFallbackModels(status)
+          ? buildFallbackCursorModels()
+          : status.availableModels;
+        const isConnected = shouldExposeRuntimeModels({
+          availableModelsCount: models.length,
+          isAvailable: isCursorEngineAvailable(status),
+        });
+
+        return models.map((model) =>
+          toEngineModelResult({
+            contextWindow: model.contextWindow,
+            defaultReasoningEffort: model.defaultReasoningEffort,
+            description: model.description,
+            displayName: model.displayName,
+            engine: "cursor",
+            inputModalities: model.inputModalities,
+            isConnected,
+            isEnabled: true,
+            modelId: model.id,
+            provider: null,
+            rawModelId: model.model,
+            supportedReasoningEfforts: model.supportedReasoningEfforts.map(
+              (option) => option.effort,
+            ),
+          }),
+        );
+      }
+
+      if (input.engine === "opencode") {
+        const status = await runtimeStatuses.opencode();
+        const models = canUseOpenCodeFallbackModels(status)
+          ? buildFallbackOpenCodeModels()
+          : status.availableModels;
+        const isConnected = shouldExposeRuntimeModels({
+          availableModelsCount: models.length,
+          isAvailable: isOpenCodeEngineAvailable(status),
+        });
+
+        return models.map((model) =>
+          toEngineModelResult({
+            contextWindow: model.contextWindow,
+            defaultReasoningEffort: model.defaultReasoningEffort,
+            description: model.description,
+            displayName: model.displayName,
+            engine: "opencode",
+            inputModalities: model.inputModalities,
+            isConnected,
+            isEnabled: true,
+            modelId: model.id,
+            openCode: model.openCode,
+            provider: null,
+            rawModelId: model.model,
+            supportedReasoningEfforts: [],
           }),
         );
       }
@@ -458,6 +626,28 @@ export const enginesRouter = createTRPCRouter({
 
         return {
           engine: "copilot" as const,
+          status,
+        };
+      }
+
+      if (input.engine === "cursor") {
+        resetCursorRuntimeCache();
+        resetCursorEngineStatusCache();
+        const status = await runtimeStatuses.cursor();
+
+        return {
+          engine: "cursor" as const,
+          status,
+        };
+      }
+
+      if (input.engine === "opencode") {
+        resetOpenCodeRuntimeCache();
+        resetOpenCodeEngineStatusCache();
+        const status = await runtimeStatuses.opencode();
+
+        return {
+          engine: "opencode" as const,
           status,
         };
       }

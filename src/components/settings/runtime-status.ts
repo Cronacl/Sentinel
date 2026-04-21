@@ -8,7 +8,7 @@ type RuntimeStatusLike = {
   usedCachedStatus?: boolean;
 };
 
-type RuntimeStatusKind = "Claude" | "Codex" | "Copilot";
+type RuntimeStatusKind = "Claude" | "Codex" | "Copilot" | "Cursor" | "OpenCode";
 
 function formatRuntimeTimestamp(
   value: string,
@@ -90,7 +90,10 @@ function getRuntimeComposerUnavailableMessage(
     status.state === "missing_cli" ||
     status.state === "missing_runtime" ||
     (runtime === "Claude" && status.binaryDetected === false) ||
-    ((runtime === "Codex" || runtime === "Copilot") &&
+    ((runtime === "Codex" ||
+      runtime === "Copilot" ||
+      runtime === "Cursor" ||
+      runtime === "OpenCode") &&
       status.cliDetected === false)
   ) {
     return `${runtime} runtime was not detected in this Sentinel session.`;
@@ -106,6 +109,8 @@ function getRuntimeComposerUnavailableMessage(
 type ClaudeRuntimeStatusLike = RuntimeStatusLike;
 type CopilotRuntimeStatusLike = RuntimeStatusLike;
 type CodexRuntimeStatusLike = RuntimeStatusLike;
+type CursorRuntimeStatusLike = RuntimeStatusLike;
+type OpenCodeRuntimeStatusLike = RuntimeStatusLike;
 
 export function formatClaudeRuntimeTimestamp(
   value: string,
@@ -196,6 +201,90 @@ export function getCopilotComposerUnavailableMessage(
   status: CopilotRuntimeStatusLike | null | undefined,
 ) {
   return getRuntimeComposerUnavailableMessage("Copilot", status);
+}
+
+export function getCursorRuntimeBadgeLabel(
+  status: CursorRuntimeStatusLike | null | undefined,
+  isAvailable: boolean,
+) {
+  return getRuntimeBadgeLabel(status, isAvailable, {
+    detectedKey: "cliDetected",
+    missingState: "missing_runtime",
+  });
+}
+
+export function getCursorRuntimeBadgeColor(
+  status: CursorRuntimeStatusLike | null | undefined,
+  isAvailable: boolean,
+) {
+  return getRuntimeBadgeColor(status, isAvailable, {
+    detectedKey: "cliDetected",
+    missingState: "missing_runtime",
+  });
+}
+
+export function getCursorRuntimeCliLabel(
+  status: CursorRuntimeStatusLike | null | undefined,
+) {
+  return getRuntimeDetectionLabel(status, {
+    detectedKey: "cliDetected",
+    versionKey: "cliVersion",
+  });
+}
+
+export function getCursorRuntimeFallbackMessage(
+  status: CursorRuntimeStatusLike | null | undefined,
+  formatter?: (date: Date) => string,
+) {
+  return getRuntimeFallbackMessage("Cursor", status, formatter);
+}
+
+export function getCursorComposerUnavailableMessage(
+  status: CursorRuntimeStatusLike | null | undefined,
+) {
+  return getRuntimeComposerUnavailableMessage("Cursor", status);
+}
+
+export function getOpenCodeRuntimeBadgeLabel(
+  status: OpenCodeRuntimeStatusLike | null | undefined,
+  isAvailable: boolean,
+) {
+  return getRuntimeBadgeLabel(status, isAvailable, {
+    detectedKey: "cliDetected",
+    missingState: "missing_runtime",
+  });
+}
+
+export function getOpenCodeRuntimeBadgeColor(
+  status: OpenCodeRuntimeStatusLike | null | undefined,
+  isAvailable: boolean,
+) {
+  return getRuntimeBadgeColor(status, isAvailable, {
+    detectedKey: "cliDetected",
+    missingState: "missing_runtime",
+  });
+}
+
+export function getOpenCodeRuntimeCliLabel(
+  status: OpenCodeRuntimeStatusLike | null | undefined,
+) {
+  return getRuntimeDetectionLabel(status, {
+    detectedKey: "cliDetected",
+    versionKey: "cliVersion",
+  });
+}
+
+export function getOpenCodeRuntimeFallbackMessage(
+  status: OpenCodeRuntimeStatusLike | null | undefined,
+  formatter?: (date: Date) => string,
+) {
+  return getRuntimeFallbackMessage("OpenCode", status, formatter);
+}
+
+export function getOpenCodeComposerUnavailableMessage(
+  status: OpenCodeRuntimeStatusLike | null | undefined,
+) {
+  return getRuntimeComposerUnavailableMessage("OpenCode", status);
 }
 
 export function getCodexRuntimeBadgeLabel(

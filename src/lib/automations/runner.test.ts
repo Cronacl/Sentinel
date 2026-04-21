@@ -359,4 +359,112 @@ describe("executeAutomationRun", () => {
       "user-1",
     );
   });
+
+  it("routes Cursor automations through the Cursor chat engine in non-interactive mode", async () => {
+    db.query = {
+      automations: {
+        findFirst: mock(async () => ({
+          chatEngine: "cursor",
+          id: "automation-1",
+          modelId: "gpt-5.4",
+          prompt: "Review the codebase.",
+          reasoningEffort: "high",
+          scheduleCron: null,
+          scheduleDayOfWeek: null,
+          scheduleTime: "09:00",
+          scheduleType: "daily",
+          status: "active",
+          title: "Daily review",
+          userId: "user-1",
+          workspace: {
+            id: "workspace-1",
+            isArchived: false,
+          },
+          workspaceId: "workspace-1",
+        })),
+      },
+    };
+
+    db.transaction = mock((callback: (tx: Record<string, any>) => unknown) =>
+      callback({
+        insert: () => ({
+          values: () => ({
+            run: () => undefined,
+          }),
+        }),
+        select: () => ({
+          from: () => ({
+            where: () => ({
+              get: () => null,
+            }),
+          }),
+        }),
+      }),
+    );
+
+    await executeAutomationRun("automation-1");
+
+    expect(runThreadChat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        engine: "cursor",
+        modelId: "gpt-5.4",
+        toolsEnabled: false,
+      }),
+      "user-1",
+    );
+  });
+
+  it("routes OpenCode automations through the OpenCode chat engine in non-interactive mode", async () => {
+    db.query = {
+      automations: {
+        findFirst: mock(async () => ({
+          chatEngine: "opencode",
+          id: "automation-1",
+          modelId: "openai/gpt-5",
+          prompt: "Review the codebase.",
+          reasoningEffort: null,
+          scheduleCron: null,
+          scheduleDayOfWeek: null,
+          scheduleTime: "09:00",
+          scheduleType: "daily",
+          status: "active",
+          title: "Daily review",
+          userId: "user-1",
+          workspace: {
+            id: "workspace-1",
+            isArchived: false,
+          },
+          workspaceId: "workspace-1",
+        })),
+      },
+    };
+
+    db.transaction = mock((callback: (tx: Record<string, any>) => unknown) =>
+      callback({
+        insert: () => ({
+          values: () => ({
+            run: () => undefined,
+          }),
+        }),
+        select: () => ({
+          from: () => ({
+            where: () => ({
+              get: () => null,
+            }),
+          }),
+        }),
+      }),
+    );
+
+    await executeAutomationRun("automation-1");
+
+    expect(runThreadChat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        engine: "opencode",
+        modelId: "openai/gpt-5",
+        toolsEnabled: false,
+      }),
+      "user-1",
+    );
+  });
 });

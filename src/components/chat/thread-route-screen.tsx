@@ -1,30 +1,56 @@
 "use client";
 
+import { Spinner } from "@heroui/react";
 import { useEffect } from "react";
 
 import { PageWrapper } from "@/components/shell";
 import { useShell } from "@/components/shell/shell-context";
+import { peekThreadSessionSnapshot } from "@/hooks/use-thread-chat";
 import { api } from "@/trpc/react";
 
 import { closeRepoDiffSidebarForThreadChange } from "./repo-diff-sidebar-store";
 import { ThreadScreen } from "./thread-screen";
+import { peekThreadRouteHandoff } from "./thread-route-handoff";
+import {
+  resolveThreadRouteComposerUiState,
+  resolveThreadRouteData,
+  shouldRefreshThreadRouteData,
+} from "./thread-route-screen.helpers";
 import { buildThreadQueryOptions } from "./thread-query-options";
-import { Spinner } from "@heroui/react";
 
 export function ThreadRouteScreen({ threadId }: { threadId: string }) {
   const { navigateHome } = useShell();
   const utils = api.useUtils();
   const cachedThread = utils.threads.get.getData({ threadId });
+  const liveSnapshot = peekThreadSessionSnapshot(threadId);
+  const handoffState = peekThreadRouteHandoff(threadId);
   const threadQuery = api.threads.get.useQuery(
     { threadId },
-    buildThreadQueryOptions(cachedThread),
+    buildThreadQueryOptions(cachedThread, {
+      refreshOnMount: shouldRefreshThreadRouteData(cachedThread, liveSnapshot),
+    }),
+  );
+  const baseThread = threadQuery.data ?? cachedThread;
+  const threadData = resolveThreadRouteData(baseThread, liveSnapshot);
+  const initialComposerUiState = resolveThreadRouteComposerUiState(
+    threadData,
+    handoffState,
   );
 
   useEffect(() => {
-    if (threadQuery.error?.data?.code === "NOT_FOUND" && !threadQuery.data) {
+    if (
+      threadQuery.error?.data?.code === "NOT_FOUND" &&
+      !threadQuery.data &&
+      !threadData
+    ) {
       navigateHome({ replace: true });
     }
-  }, [navigateHome, threadQuery.error?.data?.code, threadQuery.data]);
+  }, [
+    navigateHome,
+    threadData,
+    threadQuery.error?.data?.code,
+    threadQuery.data,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -35,7 +61,8 @@ export function ThreadRouteScreen({ threadId }: { threadId: string }) {
   if (
     threadQuery.error &&
     threadQuery.error.data?.code !== "NOT_FOUND" &&
-    !threadQuery.data
+    !threadQuery.data &&
+    !threadData
   ) {
     return (
       <PageWrapper flush>
@@ -48,7 +75,7 @@ export function ThreadRouteScreen({ threadId }: { threadId: string }) {
     );
   }
 
-  if (!threadQuery.data) {
+  if (!threadData) {
     return (
       <PageWrapper flush>
         <div className="flex h-full items-center justify-center px-4">
@@ -60,10 +87,11 @@ export function ThreadRouteScreen({ threadId }: { threadId: string }) {
 
   return (
     <ThreadScreen
-      initialMessages={threadQuery.data.messages}
-      queuedFollowUps={threadQuery.data.queuedFollowUps}
-      thread={threadQuery.data.thread}
-      workspace={threadQuery.data.workspace}
+      initialComposerUiState={initialComposerUiState}
+      initialMessages={threadData.messages}
+      queuedFollowUps={threadData.queuedFollowUps}
+      thread={threadData.thread}
+      workspace={threadData.workspace}
     />
   );
 }

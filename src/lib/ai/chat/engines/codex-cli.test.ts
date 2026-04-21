@@ -22,10 +22,25 @@ const {
 const originalPath = process.env.PATH;
 const originalHome = process.env.HOME;
 const originalSentinelCodexPath = process.env.SENTINEL_CODEX_PATH;
+const originalSentinelStatePath = process.env.SENTINEL_STATE_PATH;
+
+function useTempSentinelHome(tempRoot: string) {
+  process.env.HOME = tempRoot;
+  process.env.SENTINEL_STATE_PATH = path.join(
+    tempRoot,
+    ".sentinel",
+    "state.json",
+  );
+}
 
 afterEach(async () => {
   process.env.PATH = originalPath;
   process.env.HOME = originalHome;
+  if (originalSentinelStatePath) {
+    process.env.SENTINEL_STATE_PATH = originalSentinelStatePath;
+  } else {
+    delete process.env.SENTINEL_STATE_PATH;
+  }
   if (originalSentinelCodexPath) {
     process.env.SENTINEL_CODEX_PATH = originalSentinelCodexPath;
   } else {
@@ -63,7 +78,7 @@ describe("resolveCodexCli", () => {
     try {
       await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
       await chmod(executablePath, 0o755);
-      process.env.HOME = tempRoot;
+      useTempSentinelHome(tempRoot);
       process.env.PATH = `${tempRoot}${path.delimiter}${originalPath ?? ""}`;
 
       const resolved = await resolveCodexCli({ forceRefresh: true });
@@ -85,7 +100,7 @@ describe("resolveCodexCli", () => {
       await mkdir(bunBinRoot, { recursive: true });
       await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
       await chmod(executablePath, 0o755);
-      process.env.HOME = tempRoot;
+      useTempSentinelHome(tempRoot);
       process.env.PATH = "/usr/bin:/bin";
 
       const resolved = await resolveCodexCli({ forceRefresh: true });
@@ -120,7 +135,7 @@ describe("resolveCodexCli", () => {
       await mkdir(fnmBinRoot, { recursive: true });
       await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
       await chmod(executablePath, 0o755);
-      process.env.HOME = tempRoot;
+      useTempSentinelHome(tempRoot);
       process.env.PATH = `${fnmBinRoot}${path.delimiter}/usr/bin:/bin`;
 
       const resolved = await resolveCodexCli({ forceRefresh: true });
@@ -149,7 +164,7 @@ describe("resolveCodexCli", () => {
       await mkdir(path.join(tempRoot, ".sentinel"), { recursive: true });
       await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
       await chmod(executablePath, 0o755);
-      process.env.HOME = tempRoot;
+      useTempSentinelHome(tempRoot);
       process.env.PATH = "/usr/bin:/bin";
       process.env.SENTINEL_CODEX_PATH = staleOverridePath;
       await writeFile(

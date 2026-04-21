@@ -45,4 +45,19 @@ describe("thread query options", () => {
     expect("initialData" in options).toBe(false);
     expect(options.placeholderData()).toBeUndefined();
   });
+
+  it("opts cached active-looking threads into a background refresh on mount", () => {
+    const options = buildThreadQueryOptions({} as any, {
+      refreshOnMount: true,
+    });
+
+    expect("initialData" in options).toBe(true);
+    expect(options.refetchOnMount).toBe("always");
+  });
+
+  it("does not force a mount refresh by default", () => {
+    const options = buildThreadQueryOptions();
+
+    expect("refetchOnMount" in options).toBe(false);
+  });
 });
