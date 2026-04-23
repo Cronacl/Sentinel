@@ -98,7 +98,7 @@ export const ComposerToolbar = memo(function ComposerToolbar({
 
   return (
     <div className="flex h-7 items-center justify-between px-1">
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-1.5">
         <Popover.Root
           isOpen={composerMenuOpen}
           onOpenChange={(open) => {

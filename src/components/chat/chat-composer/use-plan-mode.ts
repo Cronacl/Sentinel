@@ -164,6 +164,8 @@ export function usePlanMode({
 
       const nextPlanMode = nextMode === "plan";
 
+      let didUpdate = false;
+
       setPlanModeState((prev) => {
         if (
           prev.planMode === nextPlanMode &&
@@ -173,25 +175,7 @@ export function usePlanMode({
           return prev;
         }
 
-        onSelectionChange?.({ mode: nextMode });
-        if (selectedModelKey) {
-          persistSelection(selectedModelKey, selectedReasoningEffort, {
-            engine: selectedEngine,
-            mode: nextMode,
-          });
-        } else {
-          updateGlobalSelection.mutate({
-            engine: selectedEngine,
-            mode: nextMode,
-          });
-          if (canPersistThreadSelection && threadId) {
-            updateThreadSelection.mutate({
-              engine: selectedEngine,
-              mode: nextMode,
-              threadId,
-            });
-          }
-        }
+        didUpdate = true;
 
         return {
           ...prev,
@@ -200,6 +184,30 @@ export function usePlanMode({
           planMode: nextPlanMode,
         };
       });
+
+      if (!didUpdate) {
+        return;
+      }
+
+      onSelectionChange?.({ mode: nextMode });
+      if (selectedModelKey) {
+        persistSelection(selectedModelKey, selectedReasoningEffort, {
+          engine: selectedEngine,
+          mode: nextMode,
+        });
+      } else {
+        updateGlobalSelection.mutate({
+          engine: selectedEngine,
+          mode: nextMode,
+        });
+        if (canPersistThreadSelection && threadId) {
+          updateThreadSelection.mutate({
+            engine: selectedEngine,
+            mode: nextMode,
+            threadId,
+          });
+        }
+      }
     },
     [
       canPersistThreadSelection,
