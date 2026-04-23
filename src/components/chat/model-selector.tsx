@@ -132,18 +132,18 @@ export function ModelSelector({
       <Popover.Root isOpen={modelOpen} onOpenChange={setModelOpen}>
         <Popover.Trigger>
           <Button
-            className="h-8 justify-between gap-1 rounded-2xl border border-border dark:border-border/20 bg-surface dark:bg-background/80 px-2.5 text-[13px] text-muted shadow-none hover:bg-default hover:text-foreground disabled:opacity-30"
+            className="h-7 justify-between gap-1 rounded-full border border-border/40 bg-surface px-2 text-[12px] text-muted shadow-none transition-colors duration-150 ease-out hover:border-border/60 hover:bg-default hover:text-foreground disabled:opacity-30 dark:border-border/15 dark:bg-background/80"
             isDisabled={!hasModels && !showLoadingState}
             size="sm"
             variant="ghost"
           >
             {showLoadingState ? (
-              <span className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="flex min-w-0 flex-1 items-center gap-1.5">
                 <Skeleton className="h-[13px] w-[13px] shrink-0 rounded-full" />
                 <Skeleton className="h-3.5 w-24 rounded-md" />
               </span>
             ) : (
-              <span className="flex min-w-0 items-center gap-2">
+              <span className="flex min-w-0 items-center gap-1.5">
                 <ModelIcon sizeClass="h-[13px] w-[13px]">
                   {selectedModel?.provider ? (
                     <ProviderIcon
@@ -157,7 +157,7 @@ export function ModelSelector({
                     )
                   )}
                 </ModelIcon>
-                <span className="max-w-[160px] truncate">
+                <span className="max-w-[148px] truncate">
                   {selectedModel?.displayName ?? selectedModelKey ?? "Model"}
                 </span>
               </span>
@@ -238,7 +238,7 @@ export function ModelSelector({
         <Popover.Root isOpen={reasoningOpen} onOpenChange={setReasoningOpen}>
           <Popover.Trigger>
             <Button
-              className="h-8 gap-1 rounded-2xl border border-border dark:border-border/20 bg-surface dark:bg-background/80 px-2.5 text-[13px] text-muted shadow-none hover:bg-default hover:text-foreground"
+              className="h-7 gap-1 rounded-full border border-border/40 bg-surface px-2 text-[12px] text-muted shadow-none transition-colors duration-150 ease-out hover:border-border/60 hover:bg-default hover:text-foreground dark:border-border/15 dark:bg-background/80"
               size="sm"
               variant="ghost"
             >
@@ -255,7 +255,7 @@ export function ModelSelector({
               />
             </Button>
           </Popover.Trigger>
-          <Popover.Content className="w-36" placement="top">
+          <Popover.Content className="w-36 rounded-[20px]" placement="top">
             <Popover.Dialog className="p-1">
               <ListBox
                 aria-label="Reasoning effort"
@@ -273,6 +273,7 @@ export function ModelSelector({
               >
                 {supportedReasoningEfforts.map((effort) => (
                   <ListBox.Item
+                    className="min-h-8 rounded-xl px-2 py-1.5 text-[13px]"
                     key={effort}
                     id={effort}
                     textValue={getReasoningEffortLabel(effort)}
@@ -321,7 +322,7 @@ function OpenCodeTraitSelector({
     <Popover.Root isOpen={isOpen} onOpenChange={onOpenChange}>
       <Popover.Trigger>
         <Button
-          className="h-8 gap-1 rounded-2xl border border-border dark:border-border/20 bg-surface dark:bg-background/80 px-2.5 text-[13px] text-muted shadow-none hover:bg-default hover:text-foreground"
+          className="h-7 gap-1 rounded-full border border-border/40 bg-surface px-2 text-[12px] text-muted shadow-none transition-colors duration-150 ease-out hover:border-border/60 hover:bg-default hover:text-foreground dark:border-border/15 dark:bg-background/80"
           size="sm"
           variant="ghost"
         >
@@ -336,7 +337,7 @@ function OpenCodeTraitSelector({
           />
         </Button>
       </Popover.Trigger>
-      <Popover.Content className="w-40" placement={placement}>
+      <Popover.Content className="w-40 rounded-[20px]" placement={placement}>
         <Popover.Dialog className="p-1">
           <ListBox
             aria-label={ariaLabel}
@@ -352,6 +353,7 @@ function OpenCodeTraitSelector({
           >
             {options.map((option) => (
               <ListBox.Item
+                className="min-h-8 rounded-xl px-2 py-1.5 text-[13px]"
                 id={option.value}
                 key={option.value}
                 textValue={option.label}
@@ -372,6 +374,7 @@ function ModelSelectorItem({ model }: { model: ChatComposerModel }) {
 
   return (
     <ListBox.Item
+      className="min-h-8 rounded-xl px-2 py-1.5 text-[13px]"
       id={model.modelId}
       key={model.modelId}
       textValue={model.displayName}

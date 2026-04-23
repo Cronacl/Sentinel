@@ -733,8 +733,8 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
   ]);
 
   return (
-    <div className="flex min-h-9 items-center justify-between gap-2 bg-transparent px-2.5 py-1">
-      <div className="flex min-w-0 items-center gap-1">
+    <div className="flex min-h-8 items-center justify-between gap-1.5 bg-transparent px-2.5 py-1">
+      <div className="flex min-w-0 items-center gap-0.5">
         {projectModeSwitcherVisible ? (
           <Popover.Root
             isOpen={projectModePopoverOpen}
@@ -742,7 +742,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
           >
             <Popover.Trigger>
               <Button
-                className="h-7 max-w-full justify-start gap-1.5 px-2 text-muted"
+                className="h-[26px] max-w-full justify-start gap-1 rounded-full px-1.5 text-muted transition-colors duration-150 ease-out hover:text-foreground"
                 isPending={isProjectModeLoading}
                 size="sm"
                 variant="ghost"
@@ -759,17 +759,17 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                       <HugeiconsIcon
                         color="currentColor"
                         icon={projectModeIcon}
-                        size={15}
+                        size={14}
                         strokeWidth={1.5}
                       />
                     )}
-                    <span className="truncate text-[12px]">
+                    <span className="truncate text-[11px]">
                       {projectModeLabel}
                     </span>
                     <HugeiconsIcon
                       color="currentColor"
                       icon={ArrowDown01Icon}
-                      size={13}
+                      size={12}
                       strokeWidth={1.5}
                     />
                   </>
@@ -777,39 +777,58 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
               </Button>
             </Popover.Trigger>
 
-            <Popover.Content className="w-64 " placement="top start">
+            <Popover.Content
+              className="w-48 rounded-[20px]"
+              placement="top start"
+            >
               <Popover.Dialog className="flex flex-col gap-1 p-1">
                 {hasDraftProjectMode ? (
                   <>
                     <button
-                      className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
+                      className="flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-left text-sm text-foreground transition-colors duration-150 ease-out hover:bg-default"
                       onClick={() => void handleDiscardDraftWorktree()}
                       type="button"
                     >
-                      <div className="min-w-0">
-                        <p>Local project</p>
-                        <p className="text-xs text-muted">
-                          Start this thread on the workspace checkout
-                        </p>
-                      </div>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <HugeiconsIcon
+                          color="currentColor"
+                          icon={LaptopIcon}
+                          size={14}
+                          strokeWidth={1.5}
+                        />
+                        <span className="truncate">Local project</span>
+                      </span>
                       {!isUsingWorktree ? (
-                        <span className="text-xs text-muted">Current</span>
+                        <HugeiconsIcon
+                          color="currentColor"
+                          icon={Tick02Icon}
+                          size={16}
+                          strokeWidth={1.5}
+                        />
                       ) : null}
                     </button>
 
                     <button
-                      className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
+                      className="flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-left text-sm text-foreground transition-colors duration-150 ease-out hover:bg-default"
                       onClick={() => void handlePrepareDraftWorktree()}
                       type="button"
                     >
-                      <div className="min-w-0">
-                        <p>Worktree</p>
-                        <p className="text-xs text-muted">
-                          Prepare an isolated checkout before the first message
-                        </p>
-                      </div>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <HugeiconsIcon
+                          color="currentColor"
+                          icon={FolderTreeIcon}
+                          size={14}
+                          strokeWidth={1.5}
+                        />
+                        <span className="truncate">Worktree</span>
+                      </span>
                       {isUsingWorktree ? (
-                        <span className="text-xs text-muted">Current</span>
+                        <HugeiconsIcon
+                          color="currentColor"
+                          icon={Tick02Icon}
+                          size={16}
+                          strokeWidth={1.5}
+                        />
                       ) : null}
                     </button>
                   </>
@@ -818,7 +837,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                 {!hasDraftProjectMode &&
                 threadBranch &&
                 branchResumeStatus !== "matched" ? (
-                  <div className="rounded-xl border border-border/60 bg-default/60 px-2.5 py-2">
+                  <div className="rounded-xl border border-border/50 bg-default/60 px-2 py-1.5">
                     <p className="text-sm text-foreground">
                       Resume on {threadBranch}
                     </p>
@@ -840,54 +859,73 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
 
                 {!hasDraftProjectMode ? (
                   <button
-                    className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
+                    className="flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-left text-sm text-foreground transition-colors duration-150 ease-out hover:bg-default"
                     onClick={() => void handleUseLocalProject()}
                     type="button"
                   >
-                    <div className="min-w-0">
-                      <p>Local project</p>
-                      <p className="text-xs text-muted">
-                        Use the workspace checkout for this thread
-                      </p>
-                    </div>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <HugeiconsIcon
+                        color="currentColor"
+                        icon={LaptopIcon}
+                        size={14}
+                        strokeWidth={1.5}
+                      />
+                      <span className="truncate">Local project</span>
+                    </span>
                     {!isUsingWorktree ? (
-                      <span className="text-xs text-muted">Current</span>
+                      <HugeiconsIcon
+                        color="currentColor"
+                        icon={Tick02Icon}
+                        size={16}
+                        strokeWidth={1.5}
+                      />
                     ) : null}
                   </button>
                 ) : null}
 
                 {!hasDraftProjectMode ? (
                   <button
-                    className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
+                    className="flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-left text-sm text-foreground transition-colors duration-150 ease-out hover:bg-default"
                     onClick={() => void handleEnableThreadWorktree()}
                     type="button"
                   >
-                    <div className="min-w-0">
-                      <p>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <HugeiconsIcon
+                        color="currentColor"
+                        icon={FolderTreeIcon}
+                        size={14}
+                        strokeWidth={1.5}
+                      />
+                      <span className="truncate">
                         {hasReadyWorktree ? "Use worktree" : "New worktree"}
-                      </p>
-                      <p className="text-xs text-muted">
-                        Give this thread an isolated checkout
-                      </p>
-                    </div>
+                      </span>
+                    </span>
                     {isUsingWorktree ? (
-                      <span className="text-xs text-muted">Current</span>
+                      <HugeiconsIcon
+                        color="currentColor"
+                        icon={Tick02Icon}
+                        size={16}
+                        strokeWidth={1.5}
+                      />
                     ) : null}
                   </button>
                 ) : null}
 
                 {!hasDraftProjectMode && hasReadyWorktree ? (
                   <button
-                    className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
+                    className="flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-left text-sm text-foreground transition-colors duration-150 ease-out hover:bg-default"
                     onClick={() => void handleRemoveThreadWorktree()}
                     type="button"
                   >
-                    <div className="min-w-0">
-                      <p>Remove worktree</p>
-                      <p className="text-xs text-muted">
-                        Delete this thread's isolated checkout
-                      </p>
-                    </div>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <HugeiconsIcon
+                        color="currentColor"
+                        icon={FolderTreeIcon}
+                        size={14}
+                        strokeWidth={1.5}
+                      />
+                      <span className="truncate">Remove worktree</span>
+                    </span>
                   </button>
                 ) : null}
               </Popover.Dialog>
@@ -901,7 +939,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
         >
           <Popover.Trigger>
             <Button
-              className="h-7 max-w-full justify-start gap-1.5 px-2 text-muted"
+              className="h-[26px] max-w-full justify-start gap-1 rounded-full px-1.5 text-muted transition-colors duration-150 ease-out hover:text-foreground"
               isPending={isPermissionLoading}
               size="sm"
               variant="ghost"
@@ -918,17 +956,17 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                     <HugeiconsIcon
                       color="currentColor"
                       icon={Shield01Icon}
-                      size={15}
+                      size={14}
                       strokeWidth={1.5}
                     />
                   )}
-                  <span className="truncate text-[12px]">
+                  <span className="truncate text-[11px]">
                     {getPermissionModeLabel(effectivePermissionMode)}
                   </span>
                   <HugeiconsIcon
                     color="currentColor"
                     icon={ArrowDown01Icon}
-                    size={13}
+                    size={12}
                     strokeWidth={1.5}
                   />
                 </>
@@ -936,10 +974,13 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
             </Button>
           </Popover.Trigger>
 
-          <Popover.Content className="w-56 " placement="top start">
+          <Popover.Content
+            className="w-56 rounded-[20px]"
+            placement="top start"
+          >
             <Popover.Dialog className="flex flex-col gap-1 p-1">
               <button
-                className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
+                className="flex items-center justify-between rounded-xl px-2 py-1.5 text-left text-sm text-foreground transition-colors duration-150 ease-out hover:bg-default"
                 onClick={() => handlePermissionChange(null)}
                 type="button"
               >
@@ -965,7 +1006,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
 
               {PERMISSION_MODE_OPTIONS.map((option) => (
                 <button
-                  className="flex items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
+                  className="flex items-center justify-between rounded-xl px-2 py-1.5 text-left text-sm text-foreground transition-colors duration-150 ease-out hover:bg-default"
                   key={option.value}
                   onClick={() =>
                     handlePermissionChange(option.value as PermissionMode)
@@ -991,7 +1032,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
         </Popover.Root>
       </div>
 
-      <div className="flex min-w-0 items-center justify-end gap-2">
+      <div className="flex min-w-0 items-center justify-end gap-1.5">
         {branchSwitcherVisible ? (
           <Popover.Root
             isOpen={branchPopoverOpen}
@@ -1007,7 +1048,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
           >
             <Popover.Trigger>
               <Button
-                className="h-7 max-w-[160px] justify-start gap-1.5 px-2 text-muted"
+                className="h-[26px] max-w-[148px] justify-start gap-1 rounded-full px-1.5 text-muted transition-colors duration-150 ease-out hover:text-foreground"
                 isDisabled={repoContextQuery.isLoading}
                 isPending={isBranchLoading}
                 size="sm"
@@ -1025,17 +1066,17 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                       <HugeiconsIcon
                         color="currentColor"
                         icon={GitBranchIcon}
-                        size={15}
+                        size={14}
                         strokeWidth={1.5}
                       />
                     )}
-                    <span className="truncate text-[12px]">
+                    <span className="truncate text-[11px]">
                       {displayBranch ?? "Branch"}
                     </span>
                     <HugeiconsIcon
                       color="currentColor"
                       icon={ArrowDown01Icon}
-                      size={13}
+                      size={12}
                       strokeWidth={1.5}
                     />
                   </>
@@ -1043,12 +1084,16 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
               </Button>
             </Popover.Trigger>
 
-            <Popover.Content className="w-64 " placement="top end">
+            <Popover.Content
+              className="w-64 rounded-[20px]"
+              placement="top end"
+            >
               <Popover.Dialog className="p-2">
                 {branchMode === "list" ? (
                   <div className="flex flex-col gap-3">
                     <Input.Root
                       autoFocus
+                      className="h-8 min-h-8 rounded-xl px-2 text-[13px]"
                       onChange={(event) =>
                         setBranchSearch(event.currentTarget.value)
                       }
@@ -1058,7 +1103,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                     <div className="flex flex-col gap-1">
                       <ScrollShadow className="max-h-64 overflow-y-auto">
                         {listBranchesQuery.isLoading ? (
-                          <div className="flex items-center gap-2 px-2.5 py-3 text-sm text-muted">
+                          <div className="flex min-h-24 items-center justify-center px-2.5 py-3 text-sm text-muted">
                             <Spinner
                               className="size-3.5 min-w-3.5"
                               color="current"
@@ -1068,7 +1113,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                         ) : null}
                         {filteredBranches.map((branch) => (
                           <button
-                            className="flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default disabled:opacity-60"
+                            className="flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-left text-sm text-foreground transition-colors duration-150 ease-out hover:bg-default disabled:opacity-60"
                             disabled={isBranchMutating}
                             key={branch.name}
                             onClick={() => {
@@ -1155,7 +1200,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                     ) : null}
                     <div className="border-t border-border/50 pt-2">
                       <button
-                        className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm text-foreground transition-colors hover:bg-default"
+                        className="flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left text-sm text-foreground transition-colors duration-150 ease-out hover:bg-default"
                         onClick={() => {
                           setBranchError("");
                           setBranchMode("create");
@@ -1174,20 +1219,21 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                   </div>
                 ) : (
                   <form
-                    className="flex flex-col gap-3"
+                    className="flex flex-col gap-2.5"
                     onSubmit={(event) => {
                       event.preventDefault();
                       handleCreateBranch();
                     }}
                   >
                     <div>
-                      <Popover.Heading className="text-sm px-2 font-medium text-foreground">
+                      <Popover.Heading className="px-2 text-[13px] font-medium text-foreground">
                         New Branch
                       </Popover.Heading>
                     </div>
 
                     <Input.Root
                       autoFocus
+                      className="h-8 min-h-8 rounded-xl px-2 text-[13px]"
                       name="branchName"
                       onChange={(event) =>
                         setBranchName(event.currentTarget.value)
@@ -1202,6 +1248,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
 
                     <div className="flex items-center justify-end gap-2">
                       <Button
+                        className="h-8 min-w-0 rounded-full px-3 text-[13px]"
                         onPress={() => {
                           setBranchError("");
                           setBranchMode("list");
@@ -1214,6 +1261,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                         Back
                       </Button>
                       <Button
+                        className="h-8 min-w-0 rounded-full px-3.5 text-[13px]"
                         isPending={createBranchMutation.isPending}
                         size="sm"
                         type="submit"

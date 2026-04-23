@@ -137,7 +137,7 @@ export const CodexPlanTool = memo(function CodexPlanTool({
   if (!body && !output?.steps?.length) return null;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border/40 bg-(--color-surface)">
+    <div className="overflow-hidden mt-2 rounded-2xl border border-border/40 bg-(--color-surface)">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-3 pb-0">
         <span

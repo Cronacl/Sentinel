@@ -104,6 +104,7 @@
 [data-theme="dark"] {
   --background: #111;
   --surface: #080808;
+  --field-background: #202020;
   --accent: oklch(100% 0 0);
   --accent-foreground: oklch(0% 0 0);
   --default-hover: #202020;
@@ -234,13 +235,28 @@ samp {
 }
 
 @layer components {
+  .input {
+    &:hover,
+    &[data-hovered="true"] {
+      @apply border-none;
+    }
+
+    &:focus-visible,
+    &[data-focus-visible="true"] {
+      @apply border-none ring-0;
+    }
+
+    &[data-invalid="true"] {
+      @apply border-none;
+    }
+  }
 }
 
 /* ── Composer ────────────────────────────────────────────────── */
 
 .sentinel-composer-editor.ProseMirror {
   max-height: 192px;
-  min-height: 32px;
+  min-height: 28px;
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-word;

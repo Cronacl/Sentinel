@@ -653,7 +653,7 @@ export function ChatComposer({
     <>
       <div
         aria-hidden={hideUntilReady ? true : undefined}
-        className="pointer-events-auto relative w-full overflow-hidden rounded-[24px] border border-border/50 bg-background shadow-[0_0_10px_rgba(0,0,0,0.05)] transition-opacity duration-150 dark:border-border/20 dark:bg-surface"
+        className="pointer-events-auto relative w-full overflow-hidden rounded-[18px] border border-border/35 bg-background shadow-[0_0_8px_rgba(0,0,0,0.04)] transition-opacity duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] dark:border-border/15 dark:bg-surface"
         onDragEnter={handleComposerDragEnter}
         onDragLeave={handleComposerDragLeave}
         onDragOver={handleComposerDragOver}
@@ -664,8 +664,8 @@ export function ChatComposer({
         }}
       >
         {isDraggingOver ? (
-          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[24px] bg-background/88 backdrop-blur-sm dark:bg-surface/90">
-            <div className="flex items-center gap-3 px-6 py-4">
+          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[18px] bg-background/88 backdrop-blur-sm dark:bg-surface/90">
+            <div className="flex items-center gap-2.5 px-5 py-3.5">
               <svg
                 className="size-6 shrink-0 text-accent"
                 fill="none"
@@ -692,7 +692,7 @@ export function ChatComposer({
         ) : null}
 
         <div
-          className={`px-2.5 py-2 transition-opacity duration-150 ${
+          className={`px-2 py-1.5 transition-opacity duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] ${
             isDraggingOver ? "opacity-0" : "opacity-100"
           }`}
         >
@@ -728,10 +728,10 @@ export function ChatComposer({
             }}
           />
 
-          <div className="px-2">
-            <div className="min-h-[32px]">
+          <div className="px-1.5">
+            <div className="min-h-7">
               {!editor ? (
-                <div className="pointer-events-none py-1 text-[14px] text-muted/50">
+                <div className="pointer-events-none py-0.5 text-[14px] text-muted/50">
                   {placeholderText}
                 </div>
               ) : null}
@@ -805,7 +805,7 @@ export function ChatComposer({
         </div>
 
         {activeWorkspace && activeWorkspace.kind !== "quick_chat" ? (
-          <div className="overflow-hidden rounded-b-[24px] border-t border-border/25">
+          <div className="overflow-hidden rounded-b-[18px] border-t border-border/10">
             <ComposerWorkspaceBar
               activeWorkspace={activeWorkspace}
               deferRepoContextFetch={deferRepoContextFetch}

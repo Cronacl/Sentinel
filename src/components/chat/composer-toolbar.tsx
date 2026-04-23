@@ -7,7 +7,7 @@ import {
   ArrowUp02Icon,
   Attachment01Icon,
   DashboardSquare01Icon,
-  Mic01Icon,
+  Mic02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, ListBox, Popover, Switch } from "@heroui/react";
@@ -97,8 +97,8 @@ export const ComposerToolbar = memo(function ComposerToolbar({
   const selectedEngineKeys = useMemo(() => [selectedEngine], [selectedEngine]);
 
   return (
-    <div className="flex h-8 items-center justify-between px-1.5">
-      <div className="flex items-center gap-1">
+    <div className="flex h-7 items-center justify-between px-1">
+      <div className="flex items-center gap-0.5">
         <Popover.Root
           isOpen={composerMenuOpen}
           onOpenChange={(open) => {
@@ -108,7 +108,7 @@ export const ComposerToolbar = memo(function ComposerToolbar({
         >
           <Popover.Trigger>
             <Button
-              className="h-8 w-8 min-w-0 rounded-2xl border border-border dark:border-border/20 bg-surface dark:bg-background/80 p-0 text-muted transition-colors hover:text-foreground dark:bg-background"
+              className="h-7 w-7 min-w-0 rounded-full border border-border/40 bg-surface p-0 text-muted transition-colors duration-150 ease-out hover:border-border/60 hover:text-foreground dark:border-border/15 dark:bg-background/80"
               isDisabled={!hasWorkspace}
               size="sm"
               variant="ghost"
@@ -116,7 +116,7 @@ export const ComposerToolbar = memo(function ComposerToolbar({
               <HugeiconsIcon
                 color="currentColor"
                 icon={Add01Icon}
-                size={18}
+                size={16}
                 strokeWidth={1.5}
               />
             </Button>
@@ -140,7 +140,11 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                   }
                 }}
               >
-                <ListBox.Item id="attach-files" textValue="Add photos & files">
+                <ListBox.Item
+                  className="min-h-8 rounded-xl px-2 py-1.5 text-[13px]"
+                  id="attach-files"
+                  textValue="Add photos & files"
+                >
                   <HugeiconsIcon
                     color="currentColor"
                     icon={Attachment01Icon}
@@ -149,7 +153,11 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                   />
                   <span>Add photos & files</span>
                 </ListBox.Item>
-                <ListBox.Item id="plan-mode" textValue="Plan mode">
+                <ListBox.Item
+                  className="min-h-8 rounded-xl px-2 py-1.5 text-[13px]"
+                  id="plan-mode"
+                  textValue="Plan mode"
+                >
                   <HugeiconsIcon
                     color="currentColor"
                     icon={AiIdeaIcon}
@@ -172,7 +180,11 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                   </div>
                 </ListBox.Item>
                 {showEngineSelector ? (
-                  <ListBox.Item id="engine" textValue="Engine">
+                  <ListBox.Item
+                    className="min-h-8 rounded-xl px-2 py-1.5 text-[13px]"
+                    id="engine"
+                    textValue="Engine"
+                  >
                     <HugeiconsIcon
                       color="currentColor"
                       icon={DashboardSquare01Icon}
@@ -211,6 +223,7 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                   >
                     {engineOptions.map((engine) => (
                       <ListBox.Item
+                        className="min-h-8 rounded-xl px-2 py-1.5 text-[13px]"
                         key={engine.engine}
                         id={engine.engine}
                         textValue={engine.label}
@@ -242,20 +255,20 @@ export const ComposerToolbar = memo(function ComposerToolbar({
         {modelSelector}
 
         {planMode ? (
-          <div className="ml-1 flex items-center gap-1 border-l border-border/50 pl-2">
+          <div className="ml-1 flex items-center gap-1 border-l border-border/35 pl-1.5">
             <HugeiconsIcon
               className="text-foreground"
               color="currentColor"
               icon={AiIdeaIcon}
-              size={13}
+              size={12}
               strokeWidth={1.5}
             />
-            <span className="text-[13px] text-foreground">Plan</span>
+            <span className="text-[12px] text-foreground">Plan</span>
           </div>
         ) : null}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         {contextWindowIndicator ? (
           <ContextWindowIndicator
             compactionEnabled={contextWindowIndicator.compactionEnabled}
@@ -272,15 +285,15 @@ export const ComposerToolbar = memo(function ComposerToolbar({
 
         {showVoiceInput ? (
           <button
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-default text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+            className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-default/50 text-muted transition-colors duration-150 ease-out hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
             disabled={voiceInputDisabled}
             onClick={onStartVoiceInput}
             type="button"
           >
             <HugeiconsIcon
               color="currentColor"
-              icon={Mic01Icon}
-              size={16}
+              icon={Mic02Icon}
+              size={15}
               strokeWidth={1.5}
             />
           </button>
@@ -288,17 +301,17 @@ export const ComposerToolbar = memo(function ComposerToolbar({
 
         {isBusy ? (
           <button
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-default text-muted transition-colors hover:text-foreground"
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-default text-muted transition-colors duration-150 ease-out hover:text-foreground"
             onClick={onStop}
             type="button"
           >
-            <svg fill="currentColor" height={12} viewBox="0 0 16 16" width={12}>
+            <svg fill="currentColor" height={11} viewBox="0 0 16 16" width={11}>
               <rect height={10} rx={2} width={10} x={3} y={3} />
             </svg>
           </button>
         ) : (
           <button
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-accent-foreground transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-25"
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-accent-foreground transition-opacity duration-150 ease-out hover:opacity-[.85] disabled:cursor-not-allowed disabled:opacity-25"
             disabled={!canSend}
             onClick={onSend}
             type="button"
@@ -306,7 +319,7 @@ export const ComposerToolbar = memo(function ComposerToolbar({
             <HugeiconsIcon
               color="currentColor"
               icon={ArrowUp02Icon}
-              size={16}
+              size={15}
               strokeWidth={1.5}
             />
           </button>

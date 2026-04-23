@@ -1159,7 +1159,7 @@ export function NewThreadScreen({
                   {isWorkspaceMenuOpen && (
                     <motion.div
                       animate={{ opacity: 1, scale: 1, y: 0 }}
-                      className="absolute left-1/2 top-10 z-[200] max-h-64 w-[220px] -translate-x-1/2 overflow-y-auto rounded-3xl border border-separator/50 bg-surface p-1.5 shadow-overlay"
+                      className="absolute left-1/2 top-10 z-[200] max-h-64 w-60 -translate-x-1/2 overflow-y-auto rounded-[20px] bg-default p-1.5 shadow-overlay"
                       exit={{ opacity: 0, scale: 0.97, y: -6 }}
                       initial={{ opacity: 0, scale: 0.97, y: -6 }}
                       transition={{
@@ -1167,19 +1167,19 @@ export function NewThreadScreen({
                         ease: [0.22, 1, 0.36, 1],
                       }}
                     >
-                      <p className="px-2.5 pb-1.5 pt-1 text-xs text-muted">
+                      <p className="px-2 pb-1 pt-0.5 text-[11px] text-muted">
                         Select your project
                       </p>
-                      <ScrollShadow className="max-h-40 pb-2">
+                      <ScrollShadow className="max-h-40 pb-1.5">
                         {(workspaces.data ?? []).map((workspace) => {
                           const isSelected =
                             workspace.id === selectedWorkspace?.id;
                           return (
                             <button
-                              className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-sm transition-colors ${
+                              className={`flex w-full items-center gap-2 rounded-xl px-2 py-1 text-left text-[13px] transition-colors duration-150 ease-out ${
                                 isSelected
                                   ? "text-foreground"
-                                  : "text-muted hover:bg-default hover:text-foreground"
+                                  : "text-muted hover:bg-default-hover hover:text-foreground"
                               }`}
                               key={workspace.id}
                               onClick={() => {
@@ -1211,10 +1211,10 @@ export function NewThreadScreen({
                         })}
                       </ScrollShadow>
 
-                      <div className="mx-2 my-1 h-px bg-separator" />
+                      <div className="mx-2 my-0.5 h-px bg-border/50" />
 
                       <button
-                        className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-sm text-muted transition-colors hover:bg-default hover:text-foreground disabled:opacity-40"
+                        className="flex w-full items-center gap-2 rounded-xl px-2 py-1 text-left text-[13px] text-muted transition-colors duration-150 ease-out hover:bg-default-hover hover:text-foreground disabled:opacity-40"
                         disabled={createWorkspace.isPending}
                         onClick={() => {
                           setIsWorkspaceMenuOpen(false);
