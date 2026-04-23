@@ -101,12 +101,17 @@ async function buildThreadDetails(
     orderBy: (messages, { asc }) => [asc(messages.createdAt)],
   });
   const queuedFollowUps = await listThreadFollowUps(thread.id);
+  const uiMessages = await mapThreadMessagesToUIMessages(messages as any[]);
+  const visibleFollowUps = queuedFollowUps.filter(
+    (followUp) =>
+      followUp.status === "queued" ||
+      (followUp.status === "processing" &&
+        !uiMessages.some((message) => message.id === followUp.id)),
+  );
 
   return {
-    messages: await mapThreadMessagesToUIMessages(messages as any[]),
-    queuedFollowUps: queuedFollowUps
-      .filter((followUp) => followUp.status === "queued")
-      .map(summarizeQueuedFollowUp),
+    messages: uiMessages,
+    queuedFollowUps: visibleFollowUps.map(summarizeQueuedFollowUp),
     thread: {
       activeRunId: thread.activeStreamId,
       archivedAt: thread.archivedAt,
@@ -615,7 +620,11 @@ export const threadsRouter = createTRPCRouter({
       const thread = await getOwnedThreadOrThrow(ctx, input.threadId);
       moveThreadFollowUpToFront(input.threadId, input.followUpId);
 
-      if (thread.status === "streaming") {
+      if (
+        thread.activeStreamId ||
+        thread.status === "streaming" ||
+        thread.status === "awaiting_approval"
+      ) {
         const latestAssistantId = await getLatestAssistantMessageId(
           input.threadId,
         );

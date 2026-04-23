@@ -393,10 +393,13 @@ async function persistResolvedCopilotCli(
       return;
     }
 
-    await setLocalRuntimeEnvValue("SENTINEL_COPILOT_PATH", null);
-    setProcessCopilotPath(command);
+    if (command) {
+      setProcessCopilotPath(command);
+    }
   } catch {
-    setProcessCopilotPath(command);
+    if (command) {
+      setProcessCopilotPath(command);
+    }
   }
 }
 
@@ -859,7 +862,8 @@ async function resolveCopilotRuntimeUncached(): Promise<ResolvedCopilotRuntime> 
     });
 
     if (process.env.SENTINEL_COPILOT_PATH?.trim() === overridePath) {
-      await persistResolvedCopilotCli(null);
+      // Keep the retained path hint; a transient launch or filesystem failure
+      // should not erase the user's last-known runtime path.
     }
   }
 
@@ -932,11 +936,11 @@ async function resolveCopilotRuntimeUncached(): Promise<ResolvedCopilotRuntime> 
 
   const shellResolution = await resolveCopilotCliFromShell();
   const shellResolvedPath = shellResolution?.cliPath ?? null;
-  await persistResolvedCopilotCli(shellResolution?.cliPath ?? null, {
-    persist: shellResolution?.cliPath
-      ? isPersistableCopilotPath(shellResolution.cliPath)
-      : false,
-  });
+  if (shellResolution?.cliPath) {
+    await persistResolvedCopilotCli(shellResolution.cliPath, {
+      persist: isPersistableCopilotPath(shellResolution.cliPath),
+    });
+  }
 
   if (shellResolution) {
     log.info("copilot_cli_resolved", {
@@ -964,8 +968,10 @@ async function resolveCopilotRuntimeUncached(): Promise<ResolvedCopilotRuntime> 
   return {
     cliDetected: false,
     error:
-      "GitHub Copilot CLI was not found on this machine. Install the Copilot CLI or set SENTINEL_COPILOT_PATH to its executable path.",
-    cliPath: null,
+      overridePath && process.env.SENTINEL_COPILOT_PATH?.trim() === overridePath
+        ? "GitHub Copilot CLI path is retained but is not currently launchable."
+        : "GitHub Copilot CLI was not found on this machine. Install the Copilot CLI or set SENTINEL_COPILOT_PATH to its executable path.",
+    cliPath: overridePath ?? null,
     env: process.env,
   };
 }

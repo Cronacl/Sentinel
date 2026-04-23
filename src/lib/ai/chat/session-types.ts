@@ -11,6 +11,7 @@ export type QueuedFollowUpSummary = {
   id: string;
   modelId: string;
   reasoningEffort: ReasoningEffort | null;
+  status: "queued" | "processing";
   text: string;
   threadMode: ThreadMode;
 };

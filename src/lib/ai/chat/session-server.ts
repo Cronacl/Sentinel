@@ -46,6 +46,7 @@ function summarizeQueuedFollowUp(
     id: followUp.id,
     modelId: followUp.modelId,
     reasoningEffort: followUp.reasoningEffort,
+    status: followUp.status,
     text: text.trim(),
     threadMode: followUp.threadMode,
   };
@@ -109,14 +110,19 @@ export async function loadThreadSessionSnapshot(
       .run();
   }
 
+  const visibleFollowUps = queuedFollowUps.filter(
+    (followUp) =>
+      followUp.status === "queued" ||
+      (followUp.status === "processing" &&
+        !uiMessages.some((message) => message.id === followUp.id)),
+  );
+
   return {
     activeRunId: thread.activeStreamId,
     chatEngine: thread.chatEngine,
     messages: uiMessages,
     mode: thread.mode,
-    queuedFollowUps: queuedFollowUps
-      .filter((followUp) => followUp.status === "queued")
-      .map(summarizeQueuedFollowUp),
+    queuedFollowUps: visibleFollowUps.map(summarizeQueuedFollowUp),
     threadId: thread.id,
     threadTitle: nextThreadTitle,
     threadStatus: thread.status,

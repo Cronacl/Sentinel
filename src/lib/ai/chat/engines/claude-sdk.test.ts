@@ -119,7 +119,7 @@ describe("resolveClaudeCodeRuntime", () => {
     }
   });
 
-  it("ignores a stale override when the configured claude binary cannot run", async () => {
+  it("retains a stale override when the configured claude binary cannot run", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
     const executablePath = path.join(tempRoot, "claude");
 
@@ -137,7 +137,7 @@ describe("resolveClaudeCodeRuntime", () => {
       expect(resolved.binaryDetected).toBe(false);
       expect(resolved.binaryVersion).toBeNull();
       expect(resolved.executablePath).toBeNull();
-      expect(process.env.SENTINEL_CLAUDE_PATH).toBeUndefined();
+      expect(process.env.SENTINEL_CLAUDE_PATH).toBe(executablePath);
     } finally {
       await rm(tempRoot, { force: true, recursive: true });
     }

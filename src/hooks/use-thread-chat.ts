@@ -262,6 +262,7 @@ function areQueuedFollowUpsEqual(
       followUp.modelId === other.modelId &&
       followUp.reasoningEffort === other.reasoningEffort &&
       followUp.threadMode === other.threadMode &&
+      followUp.status === other.status &&
       followUp.text === other.text &&
       followUp.attachmentCount === other.attachmentCount &&
       followUp.hasFiles === other.hasFiles &&
@@ -315,6 +316,7 @@ function normalizeQueuedFollowUps(
       followUp.createdAt instanceof Date
         ? followUp.createdAt
         : new Date(followUp.createdAt),
+    status: followUp.status ?? "queued",
   }));
 }
 
@@ -355,6 +357,7 @@ function summarizeLocalQueuedFollowUp(input: {
     id: input.message.id,
     modelId: input.modelId,
     reasoningEffort: input.reasoningEffort ?? null,
+    status: "queued",
     text: extractQueuedFollowUpText(input.message),
     threadMode: input.threadMode ?? "chat",
   };

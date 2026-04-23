@@ -69,6 +69,12 @@ describe("Claude runtime settings helpers", () => {
     expect(getClaudeRuntimeBinaryLabel({ binaryDetected: false })).toBe(
       "Not detected",
     );
+    expect(
+      getClaudeRuntimeBinaryLabel({
+        binaryDetected: false,
+        binaryPath: "/usr/local/bin/claude",
+      }),
+    ).toBe("Path retained");
   });
 });
 
@@ -126,6 +132,12 @@ describe("Codex runtime settings helpers", () => {
     expect(getCodexRuntimeCliLabel({ cliDetected: false })).toBe(
       "Not detected",
     );
+    expect(
+      getCodexRuntimeCliLabel({
+        cliDetected: false,
+        cliPath: "/usr/local/bin/codex",
+      }),
+    ).toBe("Path retained");
   });
 });
 
@@ -170,5 +182,11 @@ describe("Copilot runtime settings helpers", () => {
     expect(getCopilotRuntimeCliLabel({ cliDetected: false })).toBe(
       "Not detected",
     );
+    expect(
+      getCopilotRuntimeCliLabel({
+        cliDetected: false,
+        cliPath: "/usr/local/bin/copilot",
+      }),
+    ).toBe("Path retained");
   });
 });

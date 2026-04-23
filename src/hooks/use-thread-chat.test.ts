@@ -38,6 +38,7 @@ function createQueuedFollowUp(id: string, text: string) {
     id,
     modelId: "openai:gpt-5.2",
     reasoningEffort: "high" as const,
+    status: "queued" as const,
     text,
     threadMode: "chat" as const,
   };

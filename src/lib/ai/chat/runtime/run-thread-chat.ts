@@ -258,11 +258,12 @@ async function handleFollowUpAction(
   }
 
   const latestThread = await persist.loadThread(request.threadId);
-  const isStreaming =
+  const shouldInterruptActiveRun =
     latestThread?.activeStreamId != null ||
-    latestThread?.status === "streaming";
+    latestThread?.status === "streaming" ||
+    latestThread?.status === "awaiting_approval";
 
-  if (position === "front" && isStreaming) {
+  if (position === "front" && shouldInterruptActiveRun) {
     const latestAssistantId = await persist.getLatestAssistantMessageId(
       request.threadId,
     );

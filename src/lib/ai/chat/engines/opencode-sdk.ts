@@ -420,10 +420,30 @@ function parseOpenCodeVersion(value: string) {
   return trimmed.split(/\r?\n/)[0]?.trim() ?? null;
 }
 
-async function persistResolvedOpenCodeCli(executablePath: string | null) {
+function isPersistableOpenCodePath(executablePath: string) {
+  const normalized = executablePath.replaceAll("\\", "/");
+  return !normalized.includes("/fnm_multishells/");
+}
+
+async function persistResolvedOpenCodeCli(
+  executablePath: string | null,
+  options?: { persist?: boolean },
+) {
+  if (!executablePath?.trim()) {
+    return;
+  }
+
+  const persist = options?.persist ?? true;
+
   try {
-    await setLocalRuntimeEnvValue("SENTINEL_OPENCODE_PATH", executablePath);
+    if (persist) {
+      await setLocalRuntimeEnvValue("SENTINEL_OPENCODE_PATH", executablePath);
+      return;
+    }
+
+    process.env.SENTINEL_OPENCODE_PATH = executablePath;
   } catch {
+    process.env.SENTINEL_OPENCODE_PATH = executablePath;
     // Best effort only; runtime discovery still works without the persisted hint.
   }
 }
@@ -693,7 +713,9 @@ export async function resolveOpenCodeRuntime(options?: {
       : null;
 
     if (explicitCandidate?.cliPath) {
-      await persistResolvedOpenCodeCli(explicitCandidate.cliPath);
+      await persistResolvedOpenCodeCli(explicitCandidate.cliPath, {
+        persist: isPersistableOpenCodePath(explicitCandidate.cliPath),
+      });
       return {
         cliDetected: true,
         cliPath: explicitCandidate.cliPath,
@@ -713,18 +735,21 @@ export async function resolveOpenCodeRuntime(options?: {
       null;
 
     if (!candidatePath) {
-      await persistResolvedOpenCodeCli(null);
       return {
         cliDetected: false,
-        cliPath: null,
+        cliPath: explicitPath ?? null,
         cliVersion: null,
         env,
-        error: "OpenCode CLI (`opencode`) was not found in PATH.",
+        error: explicitPath
+          ? "OpenCode CLI path is retained but is not currently launchable."
+          : "OpenCode CLI (`opencode`) was not found in PATH.",
       } satisfies ResolvedOpenCodeRuntime;
     }
 
     const verified = await verifyOpenCodeCli(candidatePath, env);
-    await persistResolvedOpenCodeCli(candidatePath);
+    await persistResolvedOpenCodeCli(candidatePath, {
+      persist: isPersistableOpenCodePath(candidatePath),
+    });
 
     return {
       cliDetected: true,

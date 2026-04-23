@@ -64,10 +64,13 @@ async function persistResolvedCodexCli(
       return;
     }
 
-    await setLocalRuntimeEnvValue("SENTINEL_CODEX_PATH", null);
-    setProcessCodexPath(command);
+    if (command) {
+      setProcessCodexPath(command);
+    }
   } catch {
-    setProcessCodexPath(command);
+    if (command) {
+      setProcessCodexPath(command);
+    }
   }
 }
 
@@ -342,7 +345,8 @@ export async function resolveCodexCli(options?: { forceRefresh?: boolean }) {
       process.env.SENTINEL_CODEX_PATH?.trim() &&
       process.env.SENTINEL_CODEX_PATH?.trim() === overridePath
     ) {
-      await persistResolvedCodexCli(null);
+      // Keep the retained path hint; a transient launch or filesystem failure
+      // should not erase the user's last-known runtime path.
     }
 
     const directCommand = await findExecutableInPath("codex", preferredPath);
@@ -369,11 +373,11 @@ export async function resolveCodexCli(options?: { forceRefresh?: boolean }) {
     }
 
     const shellResolution = await resolveCodexCliFromShell();
-    await persistResolvedCodexCli(shellResolution?.command ?? null, {
-      persist: shellResolution?.command
-        ? isPersistableCodexPath(shellResolution.command)
-        : false,
-    });
+    if (shellResolution?.command) {
+      await persistResolvedCodexCli(shellResolution.command, {
+        persist: isPersistableCodexPath(shellResolution.command),
+      });
+    }
     return shellResolution;
   })();
 

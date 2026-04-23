@@ -71,7 +71,7 @@ export function VoiceRecorderPanel({
     const midY = h / 2;
 
     for (let i = 0; i < bars.length; i++) {
-      const intensity = bars[i];
+      const intensity = bars[i] ?? 0;
       const barH =
         MIN_BAR_HEIGHT + intensity * (MAX_BAR_HEIGHT - MIN_BAR_HEIGHT);
       const x = startX + i * BAR_STEP;
@@ -123,7 +123,7 @@ export function VoiceRecorderPanel({
       <Button
         className="shrink-0 text-xs"
         onPress={onCancel}
-        size="xs"
+        size="sm"
         variant="tertiary"
       >
         Cancel

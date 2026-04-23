@@ -501,10 +501,13 @@ async function persistResolvedCursorCli(
       return;
     }
 
-    await setLocalRuntimeEnvValue("SENTINEL_CURSOR_PATH", null);
-    setProcessCursorPath(command);
+    if (command) {
+      setProcessCursorPath(command);
+    }
   } catch {
-    setProcessCursorPath(command);
+    if (command) {
+      setProcessCursorPath(command);
+    }
   }
 }
 
@@ -818,16 +821,17 @@ export async function resolveCursorRuntime(options?: {
       (await resolveCursorCliFromShell())?.cliPath;
 
     if (!candidatePath) {
-      await persistResolvedCursorCli(null, { persist: false });
       return {
         cliDetected: false,
-        cliPath: null,
+        cliPath: explicitPath ?? null,
         cliVersion: null,
         env: {
           ...process.env,
           PATH: managedPathValue,
         },
-        error: "Cursor Agent was not found in PATH.",
+        error: explicitPath
+          ? "Cursor Agent path is retained but is not currently launchable."
+          : "Cursor Agent was not found in PATH.",
       } satisfies ResolvedCursorRuntime;
     }
 

@@ -1,7 +1,9 @@
 type RuntimeStatusLike = {
   binaryDetected?: boolean;
+  binaryPath?: string | null;
   binaryVersion?: string | null;
   cliDetected?: boolean;
+  cliPath?: string | null;
   cliVersion?: string | null;
   lastSuccessfulProbeAt?: string | null;
   state?: string | null;
@@ -30,6 +32,14 @@ function getRuntimeDetectionLabel(
   },
 ) {
   if (!status?.[options.detectedKey]) {
+    const retainedPath =
+      options.detectedKey === "binaryDetected"
+        ? status?.binaryPath
+        : status?.cliPath;
+    if (retainedPath) {
+      return "Path retained";
+    }
+
     return "Not detected";
   }
 

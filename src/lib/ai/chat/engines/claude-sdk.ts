@@ -161,10 +161,39 @@ function getClaudeStatusSnapshotPath() {
   return path.join(getLocalStateDirectory(), CLAUDE_STATUS_SNAPSHOT_FILE);
 }
 
-async function persistResolvedClaudeCodePath(executablePath: string | null) {
+function setProcessClaudeCodePath(executablePath: string | null) {
+  if (executablePath?.trim()) {
+    process.env.SENTINEL_CLAUDE_PATH = executablePath;
+    return;
+  }
+
+  delete process.env.SENTINEL_CLAUDE_PATH;
+}
+
+function isPersistableClaudeCodePath(executablePath: string) {
+  const normalized = executablePath.replaceAll("\\", "/");
+  return !normalized.includes("/fnm_multishells/");
+}
+
+async function persistResolvedClaudeCodePath(
+  executablePath: string | null,
+  options?: { persist?: boolean },
+) {
+  const persist = options?.persist ?? Boolean(executablePath?.trim());
+
   try {
-    await setLocalRuntimeEnvValue("SENTINEL_CLAUDE_PATH", executablePath);
+    if (persist && executablePath) {
+      await setLocalRuntimeEnvValue("SENTINEL_CLAUDE_PATH", executablePath);
+      return;
+    }
+
+    if (executablePath) {
+      setProcessClaudeCodePath(executablePath);
+    }
   } catch (error) {
+    if (executablePath) {
+      setProcessClaudeCodePath(executablePath);
+    }
     log.warn("persist_claude_path_failed", { error });
   }
 }
@@ -687,7 +716,9 @@ export async function resolveClaudeCodeRuntime(options?: {
           env: baseEnv,
           executablePath: verifiedOverride.executablePath,
         } satisfies ResolvedClaudeCodeRuntime;
-        await persistResolvedClaudeCodePath(runtime.executablePath);
+        await persistResolvedClaudeCodePath(runtime.executablePath, {
+          persist: isPersistableClaudeCodePath(runtime.executablePath),
+        });
         return runtime;
       }
     }
@@ -705,7 +736,9 @@ export async function resolveClaudeCodeRuntime(options?: {
           env: baseEnv,
           executablePath: verifiedDirectCommand.executablePath,
         } satisfies ResolvedClaudeCodeRuntime;
-        await persistResolvedClaudeCodePath(runtime.executablePath);
+        await persistResolvedClaudeCodePath(runtime.executablePath, {
+          persist: isPersistableClaudeCodePath(runtime.executablePath),
+        });
         return runtime;
       }
     }
@@ -713,13 +746,19 @@ export async function resolveClaudeCodeRuntime(options?: {
     const windowsWhereCommand =
       await resolveClaudeCodeRuntimeFromWindowsWhere();
     if (windowsWhereCommand) {
-      await persistResolvedClaudeCodePath(windowsWhereCommand.executablePath);
+      await persistResolvedClaudeCodePath(windowsWhereCommand.executablePath, {
+        persist: isPersistableClaudeCodePath(
+          windowsWhereCommand.executablePath,
+        ),
+      });
       return windowsWhereCommand;
     }
 
     const shellRuntime = await resolveClaudeCodeRuntimeFromShell();
     if (shellRuntime) {
-      await persistResolvedClaudeCodePath(shellRuntime.executablePath);
+      await persistResolvedClaudeCodePath(shellRuntime.executablePath, {
+        persist: isPersistableClaudeCodePath(shellRuntime.executablePath),
+      });
       return shellRuntime;
     }
 
@@ -732,7 +771,6 @@ export async function resolveClaudeCodeRuntime(options?: {
       },
       executablePath: null,
     } satisfies ResolvedClaudeCodeRuntime;
-    await persistResolvedClaudeCodePath(null);
     return runtime;
   })();
 
@@ -816,14 +854,17 @@ async function readClaudeStatus(options?: {
     forceRefresh: options?.forceRefreshRuntime,
   });
   if (!runtime.binaryDetected || !runtime.executablePath) {
+    const retainedPath = process.env.SENTINEL_CLAUDE_PATH?.trim() || null;
     return buildClaudeEngineStatus({
       account: null,
       authReady: false,
       availableModels: [],
       binaryDetected: false,
-      binaryPath: null,
+      binaryPath: retainedPath,
       binaryVersion: null,
-      error: "Claude Code is not installed or not available on PATH.",
+      error: retainedPath
+        ? "Claude Code path is retained but is not currently launchable."
+        : "Claude Code is not installed or not available on PATH.",
       lastSuccessfulProbeAt: null,
       state: "missing_binary",
       usedCachedStatus: false,

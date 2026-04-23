@@ -148,6 +148,7 @@ function buildCodexEngineStatus(input: {
   authReady: boolean;
   availableModels: CodexModelInfo[];
   cliDetected: boolean;
+  cliPath?: string | null;
   cliVersion: string | null;
   error: string | null;
   isDesktopRuntime: boolean;
@@ -162,6 +163,7 @@ function buildCodexEngineStatus(input: {
     authReady: input.authReady,
     availableModels: input.availableModels,
     cliDetected: input.cliDetected,
+    cliPath: input.cliPath ?? null,
     cliVersion: input.cliVersion,
     engine: "codex" as const,
     error: input.error,
@@ -184,6 +186,7 @@ function buildCachedCodexStatus(input: {
       input.snapshot.account != null || !input.snapshot.requiresOpenaiAuth,
     availableModels: input.snapshot.availableModels,
     cliDetected: true,
+    cliPath: input.snapshot.cliPath,
     cliVersion: input.cliVersion,
     error: null,
     isDesktopRuntime: true,
@@ -252,6 +255,7 @@ export type CodexEngineStatus = {
   authReady: boolean;
   availableModels: CodexModelInfo[];
   cliDetected: boolean;
+  cliPath: string | null;
   cliVersion: string | null;
   engine: "codex";
   error: string | null;
@@ -777,6 +781,7 @@ class CodexAppServerManager {
           authReady: false,
           availableModels: [],
           cliDetected: true,
+          cliPath: input.resolvedCli.command,
           cliVersion: input.cliVersion,
           error: "Timed out while querying Codex runtime.",
           isDesktopRuntime: true,
@@ -801,6 +806,7 @@ class CodexAppServerManager {
           authReady: false,
           availableModels: [],
           cliDetected: true,
+          cliPath: input.resolvedCli.command,
           cliVersion: input.cliVersion,
           error: "Codex CLI is not authenticated.",
           isDesktopRuntime: true,
@@ -828,6 +834,7 @@ class CodexAppServerManager {
           statusPayload.account != null || !statusPayload.requiresOpenaiAuth,
         availableModels: statusPayload.availableModels,
         cliDetected: true,
+        cliPath: input.resolvedCli.command,
         cliVersion: input.cliVersion,
         error: null,
         isDesktopRuntime: true,
@@ -853,6 +860,7 @@ class CodexAppServerManager {
         authReady: false,
         availableModels: [],
         cliDetected: true,
+        cliPath: input.resolvedCli.command,
         cliVersion: input.cliVersion,
         error: message,
         isDesktopRuntime: true,
@@ -903,13 +911,17 @@ class CodexAppServerManager {
     const pending = (async () => {
       const resolvedCli = await resolveCodexCli({ forceRefresh });
       if (!resolvedCli) {
+        const retainedPath = process.env.SENTINEL_CODEX_PATH?.trim() || null;
         return buildCodexEngineStatus({
           account: null,
           authReady: false,
           availableModels: [],
           cliDetected: false,
+          cliPath: retainedPath,
           cliVersion: null,
-          error: "Codex CLI is not installed or not available on PATH.",
+          error: retainedPath
+            ? "Codex CLI path is retained but is not currently launchable."
+            : "Codex CLI is not installed or not available on PATH.",
           isDesktopRuntime: false,
           lastSuccessfulProbeAt: null,
           requiresOpenaiAuth: false,

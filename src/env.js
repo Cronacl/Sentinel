@@ -147,8 +147,21 @@ const localRuntimeEnv = SHOULD_SKIP_LOCAL_RUNTIME_ENV
   ? {}
   : readLocalRuntimeEnvFile().values;
 
+const LOCAL_RUNTIME_PATH_KEYS = [
+  "SENTINEL_CODEX_PATH",
+  "SENTINEL_CLAUDE_PATH",
+  "SENTINEL_COPILOT_PATH",
+  "SENTINEL_CURSOR_PATH",
+  "SENTINEL_OPENCODE_PATH",
+];
+
 if (!SHOULD_SKIP_LOCAL_RUNTIME_ENV) {
   ensureLocalEncryptionKey(localRuntimeEnv);
+  for (const key of LOCAL_RUNTIME_PATH_KEYS) {
+    if (!process.env[key] && localRuntimeEnv[key]) {
+      process.env[key] = localRuntimeEnv[key];
+    }
+  }
 }
 
 export const env = createEnv({
