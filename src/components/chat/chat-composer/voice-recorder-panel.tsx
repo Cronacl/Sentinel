@@ -66,6 +66,9 @@ export function VoiceRecorderPanel({
 
     ctx.clearRect(0, 0, w, h);
 
+    // Read the foreground color from CSS so it works in both light and dark mode
+    const fgColor = getComputedStyle(canvas).color;
+
     const bars = historyRef.current;
     const startX = w - bars.length * BAR_STEP;
     const midY = h / 2;
@@ -76,13 +79,15 @@ export function VoiceRecorderPanel({
         MIN_BAR_HEIGHT + intensity * (MAX_BAR_HEIGHT - MIN_BAR_HEIGHT);
       const x = startX + i * BAR_STEP;
       const y = midY - barH / 2;
-      const alpha = 0.4 + intensity * 0.5;
 
-      ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+      ctx.globalAlpha = 0.4 + intensity * 0.5;
+      ctx.fillStyle = fgColor;
       ctx.beginPath();
       ctx.roundRect(x, y, BAR_WIDTH, barH, 1);
       ctx.fill();
     }
+
+    ctx.globalAlpha = 1;
   }, []);
 
   useEffect(() => {
@@ -129,7 +134,7 @@ export function VoiceRecorderPanel({
         Cancel
       </Button>
 
-      <canvas className="h-6 min-w-0 flex-1" ref={canvasRef} />
+      <canvas className="h-6 min-w-0 flex-1 text-foreground" ref={canvasRef} />
 
       {errorMessage ? (
         <span className="shrink-0 text-[11px] text-danger-soft-foreground">
