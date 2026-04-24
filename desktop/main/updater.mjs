@@ -1,6 +1,4 @@
 const RELEASES_BASE_URL = "https://github.com/Cronacl/Sentinel/releases";
-export const PRIVATE_GITHUB_RELEASES_UNSUPPORTED_REASON =
-  "Background updates are currently unavailable because Sentinel desktop builds are published through a private GitHub Releases feed. Use Release notes to download and install new versions manually.";
 
 export function buildReleasePageUrl(version) {
   if (typeof version !== "string" || !version.trim()) {
