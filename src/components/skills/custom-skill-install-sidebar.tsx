@@ -221,6 +221,7 @@ function CustomSkillInstallDrawerContent({
               (option.value === "codex" && !codexAvailable) ||
               (option.value === "copilot" && !copilotAvailable),
           }))}
+          showDescriptions={false}
         />
 
         <ControlledSelectField
@@ -236,6 +237,7 @@ function CustomSkillInstallDrawerContent({
           name="scope"
           options={SCOPE_OPTIONS}
           selectProps={{ isDisabled: target === "codex" }}
+          showDescriptions={false}
         />
 
         <ControlledTextField
