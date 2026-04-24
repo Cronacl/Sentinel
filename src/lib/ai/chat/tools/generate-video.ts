@@ -345,6 +345,8 @@ function buildVideoProviderOptions(
   provider: AIProvider,
 ): Parameters<typeof generateVideo>[0]["providerOptions"] {
   switch (provider) {
+    case "bytedance":
+      return { bytedance: { pollTimeoutMs: 600_000 } };
     case "klingai":
       return { klingai: { pollTimeoutMs: 600_000 } };
     case "xai":

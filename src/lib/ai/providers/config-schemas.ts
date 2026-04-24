@@ -54,6 +54,7 @@ export const PROVIDER_CONFIG_SCHEMAS: Record<AIProvider, z.ZodType> = {
   xai: apiKeyProvider,
   black_forest_labs: apiKeyProvider,
   klingai: accessKeySecretKeyProvider,
+  bytedance: apiKeyProvider,
   fal: apiKeyProvider,
   replicate: apiTokenProvider,
   azure: apiKeyProvider,

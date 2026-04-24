@@ -136,6 +136,13 @@ const runtime = {
         modelId: "kling-v3.0-t2v",
         provider: "klingai" as const,
       },
+      bytedance: {
+        config: { apiKey: "ark-key" },
+        displayName: "ByteDance",
+        isCustom: false,
+        modelId: "dreamina-seedance-2-0-260128",
+        provider: "bytedance" as const,
+      },
       fal: {
         config: { apiKey: "fal-key" },
         displayName: "Fal",
@@ -312,7 +319,7 @@ describe("executeGenerateVideo", () => {
     );
   });
 
-  it("applies documented provider defaults for xAI and Kling AI polling", async () => {
+  it("applies documented provider defaults for xAI, Kling AI, and ByteDance polling", async () => {
     await executeGenerateVideo({
       input: {
         count: 1,
@@ -333,6 +340,16 @@ describe("executeGenerateVideo", () => {
       runtime,
     });
 
+    await executeGenerateVideo({
+      input: {
+        count: 1,
+        mode: "single",
+        prompt: "a serene mountain landscape at sunrise",
+        provider: "bytedance",
+      },
+      runtime,
+    });
+
     expect(generateVideoMock).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
@@ -343,6 +360,12 @@ describe("executeGenerateVideo", () => {
       2,
       expect.objectContaining({
         providerOptions: { klingai: { pollTimeoutMs: 600000 } },
+      }),
+    );
+    expect(generateVideoMock).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        providerOptions: { bytedance: { pollTimeoutMs: 600000 } },
       }),
     );
   });

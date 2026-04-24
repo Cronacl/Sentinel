@@ -180,6 +180,55 @@ const VIDEO_MODEL_CATALOG: Partial<Record<AIProvider, VideoModelMeta[]>> = {
       id: "kling-v2.6-i2v",
     },
   ],
+  bytedance: [
+    {
+      capabilities: NO_SEED_TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
+      description:
+        "Seedance 2.0 model with reference video and audio guidance.",
+      displayName: "Seedance 2.0",
+      id: "dreamina-seedance-2-0-260128",
+    },
+    {
+      capabilities: NO_SEED_TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
+      description:
+        "Seedance 2.0 fast model optimized for lower-latency generation.",
+      displayName: "Seedance 2.0 Fast",
+      id: "dreamina-seedance-2-0-fast-260128",
+    },
+    {
+      capabilities: NO_SEED_TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
+      description:
+        "Seedance 1.5 Pro model with image-to-video and synchronized audio support.",
+      displayName: "Seedance 1.5 Pro",
+      id: "seedance-1-5-pro-251215",
+    },
+    {
+      capabilities: NO_SEED_TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
+      description:
+        "Seedance 1.0 Pro model for high-quality text-to-video and image-to-video generation.",
+      displayName: "Seedance 1.0 Pro",
+      id: "seedance-1-0-pro-250528",
+    },
+    {
+      capabilities: NO_SEED_TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
+      description: "Seedance 1.0 Pro Fast model optimized for speed and cost.",
+      displayName: "Seedance 1.0 Pro Fast",
+      id: "seedance-1-0-pro-fast-251015",
+    },
+    {
+      capabilities: TEXT_ONLY_VIDEO_CAPABILITIES,
+      description: "Seedance 1.0 Lite text-to-video model.",
+      displayName: "Seedance 1.0 Lite T2V",
+      id: "seedance-1-0-lite-t2v-250428",
+    },
+    {
+      capabilities: IMAGE_ONLY_VIDEO_CAPABILITIES,
+      description:
+        "Seedance 1.0 Lite image-to-video model with multi-reference image support.",
+      displayName: "Seedance 1.0 Lite I2V",
+      id: "seedance-1-0-lite-i2v-250428",
+    },
+  ],
   fal: [
     {
       capabilities: TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
@@ -211,6 +260,7 @@ const VIDEO_MODEL_CATALOG: Partial<Record<AIProvider, VideoModelMeta[]>> = {
 };
 
 const CUSTOM_VIDEO_MODEL_PROVIDERS = new Set<AIProvider>([
+  "bytedance",
   "fal",
   "klingai",
   "replicate",
@@ -222,10 +272,11 @@ const VIDEO_PROVIDER_PRIORITY: Partial<Record<AIProvider, number>> = {
   google_vertex: 0,
   google: 1,
   klingai: 2,
-  xai: 3,
-  fal: 4,
-  replicate: 5,
-  vercel: 6,
+  bytedance: 3,
+  xai: 4,
+  fal: 5,
+  replicate: 6,
+  vercel: 7,
 };
 
 function normalizeModelId(value: string | null | undefined) {

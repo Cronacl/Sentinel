@@ -1178,6 +1178,8 @@ function getProviderOptionsKey(provider: AIProvider) {
       return "blackForestLabs";
     case "klingai":
       return "klingai";
+    case "bytedance":
+      return "bytedance";
     case "fal":
       return "fal";
     case "replicate":

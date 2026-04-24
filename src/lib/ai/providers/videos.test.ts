@@ -86,7 +86,7 @@ describe("video generation provider runtime", () => {
     expect(runtime.defaultProvider).toBe("google_vertex");
   });
 
-  it("keeps Google Vertex first, then Google, then xAI", () => {
+  it("keeps Google Vertex first, then Google, then native video providers", () => {
     const providerEntries = buildVideoGenerationProviderEntries({
       credentials: [
         {
@@ -98,6 +98,11 @@ describe("video generation provider runtime", () => {
           encryptedConfig: JSON.stringify({ apiKey: "xai-key" }),
           isEnabled: true,
           provider: "xai",
+        },
+        {
+          encryptedConfig: JSON.stringify({ apiKey: "ark-key" }),
+          isEnabled: true,
+          provider: "bytedance",
         },
         {
           encryptedConfig: JSON.stringify({ apiKey: "vertex-key" }),
@@ -121,6 +126,12 @@ describe("video generation provider runtime", () => {
         {
           isCustom: false,
           isEnabled: true,
+          modelId: "dreamina-seedance-2-0-260128",
+          provider: "bytedance",
+        },
+        {
+          isCustom: false,
+          isEnabled: true,
           modelId: "veo-3.1-fast-generate-preview",
           provider: "google_vertex",
         },
@@ -130,6 +141,7 @@ describe("video generation provider runtime", () => {
     expect(providerEntries.map((entry) => entry.provider)).toEqual([
       "google_vertex",
       "google",
+      "bytedance",
       "xai",
     ]);
   });
@@ -199,6 +211,42 @@ describe("video generation provider runtime", () => {
     expect(
       getVideoModelMeta("klingai", "kling-v3.0-t2v")?.capabilities
         .supportsImageToVideo,
+    ).toBe(false);
+  });
+
+  it("includes ByteDance Seedance models and custom video model support", () => {
+    const providerEntries = buildVideoGenerationProviderEntries({
+      credentials: [
+        {
+          encryptedConfig: JSON.stringify({ apiKey: "ark-key" }),
+          isEnabled: true,
+          provider: "bytedance",
+        },
+      ],
+      providerSettings: [],
+    });
+
+    expect(providerEntries[0]).toMatchObject({
+      hasValidModel: true,
+      modelId: "dreamina-seedance-2-0-260128",
+      provider: "bytedance",
+      supportsCustomModel: true,
+    });
+    expect(
+      getVideoModelMeta("bytedance", "dreamina-seedance-2-0-260128")
+        ?.capabilities.supportsTextToVideo,
+    ).toBe(true);
+    expect(
+      getVideoModelMeta("bytedance", "dreamina-seedance-2-0-260128")
+        ?.capabilities.supportsImageToVideo,
+    ).toBe(true);
+    expect(
+      getVideoModelMeta("bytedance", "seedance-1-0-lite-t2v-250428")
+        ?.capabilities.supportsImageToVideo,
+    ).toBe(false);
+    expect(
+      getVideoModelMeta("bytedance", "seedance-1-0-lite-i2v-250428")
+        ?.capabilities.supportsTextToVideo,
     ).toBe(false);
   });
 });

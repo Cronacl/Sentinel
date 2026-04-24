@@ -9,6 +9,7 @@ export const aiProviderSchema = z.enum([
   "xai",
   "black_forest_labs",
   "klingai",
+  "bytedance",
   "fal",
   "replicate",
   "azure",

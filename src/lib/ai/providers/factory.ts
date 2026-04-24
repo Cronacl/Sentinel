@@ -4,6 +4,7 @@ import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createAzure } from "@ai-sdk/azure";
 import { createBlackForestLabs } from "@ai-sdk/black-forest-labs";
+import { createByteDance } from "@ai-sdk/bytedance";
 import { createCohere } from "@ai-sdk/cohere";
 import { createFal } from "@ai-sdk/fal";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
@@ -118,6 +119,13 @@ export function createProviderInstance(
         accessKey: c.accessKey,
         ...(c.baseURL && { baseURL: c.baseURL }),
         secretKey: c.secretKey,
+      });
+    }
+    case "bytedance": {
+      const c = config as ApiKeyConfig;
+      return createByteDance({
+        apiKey: c.apiKey,
+        ...(c.baseURL && { baseURL: c.baseURL }),
       });
     }
     case "fal": {

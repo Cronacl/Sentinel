@@ -47,6 +47,11 @@ export const PROVIDERS: Record<AIProvider, ProviderMeta> = {
     displayName: "Kling AI",
     description: "High-quality text-to-video and image-to-video models",
   },
+  bytedance: {
+    id: "bytedance",
+    displayName: "ByteDance",
+    description: "Seedance video models via BytePlus ModelArk",
+  },
   fal: {
     id: "fal",
     displayName: "Fal",

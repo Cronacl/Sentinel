@@ -41,4 +41,18 @@ describe("createProviderInstance", () => {
 
     expect(typeof klingai.videoModel).toBe("function");
   });
+
+  it("creates a ByteDance video provider", () => {
+    const bytedance = createProviderInstance("bytedance", {
+      apiKey: "ark-key",
+    }) as {
+      video?: (modelId: string) => unknown;
+      videoModel?: (modelId: string) => unknown;
+    };
+
+    expect(
+      typeof bytedance.video === "function" ||
+        typeof bytedance.videoModel === "function",
+    ).toBe(true);
+  });
 });

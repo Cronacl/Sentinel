@@ -7,6 +7,7 @@ export const AI_PROVIDERS = [
   "xai",
   "black_forest_labs",
   "klingai",
+  "bytedance",
   "fal",
   "replicate",
   "azure",
