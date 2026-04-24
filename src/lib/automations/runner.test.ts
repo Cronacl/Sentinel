@@ -2,6 +2,8 @@
 
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 
+import { CHAT_ENGINES } from "@/server/db/enums";
+
 const runThreadChat = mock(async () => new Response(null, { status: 204 }));
 const computeNextRunAt = mock(() => new Date("2026-03-14T09:00:00.000Z"));
 const db: Record<string, any> = {};
@@ -51,6 +53,67 @@ describe("executeAutomationRun", () => {
       }),
     }));
   });
+
+  function allowRunToStart() {
+    db.transaction = mock((callback: (tx: Record<string, any>) => unknown) =>
+      callback({
+        insert: () => ({
+          values: () => ({
+            run: () => undefined,
+          }),
+        }),
+        select: () => ({
+          from: () => ({
+            where: () => ({
+              get: () => null,
+            }),
+          }),
+        }),
+      }),
+    );
+  }
+
+  for (const engine of CHAT_ENGINES) {
+    it(`routes ${engine} automations through the selected chat engine`, async () => {
+      db.query = {
+        automations: {
+          findFirst: mock(async () => ({
+            chatEngine: engine,
+            id: "automation-1",
+            modelId: `${engine}-model`,
+            prompt: "Review the codebase.",
+            reasoningEffort: engine === "opencode" ? null : "medium",
+            scheduleCron: null,
+            scheduleDayOfWeek: null,
+            scheduleTime: "09:00",
+            scheduleType: "daily",
+            status: "active",
+            title: "Daily review",
+            userId: "user-1",
+            workspace: {
+              id: "workspace-1",
+              isArchived: false,
+            },
+            workspaceId: "workspace-1",
+          })),
+        },
+      };
+      allowRunToStart();
+
+      await executeAutomationRun("automation-1");
+
+      expect(runThreadChat).toHaveBeenCalledWith(
+        expect.objectContaining({
+          engine,
+          modelId: `${engine}-model`,
+          ...(engine === "cursor" || engine === "opencode"
+            ? { toolsEnabled: false }
+            : {}),
+        }),
+        "user-1",
+      );
+    });
+  }
 
   it("fails fast and pauses active automations when the workspace is archived", async () => {
     db.query = {

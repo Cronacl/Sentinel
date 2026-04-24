@@ -20,6 +20,8 @@ An automation stores:
 
 Runs are stored separately and can link back to the thread created by that run.
 
+Automations can use any configured chat engine: `sentinel`, `codex`, `claude`, `copilot`, `cursor`, or `opencode`.
+
 ## Schedule types
 
 The app supports these schedule types:

@@ -333,6 +333,107 @@ describe("skills", () => {
     );
   });
 
+  it("discovers Cursor and OpenCode skills from native workspace and global roots", async () => {
+    await writeSkill({
+      baseDirectory: workspaceRoot,
+      container: ".cursor/skills",
+      managedBySentinel: true,
+      name: "workspace-cursor",
+    });
+    await writeSkill({
+      baseDirectory: homeDirectory,
+      container: ".cursor/skills",
+      name: "global-cursor",
+    });
+    await writeSkill({
+      baseDirectory: workspaceRoot,
+      container: ".opencode/skills",
+      managedBySentinel: true,
+      name: "workspace-opencode",
+    });
+    await writeSkill({
+      baseDirectory: homeDirectory,
+      container: ".config/opencode/skills",
+      name: "global-opencode",
+    });
+
+    const skills = await discoverSkills({ workspaceRoot });
+
+    expect(skills).toContainEqual(
+      expect.objectContaining({
+        name: "workspace-cursor",
+        scope: "workspace",
+        sourceKind: "cursor",
+        target: "cursor",
+      }),
+    );
+    expect(skills).toContainEqual(
+      expect.objectContaining({
+        name: "global-cursor",
+        scope: "global",
+        sourceKind: "cursor",
+        target: "cursor",
+      }),
+    );
+    expect(skills).toContainEqual(
+      expect.objectContaining({
+        name: "workspace-opencode",
+        scope: "workspace",
+        sourceKind: "opencode",
+        target: "opencode",
+      }),
+    );
+    expect(skills).toContainEqual(
+      expect.objectContaining({
+        name: "global-opencode",
+        scope: "global",
+        sourceKind: "opencode",
+        target: "opencode",
+      }),
+    );
+  });
+
+  it("loads Cursor and OpenCode skills from their native lookup targets", async () => {
+    await writeSkill({
+      baseDirectory: workspaceRoot,
+      container: ".cursor/skills",
+      content: "Cursor workflow.\n",
+      description: "Cursor version",
+      name: "runtime-skill",
+    });
+    await writeSkill({
+      baseDirectory: workspaceRoot,
+      container: ".opencode/skills",
+      content: "OpenCode workflow.\n",
+      description: "OpenCode version",
+      name: "runtime-skill",
+    });
+
+    const cursorSkill = await loadSkillByName({
+      name: "runtime-skill",
+      target: "cursor",
+      workspaceRoot,
+    });
+    const openCodeSkill = await loadSkillByName({
+      name: "runtime-skill",
+      target: "opencode",
+      workspaceRoot,
+    });
+
+    expect(cursorSkill).toMatchObject({
+      content: "Cursor workflow.",
+      description: "Cursor version",
+      sourceKind: "cursor",
+      target: "cursor",
+    });
+    expect(openCodeSkill).toMatchObject({
+      content: "OpenCode workflow.",
+      description: "OpenCode version",
+      sourceKind: "opencode",
+      target: "opencode",
+    });
+  });
+
   it("marks Sentinel-managed skills and omits the metadata marker from sampled files", async () => {
     const managedSkillDirectory = await writeSkill({
       baseDirectory: homeDirectory,

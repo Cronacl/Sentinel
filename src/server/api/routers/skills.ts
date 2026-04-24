@@ -36,7 +36,7 @@ function resolveDestRoot(
   user: { skillsBasePath?: string | null },
   scope: "global" | "workspace",
   workspaceRootPath: string | null,
-  target: "sentinel" | "codex" | "claude" | "copilot",
+  target: "sentinel" | "codex" | "claude" | "copilot" | "cursor" | "opencode",
 ) {
   if (target === "codex") {
     if (scope === "workspace") {
@@ -168,6 +168,16 @@ export const skillsRouter = createTRPCRouter({
         .filter((skill) => skill.target === "copilot")
         .map((s) => s.name.trim().toLowerCase()),
     );
+    const installedCursorNames = new Set(
+      snapshot.skills
+        .filter((skill) => skill.target === "cursor")
+        .map((s) => s.name.trim().toLowerCase()),
+    );
+    const installedOpenCodeNames = new Set(
+      snapshot.skills
+        .filter((skill) => skill.target === "opencode")
+        .map((s) => s.name.trim().toLowerCase()),
+    );
     const installedCodexNames = new Set(
       (await buildCodexSkillList().catch(() => [])).map((skill) =>
         skill.name.trim().toLowerCase(),
@@ -183,6 +193,8 @@ export const skillsRouter = createTRPCRouter({
         claude: installedClaudeNames.has(entry.name.trim().toLowerCase()),
         codex: installedCodexNames.has(entry.name.trim().toLowerCase()),
         copilot: installedCopilotNames.has(entry.name.trim().toLowerCase()),
+        cursor: installedCursorNames.has(entry.name.trim().toLowerCase()),
+        opencode: installedOpenCodeNames.has(entry.name.trim().toLowerCase()),
         sentinel: installedSentinelNames.has(entry.name.trim().toLowerCase()),
       },
     }));

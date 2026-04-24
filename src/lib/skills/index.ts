@@ -16,10 +16,18 @@ const SOURCE_PRECEDENCE = [
   { container: ".agents/skills", scope: "workspace", sourceKind: "agents" },
   { container: ".claude/skills", scope: "workspace", sourceKind: "claude" },
   { container: ".github/skills", scope: "workspace", sourceKind: "copilot" },
+  { container: ".cursor/skills", scope: "workspace", sourceKind: "cursor" },
+  { container: ".opencode/skills", scope: "workspace", sourceKind: "opencode" },
   { container: ".sentinel/skills", scope: "global", sourceKind: "sentinel" },
   { container: ".agents/skills", scope: "global", sourceKind: "agents" },
   { container: ".claude/skills", scope: "global", sourceKind: "claude" },
   { container: ".copilot/skills", scope: "global", sourceKind: "copilot" },
+  { container: ".cursor/skills", scope: "global", sourceKind: "cursor" },
+  {
+    container: ".config/opencode/skills",
+    scope: "global",
+    sourceKind: "opencode",
+  },
 ] as const;
 
 export type SkillScope = (typeof SOURCE_PRECEDENCE)[number]["scope"];
@@ -27,7 +35,13 @@ export type SkillSourceKind =
   | (typeof SOURCE_PRECEDENCE)[number]["sourceKind"]
   | typeof CODEX_SOURCE_KIND;
 export type SkillInstallOrigin = "external" | "sentinel";
-export type SkillTarget = "claude" | "codex" | "copilot" | "sentinel";
+export type SkillTarget =
+  | "claude"
+  | "codex"
+  | "copilot"
+  | "cursor"
+  | "opencode"
+  | "sentinel";
 
 export type SkillMetadata = {
   description: string;
@@ -62,7 +76,13 @@ export type SkillSnapshot = {
   updatedAt: number;
 };
 
-type SkillLookupTarget = "sentinel" | "codex" | "claude" | "copilot";
+type SkillLookupTarget =
+  | "sentinel"
+  | "codex"
+  | "claude"
+  | "copilot"
+  | "cursor"
+  | "opencode";
 
 type ConventionalSkillRoot = {
   containerDirectory: string;
@@ -206,6 +226,14 @@ function getTargetForSourceKind(sourceKind: SkillSourceKind): SkillTarget {
     return "copilot";
   }
 
+  if (sourceKind === "cursor") {
+    return "cursor";
+  }
+
+  if (sourceKind === "opencode") {
+    return "opencode";
+  }
+
   return "sentinel";
 }
 
@@ -219,8 +247,12 @@ function getSourceKindSortRank(sourceKind: SkillSourceKind) {
       return 2;
     case "copilot":
       return 3;
-    case "codex":
+    case "cursor":
       return 4;
+    case "opencode":
+      return 5;
+    case "codex":
+      return 6;
     default:
       return 99;
   }
@@ -894,7 +926,11 @@ export async function loadSkillByName({
       ? new Set<SkillSourceKind>(["claude"])
       : target === "copilot"
         ? new Set<SkillSourceKind>(["copilot"])
-        : new Set<SkillSourceKind>(["sentinel", "agents"]);
+        : target === "cursor"
+          ? new Set<SkillSourceKind>(["cursor"])
+          : target === "opencode"
+            ? new Set<SkillSourceKind>(["opencode"])
+            : new Set<SkillSourceKind>(["sentinel", "agents"]);
   const seenRealFiles = new Set<string>();
   let bestMatch: LoadedSkill | null = null;
 

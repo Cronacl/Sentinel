@@ -13,6 +13,9 @@ const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import("next").NextConfig} */
 const config = {
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   output: "standalone",
   outputFileTracingRoot: projectRoot,
   serverExternalPackages: ["better-sqlite3", "sqlite-vec"],

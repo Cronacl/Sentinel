@@ -158,4 +158,98 @@ EOF`,
 
     expect(result.directory).toBe(`${root}/.github/skills/copilot-skill`);
   });
+
+  it("installs Cursor skills into .cursor/skills for global and workspace scopes", async () => {
+    const root = await createTempRoot("sentinel-skill-install-");
+    tempRoots.push(root);
+
+    const globalResult = await executeInstallSteps({
+      destRoot: root,
+      installSteps: [
+        `mkdir -p "${root}/.cursor/skills/cursor-skill"`,
+        `cat <<'EOF' > "${root}/.cursor/skills/cursor-skill/SKILL.md"
+---
+name: cursor-skill
+description: Helpful skill
+---
+
+# Steps
+EOF`,
+      ],
+      name: "cursor-skill",
+      scope: "global",
+      target: "cursor",
+    });
+
+    const workspaceResult = await executeInstallSteps({
+      destRoot: root,
+      installSteps: [
+        `mkdir -p "${root}/.cursor/skills/workspace-cursor-skill"`,
+        `cat <<'EOF' > "${root}/.cursor/skills/workspace-cursor-skill/SKILL.md"
+---
+name: workspace-cursor-skill
+description: Helpful skill
+---
+
+# Steps
+EOF`,
+      ],
+      name: "workspace-cursor-skill",
+      scope: "workspace",
+      target: "cursor",
+    });
+
+    expect(globalResult.directory).toBe(`${root}/.cursor/skills/cursor-skill`);
+    expect(workspaceResult.directory).toBe(
+      `${root}/.cursor/skills/workspace-cursor-skill`,
+    );
+  });
+
+  it("installs OpenCode skills into native global and workspace directories", async () => {
+    const root = await createTempRoot("sentinel-skill-install-");
+    tempRoots.push(root);
+
+    const globalResult = await executeInstallSteps({
+      destRoot: root,
+      installSteps: [
+        `mkdir -p "${root}/.config/opencode/skills/opencode-skill"`,
+        `cat <<'EOF' > "${root}/.config/opencode/skills/opencode-skill/SKILL.md"
+---
+name: opencode-skill
+description: Helpful skill
+---
+
+# Steps
+EOF`,
+      ],
+      name: "opencode-skill",
+      scope: "global",
+      target: "opencode",
+    });
+
+    const workspaceResult = await executeInstallSteps({
+      destRoot: root,
+      installSteps: [
+        `mkdir -p "${root}/.opencode/skills/workspace-opencode-skill"`,
+        `cat <<'EOF' > "${root}/.opencode/skills/workspace-opencode-skill/SKILL.md"
+---
+name: workspace-opencode-skill
+description: Helpful skill
+---
+
+# Steps
+EOF`,
+      ],
+      name: "workspace-opencode-skill",
+      scope: "workspace",
+      target: "opencode",
+    });
+
+    expect(globalResult.directory).toBe(
+      `${root}/.config/opencode/skills/opencode-skill`,
+    );
+    expect(workspaceResult.directory).toBe(
+      `${root}/.opencode/skills/workspace-opencode-skill`,
+    );
+  });
 });

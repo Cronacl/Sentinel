@@ -49,6 +49,22 @@ describe("filterSkillsForEngine", () => {
       target: "copilot",
     },
     {
+      description: "Cursor primary",
+      directory: "/tmp/cursor/shared",
+      name: "shared",
+      scope: "workspace",
+      sourceKind: "cursor",
+      target: "cursor",
+    },
+    {
+      description: "OpenCode primary",
+      directory: "/tmp/opencode/shared",
+      name: "shared",
+      scope: "workspace",
+      sourceKind: "opencode",
+      target: "opencode",
+    },
+    {
       description: "Another sentinel skill",
       directory: "/tmp/sentinel/other",
       name: "other",
@@ -160,6 +176,53 @@ describe("filterSkillsForEngine", () => {
       }),
     ]);
   });
+
+  it("prefers Cursor installs and falls back to agents skills for Cursor", () => {
+    expect(filterSkillsForEngine(skills, "cursor")).toEqual([
+      expect.objectContaining({
+        name: "shared",
+        sourceKind: "cursor",
+        target: "cursor",
+      }),
+    ]);
+
+    expect(
+      filterSkillsForEngine(
+        skills.filter((skill) => skill.target !== "cursor"),
+        "cursor",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        name: "shared",
+        sourceKind: "agents",
+      }),
+    ]);
+  });
+
+  it("prefers OpenCode installs and falls back to agents or Claude skills for OpenCode", () => {
+    expect(filterSkillsForEngine(skills, "opencode")).toEqual([
+      expect.objectContaining({
+        name: "shared",
+        sourceKind: "opencode",
+        target: "opencode",
+      }),
+    ]);
+
+    expect(
+      filterSkillsForEngine(
+        skills.filter(
+          (skill) =>
+            skill.target !== "opencode" && skill.sourceKind !== "agents",
+        ),
+        "opencode",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        name: "shared",
+        sourceKind: "claude",
+      }),
+    ]);
+  });
 });
 
 describe("getSkillSuggestionTitle", () => {
@@ -168,6 +231,8 @@ describe("getSkillSuggestionTitle", () => {
     expect(getSkillSuggestionTitle("claude")).toBe("Showing Claude skills");
     expect(getSkillSuggestionTitle("copilot")).toBe("Showing Copilot skills");
     expect(getSkillSuggestionTitle("codex")).toBe("Showing Codex skills");
+    expect(getSkillSuggestionTitle("cursor")).toBe("Showing Cursor skills");
+    expect(getSkillSuggestionTitle("opencode")).toBe("Showing OpenCode skills");
   });
 });
 

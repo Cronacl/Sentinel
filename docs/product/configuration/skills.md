@@ -6,17 +6,20 @@ They let the app pull in extra capability packs without stuffing every specializ
 
 ## What skills can target
 
-The skills UI supports three install targets:
+The skills UI supports these install targets:
 
 - `sentinel`
 - `claude`
 - `codex`
+- `copilot`
+- `cursor`
+- `opencode`
 
 That matters because a skill can live in different directories depending on the target runtime.
 
 ## Scope
 
-For local Sentinel and Claude skills, installs can be:
+For local Sentinel, Claude, Copilot, Cursor, and OpenCode skills, installs can be:
 
 - global
 - workspace-scoped

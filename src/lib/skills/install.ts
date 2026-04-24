@@ -7,7 +7,13 @@ const DEST_PLACEHOLDER = "{{DEST}}";
 const SKILL_FILENAME = "SKILL.md";
 const SENTINEL_INSTALL_METADATA_FILENAME = ".sentinel-install.json";
 const SKILL_DIRECTORY_NAME_PATTERN = /^[a-z0-9][a-z0-9-_]*$/i;
-export type SkillInstallTarget = "sentinel" | "codex" | "claude" | "copilot";
+export type SkillInstallTarget =
+  | "sentinel"
+  | "codex"
+  | "claude"
+  | "copilot"
+  | "cursor"
+  | "opencode";
 export type SkillInstallResult = {
   alreadyInstalled?: boolean;
   directory: string;
@@ -82,7 +88,13 @@ function resolveSkillDestination(
           ? scope === "workspace"
             ? path.resolve(destRoot, ".github", "skills")
             : path.resolve(destRoot, ".copilot", "skills")
-          : path.resolve(destRoot, ".sentinel", "skills");
+          : target === "cursor"
+            ? path.resolve(destRoot, ".cursor", "skills")
+            : target === "opencode"
+              ? scope === "workspace"
+                ? path.resolve(destRoot, ".opencode", "skills")
+                : path.resolve(destRoot, ".config", "opencode", "skills")
+              : path.resolve(destRoot, ".sentinel", "skills");
   const dest = path.resolve(skillsDir, normalizedName);
 
   if (path.dirname(dest) !== skillsDir) {

@@ -30,7 +30,13 @@ const loadSkillByName = mock(async () => null);
 function resolveTargetDirectory(
   destRoot: string,
   name: string,
-  target: "claude" | "codex" | "copilot" | "sentinel" = "sentinel",
+  target:
+    | "claude"
+    | "codex"
+    | "copilot"
+    | "cursor"
+    | "opencode"
+    | "sentinel" = "sentinel",
   scope: "global" | "workspace" = "global",
 ) {
   if (target === "codex") {
@@ -45,6 +51,16 @@ function resolveTargetDirectory(
     return scope === "workspace"
       ? `${destRoot}/.github/skills/${name}`
       : `${destRoot}/.copilot/skills/${name}`;
+  }
+
+  if (target === "cursor") {
+    return `${destRoot}/.cursor/skills/${name}`;
+  }
+
+  if (target === "opencode") {
+    return scope === "workspace"
+      ? `${destRoot}/.opencode/skills/${name}`
+      : `${destRoot}/.config/opencode/skills/${name}`;
   }
 
   return `${destRoot}/.sentinel/skills/${name}`;
@@ -228,6 +244,8 @@ describe("skillsRouter", () => {
           claude: false,
           codex: true,
           copilot: false,
+          cursor: false,
+          opencode: false,
           sentinel: true,
         },
         name: "example",
@@ -275,6 +293,8 @@ describe("skillsRouter", () => {
           claude: true,
           codex: false,
           copilot: false,
+          cursor: false,
+          opencode: false,
           sentinel: false,
         },
         name: "example",
@@ -335,6 +355,8 @@ describe("skillsRouter", () => {
           claude: true,
           codex: false,
           copilot: false,
+          cursor: false,
+          opencode: false,
           sentinel: true,
         },
         name: "example",
@@ -535,6 +557,60 @@ describe("skillsRouter", () => {
     expect(result.directory).toBe("/tmp/workspace/.github/skills/example");
   });
 
+  it("installs curated skills into Cursor workspace skill directories", async () => {
+    const result = await skillsRouter.install({
+      ctx: {
+        user: {
+          skillsBasePath: "/tmp/custom-home",
+        },
+        workspace: {
+          rootPath: "/tmp/workspace",
+        },
+      },
+      input: {
+        name: "example",
+        scope: "workspace",
+        target: "cursor",
+      },
+    });
+
+    expect(executeInstallSteps).toHaveBeenCalledWith({
+      destRoot: "/tmp/workspace",
+      installSteps: registryEntry.installSteps,
+      name: "example",
+      scope: "workspace",
+      target: "cursor",
+    });
+    expect(result.directory).toBe("/tmp/workspace/.cursor/skills/example");
+  });
+
+  it("installs curated skills into OpenCode global skill directories", async () => {
+    const result = await skillsRouter.install({
+      ctx: {
+        user: {
+          skillsBasePath: "/tmp/custom-home",
+        },
+        workspace: null,
+      },
+      input: {
+        name: "example",
+        scope: "global",
+        target: "opencode",
+      },
+    });
+
+    expect(executeInstallSteps).toHaveBeenCalledWith({
+      destRoot: "/tmp/custom-home",
+      installSteps: registryEntry.installSteps,
+      name: "example",
+      scope: "global",
+      target: "opencode",
+    });
+    expect(result.directory).toBe(
+      "/tmp/custom-home/.config/opencode/skills/example",
+    );
+  });
+
   it("loads claude-targeted skills using the claude lookup target", async () => {
     await skillsRouter.get({
       ctx: {
@@ -555,6 +631,30 @@ describe("skillsRouter", () => {
       globalBase: "/tmp/custom-home",
       name: "example",
       target: "claude",
+      workspaceRoot: "/tmp/workspace",
+    });
+  });
+
+  it("loads Cursor-targeted skills using the Cursor lookup target", async () => {
+    await skillsRouter.get({
+      ctx: {
+        user: {
+          skillsBasePath: "/tmp/custom-home",
+        },
+        workspace: {
+          rootPath: "/tmp/workspace",
+        },
+      },
+      input: {
+        name: "example",
+        target: "cursor",
+      },
+    });
+
+    expect(loadSkillByName).toHaveBeenCalledWith({
+      globalBase: "/tmp/custom-home",
+      name: "example",
+      target: "cursor",
       workspaceRoot: "/tmp/workspace",
     });
   });
@@ -650,6 +750,70 @@ describe("skillsRouter", () => {
           claude: false,
           codex: false,
           copilot: true,
+          cursor: false,
+          opencode: false,
+          sentinel: false,
+        },
+        name: "example",
+      }),
+    ]);
+  });
+
+  it("marks curated skills as installed in Cursor and OpenCode independently", async () => {
+    getSkillSnapshot.mockImplementationOnce(
+      async ({ workspaceRoot, globalBase }) => ({
+        revision: 2,
+        skillRoots: [
+          `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.cursor/skills/example`,
+          `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.opencode/skills/example`,
+        ],
+        skills: [
+          {
+            description: "Helpful skill",
+            directory: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.cursor/skills/example`,
+            installOrigin: "sentinel",
+            isExternal: false,
+            name: "example",
+            preview: "# Example",
+            scope: workspaceRoot ? "workspace" : "global",
+            skillFile: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.cursor/skills/example/SKILL.md`,
+            sourceKind: "cursor",
+            target: "cursor",
+          },
+          {
+            description: "Helpful skill",
+            directory: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.opencode/skills/example`,
+            installOrigin: "sentinel",
+            isExternal: false,
+            name: "example",
+            preview: "# Example",
+            scope: workspaceRoot ? "workspace" : "global",
+            skillFile: `${workspaceRoot ?? globalBase ?? "/tmp/home"}/.opencode/skills/example/SKILL.md`,
+            sourceKind: "opencode",
+            target: "opencode",
+          },
+        ],
+        updatedAt: 123,
+      }),
+    );
+
+    const result = await skillsRouter.registry({
+      ctx: {
+        user: {
+          skillsBasePath: "/tmp/custom-home",
+        },
+        workspace: null,
+      },
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        installedTargets: {
+          claude: false,
+          codex: false,
+          copilot: false,
+          cursor: true,
+          opencode: true,
           sentinel: false,
         },
         name: "example",

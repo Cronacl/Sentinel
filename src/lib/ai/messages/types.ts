@@ -38,9 +38,19 @@ const composerSkillEntrySchema = z.object({
   name: z.string(),
   scope: z.enum(["global", "workspace"]).optional(),
   sourceKind: z
-    .enum(["sentinel", "agents", "claude", "copilot", "codex"])
+    .enum([
+      "sentinel",
+      "agents",
+      "claude",
+      "copilot",
+      "cursor",
+      "opencode",
+      "codex",
+    ])
     .optional(),
-  target: z.enum(["sentinel", "codex", "claude", "copilot"]).optional(),
+  target: z
+    .enum(["sentinel", "codex", "claude", "copilot", "cursor", "opencode"])
+    .optional(),
 });
 
 const composerContextSchema = z

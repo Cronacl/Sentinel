@@ -139,9 +139,12 @@ function getSkillEngineSourceRank(skill: SkillListItem, engine: ChatEngine) {
     case "copilot":
       return skill.target === "copilot" ? 0 : 1;
     case "cursor":
-      return skill.target === "codex" ? 0 : 1;
+      if (skill.target === "cursor") return 0;
+      return skill.sourceKind === "agents" ? 1 : 2;
     case "opencode":
-      return skill.target === "codex" ? 0 : 1;
+      if (skill.target === "opencode") return 0;
+      if (skill.sourceKind === "agents") return 1;
+      return skill.sourceKind === "claude" ? 2 : 3;
     case "sentinel":
       return skill.sourceKind === "sentinel" ? 0 : 1;
     case "codex":
@@ -185,9 +188,16 @@ export function filterSkillsForEngine(
       case "copilot":
         return skills.filter((s) => s.target === "copilot");
       case "cursor":
-        return skills.filter((s) => s.target === "codex");
+        return skills.filter(
+          (s) => s.target === "cursor" || s.sourceKind === "agents",
+        );
       case "opencode":
-        return skills.filter((s) => s.target === "codex");
+        return skills.filter(
+          (s) =>
+            s.target === "opencode" ||
+            s.sourceKind === "agents" ||
+            s.sourceKind === "claude",
+        );
       case "codex":
         return skills.filter((s) => s.target === "codex");
       case "claude":

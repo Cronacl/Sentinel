@@ -20,7 +20,11 @@ export default async function SkillDetailPage({
             ? "claude"
             : target === "copilot"
               ? "copilot"
-              : "sentinel"
+              : target === "cursor"
+                ? "cursor"
+                : target === "opencode"
+                  ? "opencode"
+                  : "sentinel"
       }
     />
   );

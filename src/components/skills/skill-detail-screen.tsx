@@ -23,6 +23,8 @@ const SOURCE_LABEL = {
   claude: "Claude",
   copilot: "Copilot",
   codex: "Codex",
+  cursor: "Cursor",
+  opencode: "OpenCode",
   sentinel: "Sentinel",
 } as const;
 
@@ -87,7 +89,7 @@ export function SkillDetailScreen({
   target = "sentinel",
 }: {
   skillName: string;
-  target?: "claude" | "codex" | "copilot" | "sentinel";
+  target?: "claude" | "codex" | "copilot" | "cursor" | "opencode" | "sentinel";
 }) {
   const { leftSidebarOpen } = useShell();
   const [copiedLabel, setCopiedLabel] = useState<"name" | "path" | null>(null);

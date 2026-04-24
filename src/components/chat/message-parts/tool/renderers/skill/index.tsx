@@ -21,8 +21,15 @@ type LoadSkillStructuredOutput = {
   preview?: string;
   scope: "global" | "workspace";
   skillFile: string;
-  sourceKind: "agents" | "claude" | "copilot" | "codex" | "sentinel";
-  target: "claude" | "codex" | "copilot" | "sentinel";
+  sourceKind:
+    | "agents"
+    | "claude"
+    | "copilot"
+    | "codex"
+    | "cursor"
+    | "opencode"
+    | "sentinel";
+  target: "claude" | "codex" | "copilot" | "cursor" | "opencode" | "sentinel";
 };
 
 type LoadSkillOutput = LoadSkillStructuredOutput | string;

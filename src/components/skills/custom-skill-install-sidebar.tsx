@@ -26,9 +26,11 @@ import { api } from "@/trpc/react";
 type CustomSkillInstallDrawerProps = {
   codexAvailable: boolean;
   copilotAvailable: boolean;
+  cursorAvailable: boolean;
   createSkillHref: string;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
+  openCodeAvailable: boolean;
 };
 
 const SCOPE_OPTIONS = [
@@ -66,6 +68,17 @@ const TARGET_OPTIONS = [
     label: "Copilot",
     value: "copilot",
   },
+  {
+    description: "Install under Cursor's .cursor/skills directory.",
+    label: "Cursor",
+    value: "cursor",
+  },
+  {
+    description:
+      "Install under OpenCode's .opencode/skills workspace folder or ~/.config/opencode/skills home folder.",
+    label: "OpenCode",
+    value: "opencode",
+  },
 ] as const;
 
 function createDefaultValues(): CustomSkillInstallFormInputValues {
@@ -83,13 +96,17 @@ function createDefaultValues(): CustomSkillInstallFormInputValues {
 function CustomSkillInstallDrawerContent({
   codexAvailable,
   copilotAvailable,
+  cursorAvailable,
   createSkillHref,
   onClose,
+  openCodeAvailable,
 }: {
   codexAvailable: boolean;
   copilotAvailable: boolean;
+  cursorAvailable: boolean;
   createSkillHref: string;
   onClose: () => void;
+  openCodeAvailable: boolean;
 }) {
   const utils = api.useUtils();
   const [submitError, setSubmitError] = useState("");
@@ -219,7 +236,9 @@ function CustomSkillInstallDrawerContent({
             ...option,
             isDisabled:
               (option.value === "codex" && !codexAvailable) ||
-              (option.value === "copilot" && !copilotAvailable),
+              (option.value === "copilot" && !copilotAvailable) ||
+              (option.value === "cursor" && !cursorAvailable) ||
+              (option.value === "opencode" && !openCodeAvailable),
           }))}
           showDescriptions={false}
         />
@@ -231,7 +250,11 @@ function CustomSkillInstallDrawerContent({
               ? "Codex installs are global-only."
               : target === "copilot"
                 ? "Copilot installs use ~/.copilot/skills globally and .github/skills in a workspace."
-                : "Where this skill should be installed."
+                : target === "cursor"
+                  ? "Cursor installs use ~/.cursor/skills globally and .cursor/skills in a workspace."
+                  : target === "opencode"
+                    ? "OpenCode installs use ~/.config/opencode/skills globally and .opencode/skills in a workspace."
+                    : "Where this skill should be installed."
           }
           label="Install scope"
           name="scope"
@@ -327,9 +350,11 @@ function CustomSkillInstallDrawerContent({
 export function CustomSkillInstallDrawer({
   codexAvailable,
   copilotAvailable,
+  cursorAvailable,
   createSkillHref,
   isOpen,
   onOpenChange,
+  openCodeAvailable,
 }: CustomSkillInstallDrawerProps) {
   return (
     <Drawer.Backdrop isOpen={isOpen} onOpenChange={onOpenChange}>
@@ -339,8 +364,10 @@ export function CustomSkillInstallDrawer({
           <CustomSkillInstallDrawerContent
             codexAvailable={codexAvailable}
             copilotAvailable={copilotAvailable}
+            cursorAvailable={cursorAvailable}
             createSkillHref={createSkillHref}
             onClose={() => onOpenChange(false)}
+            openCodeAvailable={openCodeAvailable}
           />
         </Drawer.Dialog>
       </Drawer.Content>

@@ -59,7 +59,13 @@ import { api, type RouterOutputs } from "@/trpc/react";
 
 type SkillListItem = RouterOutputs["skills"]["list"]["skills"][number];
 type RegistryItem = RouterOutputs["skills"]["registry"][number];
-type SkillInstallTarget = "claude" | "codex" | "copilot" | "sentinel";
+type SkillInstallTarget =
+  | "claude"
+  | "codex"
+  | "copilot"
+  | "cursor"
+  | "opencode"
+  | "sentinel";
 type InstalledSkillAction = Pick<SkillListItem, "name" | "scope" | "target">;
 
 type UnifiedSkill = {
@@ -73,6 +79,8 @@ type UnifiedSkill = {
     claude: boolean;
     codex: boolean;
     copilot: boolean;
+    cursor: boolean;
+    opencode: boolean;
   };
   installedSkills: SkillListItem[];
   detailHref: string | null;
@@ -120,6 +128,17 @@ const TARGET_OPTIONS: SelectOption[] = [
       "Install into Copilot's .github/skills workspace folder or ~/.copilot/skills home folder.",
     label: "Copilot",
     value: "copilot",
+  },
+  {
+    description: "Install into Cursor's .cursor/skills directory.",
+    label: "Cursor",
+    value: "cursor",
+  },
+  {
+    description:
+      "Install into OpenCode's .opencode/skills workspace folder or ~/.config/opencode/skills home folder.",
+    label: "OpenCode",
+    value: "opencode",
   },
 ] as const;
 
@@ -191,6 +210,12 @@ function getInstalledDetailHref(skill: SkillListItem) {
   if (skill.target === "copilot") {
     return `/skills/${encodeURIComponent(skill.name)}?target=copilot`;
   }
+  if (skill.target === "cursor") {
+    return `/skills/${encodeURIComponent(skill.name)}?target=cursor`;
+  }
+  if (skill.target === "opencode") {
+    return `/skills/${encodeURIComponent(skill.name)}?target=opencode`;
+  }
   return `/skills/${encodeURIComponent(skill.name)}`;
 }
 
@@ -220,8 +245,17 @@ function hasAnyInstall(targets: {
   claude: boolean;
   codex: boolean;
   copilot: boolean;
+  cursor: boolean;
+  opencode: boolean;
 }) {
-  return targets.sentinel || targets.claude || targets.codex || targets.copilot;
+  return (
+    targets.sentinel ||
+    targets.claude ||
+    targets.codex ||
+    targets.copilot ||
+    targets.cursor ||
+    targets.opencode
+  );
 }
 
 function isFullyInstalled(
@@ -230,20 +264,28 @@ function isFullyInstalled(
     claude: boolean;
     codex: boolean;
     copilot: boolean;
+    cursor: boolean;
+    opencode: boolean;
   },
   options?: {
     codexAvailable?: boolean;
     copilotAvailable?: boolean;
+    cursorAvailable?: boolean;
+    openCodeAvailable?: boolean;
   },
 ) {
   const codexRequired = options?.codexAvailable ?? true;
   const copilotRequired = options?.copilotAvailable ?? true;
+  const cursorRequired = options?.cursorAvailable ?? true;
+  const openCodeRequired = options?.openCodeAvailable ?? true;
 
   return (
     targets.sentinel &&
     targets.claude &&
     (codexRequired ? targets.codex : true) &&
-    (copilotRequired ? targets.copilot : true)
+    (copilotRequired ? targets.copilot : true) &&
+    (cursorRequired ? targets.cursor : true) &&
+    (openCodeRequired ? targets.opencode : true)
   );
 }
 
@@ -306,6 +348,8 @@ function buildUnifiedList(
           claude: skill.target === "claude",
           codex: skill.target === "codex",
           copilot: skill.target === "copilot",
+          cursor: skill.target === "cursor",
+          opencode: skill.target === "opencode",
         },
         installedSkills: [skill],
         detailHref: getInstalledDetailHref(skill),
@@ -536,6 +580,8 @@ function SkillCell({
   item,
   codexAvailable,
   copilotAvailable,
+  cursorAvailable,
+  openCodeAvailable,
   isInstalling,
   installError,
   onInstall,
@@ -543,6 +589,8 @@ function SkillCell({
   item: UnifiedSkill;
   codexAvailable: boolean;
   copilotAvailable: boolean;
+  cursorAvailable: boolean;
+  openCodeAvailable: boolean;
   isInstalling: boolean;
   installError: string | null;
   onInstall: (entry: RegistryItem, target: SkillInstallTarget) => void;
@@ -551,6 +599,8 @@ function SkillCell({
     isFullyInstalled(item.installedTargets, {
       codexAvailable,
       copilotAvailable,
+      cursorAvailable,
+      openCodeAvailable,
     }) ||
     // Custom installed skills (not from registry) are inherently "complete"
     (!item.registryEntry && hasAnyInstall(item.installedTargets));
@@ -650,6 +700,8 @@ function SkillCell({
                       optionInstalled ||
                       (target === "codex" && !codexAvailable) ||
                       (target === "copilot" && !copilotAvailable) ||
+                      (target === "cursor" && !cursorAvailable) ||
+                      (target === "opencode" && !openCodeAvailable) ||
                       isInstalling;
 
                     return (
@@ -670,7 +722,11 @@ function SkillCell({
                               ? "Codex is currently unavailable."
                               : target === "copilot" && !copilotAvailable
                                 ? "Copilot is currently unavailable."
-                                : option.description}
+                                : target === "cursor" && !cursorAvailable
+                                  ? "Cursor is currently unavailable."
+                                  : target === "opencode" && !openCodeAvailable
+                                    ? "OpenCode is currently unavailable."
+                                    : option.description}
                           </span>
                         </div>
                       </Dropdown.Item>
@@ -729,6 +785,12 @@ export default function SkillsPage() {
   );
   const copilotAvailable = Boolean(
     engines.data?.find((engine) => engine.engine === "copilot")?.isAvailable,
+  );
+  const cursorAvailable = Boolean(
+    engines.data?.find((engine) => engine.engine === "cursor")?.isAvailable,
+  );
+  const openCodeAvailable = Boolean(
+    engines.data?.find((engine) => engine.engine === "opencode")?.isAvailable,
   );
 
   const isLoading =
@@ -885,6 +947,10 @@ export default function SkillsPage() {
                       installErrors[getInstallStateKey(item.name, "claude")] ??
                       installErrors[getInstallStateKey(item.name, "codex")] ??
                       installErrors[getInstallStateKey(item.name, "copilot")] ??
+                      installErrors[getInstallStateKey(item.name, "cursor")] ??
+                      installErrors[
+                        getInstallStateKey(item.name, "opencode")
+                      ] ??
                       null;
 
                     const isItemInstalling =
@@ -899,6 +965,12 @@ export default function SkillsPage() {
                       ) ||
                       installingSkills.has(
                         getInstallStateKey(item.name, "copilot"),
+                      ) ||
+                      installingSkills.has(
+                        getInstallStateKey(item.name, "cursor"),
+                      ) ||
+                      installingSkills.has(
+                        getInstallStateKey(item.name, "opencode"),
                       );
 
                     return (
@@ -906,6 +978,8 @@ export default function SkillsPage() {
                         item={item}
                         codexAvailable={codexAvailable}
                         copilotAvailable={copilotAvailable}
+                        cursorAvailable={cursorAvailable}
+                        openCodeAvailable={openCodeAvailable}
                         isInstalling={isItemInstalling}
                         installError={installErrorForItem}
                         key={item.key}
@@ -933,9 +1007,11 @@ export default function SkillsPage() {
       <CustomSkillInstallDrawer
         codexAvailable={codexAvailable}
         copilotAvailable={copilotAvailable}
+        cursorAvailable={cursorAvailable}
         createSkillHref={newSkillHref}
         isOpen={installDrawerOpen}
         onOpenChange={setInstallDrawerOpen}
+        openCodeAvailable={openCodeAvailable}
       />
     </SettingsPageWrapper>
   );

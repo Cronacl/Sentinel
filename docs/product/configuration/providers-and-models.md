@@ -60,15 +60,18 @@ You can:
 
 ## Engines
 
-Sentinel has three engines:
+Sentinel has six engines:
 
 - `sentinel`
 - `codex`
 - `claude`
+- `copilot`
+- `cursor`
+- `opencode`
 
 The `sentinel` engine is the app-managed runtime.
 
-`codex` and `claude` are local runtime integrations. The models screen shows runtime status for those engines and includes refresh actions for their availability.
+`codex`, `claude`, `copilot`, `cursor`, and `opencode` are local runtime integrations. The models screen shows runtime status for those engines and includes refresh actions for their availability.
 
 For Codex, Sentinel can also hold onto thread-specific runtime state like sandbox mode, approval policy, and the linked Codex thread ID.
 

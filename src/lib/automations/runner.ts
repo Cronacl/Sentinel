@@ -101,59 +101,19 @@ async function executeAutomationChat(params: {
   engine: ChatEngine;
   userId: string;
 }) {
-  switch (params.engine) {
-    case "claude":
-      return runThreadChat(
-        {
-          ...params.chatInput,
-          engine: "claude",
-        },
-        params.userId,
-      );
-    case "copilot":
-      return runThreadChat(
-        {
-          ...params.chatInput,
-          engine: "copilot",
-        },
-        params.userId,
-      );
-    case "codex":
-      return runThreadChat(
-        {
-          ...params.chatInput,
-          engine: "codex",
-        },
-        params.userId,
-      );
-    case "cursor":
-      return runThreadChat(
-        {
-          ...params.chatInput,
-          engine: "cursor",
-          toolsEnabled: false,
-        },
-        params.userId,
-      );
-    case "opencode":
-      return runThreadChat(
-        {
-          ...params.chatInput,
-          engine: "opencode",
-          toolsEnabled: false,
-        },
-        params.userId,
-      );
-    case "sentinel":
-    default:
-      return runThreadChat(
-        {
-          ...params.chatInput,
-          engine: "sentinel",
-        },
-        params.userId,
-      );
-  }
+  const toolsEnabled =
+    params.engine === "cursor" || params.engine === "opencode"
+      ? false
+      : params.chatInput.toolsEnabled;
+
+  return runThreadChat(
+    {
+      ...params.chatInput,
+      engine: params.engine,
+      ...(toolsEnabled === undefined ? {} : { toolsEnabled }),
+    },
+    params.userId,
+  );
 }
 
 export async function executeAutomationRun(
