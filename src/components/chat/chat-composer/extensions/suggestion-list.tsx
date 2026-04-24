@@ -6,9 +6,11 @@ import {
   Folder01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Icon } from "@iconify/react";
 import { ScrollShadow } from "@heroui/react";
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
@@ -18,11 +20,24 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { SkillIcon } from "@/components/skills/skill-icon";
+
 export type SuggestionItem = {
   description?: string;
-  icon?: "file" | "directory" | "skill";
+  execute?: () => void;
+  group?: "app" | "provider" | "skill";
+  icon?: "file" | "directory" | "skill" | "command";
   id: string;
+  kind?:
+    | "app-command"
+    | "directory"
+    | "file"
+    | "path"
+    | "provider-command"
+    | "skill";
   label: string;
+  meta?: string;
+  skillIcon?: string | null;
   sublabel?: string;
 };
 
@@ -41,8 +56,11 @@ type SuggestionListProps = {
   clientRect?: (() => DOMRect | null) | null;
   command: (item: SuggestionItem) => void;
   items: SuggestionItem[];
+  onKeyDownHandlerChange?: (
+    handler: ((event: KeyboardEvent) => boolean) | null,
+  ) => void;
   title?: string;
-  variant: "path" | "skill";
+  variant: "command" | "path" | "skill";
 };
 
 function getIcon(icon: SuggestionItem["icon"]) {
@@ -56,15 +74,77 @@ function getIcon(icon: SuggestionItem["icon"]) {
   }
 }
 
+function getGroupLabel(group: SuggestionItem["group"]) {
+  switch (group) {
+    case "app":
+      return "App";
+    case "provider":
+      return "Harness";
+    case "skill":
+      return "Skills";
+    default:
+      return null;
+  }
+}
+
+function renderItemIcon(item: SuggestionItem) {
+  const className = `sentinel-suggestion-item-icon shrink-0 ${
+    item.kind === "skill" ? "sentinel-suggestion-item-icon--skill" : ""
+  } ${
+    item.kind === "app-command" || item.kind === "provider-command"
+      ? "sentinel-suggestion-item-icon--command"
+      : ""
+  }`;
+
+  if (item.kind === "skill") {
+    return (
+      <span className={className}>
+        <SkillIcon
+          className="h-3.5 w-3.5"
+          metadataIcon={item.skillIcon}
+          name={item.label}
+          size={14}
+        />
+      </span>
+    );
+  }
+
+  if (item.kind === "app-command" || item.kind === "provider-command") {
+    return (
+      <Icon
+        className={className}
+        icon={
+          item.kind === "app-command"
+            ? "solar:command-linear"
+            : "solar:terminal-linear"
+        }
+      />
+    );
+  }
+
+  return (
+    <HugeiconsIcon
+      className={className}
+      color="currentColor"
+      icon={getIcon(item.icon)}
+      size={14}
+      strokeWidth={1.5}
+    />
+  );
+}
+
 export const SuggestionList = forwardRef<
   SuggestionListRef,
   SuggestionListProps
->(function SuggestionList({ clientRect, command, items, title, variant }, ref) {
+>(function SuggestionList(
+  { clientRect, command, items, onKeyDownHandlerChange, title, variant },
+  ref,
+) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [layout, setLayout] = useState<SuggestionPopupLayout | null>(null);
   const popupRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const maxPopupHeight = 280;
+  const maxPopupHeight = 260;
 
   useEffect(() => {
     setSelectedIndex(0);
@@ -97,8 +177,7 @@ export const SuggestionList = forwardRef<
       const minHeight = 88;
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
-      const measuredWidth =
-        popupEl.offsetWidth || (variant === "skill" ? 440 : 360);
+      const measuredWidth = popupEl.offsetWidth || 320;
       const measuredHeight = popupEl.offsetHeight || maxPopupHeight;
       const maxLeft = Math.max(
         viewportPadding,
@@ -204,24 +283,32 @@ export const SuggestionList = forwardRef<
     };
   }, [clientRect, updateLayout]);
 
-  useImperativeHandle(ref, () => ({
-    onKeyDown(event: KeyboardEvent) {
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      const consumeEvent = () => {
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
+      };
+
       if (items.length === 0) {
-        return ["ArrowUp", "ArrowDown", "Enter", "Escape"].includes(event.key);
+        return ["ArrowUp", "ArrowDown", "Enter", "Escape"].includes(event.key)
+          ? consumeEvent()
+          : false;
       }
 
       if (event.key === "ArrowUp") {
         setSelectedIndex((current) =>
           current <= 0 ? items.length - 1 : current - 1,
         );
-        return true;
+        return consumeEvent();
       }
 
       if (event.key === "ArrowDown") {
         setSelectedIndex((current) =>
           current >= items.length - 1 ? 0 : current + 1,
         );
-        return true;
+        return consumeEvent();
       }
 
       if (event.key === "Enter") {
@@ -229,16 +316,26 @@ export const SuggestionList = forwardRef<
         if (item) {
           command(item);
         }
-        return true;
+        return consumeEvent();
       }
 
       if (event.key === "Escape") {
-        return true;
+        return consumeEvent();
       }
 
       return false;
     },
+    [command, items, selectedIndex],
+  );
+
+  useImperativeHandle(ref, () => ({
+    onKeyDown: handleKeyDown,
   }));
+
+  useLayoutEffect(() => {
+    onKeyDownHandlerChange?.(handleKeyDown);
+    return () => onKeyDownHandlerChange?.(null);
+  }, [handleKeyDown, onKeyDownHandlerChange]);
 
   if (!clientRect) {
     return null;
@@ -258,7 +355,7 @@ export const SuggestionList = forwardRef<
 
   return createPortal(
     <div
-      className={`sentinel-suggestion-popup ${variant === "skill" ? "sentinel-suggestion-popup--wide" : ""} ${layout?.placement === "below" ? "sentinel-suggestion-popup--below" : "sentinel-suggestion-popup--above"}`}
+      className={`sentinel-suggestion-popup ${variant === "command" || variant === "skill" ? "sentinel-suggestion-popup--wide" : ""} ${layout?.placement === "below" ? "sentinel-suggestion-popup--below" : "sentinel-suggestion-popup--above"}`}
       ref={popupRef}
       style={style}
     >
@@ -276,45 +373,50 @@ export const SuggestionList = forwardRef<
           <div className="sentinel-suggestion-empty">No results found</div>
         ) : (
           items.map((item, index) => {
-            const isStacked =
-              item.icon === "skill" ||
-              item.icon === "file" ||
-              item.icon === "directory";
+            const previous = items[index - 1];
+            const groupLabel =
+              item.group !== previous?.group ? getGroupLabel(item.group) : null;
+            const isStacked = Boolean(item.sublabel);
 
             return (
-              <button
-                aria-selected={index === selectedIndex}
-                className={`sentinel-suggestion-item ${isStacked ? "sentinel-suggestion-item--stacked" : ""} ${index === selectedIndex ? "is-selected" : ""}`}
-                data-suggestion-index={index}
-                key={item.id}
-                onClick={() => command(item)}
-                onMouseDown={(event) => event.preventDefault()}
-                onMouseEnter={() => setSelectedIndex(index)}
-                role="option"
-                type="button"
-              >
-                <div className="sentinel-suggestion-item-content">
-                  <HugeiconsIcon
-                    className={`sentinel-suggestion-item-icon shrink-0 ${item.icon === "skill" ? "sentinel-suggestion-item-icon--skill" : ""}`}
-                    color="currentColor"
-                    icon={getIcon(item.icon)}
-                    size={14}
-                    strokeWidth={1.5}
-                  />
-                  <span className="sentinel-suggestion-item-copy">
-                    <span className="sentinel-suggestion-item-title">
-                      {item.label}
+              <div key={item.id}>
+                {groupLabel ? (
+                  <div className="sentinel-suggestion-group-label">
+                    {groupLabel}
+                  </div>
+                ) : null}
+                <button
+                  aria-selected={index === selectedIndex}
+                  className={`sentinel-suggestion-item ${isStacked ? "sentinel-suggestion-item--stacked" : ""} ${index === selectedIndex ? "is-selected" : ""}`}
+                  data-suggestion-index={index}
+                  onClick={() => command(item)}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => setSelectedIndex(index)}
+                  role="option"
+                  type="button"
+                >
+                  <div className="sentinel-suggestion-item-content">
+                    {renderItemIcon(item)}
+                    <span className="sentinel-suggestion-item-copy">
+                      <span className="sentinel-suggestion-item-title">
+                        {item.label}
+                      </span>
+                      {item.sublabel ? (
+                        <span
+                          className={`sentinel-suggestion-item-sub ${isStacked ? "sentinel-suggestion-item-sub--multiline" : ""}`}
+                        >
+                          {item.sublabel}
+                        </span>
+                      ) : null}
                     </span>
-                    {item.sublabel ? (
-                      <span
-                        className={`sentinel-suggestion-item-sub ${isStacked ? "sentinel-suggestion-item-sub--multiline" : ""}`}
-                      >
-                        {item.sublabel}
+                    {item.meta ? (
+                      <span className="sentinel-suggestion-item-meta">
+                        {item.meta}
                       </span>
                     ) : null}
-                  </span>
-                </div>
-              </button>
+                  </div>
+                </button>
+              </div>
             );
           })
         )}

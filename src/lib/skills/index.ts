@@ -32,6 +32,7 @@ export type SkillTarget = "claude" | "codex" | "copilot" | "sentinel";
 export type SkillMetadata = {
   description: string;
   directory: string;
+  icon?: string;
   installOrigin: SkillInstallOrigin;
   isExternal: boolean;
   name: string;
@@ -108,6 +109,7 @@ function parseSkillFrontmatter(content: string) {
 
   let name: string | null = null;
   let description: string | null = null;
+  let icon: string | null = null;
 
   for (const rawLine of match[1].split(/\r?\n/)) {
     if (!rawLine || /^\s/.test(rawLine)) {
@@ -130,6 +132,11 @@ function parseSkillFrontmatter(content: string) {
 
     if (key === "description" && value) {
       description = value;
+      continue;
+    }
+
+    if (key === "icon" && value) {
+      icon = value;
     }
   }
 
@@ -140,6 +147,7 @@ function parseSkillFrontmatter(content: string) {
   return {
     description,
     frontmatter: match[0],
+    ...(icon ? { icon } : {}),
     name,
   };
 }
@@ -300,6 +308,7 @@ async function loadSkillFromDirectory({
     description: parsed.description,
     directory,
     files: await listSampleFiles(directory),
+    ...(parsed.icon ? { icon: parsed.icon } : {}),
     installOrigin,
     isExternal: installOrigin === "external",
     name: parsed.name,
@@ -358,6 +367,7 @@ function createFingerprint(skills: DiscoveredSkill[]) {
       content: skill.content,
       description: skill.description,
       directory: skill.directory,
+      icon: skill.icon,
       installOrigin: skill.installOrigin,
       isExternal: skill.isExternal,
       name: skill.name,
@@ -378,6 +388,7 @@ function toSkillSnapshot(
   const skills = effectiveSkills.map<SkillMetadata>((skill) => ({
     description: skill.description,
     directory: skill.directory,
+    ...(skill.icon ? { icon: skill.icon } : {}),
     installOrigin: skill.installOrigin,
     isExternal: skill.isExternal,
     name: skill.name,
@@ -747,6 +758,7 @@ export async function discoverSkills({
   return effectiveSkills.map<SkillMetadata>((skill) => ({
     description: skill.description,
     directory: skill.directory,
+    ...(skill.icon ? { icon: skill.icon } : {}),
     installOrigin: skill.installOrigin,
     isExternal: skill.isExternal,
     name: skill.name,
@@ -795,6 +807,7 @@ export async function discoverCodexSkills({
     skills.push({
       description: loaded.description,
       directory: loaded.directory,
+      ...(loaded.icon ? { icon: loaded.icon } : {}),
       installOrigin: loaded.installOrigin,
       isExternal: loaded.isExternal,
       name: loaded.name,
@@ -905,6 +918,7 @@ export async function loadSkillByName({
           description: skill.description,
           directory: skill.directory,
           files: skill.files,
+          ...(skill.icon ? { icon: skill.icon } : {}),
           installOrigin: skill.installOrigin,
           isExternal: skill.isExternal,
           name: skill.name,

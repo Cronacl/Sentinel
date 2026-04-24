@@ -6,6 +6,7 @@ import {
   ArrowRight01Icon,
   ArrowUp02Icon,
   Attachment01Icon,
+  Cancel01Icon,
   DashboardSquare01Icon,
   Mic02Icon,
 } from "@hugeicons/core-free-icons";
@@ -108,7 +109,7 @@ export const ComposerToolbar = memo(function ComposerToolbar({
         >
           <Popover.Trigger>
             <Button
-              className="h-7 w-7 min-w-0 rounded-full border border-border/40 bg-surface p-0 text-muted transition-colors duration-150 ease-out hover:border-border/60 hover:text-foreground dark:border-border/15 dark:bg-background/80"
+              className="h-[24px] w-[24px] min-w-0 rounded-full p-0 text-muted transition-colors duration-150 ease-out hover:text-foreground"
               isDisabled={!hasWorkspace}
               size="sm"
               variant="ghost"
@@ -154,7 +155,9 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                   <span>Add photos & files</span>
                 </ListBox.Item>
                 <ListBox.Item
-                  className="min-h-8 rounded-xl px-2 py-1.5 text-[13px]"
+                  className={`min-h-8 rounded-xl px-2 py-1.5 text-[13px] ${
+                    planMode ? "text-[#3F8DD8]" : ""
+                  }`}
                   id="plan-mode"
                   textValue="Plan mode"
                 >
@@ -164,12 +167,12 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                     size={15}
                     strokeWidth={1.5}
                   />
-                  <span className="flex-1">Plan mode</span>
+                  <span className="flex-1">Plan</span>
                   <div className="pointer-events-none">
                     <Switch
-                      size="sm"
                       isDisabled={!planModeAvailable}
                       isSelected={planMode}
+                      size="sm"
                     >
                       <Switch.Control>
                         <Switch.Thumb>
@@ -255,15 +258,21 @@ export const ComposerToolbar = memo(function ComposerToolbar({
         {modelSelector}
 
         {planMode ? (
-          <div className="ml-1 flex items-center gap-1 border-l border-border/35 pl-1.5">
-            <HugeiconsIcon
-              className="text-foreground"
-              color="currentColor"
-              icon={AiIdeaIcon}
-              size={12}
-              strokeWidth={1.5}
-            />
-            <span className="text-[12px] text-foreground">Plan</span>
+          <div className="ml-1 inline-flex h-[24px] items-center gap-1.5 rounded-full bg-blue-500/10 py-0.5 pl-1.5 pr-2.5 text-[#3F8DD8] dark:bg-blue-500/10">
+            <button
+              aria-label="Exit plan mode"
+              className="flex size-3 shrink-0 items-center justify-center rounded-full bg-[#3F8DD8] text-white dark:text-black transition-opacity duration-150 ease-out hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+              onClick={onTogglePlanMode}
+              type="button"
+            >
+              <HugeiconsIcon
+                color="currentColor"
+                icon={Cancel01Icon}
+                size={8}
+                strokeWidth={2}
+              />
+            </button>
+            <span className="text-[12px] font-medium leading-none">Plan</span>
           </div>
         ) : null}
       </div>

@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import {
   filterSkillsForEngine,
+  getHarnessSlashCommands,
   getSkillSuggestionTitle,
 } from "./use-composer-editor";
 
@@ -167,5 +168,26 @@ describe("getSkillSuggestionTitle", () => {
     expect(getSkillSuggestionTitle("claude")).toBe("Showing Claude skills");
     expect(getSkillSuggestionTitle("copilot")).toBe("Showing Copilot skills");
     expect(getSkillSuggestionTitle("codex")).toBe("Showing Codex skills");
+  });
+});
+
+describe("getHarnessSlashCommands", () => {
+  it("returns only fully supported harness slash commands", () => {
+    expect(
+      getHarnessSlashCommands("claude").map((command) => command.command),
+    ).toContain("compact");
+    expect(
+      getHarnessSlashCommands("codex").map((command) => command.command),
+    ).toContain("review");
+    expect(
+      getHarnessSlashCommands("codex").map((command) => command.mode),
+    ).toEqual(["execute", "execute", "execute"]);
+    expect(getHarnessSlashCommands("copilot")).toEqual([]);
+    expect(getHarnessSlashCommands("cursor")).toEqual([]);
+    expect(getHarnessSlashCommands("opencode")).toEqual([]);
+  });
+
+  it("does not add provider commands for Sentinel", () => {
+    expect(getHarnessSlashCommands("sentinel")).toEqual([]);
   });
 });

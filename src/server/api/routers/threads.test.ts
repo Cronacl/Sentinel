@@ -53,6 +53,7 @@ mock.module("./workspace-thread-helpers", () => ({
 }));
 
 mock.module("@/lib/ai/chat/engines/types", () => ({
+  getCodexThreadState: (value: any) => value?.codex ?? null,
   getRepoThreadState: () => null,
 }));
 
@@ -391,5 +392,63 @@ describe("threadsRouter.createQuickChat", () => {
         kind: "quick_chat",
       },
     });
+  });
+});
+
+describe("threadsRouter.get", () => {
+  it("reports whether Codex app commands have a backing thread", async () => {
+    getOwnedThreadOrThrow.mockResolvedValueOnce({
+      activeStreamId: null,
+      archivedAt: null,
+      chatEngine: "codex",
+      chatEngineState: {
+        codex: {
+          codexThreadId: "codex-thread-1",
+        },
+      },
+      chatModelId: null,
+      chatReasoningEffort: null,
+      createdAt: new Date("2026-03-20T12:00:00.000Z"),
+      id: "thread-1",
+      mode: "chat",
+      pinnedAt: null,
+      status: "idle",
+      summary: null,
+      title: "Codex thread",
+      updatedAt: new Date("2026-03-20T12:00:00.000Z"),
+      workspace: {
+        createdAt: new Date("2026-03-20T12:00:00.000Z"),
+        description: null,
+        id: "workspace-1",
+        kind: "project",
+        name: "Project",
+        permissionModeOverride: null,
+        rootPath: "/tmp/project",
+        updatedAt: new Date("2026-03-20T12:00:00.000Z"),
+      },
+    });
+    findMany.mockResolvedValueOnce([]);
+
+    const result = await threadsRouter.get({
+      ctx: {
+        db: {
+          query: {
+            threadMessages: {
+              findMany,
+            },
+          },
+        },
+        session: {
+          user: {
+            id: "user-1",
+          },
+        },
+      },
+      input: {
+        threadId: "thread-1",
+      },
+    });
+
+    expect(result.thread.hasCodexThread).toBe(true);
   });
 });

@@ -83,6 +83,7 @@ type ThreadScreenProps = {
     chatEngine: ChatEngine;
     chatModelId: string | null;
     chatReasoningEffort: string | null;
+    hasCodexThread: boolean;
     id: string;
     mode: "chat" | "plan";
     pinnedAt: Date | null;
@@ -832,21 +833,23 @@ export function ThreadScreen({
   const codexReview = api.engines.codexReview.useMutation();
   const codexRollback = api.engines.codexRollback.useMutation();
   const codexCompact = api.engines.codexCompact.useMutation();
+  const canRunCodexAppCommands =
+    chatEngine === "codex" && thread.hasCodexThread;
 
   const handleStartCodexReview = useCallback(() => {
-    if (chatEngine !== "codex") return;
+    if (!canRunCodexAppCommands) return;
     void codexReview.mutate({ threadId: thread.id });
-  }, [chatEngine, codexReview, thread.id]);
+  }, [canRunCodexAppCommands, codexReview, thread.id]);
 
   const handleCodexRollback = useCallback(() => {
-    if (chatEngine !== "codex") return;
+    if (!canRunCodexAppCommands) return;
     void codexRollback.mutate({ count: 1, threadId: thread.id });
-  }, [chatEngine, codexRollback, thread.id]);
+  }, [canRunCodexAppCommands, codexRollback, thread.id]);
 
   const handleCodexCompact = useCallback(() => {
-    if (chatEngine !== "codex") return;
+    if (!canRunCodexAppCommands) return;
     void codexCompact.mutate({ threadId: thread.id });
-  }, [chatEngine, codexCompact, thread.id]);
+  }, [canRunCodexAppCommands, codexCompact, thread.id]);
 
   const handleConfirmArchive = useCallback(() => {
     void archiveThread.mutate({ threadId: thread.id });
@@ -1177,7 +1180,7 @@ export function ThreadScreen({
                   <Kbd slot="keyboard">{archiveShortcutLabel}</Kbd>
                 ) : null}
               </Dropdown.Item>
-              {chatEngine === "codex" && (
+              {canRunCodexAppCommands && (
                 <>
                   <Dropdown.Item id="codex-review" textValue="Start review">
                     <HugeiconsIcon
@@ -1335,6 +1338,7 @@ export function ThreadScreen({
               promptSeed={editingPromptSeed}
               promptSeedKey={editingMessage?.id ?? "__composer-empty__"}
               queuedFollowUps={liveQueuedFollowUps}
+              providerSlashCommandsEnabled={canRunCodexAppCommands}
               repoThreadId={thread.id}
               showBranchSwitcher={!isQuickChat}
               status={status}

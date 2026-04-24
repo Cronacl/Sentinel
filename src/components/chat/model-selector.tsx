@@ -21,11 +21,9 @@ import type { ReasoningEffort } from "@/lib/ai/providers/models";
 
 import {
   getReasoningEffortLabel,
-  isUnstableChatEngine,
   shouldHideOpenCodeAgentSelector,
   shouldHideOpenCodeTraitSelector,
   type ChatComposerModel,
-  UNSTABLE_CHAT_ENGINE_LABEL,
 } from "./chat-composer-helpers";
 
 const ClaudeAIIcon = (props: SVGProps<SVGSVGElement>) => (
@@ -128,36 +126,22 @@ export function ModelSelector({
   const [reasoningOpen, setReasoningOpen] = useState(false);
 
   return (
-    <>
+    <div className="flex min-w-0 items-center gap-0.5">
       <Popover.Root isOpen={modelOpen} onOpenChange={setModelOpen}>
         <Popover.Trigger>
           <Button
-            className="h-7 justify-between gap-1 rounded-full border border-border/40 bg-surface px-2 text-[12px] text-muted shadow-none transition-colors duration-150 ease-out hover:border-border/60 hover:bg-default hover:text-foreground disabled:opacity-30 dark:border-border/15 dark:bg-background/80"
+            className="h-[24px] max-w-full justify-start gap-1 rounded-full px-1.5 text-muted transition-colors duration-150 ease-out hover:text-foreground disabled:opacity-30"
             isDisabled={!hasModels && !showLoadingState}
             size="sm"
             variant="ghost"
           >
             {showLoadingState ? (
               <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                <Skeleton className="h-[13px] w-[13px] shrink-0 rounded-full" />
                 <Skeleton className="h-3.5 w-24 rounded-md" />
               </span>
             ) : (
-              <span className="flex min-w-0 items-center gap-1.5">
-                <ModelIcon sizeClass="h-[13px] w-[13px]">
-                  {selectedModel?.provider ? (
-                    <ProviderIcon
-                      className="h-[13px] w-[13px] shrink-0"
-                      provider={selectedModel.provider}
-                    />
-                  ) : (
-                    renderExternalEngineIcon(
-                      selectedModel?.engine,
-                      "h-[13px] w-[13px] shrink-0",
-                    )
-                  )}
-                </ModelIcon>
-                <span className="max-w-[148px] truncate">
+              <span className="flex min-w-0 items-center">
+                <span className="max-w-[148px] truncate text-[11px]">
                   {selectedModel?.displayName ?? selectedModelKey ?? "Model"}
                 </span>
               </span>
@@ -170,7 +154,7 @@ export function ModelSelector({
             />
           </Button>
         </Popover.Trigger>
-        <Popover.Content className="w-56" placement="top">
+        <Popover.Content className="w-56 rounded-[20px]" placement="top">
           <Popover.Dialog className="p-1">
             <ScrollShadow className="max-h-[240px]">
               {showLoadingState ? (
@@ -238,11 +222,11 @@ export function ModelSelector({
         <Popover.Root isOpen={reasoningOpen} onOpenChange={setReasoningOpen}>
           <Popover.Trigger>
             <Button
-              className="h-7 gap-1 rounded-full border border-border/40 bg-surface px-2 text-[12px] text-muted shadow-none transition-colors duration-150 ease-out hover:border-border/60 hover:bg-default hover:text-foreground dark:border-border/15 dark:bg-background/80"
+              className="h-[24px] max-w-full justify-start gap-1 rounded-full px-1.5 text-muted transition-colors duration-150 ease-out hover:text-foreground"
               size="sm"
               variant="ghost"
             >
-              <span>
+              <span className="truncate text-[11px]">
                 {selectedReasoningEffort
                   ? getReasoningEffortLabel(selectedReasoningEffort)
                   : "Medium"}
@@ -289,7 +273,7 @@ export function ModelSelector({
           </Popover.Content>
         </Popover.Root>
       ) : null}
-    </>
+    </div>
   );
 }
 
@@ -322,11 +306,11 @@ function OpenCodeTraitSelector({
     <Popover.Root isOpen={isOpen} onOpenChange={onOpenChange}>
       <Popover.Trigger>
         <Button
-          className="h-7 gap-1 rounded-full border border-border/40 bg-surface px-2 text-[12px] text-muted shadow-none transition-colors duration-150 ease-out hover:border-border/60 hover:bg-default hover:text-foreground dark:border-border/15 dark:bg-background/80"
+          className="h-[24px] max-w-full justify-start gap-1 rounded-full px-1.5 text-muted transition-colors duration-150 ease-out hover:text-foreground"
           size="sm"
           variant="ghost"
         >
-          <span>
+          <span className="truncate text-[11px]">
             {label}: {selectedOption?.label ?? "Default"}
           </span>
           <HugeiconsIcon
@@ -370,8 +354,6 @@ function OpenCodeTraitSelector({
 }
 
 function ModelSelectorItem({ model }: { model: ChatComposerModel }) {
-  const isUnstable = isUnstableChatEngine(model.engine);
-
   return (
     <ListBox.Item
       className="min-h-8 rounded-xl px-2 py-1.5 text-[13px]"
@@ -397,11 +379,6 @@ function ModelSelectorItem({ model }: { model: ChatComposerModel }) {
         ))
       )}
       <span className="truncate text-[13px]">{model.displayName}</span>
-      {isUnstable ? (
-        <span className="ml-auto text-[10px] text-warning">
-          {UNSTABLE_CHAT_ENGINE_LABEL}
-        </span>
-      ) : null}
       <ListBox.ItemIndicator />
     </ListBox.Item>
   );

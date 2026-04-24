@@ -73,6 +73,7 @@ export type ChatComposerProps = {
   onSteerFollowUp?: (input: ComposerSendInput) => Promise<void> | void;
   onSteerQueuedFollowUp?: (id: string) => Promise<void> | void;
   onCancelEdit?: () => void;
+  providerSlashCommandsEnabled?: boolean;
   onRegisterStartPlanImplementation?: (
     handler: ChatComposerStartPlanImplementationHandler | null,
   ) => void;

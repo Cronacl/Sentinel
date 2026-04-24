@@ -14,6 +14,7 @@ import type {
   ThreadUIMessage,
 } from "@/lib/ai/messages/types";
 import { extractLastTitle } from "@/components/chat/message-parts/reasoning/reasoning-utils";
+import { SkillIcon } from "@/components/skills/skill-icon";
 import type { ComposerContext } from "@/lib/composer-context/types";
 import { getDesktopApi } from "@/lib/desktop/client";
 import type { DesktopOpenTarget } from "@/lib/desktop/contracts";
@@ -344,6 +345,8 @@ function buildMentionTokenMap(composerContext?: ComposerContext) {
       }
     | {
         className: "sentinel-chip--skill";
+        icon?: string;
+        name: string;
         text: string;
       }
   >();
@@ -376,13 +379,23 @@ function buildMentionTokenMap(composerContext?: ComposerContext) {
   }
 
   for (const skill of composerContext?.skills ?? []) {
+    tokens.set(`$${skill.name}`, {
+      className: "sentinel-chip--skill",
+      icon: skill.icon,
+      name: skill.name,
+      text: skill.name,
+    });
     tokens.set(`/${skill.name}`, {
       className: "sentinel-chip--skill",
-      text: `/${skill.name}`,
+      icon: skill.icon,
+      name: skill.name,
+      text: skill.name,
     });
     tokens.set(skill.name, {
       className: "sentinel-chip--skill",
-      text: `/${skill.name}`,
+      icon: skill.icon,
+      name: skill.name,
+      text: skill.name,
     });
   }
 
@@ -455,11 +468,22 @@ function renderUserText(
 
         fragments.push(
           <span
-            className={`sentinel-chip ${mentionToken.className}`}
+            className={`sentinel-chip ${mentionToken.className} ${
+              mentionToken.className === "sentinel-chip--skill"
+                ? "sentinel-chip--with-icon"
+                : ""
+            }`}
             key={key++}
           >
-            {/* remove the first char */}
-            {mentionToken.text.slice(1)}
+            {mentionToken.className === "sentinel-chip--skill" ? (
+              <SkillIcon
+                className="sentinel-chip-icon"
+                metadataIcon={mentionToken.icon}
+                name={mentionToken.name}
+                size={11}
+              />
+            ) : null}
+            {mentionToken.text}
           </span>,
         );
       } else {
@@ -755,10 +779,16 @@ function ComposerContextChips({
       ))}
       {composerContext.skills?.map((entry, index) => (
         <span
-          className="sentinel-chip sentinel-chip--skill"
+          className="sentinel-chip sentinel-chip--skill sentinel-chip--with-icon"
           key={`${messageId}:ctx-skill:${index}`}
         >
-          /{entry.name}
+          <SkillIcon
+            className="sentinel-chip-icon"
+            metadataIcon={entry.icon}
+            name={entry.name}
+            size={11}
+          />
+          {entry.name}
         </span>
       ))}
     </div>

@@ -75,6 +75,7 @@ export function ChatComposer({
   onSteerFollowUp,
   onSteerQueuedFollowUp,
   persistThreadSelection,
+  providerSlashCommandsEnabled = false,
   repoThreadId,
   promptSeed,
   promptSeedKey,
@@ -97,6 +98,9 @@ export function ChatComposer({
 
   const generalSettingsQuery = api.generalSettings.get.useQuery();
   const voiceSettingsQuery = api.voiceSettings.get.useQuery();
+  const codexReview = api.engines.codexReview.useMutation();
+  const codexRollback = api.engines.codexRollback.useMutation();
+  const codexCompact = api.engines.codexCompact.useMutation();
   const followUpBehavior =
     generalSettingsQuery.data?.followUpBehavior ?? DEFAULT_FOLLOW_UP_BEHAVIOR;
 
@@ -216,6 +220,7 @@ export function ChatComposer({
     return data.skills.map((skill) => ({
       description: skill.description,
       directory: skill.directory,
+      icon: skill.icon,
       installOrigin: skill.installOrigin,
       isExternal: skill.isExternal,
       name: skill.name,
@@ -225,6 +230,43 @@ export function ChatComposer({
     }));
   }, [skillsQuery.data]);
 
+  const handleSlashCommand = useCallback(
+    (command: string) => {
+      if (
+        selectedEngine !== "codex" ||
+        !threadId ||
+        !providerSlashCommandsEnabled
+      ) {
+        return;
+      }
+
+      if (command === "compact") {
+        codexCompact.mutate({ threadId });
+        return;
+      }
+
+      if (command === "review") {
+        codexReview.mutate({ threadId });
+        return;
+      }
+
+      if (command === "rollback") {
+        codexRollback.mutate({ count: 1, threadId });
+      }
+    },
+    [
+      codexCompact,
+      codexReview,
+      codexRollback,
+      providerSlashCommandsEnabled,
+      selectedEngine,
+      threadId,
+    ],
+  );
+  const canExecuteProviderSlashCommands = Boolean(
+    threadId && providerSlashCommandsEnabled,
+  );
+
   const { editor, placeholderText } = useComposerEditor({
     activeWorkspaceId: activeWorkspace?.id ?? null,
     isBusy,
@@ -233,6 +275,9 @@ export function ChatComposer({
     onAddBrowserFiles: addBrowserFiles,
     onFetchPathSuggestions: fetchPathSuggestions,
     onFetchSkillSuggestions: fetchSkillSuggestions,
+    onSlashCommand: canExecuteProviderSlashCommands
+      ? handleSlashCommand
+      : undefined,
     onSendRef: handleSendRef,
     promptSeed,
     promptSeedKey,
@@ -653,7 +698,7 @@ export function ChatComposer({
     <>
       <div
         aria-hidden={hideUntilReady ? true : undefined}
-        className="pointer-events-auto relative w-full overflow-hidden rounded-[18px] border border-border/35 bg-background shadow-[0_0_8px_rgba(0,0,0,0.04)] transition-opacity duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] dark:border-border/15 dark:bg-surface"
+        className="pointer-events-auto relative pt-0.5 w-full overflow-hidden rounded-[20px] border border-border/35 bg-background shadow-[0_0_8px_rgba(0,0,0,0.04)] transition-opacity duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] dark:border-border/15 dark:bg-surface"
         onDragEnter={handleComposerDragEnter}
         onDragLeave={handleComposerDragLeave}
         onDragOver={handleComposerDragOver}

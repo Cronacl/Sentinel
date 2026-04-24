@@ -39,6 +39,9 @@ export function extractComposerContext(editor: Editor): ComposerContext {
       if (node.attrs.directory) {
         entry.directory = node.attrs.directory as string;
       }
+      if (node.attrs.icon) {
+        entry.icon = node.attrs.icon as string;
+      }
 
       skills.push(entry);
     }

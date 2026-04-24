@@ -22,6 +22,7 @@ async function writeSkill({
   container,
   content = "# Skill\n\nRun the workflow.\n",
   description = "Helpful skill",
+  icon,
   managedBySentinel = false,
   name,
 }: {
@@ -29,6 +30,7 @@ async function writeSkill({
   container: string;
   content?: string;
   description?: string;
+  icon?: string;
   managedBySentinel?: boolean;
   name: string;
 }) {
@@ -36,7 +38,7 @@ async function writeSkill({
   await mkdir(skillDirectory, { recursive: true });
   await writeFile(
     path.join(skillDirectory, "SKILL.md"),
-    `---\nname: ${name}\ndescription: ${description}\n---\n\n${content}`,
+    `---\nname: ${name}\ndescription: ${description}\n${icon ? `icon: ${icon}\n` : ""}---\n\n${content}`,
   );
 
   if (managedBySentinel) {
@@ -119,6 +121,24 @@ describe("skills", () => {
     expect(skills[1]?.installOrigin).toBe("sentinel");
     expect(skills[0]?.scope).toBe("global");
     expect(skills[1]?.scope).toBe("workspace");
+  });
+
+  it("preserves optional skill icons from frontmatter", async () => {
+    await writeSkill({
+      baseDirectory: workspaceRoot,
+      container: ".sentinel/skills",
+      icon: "logos:figma",
+      name: "icon-skill",
+    });
+
+    const skills = await discoverSkills({ workspaceRoot });
+    const loaded = await loadSkillByName({
+      name: "icon-skill",
+      workspaceRoot,
+    });
+
+    expect(skills[0]?.icon).toBe("logos:figma");
+    expect(loaded?.icon).toBe("logos:figma");
   });
 
   it("ignores invalid frontmatter and strips frontmatter when loading", async () => {

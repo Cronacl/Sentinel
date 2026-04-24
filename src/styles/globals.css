@@ -302,13 +302,14 @@ button[type="button"] {
 .sentinel-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  border: 1px solid transparent;
+  gap: 3px;
+  border: 0;
   border-radius: 8px;
-  padding: 3px 3px;
-  font-size: 13px;
+  min-height: 21px;
+  padding: 2px 6px;
+  font-size: 12px;
   font-weight: 500;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
   line-height: 1;
   white-space: nowrap;
   vertical-align: baseline;
@@ -318,11 +319,32 @@ button[type="button"] {
 .sentinel-chip::before {
   content: "";
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 11px;
+  height: 11px;
   flex: 0 0 auto;
   background: currentColor;
-  opacity: 0.92;
+  opacity: 0.82;
+}
+
+.sentinel-chip--with-icon::before,
+.sentinel-chip--skill.sentinel-chip--with-icon::before {
+  display: none;
+}
+
+.sentinel-chip-icon {
+  display: block;
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+}
+
+.sentinel-chip-icon--fallback {
+  background: currentColor;
+  opacity: 0.82;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='1.35' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 1.75 12.75 4.5V11.5L8 14.25 3.25 11.5V4.5z'/%3E%3Cpath d='M3.25 4.5 8 7.25l4.75-2.75M8 7.25v7'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='1.35' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 1.75 12.75 4.5V11.5L8 14.25 3.25 11.5V4.5z'/%3E%3Cpath d='M3.25 4.5 8 7.25l4.75-2.75M8 7.25v7'/%3E%3C/svg%3E")
+    center / contain no-repeat;
 }
 
 .sentinel-chip--clickable {
@@ -341,9 +363,8 @@ button[type="button"] {
 }
 
 .sentinel-chip--path {
-  background: #efe6ff;
-  border-color: color-mix(in srgb, #b06dff 22%, transparent);
-  color: #8b47ea;
+  background: #e8f2ff;
+  color: #3f8dd8;
 }
 
 .sentinel-chip--path::before {
@@ -354,9 +375,8 @@ button[type="button"] {
 }
 
 .sentinel-chip--skill {
-  background: #e8f2ff;
-  border-color: color-mix(in srgb, #4892da 20%, transparent);
-  color: #2f76bb;
+  background: #f1e8ff;
+  color: #b06dff;
 }
 
 .sentinel-chip--skill::before {
@@ -368,10 +388,9 @@ button[type="button"] {
 
 .sentinel-chip--variable {
   background: color-mix(in srgb, #f59e0b 14%, transparent);
-  border-color: color-mix(in srgb, #f59e0b 18%, transparent);
   color: #b45309;
   margin-inline: 0.18rem;
-  padding-inline: 10px;
+  padding-inline: 7px;
   vertical-align: middle;
 }
 
@@ -381,22 +400,19 @@ button[type="button"] {
 
 .dark .sentinel-chip--path,
 [data-theme="dark"] .sentinel-chip--path {
-  background: #27202f;
-  border-color: var(--color-separator);
-  color: #b06dff;
+  background: #20262e;
+  color: #3f8dd8;
 }
 
 .dark .sentinel-chip--skill,
 [data-theme="dark"] .sentinel-chip--skill {
-  background: #1d242b;
-  border-color: color-mix(in srgb, #4892da 18%, transparent);
-  color: #4892da;
+  background: #2a2432;
+  color: #b06dff;
 }
 
 .dark .sentinel-chip--variable,
 [data-theme="dark"] .sentinel-chip--variable {
   background: color-mix(in srgb, #f59e0b 18%, #21160a 82%);
-  border-color: color-mix(in srgb, #f59e0b 20%, transparent);
   color: #fbbf24;
 }
 
@@ -429,25 +445,25 @@ button[type="button"] {
 .sentinel-suggestion-popup {
   display: flex;
   flex-direction: column;
-  min-width: 240px;
-  max-width: min(360px, calc(100vw - 24px));
+  min-width: 220px;
+  max-width: min(340px, calc(100vw - 24px));
   min-height: 0;
   border: 1px solid color-mix(in srgb, var(--border) 24%, transparent);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--overlay) 96%, black 4%);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--overlay) 98%, black 2%);
   box-shadow:
-    0 22px 44px rgb(15 23 42 / 0.16),
-    0 4px 14px rgb(15 23 42 / 0.08);
-  backdrop-filter: blur(14px);
+    0 16px 32px rgb(15 23 42 / 0.12),
+    0 3px 10px rgb(15 23 42 / 0.07);
+  backdrop-filter: blur(10px);
   box-sizing: border-box;
   overflow: hidden;
-  padding: 6px;
+  padding: 4px;
   z-index: 50;
   will-change: top, left, opacity;
 }
 
 .sentinel-suggestion-popup--wide {
-  max-width: min(440px, calc(100vw - 24px));
+  max-width: min(380px, calc(100vw - 24px));
 }
 
 .sentinel-suggestion-popup--above {
@@ -460,10 +476,19 @@ button[type="button"] {
 
 .sentinel-suggestion-header {
   flex: 0 0 auto;
-  padding: 8px 12px 4px;
-  font-size: 11px;
+  padding: 5px 8px 3px;
+  font-size: 10px;
   font-weight: 500;
   color: var(--muted);
+}
+
+.sentinel-suggestion-group-label {
+  padding: 6px 8px 3px;
+  color: color-mix(in srgb, var(--muted) 80%, transparent);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1;
 }
 
 .sentinel-suggestion-scroll {
@@ -478,10 +503,10 @@ button[type="button"] {
   display: block;
   background: transparent;
   border: none;
-  border-radius: 10px;
+  border-radius: 7px;
   color: var(--foreground);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12.5px;
   padding: 0;
   text-align: left;
   transition: background 80ms ease;
@@ -491,15 +516,15 @@ button[type="button"] {
 .sentinel-suggestion-item-content {
   display: flex;
   width: 100%;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 7px 10px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 7px;
   text-align: left;
 }
 
 .sentinel-suggestion-item--stacked .sentinel-suggestion-item-content {
-  gap: 12px;
-  padding: 8px 10px;
+  gap: 8px;
+  padding: 6px 7px;
 }
 
 .sentinel-suggestion-item:hover {
@@ -512,11 +537,16 @@ button[type="button"] {
 
 .sentinel-suggestion-item-icon {
   color: color-mix(in srgb, var(--foreground) 68%, transparent);
-  margin-top: 1px;
+  height: 14px;
+  width: 14px;
 }
 
 .sentinel-suggestion-item-icon--skill {
-  color: #4892da;
+  color: #b06dff;
+}
+
+.sentinel-suggestion-item-icon--command {
+  color: #b06dff;
 }
 
 .sentinel-suggestion-item-copy {
@@ -524,7 +554,7 @@ button[type="button"] {
   min-width: 0;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .sentinel-suggestion-item-title {
@@ -533,30 +563,40 @@ button[type="button"] {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
-  line-height: 1.15;
+  line-height: 1.12;
 }
 
 .sentinel-suggestion-item-sub {
   color: var(--muted);
-  font-size: 11px;
-  line-height: 1.3;
+  font-size: 10.5px;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .sentinel-suggestion-item-sub--multiline {
-  display: -webkit-box;
-  white-space: normal;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  display: block;
+  white-space: nowrap;
+}
+
+.sentinel-suggestion-item-meta {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--muted) 82%, transparent);
+  font-family: var(--app-font-mono), monospace;
+  font-size: 10px;
+  line-height: 1;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sentinel-suggestion-empty {
-  padding: 12px;
+  padding: 10px;
   color: var(--muted);
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: 10.5px;
+  line-height: 1.3;
 }
 
 /* ── Prose (Markdown message content) ────────────────────────── */
@@ -610,7 +650,6 @@ button[type="button"] {
 }
 .sentinel-prose h4 {
   font-size: 0.875em;
-  text-transform:;
   letter-spacing: 0.05em;
 }
 

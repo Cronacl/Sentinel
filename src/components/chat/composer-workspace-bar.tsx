@@ -253,6 +253,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
     permissionOverride ??
     securityQuery.data?.permissionMode ??
     DEFAULT_PERMISSION_MODE;
+  const isFullPermissionsActive = effectivePermissionMode === "full";
   const isPermissionLoading =
     securityQuery.isLoading || updatePermissionOverrideMutation.isPending;
   const branchSwitcherVisible = Boolean(
@@ -742,7 +743,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
           >
             <Popover.Trigger>
               <Button
-                className="h-[26px] max-w-full justify-start gap-1 rounded-full px-1.5 text-muted transition-colors duration-150 ease-out hover:text-foreground"
+                className="h-[24px] max-w-full justify-start gap-1 rounded-full px-2 text-muted transition-colors duration-150 ease-out hover:text-foreground"
                 isPending={isProjectModeLoading}
                 size="sm"
                 variant="ghost"
@@ -751,15 +752,16 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                   <>
                     {isPending ? (
                       <Spinner
-                        className="size-3.5 min-w-3.5"
+                        className="size-2.5 min-w-2.5"
                         color="current"
                         size="sm"
                       />
                     ) : (
                       <HugeiconsIcon
+                        className="!size-3 min-w-3 shrink-0"
                         color="currentColor"
                         icon={projectModeIcon}
-                        size={14}
+                        size={10}
                         strokeWidth={1.5}
                       />
                     )}
@@ -767,9 +769,10 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                       {projectModeLabel}
                     </span>
                     <HugeiconsIcon
+                      className="!size-2.5 min-w-2.5 shrink-0"
                       color="currentColor"
                       icon={ArrowDown01Icon}
-                      size={12}
+                      size={10}
                       strokeWidth={1.5}
                     />
                   </>
@@ -939,7 +942,11 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
         >
           <Popover.Trigger>
             <Button
-              className="h-[26px] max-w-full justify-start gap-1 rounded-full px-1.5 text-muted transition-colors duration-150 ease-out hover:text-foreground"
+              className={`h-[24px] max-w-full justify-start gap-1 rounded-full px-2 transition-colors duration-150 ease-out ${
+                isFullPermissionsActive
+                  ? "bg-transparent text-warning-soft-foreground hover:bg-transparent hover:text-warning-soft-foreground"
+                  : "text-muted hover:text-foreground"
+              }`}
               isPending={isPermissionLoading}
               size="sm"
               variant="ghost"
@@ -948,15 +955,16 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                 <>
                   {isPending ? (
                     <Spinner
-                      className="size-3.5 min-w-3.5"
+                      className="size-2.5 min-w-2.5"
                       color="current"
                       size="sm"
                     />
                   ) : (
                     <HugeiconsIcon
+                      className="!size-3 min-w-3 shrink-0"
                       color="currentColor"
                       icon={Shield01Icon}
-                      size={14}
+                      size={10}
                       strokeWidth={1.5}
                     />
                   )}
@@ -964,9 +972,10 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                     {getPermissionModeLabel(effectivePermissionMode)}
                   </span>
                   <HugeiconsIcon
+                    className="!size-2.5 min-w-2.5 shrink-0"
                     color="currentColor"
                     icon={ArrowDown01Icon}
-                    size={12}
+                    size={10}
                     strokeWidth={1.5}
                   />
                 </>
@@ -1048,7 +1057,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
           >
             <Popover.Trigger>
               <Button
-                className="h-[26px] max-w-[148px] justify-start gap-1 rounded-full px-1.5 text-muted transition-colors duration-150 ease-out hover:text-foreground"
+                className="h-[24px] max-w-[148px] justify-start gap-1 rounded-full px-2 text-muted transition-colors duration-150 ease-out hover:text-foreground"
                 isDisabled={repoContextQuery.isLoading}
                 isPending={isBranchLoading}
                 size="sm"
@@ -1058,15 +1067,16 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                   <>
                     {isPending ? (
                       <Spinner
-                        className="size-3.5 min-w-3.5"
+                        className="size-2.5 min-w-2.5"
                         color="current"
                         size="sm"
                       />
                     ) : (
                       <HugeiconsIcon
+                        className="!size-3 min-w-3 shrink-0"
                         color="currentColor"
                         icon={GitBranchIcon}
-                        size={14}
+                        size={10}
                         strokeWidth={1.5}
                       />
                     )}
@@ -1074,9 +1084,10 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                       {displayBranch ?? "Branch"}
                     </span>
                     <HugeiconsIcon
+                      className="!size-2.5 min-w-2.5 shrink-0"
                       color="currentColor"
                       icon={ArrowDown01Icon}
-                      size={12}
+                      size={10}
                       strokeWidth={1.5}
                     />
                   </>
@@ -1105,7 +1116,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                         {listBranchesQuery.isLoading ? (
                           <div className="flex min-h-24 items-center justify-center px-2.5 py-3 text-sm text-muted">
                             <Spinner
-                              className="size-3.5 min-w-3.5"
+                              className="size-2.5 min-w-2.5"
                               color="current"
                               size="sm"
                             />
@@ -1172,7 +1183,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                               <HugeiconsIcon
                                 color="currentColor"
                                 icon={GitBranchIcon}
-                                size={14}
+                                size={10}
                                 strokeWidth={1.5}
                               />
                               <span className="truncate">{branch.name}</span>

@@ -2,12 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
 let capturedClaudeQueryInput: { options?: Record<string, unknown> } | null =
   null;
+let queryMessages: unknown[] = [];
 
 const upsertMessage = mock(() => {});
 const setActiveMessage = mock(async () => {});
 const clearActiveStream = mock(() => {});
 const setThreadStatus = mock(() => {});
 const loadThreadMessages = mock(async () => []);
+const loadThread = mock(async () => null);
 const updateThreadRepoState = mock(() => {});
 const updateThreadChatSettings = mock(async () => {});
 const updateCodexThreadState = mock(() => {});
@@ -38,6 +40,9 @@ mock.module("../persistence", () => ({
   clearActiveStream,
   ensureThread: mock(async () => ({ created: true })),
   loadThreadMessages,
+  loadThread,
+  claimNextThreadFollowUp: mock(() => null),
+  resetProcessingThreadFollowUps: mock(() => {}),
   setActiveMessage,
   setActiveStream: mock(() => {}),
   setThreadStatus,
@@ -104,11 +109,15 @@ const { ThreadChatConflictError } = await import("../errors");
 const { runClaudeThreadChat } = await import("./claude");
 
 function createQueryMock() {
+  const messages = [...queryMessages];
+
   return {
     close: mock(() => {}),
     interrupt: mock(async () => {}),
     [Symbol.asyncIterator]: async function* () {
-      return;
+      for (const message of messages) {
+        yield message;
+      }
     },
   };
 }
@@ -155,8 +164,10 @@ function createUserMessage(text: string) {
 describe("runClaudeThreadChat approvals", () => {
   beforeEach(() => {
     capturedClaudeQueryInput = null;
+    queryMessages = [];
     clearActiveStream.mockClear();
     beginThreadRepoCheckpointRun.mockClear();
+    loadThread.mockClear();
     loadThreadMessages.mockClear();
     loadThreadSessionSnapshot.mockClear();
     setActiveMessage.mockClear();
@@ -374,6 +385,84 @@ describe("runClaudeThreadChat approvals", () => {
 
     expect(response.status).toBe(202);
     expect(updateThreadTitle).toHaveBeenCalledWith("thread-title-1", "Hi");
+  });
+
+  it("mirrors Claude local slash command output as assistant text", async () => {
+    queryMessages = [
+      {
+        content: "Total cost: $0.01",
+        session_id: "session-1",
+        subtype: "local_command_output",
+        type: "system",
+        uuid: "system-1",
+      },
+      {
+        duration_api_ms: 1,
+        duration_ms: 1,
+        errors: [],
+        is_error: false,
+        modelUsage: {},
+        num_turns: 1,
+        permission_denials: [],
+        result: "",
+        session_id: "session-1",
+        stop_reason: "end_turn",
+        subtype: "success",
+        total_cost_usd: 0,
+        type: "result",
+        usage: {
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+          input_tokens: 0,
+          output_tokens: 0,
+          server_tool_use: {},
+          service_tier: "standard",
+        },
+        uuid: "result-1",
+      },
+    ];
+
+    const response = await runClaudeThreadChat(
+      {
+        message: createUserMessage("/cost"),
+        threadId: "thread-cost",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      {
+        chatEngineState: {
+          claude: {
+            cwd: "/tmp/workspace",
+            modelId: null,
+            permissionMode: "default",
+            sessionId: "session-1",
+          },
+        },
+        mode: "chat",
+        status: "idle",
+      } as any,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const mirroredAssistant = upsertMessage.mock.calls
+      .map((call: any[]) => call[1])
+      .findLast(
+        (
+          message: any,
+        ): message is { parts?: unknown[]; role?: string } | undefined =>
+          message?.role === "assistant",
+      );
+
+    expect(response.status).toBe(202);
+    expect(mirroredAssistant?.parts).toContainEqual(
+      expect.objectContaining({
+        text: "Total cost: $0.01",
+        type: "text",
+      }),
+    );
+    expect(setThreadStatus).toHaveBeenCalledWith("thread-cost", "idle");
   });
 
   it("resumes a live Claude approval using the explicit approval payload", async () => {

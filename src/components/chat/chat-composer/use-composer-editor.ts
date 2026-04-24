@@ -13,6 +13,7 @@ import { PathMention, PathMentionPluginKey } from "./extensions/path-mention";
 import {
   SkillMention,
   SkillMentionPluginKey,
+  SlashCommandPluginKey,
 } from "./extensions/skill-mention";
 import {
   SuggestionList,
@@ -23,6 +24,7 @@ import {
 type SkillListItem = {
   description: string;
   directory: string;
+  icon?: string | null;
   installOrigin?: "external" | "sentinel";
   isExternal?: boolean;
   name: string;
@@ -30,6 +32,78 @@ type SkillListItem = {
   sourceKind: string;
   target: string;
 };
+
+type SlashCommandDefinition = {
+  command: string;
+  description: string;
+  mode: "execute" | "insert";
+};
+
+type SuggestionKeyDownHandler = ((event: KeyboardEvent) => boolean) | null;
+
+const HARNESS_SLASH_COMMANDS: Partial<
+  Record<ChatEngine, SlashCommandDefinition[]>
+> = {
+  claude: [
+    "clear",
+    "compact",
+    "config",
+    "cost",
+    "doctor",
+    "help",
+    "init",
+    "login",
+    "logout",
+    "memory",
+    "model",
+    "permissions",
+    "resume",
+    "status",
+  ].map((command) => ({
+    command,
+    description: `Run Claude /${command}`,
+    mode: "insert" as const,
+  })),
+  codex: [
+    {
+      command: "compact",
+      description: "Compact Codex context",
+      mode: "execute",
+    },
+    {
+      command: "review",
+      description: "Start Codex review mode",
+      mode: "execute",
+    },
+    {
+      command: "rollback",
+      description: "Undo the last Codex turn",
+      mode: "execute",
+    },
+  ],
+};
+
+function normalizeSuggestionQuery(query: string) {
+  return query
+    .toLowerCase()
+    .trim()
+    .replace(/^[$/]+/, "");
+}
+
+function getSlashCommandMatchScore(
+  command: SlashCommandDefinition,
+  normalizedQuery: string,
+) {
+  if (!normalizedQuery) return 0;
+  if (command.command.startsWith(normalizedQuery)) return 0;
+  if (command.command.includes(normalizedQuery)) return 1;
+  if (command.description.toLowerCase().includes(normalizedQuery)) return 2;
+  return null;
+}
+
+export function getHarnessSlashCommands(engine: ChatEngine) {
+  return HARNESS_SLASH_COMMANDS[engine] ?? [];
+}
 
 function getSkillMatchScore(skill: SkillListItem, normalizedQuery: string) {
   if (!normalizedQuery) {
@@ -158,6 +232,7 @@ export function filterSkillsForEngine(
 function createSuggestionRenderer() {
   return () => {
     let renderer: ReactRenderer<SuggestionListRef> | null = null;
+    let keyDownHandler: SuggestionKeyDownHandler = null;
 
     return {
       onStart: (props: {
@@ -172,6 +247,9 @@ function createSuggestionRenderer() {
             clientRect: props.clientRect,
             command: props.command,
             items: props.items,
+            onKeyDownHandlerChange: (handler: SuggestionKeyDownHandler) => {
+              keyDownHandler = handler;
+            },
             variant: "path",
           },
         });
@@ -185,6 +263,9 @@ function createSuggestionRenderer() {
           clientRect: props.clientRect,
           command: props.command,
           items: props.items,
+          onKeyDownHandlerChange: (handler: SuggestionKeyDownHandler) => {
+            keyDownHandler = handler;
+          },
           variant: "path",
         });
       },
@@ -194,9 +275,12 @@ function createSuggestionRenderer() {
           renderer = null;
           return true;
         }
-        return renderer?.ref?.onKeyDown(event) ?? false;
+        return (
+          keyDownHandler?.(event) ?? renderer?.ref?.onKeyDown(event) ?? false
+        );
       },
       onExit: () => {
+        keyDownHandler = null;
         renderer?.destroy();
         renderer = null;
       },
@@ -209,6 +293,7 @@ function createSkillSuggestionRenderer(selectedEngineRef: {
 }) {
   return () => {
     let renderer: ReactRenderer<SuggestionListRef> | null = null;
+    let keyDownHandler: SuggestionKeyDownHandler = null;
 
     return {
       onStart: (props: {
@@ -223,6 +308,9 @@ function createSkillSuggestionRenderer(selectedEngineRef: {
             clientRect: props.clientRect,
             command: props.command,
             items: props.items,
+            onKeyDownHandlerChange: (handler: SuggestionKeyDownHandler) => {
+              keyDownHandler = handler;
+            },
             title: getSkillSuggestionTitle(selectedEngineRef.current),
             variant: "skill",
           },
@@ -237,6 +325,9 @@ function createSkillSuggestionRenderer(selectedEngineRef: {
           clientRect: props.clientRect,
           command: props.command,
           items: props.items,
+          onKeyDownHandlerChange: (handler: SuggestionKeyDownHandler) => {
+            keyDownHandler = handler;
+          },
           title: getSkillSuggestionTitle(selectedEngineRef.current),
           variant: "skill",
         });
@@ -247,9 +338,81 @@ function createSkillSuggestionRenderer(selectedEngineRef: {
           renderer = null;
           return true;
         }
-        return renderer?.ref?.onKeyDown(event) ?? false;
+        return (
+          keyDownHandler?.(event) ?? renderer?.ref?.onKeyDown(event) ?? false
+        );
       },
       onExit: () => {
+        keyDownHandler = null;
+        renderer?.destroy();
+        renderer = null;
+      },
+    };
+  };
+}
+
+function createSlashSuggestionRenderer(selectedEngineRef: {
+  current: ChatEngine;
+}) {
+  return () => {
+    let renderer: ReactRenderer<SuggestionListRef> | null = null;
+    let keyDownHandler: SuggestionKeyDownHandler = null;
+
+    return {
+      onStart: (props: {
+        clientRect?: (() => DOMRect | null) | null;
+        command: (item: SuggestionItem) => void;
+        editor: Editor;
+        items: SuggestionItem[];
+      }) => {
+        renderer = new ReactRenderer(SuggestionList, {
+          editor: props.editor,
+          props: {
+            clientRect: props.clientRect,
+            command: props.command,
+            items: props.items,
+            onKeyDownHandlerChange: (handler: SuggestionKeyDownHandler) => {
+              keyDownHandler = handler;
+            },
+            title:
+              selectedEngineRef.current === "sentinel"
+                ? "Commands"
+                : `${selectedEngineRef.current} commands`,
+            variant: "command",
+          },
+        });
+      },
+      onUpdate: (props: {
+        clientRect?: (() => DOMRect | null) | null;
+        command: (item: SuggestionItem) => void;
+        items: SuggestionItem[];
+      }) => {
+        renderer?.updateProps({
+          clientRect: props.clientRect,
+          command: props.command,
+          items: props.items,
+          onKeyDownHandlerChange: (handler: SuggestionKeyDownHandler) => {
+            keyDownHandler = handler;
+          },
+          title:
+            selectedEngineRef.current === "sentinel"
+              ? "Commands"
+              : `${selectedEngineRef.current} commands`,
+          variant: "command",
+        });
+      },
+      onKeyDown: ({ event }: { event: KeyboardEvent }) => {
+        if (event.key === "Escape") {
+          renderer?.destroy();
+          renderer = null;
+          return true;
+        }
+        return (
+          keyDownHandler?.(event) ?? renderer?.ref?.onKeyDown(event) ?? false
+        );
+      },
+      onExit: () => {
+        keyDownHandler = null;
         renderer?.destroy();
         renderer = null;
       },
@@ -265,6 +428,7 @@ export function useComposerEditor({
   onAddBrowserFiles,
   onFetchPathSuggestions,
   onFetchSkillSuggestions,
+  onSlashCommand,
   onSendRef,
   promptSeed,
   promptSeedKey,
@@ -277,6 +441,7 @@ export function useComposerEditor({
   onAddBrowserFiles: (files: File[]) => void;
   onFetchPathSuggestions: (query: string) => Promise<WorkspaceFileResult[]>;
   onFetchSkillSuggestions: () => SkillListItem[];
+  onSlashCommand?: (command: string) => void;
   onSendRef: React.RefObject<() => void>;
   promptSeed?: string;
   promptSeedKey?: string | number;
@@ -292,6 +457,9 @@ export function useComposerEditor({
   const fetchSkillSuggestionsRef = useRef(onFetchSkillSuggestions);
   fetchSkillSuggestionsRef.current = onFetchSkillSuggestions;
 
+  const slashCommandRef = useRef(onSlashCommand);
+  slashCommandRef.current = onSlashCommand;
+
   const selectedEngineRef = useRef(selectedEngine);
   selectedEngineRef.current = selectedEngine;
 
@@ -301,6 +469,10 @@ export function useComposerEditor({
   const pathSuggestionRender = useMemo(() => createSuggestionRenderer(), []);
   const skillSuggestionRender = useMemo(
     () => createSkillSuggestionRenderer(selectedEngineRef),
+    [],
+  );
+  const slashSuggestionRender = useMemo(
+    () => createSlashSuggestionRenderer(selectedEngineRef),
     [],
   );
 
@@ -334,7 +506,7 @@ export function useComposerEditor({
         selectedEngineRef.current,
       );
 
-      const normalizedQuery = query.toLowerCase().trim();
+      const normalizedQuery = normalizeSuggestionQuery(query);
 
       return filtered
         .map((skill) => ({
@@ -357,16 +529,69 @@ export function useComposerEditor({
           description: skill.description,
           directory: skill.directory,
           engine: selectedEngineRef.current,
+          group: "skill" as const,
           icon: "skill" as const,
           id: `${skill.target}:${skill.name}`,
+          kind: "skill" as const,
           label: skill.name,
+          meta: `$${skill.name}`,
           scope: skill.scope,
+          skillIcon: skill.icon ?? null,
           sourceKind: skill.sourceKind,
           sublabel: skill.description,
           target: skill.target,
         }));
     },
     [],
+  );
+
+  const slashItems = useCallback(
+    ({ query }: { query: string }): SuggestionItem[] => {
+      const normalizedQuery = normalizeSuggestionQuery(query);
+      const commands = getHarnessSlashCommands(
+        selectedEngineRef.current,
+      ).filter(
+        (command) =>
+          command.mode === "insert" || Boolean(slashCommandRef.current),
+      );
+      const commandItems = commands
+        .map((command) => ({
+          command,
+          score: getSlashCommandMatchScore(command, normalizedQuery),
+        }))
+        .filter(
+          (
+            entry,
+          ): entry is { command: SlashCommandDefinition; score: number } =>
+            entry.score != null,
+        )
+        .sort((left, right) => {
+          if (left.score !== right.score) {
+            return left.score - right.score;
+          }
+          return left.command.command.localeCompare(right.command.command);
+        })
+        .map(({ command }) => ({
+          description: command.description,
+          group: "provider" as const,
+          icon: "command" as const,
+          id: `provider:${command.command}`,
+          ...(command.mode === "execute"
+            ? {
+                execute: () => {
+                  slashCommandRef.current?.(command.command);
+                },
+              }
+            : {}),
+          kind: "provider-command" as const,
+          label: `/${command.command}`,
+          meta: selectedEngineRef.current,
+          sublabel: command.description,
+        }));
+
+      return [...commandItems, ...skillItems({ query })];
+    },
+    [skillItems],
   );
 
   const editor = useEditor({
@@ -384,7 +609,8 @@ export function useComposerEditor({
           // Check if suggestion plugins are active -- if so, let them handle Enter
           const pathState = PathMentionPluginKey.getState(_view.state);
           const skillState = SkillMentionPluginKey.getState(_view.state);
-          if (pathState?.active || skillState?.active) {
+          const slashState = SlashCommandPluginKey.getState(_view.state);
+          if (pathState?.active || skillState?.active || slashState?.active) {
             return false;
           }
 
@@ -432,6 +658,10 @@ export function useComposerEditor({
         },
       }),
       SkillMention.configure({
+        slashSuggestion: {
+          items: slashItems,
+          render: slashSuggestionRender,
+        },
         suggestion: {
           items: skillItems,
           render: skillSuggestionRender,

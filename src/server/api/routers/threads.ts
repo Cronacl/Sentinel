@@ -16,7 +16,10 @@ import {
   threadTogglePinSchema,
   threadUpdateMetaSchema,
 } from "@/schemas/workspace-thread.schema";
-import { getRepoThreadState } from "@/lib/ai/chat/engines/types";
+import {
+  getCodexThreadState,
+  getRepoThreadState,
+} from "@/lib/ai/chat/engines/types";
 import { runThreadChat } from "@/lib/ai/chat";
 import {
   getLatestAssistantMessageId,
@@ -119,6 +122,9 @@ async function buildThreadDetails(
       chatModelId: thread.chatModelId,
       chatReasoningEffort: thread.chatReasoningEffort,
       createdAt: thread.createdAt,
+      hasCodexThread: Boolean(
+        getCodexThreadState(thread.chatEngineState)?.codexThreadId,
+      ),
       id: thread.id,
       linkedPullRequest:
         getRepoThreadState(thread.chatEngineState)?.lastPullRequest ?? null,

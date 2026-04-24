@@ -11,6 +11,7 @@ export type ComposerPathEntry = {
 export type ComposerSkillEntry = {
   directory?: string;
   engine: ChatEngine;
+  icon?: string;
   name: string;
   scope?: "global" | "workspace";
   sourceKind?: SkillSourceKind;

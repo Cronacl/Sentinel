@@ -534,6 +534,7 @@ export function NewThreadScreen({
             chatModelId: modelId,
             chatReasoningEffort: reasoningEffort ?? null,
             createdAt: current?.thread.createdAt ?? now,
+            hasCodexThread: current?.thread.hasCodexThread ?? false,
             id: draftThreadId,
             linkedPullRequest: current?.thread.linkedPullRequest ?? null,
             mode: threadMode,

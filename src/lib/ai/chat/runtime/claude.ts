@@ -6,6 +6,7 @@ import {
   type PermissionResult,
   type Query as ClaudeQuery,
   type SDKAssistantMessage,
+  type SDKLocalCommandOutputMessage,
   type SDKMessage,
   type SDKResultMessage,
   type SDKToolProgressMessage,
@@ -1197,6 +1198,26 @@ function updateClaudeMirrorFromAssistantMessage(
   }
 }
 
+function updateClaudeMirrorFromLocalCommandOutput(
+  state: ClaudeMirrorState,
+  message: SDKLocalCommandOutputMessage,
+) {
+  const content = message.content.trim();
+
+  if (!content) {
+    return false;
+  }
+
+  if (!state.text.trim()) {
+    state.text = content;
+    state.textOrder = getNextOrder(state);
+    return true;
+  }
+
+  state.text = `${state.text.trimEnd()}\n\n${content}`;
+  return true;
+}
+
 function updateClaudeMirrorFromToolProgress(
   state: ClaudeMirrorState,
   message: SDKToolProgressMessage,
@@ -1411,6 +1432,20 @@ async function consumeClaudeQuery(control: ActiveClaudeRunControl) {
           }
           break;
         case "system":
+          if (message.subtype === "local_command_output") {
+            if (
+              updateClaudeMirrorFromLocalCommandOutput(control.state, message)
+            ) {
+              await emitAssistantMessageUpdate(
+                control.state,
+                control.runId,
+                "streaming",
+              );
+              await emitThreadSnapshot(control.threadId, control.eventChannel);
+            }
+            break;
+          }
+
           if (message.subtype === "session_state_changed") {
             if (message.state === "requires_action") {
               persist.setThreadStatus(control.threadId, "awaiting_approval");

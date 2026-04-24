@@ -26,6 +26,7 @@ function createThreadDetails(): ThreadDetails {
       chatModelId: "gpt-5.4",
       chatReasoningEffort: "medium",
       createdAt: new Date("2026-04-21T10:00:00Z"),
+      hasCodexThread: false,
       id: "thread-1",
       linkedPullRequest: null,
       mode: "chat",

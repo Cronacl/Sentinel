@@ -2,44 +2,19 @@
 
 import { Button, Chip, ScrollShadow, Skeleton } from "@heroui/react";
 import {
-  AiIdeaIcon,
   ArrowLeft01Icon,
-  BrushIcon,
-  BulbIcon,
   CubeIcon,
-  Magnet01Icon,
-  Mail01Icon,
-  McpServerIcon,
-  Megaphone01Icon,
   NoteEditIcon,
-  NotebookIcon,
-  PaintBoardIcon,
-  QuillWrite01Icon,
-  ShareKnowledgeIcon,
-  SparklesIcon,
-  TestTube01Icon,
   WebDesign02Icon,
 } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
 import Link from "next/link";
-import type { ComponentType, SVGProps } from "react";
 import { useEffect, useState } from "react";
 
 import { MarkdownContent } from "@/components/chat/message-parts/text";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
+import { SkillIcon } from "@/components/skills/skill-icon";
 import { writeTextToClipboard } from "@/lib/desktop/permissions";
-import {
-  CloudflareIcon,
-  FigmaIcon,
-  GitHubIcon,
-  MicrosoftExcelIcon,
-  PdfIcon,
-  PlaywrightIcon,
-  PowerPointIcon,
-  RemotionIcon,
-  VercelIcon,
-  WordIcon,
-} from "@/components/skills/skill-icons";
 import { api } from "@/trpc/react";
 import { SidebarToggle, useShell } from "../shell";
 
@@ -62,61 +37,6 @@ function formatSkillTitle(name: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-}
-
-type BrandIconEntry = {
-  type: "brand";
-  component: ComponentType<SVGProps<SVGSVGElement>>;
-};
-type HugeIconEntry = { type: "huge"; icon: IconSvgElement };
-
-const SKILL_ICON_MAP: Record<string, BrandIconEntry | HugeIconEntry> = {
-  "vercel-deploy": { type: "brand", component: VercelIcon },
-  playwright: { type: "brand", component: PlaywrightIcon },
-  "playwright-dev": { type: "brand", component: PlaywrightIcon },
-  slides: { type: "brand", component: PowerPointIcon },
-  doc: { type: "brand", component: WordIcon },
-  pdf: { type: "brand", component: PdfIcon },
-  xlsx: { type: "brand", component: MicrosoftExcelIcon },
-  "gh-fix-ci": { type: "brand", component: GitHubIcon },
-  "gh-address-comments": { type: "brand", component: GitHubIcon },
-  "figma-implement-design": { type: "brand", component: FigmaIcon },
-  "cloudflare-deploy": { type: "brand", component: CloudflareIcon },
-  remotion: { type: "brand", component: RemotionIcon },
-  "frontend-design": { type: "huge", icon: PaintBoardIcon },
-  "mcp-builder": { type: "huge", icon: McpServerIcon },
-  "webapp-testing": { type: "huge", icon: TestTube01Icon },
-  "openai-docs": { type: "huge", icon: NotebookIcon },
-  "skill-creator": { type: "huge", icon: BrushIcon },
-  "skill-installer": { type: "huge", icon: SparklesIcon },
-  "github-fix-ci": { type: "brand", component: GitHubIcon },
-  copywriting: { type: "huge", icon: QuillWrite01Icon },
-  "marketing-ideas": { type: "huge", icon: BulbIcon },
-  "lead-magnets": { type: "huge", icon: Magnet01Icon },
-  "cold-email": { type: "huge", icon: Mail01Icon },
-  "ad-creative": { type: "huge", icon: Megaphone01Icon },
-  "social-content": { type: "huge", icon: ShareKnowledgeIcon },
-};
-
-function SkillIcon({ name, size = 16 }: { name: string; size?: number }) {
-  const normalized = name.trim().toLowerCase();
-  const entry = SKILL_ICON_MAP[normalized];
-
-  if (entry?.type === "brand") {
-    const BrandComponent = entry.component;
-    return <BrandComponent width={size} height={size} />;
-  }
-
-  const hugeIcon =
-    entry?.type === "huge" ? entry.icon : (CubeIcon as IconSvgElement);
-  return (
-    <HugeiconsIcon
-      color="currentColor"
-      icon={hugeIcon}
-      size={size}
-      strokeWidth={1.5}
-    />
-  );
 }
 
 function DetailSkeleton() {
@@ -252,7 +172,11 @@ export function SkillDetailScreen({
           {/* Skill identity banner */}
           <div className="border-separator/20 bg-surface flex items-center gap-2.5 rounded-2xl border p-2.5">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-separator bg-background text-foreground">
-              <SkillIcon name={resolvedName} size={16} />
+              <SkillIcon
+                metadataIcon={loadedSkill.icon}
+                name={resolvedName}
+                size={16}
+              />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">

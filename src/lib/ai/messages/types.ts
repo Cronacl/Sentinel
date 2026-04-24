@@ -34,6 +34,7 @@ const composerPathEntrySchema = z.object({
 const composerSkillEntrySchema = z.object({
   directory: z.string().optional(),
   engine: z.enum(CHAT_ENGINES),
+  icon: z.string().optional(),
   name: z.string(),
   scope: z.enum(["global", "workspace"]).optional(),
   sourceKind: z
@@ -150,7 +151,7 @@ function getComposerContextFingerprint(
   const skills = (composerContext.skills ?? [])
     .map(
       (entry) =>
-        `${entry.name}:${entry.engine}:${entry.scope ?? ""}:${entry.sourceKind ?? ""}:${entry.target ?? ""}:${entry.directory ?? ""}`,
+        `${entry.name}:${entry.engine}:${entry.scope ?? ""}:${entry.sourceKind ?? ""}:${entry.target ?? ""}:${entry.directory ?? ""}:${entry.icon ?? ""}`,
     )
     .join("|");
 

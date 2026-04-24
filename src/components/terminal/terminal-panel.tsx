@@ -217,7 +217,7 @@ export function TerminalPanel() {
                                 {session.label}
                               </span>
                               {session.exited ? (
-                                <span className="shrink-0 text-[9px] uppercase tracking-[0.08em] text-danger/70">
+                                <span className="shrink-0 text-[9px] tracking-[0.08em] text-danger/70">
                                   exited
                                 </span>
                               ) : null}
