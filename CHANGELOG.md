@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.46](https://github.com/Cronacl/Sentinel/compare/v0.0.45...v0.0.46) (2026-04-24)
+
+
+### Features
+
+* add ByteDance provider support ([a7f4ba3](https://github.com/Cronacl/Sentinel/commit/a7f4ba36623339c67fbca0ec75a688d060c76171))
+* add cursor and opencode skill support ([756934d](https://github.com/Cronacl/Sentinel/commit/756934d0ef675dfdc17dcc7c3566fb2f1e4105f6))
+* add deepseek provider support ([6a7b990](https://github.com/Cronacl/Sentinel/commit/6a7b9902ad67dd6ff2e4bb9b53f6e7966646871a))
+* improve composer ui and minor enhancements across the entire ([a20127c](https://github.com/Cronacl/Sentinel/commit/a20127c428cb57cf998ee42b3d03ce21bb5eec14))
+* improve stability and fix queued messages issues and introduce ([86a70fb](https://github.com/Cronacl/Sentinel/commit/86a70fbbe10f7cd3280cc0482a10ee507606eb41))
+* refine composer chips and commands ([26a50e9](https://github.com/Cronacl/Sentinel/commit/26a50e9fa030c2fa5806b51c447c2622efbf026a))
+
+
+### Bug Fixes
+
+* compact skill install selects ([e8e360f](https://github.com/Cronacl/Sentinel/commit/e8e360ff2869101c7cf0360e205f5441c8ee973b))
+* fix light mode colors and waveform issue ([8da488f](https://github.com/Cronacl/Sentinel/commit/8da488f4c13f7939f03d255c4b6272260ee28a0b))
+* fix minor ui issues ([132f1ce](https://github.com/Cronacl/Sentinel/commit/132f1ce3f95a04060bd830c647d6ffc43da909e4))
+
 ## [0.0.45](https://github.com/Cronacl/Sentinel/compare/v0.0.44...v0.0.45) (2026-04-21)
 
 
