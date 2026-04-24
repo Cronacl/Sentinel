@@ -516,6 +516,15 @@ const OpenRouterIcon = (props: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+const DeepSeekIcon = (props: SVGProps<SVGSVGElement>) => (
+  <svg {...props} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path
+      className="fill-black dark:fill-white"
+      d="M12 3c5 0 9 3.4 9 7.6 0 2.8-1.8 5.3-4.6 6.6l.7 3.8-4.1-2.8h-1C7 18.2 3 14.8 3 10.6S7 3 12 3Zm0 3C8.7 6 6 8.1 6 10.6s2.7 4.6 6 4.6h1.9l1.2.8-.2-1.3 1.3-.6c1.7-.8 2.8-2.1 2.8-3.5C18 8.1 15.3 6 12 6Zm-3 3h6v2H9V9Zm0 3h4v2H9v-2Z"
+    />
+  </svg>
+);
+
 const GoogleVertexIcon = (props: SVGProps<SVGSVGElement>) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -562,6 +571,7 @@ const PROVIDER_ICON_COMPONENTS: Record<AIProvider, ProviderIconComponent> = {
   mistral: MistralAIIcon,
   ollama: OllamaIcon,
   openrouter: OpenRouterIcon,
+  deepseek: DeepSeekIcon,
 };
 
 export function ProviderIcon({

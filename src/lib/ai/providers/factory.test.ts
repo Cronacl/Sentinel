@@ -55,4 +55,25 @@ describe("createProviderInstance", () => {
         typeof bytedance.videoModel === "function",
     ).toBe(true);
   });
+
+  it("creates a DeepSeek language provider", () => {
+    const deepseek = createProviderInstance("deepseek", {
+      apiKey: "deepseek-key",
+    }) as {
+      languageModel?: (modelId: string) => unknown;
+    };
+
+    expect(typeof deepseek.languageModel).toBe("function");
+  });
+
+  it("creates a DeepSeek language provider with a custom base URL", () => {
+    const deepseek = createProviderInstance("deepseek", {
+      apiKey: "deepseek-key",
+      baseURL: "https://deepseek.example.test",
+    }) as {
+      languageModel?: (modelId: string) => unknown;
+    };
+
+    expect(typeof deepseek.languageModel).toBe("function");
+  });
 });

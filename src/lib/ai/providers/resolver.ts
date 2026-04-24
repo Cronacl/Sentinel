@@ -25,6 +25,7 @@ const VALID_PROVIDERS = new Set<string>([
   "mistral",
   "ollama",
   "openrouter",
+  "deepseek",
 ]);
 const PROVIDER_CONFIG_CACHE_TTL_MS = 15_000;
 const ENABLED_MODELS_CACHE_TTL_MS = 15_000;

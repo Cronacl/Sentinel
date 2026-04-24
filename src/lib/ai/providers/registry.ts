@@ -102,6 +102,11 @@ export const PROVIDERS: Record<AIProvider, ProviderMeta> = {
     displayName: "OpenRouter",
     description: "Unified gateway for hundreds of models",
   },
+  deepseek: {
+    id: "deepseek",
+    displayName: "DeepSeek",
+    description: "DeepSeek chat and reasoning models",
+  },
 };
 
 export const PROVIDER_LIST = Object.values(PROVIDERS);

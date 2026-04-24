@@ -20,6 +20,7 @@ export const aiProviderSchema = z.enum([
   "mistral",
   "ollama",
   "openrouter",
+  "deepseek",
 ]);
 
 const optionalUrlString = z

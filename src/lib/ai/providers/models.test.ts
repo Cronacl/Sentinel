@@ -1,8 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  getModelsForProvider,
   getDefaultReasoningEffort,
   getModelAttachmentCapabilities,
+  getReasoningProviderOptions,
   getSupportedReasoningEfforts,
 } from "./models";
 
@@ -22,6 +24,48 @@ describe("model attachment capabilities", () => {
       supportsImages: false,
       supportsPdf: false,
       supportsTextFiles: false,
+    });
+  });
+
+  it("keeps DeepSeek text models on conservative no-file support", () => {
+    expect(getModelAttachmentCapabilities("deepseek", "deepseek-chat")).toEqual(
+      {
+        supportsImages: false,
+        supportsPdf: false,
+        supportsTextFiles: false,
+      },
+    );
+  });
+});
+
+describe("DeepSeek model catalog", () => {
+  it("includes the native DeepSeek chat and reasoner models", () => {
+    expect(getModelsForProvider("deepseek").map((model) => model.id)).toEqual([
+      "deepseek-chat",
+      "deepseek-reasoner",
+    ]);
+  });
+
+  it("maps DeepSeek reasoner controls to thinking provider options", () => {
+    expect(getDefaultReasoningEffort("deepseek", "deepseek-reasoner")).toBe(
+      "high",
+    );
+    expect(
+      getSupportedReasoningEfforts("deepseek", "deepseek-reasoner"),
+    ).toEqual(["none", "high"]);
+    expect(
+      getReasoningProviderOptions("deepseek", "deepseek-reasoner", "high"),
+    ).toEqual({
+      deepseek: {
+        thinking: { type: "enabled" },
+      },
+    });
+    expect(
+      getReasoningProviderOptions("deepseek", "deepseek-reasoner", "none"),
+    ).toEqual({
+      deepseek: {
+        thinking: { type: "disabled" },
+      },
     });
   });
 });

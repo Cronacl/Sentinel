@@ -18,6 +18,7 @@ export const AI_PROVIDERS = [
   "mistral",
   "ollama",
   "openrouter",
+  "deepseek",
 ] as const;
 export type AIProvider = (typeof AI_PROVIDERS)[number];
 

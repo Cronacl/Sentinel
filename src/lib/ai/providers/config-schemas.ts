@@ -65,6 +65,7 @@ export const PROVIDER_CONFIG_SCHEMAS: Record<AIProvider, z.ZodType> = {
   mistral: apiKeyProvider,
   ollama: ollamaProvider,
   openrouter: apiKeyProvider,
+  deepseek: apiKeyProvider,
 };
 
 export function validateProviderConfig(provider: AIProvider, config: unknown) {

@@ -6,6 +6,7 @@ import { createAzure } from "@ai-sdk/azure";
 import { createBlackForestLabs } from "@ai-sdk/black-forest-labs";
 import { createByteDance } from "@ai-sdk/bytedance";
 import { createCohere } from "@ai-sdk/cohere";
+import { createDeepSeek } from "@ai-sdk/deepseek";
 import { createFal } from "@ai-sdk/fal";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createVertex } from "@ai-sdk/google-vertex";
@@ -196,6 +197,13 @@ export function createProviderInstance(
       const c = config as ApiKeyConfig;
       return createOpenRouter({
         apiKey: c.apiKey,
+      });
+    }
+    case "deepseek": {
+      const c = config as ApiKeyConfig;
+      return createDeepSeek({
+        apiKey: c.apiKey,
+        ...(c.baseURL && { baseURL: c.baseURL }),
       });
     }
     default: {

@@ -44,6 +44,7 @@ type ReasoningConfig = {
   reasoningSummary?: "auto" | "concise" | "detailed";
   strategy:
     | "anthropic-effort"
+    | "deepseek-thinking"
     | "google-thinking-level"
     | "openai-reasoning-effort";
   supportedEfforts: readonly ReasoningEffort[];
@@ -165,6 +166,16 @@ const GEMINI_2_5_PRO_REASONING_CONFIG: ReasoningConfig = {
   },
   strategy: "google-thinking-level",
   supportedEfforts: ["low", "medium", "high"],
+};
+
+const DEEPSEEK_REASONER_CONFIG: ReasoningConfig = {
+  defaultEffort: "high",
+  providerValueMap: {
+    high: "enabled",
+    none: "disabled",
+  },
+  strategy: "deepseek-thinking",
+  supportedEfforts: ["none", "high"],
 };
 
 export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
@@ -1080,6 +1091,23 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       contextWindow: 128_000,
     },
   ],
+  deepseek: [
+    {
+      id: "deepseek-chat",
+      displayName: "DeepSeek Chat",
+      description: "DeepSeek general-purpose chat model.",
+      capabilities: ["tool_use", "object_generation"],
+      contextWindow: 64_000,
+    },
+    {
+      id: "deepseek-reasoner",
+      displayName: "DeepSeek Reasoner",
+      description: "DeepSeek reasoning model with thinking support.",
+      capabilities: ["reasoning", "tool_use", "object_generation"],
+      contextWindow: 64_000,
+      reasoning: DEEPSEEK_REASONER_CONFIG,
+    },
+  ],
 };
 
 export function getModelsForProvider(provider: AIProvider): ModelMeta[] {
@@ -1200,6 +1228,8 @@ function getProviderOptionsKey(provider: AIProvider) {
       return "openai";
     case "openrouter":
       return "openai";
+    case "deepseek":
+      return "deepseek";
   }
 }
 
@@ -1312,6 +1342,16 @@ export function getReasoningProviderOptions(
       [providerOptionsKey]: {
         thinkingConfig: {
           thinkingLevel: reasoningEffort,
+        },
+      },
+    };
+  }
+
+  if (config.strategy === "deepseek-thinking") {
+    return {
+      [providerOptionsKey]: {
+        thinking: {
+          type: providerValue,
         },
       },
     };
