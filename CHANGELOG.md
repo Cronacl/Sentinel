@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.47](https://github.com/Cronacl/Sentinel/compare/v0.0.46...v0.0.47) (2026-04-25)
+
+
+### Features
+
+* **appearance:** enhance appearance settings with accent color and sidebar glass options ([90cf6ac](https://github.com/Cronacl/Sentinel/commit/90cf6acceec1cca1b1ab24e75c531f53884d690f))
+* **appearance:** implement sidebar glass effect and related settings ([d223304](https://github.com/Cronacl/Sentinel/commit/d22330414c4ec3fc950645b25b48da4327a9aa4b))
+* **automations:** enhance automation management and UI updates ([3f11bbc](https://github.com/Cronacl/Sentinel/commit/3f11bbc81918e9b34075b0c2480116b02dda07b0))
+* **desktop:** add latest release fetching and architecture support ([0a87739](https://github.com/Cronacl/Sentinel/commit/0a87739aad7bfc05a24a7ea11f20182c5cc444ac))
+* **settings:** implement centralized settings navigation ([016aa69](https://github.com/Cronacl/Sentinel/commit/016aa698aa5a215a655e87cd629a99a711414394))
+* **settings:** restrict access to settings modal based on pathname ([a179fb4](https://github.com/Cronacl/Sentinel/commit/a179fb426053d7c6691145a6c417892b3249bdb3))
+* **sidebar:** enhance sidebar transition and settings navigation ([480e653](https://github.com/Cronacl/Sentinel/commit/480e6539f9bd392799252aa82d02bfbdd182b0ac))
+
+
+### Bug Fixes
+
+* **automations:** ensure workspace is correctly handled in automation updates ([4b49996](https://github.com/Cronacl/Sentinel/commit/4b49996347f654399f5e0457d82d976958778023))
+* **desktop:** enable native update checks ([a8293e7](https://github.com/Cronacl/Sentinel/commit/a8293e799384cea136616196214fd74e3aa9c7d0))
+
 ## [0.0.46](https://github.com/Cronacl/Sentinel/compare/v0.0.45...v0.0.46) (2026-04-24)
 
 
