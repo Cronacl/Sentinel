@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.48](https://github.com/Cronacl/Sentinel/compare/v0.0.47...v0.0.48) (2026-04-25)
+
+
+### Features
+
+* **diff-sidebar:** enhance repo diff sidebar functionality and styling ([b600bd4](https://github.com/Cronacl/Sentinel/commit/b600bd4da7f5fe9a1c3665fb3c7c21c8479917e8))
+* **repo-diff-sidebar:** enhance state management and functionality ([06c92b7](https://github.com/Cronacl/Sentinel/commit/06c92b78281ffa0bb9a4dcd50ecfbc3e1ca3f5b1))
+
 ## [0.0.47](https://github.com/Cronacl/Sentinel/compare/v0.0.46...v0.0.47) (2026-04-25)
 
 
