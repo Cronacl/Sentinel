@@ -1050,8 +1050,8 @@ export function RepoDiffSidebar() {
                 aria-label="Unified diff"
                 className={`h-7 rounded-xl rounded-r-none px-2 text-[10px] ${
                   prefs.layout === "unified"
-                    ? "bg-surface text-foreground"
-                    : "text-foreground/40"
+                    ? "bg-surface text-foreground font-medium"
+                    : "text-foreground/40 bg-surface/50"
                 }`}
                 onPress={() => queuePrefsUpdate({ layout: "unified" })}
                 size="sm"
@@ -1062,8 +1062,8 @@ export function RepoDiffSidebar() {
                 aria-label="Split diff"
                 className={`h-7 rounded-xl rounded-l-none px-2 text-[10px] ${
                   prefs.layout === "split"
-                    ? "bg-surface text-foreground"
-                    : "text-foreground/40"
+                    ? "bg-surface text-foreground font-medium"
+                    : "text-foreground/40 bg-surface/50"
                 }`}
                 onPress={() => queuePrefsUpdate({ layout: "split" })}
                 size="sm"
