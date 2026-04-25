@@ -6,9 +6,12 @@ export type RepoDiffSidebarMode = "branch" | "staged" | "unstaged";
 export type RepoDiffSidebarLayout = "split" | "unified";
 
 type RepoDiffSidebarPrefs = {
+  collapsedFiles: Set<string>;
   expandAll: boolean;
+  fileListOpen: boolean;
   layout: RepoDiffSidebarLayout;
   mode: RepoDiffSidebarMode;
+  searchFilter: string;
   wordDiffs: boolean;
   wordWrap: boolean;
 };
@@ -44,9 +47,12 @@ type RepoDiffSidebarRecord =
     };
 
 const DEFAULT_PREFS: RepoDiffSidebarPrefs = {
+  collapsedFiles: new Set<string>(),
   expandAll: false,
+  fileListOpen: false,
   layout: "unified",
   mode: "unstaged",
+  searchFilter: "",
   wordDiffs: false,
   wordWrap: false,
 };
@@ -147,9 +153,12 @@ export function updateRepoDiffSidebarPrefs(
 
   const currentPrefs = getPrefs(state.sourceKey);
   if (
+    currentPrefs.collapsedFiles === nextPrefs.collapsedFiles &&
     currentPrefs.expandAll === nextPrefs.expandAll &&
+    currentPrefs.fileListOpen === nextPrefs.fileListOpen &&
     currentPrefs.layout === nextPrefs.layout &&
     currentPrefs.mode === nextPrefs.mode &&
+    currentPrefs.searchFilter === nextPrefs.searchFilter &&
     currentPrefs.wordDiffs === nextPrefs.wordDiffs &&
     currentPrefs.wordWrap === nextPrefs.wordWrap
   ) {
@@ -157,6 +166,27 @@ export function updateRepoDiffSidebarPrefs(
   }
 
   prefsBySourceKey.set(state.sourceKey, nextPrefs);
+  syncSnapshot();
+  emit();
+}
+
+export function toggleRepoDiffFileCollapsed(filePath: string) {
+  if (state.kind !== "thread") {
+    return;
+  }
+
+  const currentPrefs = getPrefs(state.sourceKey);
+  const nextCollapsed = new Set(currentPrefs.collapsedFiles);
+  if (nextCollapsed.has(filePath)) {
+    nextCollapsed.delete(filePath);
+  } else {
+    nextCollapsed.add(filePath);
+  }
+
+  prefsBySourceKey.set(state.sourceKey, {
+    ...currentPrefs,
+    collapsedFiles: nextCollapsed,
+  });
   syncSnapshot();
   emit();
 }

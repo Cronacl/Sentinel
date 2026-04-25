@@ -3,22 +3,26 @@
 import { FileDiff } from "@pierre/diffs/react";
 import { skipToken } from "@tanstack/react-query";
 import {
-  ArrowLeftRightIcon,
   ArrowDown01Icon,
   ArrowReloadHorizontalIcon,
   Cancel01Icon,
+  ArrowRight01Icon,
   CollapseIcon,
   FolderOpenIcon,
+  GitBranchIcon,
   GitCommitHorizontalIcon,
   GitCompareIcon,
-  SplitIcon,
+  Search01Icon,
   TextWrapIcon,
+  Tick02Icon,
   Undo02Icon,
   UnfoldMoreIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { Icon } from "@iconify/react";
 import {
   Button,
+  ButtonGroup,
   CloseButton,
   Dropdown,
   Label,
@@ -37,9 +41,13 @@ import { sileo } from "sileo";
 
 import { getActiveCodeThemeName } from "@/lib/appearance";
 import { useRightSidebar } from "@/components/shell/shell-context";
-import { getDesktopApi, isDesktopRuntime } from "@/lib/desktop/client";
+import { getDesktopApi } from "@/lib/desktop/client";
 import type { DesktopOpenTarget } from "@/lib/desktop/contracts";
 import { getErrorMessage } from "@/lib/errors";
+import {
+  detectLanguageFromPath,
+  languageToVSCodeIcon,
+} from "@/lib/syntax/highlighter";
 import {
   ensureSentinelDiffThemesRegistered,
   getSentinelCodeThemeName,
@@ -54,14 +62,17 @@ import {
 import { hydrateRepoDiffBundleCaches } from "./repo-background-warmup";
 import {
   buildRenderableDiffCacheKey,
+  detectFileChangeType,
   getInitialRenderableFileCount,
   getNextRenderableFileCount,
   parseRenderableDiffFile,
+  type FileChangeType,
   type RenderableDiffFile,
   type RepoDiffSourceFile,
 } from "./repo-diff-sidebar.helpers";
 import {
   closeRepoDiffSidebarState,
+  toggleRepoDiffFileCollapsed,
   updateRepoDiffSidebarPrefs,
   useRepoDiffSidebarState,
   type RepoDiffSidebarMode,
@@ -73,27 +84,27 @@ const DIFF_PANEL_UNSAFE_CSS = `
 [data-file],
 [data-error-wrapper],
 [data-virtualizer-buffer] {
-  --diffs-bg: color-mix(in srgb, var(--background) 94%, var(--foreground)) !important;
-  --diffs-light-bg: color-mix(in srgb, var(--background) 94%, var(--foreground)) !important;
-  --diffs-dark-bg: color-mix(in srgb, var(--background) 94%, var(--foreground)) !important;
+  --diffs-bg: color-mix(in oklab, var(--background) 94%, var(--foreground)) !important;
+  --diffs-light-bg: color-mix(in oklab, var(--background) 94%, var(--foreground)) !important;
+  --diffs-dark-bg: color-mix(in oklab, var(--background) 94%, var(--foreground)) !important;
   --diffs-token-light-bg: transparent;
   --diffs-token-dark-bg: transparent;
   --diffs-addition-color-override: var(--syntax-token-inserted);
   --diffs-deletion-color-override: var(--syntax-token-deleted);
   --diffs-fg-number-addition-override: var(--syntax-token-inserted);
   --diffs-fg-number-deletion-override: var(--syntax-token-deleted);
-  --diffs-bg-context-override: color-mix(in srgb, var(--background) 97%, var(--foreground));
-  --diffs-bg-hover-override: color-mix(in srgb, var(--background) 94%, var(--foreground));
-  --diffs-bg-separator-override: color-mix(in srgb, var(--background) 95%, var(--foreground));
-  --diffs-bg-buffer-override: color-mix(in srgb, var(--background) 90%, var(--foreground));
-  --diffs-bg-addition-override: color-mix(in srgb, var(--background) 88%, var(--syntax-token-inserted));
-  --diffs-bg-addition-number-override: color-mix(in srgb, var(--background) 84%, var(--syntax-token-inserted));
-  --diffs-bg-addition-hover-override: color-mix(in srgb, var(--background) 78%, var(--syntax-token-inserted));
-  --diffs-bg-addition-emphasis-override: color-mix(in srgb, var(--background) 70%, var(--syntax-token-inserted));
-  --diffs-bg-deletion-override: color-mix(in srgb, var(--background) 88%, var(--syntax-token-deleted));
-  --diffs-bg-deletion-number-override: color-mix(in srgb, var(--background) 84%, var(--syntax-token-deleted));
-  --diffs-bg-deletion-hover-override: color-mix(in srgb, var(--background) 78%, var(--syntax-token-deleted));
-  --diffs-bg-deletion-emphasis-override: color-mix(in srgb, var(--background) 70%, var(--syntax-token-deleted));
+  --diffs-bg-context-override: color-mix(in oklab, var(--background) 97%, var(--foreground));
+  --diffs-bg-hover-override: color-mix(in oklab, var(--background) 94%, var(--foreground));
+  --diffs-bg-separator-override: color-mix(in oklab, var(--background) 95%, var(--foreground));
+  --diffs-bg-buffer-override: color-mix(in oklab, var(--background) 90%, var(--foreground));
+  --diffs-bg-addition-override: color-mix(in oklab, var(--background) 88%, var(--syntax-token-inserted));
+  --diffs-bg-addition-number-override: color-mix(in oklab, var(--background) 84%, var(--syntax-token-inserted));
+  --diffs-bg-addition-hover-override: color-mix(in oklab, var(--background) 78%, var(--syntax-token-inserted));
+  --diffs-bg-addition-emphasis-override: color-mix(in oklab, var(--background) 70%, var(--syntax-token-inserted));
+  --diffs-bg-deletion-override: color-mix(in oklab, var(--background) 88%, var(--syntax-token-deleted));
+  --diffs-bg-deletion-number-override: color-mix(in oklab, var(--background) 84%, var(--syntax-token-deleted));
+  --diffs-bg-deletion-hover-override: color-mix(in oklab, var(--background) 78%, var(--syntax-token-deleted));
+  --diffs-bg-deletion-emphasis-override: color-mix(in oklab, var(--background) 70%, var(--syntax-token-deleted));
   background-color: var(--diffs-bg) !important;
 }
 
@@ -104,49 +115,44 @@ const DIFF_PANEL_UNSAFE_CSS = `
   line-height: 1.35 !important;
 }
 
-[data-line-type='change-addition'][data-line] span {
-  color: color-mix(in srgb, currentColor 76%, var(--syntax-token-inserted)) !important;
-}
-
-[data-line-type='change-deletion'][data-line] span {
-  color: color-mix(in srgb, currentColor 76%, var(--syntax-token-deleted)) !important;
+[data-line-type='context'][data-line][data-hovered],
+[data-line-type='context'][data-column-number][data-hovered] {
+  background-color: color-mix(in oklab, var(--background) 92%, var(--foreground)) !important;
 }
 
 [data-line-type='change-addition'][data-line],
 [data-line-type='change-addition'][data-no-newline] {
-  background-color: color-mix(in srgb, var(--background) 82%, var(--syntax-token-inserted)) !important;
-  color: color-mix(in srgb, var(--foreground) 28%, var(--syntax-token-inserted)) !important;
+  background-color: color-mix(in oklab, var(--background) 82%, var(--syntax-token-inserted)) !important;
 }
 
 [data-line-type='change-deletion'][data-line],
 [data-line-type='change-deletion'][data-no-newline] {
-  background-color: color-mix(in srgb, var(--background) 82%, var(--syntax-token-deleted)) !important;
-  color: color-mix(in srgb, var(--foreground) 28%, var(--syntax-token-deleted)) !important;
+  background-color: color-mix(in oklab, var(--background) 82%, var(--syntax-token-deleted)) !important;
 }
 
 [data-line-type='change-addition'][data-column-number] {
-  background-color: color-mix(in srgb, var(--background) 76%, var(--syntax-token-inserted)) !important;
+  background-color: color-mix(in oklab, var(--background) 76%, var(--syntax-token-inserted)) !important;
   color: var(--syntax-token-inserted) !important;
 }
 
 [data-line-type='change-deletion'][data-column-number] {
-  background-color: color-mix(in srgb, var(--background) 76%, var(--syntax-token-deleted)) !important;
+  background-color: color-mix(in oklab, var(--background) 76%, var(--syntax-token-deleted)) !important;
   color: var(--syntax-token-deleted) !important;
 }
 
 [data-line-type='change-addition'][data-line][data-hovered],
 [data-line-type='change-addition'][data-column-number][data-hovered] {
-  background-color: color-mix(in srgb, var(--background) 74%, var(--syntax-token-inserted)) !important;
+  background-color: color-mix(in oklab, var(--background) 74%, var(--syntax-token-inserted)) !important;
 }
 
 [data-line-type='change-deletion'][data-line][data-hovered],
 [data-line-type='change-deletion'][data-column-number][data-hovered] {
-  background-color: color-mix(in srgb, var(--background) 74%, var(--syntax-token-deleted)) !important;
+  background-color: color-mix(in oklab, var(--background) 74%, var(--syntax-token-deleted)) !important;
 }
 
 [data-file-info] {
-  background-color: color-mix(in srgb, var(--background) 92%, var(--foreground)) !important;
-  border-block-color: color-mix(in srgb, var(--border) 80%, transparent) !important;
+  background-color: color-mix(in oklab, var(--background) 92%, var(--foreground)) !important;
+  border-block-color: color-mix(in oklab, var(--border) 80%, transparent) !important;
   color: var(--foreground) !important;
 }
 
@@ -154,8 +160,8 @@ const DIFF_PANEL_UNSAFE_CSS = `
   position: sticky !important;
   top: 0;
   z-index: 4;
-  background-color: color-mix(in srgb, var(--background) 92%, var(--foreground)) !important;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 75%, transparent) !important;
+  background-color: color-mix(in oklab, var(--background) 92%, var(--foreground)) !important;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 75%, transparent) !important;
 }
 
 [data-title] {
@@ -163,7 +169,7 @@ const DIFF_PANEL_UNSAFE_CSS = `
 }
 
 [data-title]:hover {
-  color: color-mix(in srgb, var(--foreground) 86%, var(--accent)) !important;
+  color: color-mix(in oklab, var(--foreground) 86%, var(--accent)) !important;
 }
 `;
 
@@ -172,6 +178,35 @@ const MODE_LABELS: Record<RepoDiffSidebarMode, string> = {
   staged: "Staged",
   unstaged: "Unstaged",
 };
+
+const MODE_EMPTY_MESSAGES: Record<
+  RepoDiffSidebarMode,
+  { description: string; title: string }
+> = {
+  branch: {
+    description: "No differences from the base branch.",
+    title: "Branch is up to date",
+  },
+  staged: {
+    description: "Stage files from unstaged changes to see them here.",
+    title: "No staged changes",
+  },
+  unstaged: {
+    description: "All files match the last commit.",
+    title: "Working tree is clean",
+  },
+};
+
+const CHANGE_TYPE_CONFIG: Record<
+  FileChangeType,
+  { className: string; label: string }
+> = {
+  added: { className: "bg-success/15 text-success", label: "A" },
+  deleted: { className: "bg-danger/15 text-danger", label: "D" },
+  modified: { className: "bg-warning/15 text-warning", label: "M" },
+  renamed: { className: "bg-info/15 text-info", label: "R" },
+};
+
 const DIFF_BODY_REVEAL_DELAY_MS = 220;
 
 ensureSentinelDiffThemesRegistered();
@@ -196,6 +231,20 @@ function getPreferredEditorTarget(
 
 function resolveDiffThemeName(theme: "light" | "dark") {
   return getSentinelCodeThemeName(getActiveCodeThemeName(), theme);
+}
+
+function getFileIcon(path: string): string {
+  const language = detectLanguageFromPath(path);
+  return languageToVSCodeIcon[language] ?? "vscode-icons:default-file";
+}
+
+function splitFilePath(path: string): { dir: string; name: string } {
+  const lastSlash = path.lastIndexOf("/");
+  if (lastSlash === -1) return { dir: "", name: path };
+  return {
+    dir: path.slice(0, lastSlash + 1),
+    name: path.slice(lastSlash + 1),
+  };
 }
 
 function DiffRevealTrigger({
@@ -265,7 +314,7 @@ function IconActionButton({
     <Tooltip.Root delay={150}>
       <Button
         aria-label={ariaLabel}
-        className={["h-8 w-8 min-h-8 min-w-8 shrink-0 rounded-xl", className]
+        className={["h-7 w-7 min-h-7 min-w-7 shrink-0 rounded-xl", className]
           .filter(Boolean)
           .join(" ")}
         isDisabled={isDisabled}
@@ -286,6 +335,17 @@ function IconActionButton({
         {ariaLabel}
       </Tooltip.Content>
     </Tooltip.Root>
+  );
+}
+
+function ChangeTypeBadge({ type }: { type: FileChangeType }) {
+  const config = CHANGE_TYPE_CONFIG[type];
+  return (
+    <span
+      className={`inline-flex h-[18px] w-[18px] items-center justify-center rounded text-[9px] font-bold leading-none ${config.className}`}
+    >
+      {config.label}
+    </span>
   );
 }
 
@@ -311,7 +371,7 @@ function FileHeaderActions({
   onUnstage: () => void;
 }) {
   return (
-    <div className="pointer-events-auto flex items-center gap-1">
+    <div className="pointer-events-auto flex items-center gap-0.5">
       {canStage ? (
         <IconActionButton
           ariaLabel="Stage file"
@@ -358,6 +418,154 @@ function FileHeaderActions({
   );
 }
 
+function RawPatchFallback({ patch }: { patch: string }) {
+  return (
+    <div className="overflow-auto rounded-b-xl bg-background/70 p-3 font-mono text-[11px] leading-[18px]">
+      {patch.split("\n").map((line, i) => {
+        let bgClass = "";
+        let textClass = "text-foreground/60";
+
+        if (line.startsWith("+")) {
+          bgClass = "sentinel-diff-add";
+          textClass = "text-success/90";
+        } else if (line.startsWith("-")) {
+          bgClass = "sentinel-diff-del";
+          textClass = "text-danger/90";
+        } else if (line.startsWith("@@")) {
+          textClass = "text-info/60";
+        }
+
+        return (
+          <div
+            key={i}
+            className={`${bgClass} whitespace-pre-wrap wrap-break-word px-1`}
+          >
+            <span className={textClass}>{line}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FileListPanel({
+  diffFiles,
+  onScrollToFile,
+  searchFilter,
+  onSearchChange,
+}: {
+  diffFiles: RepoDiffSourceFile[];
+  onScrollToFile: (path: string) => void;
+  onSearchChange: (value: string) => void;
+  searchFilter: string;
+}) {
+  const filteredFiles = useMemo(() => {
+    if (!searchFilter) return diffFiles;
+    const lower = searchFilter.toLowerCase();
+    return diffFiles.filter((f) => f.path.toLowerCase().includes(lower));
+  }, [diffFiles, searchFilter]);
+
+  return (
+    <div className="border-b border-border/20">
+      <div className="px-2 pt-2 pb-1.5">
+        <div className="flex items-center gap-1.5 rounded-xl border border-border/30 bg-foreground/3 px-2">
+          <HugeiconsIcon
+            color="currentColor"
+            icon={Search01Icon}
+            size={12}
+            strokeWidth={1.5}
+            className="shrink-0 text-muted"
+          />
+          <input
+            className="h-7 w-full bg-transparent text-xs text-foreground placeholder:text-muted/60 outline-none"
+            placeholder="Filter files..."
+            value={searchFilter}
+            onChange={(e) => onSearchChange(e.currentTarget.value)}
+          />
+        </div>
+      </div>
+      <div className="max-h-[200px] overflow-auto px-1 pb-1.5">
+        {filteredFiles.map((file) => {
+          const { dir, name } = splitFilePath(file.path);
+          const changeType = detectFileChangeType(file);
+          const fileIcon = getFileIcon(file.path);
+
+          return (
+            <button
+              key={file.path}
+              className="flex w-full items-center gap-1.5 rounded-xl px-2 py-1 text-left transition-colors hover:bg-foreground/5"
+              onClick={() => onScrollToFile(file.path)}
+              type="button"
+            >
+              <ChangeTypeBadge type={changeType} />
+              <Icon className="h-3.5 w-3.5 shrink-0" icon={fileIcon} />
+              <span className="min-w-0 flex-1 truncate font-mono text-[10px]">
+                <span className="text-foreground/30">{dir}</span>
+                <span className="text-foreground/70">{name}</span>
+              </span>
+              <span className="shrink-0 font-mono text-[9px]">
+                {file.additions > 0 ? (
+                  <span className="text-success">+{file.additions}</span>
+                ) : null}
+                {file.additions > 0 && file.deletions > 0 ? " " : null}
+                {file.deletions > 0 ? (
+                  <span className="text-danger">-{file.deletions}</span>
+                ) : null}
+              </span>
+            </button>
+          );
+        })}
+        {filteredFiles.length === 0 && searchFilter ? (
+          <div className="px-2 py-3 text-center text-[11px] text-muted">
+            No files match &ldquo;{searchFilter}&rdquo;
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function SkeletonFileCard() {
+  return (
+    <div className="mb-2 overflow-hidden rounded-xl border border-border/20 bg-background/30 first:mt-2">
+      <div className="flex items-center gap-3 px-3 py-2.5">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="h-3.5 w-3.5 shrink-0 animate-pulse rounded bg-surface" />
+          <div className="h-3 w-3/4 animate-pulse rounded bg-surface" />
+        </div>
+        <div className="h-3 w-12 animate-pulse rounded bg-surface" />
+      </div>
+      <div className="space-y-1 px-3 pb-3 pt-1">
+        <div className="h-2.5 w-full animate-pulse rounded bg-foreground/5" />
+        <div className="h-2.5 w-5/6 animate-pulse rounded bg-foreground/5" />
+        <div className="h-2.5 w-4/6 animate-pulse rounded bg-foreground/5" />
+        <div className="h-2.5 w-3/4 animate-pulse rounded bg-foreground/5" />
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ mode }: { mode: RepoDiffSidebarMode }) {
+  const config = MODE_EMPTY_MESSAGES[mode];
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
+      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-success/10">
+        <HugeiconsIcon
+          color="currentColor"
+          icon={Tick02Icon}
+          size={20}
+          strokeWidth={2}
+          className="text-success"
+        />
+      </div>
+      <div>
+        <p className="text-sm font-medium text-foreground/80">{config.title}</p>
+        <p className="mt-1 text-xs text-muted">{config.description}</p>
+      </div>
+    </div>
+  );
+}
+
 function getCachedRenderableFile(args: {
   cache: Map<string, RenderableDiffFile>;
   file: RepoDiffSourceFile;
@@ -376,7 +584,6 @@ function getCachedRenderableFile(args: {
 
 export function RepoDiffSidebar() {
   const desktop = getDesktopApi();
-  const isDesktop = isDesktopRuntime();
   const rightSidebar = useRightSidebar();
   const { close } = rightSidebar;
   const utils = api.useUtils();
@@ -386,7 +593,11 @@ export function RepoDiffSidebar() {
   const [isLoadingTargets, setIsLoadingTargets] = useState(false);
   const [visibleFileCount, setVisibleFileCount] = useState(0);
   const [isBodyReady, setIsBodyReady] = useState(false);
-  const renderableFileCacheRef = useRef(new Map<string, RenderableDiffFile>());
+  const [revertAllConfirm, setRevertAllConfirm] = useState(false);
+  const [renderableFileCache] = useState(
+    () => new Map<string, RenderableDiffFile>(),
+  );
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   const threadId =
     sidebarState.kind === "thread" ? sidebarState.threadId : null;
@@ -575,9 +786,28 @@ export function RepoDiffSidebar() {
     [desktop, preferredEditorTarget, repoRoot],
   );
 
+  const handleScrollToFile = useCallback((path: string) => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const element = container.querySelector<HTMLDivElement>(
+      `[data-diff-file-path="${CSS.escape(path)}"]`,
+    );
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, []);
+
   const currentMode = prefs?.mode ?? "unstaged";
   const diff = diffPanelQuery.data?.diff;
   const diffFiles = diff?.files ?? EMPTY_SOURCE_FILES;
+
+  const filteredDiffFiles = useMemo(() => {
+    const filter = prefs?.searchFilter ?? "";
+    if (!filter) return diffFiles;
+    const lower = filter.toLowerCase();
+    return diffFiles.filter((f) => f.path.toLowerCase().includes(lower));
+  }, [diffFiles, prefs?.searchFilter]);
+
   const renderableDiffSnapshotKey = useMemo(
     () =>
       [
@@ -592,16 +822,18 @@ export function RepoDiffSidebar() {
   );
 
   useEffect(() => {
-    setVisibleFileCount(getInitialRenderableFileCount(diffFiles.length));
-  }, [currentMode, diffFiles]);
+    setVisibleFileCount(
+      getInitialRenderableFileCount(filteredDiffFiles.length),
+    );
+  }, [currentMode, filteredDiffFiles]);
 
   useEffect(() => {
-    renderableFileCacheRef.current.clear();
-  }, [renderableDiffSnapshotKey]);
+    renderableFileCache.clear();
+  }, [renderableFileCache, renderableDiffSnapshotKey]);
 
   const effectiveVisibleFileCount =
-    visibleFileCount === 0 && diffFiles.length > 0
-      ? getInitialRenderableFileCount(diffFiles.length)
+    visibleFileCount === 0 && filteredDiffFiles.length > 0
+      ? getInitialRenderableFileCount(filteredDiffFiles.length)
       : visibleFileCount;
 
   const queuePrefsUpdate = useCallback(
@@ -614,9 +846,65 @@ export function RepoDiffSidebar() {
   );
   const revealMoreFiles = useCallback(() => {
     setVisibleFileCount((current) =>
-      getNextRenderableFileCount(current, diffFiles.length),
+      getNextRenderableFileCount(current, filteredDiffFiles.length),
     );
-  }, [diffFiles.length]);
+  }, [filteredDiffFiles.length]);
+
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (filteredDiffFiles.length === 0) return;
+      const container = scrollContainerRef.current;
+      if (!container) return;
+
+      if (event.key === "j" || event.key === "k") {
+        const target = event.target as HTMLElement;
+        if (
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        const cards = Array.from(
+          container.querySelectorAll<HTMLDivElement>("[data-diff-file-path]"),
+        );
+        if (cards.length === 0) return;
+
+        const containerTop = container.getBoundingClientRect().top;
+
+        let currentIndex = -1;
+        for (let i = 0; i < cards.length; i++) {
+          const cardTop = cards[i]!.getBoundingClientRect().top - containerTop;
+          if (cardTop >= -10) {
+            currentIndex = i;
+            break;
+          }
+        }
+        if (currentIndex === -1) currentIndex = cards.length - 1;
+
+        const nextIndex =
+          event.key === "j"
+            ? Math.min(currentIndex + 1, cards.length - 1)
+            : Math.max(currentIndex - 1, 0);
+
+        const targetCard = cards[nextIndex];
+        if (targetCard) {
+          targetCard.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }
+    },
+    [filteredDiffFiles.length],
+  );
+
+  const prevModeRef = useRef(currentMode);
+  if (prevModeRef.current !== currentMode) {
+    prevModeRef.current = currentMode;
+    if (revertAllConfirm) {
+      setRevertAllConfirm(false);
+    }
+  }
 
   if (sidebarState.kind !== "thread" || !prefs || !threadId || !workspaceId) {
     return (
@@ -631,147 +919,234 @@ export function RepoDiffSidebar() {
   const disabledReason = diff?.disabledReason ?? null;
   const canOpenInEditor = Boolean(preferredEditorTarget) && !isLoadingTargets;
   const lineDiffType = prefs.wordDiffs ? "word-alt" : "none";
+  const totalAdditions = diff?.totalAdditions ?? 0;
+  const totalDeletions = diff?.totalDeletions ?? 0;
 
   return (
-    <div className="flex h-full w-full flex-col bg-background">
-      <header className="flex shrink-0 items-center gap-3 border-b border-border/20 px-4 py-3">
-        <Dropdown>
-          <Button
-            className="h-8 shrink-0 rounded-xl px-3"
-            size="sm"
-            variant="tertiary"
-          >
-            <span>{modeLabel}</span>
-            {fileCount > 0 ? (
-              <span className="rounded-full bg-background/80 px-1.5 py-0.5 text-[10px] text-muted">
-                {fileCount}
-              </span>
-            ) : null}
-            <HugeiconsIcon
-              color="currentColor"
-              icon={ArrowDown01Icon}
-              size={14}
-              strokeWidth={1.6}
-            />
-          </Button>
-          <Dropdown.Popover className="min-w-[220px]" placement="bottom start">
-            <Dropdown.Menu
-              onAction={(key) => {
-                queuePrefsUpdate({
-                  mode: key as RepoDiffSidebarMode,
-                });
-              }}
-            >
-              {(["unstaged", "staged", "branch"] as const).map((mode) => (
-                <Dropdown.Item
-                  id={mode}
-                  key={mode}
-                  textValue={MODE_LABELS[mode]}
-                >
-                  <Label>{MODE_LABELS[mode]}</Label>
-                </Dropdown.Item>
-              ))}
-            </Dropdown.Menu>
-          </Dropdown.Popover>
-        </Dropdown>
-        <div className="min-w-0 flex-1">
-          <span className="block min-w-0 truncate text-xs text-muted">
-            {diff?.sourceLabel ?? null}
-          </span>
-        </div>
-        <div className="ml-auto flex shrink-0 items-center gap-1">
-          <Tooltip.Root delay={150}>
+    <div
+      className="flex h-full w-full flex-col bg-background"
+      onKeyDown={handleKeyDown}
+      role="region"
+      aria-label="Git diff panel"
+    >
+      {/* ── Header ── */}
+      <header className="flex shrink-0 flex-col border-b border-border/20">
+        <div className="flex items-center gap-2 px-3 py-2">
+          {/* Mode selector */}
+          <Dropdown>
             <Button
-              aria-label="Refresh diff"
-              className="h-8 w-8 min-h-8 min-w-8 shrink-0 rounded-xl"
-              isDisabled={diffPanelQuery.isPending}
-              isIconOnly
-              onPress={() => void diffPanelQuery.refetch()}
+              className="h-7 shrink-0 rounded-xl px-2.5 text-xs"
               size="sm"
-              type="button"
-              variant="ghost"
+              variant="tertiary"
             >
+              <span className="font-medium">{modeLabel}</span>
+              {fileCount > 0 ? (
+                <span className="ml-0.5 rounded-md bg-surface px-1.5 py-px text-[10px] font-medium tabular-nums text-foreground/60">
+                  {fileCount}
+                </span>
+              ) : null}
               <HugeiconsIcon
-                className={diffPanelQuery.isFetching ? "opacity-45" : undefined}
                 color="currentColor"
-                icon={ArrowReloadHorizontalIcon}
-                size={14}
-                strokeWidth={1.6}
+                icon={ArrowDown01Icon}
+                size={12}
+                strokeWidth={1.8}
               />
             </Button>
-            <Tooltip.Content
-              className="rounded-xl border border-border/60 bg-overlay px-2 py-1 text-xs shadow-overlay"
-              offset={10}
+            <Dropdown.Popover
+              className="min-w-[200px]"
+              placement="bottom start"
             >
-              Refresh diff
-            </Tooltip.Content>
-          </Tooltip.Root>
-          <IconActionButton
-            ariaLabel={
-              prefs.layout === "split"
-                ? "Switch to unified diff"
-                : "Switch to split diff"
-            }
-            icon={prefs.layout === "split" ? ArrowLeftRightIcon : SplitIcon}
-            isActive={prefs.layout === "split"}
-            onPress={() =>
-              queuePrefsUpdate({
-                layout: prefs.layout === "unified" ? "split" : "unified",
-              })
-            }
-          />
-          <IconActionButton
-            ariaLabel={
-              prefs.wordWrap ? "Disable word wrap" : "Enable word wrap"
-            }
-            icon={TextWrapIcon}
-            isActive={prefs.wordWrap}
-            onPress={() =>
-              queuePrefsUpdate({
-                wordWrap: !prefs.wordWrap,
-              })
-            }
-          />
-          <IconActionButton
-            ariaLabel={
-              prefs.wordDiffs ? "Disable word diffs" : "Enable word diffs"
-            }
-            icon={GitCompareIcon}
-            isActive={prefs.wordDiffs}
-            onPress={() =>
-              queuePrefsUpdate({
-                wordDiffs: !prefs.wordDiffs,
-              })
-            }
-          />
-          <IconActionButton
-            ariaLabel={
-              prefs.expandAll ? "Collapse all diffs" : "Expand all diffs"
-            }
-            icon={prefs.expandAll ? CollapseIcon : UnfoldMoreIcon}
-            isActive={prefs.expandAll}
-            onPress={() =>
-              queuePrefsUpdate({
-                expandAll: !prefs.expandAll,
-              })
-            }
-          />
+              <Dropdown.Menu
+                onAction={(key) => {
+                  queuePrefsUpdate({
+                    mode: key as RepoDiffSidebarMode,
+                  });
+                }}
+              >
+                {(["unstaged", "staged", "branch"] as const).map((mode) => (
+                  <Dropdown.Item
+                    id={mode}
+                    key={mode}
+                    textValue={MODE_LABELS[mode]}
+                  >
+                    <Label>{MODE_LABELS[mode]}</Label>
+                  </Dropdown.Item>
+                ))}
+              </Dropdown.Menu>
+            </Dropdown.Popover>
+          </Dropdown>
+
+          {/* Branch + stats summary */}
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            {diff?.branch ? (
+              <span className="flex shrink-0 items-center gap-1 rounded-md bg-foreground/5 px-1.5 py-0.5 font-mono text-[10px] text-foreground/50">
+                <HugeiconsIcon
+                  color="currentColor"
+                  icon={GitBranchIcon}
+                  size={10}
+                  strokeWidth={1.6}
+                />
+                <span className="max-w-[120px] truncate">{diff.branch}</span>
+              </span>
+            ) : null}
+            {totalAdditions > 0 || totalDeletions > 0 ? (
+              <span className="shrink-0 font-mono text-[10px]">
+                {totalAdditions > 0 ? (
+                  <span className="text-success">+{totalAdditions}</span>
+                ) : null}
+                {totalAdditions > 0 && totalDeletions > 0 ? (
+                  <span className="text-foreground/20"> </span>
+                ) : null}
+                {totalDeletions > 0 ? (
+                  <span className="text-danger">-{totalDeletions}</span>
+                ) : null}
+              </span>
+            ) : null}
+          </div>
+
+          {/* Close button */}
           <CloseButton
             aria-label="Close repo diff sidebar"
-            className="shrink-0"
+            className="shrink-0 h-7 w-7 min-h-7 min-w-7"
             onPress={handleClose}
           />
         </div>
+
+        {/* ── Toolbar row ── */}
+        <div className="flex items-center justify-between gap-2 border-t border-border/10 px-3 py-1.5">
+          {/* Left: view options */}
+          <div className="flex items-center gap-1">
+            <Tooltip.Root delay={150}>
+              <Button
+                aria-label="Refresh diff"
+                className="h-7 w-7 min-h-7 min-w-7 shrink-0 rounded-xl"
+                isDisabled={diffPanelQuery.isPending}
+                isIconOnly
+                onPress={() => void diffPanelQuery.refetch()}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                <HugeiconsIcon
+                  className={
+                    diffPanelQuery.isFetching ? "opacity-45" : undefined
+                  }
+                  color="currentColor"
+                  icon={ArrowReloadHorizontalIcon}
+                  size={13}
+                  strokeWidth={1.6}
+                />
+              </Button>
+              <Tooltip.Content className="rounded-xl" offset={10}>
+                Refresh diff
+              </Tooltip.Content>
+            </Tooltip.Root>
+
+            <div className="mx-1 h-4 w-px bg-border/20" />
+
+            {/* Layout toggle as button group */}
+            <ButtonGroup size="sm" variant="ghost">
+              <Button
+                aria-label="Unified diff"
+                className={`h-7 rounded-xl rounded-r-none px-2 text-[10px] ${
+                  prefs.layout === "unified"
+                    ? "bg-surface text-foreground"
+                    : "text-foreground/40"
+                }`}
+                onPress={() => queuePrefsUpdate({ layout: "unified" })}
+                size="sm"
+              >
+                Unified
+              </Button>
+              <Button
+                aria-label="Split diff"
+                className={`h-7 rounded-xl rounded-l-none px-2 text-[10px] ${
+                  prefs.layout === "split"
+                    ? "bg-surface text-foreground"
+                    : "text-foreground/40"
+                }`}
+                onPress={() => queuePrefsUpdate({ layout: "split" })}
+                size="sm"
+              >
+                Split
+              </Button>
+            </ButtonGroup>
+          </div>
+
+          {/* Right: toggle options */}
+          <div className="flex items-center gap-0.5">
+            <IconActionButton
+              ariaLabel={
+                prefs.wordWrap ? "Disable word wrap" : "Enable word wrap"
+              }
+              icon={TextWrapIcon}
+              isActive={prefs.wordWrap}
+              onPress={() =>
+                queuePrefsUpdate({
+                  wordWrap: !prefs.wordWrap,
+                })
+              }
+              size={13}
+            />
+            <IconActionButton
+              ariaLabel={
+                prefs.wordDiffs ? "Disable word diffs" : "Enable word diffs"
+              }
+              icon={GitCompareIcon}
+              isActive={prefs.wordDiffs}
+              onPress={() =>
+                queuePrefsUpdate({
+                  wordDiffs: !prefs.wordDiffs,
+                })
+              }
+              size={13}
+            />
+            <IconActionButton
+              ariaLabel={
+                prefs.expandAll ? "Collapse all diffs" : "Expand all diffs"
+              }
+              icon={prefs.expandAll ? CollapseIcon : UnfoldMoreIcon}
+              isActive={prefs.expandAll}
+              onPress={() =>
+                queuePrefsUpdate({
+                  expandAll: !prefs.expandAll,
+                })
+              }
+              size={13}
+            />
+
+            <div className="mx-1 h-4 w-px bg-border/20" />
+
+            <IconActionButton
+              ariaLabel={
+                prefs.fileListOpen ? "Hide file list" : "Show file list"
+              }
+              icon={prefs.fileListOpen ? ArrowDown01Icon : ArrowRight01Icon}
+              isActive={prefs.fileListOpen}
+              onPress={() =>
+                queuePrefsUpdate({ fileListOpen: !prefs.fileListOpen })
+              }
+              size={13}
+            />
+          </div>
+        </div>
       </header>
 
-      <div className="min-h-0 flex-1">
-        {!isBodyReady ? (
-          <div className="flex h-full items-center justify-center px-6 text-sm text-muted">
-            <Spinner color="current" size="sm" />
-          </div>
-        ) : diffPanelQuery.isPending && !diff ? (
-          <div className="flex h-full items-center justify-center px-6 text-sm text-muted">
-            <Spinner color="current" size="sm" />
+      {/* ── File list panel ── */}
+      {prefs.fileListOpen && diffFiles.length > 0 ? (
+        <FileListPanel
+          diffFiles={diffFiles}
+          onScrollToFile={handleScrollToFile}
+          searchFilter={prefs.searchFilter}
+          onSearchChange={(value) => queuePrefsUpdate({ searchFilter: value })}
+        />
+      ) : null}
+
+      {/* ── Diff body ── */}
+      <div className="min-h-0 flex-1" role="list" aria-label="Changed files">
+        {!isBodyReady || (diffPanelQuery.isPending && !diff) ? (
+          <div className="px-2 pt-2 h-48 flex items-center justify-center">
+            <Spinner size="sm" />
           </div>
         ) : diffPanelQuery.error ? (
           <div className="px-4 py-6 text-sm text-danger">
@@ -784,55 +1159,100 @@ export function RepoDiffSidebar() {
           </div>
         ) : disabledReason ? (
           <div className="px-4 py-6">
-            <div className="rounded-2xl border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning">
+            <div className="rounded-xl border border-warning-soft-hover bg-warning/10 px-4 py-3 text-sm text-warning">
               {disabledReason}
             </div>
           </div>
-        ) : diffFiles.length === 0 ? (
-          <div className="flex h-full items-center justify-center px-6 text-sm text-muted">
-            No files in this diff view.
-          </div>
+        ) : filteredDiffFiles.length === 0 ? (
+          prefs.searchFilter && diffFiles.length > 0 ? (
+            <div className="flex h-full items-center justify-center px-6 text-sm text-muted">
+              No files match &ldquo;{prefs.searchFilter}&rdquo;
+            </div>
+          ) : (
+            <EmptyState mode={currentMode} />
+          )
         ) : (
-          <div className="h-full min-h-0 overflow-auto px-2 pb-2">
-            {diffFiles.map((file, index) => {
+          <div
+            className="h-full min-h-0 overflow-auto px-2 pb-2"
+            ref={scrollContainerRef}
+          >
+            {filteredDiffFiles.map((file, index) => {
               const canStage = currentMode === "unstaged";
               const canUnstage = currentMode === "staged";
               const canRevert = currentMode !== "branch";
               const shouldRenderDiff = index < effectiveVisibleFileCount;
               const parsedFile = shouldRenderDiff
                 ? getCachedRenderableFile({
-                    cache: renderableFileCacheRef.current,
+                    cache: renderableFileCache,
                     file,
                     mode: currentMode,
                   })
                 : null;
 
+              const changeType = detectFileChangeType(file);
+              const fileIcon = getFileIcon(file.path);
+              const { dir, name } = splitFilePath(file.path);
+              const isCollapsed = prefs.collapsedFiles.has(file.path);
+
               return (
                 <div
-                  className="mb-2 overflow-hidden rounded-xl border border-border/40 bg-background/40 first:mt-2 last:mb-0"
+                  className="mb-2 overflow-hidden rounded-xl border border-border/30 bg-background/40 first:mt-2 last:mb-0"
                   data-diff-mounted={
                     shouldRenderDiff && parsedFile?.fileDiff ? "true" : "false"
                   }
+                  data-diff-file-path={file.path}
                   key={`${currentMode}:${file.path}`}
+                  role="listitem"
+                  aria-label={`${file.path}: ${file.additions} additions, ${file.deletions} deletions`}
                 >
-                  <div className="flex items-center justify-between gap-3 border-b border-border/20 px-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="truncate font-mono text-[11px] text-foreground/75">
-                        {file.path}
-                      </p>
-                      <div className="mt-1 flex items-center gap-2 text-[11px] text-muted">
-                        <span>
-                          +{file.additions} -{file.deletions}
+                  {/* File card header */}
+                  <div className="flex items-center gap-2 border-b border-border/15 px-3 py-2">
+                    {/* Collapse toggle */}
+                    <button
+                      aria-label={isCollapsed ? "Expand diff" : "Collapse diff"}
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-foreground/30 transition-colors hover:text-foreground/60"
+                      onClick={() => toggleRepoDiffFileCollapsed(file.path)}
+                      type="button"
+                    >
+                      <HugeiconsIcon
+                        color="currentColor"
+                        icon={isCollapsed ? ArrowRight01Icon : ArrowDown01Icon}
+                        size={12}
+                        strokeWidth={2}
+                      />
+                    </button>
+
+                    {/* Change type badge */}
+                    <ChangeTypeBadge type={changeType} />
+
+                    {/* File icon */}
+                    <Icon className="h-3.5 w-3.5 shrink-0" icon={fileIcon} />
+
+                    {/* File path with highlighted name */}
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className="truncate font-mono text-[11px]"
+                        title={file.path}
+                      >
+                        <span className="text-foreground/35">{dir}</span>
+                        <span className="font-medium text-foreground/80">
+                          {name}
                         </span>
-                        {parsedFile?.parseError ? (
-                          <span>{parsedFile.parseError}</span>
-                        ) : shouldRenderDiff ? null : (
-                          <span>
-                            Diff body deferred for smoother scrolling.
-                          </span>
-                        )}
-                      </div>
+                      </p>
                     </div>
+
+                    {/* Stats */}
+                    <span className="shrink-0 font-mono text-[10px] tabular-nums">
+                      {file.additions > 0 ? (
+                        <span className="text-success">+{file.additions}</span>
+                      ) : null}
+                      {file.additions > 0 && file.deletions > 0 ? " " : null}
+                      {file.deletions > 0 ? (
+                        <span className="text-danger">-{file.deletions}</span>
+                      ) : null}
+                    </span>
+
+                    {/* Actions */}
                     <FileHeaderActions
                       canOpenInEditor={canOpenInEditor}
                       canRevert={canRevert}
@@ -872,32 +1292,37 @@ export function RepoDiffSidebar() {
                       }
                     />
                   </div>
-                  {parsedFile?.fileDiff ? (
-                    <FileDiff
-                      fileDiff={parsedFile.fileDiff}
-                      options={{
-                        collapsedContextThreshold: 8,
-                        disableBackground: false,
-                        diffStyle:
-                          prefs.layout === "split" ? "split" : "unified",
-                        disableFileHeader: true,
-                        expandUnchanged: prefs.expandAll,
-                        lineDiffType,
-                        overflow: prefs.wordWrap ? "wrap" : "scroll",
-                        theme: resolveDiffThemeName(resolvedTheme),
-                        themeType: resolvedTheme,
-                        unsafeCSS: DIFF_PANEL_UNSAFE_CSS,
-                      }}
-                    />
-                  ) : shouldRenderDiff ? (
-                    <pre className="overflow-auto rounded-b-lg bg-background/70 p-3 font-mono text-[10px] leading-relaxed text-foreground/80 whitespace-pre-wrap break-words">
-                      {file.patch}
-                    </pre>
-                  ) : (
-                    <div className="rounded-b-lg bg-background/60 px-3 py-4 text-[11px] text-muted">
-                      Diff body deferred for smoother scrolling.
-                    </div>
-                  )}
+
+                  {/* Diff content */}
+                  {!isCollapsed ? (
+                    <>
+                      {parsedFile?.fileDiff ? (
+                        <FileDiff
+                          fileDiff={parsedFile.fileDiff}
+                          options={{
+                            collapsedContextThreshold: 8,
+                            disableBackground: false,
+                            diffStyle:
+                              prefs.layout === "split" ? "split" : "unified",
+                            disableFileHeader: true,
+                            expandUnchanged: prefs.expandAll,
+                            lineDiffType,
+                            overflow: prefs.wordWrap ? "wrap" : "scroll",
+                            theme: resolveDiffThemeName(resolvedTheme),
+                            themeType: resolvedTheme,
+                            unsafeCSS: DIFF_PANEL_UNSAFE_CSS,
+                          }}
+                        />
+                      ) : shouldRenderDiff ? (
+                        <RawPatchFallback patch={file.patch} />
+                      ) : (
+                        <div className="rounded-b-xl bg-background/60 px-3 py-4 text-[11px] text-muted">
+                          Scroll down to load this diff.
+                        </div>
+                      )}
+                    </>
+                  ) : null}
+
                   <DiffRevealTrigger
                     isActive={index === effectiveVisibleFileCount}
                     onReveal={revealMoreFiles}
@@ -909,45 +1334,96 @@ export function RepoDiffSidebar() {
         )}
       </div>
 
+      {/* ── Footer ── */}
       {diff &&
       (currentMode === "unstaged" || currentMode === "staged") &&
       diff.files.length > 0 ? (
-        <div className="flex shrink-0 items-center justify-between border-t border-border/20 px-4 py-3">
-          <div className="text-xs text-muted">
-            {diff.totalAdditions > 0 ? (
-              <span className="text-success">+{diff.totalAdditions}</span>
-            ) : null}
-            {diff.totalAdditions > 0 && diff.totalDeletions > 0 ? " " : null}
-            {diff.totalDeletions > 0 ? (
-              <span className="text-danger">-{diff.totalDeletions}</span>
-            ) : null}
-          </div>
-          <Button
-            className="rounded-xl"
-            isDisabled={isMutating}
-            onPress={() => {
-              if (currentMode === "unstaged") {
-                void stageMutation.mutateAsync({
-                  mode: currentMode,
-                  paths: diff.files.map((file) => file.path),
-                  threadId,
-                  workspaceId,
-                });
-                return;
-              }
+        <div className="flex shrink-0 flex-col gap-2 border-t border-border/20 px-3 py-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs text-muted">
+              <span className="tabular-nums">
+                {fileCount} {fileCount === 1 ? "file" : "files"}
+              </span>
+              <span className="text-foreground/15">|</span>
+              {totalAdditions > 0 ? (
+                <span className="text-success">+{totalAdditions}</span>
+              ) : null}
+              {totalAdditions > 0 && totalDeletions > 0 ? " " : null}
+              {totalDeletions > 0 ? (
+                <span className="text-danger">-{totalDeletions}</span>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-1.5">
+              {currentMode === "unstaged" ? (
+                revertAllConfirm ? (
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-danger">Revert all?</span>
+                    <Button
+                      className="h-6 rounded-xl px-2 text-[10px] text-danger"
+                      isDisabled={isMutating}
+                      onPress={() => {
+                        setRevertAllConfirm(false);
+                        void revertMutation.mutateAsync({
+                          mode: currentMode,
+                          paths: diff.files.map((f) => f.path),
+                          threadId,
+                          workspaceId,
+                        });
+                      }}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      Yes
+                    </Button>
+                    <Button
+                      className="h-6 rounded-xl px-2 text-[10px]"
+                      onPress={() => setRevertAllConfirm(false)}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      No
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    className="h-7 rounded-xl px-2.5 text-[11px] text-danger"
+                    isDisabled={isMutating}
+                    onPress={() => setRevertAllConfirm(true)}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    Revert all
+                  </Button>
+                )
+              ) : null}
+              <Button
+                className="h-7 rounded-xl px-3 text-[11px]"
+                isDisabled={isMutating}
+                onPress={() => {
+                  if (currentMode === "unstaged") {
+                    void stageMutation.mutateAsync({
+                      mode: currentMode,
+                      paths: diff.files.map((file) => file.path),
+                      threadId,
+                      workspaceId,
+                    });
+                    return;
+                  }
 
-              void unstageMutation.mutateAsync({
-                mode: currentMode,
-                paths: diff.files.map((file) => file.path),
-                threadId,
-                workspaceId,
-              });
-            }}
-            size="sm"
-            variant="tertiary"
-          >
-            {currentMode === "unstaged" ? "Stage all" : "Unstage all"}
-          </Button>
+                  void unstageMutation.mutateAsync({
+                    mode: currentMode,
+                    paths: diff.files.map((file) => file.path),
+                    threadId,
+                    workspaceId,
+                  });
+                }}
+                size="sm"
+                variant="tertiary"
+              >
+                {currentMode === "unstaged" ? "Stage all" : "Unstage all"}
+              </Button>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>

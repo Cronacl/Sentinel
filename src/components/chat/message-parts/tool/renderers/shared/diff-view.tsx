@@ -375,14 +375,17 @@ function getDiffTint(kind: DiffLineKind) {
 }
 
 function getSegmentStyle(color: string | undefined, kind: DiffLineKind) {
-  const tint = getDiffTint(kind);
+  if (color) {
+    return { color };
+  }
 
+  const tint = getDiffTint(kind);
   if (!tint) {
-    return color ? { color } : undefined;
+    return undefined;
   }
 
   return {
-    color: color ? `color-mix(in srgb, ${color} 78%, ${tint})` : tint,
+    color: `color-mix(in oklab, var(--color-foreground) 82%, ${tint})`,
   };
 }
 
@@ -499,6 +502,9 @@ export function buildPreviewUnifiedDiff({
   }).diff;
 }
 
+const COLLAPSED_MAX_HEIGHT = 400;
+const EXPANDED_MAX_HEIGHT = 2000;
+
 export function DiffView({
   diff,
   path,
@@ -510,6 +516,7 @@ export function DiffView({
 }) {
   const theme = useResolvedTheme();
   const [copied, setCopied] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [expandedRegions, setExpandedRegions] = useState<Set<number>>(
     () => new Set(),
   );
@@ -517,7 +524,9 @@ export function DiffView({
     () => new Map(),
   );
   const [hasBeenVisible, setHasBeenVisible] = useState(false);
+  const [needsExpansion, setNeedsExpansion] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const scrollContentRef = useRef<HTMLDivElement | null>(null);
 
   const language = languageOverride ?? detectLanguageFromPath(path);
   const fileIcon =
@@ -591,6 +600,12 @@ export function DiffView({
     };
   }, [hasBeenVisible, language, theme, allLines]);
 
+  useEffect(() => {
+    const el = scrollContentRef.current;
+    if (!el) return;
+    setNeedsExpansion(el.scrollHeight > COLLAPSED_MAX_HEIGHT);
+  }, [groups, expandedRegions]);
+
   const handleCopy = useCallback(async () => {
     const didCopy = await writeTextToClipboard(diff, {
       errorMessage: "Unable to copy this diff.",
@@ -618,14 +633,15 @@ export function DiffView({
 
   const fileName = path.split("/").pop() ?? path;
   const isFullPath = path.includes("/");
+  const maxHeight = isExpanded ? EXPANDED_MAX_HEIGHT : COLLAPSED_MAX_HEIGHT;
 
   return (
     <div
       ref={containerRef}
       className="sentinel-diff overflow-hidden rounded-lg border border-border/40"
     >
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/30 bg-foreground/2 px-3 py-1.5">
+      {/* Sticky header */}
+      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border/30 bg-foreground/2 px-3 py-1.5 backdrop-blur-sm">
         <div className="flex min-w-0 items-center gap-1.5">
           <Icon
             className="h-3.5 w-3.5 shrink-0 text-foreground/50"
@@ -676,8 +692,14 @@ export function DiffView({
       </div>
 
       {/* Lines */}
-      <ScrollShadow className="max-h-[400px] overflow-x-auto">
-        <div className="font-mono text-[11px] leading-[18px]">
+      <ScrollShadow
+        className="overflow-x-auto"
+        style={{ maxHeight: `${maxHeight}px` }}
+      >
+        <div
+          ref={scrollContentRef}
+          className="font-mono text-[11px] leading-[18px]"
+        >
           {groups.map((group, groupIndex) => {
             if (
               group.type === "collapsed" &&
@@ -798,6 +820,17 @@ export function DiffView({
           })}
         </div>
       </ScrollShadow>
+
+      {/* Show more / Show less toggle */}
+      {needsExpansion ? (
+        <button
+          className="flex w-full items-center justify-center gap-1 border-t border-border/20 bg-foreground/2 py-1.5 font-mono text-[10px] text-foreground/40 transition-colors hover:bg-foreground/4 hover:text-foreground/60"
+          onClick={() => setIsExpanded((prev) => !prev)}
+          type="button"
+        >
+          {isExpanded ? "Show less" : `Show more (${allLines.length} lines)`}
+        </button>
+      ) : null}
     </div>
   );
 }

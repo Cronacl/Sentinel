@@ -6,6 +6,8 @@ import type { RepoDiffSidebarMode } from "./repo-diff-sidebar-store";
 export const INITIAL_RENDERABLE_DIFF_BATCH = 6;
 export const RENDERABLE_DIFF_BATCH_INCREMENT = 4;
 
+export type FileChangeType = "added" | "deleted" | "modified" | "renamed";
+
 export type RepoDiffSourceFile = {
   additions: number;
   deletions: number;
@@ -16,6 +18,90 @@ export type RepoDiffSourceFile = {
   patch: string;
   path: string;
 };
+
+export type FileTreeNode = {
+  additions: number;
+  children: FileTreeNode[];
+  deletions: number;
+  isDirectory: boolean;
+  name: string;
+  path: string;
+};
+
+export function detectFileChangeType(file: RepoDiffSourceFile): FileChangeType {
+  if (file.isUntracked) return "added";
+  if (file.deletions > 0 && file.additions === 0) return "deleted";
+  if (file.additions > 0 && file.deletions === 0 && file.oldContents === "")
+    return "added";
+  if (file.newContents === "" && file.deletions > 0) return "deleted";
+  return "modified";
+}
+
+export function buildFileTree(files: RepoDiffSourceFile[]): FileTreeNode[] {
+  const root: Map<string, FileTreeNode> = new Map();
+
+  for (const file of files) {
+    const parts = file.path.split("/");
+    let currentLevel = root;
+
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i]!;
+      const isFile = i === parts.length - 1;
+      const fullPath = parts.slice(0, i + 1).join("/");
+
+      if (!currentLevel.has(part)) {
+        currentLevel.set(part, {
+          additions: isFile ? file.additions : 0,
+          children: [],
+          deletions: isFile ? file.deletions : 0,
+          isDirectory: !isFile,
+          name: part,
+          path: fullPath,
+        });
+      }
+
+      const node = currentLevel.get(part)!;
+      if (!isFile) {
+        node.additions += file.additions;
+        node.deletions += file.deletions;
+        const childMap = new Map<string, FileTreeNode>();
+        for (const child of node.children) {
+          childMap.set(child.name, child);
+        }
+        currentLevel = childMap;
+        node.children = Array.from(childMap.values());
+      }
+    }
+  }
+
+  return Array.from(root.values());
+}
+
+export function flattenFileTree(
+  nodes: FileTreeNode[],
+  depth = 0,
+): Array<FileTreeNode & { depth: number }> {
+  const result: Array<FileTreeNode & { depth: number }> = [];
+  for (const node of nodes) {
+    if (
+      node.isDirectory &&
+      node.children.length === 1 &&
+      node.children[0]!.isDirectory
+    ) {
+      const merged: FileTreeNode = {
+        ...node.children[0]!,
+        name: `${node.name}/${node.children[0]!.name}`,
+      };
+      result.push(...flattenFileTree([merged], depth));
+    } else {
+      result.push({ ...node, depth });
+      if (node.isDirectory) {
+        result.push(...flattenFileTree(node.children, depth + 1));
+      }
+    }
+  }
+  return result;
+}
 
 export type RenderableDiffFile = RepoDiffSourceFile & {
   fileDiff: FileDiffMetadata | null;
