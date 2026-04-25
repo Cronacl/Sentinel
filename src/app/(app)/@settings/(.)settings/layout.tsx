@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { type PropsWithChildren, useCallback } from "react";
 
 import { DesktopTitleBar } from "@/components/shell/sidebar-window-chrome";
@@ -10,6 +10,7 @@ import { useShortcutAction, useShortcutScope } from "@/lib/shortcuts/provider";
 const SETTINGS_SIDEBAR_WIDTH = 224;
 
 export default function SettingsModalLayout({ children }: PropsWithChildren) {
+  const pathname = usePathname();
   const router = useRouter();
 
   const desktop = getDesktopApi();
@@ -25,6 +26,10 @@ export default function SettingsModalLayout({ children }: PropsWithChildren) {
   useShortcutAction("overlay.close", close, {
     scopeId: settingsScope.id,
   });
+
+  if (!pathname.startsWith("/settings")) {
+    return null;
+  }
 
   return (
     <div className="sentinel-settings-modal-root pointer-events-none fixed inset-0 z-50 flex flex-col">
