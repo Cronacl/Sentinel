@@ -897,3 +897,55 @@ button[type="button"] {
     transparent
   );
 }
+
+[data-sidebar-glass="true"] .sentinel-left-sidebar {
+  position: relative;
+  isolation: isolate;
+  background: transparent !important;
+  border: 0;
+  box-shadow: none;
+}
+
+[data-sidebar-glass="true"] .sentinel-left-sidebar::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  content: "";
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--background) 58%, transparent),
+      color-mix(in oklch, var(--background) 46%, transparent)
+    ),
+    color-mix(in oklch, var(--surface) 30%, transparent);
+  backdrop-filter: blur(72px) saturate(1.9);
+  -webkit-backdrop-filter: blur(72px) saturate(1.9);
+}
+
+[data-sidebar-glass="true"][data-theme="dark"] .sentinel-left-sidebar::before {
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--background) 32%, transparent),
+      color-mix(in oklch, var(--background) 22%, transparent)
+    ),
+    color-mix(in oklch, var(--surface) 16%, transparent);
+}
+
+[data-sidebar-glass="true"] .sentinel-left-sidebar > * {
+  position: relative;
+  z-index: 1;
+}
+
+[data-sidebar-glass="true"] body {
+  background: transparent !important;
+}
+
+[data-sidebar-glass="true"] .sentinel-settings-modal-root {
+  background: transparent;
+}
+
+[data-sidebar-glass="true"] .sentinel-sidebar-window-chrome {
+  background: transparent;
+}

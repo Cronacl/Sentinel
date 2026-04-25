@@ -53,6 +53,22 @@ describe("sanitizeAppearanceSettings", () => {
       null,
     );
   });
+
+  it("keeps the sidebar glass preference when it is boolean", () => {
+    expect(
+      sanitizeAppearanceSettings({ sidebarGlassEnabled: true })
+        .sidebarGlassEnabled,
+    ).toBe(true);
+    expect(
+      sanitizeAppearanceSettings({ sidebarGlassEnabled: false })
+        .sidebarGlassEnabled,
+    ).toBe(false);
+    expect(
+      sanitizeAppearanceSettings({
+        sidebarGlassEnabled: "true" as never,
+      }).sidebarGlassEnabled,
+    ).toBe(false);
+  });
 });
 
 describe("accent color tokens", () => {

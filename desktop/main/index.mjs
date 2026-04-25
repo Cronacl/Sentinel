@@ -358,6 +358,16 @@ function getWindowBackgroundColor(theme) {
   return theme === "light" ? "#f5f5f5" : "#090909";
 }
 
+function getMainWindowBackgroundColor(theme) {
+  return process.platform === "darwin"
+    ? "#00000000"
+    : getWindowBackgroundColor(theme);
+}
+
+function getMacWindowVibrancy() {
+  return "sidebar";
+}
+
 function resolveWindowIconPath() {
   const candidates = app.isPackaged
     ? process.platform === "win32"
@@ -588,6 +598,9 @@ function getBrowserWindowChromeOptions(theme = resolvedTheme) {
   if (process.platform === "darwin") {
     return {
       titleBarStyle: "hiddenInset",
+      transparent: true,
+      vibrancy: getMacWindowVibrancy(theme),
+      visualEffectState: "active",
     };
   }
 
@@ -898,7 +911,7 @@ function createWindow() {
   const windowIcon = resolveWindowIconPath();
 
   mainWindow = new BrowserWindow({
-    backgroundColor: "#090909",
+    backgroundColor: getMainWindowBackgroundColor(resolvedTheme),
     height: 920,
     icon: windowIcon,
     minHeight: 720,
@@ -1383,6 +1396,14 @@ function registerIpc() {
   ipcMain.handle(DESKTOP_CHANNELS.WINDOW_SYNC_THEME, async (_event, theme) => {
     resolvedTheme = theme === "light" ? "light" : "dark";
     syncWindowsTitleBarOverlay(resolvedTheme);
+    if (process.platform === "darwin") {
+      for (const win of BrowserWindow.getAllWindows()) {
+        try {
+          win.setVibrancy(getMacWindowVibrancy(resolvedTheme));
+          win.setVisualEffectState("active");
+        } catch {}
+      }
+    }
   });
   ipcMain.handle(DESKTOP_CHANNELS.WINDOW_TOGGLE_MAXIMIZE, async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);

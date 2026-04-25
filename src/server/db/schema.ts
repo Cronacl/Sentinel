@@ -94,6 +94,9 @@ export const users = sqliteTable(
       .default("system"),
     codeTheme: text("code_theme"),
     accentColor: integer("accent_color"),
+    sidebarGlassEnabled: integer("sidebar_glass_enabled", {
+      mode: "boolean",
+    }),
     uiFontFamily: text("ui_font_family"),
     codeFontFamily: text("code_font_family"),
     uiFontSize: real("ui_font_size"),

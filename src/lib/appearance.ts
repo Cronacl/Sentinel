@@ -664,6 +664,7 @@ export type AppearanceSettings = {
   codeFontFamily: string;
   codeFontSize: number;
   codeTheme: CodeThemeName;
+  sidebarGlassEnabled: boolean;
   themePreference: ThemePreference;
   uiFontFamily: string;
   uiFontSize: number;
@@ -674,6 +675,7 @@ export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
   codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
   codeFontSize: DEFAULT_CODE_FONT_SIZE,
   codeTheme: DEFAULT_CODE_THEME,
+  sidebarGlassEnabled: false,
   themePreference: DEFAULT_THEME_PREFERENCE,
   uiFontFamily: DEFAULT_UI_FONT_FAMILY,
   uiFontSize: DEFAULT_UI_FONT_SIZE,
@@ -826,6 +828,10 @@ export function sanitizeAppearanceSettings(
       value.codeFontSize <= MAX_CODE_FONT_SIZE
         ? value.codeFontSize
         : DEFAULT_CODE_FONT_SIZE,
+    sidebarGlassEnabled:
+      typeof value?.sidebarGlassEnabled === "boolean"
+        ? value.sidebarGlassEnabled
+        : DEFAULT_APPEARANCE_SETTINGS.sidebarGlassEnabled,
   };
 }
 
@@ -896,6 +902,10 @@ export function applyAppearanceSettings(settings: AppearanceSettings) {
   );
   root.style.setProperty("--accent", accentTokens.accent);
   root.style.setProperty("--accent-foreground", accentTokens.accentForeground);
+  root.setAttribute(
+    "data-sidebar-glass",
+    nextSettings.sidebarGlassEnabled ? "true" : "false",
+  );
   root.setAttribute("data-code-theme", nextSettings.codeTheme);
 
   const codeThemePalette = getCodeThemePalette(
@@ -928,7 +938,7 @@ export function getAppearanceInitScript() {
     DEFAULT_APPEARANCE_SETTINGS,
   )};var p=${JSON.stringify(CODE_THEME_PALETTES)};var m=${JSON.stringify(
     LEGACY_CODE_THEME_ALIASES,
-  )};var a=d;try{var raw=window.localStorage.getItem(ak);if(raw){a=Object.assign({},d,JSON.parse(raw));}}catch{}try{var tp=window.localStorage.getItem(tk);if(tp==="light"||tp==="dark"||tp==="system"){a.themePreference=tp;}}catch{}var root=document.documentElement;var theme=a.themePreference==="system"?(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):a.themePreference;var rawCodeTheme=typeof a.codeTheme==="string"?a.codeTheme:"";var normalizedCodeTheme=(m[rawCodeTheme]||rawCodeTheme);var codeTheme=p[normalizedCodeTheme]?normalizedCodeTheme:d.codeTheme;var palette=p[codeTheme][theme]||p[d.codeTheme][theme];var hue=typeof a.accentColor==="number"&&Number.isInteger(a.accentColor)&&a.accentColor>=0&&a.accentColor<=360?a.accentColor:null;var accent=hue===null?(theme==="dark"?"oklch(100% 0 0)":"oklch(0% 0 0)"):(theme==="dark"?"oklch(75% 0.15 "+hue+")":"oklch(45% 0.2 "+hue+")");var accentForeground=theme==="dark"?"oklch(0% 0 0)":"oklch(100% 0 0)";root.setAttribute("data-theme",theme);root.classList.toggle("dark",theme==="dark");root.setAttribute("data-code-theme",codeTheme);root.style.setProperty("--app-font-sans",a.uiFontFamily||d.uiFontFamily);root.style.setProperty("--app-font-display",a.uiFontFamily||d.uiFontFamily);root.style.setProperty("--app-font-mono",a.codeFontFamily||d.codeFontFamily);root.style.setProperty("--app-ui-font-size",(a.uiFontSize||d.uiFontSize)+"px");root.style.setProperty("--app-code-font-size",(a.codeFontSize||d.codeFontSize)+"px");root.style.setProperty("--accent",accent);root.style.setProperty("--accent-foreground",accentForeground);for(var key in palette){root.style.setProperty("--syntax-"+key,palette[key]);}window.__sentinelThemePreference=a.themePreference||d.themePreference;window.__sentinelAppearance=Object.assign({},a,{accentColor:hue,codeTheme:codeTheme});})();`;
+  )};var a=d;try{var raw=window.localStorage.getItem(ak);if(raw){a=Object.assign({},d,JSON.parse(raw));}}catch{}try{var tp=window.localStorage.getItem(tk);if(tp==="light"||tp==="dark"||tp==="system"){a.themePreference=tp;}}catch{}var root=document.documentElement;var theme=a.themePreference==="system"?(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):a.themePreference;var rawCodeTheme=typeof a.codeTheme==="string"?a.codeTheme:"";var normalizedCodeTheme=(m[rawCodeTheme]||rawCodeTheme);var codeTheme=p[normalizedCodeTheme]?normalizedCodeTheme:d.codeTheme;var palette=p[codeTheme][theme]||p[d.codeTheme][theme];var hue=typeof a.accentColor==="number"&&Number.isInteger(a.accentColor)&&a.accentColor>=0&&a.accentColor<=360?a.accentColor:null;var sidebarGlass=a.sidebarGlassEnabled===true;var accent=hue===null?(theme==="dark"?"oklch(100% 0 0)":"oklch(0% 0 0)"):(theme==="dark"?"oklch(75% 0.15 "+hue+")":"oklch(45% 0.2 "+hue+")");var accentForeground=theme==="dark"?"oklch(0% 0 0)":"oklch(100% 0 0)";root.setAttribute("data-theme",theme);root.classList.toggle("dark",theme==="dark");root.setAttribute("data-code-theme",codeTheme);root.setAttribute("data-sidebar-glass",sidebarGlass?"true":"false");root.style.setProperty("--app-font-sans",a.uiFontFamily||d.uiFontFamily);root.style.setProperty("--app-font-display",a.uiFontFamily||d.uiFontFamily);root.style.setProperty("--app-font-mono",a.codeFontFamily||d.codeFontFamily);root.style.setProperty("--app-ui-font-size",(a.uiFontSize||d.uiFontSize)+"px");root.style.setProperty("--app-code-font-size",(a.codeFontSize||d.codeFontSize)+"px");root.style.setProperty("--accent",accent);root.style.setProperty("--accent-foreground",accentForeground);for(var key in palette){root.style.setProperty("--syntax-"+key,palette[key]);}window.__sentinelThemePreference=a.themePreference||d.themePreference;window.__sentinelAppearance=Object.assign({},a,{accentColor:hue,codeTheme:codeTheme,sidebarGlassEnabled:sidebarGlass});})();`;
 }
 
 export function getCodeThemePalette(

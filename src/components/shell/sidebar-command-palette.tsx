@@ -7,6 +7,7 @@ import { Command } from "cmdk";
 import { formatDistanceToNowStrict } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 import {
   useShortcutAction,
@@ -155,6 +156,7 @@ export function SidebarCommandPalette({
   const { getShortcutLabel } = useShortcuts();
   const shortcutLabel = getShortcutLabel("commandPalette.toggle");
   const [query, setQuery] = useState("");
+  const [portalElement, setPortalElement] = useState<HTMLElement | null>(null);
   const deferredQuery = useDeferredValue(query.trim());
   const searchQuery = api.threads.search.useQuery(
     { query: deferredQuery },
@@ -174,6 +176,10 @@ export function SidebarCommandPalette({
       }),
     [actions, query, recentThreads, searchQuery.data],
   );
+
+  useEffect(() => {
+    setPortalElement(document.body);
+  }, []);
 
   useEffect(() => {
     if (!open) {
@@ -204,7 +210,7 @@ export function SidebarCommandPalette({
     paletteState.actions.length === 0 &&
     paletteState.threads.length === 0;
 
-  return (
+  const palette = (
     <AnimatePresence>
       {open ? (
         <>
@@ -422,4 +428,6 @@ export function SidebarCommandPalette({
       ) : null}
     </AnimatePresence>
   );
+
+  return portalElement ? createPortal(palette, portalElement) : palette;
 }

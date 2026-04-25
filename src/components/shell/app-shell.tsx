@@ -85,7 +85,7 @@ function SidebarContent() {
       <div className="flex h-full min-h-0 flex-col">
         <div className="shrink-0 px-3 pt-3 pb-1">
           <button
-            className="text-muted hover:text-foreground inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors"
+            className="text-muted hover:text-foreground inline-flex items-center gap-2 rounded-xl px-2 py-1.5 text-xs transition-colors"
             onClick={() => navigateHome()}
             type="button"
           >
@@ -111,7 +111,7 @@ function SidebarContent() {
                 size="sm"
                 fullWidth
                 variant={isActive(item.href) ? "tertiary" : "ghost"}
-                className="justify-start rounded-lg"
+                className="justify-start rounded-xl"
                 onPress={() => router.push(item.href)}
               >
                 <HugeiconsIcon
@@ -221,7 +221,7 @@ export function AppShell({ children }: PropsWithChildren) {
               </div>
             </LeftSidebar>
 
-            <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip">
+            <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip bg-background">
               <div className="min-h-0 flex-1">
                 <AppShellContent>{children}</AppShellContent>
               </div>

@@ -263,7 +263,7 @@ export function SidebarWindowChrome() {
 
   return (
     <div
-      className="app-region-drag grid shrink-0 items-center px-3"
+      className="sentinel-sidebar-window-chrome app-region-drag grid shrink-0 items-center px-3"
       style={{
         gridTemplateColumns: `${chromeMetrics.sidebarLeadingWidth}px 1fr ${chromeMetrics.sidebarTrailingWidth}px`,
         minHeight: chromeMetrics.sidebarChromeHeight,

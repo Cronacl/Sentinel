@@ -17,6 +17,7 @@ export const appearanceRouter = createTRPCRouter({
         codeFontFamily: true,
         codeFontSize: true,
         codeTheme: true,
+        sidebarGlassEnabled: true,
         themePreference: true,
         uiFontFamily: true,
         uiFontSize: true,
@@ -32,6 +33,9 @@ export const appearanceRouter = createTRPCRouter({
       codeTheme:
         (user?.codeTheme as typeof DEFAULT_APPEARANCE_SETTINGS.codeTheme) ??
         DEFAULT_APPEARANCE_SETTINGS.codeTheme,
+      sidebarGlassEnabled:
+        user?.sidebarGlassEnabled ??
+        DEFAULT_APPEARANCE_SETTINGS.sidebarGlassEnabled,
       themePreference:
         user?.themePreference ?? DEFAULT_APPEARANCE_SETTINGS.themePreference,
       uiFontFamily:
@@ -50,6 +54,7 @@ export const appearanceRouter = createTRPCRouter({
           codeFontFamily: input.codeFontFamily,
           codeFontSize: input.codeFontSize,
           codeTheme: input.codeTheme,
+          sidebarGlassEnabled: input.sidebarGlassEnabled,
           themePreference: input.themePreference,
           uiFontFamily: input.uiFontFamily,
           uiFontSize: input.uiFontSize,
@@ -62,6 +67,7 @@ export const appearanceRouter = createTRPCRouter({
         codeFontFamily: input.codeFontFamily,
         codeFontSize: input.codeFontSize,
         codeTheme: input.codeTheme,
+        sidebarGlassEnabled: input.sidebarGlassEnabled,
         themePreference: input.themePreference,
         uiFontFamily: input.uiFontFamily,
         uiFontSize: input.uiFontSize,

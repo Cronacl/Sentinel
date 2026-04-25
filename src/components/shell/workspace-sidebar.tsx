@@ -1139,10 +1139,7 @@ const ThreadList = memo(function ThreadList({
   );
 
   return (
-    <ScrollShadow
-      className="max-h-full px-2.5 py-1 pb-4"
-      orientation="vertical"
-    >
+    <div className="px-2.5 py-1 pb-4">
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -1174,7 +1171,7 @@ const ThreadList = memo(function ThreadList({
           </div>
         </SortableContext>
       </DndContext>
-    </ScrollShadow>
+    </div>
   );
 });
 
@@ -1200,7 +1197,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
   const overflowItems = items.slice(THREADS_PER_PAGE);
 
   return (
-    <ScrollShadow className="max-h-full px-2.5 py-1" orientation="vertical">
+    <div className="px-2.5 py-1">
       <div className="flex flex-col gap-1">
         {visibleItems.map((item) => (
           <ThreadRow
@@ -1259,7 +1256,7 @@ const ChronologicalThreadList = memo(function ChronologicalThreadList({
           </>
         ) : null}
       </div>
-    </ScrollShadow>
+    </div>
   );
 });
 
@@ -2871,10 +2868,12 @@ export function WorkspaceSidebar() {
 
       <div className="min-h-0 flex-1">
         <ScrollShadow
-          className="sentinel-scroll-shell h-full pb-4"
+          className="h-full min-h-0 pb-4"
+          hideScrollBar
           orientation="vertical"
+          size={56}
         >
-          <div className="sentinel-scroll-area h-full">
+          <div className="flex min-h-full flex-col">
             <div
               className={`flex shrink-0 items-center gap-1 ${SIDEBAR_SECTION_INSET}`}
             >
@@ -3046,7 +3045,7 @@ export function WorkspaceSidebar() {
             ) : null}
 
             <div
-              className={`flex shrink-0 items-center gap-1 pt-2 ${SIDEBAR_SECTION_INSET}`}
+              className={`flex shrink-0 items-center gap-1 ${SIDEBAR_SECTION_INSET}`}
             >
               <div className="min-w-0 flex-1">
                 <h2 className="text-foreground/40 flex items-center gap-1.5 px-1 text-xs font-medium">

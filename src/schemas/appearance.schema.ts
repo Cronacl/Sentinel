@@ -33,6 +33,7 @@ export const appearanceFormSchema = z.object({
   codeFontFamily: fontFamilySchema,
   codeFontSize: fontSizeSchema(MIN_CODE_FONT_SIZE, MAX_CODE_FONT_SIZE),
   codeTheme: codeThemeSchema,
+  sidebarGlassEnabled: z.boolean(),
   themePreference: themePreferenceSchema,
   uiFontFamily: fontFamilySchema,
   uiFontSize: fontSizeSchema(MIN_UI_FONT_SIZE, MAX_UI_FONT_SIZE),

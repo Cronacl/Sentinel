@@ -28,6 +28,7 @@ const CURRENT_USER_COLUMNS = [
   { name: "theme_preference" },
   { name: "code_theme" },
   { name: "accent_color" },
+  { name: "sidebar_glass_enabled" },
   { name: "ui_font_family" },
   { name: "code_font_family" },
   { name: "ui_font_size" },
@@ -276,6 +277,9 @@ describe("ensureTables", () => {
     );
     expect(sqlite.exec).toHaveBeenCalledWith(
       `ALTER TABLE "user" ADD COLUMN "accent_color" integer`,
+    );
+    expect(sqlite.exec).toHaveBeenCalledWith(
+      `ALTER TABLE "user" ADD COLUMN "sidebar_glass_enabled" integer`,
     );
     expect(sqlite.exec).toHaveBeenCalledWith(
       `ALTER TABLE "user" ADD COLUMN "ui_font_family" text`,

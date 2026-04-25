@@ -1,6 +1,13 @@
 "use client";
 
-import { Button, ColorSlider, ColorSwatch, Form, Spinner } from "@heroui/react";
+import {
+  Button,
+  ColorSlider,
+  ColorSwatch,
+  Form,
+  Spinner,
+  Switch,
+} from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ComputerIcon,
@@ -223,27 +230,24 @@ export default function AppearanceSettingsPage() {
     nextColor: ReturnType<typeof parseColor>,
   ) => {
     const nextHue = Math.round(nextColor.getChannelValue("hue"));
-    const nextValues = {
-      ...form.getValues(),
-      accentColor: nextHue,
-    } satisfies AppearanceFormValues;
 
     form.setValue("accentColor", nextHue, {
       shouldDirty: true,
       shouldTouch: true,
       shouldValidate: true,
     });
-    applyPreviewValues(nextValues);
   };
 
   const handleAccentColorReset = () => {
-    const nextValues = {
-      ...form.getValues(),
-      accentColor: null,
-    } satisfies AppearanceFormValues;
-
     resetField("accentColor", null);
-    applyPreviewValues(nextValues);
+  };
+
+  const handleSidebarGlassChange = (isSelected: boolean) => {
+    form.setValue("sidebarGlassEnabled", isSelected, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
   };
 
   const handleSubmit = async (values: AppearanceFormValues) => {
@@ -342,6 +346,24 @@ export default function AppearanceSettingsPage() {
                   </ColorSlider>
                   <ResetAction onPress={handleAccentColorReset} />
                 </div>
+              </SettingsRowControl>
+            </SettingsSectionRow>
+
+            <SettingsSectionRow
+              description="Use a translucent left sidebar with a deeper background blur."
+              title="Glass sidebar"
+            >
+              <SettingsRowControl widthClassName="lg:w-auto">
+                <Switch
+                  aria-label="Glass sidebar"
+                  className="shrink-0"
+                  isSelected={Boolean(appearanceValues.sidebarGlassEnabled)}
+                  onChange={handleSidebarGlassChange}
+                >
+                  <Switch.Control>
+                    <Switch.Thumb />
+                  </Switch.Control>
+                </Switch>
               </SettingsRowControl>
             </SettingsSectionRow>
 
