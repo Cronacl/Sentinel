@@ -5,7 +5,6 @@ import {
   buildReleasePageUrl,
   createDesktopUpdaterController,
   createInitialUpdateState,
-  PRIVATE_GITHUB_RELEASES_UNSUPPORTED_REASON,
   serializeReleaseNotes,
 } from "./updater.mjs";
 
@@ -69,14 +68,20 @@ describe("desktop updater controller", () => {
     expect(updater.checkCalls).toBe(0);
   });
 
-  it("reports unsupported state when background updates are explicitly disabled", async () => {
+  it("checks for updates in packaged builds with an active updater", async () => {
     const updater = new MockUpdater();
+    updater.checkResult = Promise.resolve({
+      updateInfo: {
+        releaseDate: "2026-03-29T11:00:00.000Z",
+        releaseName: "Sentinel 1.0.0",
+        version: "1.0.0",
+      },
+    });
+
     const controller = createDesktopUpdaterController({
       appVersion: () => "1.0.0",
-      backgroundUpdatesEnabled: false,
-      backgroundUpdatesSupportReason:
-        PRIVATE_GITHUB_RELEASES_UNSUPPORTED_REASON,
       isPackaged: () => true,
+      now: () => "2026-03-29T12:00:00.000Z",
       platform: "darwin",
       updater,
     });
@@ -84,10 +89,30 @@ describe("desktop updater controller", () => {
     controller.initialize();
     const state = await controller.checkForUpdates();
 
+    expect(state).toMatchObject({
+      checkedAt: "2026-03-29T12:00:00.000Z",
+      isSupported: true,
+      status: "checking",
+      supportReason: null,
+    });
+    expect(updater.checkCalls).toBe(1);
+  });
+
+  it("reports unsupported state when the packaged updater is inactive", async () => {
+    const updater = new MockUpdater();
+    updater.active = false;
+    const controller = createDesktopUpdaterController({
+      appVersion: () => "1.0.0",
+      isPackaged: () => true,
+      platform: "linux",
+      updater,
+    });
+
+    controller.initialize();
+    const state = await controller.checkForUpdates();
+
     expect(state.isSupported).toBe(false);
-    expect(state.supportReason).toBe(
-      PRIVATE_GITHUB_RELEASES_UNSUPPORTED_REASON,
-    );
+    expect(state.supportReason).toContain("AppImage");
     expect(updater.checkCalls).toBe(0);
   });
 
