@@ -12,6 +12,7 @@ import {
 import { api } from "@/trpc/react";
 
 import { useShell } from "./shell-context";
+import { openSettingsRoute } from "./settings-navigation";
 
 export function useAppShortcutActions() {
   const router = useRouter();
@@ -122,8 +123,8 @@ export function useAppShortcutActions() {
   }, [router]);
 
   const handleOpenSettings = useCallback(() => {
-    router.push("/settings");
-  }, [router]);
+    openSettingsRoute(router, "/settings", pathname);
+  }, [pathname, router]);
 
   return {
     handleCreateWorkspace,

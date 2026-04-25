@@ -75,7 +75,7 @@ function SettingsSectionRow({
   title,
 }: {
   children: ReactNode;
-  description: ReactNode;
+  description?: ReactNode;
   isFirst?: boolean;
   title: ReactNode;
 }) {
@@ -85,7 +85,9 @@ function SettingsSectionRow({
     >
       <div className="space-y-1">
         <h2 className="text-foreground text-base font-medium">{title}</h2>
-        <p className="text-muted text-sm">{description}</p>
+        {description ? (
+          <p className="text-muted text-sm">{description}</p>
+        ) : null}
       </div>
       {children}
     </div>
@@ -349,10 +351,7 @@ export default function AppearanceSettingsPage() {
               </SettingsRowControl>
             </SettingsSectionRow>
 
-            <SettingsSectionRow
-              description="Use a translucent left sidebar with a deeper background blur."
-              title="Glass sidebar"
-            >
+            <SettingsSectionRow title="Glass sidebar">
               <SettingsRowControl widthClassName="lg:w-auto">
                 <Switch
                   aria-label="Glass sidebar"

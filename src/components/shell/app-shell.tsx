@@ -30,6 +30,7 @@ import {
   SidebarWindowChrome,
   hasDesktopTitleBar,
 } from "./sidebar-window-chrome";
+import { closeSettingsRoute } from "./settings-navigation";
 
 const ThreadRouteScreen = dynamic(
   () =>
@@ -78,12 +79,15 @@ function ShellWarmCache() {
 
 function SidebarContent() {
   const router = useRouter();
-  const { navigateHome, pathname } = useShell();
+  const { pathname } = useShell();
   const isSettings = pathname.startsWith("/settings");
   const sidebarMode = isSettings ? "settings" : "workspace";
 
   const isActiveSettingsItem = (href: string) =>
     href === "/settings" ? pathname === "/settings" : pathname.startsWith(href);
+  const handleBackToApp = () => {
+    closeSettingsRoute(router);
+  };
 
   return (
     <div className="relative h-full min-h-0 overflow-hidden">
@@ -101,7 +105,7 @@ function SidebarContent() {
               <div className="shrink-0 px-3 pt-3 pb-1">
                 <button
                   className="text-muted hover:text-foreground inline-flex items-center gap-2 rounded-xl px-2 py-1.5 text-xs transition-colors"
-                  onClick={() => navigateHome()}
+                  onClick={handleBackToApp}
                   type="button"
                 >
                   <HugeiconsIcon

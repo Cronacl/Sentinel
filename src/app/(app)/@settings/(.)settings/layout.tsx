@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { type PropsWithChildren, useCallback } from "react";
 
+import { closeSettingsRoute } from "@/components/shell/settings-navigation";
 import { DesktopTitleBar } from "@/components/shell/sidebar-window-chrome";
 import { getDesktopApi } from "@/lib/desktop/client";
 import { useShortcutAction, useShortcutScope } from "@/lib/shortcuts/provider";
@@ -21,7 +22,7 @@ export default function SettingsModalLayout({ children }: PropsWithChildren) {
   });
 
   const close = useCallback(() => {
-    router.back();
+    closeSettingsRoute(router);
   }, [router]);
   useShortcutAction("overlay.close", close, {
     scopeId: settingsScope.id,

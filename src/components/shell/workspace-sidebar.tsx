@@ -115,6 +115,7 @@ import {
   threadPullRequestToneClass,
 } from "./thread-pull-request";
 import { useShell } from "./shell-context";
+import { openSettingsRoute } from "./settings-navigation";
 import { useAppShortcutActions } from "./use-app-shortcut-actions";
 
 type OrganizeBy = "chronological" | "workspace";
@@ -2704,7 +2705,7 @@ export function WorkspaceSidebar() {
         keywords: ["theme", "appearance", "fonts", "display"],
         label: "Appearance",
         onSelect: () => {
-          router.push("/settings/appearance");
+          openSettingsRoute(router, "/settings/appearance", pathname);
         },
         subtitle: "Open theme, font, and display settings",
       },
