@@ -99,7 +99,7 @@ export const ComposerToolbar = memo(function ComposerToolbar({
 
   return (
     <div className="flex h-7 items-center justify-between px-1">
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-0.5">
         <Popover.Root
           isOpen={composerMenuOpen}
           onOpenChange={(open) => {
@@ -109,7 +109,7 @@ export const ComposerToolbar = memo(function ComposerToolbar({
         >
           <Popover.Trigger>
             <Button
-              className="h-[24px] w-[24px] min-w-0 rounded-full p-0 text-muted transition-colors duration-150 ease-out hover:text-foreground"
+              className="flex h-[24px] w-[24px] min-w-0 items-center justify-center rounded-full p-0 text-muted transition-colors duration-150 ease-out hover:text-foreground"
               isDisabled={!hasWorkspace}
               size="sm"
               variant="ghost"

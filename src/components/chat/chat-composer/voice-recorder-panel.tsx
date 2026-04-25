@@ -124,9 +124,9 @@ export function VoiceRecorderPanel({
   }, [phase, draw]);
 
   return (
-    <div className="flex h-8 items-center gap-3 px-2">
+    <div className="flex h-7 items-center gap-3 px-1">
       <Button
-        className="shrink-0 text-xs"
+        className="h-[24px] shrink-0 rounded-full px-3 text-xs"
         onPress={onCancel}
         size="sm"
         variant="tertiary"
