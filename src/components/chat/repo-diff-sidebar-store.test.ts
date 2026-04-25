@@ -22,9 +22,12 @@ describe("repo diff sidebar store", () => {
     expect(getRepoDiffSidebarState()).toEqual({
       kind: "thread",
       prefs: {
+        collapsedFiles: new Set(),
         expandAll: false,
+        fileListOpen: false,
         layout: "unified",
         mode: "unstaged",
+        searchFilter: "",
         wordDiffs: false,
         wordWrap: false,
       },

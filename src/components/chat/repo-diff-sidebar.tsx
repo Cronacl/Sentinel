@@ -600,6 +600,7 @@ export function RepoDiffSidebar() {
   const workspaceId =
     sidebarState.kind === "thread" ? sidebarState.workspaceId : null;
   const prefs = sidebarState.kind === "thread" ? sidebarState.prefs : null;
+  const currentMode = prefs?.mode ?? "unstaged";
 
   const queryInput = useMemo(
     () =>
@@ -642,13 +643,53 @@ export function RepoDiffSidebar() {
       staleTime: 0,
     },
   );
-  const diffPanelData =
+  const [stableDiffPanelData, setStableDiffPanelData] = useState<
+    typeof diffPanelQuery.data | undefined
+  >(undefined);
+  const isDiffFingerprintAccepted =
     !diffPanelQuery.data ||
     !threadGitStateQuery.data ||
     diffPanelQuery.data.statusFingerprint ===
-      threadGitStateQuery.data.statusFingerprint
-      ? diffPanelQuery.data
-      : undefined;
+      threadGitStateQuery.data.statusFingerprint;
+  const shouldClearStableDiff =
+    currentMode !== "branch" && threadGitStateQuery.data?.hasChanges === false;
+  const diffPanelData = isDiffFingerprintAccepted
+    ? diffPanelQuery.data
+    : shouldClearStableDiff
+      ? undefined
+      : stableDiffPanelData;
+
+  useEffect(() => {
+    setStableDiffPanelData(undefined);
+  }, [currentMode, threadId, workspaceId]);
+
+  useEffect(() => {
+    if (shouldClearStableDiff) {
+      setStableDiffPanelData(undefined);
+      return;
+    }
+
+    if (diffPanelQuery.data && isDiffFingerprintAccepted) {
+      setStableDiffPanelData(diffPanelQuery.data);
+    }
+  }, [diffPanelQuery.data, isDiffFingerprintAccepted, shouldClearStableDiff]);
+
+  useEffect(() => {
+    if (
+      queryInput &&
+      diffPanelQuery.data &&
+      threadGitStateQuery.data &&
+      !isDiffFingerprintAccepted &&
+      !diffPanelQuery.isFetching
+    ) {
+      void diffPanelQuery.refetch();
+    }
+  }, [
+    diffPanelQuery,
+    isDiffFingerprintAccepted,
+    queryInput,
+    threadGitStateQuery.data,
+  ]);
 
   const repoRoot =
     diffPanelData?.repoContext.effectiveRootPath ??
@@ -851,7 +892,6 @@ export function RepoDiffSidebar() {
     }
   }, []);
 
-  const currentMode = prefs?.mode ?? "unstaged";
   const diff = diffPanelData?.diff;
   const diffFiles = diff?.files ?? EMPTY_SOURCE_FILES;
 
