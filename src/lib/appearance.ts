@@ -660,6 +660,7 @@ const CODE_THEME_PALETTES: Record<CodeThemeName, CodeThemeDefinition> =
   ) as Record<CodeThemeName, CodeThemeDefinition>;
 
 export type AppearanceSettings = {
+  accentColor: number | null;
   codeFontFamily: string;
   codeFontSize: number;
   codeTheme: CodeThemeName;
@@ -669,6 +670,7 @@ export type AppearanceSettings = {
 };
 
 export const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
+  accentColor: null,
   codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
   codeFontSize: DEFAULT_CODE_FONT_SIZE,
   codeTheme: DEFAULT_CODE_THEME,
@@ -758,10 +760,44 @@ export function getActiveCodeThemeName(): CodeThemeName {
   return readStoredAppearanceSettings().codeTheme;
 }
 
+export function getAccentColorTokens(
+  accentColor: number | null,
+  resolvedTheme: ResolvedTheme,
+) {
+  if (accentColor === null) {
+    return resolvedTheme === "dark"
+      ? {
+          accent: "oklch(100% 0 0)",
+          accentForeground: "oklch(0% 0 0)",
+        }
+      : {
+          accent: "oklch(0% 0 0)",
+          accentForeground: "oklch(100% 0 0)",
+        };
+  }
+
+  return resolvedTheme === "dark"
+    ? {
+        accent: `oklch(75% 0.15 ${accentColor})`,
+        accentForeground: "oklch(0% 0 0)",
+      }
+    : {
+        accent: `oklch(45% 0.2 ${accentColor})`,
+        accentForeground: "oklch(100% 0 0)",
+      };
+}
+
 export function sanitizeAppearanceSettings(
   value?: Partial<AppearanceSettings> | null,
 ): AppearanceSettings {
   return {
+    accentColor:
+      typeof value?.accentColor === "number" &&
+      Number.isInteger(value.accentColor) &&
+      value.accentColor >= 0 &&
+      value.accentColor <= 360
+        ? value.accentColor
+        : DEFAULT_APPEARANCE_SETTINGS.accentColor,
     themePreference:
       value?.themePreference &&
       THEME_PREFERENCE_VALUES.includes(value.themePreference)
@@ -854,6 +890,12 @@ export function applyAppearanceSettings(settings: AppearanceSettings) {
     "--app-code-font-size",
     `${nextSettings.codeFontSize}px`,
   );
+  const accentTokens = getAccentColorTokens(
+    nextSettings.accentColor,
+    resolvedTheme,
+  );
+  root.style.setProperty("--accent", accentTokens.accent);
+  root.style.setProperty("--accent-foreground", accentTokens.accentForeground);
   root.setAttribute("data-code-theme", nextSettings.codeTheme);
 
   const codeThemePalette = getCodeThemePalette(
@@ -886,7 +928,7 @@ export function getAppearanceInitScript() {
     DEFAULT_APPEARANCE_SETTINGS,
   )};var p=${JSON.stringify(CODE_THEME_PALETTES)};var m=${JSON.stringify(
     LEGACY_CODE_THEME_ALIASES,
-  )};var a=d;try{var raw=window.localStorage.getItem(ak);if(raw){a=Object.assign({},d,JSON.parse(raw));}}catch{}try{var tp=window.localStorage.getItem(tk);if(tp==="light"||tp==="dark"||tp==="system"){a.themePreference=tp;}}catch{}var root=document.documentElement;var theme=a.themePreference==="system"?(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):a.themePreference;var rawCodeTheme=typeof a.codeTheme==="string"?a.codeTheme:"";var normalizedCodeTheme=(m[rawCodeTheme]||rawCodeTheme);var codeTheme=p[normalizedCodeTheme]?normalizedCodeTheme:d.codeTheme;var palette=p[codeTheme][theme]||p[d.codeTheme][theme];root.setAttribute("data-theme",theme);root.classList.toggle("dark",theme==="dark");root.setAttribute("data-code-theme",codeTheme);root.style.setProperty("--app-font-sans",a.uiFontFamily||d.uiFontFamily);root.style.setProperty("--app-font-display",a.uiFontFamily||d.uiFontFamily);root.style.setProperty("--app-font-mono",a.codeFontFamily||d.codeFontFamily);root.style.setProperty("--app-ui-font-size",(a.uiFontSize||d.uiFontSize)+"px");root.style.setProperty("--app-code-font-size",(a.codeFontSize||d.codeFontSize)+"px");for(var key in palette){root.style.setProperty("--syntax-"+key,palette[key]);}window.__sentinelThemePreference=a.themePreference||d.themePreference;window.__sentinelAppearance=Object.assign({},a,{codeTheme:codeTheme});})();`;
+  )};var a=d;try{var raw=window.localStorage.getItem(ak);if(raw){a=Object.assign({},d,JSON.parse(raw));}}catch{}try{var tp=window.localStorage.getItem(tk);if(tp==="light"||tp==="dark"||tp==="system"){a.themePreference=tp;}}catch{}var root=document.documentElement;var theme=a.themePreference==="system"?(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):a.themePreference;var rawCodeTheme=typeof a.codeTheme==="string"?a.codeTheme:"";var normalizedCodeTheme=(m[rawCodeTheme]||rawCodeTheme);var codeTheme=p[normalizedCodeTheme]?normalizedCodeTheme:d.codeTheme;var palette=p[codeTheme][theme]||p[d.codeTheme][theme];var hue=typeof a.accentColor==="number"&&Number.isInteger(a.accentColor)&&a.accentColor>=0&&a.accentColor<=360?a.accentColor:null;var accent=hue===null?(theme==="dark"?"oklch(100% 0 0)":"oklch(0% 0 0)"):(theme==="dark"?"oklch(75% 0.15 "+hue+")":"oklch(45% 0.2 "+hue+")");var accentForeground=theme==="dark"?"oklch(0% 0 0)":"oklch(100% 0 0)";root.setAttribute("data-theme",theme);root.classList.toggle("dark",theme==="dark");root.setAttribute("data-code-theme",codeTheme);root.style.setProperty("--app-font-sans",a.uiFontFamily||d.uiFontFamily);root.style.setProperty("--app-font-display",a.uiFontFamily||d.uiFontFamily);root.style.setProperty("--app-font-mono",a.codeFontFamily||d.codeFontFamily);root.style.setProperty("--app-ui-font-size",(a.uiFontSize||d.uiFontSize)+"px");root.style.setProperty("--app-code-font-size",(a.codeFontSize||d.codeFontSize)+"px");root.style.setProperty("--accent",accent);root.style.setProperty("--accent-foreground",accentForeground);for(var key in palette){root.style.setProperty("--syntax-"+key,palette[key]);}window.__sentinelThemePreference=a.themePreference||d.themePreference;window.__sentinelAppearance=Object.assign({},a,{accentColor:hue,codeTheme:codeTheme});})();`;
 }
 
 export function getCodeThemePalette(

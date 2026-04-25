@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import {
   CODE_THEME_VALUES,
   DEFAULT_CODE_THEME,
+  getAccentColorTokens,
   getCodeThemePalette,
   getCodeThemeThemeId,
   sanitizeAppearanceSettings,
@@ -36,6 +37,45 @@ describe("sanitizeAppearanceSettings", () => {
       sanitizeAppearanceSettings({ codeTheme: "unknown-theme" as never })
         .codeTheme,
     ).toBe(DEFAULT_CODE_THEME);
+  });
+
+  it("keeps valid accent hues and falls back for invalid values", () => {
+    expect(sanitizeAppearanceSettings({ accentColor: 220 }).accentColor).toBe(
+      220,
+    );
+    expect(sanitizeAppearanceSettings({ accentColor: null }).accentColor).toBe(
+      null,
+    );
+    expect(sanitizeAppearanceSettings({ accentColor: 361 }).accentColor).toBe(
+      null,
+    );
+    expect(sanitizeAppearanceSettings({ accentColor: 15.5 }).accentColor).toBe(
+      null,
+    );
+  });
+});
+
+describe("accent color tokens", () => {
+  it("preserves the default black and white accent when no hue is set", () => {
+    expect(getAccentColorTokens(null, "light")).toEqual({
+      accent: "oklch(0% 0 0)",
+      accentForeground: "oklch(100% 0 0)",
+    });
+    expect(getAccentColorTokens(null, "dark")).toEqual({
+      accent: "oklch(100% 0 0)",
+      accentForeground: "oklch(0% 0 0)",
+    });
+  });
+
+  it("returns theme-aware accent tokens for a custom hue", () => {
+    expect(getAccentColorTokens(220, "light")).toEqual({
+      accent: "oklch(45% 0.2 220)",
+      accentForeground: "oklch(100% 0 0)",
+    });
+    expect(getAccentColorTokens(220, "dark")).toEqual({
+      accent: "oklch(75% 0.15 220)",
+      accentForeground: "oklch(0% 0 0)",
+    });
   });
 });
 

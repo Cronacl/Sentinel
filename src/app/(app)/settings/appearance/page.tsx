@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Form, Spinner } from "@heroui/react";
+import { Button, ColorSlider, ColorSwatch, Form, Spinner } from "@heroui/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ComputerIcon,
@@ -11,6 +11,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { parseColor } from "react-aria-components";
 import { sileo } from "sileo";
 
 import {
@@ -26,10 +27,10 @@ import {
   DEFAULT_APPEARANCE_SETTINGS,
   DEFAULT_CODE_FONT_FAMILY,
   DEFAULT_CODE_FONT_SIZE,
-  DEFAULT_CODE_THEME,
   DEFAULT_UI_FONT_FAMILY,
   DEFAULT_UI_FONT_SIZE,
   FONT_SIZE_STEP,
+  resolveThemePreference,
   THEME_OPTIONS,
   type ThemePreference,
 } from "@/lib/appearance";
@@ -44,6 +45,8 @@ const THEME_ICON = {
   light: Sun03Icon,
   system: ComputerIcon,
 } as const;
+
+const DEFAULT_ACCENT_COLOR_HUE = 220;
 
 function dispatchAppearanceEvents() {
   window.dispatchEvent(new Event("sentinel-appearance-change"));
@@ -157,12 +160,18 @@ export default function AppearanceSettingsPage() {
 
   const appearanceValues = form.watch();
   const themePreference = appearanceValues.themePreference;
-  const selectedCodeTheme =
-    CODE_THEME_OPTIONS.find(
-      (option) => option.value === appearanceValues.codeTheme,
-    ) ??
-    CODE_THEME_OPTIONS.find((option) => option.value === DEFAULT_CODE_THEME)!;
-
+  const accentHue = appearanceValues.accentColor;
+  const accentSliderColor = parseColor(
+    `hsl(${accentHue ?? DEFAULT_ACCENT_COLOR_HUE}, 100%, 50%)`,
+  );
+  const accentSwatchColor =
+    accentHue === null
+      ? parseColor(
+          resolveThemePreference(themePreference) === "dark"
+            ? "#ffffff"
+            : "#000000",
+        )
+      : accentSliderColor;
   const resetField = <TField extends keyof AppearanceFormValues>(
     field: TField,
     value: AppearanceFormValues[TField],
@@ -172,6 +181,11 @@ export default function AppearanceSettingsPage() {
       shouldTouch: true,
       shouldValidate: true,
     });
+  };
+
+  const applyPreviewValues = (values: AppearanceFormValues) => {
+    applyAppearanceSettings(values);
+    dispatchAppearanceEvents();
   };
 
   const handleThemeChange = async (nextTheme: ThemePreference) => {
@@ -195,30 +209,53 @@ export default function AppearanceSettingsPage() {
       shouldTouch: true,
       shouldValidate: true,
     });
-    applyAppearanceSettings(nextValues);
-    dispatchAppearanceEvents();
+    applyPreviewValues(nextValues);
 
     try {
       await updateAppearance.mutateAsync(nextValues);
     } catch {
-      applyAppearanceSettings(previousValues);
+      applyPreviewValues(previousValues);
       form.reset(previousValues);
-      dispatchAppearanceEvents();
     }
+  };
+
+  const handleAccentColorChange = (
+    nextColor: ReturnType<typeof parseColor>,
+  ) => {
+    const nextHue = Math.round(nextColor.getChannelValue("hue"));
+    const nextValues = {
+      ...form.getValues(),
+      accentColor: nextHue,
+    } satisfies AppearanceFormValues;
+
+    form.setValue("accentColor", nextHue, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+    applyPreviewValues(nextValues);
+  };
+
+  const handleAccentColorReset = () => {
+    const nextValues = {
+      ...form.getValues(),
+      accentColor: null,
+    } satisfies AppearanceFormValues;
+
+    resetField("accentColor", null);
+    applyPreviewValues(nextValues);
   };
 
   const handleSubmit = async (values: AppearanceFormValues) => {
     const previousValues = appearance ?? DEFAULT_APPEARANCE_SETTINGS;
     setSubmitError("");
-    applyAppearanceSettings(values);
-    dispatchAppearanceEvents();
+    applyPreviewValues(values);
 
     try {
       await updateAppearance.mutateAsync(values);
     } catch {
-      applyAppearanceSettings(previousValues);
+      applyPreviewValues(previousValues);
       form.reset(previousValues);
-      dispatchAppearanceEvents();
     }
   };
 
@@ -278,6 +315,34 @@ export default function AppearanceSettingsPage() {
                   );
                 })}
               </div>
+            </SettingsSectionRow>
+
+            <SettingsSectionRow
+              description="Tune the accent used by active controls and status highlights."
+              title="Accent color"
+            >
+              <SettingsRowControl widthClassName="lg:w-[320px]">
+                <div className="flex w-full items-center gap-3">
+                  <ColorSwatch
+                    aria-label="Current accent color"
+                    className="shrink-0"
+                    color={accentSwatchColor}
+                    size="sm"
+                  />
+                  <ColorSlider
+                    aria-label="Accent hue"
+                    channel="hue"
+                    className="min-w-0 flex-1"
+                    onChange={handleAccentColorChange}
+                    value={accentSliderColor}
+                  >
+                    <ColorSlider.Track className="h-3 !w-full overflow-hidden rounded-full before:!hidden after:!hidden">
+                      <ColorSlider.Thumb className="size-4 rounded-full border-2 border-background shadow-sm" />
+                    </ColorSlider.Track>
+                  </ColorSlider>
+                  <ResetAction onPress={handleAccentColorReset} />
+                </div>
+              </SettingsRowControl>
             </SettingsSectionRow>
 
             <SettingsSectionRow

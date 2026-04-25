@@ -13,6 +13,7 @@ import {
 const findFirst = mock(
   async () =>
     ({
+      accentColor: 248,
       codeFontFamily: '"JetBrains Mono", monospace',
       codeFontSize: 13.5,
       codeTheme: "dracula",
@@ -70,6 +71,7 @@ describe("appearanceRouter", () => {
 
     expect(findFirst).toHaveBeenCalled();
     expect(result).toEqual({
+      accentColor: 248,
       codeFontFamily: '"JetBrains Mono", monospace',
       codeFontSize: 13.5,
       codeTheme: "rose-pine",
@@ -81,6 +83,7 @@ describe("appearanceRouter", () => {
 
   it("falls back to default appearance values when the user has none stored", async () => {
     findFirst.mockImplementationOnce(async () => ({
+      accentColor: null,
       codeFontFamily: null,
       codeFontSize: null,
       codeTheme: null,
@@ -107,6 +110,7 @@ describe("appearanceRouter", () => {
     });
 
     expect(result).toEqual({
+      accentColor: null,
       codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
       codeFontSize: DEFAULT_CODE_FONT_SIZE,
       codeTheme: DEFAULT_CODE_THEME,
@@ -118,6 +122,7 @@ describe("appearanceRouter", () => {
 
   it("updates the stored appearance settings", async () => {
     const input = {
+      accentColor: 132,
       codeFontFamily: '"IBM Plex Mono", monospace',
       codeFontSize: 14,
       codeTheme: "github",
@@ -150,6 +155,7 @@ describe("appearanceRouter", () => {
 describe("appearanceFormSchema", () => {
   it("rejects empty font-family strings", () => {
     const parsed = appearanceFormSchema.safeParse({
+      accentColor: null,
       codeFontFamily: "   ",
       codeFontSize: 12.5,
       codeTheme: "github",
@@ -163,6 +169,7 @@ describe("appearanceFormSchema", () => {
 
   it("rejects out-of-range or non-half-step font sizes", () => {
     const parsed = appearanceFormSchema.safeParse({
+      accentColor: null,
       codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
       codeFontSize: 10.5,
       codeTheme: "github",
@@ -176,9 +183,24 @@ describe("appearanceFormSchema", () => {
 
   it("rejects unsupported code theme families", () => {
     const parsed = appearanceFormSchema.safeParse({
+      accentColor: null,
       codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
       codeFontSize: DEFAULT_CODE_FONT_SIZE,
       codeTheme: "dracula",
+      themePreference: "system",
+      uiFontFamily: DEFAULT_UI_FONT_FAMILY,
+      uiFontSize: DEFAULT_UI_FONT_SIZE,
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects out-of-range accent colors", () => {
+    const parsed = appearanceFormSchema.safeParse({
+      accentColor: 361,
+      codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
+      codeFontSize: DEFAULT_CODE_FONT_SIZE,
+      codeTheme: DEFAULT_CODE_THEME,
       themePreference: "system",
       uiFontFamily: DEFAULT_UI_FONT_FAMILY,
       uiFontSize: DEFAULT_UI_FONT_SIZE,

@@ -13,6 +13,7 @@ export const appearanceRouter = createTRPCRouter({
     const user = await ctx.db.query.users.findFirst({
       where: eq(users.id, ctx.session.user.id),
       columns: {
+        accentColor: true,
         codeFontFamily: true,
         codeFontSize: true,
         codeTheme: true,
@@ -23,6 +24,7 @@ export const appearanceRouter = createTRPCRouter({
     });
 
     return sanitizeAppearanceSettings({
+      accentColor: user?.accentColor ?? DEFAULT_APPEARANCE_SETTINGS.accentColor,
       codeFontFamily:
         user?.codeFontFamily ?? DEFAULT_APPEARANCE_SETTINGS.codeFontFamily,
       codeFontSize:
@@ -44,6 +46,7 @@ export const appearanceRouter = createTRPCRouter({
       ctx.db
         .update(users)
         .set({
+          accentColor: input.accentColor,
           codeFontFamily: input.codeFontFamily,
           codeFontSize: input.codeFontSize,
           codeTheme: input.codeTheme,
@@ -55,6 +58,7 @@ export const appearanceRouter = createTRPCRouter({
         .run();
 
       return sanitizeAppearanceSettings({
+        accentColor: input.accentColor,
         codeFontFamily: input.codeFontFamily,
         codeFontSize: input.codeFontSize,
         codeTheme: input.codeTheme,

@@ -93,6 +93,7 @@ export const users = sqliteTable(
       .notNull()
       .default("system"),
     codeTheme: text("code_theme"),
+    accentColor: integer("accent_color"),
     uiFontFamily: text("ui_font_family"),
     codeFontFamily: text("code_font_family"),
     uiFontSize: real("ui_font_size"),

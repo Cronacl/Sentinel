@@ -29,6 +29,7 @@ const fontSizeSchema = (minimum: number, maximum: number) =>
     );
 
 export const appearanceFormSchema = z.object({
+  accentColor: z.number().int().min(0).max(360).nullable(),
   codeFontFamily: fontFamilySchema,
   codeFontSize: fontSizeSchema(MIN_CODE_FONT_SIZE, MAX_CODE_FONT_SIZE),
   codeTheme: codeThemeSchema,

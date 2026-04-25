@@ -27,6 +27,7 @@ const CURRENT_USER_COLUMNS = [
   { name: "skills_base_path" },
   { name: "theme_preference" },
   { name: "code_theme" },
+  { name: "accent_color" },
   { name: "ui_font_family" },
   { name: "code_font_family" },
   { name: "ui_font_size" },
@@ -272,6 +273,9 @@ describe("ensureTables", () => {
     );
     expect(sqlite.exec).toHaveBeenCalledWith(
       `ALTER TABLE "user" ADD COLUMN "code_theme" text`,
+    );
+    expect(sqlite.exec).toHaveBeenCalledWith(
+      `ALTER TABLE "user" ADD COLUMN "accent_color" integer`,
     );
     expect(sqlite.exec).toHaveBeenCalledWith(
       `ALTER TABLE "user" ADD COLUMN "ui_font_family" text`,
