@@ -3,12 +3,9 @@
 import { ListBox, Popover, ScrollShadow, Spinner } from "@heroui/react";
 import {
   ArrowDown01Icon,
-  FolderTreeIcon,
   CircleIcon,
   Delete02Icon,
-  LaptopIcon,
   Cancel01Icon,
-  Shield01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -246,14 +243,17 @@ function ToolbarPicker({
       <Popover.Trigger>
         <button
           aria-label={ariaLabel}
-          className="inline-flex items-center gap-0.5 text-[11.5px] text-foreground/35 hover:text-foreground/60"
+          className="group inline-flex h-6 max-w-full items-center gap-1 rounded-lg px-1.5 align-middle text-[12px] font-medium leading-none text-foreground/45 transition-colors hover:text-foreground/78 data-[pressed=true]:text-foreground/85"
           type="button"
         >
-          {label}
+          <span className="flex min-w-0 items-center leading-none">
+            {label}
+          </span>
           <HugeiconsIcon
+            className="shrink-0 text-foreground/25 transition-colors group-hover:text-foreground/45"
             color="currentColor"
             icon={ArrowDown01Icon}
-            size={8}
+            size={10}
             strokeWidth={2}
           />
         </button>
@@ -264,6 +264,22 @@ function ToolbarPicker({
         </Popover.Dialog>
       </Popover.Content>
     </Popover.Root>
+  );
+}
+
+function ToolbarLabel({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <span
+      className={`inline-flex min-w-0 items-center leading-none ${className}`}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -310,13 +326,13 @@ function ScratchpadToolbar({
   const supportsReasoning = modelSelection.supportedReasoningEfforts.length > 0;
 
   return (
-    <div className="flex items-center gap-2 py-1 text-[11.5px] text-foreground/35">
+    <div className="flex w-fit max-w-full flex-wrap items-center gap-x-0.5 gap-y-0.5">
       <ToolbarPicker
         ariaLabel="Workspace"
         label={
-          <span className="max-w-[100px] truncate">
+          <ToolbarLabel className="max-w-[128px] truncate">
             {currentWorkspace?.name ?? "Workspace"}
-          </span>
+          </ToolbarLabel>
         }
       >
         {(close) => (
@@ -344,21 +360,10 @@ function ScratchpadToolbar({
         )}
       </ToolbarPicker>
 
-      <span className="text-foreground/15">/</span>
-
       <ToolbarPicker
         ariaLabel="Permissions"
         label={
-          <span className="inline-flex items-center gap-1">
-            <HugeiconsIcon
-              className="text-foreground/30"
-              color="currentColor"
-              icon={Shield01Icon}
-              size={11}
-              strokeWidth={1.8}
-            />
-            {getPermissionModeLabel(permissionMode)}
-          </span>
+          <ToolbarLabel>{getPermissionModeLabel(permissionMode)}</ToolbarLabel>
         }
       >
         {(close) => (
@@ -390,22 +395,9 @@ function ScratchpadToolbar({
         )}
       </ToolbarPicker>
 
-      <span className="text-foreground/15">/</span>
-
       <ToolbarPicker
         ariaLabel="Project mode"
-        label={
-          <span className="inline-flex items-center gap-1">
-            <HugeiconsIcon
-              className="text-foreground/30"
-              color="currentColor"
-              icon={projectMode === "worktree" ? FolderTreeIcon : LaptopIcon}
-              size={11}
-              strokeWidth={1.8}
-            />
-            {getProjectModeLabel(projectMode)}
-          </span>
-        }
+        label={<ToolbarLabel>{getProjectModeLabel(projectMode)}</ToolbarLabel>}
       >
         {(close) => (
           <ListBox
@@ -433,11 +425,11 @@ function ScratchpadToolbar({
         )}
       </ToolbarPicker>
 
-      <span className="text-foreground/15">/</span>
-
       <ToolbarPicker
         ariaLabel="Engine"
-        label={<span className="capitalize">{selectedEngine}</span>}
+        label={
+          <ToolbarLabel className="capitalize">{selectedEngine}</ToolbarLabel>
+        }
       >
         {(close) => (
           <ListBox
@@ -467,16 +459,14 @@ function ScratchpadToolbar({
         )}
       </ToolbarPicker>
 
-      <span className="text-foreground/15">/</span>
-
       <ToolbarPicker
         ariaLabel="Model"
         label={
-          <span className="max-w-[120px] truncate">
+          <ToolbarLabel className="max-w-[148px] truncate">
             {modelSelection.selectedModel?.displayName ??
               modelSelection.selectedModelKey ??
               "Model"}
-          </span>
+          </ToolbarLabel>
         }
       >
         {(close) => (
@@ -523,57 +513,54 @@ function ScratchpadToolbar({
       </ToolbarPicker>
 
       {supportsReasoning ? (
-        <>
-          <span className="text-foreground/15">/</span>
-          <ToolbarPicker
-            ariaLabel="Reasoning effort"
-            label={
-              <span>
-                {modelSelection.selectedReasoningEffort
-                  ? getReasoningEffortLabel(
-                      modelSelection.selectedReasoningEffort,
-                    )
-                  : "Medium"}
-              </span>
-            }
-          >
-            {(close) => (
-              <ListBox
-                aria-label="Reasoning effort"
-                selectedKeys={
-                  modelSelection.selectedReasoningEffort
-                    ? [modelSelection.selectedReasoningEffort]
-                    : []
+        <ToolbarPicker
+          ariaLabel="Reasoning effort"
+          label={
+            <ToolbarLabel>
+              {modelSelection.selectedReasoningEffort
+                ? getReasoningEffortLabel(
+                    modelSelection.selectedReasoningEffort,
+                  )
+                : "Medium"}
+            </ToolbarLabel>
+          }
+        >
+          {(close) => (
+            <ListBox
+              aria-label="Reasoning effort"
+              selectedKeys={
+                modelSelection.selectedReasoningEffort
+                  ? [modelSelection.selectedReasoningEffort]
+                  : []
+              }
+              selectionMode="single"
+              onSelectionChange={(keys) => {
+                const key = [...keys][0];
+                if (key != null) {
+                  modelSelection.handleSelectReasoningEffort(
+                    String(key) as Parameters<
+                      typeof modelSelection.handleSelectReasoningEffort
+                    >[0],
+                  );
+                  close();
                 }
-                selectionMode="single"
-                onSelectionChange={(keys) => {
-                  const key = [...keys][0];
-                  if (key != null) {
-                    modelSelection.handleSelectReasoningEffort(
-                      String(key) as Parameters<
-                        typeof modelSelection.handleSelectReasoningEffort
-                      >[0],
-                    );
-                    close();
-                  }
-                }}
-              >
-                {modelSelection.supportedReasoningEfforts.map((effort) => (
-                  <ListBox.Item
-                    key={effort}
-                    id={effort}
-                    textValue={getReasoningEffortLabel(effort)}
-                  >
-                    <span className="text-[12px]">
-                      {getReasoningEffortLabel(effort)}
-                    </span>
-                    <ListBox.ItemIndicator />
-                  </ListBox.Item>
-                ))}
-              </ListBox>
-            )}
-          </ToolbarPicker>
-        </>
+              }}
+            >
+              {modelSelection.supportedReasoningEfforts.map((effort) => (
+                <ListBox.Item
+                  key={effort}
+                  id={effort}
+                  textValue={getReasoningEffortLabel(effort)}
+                >
+                  <span className="text-[12px]">
+                    {getReasoningEffortLabel(effort)}
+                  </span>
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              ))}
+            </ListBox>
+          )}
+        </ToolbarPicker>
       ) : null}
     </div>
   );
