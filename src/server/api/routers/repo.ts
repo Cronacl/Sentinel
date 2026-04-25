@@ -12,7 +12,7 @@ import {
   createAndCheckoutBranch,
   ensureThreadWorktree,
   getCommitMessageContext,
-  getRepoDiffPanelBundleData,
+  getRepoDiffPanelData,
   getHeadCommitMessage,
   initializeRepository,
   listBranches,
@@ -62,11 +62,19 @@ const workspaceInputSchema = z.object({
 const workspaceOptionalThreadInputSchema = workspaceInputSchema.extend({
   threadId: z.string().min(1).optional(),
 });
-const workspaceStatusesInputSchema = z.object({
-  workspaceIds: z.array(z.string().min(1)).min(1).max(100),
-});
 const workspaceThreadInputSchema = workspaceInputSchema.extend({
   threadId: z.string().min(1),
+});
+const threadGitStatesInputSchema = z.object({
+  threads: z
+    .array(
+      z.object({
+        threadId: z.string().min(1),
+        workspaceId: z.string().min(1),
+      }),
+    )
+    .min(1)
+    .max(100),
 });
 const repoDiffModeSchema = z.enum(["branch", "staged", "unstaged"]);
 const repoDiffFilesInputSchema = workspaceThreadInputSchema.extend({
@@ -589,24 +597,10 @@ async function resolveThreadProjectPath(input: {
   return input.workspaceRootPath;
 }
 
-function buildRepoDiffBundleDedupeKey(input: {
-  projectPath: string | null;
-  repoContext: Awaited<ReturnType<typeof buildRepoContextResponse>>;
-  workspaceId: string;
-}) {
-  return JSON.stringify({
-    branch: input.repoContext.branch ?? null,
-    projectPath: input.projectPath,
-    threadBranch: input.repoContext.threadBranch ?? null,
-    threadProjectMode: input.repoContext.threadProjectMode ?? null,
-    workspaceId: input.workspaceId,
-    worktreeStatus: input.repoContext.worktreeStatus,
-  });
-}
-
-async function buildRepoDiffBundleResponse(input: {
+async function buildRepoDiffPanelResponse(input: {
   githubService: GitHubService | null;
   missingThread?: boolean;
+  mode: z.infer<typeof repoDiffModeSchema>;
   preferredOpenTargetId: string | null;
   rootPath: string | null;
   thread?: { chatEngineState?: unknown; id: string } | null;
@@ -639,20 +633,17 @@ async function buildRepoDiffBundleResponse(input: {
         : !repoContext.isGitRepo
           ? "This workspace is not a git repository."
           : undefined;
-  const diffBundle = await getRepoDiffPanelBundleData(projectPath, {
-    dedupeKey: buildRepoDiffBundleDedupeKey({
-      projectPath,
-      repoContext,
-      workspaceId: input.workspaceId,
-    }),
+
+  const diff = await getRepoDiffPanelData(projectPath, input.mode, {
     emptyReason,
     onMissingRepo: "empty",
     repoContext,
   });
 
   return {
-    diffs: diffBundle.diffs,
+    diff,
     repoContext,
+    statusFingerprint: repoContext.statusFingerprint,
   };
 }
 
@@ -666,8 +657,9 @@ async function buildRepoDiffMutationResponse(input: {
   userId: string;
   workspaceId: string;
 }) {
-  const bundle = await buildRepoDiffBundleResponse({
+  const panel = await buildRepoDiffPanelResponse({
     githubService: input.githubService,
+    mode: input.mode,
     preferredOpenTargetId: input.preferredOpenTargetId,
     rootPath: input.rootPath,
     thread: input.thread,
@@ -676,10 +668,10 @@ async function buildRepoDiffMutationResponse(input: {
   });
 
   return {
-    diff: bundle.diffs[input.mode],
-    diffs: bundle.diffs,
+    diff: panel.diff,
     paths: input.paths,
-    repoContext: bundle.repoContext,
+    repoContext: panel.repoContext,
+    statusFingerprint: panel.statusFingerprint,
   };
 }
 
@@ -940,29 +932,8 @@ async function resolvePullRequestStatus(input: {
   return result;
 }
 
-async function buildWorkspaceRepoStatus(input: {
-  githubService: GitHubService | null;
-  pathValue: string | null;
-  userId: string;
-  workspaceId: string;
-}) {
-  const repoContext = await resolveRepoContext(input.pathValue);
-  const pullRequestState = await resolvePullRequestStatus({
-    githubService: input.githubService,
-    repoContext,
-    userId: input.userId,
-  });
-
-  return {
-    ...repoContext,
-    pullRequestIntegrationStatus: pullRequestState.pullRequestIntegrationStatus,
-    pullRequestStatus: pullRequestState.pullRequestStatus,
-    workspaceId: input.workspaceId,
-  };
-}
-
 export const repoRouter = createTRPCRouter({
-  getContext: protectedProcedure
+  getThreadGitState: protectedProcedure
     .input(workspaceOptionalThreadInputSchema)
     .query(async ({ ctx, input }) => {
       const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
@@ -978,47 +949,33 @@ export const repoRouter = createTRPCRouter({
       });
     }),
 
-  listWorkspaceStatuses: protectedProcedure
-    .input(workspaceStatusesInputSchema)
+  listThreadGitStates: protectedProcedure
+    .input(threadGitStatesInputSchema)
     .query(async ({ ctx, input }) => {
       const githubService = await resolveGitHubService(ctx);
-      const workspaces = await Promise.all(
-        input.workspaceIds.map((workspaceId) =>
-          getOwnedWorkspaceOrThrow(ctx, workspaceId),
-        ),
-      );
 
       return await Promise.all(
-        workspaces.map((workspace) =>
-          buildWorkspaceRepoStatus({
-            githubService,
-            pathValue: workspace.rootPath,
-            userId: ctx.session.user.id,
-            workspaceId: workspace.id,
-          }),
-        ),
-      );
-    }),
+        input.threads.map(async (item) => {
+          const workspace = await getOwnedWorkspaceOrThrow(
+            ctx,
+            item.workspaceId,
+          );
+          const thread = await getOptionalOwnedThreadForWorkspace(ctx, item);
 
-  getDiffPanelBundle: protectedProcedure
-    .input(workspaceOptionalThreadInputSchema)
-    .query(async ({ ctx, input }) => {
-      const workspace = await getOwnedWorkspaceOrThrow(ctx, input.workspaceId);
-      const thread = await getOptionalOwnedThreadForWorkspace(ctx, input);
-      const rootPath = await getWorkspaceRootPathIfAvailable(
-        workspace.rootPath,
+          return {
+            threadId: item.threadId,
+            workspaceId: item.workspaceId,
+            gitState: await buildRepoContextResponse({
+              githubService,
+              pathValue: workspace.rootPath,
+              preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
+              thread,
+              userId: ctx.session.user.id,
+              workspaceId: workspace.id,
+            }),
+          };
+        }),
       );
-      const githubService = await resolveGitHubService(ctx);
-
-      return await buildRepoDiffBundleResponse({
-        githubService,
-        missingThread: Boolean(input.threadId && !thread),
-        preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
-        rootPath,
-        thread,
-        userId: ctx.session.user.id,
-        workspaceId: workspace.id,
-      });
     }),
 
   setPreferredOpenTarget: protectedProcedure
@@ -1077,9 +1034,10 @@ export const repoRouter = createTRPCRouter({
         workspace.rootPath,
       );
       const githubService = await resolveGitHubService(ctx);
-      const bundle = await buildRepoDiffBundleResponse({
+      const result = await buildRepoDiffPanelResponse({
         githubService,
         missingThread: Boolean(input.threadId && !thread),
+        mode: input.mode,
         preferredOpenTargetId: ctx.user.lastProjectOpenTargetId ?? null,
         rootPath,
         thread,
@@ -1088,8 +1046,9 @@ export const repoRouter = createTRPCRouter({
       });
 
       return {
-        diff: bundle.diffs[input.mode],
-        repoContext: bundle.repoContext,
+        diff: result.diff,
+        repoContext: result.repoContext,
+        statusFingerprint: result.statusFingerprint,
       };
     }),
 

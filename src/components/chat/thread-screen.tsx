@@ -209,7 +209,7 @@ export function ThreadScreen({
         workspace: current?.workspace,
         workspaceId: workspace.id,
       });
-      void utils.repo.getContext.invalidate(repoContextQueryInput);
+      void utils.repo.getThreadGitState.invalidate(repoContextQueryInput);
     },
     [repoContextQueryInput, thread.id, utils, workspace.id],
   );
@@ -405,9 +405,12 @@ export function ThreadScreen({
     stopStream,
     threadStatus,
   } = chat;
-  const repoContextQuery = api.repo.getContext.useQuery(repoContextQueryInput, {
-    enabled: !isQuickChat && Boolean(workspace.rootPath),
-  });
+  const repoContextQuery = api.repo.getThreadGitState.useQuery(
+    repoContextQueryInput,
+    {
+      enabled: !isQuickChat && Boolean(workspace.rootPath),
+    },
+  );
   const resetCheckpointMutation = api.repo.resetCheckpoint.useMutation();
   const toggleCheckpointMutation = api.repo.toggleCheckpoint.useMutation();
 
@@ -895,13 +898,13 @@ export function ThreadScreen({
 
     const { checkpointId, message } = pendingCheckpointReset;
     const previousRepoContext =
-      utils.repo.getContext.getData(repoContextQueryInput) ?? null;
+      utils.repo.getThreadGitState.getData(repoContextQueryInput) ?? null;
 
     setBusyCheckpointMessageId(message.id);
     setChatError(null);
 
     if (previousRepoContext) {
-      utils.repo.getContext.setData(repoContextQueryInput, {
+      utils.repo.getThreadGitState.setData(repoContextQueryInput, {
         ...previousRepoContext,
         checkpointAnchorMessageId: message.id,
       });
@@ -915,7 +918,10 @@ export function ThreadScreen({
         workspaceId: workspace.id,
       });
 
-      utils.repo.getContext.setData(repoContextQueryInput, result.repoContext);
+      utils.repo.getThreadGitState.setData(
+        repoContextQueryInput,
+        result.repoContext,
+      );
       await Promise.all(
         buildRepoDiffPanelInvalidationInputs({
           threadId: thread.id,
@@ -934,7 +940,7 @@ export function ThreadScreen({
       setPendingCheckpointReset(null);
     } catch (error) {
       if (previousRepoContext) {
-        utils.repo.getContext.setData(
+        utils.repo.getThreadGitState.setData(
           repoContextQueryInput,
           previousRepoContext,
         );
@@ -942,7 +948,7 @@ export function ThreadScreen({
       setChatError(getErrorMessage(error, "Unable to reset to this point."));
     } finally {
       setBusyCheckpointMessageId(null);
-      await utils.repo.getContext.invalidate(repoContextQueryInput);
+      await utils.repo.getThreadGitState.invalidate(repoContextQueryInput);
     }
   }, [
     chatEngine,
@@ -951,7 +957,7 @@ export function ThreadScreen({
     repoContextQueryInput,
     resetCheckpointMutation,
     thread.id,
-    utils.repo.getContext,
+    utils.repo.getThreadGitState,
     utils.repo.getDiffPanelData,
     workspace.id,
   ]);
@@ -959,14 +965,14 @@ export function ThreadScreen({
   const handleReapplyCheckpoint = useCallback(
     async (message: ThreadUIMessage) => {
       const previousRepoContext =
-        utils.repo.getContext.getData(repoContextQueryInput) ?? null;
+        utils.repo.getThreadGitState.getData(repoContextQueryInput) ?? null;
 
       setBusyCheckpointMessageId(message.id);
       try {
         const reapplied = await reapplyUserMessageCheckpoint({
           clearEditingMessage: () => setEditingMessage(null),
           invalidateRepoContext: () =>
-            utils.repo.getContext.invalidate(repoContextQueryInput),
+            utils.repo.getThreadGitState.invalidate(repoContextQueryInput),
           invalidateRepoDiffPanels: () =>
             Promise.all(
               buildRepoDiffPanelInvalidationInputs({
@@ -984,8 +990,10 @@ export function ThreadScreen({
           previousRepoContext,
           setError: setChatError,
           setRepoContext: (nextRepoContext) => {
-            utils.repo.getContext.setData(repoContextQueryInput, (current) =>
-              current ? { ...current, ...nextRepoContext } : current,
+            utils.repo.getThreadGitState.setData(
+              repoContextQueryInput,
+              (current) =>
+                current ? { ...current, ...nextRepoContext } : current,
             );
           },
           threadId: thread.id,
@@ -1005,7 +1013,7 @@ export function ThreadScreen({
       repoContextQueryInput,
       thread.id,
       toggleCheckpointMutation,
-      utils.repo.getContext,
+      utils.repo.getThreadGitState,
       utils.repo.getDiffPanelData,
       workspace.id,
     ],

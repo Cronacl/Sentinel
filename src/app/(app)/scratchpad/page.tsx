@@ -755,7 +755,7 @@ export default function ScratchpadPage() {
     persistSelection: persistHook.persistSelection,
     selectionScopeKey: "scratchpad",
   });
-  const repoContext = api.repo.getContext.useQuery(
+  const repoContext = api.repo.getThreadGitState.useQuery(
     { workspaceId: workspace.data?.id ?? "" },
     {
       enabled: Boolean(workspace.data?.id),

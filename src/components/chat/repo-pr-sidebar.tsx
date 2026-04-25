@@ -9,7 +9,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, CloseButton, Spinner } from "@heroui/react";
-import { type ReactNode, useCallback } from "react";
+import { type ReactNode, useCallback, useMemo } from "react";
 import { sileo } from "sileo";
 
 import { useRightSidebar } from "@/components/shell/shell-context";
@@ -52,16 +52,18 @@ export function RepoPullRequestSidebar({
   const rightSidebar = useRightSidebar();
   const utils = api.useUtils();
 
-  const repoContextQuery = api.repo.getContext.useQuery(
-    {
+  const gitStateInput = useMemo(
+    () => ({
       ...(threadId ? { threadId } : {}),
       workspaceId,
-    },
-    {
-      refetchInterval: 15_000,
-      refetchOnWindowFocus: true,
-    },
+    }),
+    [threadId, workspaceId],
   );
+
+  const repoContextQuery = api.repo.getThreadGitState.useQuery(gitStateInput, {
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
+  });
 
   const createPullRequestMutation = api.repo.createPullRequest.useMutation({
     onError: (error) => {
@@ -73,15 +75,9 @@ export function RepoPullRequestSidebar({
       });
     },
     onSuccess: async (result) => {
-      utils.repo.getContext.setData(
-        {
-          ...(threadId ? { threadId } : {}),
-          workspaceId,
-        },
-        result.repoContext,
-      );
+      utils.repo.getThreadGitState.setData(gitStateInput, result.repoContext);
       await utils.threads.list.invalidate();
-      await utils.repo.listWorkspaceStatuses.invalidate();
+      await utils.repo.listThreadGitStates.invalidate();
       if (desktop) {
         await desktop.openExternal(result.pullRequestUrl).catch(() => {});
       }
@@ -109,16 +105,12 @@ export function RepoPullRequestSidebar({
   });
 
   const handleRefresh = useCallback(async () => {
-    await utils.repo.getContext.invalidate({
-      ...(threadId ? { threadId } : {}),
-      workspaceId,
-    });
-    await utils.repo.listWorkspaceStatuses.invalidate();
+    await utils.repo.getThreadGitState.invalidate(gitStateInput);
+    await utils.repo.listThreadGitStates.invalidate();
   }, [
-    threadId,
-    utils.repo.getContext,
-    utils.repo.listWorkspaceStatuses,
-    workspaceId,
+    gitStateInput,
+    utils.repo.getThreadGitState,
+    utils.repo.listThreadGitStates,
   ]);
 
   const handleOpenExternal = useCallback(async () => {

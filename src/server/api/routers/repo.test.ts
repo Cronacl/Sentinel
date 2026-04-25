@@ -88,9 +88,9 @@ const getHeadCommitMessage = mock(async () => ({
   message: "Latest subject\n\n- latest body",
   subject: "Latest subject",
 }));
-const getRepoDiffPanelData = mock(async (rootPath, mode: string) => ({
+const getRepoDiffPanelData = mock(async (rootPath, mode: string, options) => ({
   branch: "feature/test",
-  disabledReason: mode === "branch" ? null : null,
+  disabledReason: options?.emptyReason ?? null,
   fileCount: 1,
   files: [
     {
@@ -107,22 +107,6 @@ const getRepoDiffPanelData = mock(async (rootPath, mode: string) => ({
   sourceLabel: mode === "branch" ? "feature/test -> origin/main" : "Staged",
   totalAdditions: 1,
   totalDeletions: 1,
-}));
-const getRepoDiffPanelBundleData = mock(async (rootPath, options) => ({
-  diffs: {
-    branch: {
-      ...(await getRepoDiffPanelData(rootPath, "branch")),
-      disabledReason: options?.emptyReason ?? null,
-    },
-    staged: {
-      ...(await getRepoDiffPanelData(rootPath, "staged")),
-      disabledReason: options?.emptyReason ?? null,
-    },
-    unstaged: {
-      ...(await getRepoDiffPanelData(rootPath, "unstaged")),
-      disabledReason: options?.emptyReason ?? null,
-    },
-  },
 }));
 const buildFallbackCommitMessage = mock(() => "Update file");
 const commitAllChanges = mock(async () => ({
@@ -259,7 +243,6 @@ mock.module("@/lib/git/repo", () => ({
   commitAllChanges,
   createAndCheckoutBranch,
   ensureThreadWorktree,
-  getRepoDiffPanelBundleData,
   getCommitMessageContext,
   getRepoDiffPanelData,
   getHeadCommitMessage,
@@ -338,7 +321,6 @@ beforeEach(async () => {
   getOwnedThreadOrThrow.mockClear();
   resolveRepoContext.mockClear();
   getCommitMessageContext.mockClear();
-  getRepoDiffPanelBundleData.mockClear();
   getRepoDiffPanelData.mockClear();
   getHeadCommitMessage.mockClear();
   buildFallbackCommitMessage.mockClear();
@@ -1166,7 +1148,7 @@ describe("repoRouter.commit", () => {
 });
 
 describe("repoRouter workspace PR status queries", () => {
-  it("links the active branch PR to the thread when repo context is loaded", async () => {
+  it("links the active branch PR to the thread when git state is loaded", async () => {
     findGithubIntegration.mockImplementationOnce(async () => ({
       id: "integration-1",
     }));
@@ -1195,7 +1177,7 @@ describe("repoRouter workspace PR status queries", () => {
       url: "https://github.com/openai/sentinel/pull/42",
     }));
 
-    const result = await repoRouter.getContext({
+    const result = await repoRouter.getThreadGitState({
       ctx: {
         db: {
           query: {
@@ -1265,7 +1247,7 @@ describe("repoRouter workspace PR status queries", () => {
       url: "https://github.com/openai/sentinel/pull/42",
     }));
 
-    const result = await repoRouter.listWorkspaceStatuses({
+    const result = await repoRouter.listThreadGitStates({
       ctx: {
         db: {
           query: {
@@ -1281,18 +1263,21 @@ describe("repoRouter workspace PR status queries", () => {
         },
       },
       input: {
-        workspaceIds: ["workspace-1"],
+        threads: [{ threadId: "thread-1", workspaceId: "workspace-1" }],
       },
     });
 
     expect(result[0]).toMatchObject({
-      pullRequestIntegrationStatus: "connected",
-      pullRequestStatus: {
-        mergeStatus: "ready",
-        number: 42,
-        title: "Add workspace PR status",
-      },
+      threadId: "thread-1",
       workspaceId: "workspace-1",
+      gitState: {
+        pullRequestIntegrationStatus: "connected",
+        pullRequestStatus: {
+          mergeStatus: "ready",
+          number: 42,
+          title: "Add workspace PR status",
+        },
+      },
     });
     expect(githubGetActivePullRequestStatus).toHaveBeenCalledWith({
       branch: "feature/test",
@@ -1302,7 +1287,7 @@ describe("repoRouter workspace PR status queries", () => {
   });
 
   it("reports that GitHub needs to be connected before live PR status is available", async () => {
-    const result = await repoRouter.getContext({
+    const result = await repoRouter.getThreadGitState({
       ctx: {
         db: {
           query: {
@@ -1328,8 +1313,8 @@ describe("repoRouter workspace PR status queries", () => {
     expect(result.pullRequestStatus).toBeNull();
   });
 
-  it("remembers the current branch the first time a thread repo context is loaded", async () => {
-    const result = await repoRouter.getContext({
+  it("remembers the current branch the first time a thread git state is loaded", async () => {
+    const result = await repoRouter.getThreadGitState({
       ctx: {
         db: {
           query: {
@@ -1362,7 +1347,7 @@ describe("repoRouter workspace PR status queries", () => {
     );
   });
 
-  it("returns worktree repo context when the thread is already pinned to a worktree", async () => {
+  it("returns worktree git state when the thread is already pinned to a worktree", async () => {
     getOwnedThreadOrThrow.mockImplementationOnce(async () => ({
       chatEngine: "codex",
       chatEngineState: {
@@ -1435,7 +1420,7 @@ describe("repoRouter workspace PR status queries", () => {
       ),
     );
 
-    const result = await repoRouter.getContext({
+    const result = await repoRouter.getThreadGitState({
       ctx: {
         db: {
           query: {
@@ -1511,7 +1496,7 @@ describe("repoRouter workspace PR status queries", () => {
       repoRoot: "/tmp/workspace/apps/web",
     }));
 
-    const result = await repoRouter.getContext({
+    const result = await repoRouter.getThreadGitState({
       ctx: {
         db: {
           query: {
@@ -1579,7 +1564,7 @@ describe("repoRouter workspace PR status queries", () => {
       repoRoot: "/tmp/workspace",
     }));
 
-    const result = await repoRouter.getContext({
+    const result = await repoRouter.getThreadGitState({
       ctx: {
         db: {
           query: {
@@ -1606,7 +1591,7 @@ describe("repoRouter workspace PR status queries", () => {
     expect(result.branchResumeReason).toContain("uncommitted changes");
   });
 
-  it("ignores a missing optional draft thread when loading repo context", async () => {
+  it("ignores a missing optional draft thread when loading git state", async () => {
     getOwnedThreadOrThrow.mockImplementationOnce(async () => {
       throw new TRPCError({
         code: "NOT_FOUND",
@@ -1614,7 +1599,7 @@ describe("repoRouter workspace PR status queries", () => {
       });
     });
 
-    const result = await repoRouter.getContext({
+    const result = await repoRouter.getThreadGitState({
       ctx: {
         db: {
           query: {
@@ -1818,37 +1803,7 @@ describe("repoRouter.setPreferredOpenTarget", () => {
 });
 
 describe("repoRouter.diff panel", () => {
-  it("returns the aggregated diff bundle for a thread workspace pair", async () => {
-    const result = await repoRouter.getDiffPanelBundle({
-      ctx: {
-        session: { user: { id: "user-1" } },
-        user: {
-          id: "user-1",
-          lastProjectOpenTargetId: "cursor",
-        },
-      },
-      input: {
-        threadId: "thread-1",
-        workspaceId: "workspace-1",
-      },
-    });
-
-    expect(getRepoDiffPanelBundleData).toHaveBeenCalledWith(
-      "/tmp/workspace",
-      expect.objectContaining({
-        dedupeKey: expect.any(String),
-        emptyReason: undefined,
-        onMissingRepo: "empty",
-      }),
-    );
-    expect(result.diffs.staged).toMatchObject({
-      fileCount: 1,
-      mode: "staged",
-    });
-    expect(result.repoContext.preferredOpenTargetId).toBe("cursor");
-  });
-
-  it("returns diff data for the selected mode with refreshed repo context", async () => {
+  it("returns diff data for the selected mode with refreshed git state", async () => {
     const result = await repoRouter.getDiffPanelData({
       ctx: {
         session: { user: { id: "user-1" } },
@@ -1864,10 +1819,10 @@ describe("repoRouter.diff panel", () => {
       },
     });
 
-    expect(getRepoDiffPanelBundleData).toHaveBeenCalledWith(
+    expect(getRepoDiffPanelData).toHaveBeenCalledWith(
       "/tmp/workspace",
+      "staged",
       expect.objectContaining({
-        dedupeKey: expect.any(String),
         emptyReason: undefined,
         onMissingRepo: "empty",
         repoContext: expect.objectContaining({
@@ -1881,38 +1836,7 @@ describe("repoRouter.diff panel", () => {
       sourceLabel: "Staged",
     });
     expect(result.repoContext.preferredOpenTargetId).toBe("cursor");
-  });
-
-  it("returns an empty diff bundle when the workspace root path is unavailable", async () => {
-    getOwnedWorkspaceOrThrow.mockImplementationOnce(async () => ({
-      id: "workspace-1",
-      rootPath: "/tmp/sentinel-missing-workspace-root",
-    }));
-
-    const result = await repoRouter.getDiffPanelBundle({
-      ctx: {
-        session: { user: { id: "user-1" } },
-        user: {
-          id: "user-1",
-          lastProjectOpenTargetId: "cursor",
-        },
-      },
-      input: {
-        threadId: "thread-1",
-        workspaceId: "workspace-1",
-      },
-    });
-
-    expect(getRepoDiffPanelBundleData).toHaveBeenCalledWith(
-      null,
-      expect.objectContaining({
-        emptyReason: "Workspace root path is not available.",
-        onMissingRepo: "empty",
-      }),
-    );
-    expect(result.diffs.branch.disabledReason).toBe(
-      "Workspace root path is not available.",
-    );
+    expect(result.statusFingerprint).toBe(result.repoContext.statusFingerprint);
   });
 
   it("returns empty diff panel data when the workspace root path is unavailable", async () => {
@@ -1936,8 +1860,9 @@ describe("repoRouter.diff panel", () => {
       },
     });
 
-    expect(getRepoDiffPanelBundleData).toHaveBeenCalledWith(
+    expect(getRepoDiffPanelData).toHaveBeenCalledWith(
       null,
+      "staged",
       expect.objectContaining({
         emptyReason: "Workspace root path is not available.",
         onMissingRepo: "empty",
@@ -1971,10 +1896,10 @@ describe("repoRouter.diff panel", () => {
       },
     });
 
-    expect(getRepoDiffPanelBundleData).toHaveBeenCalledWith(
+    expect(getRepoDiffPanelData).toHaveBeenCalledWith(
       "/tmp/workspace",
+      "unstaged",
       expect.objectContaining({
-        dedupeKey: expect.any(String),
         onMissingRepo: "empty",
       }),
     );
@@ -2020,10 +1945,10 @@ describe("repoRouter.diff panel", () => {
     });
 
     expect(stageFiles).toHaveBeenCalledWith("/tmp/workspace", ["file.ts"]);
-    expect(getRepoDiffPanelBundleData).toHaveBeenCalledWith(
+    expect(getRepoDiffPanelData).toHaveBeenCalledWith(
       "/tmp/workspace",
+      "unstaged",
       expect.objectContaining({
-        dedupeKey: expect.any(String),
         onMissingRepo: "empty",
         repoContext: expect.objectContaining({
           branch: "feature/test",
@@ -2033,19 +1958,9 @@ describe("repoRouter.diff panel", () => {
     expect(stageResult.diff).toMatchObject({
       mode: "unstaged",
     });
-    expect(stageResult.diffs).toMatchObject({
-      branch: { mode: "branch" },
-      staged: { mode: "staged" },
-      unstaged: { mode: "unstaged" },
-    });
     expect(unstageFiles).toHaveBeenCalledWith("/tmp/workspace", ["file.ts"]);
     expect(unstageResult.diff).toMatchObject({
       mode: "staged",
-    });
-    expect(unstageResult.diffs).toMatchObject({
-      branch: { mode: "branch" },
-      staged: { mode: "staged" },
-      unstaged: { mode: "unstaged" },
     });
     expect(revertFiles).toHaveBeenCalledWith(
       "/tmp/workspace",
@@ -2055,14 +1970,9 @@ describe("repoRouter.diff panel", () => {
     expect(revertResult.diff).toMatchObject({
       mode: "unstaged",
     });
-    expect(revertResult.diffs).toMatchObject({
-      branch: { mode: "branch" },
-      staged: { mode: "staged" },
-      unstaged: { mode: "unstaged" },
-    });
   });
 
-  it("toggles a thread checkpoint and refreshes repo context", async () => {
+  it("toggles a thread checkpoint and refreshes git state", async () => {
     const result = await repoRouter.toggleCheckpoint({
       ctx: {
         session: { user: { id: "user-1" } },
@@ -2094,7 +2004,7 @@ describe("repoRouter.diff panel", () => {
     });
   });
 
-  it("resets a thread checkpoint from a user message and refreshes repo context", async () => {
+  it("resets a thread checkpoint from a user message and refreshes git state", async () => {
     const result = await repoRouter.resetCheckpoint({
       ctx: {
         session: { user: { id: "user-1" } },

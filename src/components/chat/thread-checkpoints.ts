@@ -1,7 +1,5 @@
 import { getErrorMessage } from "@/lib/errors";
 
-import { REPO_DIFF_PRELOAD_MODES } from "./thread-repo-actions.helpers";
-
 export type UserMessageCheckpointAction = "reapply" | "reset";
 
 type CheckpointRepoContextState = {
@@ -36,7 +34,7 @@ export function buildRepoDiffPanelInvalidationInputs(input: {
   threadId: string;
   workspaceId: string;
 }) {
-  return REPO_DIFF_PRELOAD_MODES.map((mode) => ({
+  return (["unstaged", "staged", "branch"] as const).map((mode) => ({
     mode,
     threadId: input.threadId,
     workspaceId: input.workspaceId,

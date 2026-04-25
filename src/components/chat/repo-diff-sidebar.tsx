@@ -55,11 +55,7 @@ import {
 import { useResolvedTheme } from "@/lib/syntax/use-resolved-theme";
 import { api } from "@/trpc/react";
 
-import {
-  formatRepoActionErrorMessage,
-  REPO_DIFF_PRELOAD_MODES,
-} from "./thread-repo-actions.helpers";
-import { hydrateRepoDiffBundleCaches } from "./repo-background-warmup";
+import { formatRepoActionErrorMessage } from "./thread-repo-actions.helpers";
 import {
   buildRenderableDiffCacheKey,
   detectFileChangeType,
@@ -616,24 +612,74 @@ export function RepoDiffSidebar() {
         : null,
     [prefs, threadId, workspaceId],
   );
+  const gitStateInput = useMemo(
+    () =>
+      threadId && workspaceId
+        ? {
+            threadId,
+            workspaceId,
+          }
+        : null,
+    [threadId, workspaceId],
+  );
+
+  const threadGitStateQuery = api.repo.getThreadGitState.useQuery(
+    gitStateInput ?? skipToken,
+    {
+      refetchOnMount: "always",
+      refetchOnReconnect: true,
+      refetchOnWindowFocus: true,
+      staleTime: 2_500,
+    },
+  );
 
   const diffPanelQuery = api.repo.getDiffPanelData.useQuery(
     queryInput ?? skipToken,
     {
-      placeholderData: (previousData) => previousData,
       refetchOnMount: "always",
       refetchOnReconnect: true,
       refetchOnWindowFocus: true,
       staleTime: 0,
     },
   );
+  const diffPanelData =
+    !diffPanelQuery.data ||
+    !threadGitStateQuery.data ||
+    diffPanelQuery.data.statusFingerprint ===
+      threadGitStateQuery.data.statusFingerprint
+      ? diffPanelQuery.data
+      : undefined;
 
   const repoRoot =
-    diffPanelQuery.data?.repoContext.effectiveRootPath ??
-    diffPanelQuery.data?.repoContext.repoRoot ??
+    diffPanelData?.repoContext.effectiveRootPath ??
+    diffPanelData?.repoContext.repoRoot ??
     null;
   const preferredOpenTargetId =
-    diffPanelQuery.data?.repoContext.preferredOpenTargetId ?? null;
+    diffPanelData?.repoContext.preferredOpenTargetId ?? null;
+
+  useEffect(() => {
+    if (!gitStateInput || !diffPanelQuery.data?.repoContext) {
+      return;
+    }
+
+    const currentGitState = utils.repo.getThreadGitState.getData(gitStateInput);
+    if (
+      currentGitState &&
+      currentGitState.statusFingerprint !==
+        diffPanelQuery.data.repoContext.statusFingerprint
+    ) {
+      return;
+    }
+
+    utils.repo.getThreadGitState.setData(
+      gitStateInput,
+      diffPanelQuery.data.repoContext,
+    );
+  }, [
+    diffPanelQuery.data?.repoContext,
+    gitStateInput,
+    utils.repo.getThreadGitState,
+  ]);
 
   useEffect(() => {
     if (!desktop || !repoRoot) {
@@ -688,23 +734,40 @@ export function RepoDiffSidebar() {
     [openTargets, preferredOpenTargetId],
   );
 
-  const hydrateDiffBundle = useCallback(
-    (bundle: {
-      diffs: Record<RepoDiffSidebarMode, unknown>;
+  const applyRepoMutationResult = useCallback(
+    (result: {
+      diff: unknown;
       repoContext: unknown;
+      statusFingerprint?: string;
     }) => {
-      if (!threadId || !workspaceId) {
+      if (!threadId || !workspaceId || !prefs) {
         return;
       }
 
-      hydrateRepoDiffBundleCaches({
-        bundle,
-        candidate: { threadId, workspaceId },
-        modes: REPO_DIFF_PRELOAD_MODES,
-        utils,
-      });
+      const input = { mode: prefs.mode, threadId, workspaceId };
+      utils.repo.getThreadGitState.setData(
+        { threadId, workspaceId },
+        result.repoContext as never,
+      );
+      utils.repo.getDiffPanelData.setData(input, {
+        diff: result.diff,
+        repoContext: result.repoContext,
+        statusFingerprint: result.statusFingerprint,
+      } as never);
+      void utils.repo.listThreadGitStates.invalidate();
+      void Promise.all(
+        (["unstaged", "staged", "branch"] as const)
+          .filter((mode) => mode !== prefs.mode)
+          .map((mode) =>
+            utils.repo.getDiffPanelData.invalidate({
+              mode,
+              threadId,
+              workspaceId,
+            }),
+          ),
+      );
     },
-    [threadId, utils, workspaceId],
+    [prefs, threadId, utils, workspaceId],
   );
 
   const handleMutationError = useCallback(
@@ -722,28 +785,19 @@ export function RepoDiffSidebar() {
   const stageMutation = api.repo.stageFiles.useMutation({
     onError: (error) => handleMutationError(error, "Unable to stage files."),
     onSuccess: (result) => {
-      hydrateDiffBundle({
-        diffs: result.diffs,
-        repoContext: result.repoContext,
-      });
+      applyRepoMutationResult(result);
     },
   });
   const unstageMutation = api.repo.unstageFiles.useMutation({
     onError: (error) => handleMutationError(error, "Unable to unstage files."),
     onSuccess: (result) => {
-      hydrateDiffBundle({
-        diffs: result.diffs,
-        repoContext: result.repoContext,
-      });
+      applyRepoMutationResult(result);
     },
   });
   const revertMutation = api.repo.revertFiles.useMutation({
     onError: (error) => handleMutationError(error, "Unable to revert files."),
     onSuccess: (result) => {
-      hydrateDiffBundle({
-        diffs: result.diffs,
-        repoContext: result.repoContext,
-      });
+      applyRepoMutationResult(result);
     },
   });
 
@@ -798,7 +852,7 @@ export function RepoDiffSidebar() {
   }, []);
 
   const currentMode = prefs?.mode ?? "unstaged";
-  const diff = diffPanelQuery.data?.diff;
+  const diff = diffPanelData?.diff;
   const diffFiles = diff?.files ?? EMPTY_SOURCE_FILES;
 
   const filteredDiffFiles = useMemo(() => {

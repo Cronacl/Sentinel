@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import path from "node:path";
 import { mkdir, readFile, rm, stat } from "node:fs/promises";
 
@@ -30,6 +30,7 @@ export type RepoContext = {
   isGitRepo: boolean;
   pushRemoteName: string | null;
   repoRoot: string | null;
+  statusFingerprint: string;
 };
 
 export type RepoBranch = {
@@ -123,7 +124,17 @@ function emptyRepoContext(): RepoContext {
     isGitRepo: false,
     pushRemoteName: null,
     repoRoot: null,
+    statusFingerprint: "missing",
   };
+}
+
+function buildStatusFingerprint(parts: Array<string | null | undefined>) {
+  const hash = createHash("sha256");
+  for (const part of parts) {
+    hash.update(part ?? "");
+    hash.update("\0");
+  }
+  return hash.digest("hex").slice(0, 16);
 }
 
 function buildEmptyRepoDiffPanelData(input: {
@@ -969,6 +980,16 @@ export async function resolveRepoContext(
     : null;
   const aheadCount =
     aheadResult?.code === 0 ? Number.parseInt(aheadResult.stdout, 10) || 0 : 0;
+  const statusFingerprint = buildStatusFingerprint([
+    repoRoot,
+    branch,
+    headResult.code === 0 ? headResult.stdout.trim() : null,
+    upstreamRef,
+    aheadResult?.code === 0 ? aheadResult.stdout.trim() : null,
+    statusResult.code === 0 ? statusResult.stdout : null,
+    stagedStat.code === 0 ? stagedStat.stdout : null,
+    unstagedStat.code === 0 ? unstagedStat.stdout : null,
+  ]);
 
   const preferredRemoteName = upstreamRef?.split("/")[0] ?? null;
   const pushRemoteName =
@@ -1000,6 +1021,7 @@ export async function resolveRepoContext(
       isGitRepo: true,
       pushRemoteName,
       repoRoot,
+      statusFingerprint,
     };
   }
 
@@ -1020,6 +1042,7 @@ export async function resolveRepoContext(
       isGitRepo: true,
       pushRemoteName,
       repoRoot,
+      statusFingerprint,
     };
   }
 
@@ -1060,6 +1083,7 @@ export async function resolveRepoContext(
     isGitRepo: true,
     pushRemoteName,
     repoRoot,
+    statusFingerprint,
   };
 }
 
@@ -1439,9 +1463,130 @@ export async function pushCurrentBranch(pathValue: string | null | undefined) {
 export async function getRepoDiffPanelData(
   pathValue: string | null | undefined,
   mode: RepoDiffMode,
+  options?: {
+    emptyReason?: string;
+    onMissingRepo?: "empty" | "throw";
+    repoContext?: RepoContext;
+  },
 ): Promise<RepoDiffPanelData> {
-  const bundle = await getRepoDiffPanelBundleData(pathValue);
-  return bundle.diffs[mode];
+  const repoRoot =
+    options?.repoContext?.repoRoot ?? (await resolveRepoRoot(pathValue ?? ""));
+  if (!repoRoot) {
+    if (options?.onMissingRepo === "empty") {
+      return buildEmptyRepoDiffPanelData({
+        disabledReason:
+          options.emptyReason ??
+          "Repo diff is temporarily unavailable while this thread is loading.",
+        mode,
+      });
+    }
+
+    throw new Error("The selected workspace root is not a git repository.");
+  }
+
+  const context =
+    options?.repoContext?.repoRoot === repoRoot
+      ? options.repoContext
+      : await resolveRepoContext(repoRoot);
+
+  if (!context.isGitRepo) {
+    if (options?.onMissingRepo === "empty") {
+      return buildEmptyRepoDiffPanelData({
+        branch: context.branch,
+        disabledReason:
+          options.emptyReason ?? "This workspace is not a git repository.",
+        mode,
+      });
+    }
+
+    throw new Error("The selected workspace root is not a git repository.");
+  }
+
+  if (mode === "staged") {
+    const stagedPatchResult = await runGit(
+      ["diff", "--cached", "--patch", "--minimal"],
+      repoRoot,
+    );
+    if (stagedPatchResult.code !== 0) {
+      throw new Error(
+        stagedPatchResult.stderr || "Failed to generate staged diff.",
+      );
+    }
+
+    return buildRepoDiffPanelData({
+      branch: context.branch,
+      mode: "staged",
+      patch: stagedPatchResult.stdout.trim(),
+      sourceLabel: "Staged",
+    });
+  }
+
+  if (mode === "branch") {
+    const branchSpec = await resolveBranchDiffSpec(repoRoot, context);
+    if (!branchSpec.diffRef) {
+      return buildEmptyRepoDiffPanelData({
+        branch: branchSpec.branch,
+        disabledReason: branchSpec.disabledReason,
+        mode: "branch",
+        sourceLabel: branchSpec.sourceLabel,
+      });
+    }
+
+    const branchPatchResult = await runGit(
+      ["diff", "--patch", "--minimal", branchSpec.diffRef],
+      repoRoot,
+    );
+    if (branchPatchResult.code !== 0) {
+      throw new Error(
+        branchPatchResult.stderr || "Failed to generate branch diff.",
+      );
+    }
+
+    return buildRepoDiffPanelData({
+      branch: branchSpec.branch,
+      disabledReason: branchSpec.disabledReason,
+      mode: "branch",
+      patch: branchPatchResult.stdout.trim(),
+      sourceLabel: branchSpec.sourceLabel,
+    });
+  }
+
+  const [statusResult, unstagedPatchResult] = await Promise.all([
+    runGit(["status", "--porcelain=v1"], repoRoot),
+    runGit(["diff", "--patch", "--minimal"], repoRoot),
+  ]);
+
+  if (statusResult.code !== 0) {
+    throw new Error(statusResult.stderr || "Failed to inspect git status.");
+  }
+  if (unstagedPatchResult.code !== 0) {
+    throw new Error(
+      unstagedPatchResult.stderr || "Failed to generate unstaged diff.",
+    );
+  }
+
+  const untrackedPaths = collectUntrackedPaths(statusResult.stdout);
+  const untrackedPatches = await Promise.all(
+    [...untrackedPaths].map((filePath) =>
+      buildUntrackedPatch(repoRoot, filePath),
+    ),
+  );
+  const unstagedPatch = [
+    unstagedPatchResult.stdout.trim(),
+    ...untrackedPatches.filter((entry): entry is string =>
+      Boolean(entry?.trim()),
+    ),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  return buildRepoDiffPanelData({
+    branch: context.branch,
+    mode: "unstaged",
+    patch: unstagedPatch,
+    sourceLabel: "Unstaged",
+    untrackedPaths,
+  });
 }
 
 export async function getRepoDiffPanelBundleData(

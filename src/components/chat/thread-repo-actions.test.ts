@@ -2,16 +2,14 @@ import { describe, expect, it } from "bun:test";
 
 import {
   buildOptimisticWorktreeRepoContext,
-  buildRepoDiffPreloadKey,
   buildCreatePullRequestInput,
   buildGenerateCommitMessageInput,
-  collectRepoDiffPreloadCandidates,
+  collectRepoStateCandidates,
   formatRepoActionErrorMessage,
   getActivePullRequestUrl,
   getGeneratedCommitPromptValue,
   getLinkedPullRequestStatus,
   getThreadLinkedPullRequest,
-  REPO_DIFF_PRELOAD_MODES,
 } from "./thread-repo-actions.helpers";
 
 describe("thread repo action helpers", () => {
@@ -27,34 +25,6 @@ describe("thread repo action helpers", () => {
       threadId: "thread-1",
       workspaceId: "workspace-1",
     });
-  });
-
-  it("lists the repo diff modes we preload for the thread panel", () => {
-    expect(REPO_DIFF_PRELOAD_MODES).toEqual(["unstaged", "staged", "branch"]);
-  });
-
-  it("builds a stable repo diff preload key for git-backed threads", () => {
-    const base = {
-      branch: "feature/thread-preload",
-      changedFileCount: 3,
-      deletions: 5,
-      effectiveProjectPath: "/tmp/sentinel/thread-1",
-      hasChanges: true,
-      insertions: 8,
-      isGitRepo: true,
-      threadBranch: "feature/thread-preload",
-      threadProjectMode: "worktree",
-      worktreeStatus: "ready",
-    } as const;
-
-    expect(buildRepoDiffPreloadKey(base)).toBe(buildRepoDiffPreloadKey(base));
-    expect(
-      buildRepoDiffPreloadKey({
-        ...base,
-        changedFileCount: 4,
-      }),
-    ).not.toBe(buildRepoDiffPreloadKey(base));
-    expect(buildRepoDiffPreloadKey({ isGitRepo: false })).toBeNull();
   });
 
   it("builds an optimistic worktree repo context for thread handoff", () => {
@@ -86,9 +56,9 @@ describe("thread repo action helpers", () => {
     });
   });
 
-  it("collects one background diff preload candidate per workspace", () => {
+  it("collects one background repo state candidate per workspace", () => {
     expect(
-      collectRepoDiffPreloadCandidates({
+      collectRepoStateCandidates({
         groups: [
           {
             threads: [{ id: "thread-1" }, { id: "thread-2" }],
@@ -111,9 +81,9 @@ describe("thread repo action helpers", () => {
     ]);
   });
 
-  it("prioritizes the selected thread when warming repo diff data", () => {
+  it("prioritizes the selected thread when warming repo state", () => {
     expect(
-      collectRepoDiffPreloadCandidates({
+      collectRepoStateCandidates({
         groups: [
           {
             threads: [{ id: "thread-1" }, { id: "thread-2" }],

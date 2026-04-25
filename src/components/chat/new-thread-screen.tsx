@@ -565,14 +565,14 @@ export function NewThreadScreen({
           }
         : null;
       const previousThreadRepoContext = repoContextQueryInput
-        ? (utils.repo.getContext.getData(repoContextQueryInput) ??
-          utils.repo.getContext.getData({
+        ? (utils.repo.getThreadGitState.getData(repoContextQueryInput) ??
+          utils.repo.getThreadGitState.getData({
             workspaceId: selectedWorkspace?.id ?? "",
           }) ??
           null)
         : null;
       if (repoContextQueryInput && previousThreadRepoContext) {
-        utils.repo.getContext.setData(
+        utils.repo.getThreadGitState.setData(
           repoContextQueryInput,
           previousThreadRepoContext as never,
         );
@@ -582,7 +582,7 @@ export function NewThreadScreen({
         draftPreparedWorktree &&
         draftRepoState?.projectMode === "worktree"
       ) {
-        utils.repo.getContext.setData(
+        utils.repo.getThreadGitState.setData(
           repoContextQueryInput,
           buildOptimisticWorktreeRepoContext({
             baseContext: previousThreadRepoContext as never,
@@ -643,7 +643,7 @@ export function NewThreadScreen({
         setDraftThreadInitialized(true);
         applyBootstrapSnapshot(bootstrap);
         if (threadId && repoContextQueryInput) {
-          void utils.repo.getContext.invalidate(repoContextQueryInput);
+          void utils.repo.getThreadGitState.invalidate(repoContextQueryInput);
         }
       } catch (error) {
         if (

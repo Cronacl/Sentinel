@@ -92,15 +92,7 @@ import {
   pickWorkspaceDirectory,
 } from "@/lib/workspaces/picker";
 import { api, type RouterOutputs } from "@/trpc/react";
-import {
-  collectRepoDiffPreloadCandidates,
-  REPO_DIFF_PRELOAD_MODES,
-} from "@/components/chat/thread-repo-actions.helpers";
-import {
-  BACKGROUND_REPO_WARMUP_INTERVAL_MS,
-  queueRepoBackgroundWarmup,
-  warmRepoDiffBundleCandidate,
-} from "@/components/chat/repo-background-warmup";
+import { collectRepoStateCandidates } from "@/components/chat/thread-repo-actions.helpers";
 
 import { SidebarCommandPalette } from "./sidebar-command-palette";
 import { shouldInspectWorkspaceThreadSwitch } from "./workspace-sidebar.helpers";
@@ -1501,9 +1493,9 @@ export function WorkspaceSidebar() {
       (left, right) => right.updatedAt.getTime() - left.updatedAt.getTime(),
     );
   }, [groups, items]);
-  const backgroundRepoPreloadCandidates = useMemo(
+  const backgroundRepoStateCandidates = useMemo(
     () =>
-      collectRepoDiffPreloadCandidates({
+      collectRepoStateCandidates({
         groups,
         items,
         maxCandidates: Number.MAX_SAFE_INTEGER,
@@ -1511,53 +1503,24 @@ export function WorkspaceSidebar() {
       }),
     [groups, items, selectedThreadId],
   );
-  const backgroundRepoPreloadKey = useMemo(
-    () =>
-      backgroundRepoPreloadCandidates
-        .map((candidate) => `${candidate.threadId}:${candidate.workspaceId}`)
-        .join("|"),
-    [backgroundRepoPreloadCandidates],
+  const threadGitStates = api.repo.listThreadGitStates.useQuery(
+    { threads: backgroundRepoStateCandidates },
+    {
+      enabled: backgroundRepoStateCandidates.length > 0,
+      refetchInterval: 45_000,
+      refetchOnWindowFocus: true,
+      staleTime: 2_500,
+    },
   );
-  const backgroundRepoPreloadKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!backgroundRepoPreloadCandidates.length) {
-      backgroundRepoPreloadKeyRef.current = null;
-      return;
+    for (const item of threadGitStates.data ?? []) {
+      utils.repo.getThreadGitState.setData(
+        { threadId: item.threadId, workspaceId: item.workspaceId },
+        item.gitState,
+      );
     }
-
-    if (backgroundRepoPreloadKeyRef.current === backgroundRepoPreloadKey) {
-      return;
-    }
-
-    backgroundRepoPreloadKeyRef.current = backgroundRepoPreloadKey;
-    queueRepoBackgroundWarmup({
-      candidates: backgroundRepoPreloadCandidates,
-      modes: REPO_DIFF_PRELOAD_MODES,
-      strategy: "prefetch",
-      utils,
-    });
-  }, [backgroundRepoPreloadCandidates, backgroundRepoPreloadKey, utils]);
-
-  useEffect(() => {
-    if (!backgroundRepoPreloadCandidates.length) {
-      return;
-    }
-
-    const intervalId = window.setInterval(() => {
-      queueRepoBackgroundWarmup({
-        candidates: backgroundRepoPreloadCandidates,
-        minIntervalMs: BACKGROUND_REPO_WARMUP_INTERVAL_MS,
-        modes: REPO_DIFF_PRELOAD_MODES,
-        strategy: "fetch",
-        utils,
-      });
-    }, BACKGROUND_REPO_WARMUP_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [backgroundRepoPreloadCandidates, backgroundRepoPreloadKey, utils]);
+  }, [threadGitStates.data, utils.repo.getThreadGitState]);
 
   const togglePin = api.threads.togglePin.useMutation({
     onMutate: async ({ pinned, threadId }) => {
@@ -1801,7 +1764,7 @@ export function WorkspaceSidebar() {
           : current,
       );
       void utils.threads.list.invalidate();
-      void utils.repo.listWorkspaceStatuses.invalidate();
+      void utils.repo.listThreadGitStates.invalidate();
     },
   });
 
@@ -1828,7 +1791,7 @@ export function WorkspaceSidebar() {
         toCurrentWorkspace(nextSelectedWorkspace),
       );
       void utils.threads.list.invalidate();
-      void utils.repo.listWorkspaceStatuses.invalidate();
+      void utils.repo.listThreadGitStates.invalidate();
 
       if (
         (selectedThreadState?.workspaceId === workspaceId ||
@@ -2175,12 +2138,7 @@ export function WorkspaceSidebar() {
 
       void utils.threads.get.prefetch({ threadId });
       void router.prefetch(`/thread/${threadId}`);
-      void warmRepoDiffBundleCandidate({
-        candidate: { threadId, workspaceId },
-        modes: REPO_DIFF_PRELOAD_MODES,
-        strategy: "prefetch",
-        utils,
-      });
+      void utils.repo.getThreadGitState.prefetch({ threadId, workspaceId });
     },
     [router, selectedThreadId, utils],
   );
@@ -2328,7 +2286,7 @@ export function WorkspaceSidebar() {
         ...(input?.stashName ? { stashName: input.stashName } : {}),
         ...(input?.strategy ? { strategy: input.strategy } : {}),
       });
-      utils.repo.getContext.setData(
+      utils.repo.getThreadGitState.setData(
         {
           threadId: switchState.targetThreadId,
           workspaceId: switchState.workspaceId,
@@ -2336,7 +2294,7 @@ export function WorkspaceSidebar() {
         result.repoContext as never,
       );
       await Promise.all([
-        utils.repo.listWorkspaceStatuses.invalidate(),
+        utils.repo.listThreadGitStates.invalidate(),
         utils.threads.get.invalidate({ threadId: switchState.targetThreadId }),
         selectedThreadId
           ? utils.threads.get.invalidate({ threadId: selectedThreadId })
@@ -2363,8 +2321,8 @@ export function WorkspaceSidebar() {
       navigateToThread,
       selectedThreadId,
       threadSwitchState,
-      utils.repo.getContext,
-      utils.repo.listWorkspaceStatuses,
+      utils.repo.getThreadGitState,
+      utils.repo.listThreadGitStates,
       utils.threads.get,
       utils.threads.list,
     ],
@@ -2412,7 +2370,10 @@ export function WorkspaceSidebar() {
             targetThreadId: threadId,
             workspaceId,
           });
-          await utils.repo.getContext.invalidate({ threadId, workspaceId });
+          await utils.repo.getThreadGitState.invalidate({
+            threadId,
+            workspaceId,
+          });
         } catch (error) {
           console.debug("Unable to inspect thread switch after navigation.", {
             error,
@@ -2427,7 +2388,7 @@ export function WorkspaceSidebar() {
       navigateToThread,
       selectedThreadState,
       selectedThreadId,
-      utils.repo.getContext,
+      utils.repo.getThreadGitState,
       utils.repo.inspectThreadSwitch,
       utils.threads.get,
     ],

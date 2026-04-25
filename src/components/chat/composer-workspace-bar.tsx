@@ -100,24 +100,28 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
     ? { threadId: repoThreadId, workspaceId: activeWorkspace.id }
     : { workspaceId: activeWorkspace.id };
   const repoStateKey = `${activeWorkspace.id}:${repoThreadId ?? "__workspace__"}`;
-  const cachedRepoContext = utils.repo.getContext.getData(repoContextInput);
-  const repoContextQuery = api.repo.getContext.useQuery(repoContextInput, {
-    ...(cachedRepoContext ? { initialData: cachedRepoContext } : {}),
-    enabled:
-      showBranchSwitcher &&
-      Boolean(activeWorkspace.rootPath) &&
-      !deferRepoContextFetch,
-    refetchInterval:
-      showBranchSwitcher &&
-      activeWorkspace.rootPath &&
-      repoThreadId &&
-      !deferRepoContextFetch
-        ? 2500
-        : false,
-    refetchOnWindowFocus: Boolean(repoThreadId) && !deferRepoContextFetch,
-    placeholderData: () => undefined,
-    staleTime: repoThreadId ? 2_500 : 15_000,
-  });
+  const cachedRepoContext =
+    utils.repo.getThreadGitState.getData(repoContextInput);
+  const repoContextQuery = api.repo.getThreadGitState.useQuery(
+    repoContextInput,
+    {
+      ...(cachedRepoContext ? { initialData: cachedRepoContext } : {}),
+      enabled:
+        showBranchSwitcher &&
+        Boolean(activeWorkspace.rootPath) &&
+        !deferRepoContextFetch,
+      refetchInterval:
+        showBranchSwitcher &&
+        activeWorkspace.rootPath &&
+        repoThreadId &&
+        !deferRepoContextFetch
+          ? 2500
+          : false,
+      refetchOnWindowFocus: Boolean(repoThreadId) && !deferRepoContextFetch,
+      placeholderData: () => undefined,
+      staleTime: repoThreadId ? 2_500 : 15_000,
+    },
+  );
   const listBranchesQuery = api.repo.listBranches.useQuery(repoContextInput, {
     enabled: Boolean(
       branchPopoverOpen &&
@@ -147,14 +151,14 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
   const applyRepoContext = useCallback(
     (nextThreadId: string | null | undefined, repoContext: unknown) => {
       seedStableRepoContext(nextThreadId, repoContext);
-      utils.repo.getContext.setData(
+      utils.repo.getThreadGitState.setData(
         nextThreadId
           ? { threadId: nextThreadId, workspaceId: activeWorkspace.id }
           : { workspaceId: activeWorkspace.id },
         repoContext as never,
       );
     },
-    [activeWorkspace.id, seedStableRepoContext, utils.repo.getContext],
+    [activeWorkspace.id, seedStableRepoContext, utils.repo.getThreadGitState],
   );
 
   const updatePermissionOverrideMutation =

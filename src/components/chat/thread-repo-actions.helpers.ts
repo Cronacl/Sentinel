@@ -1,5 +1,4 @@
 import type { RepoLastPullRequest } from "@/lib/ai/chat/engines/types";
-import type { RepoDiffMode } from "@/lib/git/repo";
 import type { RepoPullRequestStatus } from "@/lib/git/pull-request-status";
 
 type RepoDiffPreloadContext = {
@@ -46,7 +45,7 @@ export function buildOptimisticWorktreeRepoContext<
   };
 }
 
-type RepoDiffPreloadCandidateInput = {
+type RepoStateCandidateInput = {
   groups?: Array<{
     threads: Array<{ id: string }>;
     workspace: { id: string };
@@ -58,12 +57,6 @@ type RepoDiffPreloadCandidateInput = {
   maxCandidates?: number;
   selectedThreadId?: string | null;
 };
-
-export const REPO_DIFF_PRELOAD_MODES: RepoDiffMode[] = [
-  "unstaged",
-  "staged",
-  "branch",
-];
 
 function extractErrorMessagesFromPayload(payload: unknown): string[] {
   if (typeof payload === "string") {
@@ -98,38 +91,12 @@ export function buildGenerateCommitMessageInput(input: {
   };
 }
 
-export function buildRepoDiffPreloadKey(
-  input: RepoDiffPreloadContext | null | undefined,
-) {
-  if (!input?.isGitRepo) {
-    return null;
-  }
-
-  const projectPath =
-    input.effectiveProjectPath ?? input.effectiveRootPath ?? input.repoRoot;
-  if (!projectPath) {
-    return null;
-  }
-
-  return JSON.stringify({
-    branch: input.branch ?? null,
-    changedFileCount: input.changedFileCount ?? 0,
-    deletions: input.deletions ?? 0,
-    hasChanges: input.hasChanges ?? false,
-    insertions: input.insertions ?? 0,
-    projectPath,
-    threadBranch: input.threadBranch ?? null,
-    threadProjectMode: input.threadProjectMode ?? null,
-    worktreeStatus: input.worktreeStatus ?? null,
-  });
-}
-
-export function collectRepoDiffPreloadCandidates({
+export function collectRepoStateCandidates({
   groups = [],
   items = [],
   maxCandidates = 4,
   selectedThreadId = null,
-}: RepoDiffPreloadCandidateInput) {
+}: RepoStateCandidateInput) {
   const candidates: Array<{ threadId: string; workspaceId: string }> = [];
   const seenThreads = new Set<string>();
   const seenWorkspaces = new Set<string>();

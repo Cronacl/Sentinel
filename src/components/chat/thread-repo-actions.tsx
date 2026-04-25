@@ -55,10 +55,6 @@ import {
 } from "../terminal/terminal-store";
 import { RepoPullRequestSidebar } from "./repo-pr-sidebar";
 import { RepoDiffSidebar } from "./repo-diff-sidebar";
-import {
-  BACKGROUND_REPO_WARMUP_INTERVAL_MS,
-  queueRepoBackgroundWarmup,
-} from "./repo-background-warmup";
 import { WorkspaceRunCommandButton } from "./workspace-run-command-button";
 import {
   closeRepoDiffSidebarState,
@@ -66,14 +62,12 @@ import {
   useRepoDiffSidebarState,
 } from "./repo-diff-sidebar-store";
 import {
-  buildRepoDiffPreloadKey,
   buildCreatePullRequestInput,
   buildGenerateCommitMessageInput,
   formatRepoActionErrorMessage,
   getActivePullRequestUrl,
   getGeneratedCommitPromptValue,
   getLinkedPullRequestStatus,
-  REPO_DIFF_PRELOAD_MODES,
   getThreadLinkedPullRequest,
 } from "./thread-repo-actions.helpers";
 import {
@@ -178,20 +172,27 @@ export function ThreadRepoActions({
     branchModalState.isOpen ||
     prBranchModalState.isOpen;
   const repoDiffSidebarState = useRepoDiffSidebarState();
-  const cachedRepoContext = utils.repo.getContext.getData(
+  const cachedRepoContext = utils.repo.getThreadGitState.getData(
     repoContextQueryInput,
   );
 
-  const repoContextQuery = api.repo.getContext.useQuery(repoContextQueryInput, {
-    enabled: isDesktop && Boolean(workspaceRootPath) && !deferRepoContextFetch,
-    ...(cachedRepoContext ? { initialData: cachedRepoContext } : {}),
-    refetchInterval:
-      isDesktop && workspaceRootPath && !anyModalOpen && !deferRepoContextFetch
-        ? 2500
-        : false,
-    refetchOnWindowFocus: !anyModalOpen && !deferRepoContextFetch,
-    placeholderData: () => undefined,
-  });
+  const repoContextQuery = api.repo.getThreadGitState.useQuery(
+    repoContextQueryInput,
+    {
+      enabled:
+        isDesktop && Boolean(workspaceRootPath) && !deferRepoContextFetch,
+      ...(cachedRepoContext ? { initialData: cachedRepoContext } : {}),
+      refetchInterval:
+        isDesktop &&
+        workspaceRootPath &&
+        !anyModalOpen &&
+        !deferRepoContextFetch
+          ? 2500
+          : false,
+      refetchOnWindowFocus: !anyModalOpen && !deferRepoContextFetch,
+      placeholderData: () => undefined,
+    },
+  );
 
   const repoContext = repoContextQuery.data;
   const launchPath =
@@ -228,7 +229,6 @@ export function ThreadRepoActions({
 
   const snapshotRef = useRef(repoContext);
   const syncedPullRequestKeyRef = useRef<string | null>(null);
-  const preloadedRepoDiffKeyRef = useRef<string | null>(null);
   if (!anyModalOpen) {
     snapshotRef.current = repoContext;
   }
@@ -262,8 +262,8 @@ export function ThreadRepoActions({
   }, [isTerminalOpen, launchPath]);
 
   const refreshContext = useCallback(async () => {
-    await utils.repo.getContext.invalidate(repoContextQueryInput);
-    await utils.repo.listWorkspaceStatuses.invalidate();
+    await utils.repo.getThreadGitState.invalidate(repoContextQueryInput);
+    await utils.repo.listThreadGitStates.invalidate();
   }, [repoContextQueryInput, utils]);
 
   const applyRepoContext = useCallback(
@@ -272,8 +272,11 @@ export function ThreadRepoActions({
         key: repoStateKey,
         state: nextRepoContext as RepoThreadUiContext | null,
       });
-      utils.repo.getContext.setData(repoContextQueryInput, nextRepoContext);
-      void utils.repo.listWorkspaceStatuses.invalidate();
+      utils.repo.getThreadGitState.setData(
+        repoContextQueryInput,
+        nextRepoContext,
+      );
+      void utils.repo.listThreadGitStates.invalidate();
     },
     [repoContextQueryInput, repoStateKey, utils],
   );
@@ -380,11 +383,6 @@ export function ThreadRepoActions({
 
     return `branch:${branchKey}:none`;
   }, [repoContext]);
-  const repoDiffPreloadKey = useMemo(
-    () => buildRepoDiffPreloadKey(repoContext),
-    [repoContext],
-  );
-
   useEffect(() => {
     if (!threadId || !syncedPullRequestKey) {
       return;
@@ -398,48 +396,6 @@ export function ThreadRepoActions({
     void utils.threads.get.invalidate({ threadId });
     void utils.threads.list.invalidate();
   }, [syncedPullRequestKey, threadId, utils]);
-
-  useEffect(() => {
-    if (!isDesktop || !repoDiffPreloadKey) {
-      preloadedRepoDiffKeyRef.current = null;
-      return;
-    }
-
-    if (preloadedRepoDiffKeyRef.current === repoDiffPreloadKey) {
-      return;
-    }
-
-    preloadedRepoDiffKeyRef.current = repoDiffPreloadKey;
-    const candidates = [{ threadId, workspaceId }];
-
-    queueRepoBackgroundWarmup({
-      candidates,
-      modes: REPO_DIFF_PRELOAD_MODES,
-      strategy: "prefetch",
-      utils,
-    });
-  }, [isDesktop, repoDiffPreloadKey, threadId, utils, workspaceId]);
-
-  useEffect(() => {
-    if (!isDesktop || !repoDiffPreloadKey) {
-      return;
-    }
-
-    const candidates = [{ threadId, workspaceId }];
-    const intervalId = window.setInterval(() => {
-      queueRepoBackgroundWarmup({
-        candidates,
-        minIntervalMs: BACKGROUND_REPO_WARMUP_INTERVAL_MS,
-        modes: REPO_DIFF_PRELOAD_MODES,
-        strategy: "fetch",
-        utils,
-      });
-    }, BACKGROUND_REPO_WARMUP_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [isDesktop, repoDiffPreloadKey, threadId, utils, workspaceId]);
 
   useEffect(() => {
     if (!isRepoVisible || !launchPath || !desktop) {

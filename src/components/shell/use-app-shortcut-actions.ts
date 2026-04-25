@@ -62,7 +62,7 @@ export function useAppShortcutActions() {
         ];
       });
       void utils.threads.list.invalidate();
-      void utils.repo.listWorkspaceStatuses.invalidate();
+      void utils.repo.listThreadGitStates.invalidate();
     },
   });
 
