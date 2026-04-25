@@ -19,6 +19,7 @@ export type DesktopSystemFontFamily = {
 };
 
 export type DesktopResolvedTheme = "light" | "dark";
+export type DesktopArchitecture = string;
 export type DesktopPlatform = "darwin" | "linux" | "win32";
 export type DesktopPermissionName = "microphone";
 export type DesktopPermissionState =
@@ -66,6 +67,7 @@ export type DesktopTerminalSession = {
 
 export type SentinelDesktopApi = {
   app: {
+    arch: DesktopArchitecture;
     getVersion: () => Promise<string>;
     listSystemFonts: () => Promise<DesktopSystemFontFamily[]>;
     platform: DesktopPlatform;

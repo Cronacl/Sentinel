@@ -4,6 +4,7 @@ import { DESKTOP_CHANNELS } from "../shared/channels.mjs";
 
 contextBridge.exposeInMainWorld("sentinelDesktop", {
   app: {
+    arch: process.arch,
     getVersion: () => ipcRenderer.invoke(DESKTOP_CHANNELS.APP_VERSION),
     listSystemFonts: () =>
       ipcRenderer.invoke(DESKTOP_CHANNELS.APP_LIST_SYSTEM_FONTS),

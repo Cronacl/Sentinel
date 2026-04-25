@@ -1,11 +1,7 @@
 "use client";
 
 import { Button, Chip, ProgressBar, Spinner } from "@heroui/react";
-import {
-  Download04Icon,
-  RefreshIcon,
-  Rocket01Icon,
-} from "@hugeicons/core-free-icons";
+import { RefreshIcon, Rocket01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -15,12 +11,17 @@ import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper
 import { getDesktopApi } from "@/lib/desktop/client";
 import type { DesktopUpdateState } from "@/lib/desktop/contracts";
 import {
+  formatUpdateBytes,
   formatUpdateTimestamp,
   getUpdatePrimaryActionLabel,
   getUpdateProgressText,
   getUpdateReleaseUrl,
   getUpdateStatusColor,
   getUpdateStatusLabel,
+  LATEST_RELEASE_API_URL,
+  normalizeGitHubLatestRelease,
+  selectDesktopReleaseAsset,
+  type DesktopLatestRelease,
 } from "@/lib/desktop/updates";
 
 function SettingsSectionRow({
@@ -47,6 +48,21 @@ function SettingsSectionRow({
   );
 }
 
+function UpdateDetail({
+  children,
+  label,
+}: {
+  children: ReactNode;
+  label: ReactNode;
+}) {
+  return (
+    <div className="min-w-0 space-y-1">
+      <p className="text-muted text-xs">{label}</p>
+      {children}
+    </div>
+  );
+}
+
 function SettingsLoadingSpinner() {
   return (
     <div className="flex items-center justify-center py-48">
@@ -58,15 +74,32 @@ function SettingsLoadingSpinner() {
 export default function UpdatesSettingsPage() {
   const [actionError, setActionError] = useState("");
   const [isActionPending, setIsActionPending] = useState(false);
+  const [isReleaseLoading, setIsReleaseLoading] = useState(false);
+  const [latestRelease, setLatestRelease] =
+    useState<DesktopLatestRelease | null>(null);
+  const [releaseError, setReleaseError] = useState("");
   const [state, setState] = useState<DesktopUpdateState | null>(null);
 
   const desktop = getDesktopApi();
+  const downloadAsset = useMemo(
+    () =>
+      desktop
+        ? selectDesktopReleaseAsset(
+            latestRelease,
+            desktop.app.platform,
+            desktop.app.arch,
+          )
+        : null,
+    [desktop, latestRelease],
+  );
   const releaseUrl = useMemo(
     () =>
-      state
-        ? getUpdateReleaseUrl(state)
-        : "https://github.com/Cronacl/Sentinel/releases",
-    [state],
+      latestRelease
+        ? latestRelease.releasePageUrl
+        : state
+          ? getUpdateReleaseUrl(state)
+          : "https://github.com/Cronacl/Sentinel/releases",
+    [latestRelease, state],
   );
 
   useEffect(() => {
@@ -117,6 +150,63 @@ export default function UpdatesSettingsPage() {
     };
   }, [desktop]);
 
+  useEffect(() => {
+    if (!desktop) {
+      return;
+    }
+
+    const controller = new AbortController();
+    let isMounted = true;
+
+    setIsReleaseLoading(true);
+    setReleaseError("");
+
+    void fetch(LATEST_RELEASE_API_URL, {
+      headers: {
+        Accept: "application/vnd.github+json",
+      },
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Unable to load the latest release.");
+        }
+
+        const release = normalizeGitHubLatestRelease(await response.json());
+        if (!release) {
+          throw new Error("The latest release metadata is incomplete.");
+        }
+
+        if (isMounted) {
+          setLatestRelease(release);
+        }
+      })
+      .catch((error) => {
+        if (
+          !isMounted ||
+          (error instanceof DOMException && error.name === "AbortError")
+        ) {
+          return;
+        }
+
+        setReleaseError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load the latest release.",
+        );
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsReleaseLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [desktop]);
+
   const handlePrimaryAction = async () => {
     if (!desktop || !state || !state.isSupported) {
       return;
@@ -154,13 +244,31 @@ export default function UpdatesSettingsPage() {
     });
   };
 
+  const handleDownloadLatest = async () => {
+    if (!desktop || !downloadAsset) {
+      return;
+    }
+
+    setActionError("");
+
+    await desktop.openExternal(downloadAsset.downloadUrl).catch(() => {
+      setActionError("Unable to open the latest installer download.");
+    });
+  };
+
   const currentVersion = state?.currentVersion ?? "Desktop runtime";
   const latestVersion =
-    state && !state.isSupported
-      ? "Manual release installs"
+    latestRelease?.version ??
+    (state && !state.isSupported
+      ? "Manual installer"
       : state?.status === "up_to_date"
         ? state.currentVersion
-        : (state?.availableVersion ?? "Checking in background");
+        : (state?.availableVersion ?? "Checking in background"));
+  const downloadAssetLabel = downloadAsset
+    ? `${downloadAsset.name}${downloadAsset.size !== null ? ` · ${formatUpdateBytes(downloadAsset.size)}` : ""}`
+    : isReleaseLoading
+      ? "Finding the right installer"
+      : "Installer unavailable";
   const isProgressVisible =
     state?.status === "available" ||
     state?.status === "downloading" ||
@@ -209,52 +317,103 @@ export default function UpdatesSettingsPage() {
         <SettingsLoadingSpinner />
       ) : (
         <div className="flex flex-col gap-6">
-          <section className="border-separator/20 bg-surface rounded-2xl border">
-            <SettingsSectionRow
-              description="The version currently running on this machine."
-              isFirst
-              title="Current version"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-foreground text-sm font-medium font-mono">
-                  {currentVersion}
-                </span>
-                <Chip
-                  color={getUpdateStatusColor(state)}
-                  size="sm"
-                  variant="soft"
-                >
-                  {getUpdateStatusLabel(state)}
-                </Chip>
+          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+              <div className="grid flex-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+                <UpdateDetail label="Current">
+                  <div className="flex items-center gap-2">
+                    <span className="text-foreground text-sm font-medium font-mono">
+                      {currentVersion}
+                    </span>
+                    <Chip
+                      color={getUpdateStatusColor(state)}
+                      size="sm"
+                      variant="soft"
+                    >
+                      {getUpdateStatusLabel(state)}
+                    </Chip>
+                  </div>
+                </UpdateDetail>
+
+                <UpdateDetail label="Latest">
+                  <span className="text-foreground text-sm font-medium font-mono">
+                    {latestVersion}
+                  </span>
+                </UpdateDetail>
+
+                <UpdateDetail label="Last checked">
+                  <span className="text-foreground text-sm font-medium">
+                    {formatUpdateTimestamp(state.checkedAt)}
+                  </span>
+                </UpdateDetail>
+
+                <UpdateDetail label="Installer">
+                  <span className="text-foreground block truncate text-sm font-medium">
+                    {downloadAssetLabel}
+                  </span>
+                </UpdateDetail>
               </div>
-            </SettingsSectionRow>
 
-            <SettingsSectionRow
-              description="The newest stable release available."
-              title="Latest stable"
-            >
-              <span className="text-foreground text-sm font-medium font-mono">
-                {latestVersion}
-              </span>
-            </SettingsSectionRow>
-
-            <SettingsSectionRow
-              description="When Sentinel last checked for a new release."
-              title="Last checked"
-            >
-              <span className="text-foreground text-sm font-medium">
-                {formatUpdateTimestamp(state.checkedAt)}
-              </span>
-            </SettingsSectionRow>
+              <div className="flex flex-wrap gap-3 lg:justify-end">
+                {state.isSupported ? (
+                  <Button
+                    isPending={isPrimaryPending}
+                    onPress={handlePrimaryAction}
+                    size="sm"
+                  >
+                    {({ isPending }) => (
+                      <>
+                        {isPending ? (
+                          <Spinner color="current" size="sm" />
+                        ) : state.status === "downloaded" ? (
+                          <HugeiconsIcon
+                            color="currentColor"
+                            icon={Rocket01Icon}
+                            size={15}
+                            strokeWidth={1.5}
+                          />
+                        ) : (
+                          <HugeiconsIcon
+                            color="currentColor"
+                            icon={RefreshIcon}
+                            size={15}
+                            strokeWidth={1.5}
+                          />
+                        )}
+                        {getUpdatePrimaryActionLabel(state)}
+                      </>
+                    )}
+                  </Button>
+                ) : null}
+                <Button
+                  isDisabled={!downloadAsset}
+                  isPending={isReleaseLoading}
+                  onPress={handleDownloadLatest}
+                  size="sm"
+                >
+                  {({ isPending }) => (
+                    <>
+                      {isPending ? <Spinner color="current" size="sm" /> : null}
+                      Download latest
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onPress={handleOpenRelease}
+                  size="sm"
+                  variant="tertiary"
+                >
+                  Release notes
+                </Button>
+              </div>
+            </div>
 
             {!state.isSupported ? (
-              <div className="border-t border-border/50 px-5 py-3">
+              <div className="mt-5 border-t border-border/50 pt-4">
                 <p className="text-muted text-xs">
-                  <span className="text-foreground font-medium">
-                    Native updates are unavailable.
-                  </span>{" "}
                   {state.supportReason ??
-                    "This build does not support background updates."}
+                    "This build does not support background updates."}{" "}
+                  Use direct download for this build.
                 </p>
               </div>
             ) : null}
@@ -301,47 +460,11 @@ export default function UpdatesSettingsPage() {
               </div>
             ) : null}
 
-            <div className="flex flex-wrap gap-3 border-t border-border/50 p-5">
-              {state.isSupported ? (
-                <Button
-                  isPending={isPrimaryPending}
-                  onPress={handlePrimaryAction}
-                  size="sm"
-                >
-                  {({ isPending }) => (
-                    <>
-                      {isPending ? (
-                        <Spinner color="current" size="sm" />
-                      ) : state.status === "downloaded" ? (
-                        <HugeiconsIcon
-                          color="currentColor"
-                          icon={Rocket01Icon}
-                          size={15}
-                          strokeWidth={1.5}
-                        />
-                      ) : (
-                        <HugeiconsIcon
-                          color="currentColor"
-                          icon={RefreshIcon}
-                          size={15}
-                          strokeWidth={1.5}
-                        />
-                      )}
-                      {getUpdatePrimaryActionLabel(state)}
-                    </>
-                  )}
-                </Button>
-              ) : null}
-              <Button onPress={handleOpenRelease} size="sm" variant="tertiary">
-                <HugeiconsIcon
-                  color="currentColor"
-                  icon={Download04Icon}
-                  size={15}
-                  strokeWidth={1.5}
-                />
-                Release notes
-              </Button>
-            </div>
+            {releaseError ? (
+              <div className="mt-4 border-t border-border/50 pt-4">
+                <p className="text-warning text-xs">{releaseError}</p>
+              </div>
+            ) : null}
           </section>
 
           {state.releaseNotes ? (

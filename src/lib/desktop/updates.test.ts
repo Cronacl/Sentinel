@@ -9,6 +9,8 @@ import {
   getUpdateReleaseUrl,
   getUpdateStatusColor,
   getUpdateStatusLabel,
+  normalizeGitHubLatestRelease,
+  selectDesktopReleaseAsset,
 } from "./updates";
 
 function createState(
@@ -120,5 +122,78 @@ describe("desktop update formatting helpers", () => {
       "Preparing download",
     );
     expect(getUpdateProgressText(createState({ status: "idle" }))).toBeNull();
+  });
+
+  it("normalizes latest GitHub releases and picks platform installers", () => {
+    const release = normalizeGitHubLatestRelease({
+      assets: [
+        {
+          browser_download_url: "https://example.com/Sentinel-1.2.0-arm64.dmg",
+          name: "Sentinel-1.2.0-arm64.dmg",
+          size: 1024,
+        },
+        {
+          browser_download_url: "https://example.com/Sentinel-1.2.0-x64.dmg",
+          name: "Sentinel-1.2.0-x64.dmg",
+          size: 2048,
+        },
+        {
+          browser_download_url:
+            "https://example.com/Sentinel-1.2.0-x64.dmg.blockmap",
+          name: "Sentinel-1.2.0-x64.dmg.blockmap",
+          size: 512,
+        },
+      ],
+      html_url: "https://github.com/Cronacl/Sentinel/releases/tag/v1.2.0",
+      name: "Sentinel 1.2.0",
+      published_at: "2026-03-29T10:00:00.000Z",
+      tag_name: "v1.2.0",
+    });
+
+    expect(release).toMatchObject({
+      releasePageUrl: "https://github.com/Cronacl/Sentinel/releases/tag/v1.2.0",
+      version: "1.2.0",
+    });
+    expect(selectDesktopReleaseAsset(release, "darwin", "arm64")).toMatchObject(
+      {
+        downloadUrl: "https://example.com/Sentinel-1.2.0-arm64.dmg",
+        name: "Sentinel-1.2.0-arm64.dmg",
+      },
+    );
+    expect(selectDesktopReleaseAsset(release, "darwin", "x64")).toMatchObject({
+      downloadUrl: "https://example.com/Sentinel-1.2.0-x64.dmg",
+      name: "Sentinel-1.2.0-x64.dmg",
+    });
+  });
+
+  it("picks Windows and Linux installer assets without metadata files", () => {
+    const release = normalizeGitHubLatestRelease({
+      assets: [
+        {
+          browser_download_url: "https://example.com/latest.yml",
+          name: "latest.yml",
+          size: 10,
+        },
+        {
+          browser_download_url: "https://example.com/Sentinel-1.2.0-x64.exe",
+          name: "Sentinel-1.2.0-x64.exe",
+          size: 1024,
+        },
+        {
+          browser_download_url:
+            "https://example.com/Sentinel-1.2.0-arm64.AppImage",
+          name: "Sentinel-1.2.0-arm64.AppImage",
+          size: 2048,
+        },
+      ],
+      tag_name: "v1.2.0",
+    });
+
+    expect(selectDesktopReleaseAsset(release, "win32", "x64")).toMatchObject({
+      name: "Sentinel-1.2.0-x64.exe",
+    });
+    expect(selectDesktopReleaseAsset(release, "linux", "arm64")).toMatchObject({
+      name: "Sentinel-1.2.0-arm64.AppImage",
+    });
   });
 });

@@ -15,6 +15,7 @@ function createDesktopApi(
 ): SentinelDesktopApi {
   return {
     app: {
+      arch: "arm64",
       getVersion: async () => "1.0.0",
       listSystemFonts: async () => [],
       platform: "darwin",
