@@ -69,9 +69,20 @@ interface ShellContextValue {
 
 const ShellContext = createContext<ShellContextValue | null>(null);
 
+function getBrowserShellPathname(fallback: string) {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  const browserPathname = window.location.pathname;
+  return browserPathname.startsWith("/settings") ? browserPathname : fallback;
+}
+
 export function ShellProvider({ children }: PropsWithChildren) {
   const nextPathname = usePathname();
-  const [pathname, setPathname] = useState(nextPathname);
+  const [pathname, setPathname] = useState(() =>
+    getBrowserShellPathname(nextPathname),
+  );
   const initialPathRef = useRef(pathname);
   const generalSettings = api.generalSettings.get.useQuery();
 
@@ -89,7 +100,7 @@ export function ShellProvider({ children }: PropsWithChildren) {
   const rightSidebarDrawerMode = useMediaQuery(RIGHT_SIDEBAR_DRAWER_BREAKPOINT);
 
   useEffect(() => {
-    setPathname(nextPathname);
+    setPathname(getBrowserShellPathname(nextPathname));
   }, [nextPathname]);
 
   useEffect(() => {

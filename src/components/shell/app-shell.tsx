@@ -4,6 +4,7 @@ import { Button, ScrollShadow } from "@heroui/react";
 import { ArrowLeft02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import dynamic from "next/dynamic";
+import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { type PropsWithChildren, useEffect, useRef } from "react";
 
@@ -62,6 +63,11 @@ const TerminalPanel = dynamic(
   },
 );
 
+const SIDEBAR_TRANSITION = {
+  duration: 0.24,
+  ease: [0.16, 1, 0.3, 1],
+} as const;
+
 function ShellWarmCache() {
   api.workspaces.getCurrent.useQuery();
   api.workspaces.list.useQuery();
@@ -74,62 +80,76 @@ function SidebarContent() {
   const router = useRouter();
   const { navigateHome, pathname } = useShell();
   const isSettings = pathname.startsWith("/settings");
+  const sidebarMode = isSettings ? "settings" : "workspace";
 
-  if (isSettings) {
-    const isActive = (href: string) =>
-      href === "/settings"
-        ? pathname === "/settings"
-        : pathname.startsWith(href);
+  const isActiveSettingsItem = (href: string) =>
+    href === "/settings" ? pathname === "/settings" : pathname.startsWith(href);
 
-    return (
-      <div className="flex h-full min-h-0 flex-col">
-        <div className="shrink-0 px-3 pt-3 pb-1">
-          <button
-            className="text-muted hover:text-foreground inline-flex items-center gap-2 rounded-xl px-2 py-1.5 text-xs transition-colors"
-            onClick={() => navigateHome()}
-            type="button"
-          >
-            <HugeiconsIcon
-              color="currentColor"
-              icon={ArrowLeft02Icon}
-              size={14}
-              strokeWidth={1.5}
-            />
-            Back to app
-          </button>
-        </div>
-
-        <ScrollShadow
-          className="min-h-0 flex-1 px-3 pt-1 pb-3"
-          hideScrollBar
-          orientation="vertical"
+  return (
+    <div className="relative h-full min-h-0 overflow-hidden">
+      <AnimatePresence initial={false}>
+        <motion.div
+          animate={{ opacity: 1, x: 0 }}
+          className="absolute inset-0 h-full min-h-0 transform-gpu will-change-[opacity,transform]"
+          exit={{ opacity: 0, x: sidebarMode === "settings" ? -10 : 10 }}
+          initial={{ opacity: 0, x: sidebarMode === "settings" ? 10 : -10 }}
+          key={sidebarMode}
+          transition={SIDEBAR_TRANSITION}
         >
-          <nav className="flex flex-col gap-0.5">
-            {SETTINGS_NAV.map((item) => (
-              <Button
-                key={item.href}
-                size="sm"
-                fullWidth
-                variant={isActive(item.href) ? "tertiary" : "ghost"}
-                className="justify-start rounded-xl"
-                onPress={() => router.push(item.href)}
-              >
-                <HugeiconsIcon
-                  color="currentColor"
-                  icon={item.icon}
-                  size={15}
-                  strokeWidth={1.5}
-                />
-                {item.label}
-              </Button>
-            ))}
-          </nav>
-        </ScrollShadow>
-      </div>
-    );
-  }
+          {isSettings ? (
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="shrink-0 px-3 pt-3 pb-1">
+                <button
+                  className="text-muted hover:text-foreground inline-flex items-center gap-2 rounded-xl px-2 py-1.5 text-xs transition-colors"
+                  onClick={() => navigateHome()}
+                  type="button"
+                >
+                  <HugeiconsIcon
+                    color="currentColor"
+                    icon={ArrowLeft02Icon}
+                    size={14}
+                    strokeWidth={1.5}
+                  />
+                  Back to app
+                </button>
+              </div>
 
-  return <WorkspaceSidebar />;
+              <ScrollShadow
+                className="min-h-0 flex-1 px-3 pt-1 pb-3"
+                hideScrollBar
+                orientation="vertical"
+              >
+                <nav className="flex flex-col gap-0.5">
+                  {SETTINGS_NAV.map((item) => (
+                    <Button
+                      className="justify-start rounded-xl"
+                      fullWidth
+                      key={item.href}
+                      onPress={() => router.push(item.href)}
+                      size="sm"
+                      variant={
+                        isActiveSettingsItem(item.href) ? "tertiary" : "ghost"
+                      }
+                    >
+                      <HugeiconsIcon
+                        color="currentColor"
+                        icon={item.icon}
+                        size={15}
+                        strokeWidth={1.5}
+                      />
+                      {item.label}
+                    </Button>
+                  ))}
+                </nav>
+              </ScrollShadow>
+            </div>
+          ) : (
+            <WorkspaceSidebar />
+          )}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
 }
 
 function AppShellShortcutBindings() {
