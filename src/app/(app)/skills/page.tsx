@@ -2,11 +2,12 @@
 
 import {
   Button,
-  Dropdown,
   Input,
+  Modal,
   Skeleton,
   Spinner,
   Tabs,
+  useOverlayState,
 } from "@heroui/react";
 import {
   AiIdeaIcon,
@@ -33,7 +34,6 @@ import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import Link from "next/link";
 import type { ComponentType, SVGProps } from "react";
 import { useCallback, useMemo, useState } from "react";
-import { sileo } from "sileo";
 
 import { type SelectOption } from "@/components/forms/controlled-fields";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
@@ -449,33 +449,150 @@ type BrandIconEntry = {
 };
 type HugeIconEntry = { type: "huge"; icon: IconSvgElement };
 
-const SKILL_ICON_MAP: Record<string, BrandIconEntry | HugeIconEntry> = {
-  "vercel-deploy": { type: "brand", component: VercelIcon },
-  playwright: { type: "brand", component: PlaywrightIcon },
-  "playwright-dev": { type: "brand", component: PlaywrightIcon },
-  slides: { type: "brand", component: PowerPointIcon },
-  doc: { type: "brand", component: WordIcon },
-  pdf: { type: "brand", component: PdfIcon },
-  xlsx: { type: "brand", component: MicrosoftExcelIcon },
-  "gh-fix-ci": { type: "brand", component: GitHubIcon },
-  "gh-address-comments": { type: "brand", component: GitHubIcon },
-  "figma-implement-design": { type: "brand", component: FigmaIcon },
-  "cloudflare-deploy": { type: "brand", component: CloudflareIcon },
-  remotion: { type: "brand", component: RemotionIcon },
-  "frontend-design": { type: "huge", icon: PaintBoardIcon },
-  "mcp-builder": { type: "huge", icon: McpServerIcon },
-  "webapp-testing": { type: "huge", icon: TestTube01Icon },
-  "openai-docs": { type: "huge", icon: NotebookIcon },
-  "skill-creator": { type: "huge", icon: BrushIcon },
-  "skill-installer": { type: "huge", icon: SparklesIcon },
-  "github-fix-ci": { type: "brand", component: GitHubIcon },
-  copywriting: { type: "huge", icon: QuillWrite01Icon },
-  "marketing-ideas": { type: "huge", icon: BulbIcon },
-  "lead-magnets": { type: "huge", icon: Magnet01Icon },
-  "cold-email": { type: "huge", icon: Mail01Icon },
-  "ad-creative": { type: "huge", icon: Megaphone01Icon },
-  "social-content": { type: "huge", icon: ShareKnowledgeIcon },
+type SkillIconMeta = (BrandIconEntry | HugeIconEntry) & {
+  accent: string;
 };
+
+const SKILL_ICON_MAP: Record<string, SkillIconMeta> = {
+  "vercel-deploy": {
+    type: "brand",
+    component: VercelIcon,
+    accent: "bg-background dark:bg-background",
+  },
+  playwright: {
+    type: "brand",
+    component: PlaywrightIcon,
+    accent: "bg-green-50 dark:bg-green-950/50",
+  },
+  "playwright-dev": {
+    type: "brand",
+    component: PlaywrightIcon,
+    accent: "bg-green-50 dark:bg-green-950/50",
+  },
+  slides: {
+    type: "brand",
+    component: PowerPointIcon,
+    accent: "bg-orange-50 dark:bg-orange-950/40",
+  },
+  doc: {
+    type: "brand",
+    component: WordIcon,
+    accent: "bg-blue-50 dark:bg-blue-950/40",
+  },
+  pdf: {
+    type: "brand",
+    component: PdfIcon,
+    accent: "bg-red-50 dark:bg-red-950/40",
+  },
+  xlsx: {
+    type: "brand",
+    component: MicrosoftExcelIcon,
+    accent: "bg-emerald-50 dark:bg-emerald-950/40",
+  },
+  "gh-fix-ci": {
+    type: "brand",
+    component: GitHubIcon,
+    accent: "bg-background dark:bg-background",
+  },
+  "gh-address-comments": {
+    type: "brand",
+    component: GitHubIcon,
+    accent: "bg-background dark:bg-background",
+  },
+  "figma-implement-design": {
+    type: "brand",
+    component: FigmaIcon,
+    accent: "bg-purple-50 dark:bg-purple-950/40",
+  },
+  "cloudflare-deploy": {
+    type: "brand",
+    component: CloudflareIcon,
+    accent: "bg-amber-50 dark:bg-amber-950/40",
+  },
+  remotion: {
+    type: "brand",
+    component: RemotionIcon,
+    accent: "bg-sky-50 dark:bg-sky-950/40",
+  },
+  "frontend-design": {
+    type: "huge",
+    icon: PaintBoardIcon,
+    accent: "bg-background dark:bg-background",
+  },
+  "mcp-builder": {
+    type: "huge",
+    icon: McpServerIcon,
+    accent: "bg-background dark:bg-background",
+  },
+  "webapp-testing": {
+    type: "huge",
+    icon: TestTube01Icon,
+    accent: "bg-background dark:bg-background",
+  },
+  "openai-docs": {
+    type: "huge",
+    icon: NotebookIcon,
+    accent: "bg-background dark:bg-background",
+  },
+  "skill-creator": {
+    type: "huge",
+    icon: BrushIcon,
+    accent: "bg-b ackground/50",
+  },
+  "skill-installer": {
+    type: "huge",
+    icon: SparklesIcon,
+    accent: "bg-background dark:bg-background",
+  },
+  "github-fix-ci": {
+    type: "brand",
+    component: GitHubIcon,
+    accent: "bg-background dark:bg-background",
+  },
+  copywriting: {
+    type: "huge",
+    icon: QuillWrite01Icon,
+    accent: "bg-background dark:bg-background",
+  },
+  "marketing-ideas": {
+    type: "huge",
+    icon: BulbIcon,
+    accent: "bg-background dark:bg-background",
+  },
+  "lead-magnets": {
+    type: "huge",
+    icon: Magnet01Icon,
+    accent: "bg-background dark:bg-background",
+  },
+  "cold-email": {
+    type: "huge",
+    icon: Mail01Icon,
+    accent: "bg-background dark:bg-background",
+  },
+  "ad-creative": {
+    type: "huge",
+    icon: Megaphone01Icon,
+    accent: "bg-background dark:bg-background",
+  },
+  "social-content": {
+    type: "huge",
+    icon: ShareKnowledgeIcon,
+    accent: "bg-background dark:bg-background",
+  },
+  "doc-coauthoring": {
+    type: "huge",
+    icon: NoteEditIcon,
+    accent: "bg-background dark:bg-background",
+  },
+};
+
+const EXTERNAL_ACCENT = "bg-background dark:bg-background";
+const DEFAULT_ACCENT = "bg-background dark:bg-background";
+
+function getSkillAccent(name: string, isExternal: boolean) {
+  if (isExternal) return EXTERNAL_ACCENT;
+  return SKILL_ICON_MAP[name.trim().toLowerCase()]?.accent ?? DEFAULT_ACCENT;
+}
 
 function SkillIcon({
   name,
@@ -553,15 +670,15 @@ function SkillsSkeleton() {
     <>
       {Array.from({ length: 8 }).map((_, index) => (
         <div
-          className="flex items-center gap-2.5 rounded-2xl bg-surface px-2.5 py-2"
+          className="flex items-center gap-3 rounded-2xl bg-surface px-3 py-2.5"
           key={index}
         >
-          <Skeleton className="h-8 w-8 shrink-0 rounded-xl" />
-          <div className="min-w-0 flex-1 space-y-1">
-            <Skeleton className="h-3.5 w-24 rounded-md" />
-            <Skeleton className="h-3 w-40 rounded-md" />
+          <Skeleton className="h-10 w-10 shrink-0 rounded-[14px]" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <Skeleton className="h-3.5 w-28 rounded-md" />
+            <Skeleton className="h-3 w-44 rounded-md" />
           </div>
-          <Skeleton className="h-6 w-6 shrink-0 rounded-full" />
+          <Skeleton className="h-5 w-5 shrink-0 rounded-full" />
         </div>
       ))}
     </>
@@ -576,6 +693,34 @@ function SkillsSkeleton() {
 /*  Unified skill cell                                                        */
 /* -------------------------------------------------------------------------- */
 
+function SkillCellContent({
+  item,
+  isExternal,
+}: {
+  item: UnifiedSkill;
+  isExternal: boolean;
+}) {
+  const accent = getSkillAccent(item.name, isExternal);
+
+  return (
+    <>
+      <div
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] ${accent}`}
+      >
+        <SkillIcon isExternal={isExternal} name={item.name} size={20} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <span className="text-foreground text-[13px] font-semibold leading-tight line-clamp-1">
+          {item.displayName}
+        </span>
+        <p className="text-muted mt-0.5 truncate text-xs leading-snug">
+          {item.description}
+        </p>
+      </div>
+    </>
+  );
+}
+
 function SkillCell({
   item,
   codexAvailable,
@@ -583,8 +728,7 @@ function SkillCell({
   cursorAvailable,
   openCodeAvailable,
   isInstalling,
-  installError,
-  onInstall,
+  onOpenInstall,
 }: {
   item: UnifiedSkill;
   codexAvailable: boolean;
@@ -592,9 +736,9 @@ function SkillCell({
   cursorAvailable: boolean;
   openCodeAvailable: boolean;
   isInstalling: boolean;
-  installError: string | null;
-  onInstall: (entry: RegistryItem, target: SkillInstallTarget) => void;
+  onOpenInstall: (item: UnifiedSkill) => void;
 }) {
+  const hasInstalledTarget = hasAnyInstall(item.installedTargets);
   const fullyInstalled =
     isFullyInstalled(item.installedTargets, {
       codexAvailable,
@@ -602,153 +746,207 @@ function SkillCell({
       cursorAvailable,
       openCodeAvailable,
     }) ||
-    // Custom installed skills (not from registry) are inherently "complete"
-    (!item.registryEntry && hasAnyInstall(item.installedTargets));
-  const canInstall = item.registryEntry && !fullyInstalled;
+    (!item.registryEntry && hasInstalledTarget);
+  const canOpenInstall = Boolean(item.registryEntry);
+  const isExternal = shouldTreatAsExternal(item);
 
-  // Wrap the clickable area (icon + text) in a Link, but keep the action
-  // button outside so the Dropdown works independently.
   return (
-    <div>
-      <div className="border-separator/20 flex items-center gap-2.5 rounded-2xl border bg-surface px-2.5 py-2 transition-colors hover:bg-surface-hover">
-        {item.detailHref ? (
-          <Link
-            href={item.detailHref}
-            prefetch
-            className="flex min-w-0 flex-1 items-center gap-2.5"
-          >
-            {/* Icon */}
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-separator bg-background text-foreground">
-              <SkillIcon
-                isExternal={shouldTreatAsExternal(item)}
-                name={item.name}
-                size={16}
-              />
-            </div>
-            <div className="min-w-0 flex-1">
-              <span className="text-foreground text-[13px] font-medium leading-tight line-clamp-1">
-                {item.displayName}
-              </span>
-              <p className="text-muted mt-0.5 truncate text-[11px]">
-                {item.description}
-              </p>
-            </div>
-          </Link>
-        ) : (
-          <div className="flex min-w-0 flex-1 items-center gap-2.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-separator bg-background text-foreground">
-              <SkillIcon
-                isExternal={shouldTreatAsExternal(item)}
-                name={item.name}
-                size={16}
-              />
-            </div>
-            <div className="min-w-0 flex-1">
-              <span className="text-foreground text-[13px] font-medium leading-tight line-clamp-1">
-                {item.displayName}
-              </span>
-              <p className="text-muted mt-0.5 truncate text-[11px]">
-                {item.description}
-              </p>
-            </div>
-          </div>
-        )}
+    <div className="group flex items-center gap-3 rounded-2xl bg-surface/70 dark:bg-surface/50 px-3 py-2.5 transition-colors hover:bg-surface-hover/20">
+      {item.detailHref ? (
+        <Link
+          href={item.detailHref}
+          prefetch
+          className="flex min-w-0 flex-1 items-center gap-3"
+        >
+          <SkillCellContent item={item} isExternal={isExternal} />
+        </Link>
+      ) : (
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <SkillCellContent item={item} isExternal={isExternal} />
+        </div>
+      )}
 
-        {/* Action indicator */}
-        <div className="shrink-0">
-          {canInstall ? (
-            <Dropdown>
-              <Button
-                isDisabled={isInstalling}
-                isPending={isInstalling}
-                size="sm"
-                variant="tertiary"
-                isIconOnly
-                className="h-6 w-6 min-w-0"
-              >
-                {({ isPending }) =>
-                  isPending ? (
-                    <Spinner color="current" size="sm" />
-                  ) : (
-                    <HugeiconsIcon
-                      color="currentColor"
-                      icon={PlusSignIcon}
-                      size={16}
-                      strokeWidth={2}
-                      className="text-muted"
-                    />
-                  )
-                }
-              </Button>
-              <Dropdown.Popover
-                className="min-w-[240px]"
-                placement="bottom end"
-              >
-                <Dropdown.Menu
-                  onAction={(key) =>
-                    item.registryEntry &&
-                    onInstall(
-                      item.registryEntry,
-                      String(key) as SkillInstallTarget,
-                    )
-                  }
-                >
+      <div className="shrink-0">
+        {canOpenInstall ? (
+          <Button
+            aria-label={
+              fullyInstalled
+                ? `Manage ${item.displayName} installs`
+                : hasInstalledTarget
+                  ? `Continue installing ${item.displayName}`
+                  : `Install ${item.displayName}`
+            }
+            onPress={() => onOpenInstall(item)}
+            size="sm"
+            variant="ghost"
+            isIconOnly
+            className="h-7 w-7 min-w-0"
+            isDisabled={isInstalling}
+            isPending={isInstalling}
+          >
+            {({ isPending }) =>
+              isPending ? (
+                <Spinner color="current" size="sm" />
+              ) : fullyInstalled ? (
+                <CheckCircleFilled size={18} className="text-success" />
+              ) : (
+                <HugeiconsIcon
+                  color="currentColor"
+                  icon={PlusSignIcon}
+                  size={16}
+                  strokeWidth={2}
+                  className="text-muted transition-colors group-hover:text-foreground"
+                />
+              )
+            }
+          </Button>
+        ) : fullyInstalled ? (
+          <div className="flex h-7 w-7 items-center justify-center">
+            <CheckCircleFilled size={18} className="text-success" />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Install modal                                                             */
+/* -------------------------------------------------------------------------- */
+
+function SkillInstallModal({
+  skill,
+  codexAvailable,
+  copilotAvailable,
+  cursorAvailable,
+  openCodeAvailable,
+  installingSkills,
+  installErrors,
+  onInstall,
+  isOpen,
+  onOpenChange,
+}: {
+  skill: UnifiedSkill | null;
+  codexAvailable: boolean;
+  copilotAvailable: boolean;
+  cursorAvailable: boolean;
+  openCodeAvailable: boolean;
+  installingSkills: Set<string>;
+  installErrors: Record<string, string>;
+  onInstall: (entry: RegistryItem, target: SkillInstallTarget) => void;
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const state = useOverlayState({ isOpen, onOpenChange });
+  const entry = skill?.registryEntry ?? null;
+
+  return (
+    <Modal.Root state={state}>
+      <Modal.Backdrop>
+        <Modal.Container placement="center" size="md">
+          <Modal.Dialog className=" sm:max-w-[440px]">
+            {skill && entry ? (
+              <>
+                <Modal.Header className="items-start justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] ${getSkillAccent(skill.name, false)}`}
+                    >
+                      <SkillIcon name={skill.name} size={20} />
+                    </div>
+                    <div className="min-w-0">
+                      <Modal.Heading className="text-base">
+                        Install {skill.displayName}
+                      </Modal.Heading>
+                      <p className="text-muted mt-0.5 text-[13px] leading-snug line-clamp-2">
+                        {skill.description}
+                      </p>
+                    </div>
+                  </div>
+                  <Modal.CloseTrigger />
+                </Modal.Header>
+
+                <Modal.Body className="space-y-1 p-2">
                   {TARGET_OPTIONS.map((option) => {
                     const target = option.value as SkillInstallTarget;
-                    const optionInstalled = item.installedTargets[target];
-                    const optionDisabled =
-                      optionInstalled ||
+                    const isInstalled = skill.installedTargets[target];
+                    const installKey = getInstallStateKey(skill.name, target);
+                    const isTargetInstalling = installingSkills.has(installKey);
+                    const targetError = installErrors[installKey] ?? null;
+                    const isUnavailable =
                       (target === "codex" && !codexAvailable) ||
                       (target === "copilot" && !copilotAvailable) ||
                       (target === "cursor" && !cursorAvailable) ||
-                      (target === "opencode" && !openCodeAvailable) ||
-                      isInstalling;
+                      (target === "opencode" && !openCodeAvailable);
 
                     return (
-                      <Dropdown.Item
-                        id={target}
-                        isDisabled={optionDisabled}
-                        key={target}
-                        textValue={`Install in ${option.label}`}
-                      >
-                        <div className="flex min-w-0 flex-col">
-                          <span className="text-sm">
-                            {optionInstalled
-                              ? `${option.label} installed`
-                              : `Install in ${option.label}`}
-                          </span>
-                          <span className="text-muted text-xs">
-                            {target === "codex" && !codexAvailable
-                              ? "Codex is currently unavailable."
-                              : target === "copilot" && !copilotAvailable
-                                ? "Copilot is currently unavailable."
-                                : target === "cursor" && !cursorAvailable
-                                  ? "Cursor is currently unavailable."
-                                  : target === "opencode" && !openCodeAvailable
-                                    ? "OpenCode is currently unavailable."
-                                    : option.description}
-                          </span>
+                      <div key={target}>
+                        <div className="flex items-center gap-3 rounded-xl px-3 py-2.5">
+                          <div className="min-w-0 flex-1">
+                            <span className="text-foreground text-sm font-medium">
+                              {option.label}
+                            </span>
+                            <p className="text-muted mt-0.5 text-xs leading-snug">
+                              {isUnavailable
+                                ? `${option.label} is currently unavailable.`
+                                : option.description}
+                            </p>
+                          </div>
+
+                          <div className="shrink-0">
+                            {isInstalled ? (
+                              <div className="flex items-center gap-1.5 text-success">
+                                <CheckCircleFilled size={16} />
+                                <span className="text-xs font-medium">
+                                  Installed
+                                </span>
+                              </div>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                className="h-7 min-w-[72px] px-2.5"
+                                isDisabled={isUnavailable || isTargetInstalling}
+                                isPending={isTargetInstalling}
+                                onPress={() => onInstall(entry, target)}
+                              >
+                                {({ isPending }) =>
+                                  isPending ? (
+                                    <Spinner color="current" size="sm" />
+                                  ) : (
+                                    "Install"
+                                  )
+                                }
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                      </Dropdown.Item>
+
+                        {targetError ? (
+                          <p className="border-danger-soft-hover bg-danger-soft text-danger-soft-foreground mx-1 mt-0.5 rounded-lg border px-2.5 py-1.5 text-xs">
+                            {targetError}
+                          </p>
+                        ) : null}
+                      </div>
                     );
                   })}
-                </Dropdown.Menu>
-              </Dropdown.Popover>
-            </Dropdown>
-          ) : fullyInstalled ? (
-            <div className="flex h-6 w-6 items-center justify-center">
-              <CheckCircleFilled size={18} className="text-success" />
-            </div>
-          ) : null}
-        </div>
-      </div>
+                </Modal.Body>
 
-      {installError ? (
-        <p className="border-danger-soft-hover bg-danger-soft text-danger-soft-foreground mx-2 mt-0.5 rounded-xl border px-3 py-1.5 text-xs">
-          {installError}
-        </p>
-      ) : null}
-    </div>
+                <Modal.Footer>
+                  <Button
+                    onPress={() => onOpenChange(false)}
+                    variant="secondary"
+                    className="w-full"
+                  >
+                    Done
+                  </Button>
+                </Modal.Footer>
+              </>
+            ) : null}
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal.Root>
   );
 }
 
@@ -759,6 +957,8 @@ function SkillCell({
 export default function SkillsPage() {
   const { leftSidebarOpen } = useShell();
   const [installDrawerOpen, setInstallDrawerOpen] = useState(false);
+  const [installModalSkill, setInstallModalSkill] =
+    useState<UnifiedSkill | null>(null);
   const [query, setQuery] = useState("");
   const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
   const [installErrors, setInstallErrors] = useState<Record<string, string>>(
@@ -802,6 +1002,15 @@ export default function SkillsPage() {
     () => buildUnifiedList(registryEntries, allSkills),
     [registryEntries, allSkills],
   );
+
+  // Keep modal skill data fresh as installs complete
+  const activeModalSkill = useMemo(() => {
+    if (!installModalSkill) return null;
+    return (
+      unified.find((s) => s.name === installModalSkill.name) ??
+      installModalSkill
+    );
+  }, [unified, installModalSkill]);
 
   // Filter + search
   const viewCounts = useMemo(() => {
@@ -854,11 +1063,6 @@ export default function SkillsPage() {
           utils.skills.list.invalidate(),
           utils.skills.registry.invalidate(),
         ]);
-        sileo.success({
-          description: result.alreadyInstalled
-            ? "Skill already installed. Refreshed skill state."
-            : "Skill installed.",
-        });
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Installation failed.";
@@ -889,12 +1093,6 @@ export default function SkillsPage() {
           variant="primary"
           className="h-7 px-2"
         >
-          <HugeiconsIcon
-            color="currentColor"
-            icon={PlusSignIcon}
-            size={16}
-            strokeWidth={1.5}
-          />
           Add custom
         </Button>
       }
@@ -940,19 +1138,6 @@ export default function SkillsPage() {
 
                 <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
                   {section.items.map((item) => {
-                    const installErrorForItem =
-                      installErrors[
-                        getInstallStateKey(item.name, "sentinel")
-                      ] ??
-                      installErrors[getInstallStateKey(item.name, "claude")] ??
-                      installErrors[getInstallStateKey(item.name, "codex")] ??
-                      installErrors[getInstallStateKey(item.name, "copilot")] ??
-                      installErrors[getInstallStateKey(item.name, "cursor")] ??
-                      installErrors[
-                        getInstallStateKey(item.name, "opencode")
-                      ] ??
-                      null;
-
                     const isItemInstalling =
                       installingSkills.has(
                         getInstallStateKey(item.name, "sentinel"),
@@ -981,9 +1166,8 @@ export default function SkillsPage() {
                         cursorAvailable={cursorAvailable}
                         openCodeAvailable={openCodeAvailable}
                         isInstalling={isItemInstalling}
-                        installError={installErrorForItem}
                         key={item.key}
-                        onInstall={handleInstall}
+                        onOpenInstall={setInstallModalSkill}
                       />
                     );
                   })}
@@ -1004,6 +1188,20 @@ export default function SkillsPage() {
           )}
         </div>
       </div>
+      <SkillInstallModal
+        skill={activeModalSkill}
+        codexAvailable={codexAvailable}
+        copilotAvailable={copilotAvailable}
+        cursorAvailable={cursorAvailable}
+        openCodeAvailable={openCodeAvailable}
+        installingSkills={installingSkills}
+        installErrors={installErrors}
+        onInstall={handleInstall}
+        isOpen={installModalSkill !== null}
+        onOpenChange={(open) => {
+          if (!open) setInstallModalSkill(null);
+        }}
+      />
       <CustomSkillInstallDrawer
         codexAvailable={codexAvailable}
         copilotAvailable={copilotAvailable}

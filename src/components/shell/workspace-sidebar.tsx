@@ -3121,7 +3121,7 @@ export function WorkspaceSidebar() {
       <Modal.Root state={threadSwitchState}>
         <Modal.Backdrop>
           <Modal.Container placement="center" size="sm">
-            <Modal.Dialog className="border-separator w-full border sm:max-w-[460px]">
+            <Modal.Dialog className=" sm:max-w-[460px]">
               <Modal.Header className="items-start justify-between gap-4">
                 <Modal.Heading className="text-base">
                   Move or stash changes
@@ -3229,7 +3229,7 @@ export function WorkspaceSidebar() {
       <Modal.Root state={renameWorkspaceState}>
         <Modal.Backdrop>
           <Modal.Container placement="center" size="sm">
-            <Modal.Dialog className="border-separator w-full border sm:max-w-[400px]">
+            <Modal.Dialog className=" sm:max-w-[400px]">
               <Form className="contents" onSubmit={handleRenameWorkspaceSubmit}>
                 <Modal.Header className="items-start justify-between gap-4">
                   <Modal.Heading className="text-base">
@@ -3270,7 +3270,7 @@ export function WorkspaceSidebar() {
       <Modal.Root state={renameThreadState}>
         <Modal.Backdrop>
           <Modal.Container placement="center" size="sm">
-            <Modal.Dialog className="border-separator w-full border sm:max-w-[400px]">
+            <Modal.Dialog className=" sm:max-w-[400px]">
               <Form className="contents" onSubmit={handleRenameThreadSubmit}>
                 <Modal.Header className="items-start justify-between gap-4">
                   <Modal.Heading className="text-base">
@@ -3313,7 +3313,7 @@ export function WorkspaceSidebar() {
         onOpenChange={deleteWorkspaceState.setOpen}
       >
         <AlertDialog.Container placement="center" size="sm">
-          <AlertDialog.Dialog className="border-separator w-full border sm:max-w-[420px]">
+          <AlertDialog.Dialog className=" sm:max-w-[420px]">
             <AlertDialog.CloseTrigger />
             <AlertDialog.Header>
               <AlertDialog.Icon status="danger" />
@@ -3367,7 +3367,7 @@ export function WorkspaceSidebar() {
         onOpenChange={archiveThreadState.setOpen}
       >
         <AlertDialog.Container placement="center" size="sm">
-          <AlertDialog.Dialog className="border-separator w-full border sm:max-w-[420px]">
+          <AlertDialog.Dialog className=" sm:max-w-[420px]">
             <AlertDialog.CloseTrigger />
             <AlertDialog.Header>
               <AlertDialog.Icon status="warning" />

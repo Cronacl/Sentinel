@@ -1362,7 +1362,7 @@ export function ThreadScreen({
       <Modal.Root state={renameState}>
         <Modal.Backdrop>
           <Modal.Container placement="center" size="sm">
-            <Modal.Dialog className="border-separator w-full border sm:max-w-[400px]">
+            <Modal.Dialog className=" sm:max-w-[400px]">
               <Form className="contents" onSubmit={handleRenameSubmit}>
                 <Modal.Header className="items-start justify-between gap-4">
                   <Modal.Heading className="text-base">
@@ -1404,7 +1404,7 @@ export function ThreadScreen({
         onOpenChange={confirmArchiveState.setOpen}
       >
         <AlertDialog.Container placement="center" size="sm">
-          <AlertDialog.Dialog className="border-separator w-full border sm:max-w-[420px]">
+          <AlertDialog.Dialog className=" sm:max-w-[420px]">
             <AlertDialog.CloseTrigger />
             <AlertDialog.Header>
               <AlertDialog.Icon status="warning" />
@@ -1448,7 +1448,7 @@ export function ThreadScreen({
         onOpenChange={handleResetCheckpointOpenChange}
       >
         <AlertDialog.Container placement="center" size="sm">
-          <AlertDialog.Dialog className="border-separator w-full border sm:max-w-[460px]">
+          <AlertDialog.Dialog className=" sm:max-w-[460px]">
             <AlertDialog.CloseTrigger />
             <AlertDialog.Header>
               <AlertDialog.Icon status="warning" />

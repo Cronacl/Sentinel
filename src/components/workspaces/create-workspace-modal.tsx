@@ -121,7 +121,7 @@ export function CreateWorkspaceModal({
     <Modal.Root state={state}>
       <Modal.Backdrop>
         <Modal.Container placement="center" size="md">
-          <Modal.Dialog className="border-separator w-full border sm:max-w-[460px]">
+          <Modal.Dialog className=" sm:max-w-[460px]">
             <Form
               className="contents"
               onSubmit={form.handleSubmit(handleSubmit)}

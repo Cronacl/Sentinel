@@ -35,6 +35,10 @@ import {
   ControlledTextField,
   type SelectOption,
 } from "@/components/forms/controlled-fields";
+import {
+  removeAutomationFromList,
+  upsertAutomationInList,
+} from "@/components/automations/automation-list-cache";
 import { SidebarToggle, useShell } from "@/components/shell";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
@@ -242,7 +246,7 @@ export function AutomationDetailScreen({
 
   const automationQuery = api.automations.get.useQuery(
     { id: automationId },
-    { refetchInterval: 2_000 },
+    { refetchOnWindowFocus: false, staleTime: 30_000 },
   );
   const runNowMutation = api.automations.runNow.useMutation();
   const toggleMutation = api.automations.toggleStatus.useMutation();
@@ -504,7 +508,7 @@ export function AutomationDetailScreen({
             ? (values.reasoningEffort as ReasoningEffort)
             : null;
 
-        await updateMutation.mutateAsync({
+        const updated = await updateMutation.mutateAsync({
           id: automation.id,
           title: values.title,
           prompt: values.prompt,
@@ -519,12 +523,15 @@ export function AutomationDetailScreen({
           reasoningEffort: selectedReasoning,
         });
 
-        await Promise.all([
-          automationQuery.refetch(),
-          utils.automations.list.invalidate(),
-        ]);
+        utils.automations.list.setData(undefined, (current) =>
+          upsertAutomationInList(current, updated),
+        );
+        utils.automations.get.setData({ id: automation.id }, (current) =>
+          current ? { ...current, ...updated } : current,
+        );
+        void automationQuery.refetch();
+        void utils.automations.list.invalidate();
         form.reset(values);
-        sileo.success({ description: "Automation updated." });
       } catch (error) {
         setSubmitError(
           error instanceof Error ? error.message : "Unable to save automation.",
@@ -538,8 +545,7 @@ export function AutomationDetailScreen({
     if (!automation) return;
     try {
       await runNowMutation.mutateAsync({ id: automation.id });
-      await automationQuery.refetch();
-      sileo.success({ description: "Automation triggered." });
+      void automationQuery.refetch();
     } catch (error) {
       sileo.error({
         description:
@@ -551,17 +557,27 @@ export function AutomationDetailScreen({
   const handleToggleStatus = async () => {
     if (!automation) return;
     const wasActive = automation.status === "active";
+    const nextStatus: "active" | "paused" = wasActive ? "paused" : "active";
+    const previousList = utils.automations.list.getData();
+    const optimisticAutomation = {
+      ...automation,
+      status: nextStatus,
+      runs: undefined,
+    };
+    utils.automations.list.setData(undefined, (current) =>
+      upsertAutomationInList(current, optimisticAutomation),
+    );
+
     try {
-      await toggleMutation.mutateAsync({ id: automation.id });
-      await Promise.all([
-        automationQuery.refetch(),
-        utils.automations.list.invalidate(),
-        utils.automations.get.invalidate({ id: automation.id }),
-      ]);
-      sileo.success({
-        description: wasActive ? "Automation paused." : "Automation resumed.",
-      });
+      const updated = await toggleMutation.mutateAsync({ id: automation.id });
+      utils.automations.list.setData(undefined, (current) =>
+        upsertAutomationInList(current, updated),
+      );
+      void automationQuery.refetch();
+      void utils.automations.list.invalidate();
+      void utils.automations.get.invalidate({ id: automation.id });
     } catch (error) {
+      utils.automations.list.setData(undefined, previousList);
       sileo.error({
         description:
           error instanceof Error
@@ -573,12 +589,17 @@ export function AutomationDetailScreen({
 
   const handleDelete = async () => {
     if (!automation) return;
+    const previousList = utils.automations.list.getData();
+    utils.automations.list.setData(undefined, (current) =>
+      removeAutomationFromList(current, automation.id),
+    );
+
     try {
       await deleteMutation.mutateAsync({ id: automation.id });
-      await utils.automations.list.invalidate();
-      sileo.success({ description: "Automation deleted." });
+      void utils.automations.list.invalidate();
       router.push("/automations");
     } catch (error) {
+      utils.automations.list.setData(undefined, previousList);
       sileo.error({
         description:
           error instanceof Error

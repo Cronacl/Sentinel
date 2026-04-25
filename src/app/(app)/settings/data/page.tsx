@@ -248,7 +248,7 @@ export default function DataSettingsPage() {
         }}
       >
         <AlertDialog.Container placement="center" size="sm">
-          <AlertDialog.Dialog className="border-separator w-full border sm:max-w-[460px]">
+          <AlertDialog.Dialog className=" sm:max-w-[460px]">
             <AlertDialog.CloseTrigger />
             <AlertDialog.Header>
               <AlertDialog.Icon status="danger" />

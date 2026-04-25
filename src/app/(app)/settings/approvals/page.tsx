@@ -599,7 +599,7 @@ export default function ApprovalsSettingsPage() {
         }}
       >
         <AlertDialog.Container placement="center" size="sm">
-          <AlertDialog.Dialog className="border-separator w-full border sm:max-w-[440px]">
+          <AlertDialog.Dialog className=" sm:max-w-[440px]">
             <AlertDialog.CloseTrigger />
             <AlertDialog.Header>
               <AlertDialog.Icon status="danger" />

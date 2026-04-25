@@ -22,8 +22,8 @@ import {
   ControlledTextAreaField,
   ControlledTextField,
 } from "@/components/forms/controlled-fields";
+import { upsertAutomationInList } from "@/components/automations/automation-list-cache";
 import { getErrorMessage } from "@/lib/errors";
-import { sileo } from "sileo";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import {
   AUTOMATION_SCHEDULE_TYPES,
@@ -552,8 +552,10 @@ export function NewAutomationModal({
       }
 
       const created = await createMutation.mutateAsync(validated.data);
-      await utils.automations.list.invalidate();
-      sileo.success({ description: "Automation created." });
+      utils.automations.list.setData(undefined, (current) =>
+        upsertAutomationInList(current, created),
+      );
+      void utils.automations.list.invalidate();
       state.close();
       router.push(`/automations/${encodeURIComponent(created.id)}`);
     } catch (error) {

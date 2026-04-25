@@ -1,11 +1,10 @@
 "use client";
 
-import { Button, Chip, Input, Skeleton, Spinner } from "@heroui/react";
+import { Button, Chip, Input, Skeleton } from "@heroui/react";
 import {
   ArrowRight01Icon,
   PauseIcon,
   PlayIcon,
-  PlusSignIcon,
   Rocket01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -18,6 +17,7 @@ import {
   AUTOMATION_TEMPLATES,
   type AutomationTemplate,
 } from "@/components/automations/automation-templates";
+import { upsertAutomationInList } from "@/components/automations/automation-list-cache";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { SidebarToggle, useShell } from "@/components/shell";
 import { api, type RouterOutputs } from "@/trpc/react";
@@ -66,35 +66,37 @@ function formatSchedule(automation: AutomationItem) {
 
 function AutomationRow({
   automation,
-  isRunningNow,
   isToggling,
-  onRunNow,
   onToggleStatus,
 }: {
   automation: AutomationItem;
-  isRunningNow: boolean;
   isToggling: boolean;
-  onRunNow: (id: string) => void;
   onToggleStatus: (id: string) => void;
 }) {
   return (
-    <div className="border-separator/20 bg-surface group flex items-center gap-2.5 rounded-2xl border p-2.5 transition-colors">
+    <div className="group flex items-center gap-3 rounded-2xl bg-surface/70 dark:bg-surface/50 px-3 py-2.5 transition-colors hover:bg-surface-hover/20">
       <Link
-        className="flex min-w-0 flex-1 items-center gap-2.5 hover:opacity-80 transition-opacity"
+        className="flex min-w-0 flex-1 items-center gap-3"
         href={`/automations/${encodeURIComponent(automation.id)}`}
         prefetch
       >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-separator bg-background text-foreground">
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] ${
+            automation.status === "active"
+              ? "bg-success-soft/60 text-success dark:bg-success-soft/30"
+              : "bg-background dark:bg-background"
+          }`}
+        >
           <HugeiconsIcon
             color="currentColor"
             icon={automation.status === "active" ? Rocket01Icon : PauseIcon}
-            size={16}
+            size={20}
             strokeWidth={1.5}
           />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-foreground truncate text-sm font-medium">
+            <span className="text-foreground text-[13px] font-semibold leading-tight line-clamp-1">
               {automation.title}
             </span>
             <Chip
@@ -104,7 +106,7 @@ function AutomationRow({
               {automation.workspace?.name ?? "Current workspace"}
             </Chip>
           </div>
-          <p className="text-muted mt-0.5 truncate text-xs">
+          <p className="text-muted mt-0.5 truncate text-xs leading-snug">
             {formatSchedule(automation)}
           </p>
         </div>
@@ -114,21 +116,23 @@ function AutomationRow({
           isPending={isToggling}
           onPress={() => onToggleStatus(automation.id)}
           size="sm"
-          variant="tertiary"
+          variant="ghost"
           isIconOnly
+          className="h-7 w-7 min-w-0"
         >
           <HugeiconsIcon
             color="currentColor"
             icon={automation.status === "active" ? PauseIcon : PlayIcon}
-            size={14}
+            size={16}
             strokeWidth={1.5}
+            className="text-muted transition-colors group-hover:text-foreground"
           />
         </Button>
         <Link
           href={`/automations/${encodeURIComponent(automation.id)}`}
           prefetch
         >
-          <div className="text-muted transition-colors group-hover:text-muted">
+          <div className="text-muted transition-colors group-hover:text-foreground">
             <HugeiconsIcon
               color="currentColor"
               icon={ArrowRight01Icon}
@@ -144,9 +148,21 @@ function AutomationRow({
 
 function AutomationsSkeleton() {
   return (
-    <div>
-      <Skeleton className="w-full h-[4.5rem] opacity-50 shrink-0 rounded-2xl" />
-    </div>
+    <>
+      {Array.from({ length: 3 }).map((_, index) => (
+        <div
+          className="flex items-center gap-3 rounded-2xl bg-surface/70 dark:bg-surface/50 px-3 py-2.5"
+          key={index}
+        >
+          <Skeleton className="h-10 w-10 shrink-0 rounded-[14px]" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <Skeleton className="h-3.5 w-28 rounded-md" />
+            <Skeleton className="h-3 w-44 rounded-md" />
+          </div>
+          <Skeleton className="h-5 w-5 shrink-0 rounded-full" />
+        </div>
+      ))}
+    </>
   );
 }
 
@@ -154,7 +170,6 @@ export default function AutomationsPage() {
   const { leftSidebarOpen } = useShell();
   const utils = api.useUtils();
   const [query, setQuery] = useState("");
-  const [runningNowSet, setRunningNowSet] = useState<Set<string>>(new Set());
   const [togglingSet, setTogglingSet] = useState<Set<string>>(new Set());
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -163,9 +178,9 @@ export default function AutomationsPage() {
   >();
 
   const automationsQuery = api.automations.list.useQuery(undefined, {
-    refetchInterval: 2_000,
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
   });
-  const runNowMutation = api.automations.runNow.useMutation();
   const toggleMutation = api.automations.toggleStatus.useMutation();
 
   const active = automationsQuery.data?.active ?? [];
@@ -185,45 +200,33 @@ export default function AutomationsPage() {
     setModalOpen(true);
   }, []);
 
-  const handleRunNow = useCallback(
-    async (id: string) => {
-      setRunningNowSet((prev) => new Set(prev).add(id));
-      try {
-        await runNowMutation.mutateAsync({ id });
-        sileo.success({ description: "Automation triggered." });
-      } catch (error) {
-        sileo.error({
-          description:
-            error instanceof Error
-              ? error.message
-              : "Failed to run automation.",
-        });
-      } finally {
-        setRunningNowSet((prev) => {
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
-      }
-    },
-    [runNowMutation],
-  );
-
   const handleToggleStatus = useCallback(
     async (id: string) => {
       const automation = [...active, ...paused].find((a) => a.id === id);
-      const wasPaused = automation?.status !== "active";
       setTogglingSet((prev) => new Set(prev).add(id));
+      const previousList = utils.automations.list.getData();
+
+      if (automation) {
+        utils.automations.list.setData(undefined, (current) =>
+          upsertAutomationInList(current, {
+            ...automation,
+            status: automation.status === "active" ? "paused" : "active",
+          }),
+        );
+      }
+
       try {
-        await toggleMutation.mutateAsync({ id });
-        await Promise.all([
-          utils.automations.list.invalidate(),
-          utils.automations.get.invalidate({ id }),
-        ]);
-        sileo.success({
-          description: wasPaused ? "Automation resumed." : "Automation paused.",
-        });
+        const updated = await toggleMutation.mutateAsync({ id });
+        utils.automations.list.setData(undefined, (current) =>
+          upsertAutomationInList(current, updated),
+        );
+        utils.automations.get.setData({ id }, (current) =>
+          current ? { ...current, ...updated } : current,
+        );
+        void utils.automations.list.invalidate();
+        void utils.automations.get.invalidate({ id });
       } catch (error) {
+        utils.automations.list.setData(undefined, previousList);
         sileo.error({
           description:
             error instanceof Error
@@ -250,12 +253,6 @@ export default function AutomationsPage() {
           variant="primary"
           className="h-7 px-2"
         >
-          <HugeiconsIcon
-            color="currentColor"
-            icon={PlusSignIcon}
-            size={16}
-            strokeWidth={1.5}
-          />
           New automation
         </Button>
       }
@@ -272,132 +269,130 @@ export default function AutomationsPage() {
         </p>
       ) : null}
 
-      <div className="flex flex-col gap-5">
-        <Input
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search automations"
-          value={query}
-          variant="secondary"
-        />
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <Input
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search automations..."
+            value={query}
+            variant="secondary"
+            fullWidth
+          />
+        </div>
 
-        <section>
-          <h2 className="text-foreground mb-3 text-sm font-medium">Active</h2>
-          <div className="grid grid-cols-1 gap-1 min-h-[4.5rem]">
-            {automationsQuery.isPending && !automationsQuery.data ? (
-              <AutomationsSkeleton />
-            ) : filteredActive.length ? (
-              filteredActive.map((automation) => (
-                <AutomationRow
-                  automation={automation}
-                  isRunningNow={runningNowSet.has(automation.id)}
-                  isToggling={togglingSet.has(automation.id)}
-                  key={automation.id}
-                  onRunNow={handleRunNow}
-                  onToggleStatus={handleToggleStatus}
-                />
-              ))
-            ) : active.length ? (
-              <div className="border-separator/20 bg-surface rounded-2xl border p-4 col-span-full">
-                <h2 className="text-foreground text-sm font-medium">
-                  No matching automations
-                </h2>
-                <p className="text-muted mt-1 text-sm">
-                  Try a different search term.
-                </p>
-              </div>
-            ) : (
-              <div className="border-separator/20 bg-surface rounded-2xl border p-4 col-span-full">
-                <h2 className="text-foreground text-sm font-medium">
-                  No active automations
-                </h2>
-                <p className="text-muted mt-1 text-sm">
-                  Create one, then toggle it to active when you are ready to run
-                  it.
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section>
-          <h2 className="text-foreground mb-3 text-sm font-medium">Paused</h2>
-          <div className="grid grid-cols-1 gap-1 min-h-[4.5rem]">
-            {automationsQuery.isPending && !automationsQuery.data ? (
-              <AutomationsSkeleton />
-            ) : filteredPaused.length ? (
-              filteredPaused.map((automation) => (
-                <AutomationRow
-                  automation={automation}
-                  isRunningNow={runningNowSet.has(automation.id)}
-                  isToggling={togglingSet.has(automation.id)}
-                  key={automation.id}
-                  onRunNow={handleRunNow}
-                  onToggleStatus={handleToggleStatus}
-                />
-              ))
-            ) : paused.length ? (
-              <div className="border-separator/20 bg-surface rounded-2xl border p-4 col-span-full">
-                <h2 className="text-foreground text-sm font-medium">
-                  No matching automations
-                </h2>
-                <p className="text-muted mt-1 text-sm">
-                  Try a different search term.
-                </p>
-              </div>
-            ) : (
-              <div className="border-separator/20 bg-surface rounded-2xl border p-4 col-span-full">
-                <h2 className="text-foreground text-sm font-medium">
-                  No paused automations
-                </h2>
-                <p className="text-muted mt-1 text-sm">
-                  Nothing paused right now. New automations start in paused
-                  state.
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section>
-          <h2 className="text-foreground mb-3 text-sm font-medium">
-            Templates
-          </h2>
-          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-3">
-            {AUTOMATION_TEMPLATES.map((template) => (
-              <button
-                className="border-separator/20 cursor-pointer bg-surface hover:bg-surface-hover group flex flex-col items-start gap-1 rounded-2xl border p-3 text-left transition-colors"
-                key={template.id}
-                onClick={() => handleOpenModal(template)}
-                type="button"
-              >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-separator bg-background text-foreground">
-                  <HugeiconsIcon
-                    color="currentColor"
-                    icon={template.icon}
-                    size={16}
-                    strokeWidth={1.5}
+        <div className="flex flex-col gap-3">
+          <section className="flex flex-col gap-1.5">
+            <div className="px-1.5 pb-0.5">
+              <h2 className="text-foreground text-sm font-medium">Active</h2>
+            </div>
+            <div className="grid grid-cols-1 gap-1.5">
+              {automationsQuery.isPending && !automationsQuery.data ? (
+                <AutomationsSkeleton />
+              ) : filteredActive.length ? (
+                filteredActive.map((automation) => (
+                  <AutomationRow
+                    automation={automation}
+                    isToggling={togglingSet.has(automation.id)}
+                    key={automation.id}
+                    onToggleStatus={handleToggleStatus}
                   />
-                </div>
-                <div className="min-w-0">
-                  <span className="text-foreground text-sm font-medium">
-                    {template.title}
-                  </span>
-                  <p className="text-muted mt-0.5 line-clamp-2 text-xs">
-                    {template.description}
+                ))
+              ) : active.length ? (
+                <div className="rounded-2xl bg-surface/70 dark:bg-surface/50 px-4 py-8 text-center">
+                  <p className="text-foreground text-sm font-medium">
+                    No matching automations
+                  </p>
+                  <p className="text-muted mt-1 text-xs">
+                    Try a different search term.
                   </p>
                 </div>
-              </button>
-            ))}
-          </div>
-        </section>
-      </div>
+              ) : (
+                <div className="rounded-2xl bg-surface/70 dark:bg-surface/50 px-4 py-8 text-center">
+                  <p className="text-foreground text-sm font-medium">
+                    No active automations
+                  </p>
+                  <p className="text-muted mt-1 text-xs">
+                    Create one, then toggle it to active when you are ready to
+                    run it.
+                  </p>
+                </div>
+              )}
+            </div>
+          </section>
 
-      {runNowMutation.isPending && (
-        <div className="mt-4 flex items-center gap-2 text-xs text-muted">
-          <Spinner color="current" size="sm" />
-          Triggering automation...
+          <section className="flex flex-col gap-1.5">
+            <div className="px-1.5 pb-0.5">
+              <h2 className="text-foreground text-sm font-medium">Paused</h2>
+            </div>
+            <div className="grid grid-cols-1 gap-1.5">
+              {automationsQuery.isPending && !automationsQuery.data ? (
+                <AutomationsSkeleton />
+              ) : filteredPaused.length ? (
+                filteredPaused.map((automation) => (
+                  <AutomationRow
+                    automation={automation}
+                    isToggling={togglingSet.has(automation.id)}
+                    key={automation.id}
+                    onToggleStatus={handleToggleStatus}
+                  />
+                ))
+              ) : paused.length ? (
+                <div className="rounded-2xl bg-surface/70 dark:bg-surface/50 px-4 py-8 text-center">
+                  <p className="text-foreground text-sm font-medium">
+                    No matching automations
+                  </p>
+                  <p className="text-muted mt-1 text-xs">
+                    Try a different search term.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-2xl bg-surface/70 dark:bg-surface/50 px-4 py-8 text-center">
+                  <p className="text-foreground text-sm font-medium">
+                    No paused automations
+                  </p>
+                  <p className="text-muted mt-1 text-xs">
+                    Nothing paused right now. New automations start in paused
+                    state.
+                  </p>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="flex flex-col gap-1.5">
+            <div className="px-1.5 pb-0.5">
+              <h2 className="text-foreground text-sm font-medium">Templates</h2>
+            </div>
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+              {AUTOMATION_TEMPLATES.map((template) => (
+                <button
+                  className="group flex cursor-pointer flex-col items-start gap-1.5 rounded-2xl bg-surface/70 px-3 py-2.5 text-left transition-colors hover:bg-surface-hover/20 dark:bg-surface/50"
+                  key={template.id}
+                  onClick={() => handleOpenModal(template)}
+                  type="button"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-background dark:bg-background">
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={template.icon}
+                      size={20}
+                      strokeWidth={1.5}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-foreground text-[13px] font-semibold leading-tight">
+                      {template.title}
+                    </span>
+                    <p className="text-muted mt-0.5 line-clamp-2 text-xs leading-snug">
+                      {template.description}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
         </div>
-      )}
+      </div>
 
       <NewAutomationModal
         isOpen={modalOpen}

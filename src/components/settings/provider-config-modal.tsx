@@ -356,7 +356,7 @@ export function ProviderConfigModal({
     <Modal.Root state={state}>
       <Modal.Backdrop>
         <Modal.Container placement="center" size="lg">
-          <Modal.Dialog className="border-separator w-full border sm:max-w-[460px]">
+          <Modal.Dialog className=" sm:max-w-[460px]">
             {isLoading ? (
               <>
                 <Modal.Header className="items-start justify-between gap-4">
