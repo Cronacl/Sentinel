@@ -159,19 +159,7 @@ export const automationsRouter = createTRPCRouter({
         })
         .returning();
 
-      const created = await ctx.db.query.automations.findFirst({
-        where: eq(automations.id, row!.id),
-        with: { workspace: { columns: { id: true, name: true } } },
-      });
-
-      if (!created) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Automation was created but could not be loaded.",
-        });
-      }
-
-      return created;
+      return { ...row!, workspace: null };
     }),
 
   update: protectedProcedure
@@ -287,19 +275,7 @@ export const automationsRouter = createTRPCRouter({
         scheduleAutomation(updated);
       }
 
-      const hydrated = await ctx.db.query.automations.findFirst({
-        where: eq(automations.id, updated!.id),
-        with: { workspace: { columns: { id: true, name: true } } },
-      });
-
-      if (!hydrated) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Automation was updated but could not be loaded.",
-        });
-      }
-
-      return hydrated;
+      return { ...updated!, workspace: null };
     }),
 
   delete: protectedProcedure
@@ -376,19 +352,7 @@ export const automationsRouter = createTRPCRouter({
         pauseScheduledJob(input.id);
       }
 
-      const hydrated = await ctx.db.query.automations.findFirst({
-        where: eq(automations.id, updated!.id),
-        with: { workspace: { columns: { id: true, name: true } } },
-      });
-
-      if (!hydrated) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Automation was updated but could not be loaded.",
-        });
-      }
-
-      return hydrated;
+      return { ...updated!, workspace: null };
     }),
 
   runNow: protectedProcedure

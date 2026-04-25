@@ -15,13 +15,20 @@ export function upsertAutomationInList(
   automation: AutomationListItem,
 ): AutomationList {
   const base = current ?? { active: [], paused: [] };
+  const existing =
+    base.active.find((item) => item.id === automation.id) ??
+    base.paused.find((item) => item.id === automation.id);
+  const mergedAutomation = {
+    ...automation,
+    workspace: automation.workspace ?? existing?.workspace ?? null,
+  };
   const next = withoutAutomation(base, automation.id);
 
-  if (automation.status === "active") {
-    return { ...next, active: [automation, ...next.active] };
+  if (mergedAutomation.status === "active") {
+    return { ...next, active: [mergedAutomation, ...next.active] };
   }
 
-  return { ...next, paused: [automation, ...next.paused] };
+  return { ...next, paused: [mergedAutomation, ...next.paused] };
 }
 
 export function removeAutomationFromList(

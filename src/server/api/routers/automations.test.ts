@@ -90,7 +90,11 @@ describe("automationsRouter", () => {
         workspaceId: "workspace-1",
       }),
     );
-    expect(result).toEqual({ id: "automation-1", workspaceId: "workspace-1" });
+    expect(result).toEqual({
+      id: "automation-1",
+      workspace: null,
+      workspaceId: "workspace-1",
+    });
   });
 
   it("allows manual runs for paused automations", async () => {
