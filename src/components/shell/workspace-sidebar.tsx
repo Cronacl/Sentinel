@@ -3006,6 +3006,12 @@ export function WorkspaceSidebar() {
               />
             ) : null}
 
+            {!showSidebarLoading && projectListIsEmpty ? (
+              <p className="px-4 pt-2 text-sm text-foreground/30">
+                No project threads
+              </p>
+            ) : null}
+
             <div
               className={`flex shrink-0 items-center gap-1 ${SIDEBAR_SECTION_INSET}`}
             >

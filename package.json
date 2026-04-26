@@ -29,7 +29,7 @@
     "build:desktop:prepare": "bun run ./scripts/desktop/clean.mjs && bun run ./scripts/desktop/normalize-node-module-manifests.mjs && bun run build && bun run ./scripts/desktop/prepare-production.mjs && bun run ./scripts/desktop/prune-server.mjs && bun run ./scripts/desktop/prepare-shell.mjs",
     "build:desktop:windows": "bun run build:desktop:prepare && node ./scripts/desktop/package.mjs --platform win --target nsis",
     "audit:desktop-bundle": "node ./scripts/desktop/audit-bundle.mjs",
-    "dev:desktop": "concurrently -k \"bun run dev -- --port 3232\" \"bun run ./scripts/desktop/dev-launch.mjs\"",
+    "dev:desktop": "node ./scripts/rebuild-node-native.mjs && concurrently -k \"next dev --turbo --port 3232\" \"bun run ./scripts/desktop/dev-launch.mjs\"",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:push": "node -e \"require('esbuild-register'); require('./scripts/db/push.ts')\"",

@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 
 const HEALTHCHECK_URL = "http://localhost:3232/api/health";
+const DEFAULT_HEALTHCHECK_TIMEOUT_MS = 300_000;
 const ELECTRON_ENTRY = path.join(
   process.cwd(),
   "node_modules",
@@ -9,11 +10,29 @@ const ELECTRON_ENTRY = path.join(
   "electron",
 );
 
+function getHealthcheckTimeoutMs() {
+  const configuredTimeout = process.env.SENTINEL_DESKTOP_DEV_TIMEOUT_MS;
+
+  if (!configuredTimeout) {
+    return DEFAULT_HEALTHCHECK_TIMEOUT_MS;
+  }
+
+  const timeoutMs = Number(configuredTimeout);
+  if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+    return timeoutMs;
+  }
+
+  console.warn(
+    `[desktop] ignoring invalid SENTINEL_DESKTOP_DEV_TIMEOUT_MS=${configuredTimeout}`,
+  );
+  return DEFAULT_HEALTHCHECK_TIMEOUT_MS;
+}
+
 function wait(durationMs) {
   return new Promise((resolve) => setTimeout(resolve, durationMs));
 }
 
-async function waitForHealthcheck(timeoutMs = 45_000) {
+async function waitForHealthcheck(timeoutMs = getHealthcheckTimeoutMs()) {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < timeoutMs) {
