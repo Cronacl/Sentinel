@@ -698,7 +698,7 @@ export function ChatComposer({
     <>
       <div
         aria-hidden={hideUntilReady ? true : undefined}
-        className="pointer-events-auto relative pt-0.5 w-full overflow-hidden rounded-[20px] border border-border/35 bg-background shadow-[0_0_8px_rgba(0,0,0,0.04)] transition-opacity duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] dark:border-border/15 dark:bg-surface"
+        className="pointer-events-auto relative pt-0.5 w-full overflow-hidden rounded-[20px] border border-border/35 bg-surface shadow-[0_0_8px_rgba(0,0,0,0.04)] transition-opacity duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] dark:border-border/15 dark:bg-surface"
         onDragEnter={handleComposerDragEnter}
         onDragLeave={handleComposerDragLeave}
         onDragOver={handleComposerDragOver}
