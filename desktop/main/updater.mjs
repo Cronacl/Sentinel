@@ -1,15 +1,99 @@
-import TurndownService from "turndown";
-
 const RELEASES_BASE_URL = "https://github.com/Cronacl/Sentinel/releases";
 const MISSING_MAC_ZIP_ERROR =
   "Background update metadata is missing the macOS ZIP artifact. Download the latest installer manually, then try background updates again after the next release.";
-const turndown = new TurndownService({
-  bulletListMarker: "-",
-  codeBlockStyle: "fenced",
-  headingStyle: "atx",
-});
 
-turndown.remove(["link", "meta", "noscript", "script", "style"]);
+const BLOCK_TAGS = new Set([
+  "blockquote",
+  "div",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "li",
+  "ol",
+  "p",
+  "pre",
+  "section",
+  "table",
+  "tbody",
+  "td",
+  "tfoot",
+  "th",
+  "thead",
+  "tr",
+  "ul",
+]);
+
+function decodeHtmlEntities(value) {
+  return value
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, entity) => {
+      if (entity[0] === "#") {
+        const radix = entity[1]?.toLowerCase() === "x" ? 16 : 10;
+        const codePoint = Number.parseInt(
+          entity.slice(radix === 16 ? 2 : 1),
+          radix,
+        );
+        return Number.isFinite(codePoint)
+          ? String.fromCodePoint(codePoint)
+          : match;
+      }
+
+      switch (entity.toLowerCase()) {
+        case "amp":
+          return "&";
+        case "apos":
+          return "'";
+        case "gt":
+          return ">";
+        case "lt":
+          return "<";
+        case "nbsp":
+          return " ";
+        case "quot":
+          return '"';
+        default:
+          return match;
+      }
+    })
+    .replace(/\u00a0/g, " ");
+}
+
+function htmlToReadableMarkdown(html) {
+  return decodeHtmlEntities(
+    html
+      .replace(/<(script|style|noscript|meta|link)\b[\s\S]*?<\/\1>/gi, "")
+      .replace(/<(meta|link)\b[^>]*>/gi, "")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi, (_, level, text) => {
+        return `\n\n${"#".repeat(Number(level))} ${stripInlineHtml(text)}\n\n`;
+      })
+      .replace(/<li\b[^>]*>([\s\S]*?)<\/li>/gi, (_, text) => {
+        return `\n- ${stripInlineHtml(text).replace(/\s+/g, " ").trim()}`;
+      })
+      .replace(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/gi, "**$2**")
+      .replace(/<(em|i)\b[^>]*>([\s\S]*?)<\/\1>/gi, "_$2_")
+      .replace(/<\/?([a-z][a-z0-9-]*)\b[^>]*>/gi, (match, tag) => {
+        return BLOCK_TAGS.has(tag.toLowerCase()) ? "\n\n" : "";
+      }),
+  )
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/^\s*-\s+/gm, "- ")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/^(#{1,6} .+)\n(?=- )/gm, "$1\n\n")
+    .trim();
+}
+
+function stripInlineHtml(html) {
+  return decodeHtmlEntities(
+    html
+      .replace(/<(strong|b)\b[^>]*>([\s\S]*?)<\/\1>/gi, "**$2**")
+      .replace(/<(em|i)\b[^>]*>([\s\S]*?)<\/\1>/gi, "_$2_")
+      .replace(/<[^>]*>/g, ""),
+  ).trim();
+}
 
 function normalizeReleaseNoteText(note) {
   const trimmed = note.trim();
@@ -18,10 +102,7 @@ function normalizeReleaseNoteText(note) {
   }
 
   if (/<[a-z][\s\S]*>/i.test(trimmed)) {
-    const markdown = turndown
-      .turndown(trimmed)
-      .replace(/^([ \t]*[-*+]) {2,}/gm, "$1 ")
-      .trim();
+    const markdown = htmlToReadableMarkdown(trimmed);
     return markdown || null;
   }
 
