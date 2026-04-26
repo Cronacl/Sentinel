@@ -274,6 +274,16 @@ function applyErrorState(state, error, checkedAt) {
   };
 }
 
+function applySuppressedErrorState(state, checkedAt) {
+  return {
+    ...state,
+    checkedAt,
+    downloadPercent: null,
+    errorMessage: null,
+    status: state.status === "checking" ? "idle" : state.status,
+  };
+}
+
 export function serializeUpdateError(error) {
   const message =
     error instanceof Error
@@ -287,6 +297,29 @@ export function serializeUpdateError(error) {
   }
 
   return message || "Unable to check for updates.";
+}
+
+export function isTransientReleaseMetadataError(error) {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+
+  if (!message) {
+    return false;
+  }
+
+  return (
+    /Cannot find latest(?:-[a-z0-9]+)?\.ya?ml in the latest release artifacts/i.test(
+      message,
+    ) ||
+    (/\/releases\/download\/[^)\s"']+\/latest(?:-[a-z0-9]+)?\.ya?ml/i.test(
+      message,
+    ) &&
+      /(?:HttpError:\s*)?404\b/i.test(message))
+  );
 }
 
 export function createDesktopUpdaterController({
@@ -390,6 +423,11 @@ export function createDesktopUpdaterController({
 
     updater.on("error", (error) => {
       syncCurrentVersion();
+      if (isTransientReleaseMetadataError(error)) {
+        replaceState(applySuppressedErrorState(state, now()));
+        return;
+      }
+
       replaceState(applyErrorState(state, error, now()));
     });
   }
@@ -442,6 +480,10 @@ export function createDesktopUpdaterController({
     try {
       await updater.checkForUpdates();
     } catch (error) {
+      if (isTransientReleaseMetadataError(error)) {
+        return replaceState(applySuppressedErrorState(state, now()));
+      }
+
       return replaceState(applyErrorState(state, error, now()));
     }
 
@@ -490,6 +532,7 @@ export const __internal = {
   applyDownloadedState,
   applyDownloadingState,
   applyErrorState,
+  applySuppressedErrorState,
   applyUpToDateState,
   createUnsupportedUpdateState,
   normalizeReleaseNoteText,

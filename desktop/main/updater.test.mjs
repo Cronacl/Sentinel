@@ -5,6 +5,7 @@ import {
   buildReleasePageUrl,
   createDesktopUpdaterController,
   createInitialUpdateState,
+  isTransientReleaseMetadataError,
   serializeUpdateError,
   serializeReleaseNotes,
 } from "./updater.mjs";
@@ -207,6 +208,55 @@ describe("desktop updater controller", () => {
     );
   });
 
+  it("suppresses transient missing release metadata updater errors", async () => {
+    const updater = new MockUpdater();
+    updater.checkResult = Promise.reject(
+      new Error(
+        "Cannot find latest-mac.yml in the latest release artifacts (https://github.com/Cronacl/Sentinel/releases/download/v0.0.50/latest-mac.yml): HttpError: 404",
+      ),
+    );
+    const controller = createDesktopUpdaterController({
+      appVersion: () => "1.0.0",
+      isPackaged: () => true,
+      now: () => "2026-04-26T01:07:04.000Z",
+      platform: "darwin",
+      updater,
+    });
+
+    controller.initialize();
+    const state = await controller.checkForUpdates();
+
+    expect(state).toMatchObject({
+      checkedAt: "2026-04-26T01:07:04.000Z",
+      errorMessage: null,
+      status: "idle",
+    });
+  });
+
+  it("suppresses transient missing release metadata updater events", () => {
+    const updater = new MockUpdater();
+    const controller = createDesktopUpdaterController({
+      appVersion: () => "1.0.0",
+      isPackaged: () => true,
+      now: () => "2026-04-26T01:07:04.000Z",
+      platform: "darwin",
+      updater,
+    });
+
+    controller.initialize();
+    updater.emit(
+      "error",
+      new Error(
+        "Cannot find latest-mac.yml in the latest release artifacts (https://github.com/Cronacl/Sentinel/releases/download/v0.0.50/latest-mac.yml): HttpError: 404",
+      ),
+    );
+
+    expect(controller.getState()).toMatchObject({
+      errorMessage: null,
+      status: "idle",
+    });
+  });
+
   it("installs only when an update is ready", () => {
     const updater = new MockUpdater();
     const controller = createDesktopUpdaterController({
@@ -261,5 +311,21 @@ describe("desktop updater helpers", () => {
         "<h2>v1.2.0</h2><ul><li><strong>desktop:</strong> fixes updates</li></ul>",
       ),
     ).toBe("## v1.2.0\n\n- **desktop:** fixes updates");
+  });
+
+  it("detects transient release metadata errors", () => {
+    expect(
+      isTransientReleaseMetadataError(
+        "Cannot find latest-mac.yml in the latest release artifacts",
+      ),
+    ).toBe(true);
+    expect(
+      isTransientReleaseMetadataError(
+        "GET https://github.com/Cronacl/Sentinel/releases/download/v1.0.0/latest.yml HttpError: 404",
+      ),
+    ).toBe(true);
+    expect(isTransientReleaseMetadataError("Update feed unavailable")).toBe(
+      false,
+    );
   });
 });
