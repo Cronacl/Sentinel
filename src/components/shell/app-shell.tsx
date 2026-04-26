@@ -104,7 +104,7 @@ function SidebarContent() {
             <div className="flex h-full min-h-0 flex-col">
               <div className="shrink-0 px-3 pt-3 pb-1">
                 <button
-                  className="text-muted hover:text-foreground inline-flex items-center gap-2 rounded-xl px-2 py-1.5 text-xs transition-colors"
+                  className="app-region-no-drag text-muted hover:text-foreground inline-flex items-center gap-2 rounded-xl px-2 py-1.5 text-xs transition-colors"
                   onClick={handleBackToApp}
                   type="button"
                 >
