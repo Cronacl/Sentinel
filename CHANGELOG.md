@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.51](https://github.com/Cronacl/Sentinel/compare/v0.0.50...v0.0.51) (2026-04-26)
+
+
+### Features
+
+* **updater:** add handling for transient release metadata errors ([28fd9be](https://github.com/Cronacl/Sentinel/commit/28fd9bea694aa6221327505ee0ebe92c64d060c9))
+
 ## [0.0.50](https://github.com/Cronacl/Sentinel/compare/v0.0.49...v0.0.50) (2026-04-26)
 
 
