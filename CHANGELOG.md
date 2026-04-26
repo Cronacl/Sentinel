@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.52](https://github.com/Cronacl/Sentinel/compare/v0.0.51...v0.0.52) (2026-04-26)
+
+
+### Bug Fixes
+
+* fix desktop startup and project thread empty state ([13fb2c5](https://github.com/Cronacl/Sentinel/commit/13fb2c51c531007ae435d23660c9164a0fabce62))
+* improve desktop launch empty states ([6e3594c](https://github.com/Cronacl/Sentinel/commit/6e3594cc101df04082558c7bf9510b80b524bb91))
+* mark sidebar back button as non-draggable ([11a0b98](https://github.com/Cronacl/Sentinel/commit/11a0b9876ee146d43c59fdf3e8bd01530e3841e0))
+
 ## [0.0.51](https://github.com/Cronacl/Sentinel/compare/v0.0.50...v0.0.51) (2026-04-26)
 
 
