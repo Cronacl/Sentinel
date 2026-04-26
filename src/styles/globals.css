@@ -38,7 +38,7 @@
     "Consolas", "Liberation Mono", monospace;
   --app-ui-font-size: 16px;
   --app-code-font-size: 12.5px;
-  --background: oklch(99% 0 0);
+  --background: oklch(98% 0 0);
   --surface: oklch(100% 0 0);
   --accent: oklch(0% 0 0);
   --accent-foreground: oklch(100% 0 0);
