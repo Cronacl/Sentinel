@@ -5,6 +5,7 @@ import {
   buildReleasePageUrl,
   createDesktopUpdaterController,
   createInitialUpdateState,
+  serializeUpdateError,
   serializeReleaseNotes,
 } from "./updater.mjs";
 
@@ -196,6 +197,16 @@ describe("desktop updater controller", () => {
     });
   });
 
+  it("turns missing macOS ZIP updater errors into a useful action", () => {
+    expect(
+      serializeUpdateError(
+        'ZIP file not provided: [{ "url": "https://example.com/Sentinel.dmg" }]',
+      ),
+    ).toBe(
+      "Background update metadata is missing the macOS ZIP artifact. Download the latest installer manually, then try background updates again after the next release.",
+    );
+  });
+
   it("installs only when an update is ready", () => {
     const updater = new MockUpdater();
     const controller = createDesktopUpdaterController({
@@ -242,5 +253,13 @@ describe("desktop updater helpers", () => {
     expect(buildReleasePageUrl("1.1.0")).toBe(
       "https://github.com/Cronacl/Sentinel/releases/tag/v1.1.0",
     );
+  });
+
+  it("converts HTML release notes to readable markdown", () => {
+    expect(
+      serializeReleaseNotes(
+        "<h2>v1.2.0</h2><ul><li><strong>desktop:</strong> fixes updates</li></ul>",
+      ),
+    ).toBe("## v1.2.0\n\n- **desktop:** fixes updates");
   });
 });

@@ -1,4 +1,32 @@
+import TurndownService from "turndown";
+
 const RELEASES_BASE_URL = "https://github.com/Cronacl/Sentinel/releases";
+const MISSING_MAC_ZIP_ERROR =
+  "Background update metadata is missing the macOS ZIP artifact. Download the latest installer manually, then try background updates again after the next release.";
+const turndown = new TurndownService({
+  bulletListMarker: "-",
+  codeBlockStyle: "fenced",
+  headingStyle: "atx",
+});
+
+turndown.remove(["link", "meta", "noscript", "script", "style"]);
+
+function normalizeReleaseNoteText(note) {
+  const trimmed = note.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/<[a-z][\s\S]*>/i.test(trimmed)) {
+    const markdown = turndown
+      .turndown(trimmed)
+      .replace(/^([ \t]*[-*+]) {2,}/gm, "$1 ")
+      .trim();
+    return markdown || null;
+  }
+
+  return trimmed;
+}
 
 export function buildReleasePageUrl(version) {
   if (typeof version !== "string" || !version.trim()) {
@@ -14,8 +42,7 @@ export function serializeReleaseNotes(releaseNotes) {
   }
 
   if (typeof releaseNotes === "string") {
-    const trimmed = releaseNotes.trim();
-    return trimmed ? trimmed : null;
+    return normalizeReleaseNoteText(releaseNotes);
   }
 
   if (!Array.isArray(releaseNotes)) {
@@ -28,7 +55,7 @@ export function serializeReleaseNotes(releaseNotes) {
         return null;
       }
 
-      const note = entry.note.trim();
+      const note = normalizeReleaseNoteText(entry.note);
       if (!note) {
         return null;
       }
@@ -161,14 +188,24 @@ function applyErrorState(state, error, checkedAt) {
     ...state,
     checkedAt,
     downloadPercent: null,
-    errorMessage:
-      error instanceof Error
-        ? error.message
-        : typeof error === "string"
-          ? error
-          : "Unable to check for updates.",
+    errorMessage: serializeUpdateError(error),
     status: "error",
   };
+}
+
+export function serializeUpdateError(error) {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : "";
+
+  if (message.includes("ZIP file not provided")) {
+    return MISSING_MAC_ZIP_ERROR;
+  }
+
+  return message || "Unable to check for updates.";
 }
 
 export function createDesktopUpdaterController({
@@ -374,4 +411,5 @@ export const __internal = {
   applyErrorState,
   applyUpToDateState,
   createUnsupportedUpdateState,
+  normalizeReleaseNoteText,
 };

@@ -3,10 +3,18 @@ import type {
   DesktopPlatform,
   DesktopUpdateState,
 } from "@/lib/desktop/contracts";
+import TurndownService from "turndown";
 
 const FALLBACK_RELEASES_URL = "https://github.com/Cronacl/Sentinel/releases";
 export const LATEST_RELEASE_API_URL =
   "https://api.github.com/repos/Cronacl/Sentinel/releases/latest";
+const turndown = new TurndownService({
+  bulletListMarker: "-",
+  codeBlockStyle: "fenced",
+  headingStyle: "atx",
+});
+
+turndown.remove(["link", "meta", "noscript", "script", "style"]);
 
 export type DesktopReleaseAsset = {
   downloadUrl: string;
@@ -18,6 +26,7 @@ export type DesktopLatestRelease = {
   assets: DesktopReleaseAsset[];
   name: string | null;
   publishedAt: string | null;
+  releaseNotes: string | null;
   releasePageUrl: string;
   version: string;
 };
@@ -30,11 +39,29 @@ type GitHubReleaseAsset = {
 
 type GitHubReleaseResponse = {
   assets?: unknown;
+  body?: unknown;
   html_url?: unknown;
   name?: unknown;
   published_at?: unknown;
   tag_name?: unknown;
 };
+
+export function normalizeReleaseNotesContent(notes: string | null | undefined) {
+  const trimmed = notes?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/<[a-z][\s\S]*>/i.test(trimmed)) {
+    const markdown = turndown
+      .turndown(trimmed)
+      .replace(/^([ \t]*[-*+]) {2,}/gm, "$1 ")
+      .trim();
+    return markdown || null;
+  }
+
+  return trimmed;
+}
 
 export function formatUpdateBytes(bytes: number | null | undefined) {
   if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) {
@@ -209,6 +236,9 @@ export function normalizeGitHubLatestRelease(
     name: typeof release.name === "string" ? release.name : null,
     publishedAt:
       typeof release.published_at === "string" ? release.published_at : null,
+    releaseNotes: normalizeReleaseNotesContent(
+      typeof release.body === "string" ? release.body : null,
+    ),
     releasePageUrl,
     version,
   };

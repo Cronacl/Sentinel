@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { sileo } from "sileo";
 
+import { MarkdownContent } from "@/components/chat/message-parts/text";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { getDesktopApi } from "@/lib/desktop/client";
 import type { DesktopUpdateState } from "@/lib/desktop/contracts";
@@ -20,6 +21,7 @@ import {
   getUpdateStatusLabel,
   LATEST_RELEASE_API_URL,
   normalizeGitHubLatestRelease,
+  normalizeReleaseNotesContent,
   selectDesktopReleaseAsset,
   type DesktopLatestRelease,
 } from "@/lib/desktop/updates";
@@ -56,8 +58,8 @@ function UpdateDetail({
   label: ReactNode;
 }) {
   return (
-    <div className="min-w-0 space-y-1">
-      <p className="text-muted text-xs">{label}</p>
+    <div className="min-w-0 space-y-2">
+      <p className="text-muted text-sm">{label}</p>
       {children}
     </div>
   );
@@ -99,6 +101,13 @@ export default function UpdatesSettingsPage() {
         : state
           ? getUpdateReleaseUrl(state)
           : "https://github.com/Cronacl/Sentinel/releases",
+    [latestRelease, state],
+  );
+  const releaseNotes = useMemo(
+    () =>
+      normalizeReleaseNotesContent(
+        state?.releaseNotes ?? latestRelease?.releaseNotes ?? null,
+      ),
     [latestRelease, state],
   );
 
@@ -308,7 +317,7 @@ export default function UpdatesSettingsPage() {
       title="Updates"
     >
       {errorMessage ? (
-        <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-4 rounded-xl border px-3 py-2.5 text-xs">
+        <p className="border-danger/20 bg-danger-soft text-danger-soft-foreground mb-6 max-w-5xl rounded-xl border px-4 py-3 text-sm leading-6 break-words">
           {errorMessage}
         </p>
       ) : null}
@@ -317,46 +326,53 @@ export default function UpdatesSettingsPage() {
         <SettingsLoadingSpinner />
       ) : (
         <div className="flex flex-col gap-6">
-          <section className="border-separator/20 bg-surface rounded-2xl border p-5">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-              <div className="grid flex-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
-                <UpdateDetail label="Current">
-                  <div className="flex items-center gap-2">
-                    <span className="text-foreground text-sm font-medium font-mono">
-                      {currentVersion}
-                    </span>
-                    <Chip
-                      color={getUpdateStatusColor(state)}
-                      size="sm"
-                      variant="soft"
-                    >
-                      {getUpdateStatusLabel(state)}
-                    </Chip>
+          <section className="border-separator/20 bg-surface rounded-2xl border p-6 sm:p-8">
+            <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] xl:items-start">
+              <div className="min-w-0 space-y-8">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 space-y-2">
+                    <p className="text-muted text-sm">Current version</p>
+                    <div className="flex min-w-0 flex-wrap items-center gap-3">
+                      <span className="text-foreground font-mono text-2xl font-semibold tracking-normal">
+                        {currentVersion}
+                      </span>
+                      <Chip
+                        color={getUpdateStatusColor(state)}
+                        size="sm"
+                        variant="soft"
+                      >
+                        {getUpdateStatusLabel(state)}
+                      </Chip>
+                    </div>
                   </div>
-                </UpdateDetail>
 
-                <UpdateDetail label="Latest">
-                  <span className="text-foreground text-sm font-medium font-mono">
-                    {latestVersion}
-                  </span>
-                </UpdateDetail>
+                  <div className="min-w-0 space-y-2 sm:text-right">
+                    <p className="text-muted text-sm">Latest version</p>
+                    <span className="text-foreground block font-mono text-2xl font-semibold tracking-normal">
+                      {latestVersion}
+                    </span>
+                  </div>
+                </div>
 
-                <UpdateDetail label="Last checked">
-                  <span className="text-foreground text-sm font-medium">
-                    {formatUpdateTimestamp(state.checkedAt)}
-                  </span>
-                </UpdateDetail>
+                <div className="grid gap-x-10 gap-y-8 border-t border-border/50 pt-7 md:grid-cols-2">
+                  <UpdateDetail label="Last checked">
+                    <span className="text-foreground block max-w-64 text-lg font-medium leading-7">
+                      {formatUpdateTimestamp(state.checkedAt)}
+                    </span>
+                  </UpdateDetail>
 
-                <UpdateDetail label="Installer">
-                  <span className="text-foreground block truncate text-sm font-medium">
-                    {downloadAssetLabel}
-                  </span>
-                </UpdateDetail>
+                  <UpdateDetail label="Installer">
+                    <span className="text-foreground block max-w-full text-lg font-medium leading-7 break-words">
+                      {downloadAssetLabel}
+                    </span>
+                  </UpdateDetail>
+                </div>
               </div>
 
-              <div className="flex flex-wrap gap-3 lg:justify-end">
+              <div className="flex flex-col gap-3 border-t border-border/50 pt-6 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-8">
                 {state.isSupported ? (
                   <Button
+                    className="w-full justify-center"
                     isPending={isPrimaryPending}
                     onPress={handlePrimaryAction}
                     size="sm"
@@ -386,6 +402,7 @@ export default function UpdatesSettingsPage() {
                   </Button>
                 ) : null}
                 <Button
+                  className="w-full justify-center"
                   isDisabled={!downloadAsset}
                   isPending={isReleaseLoading}
                   onPress={handleDownloadLatest}
@@ -399,6 +416,7 @@ export default function UpdatesSettingsPage() {
                   )}
                 </Button>
                 <Button
+                  className="w-full justify-center"
                   onPress={handleOpenRelease}
                   size="sm"
                   variant="tertiary"
@@ -467,7 +485,7 @@ export default function UpdatesSettingsPage() {
             ) : null}
           </section>
 
-          {state.releaseNotes ? (
+          {releaseNotes ? (
             <section className="border-separator/20 bg-surface rounded-2xl border">
               <div className="p-5">
                 <h2 className="text-foreground text-base font-medium">
@@ -477,10 +495,10 @@ export default function UpdatesSettingsPage() {
                   Release details for the latest available stable update.
                 </p>
               </div>
-              <div className="border-t border-border/50 px-5 py-4">
-                <pre className="text-muted max-h-56 overflow-auto whitespace-pre-wrap text-xs leading-5">
-                  {state.releaseNotes}
-                </pre>
+              <div className="max-h-80 overflow-auto border-t border-border/50 px-5 py-5">
+                <div className="[&_.sentinel-prose]:max-w-none [&_.sentinel-prose]:text-sm [&_.sentinel-prose_a]:text-primary [&_.sentinel-prose_a]:decoration-primary/30 [&_.sentinel-prose_h1]:text-xl [&_.sentinel-prose_h1]:font-semibold [&_.sentinel-prose_h2]:text-lg [&_.sentinel-prose_h2]:font-semibold [&_.sentinel-prose_h3]:text-base [&_.sentinel-prose_h3]:font-semibold [&_.sentinel-prose_li]:text-sm [&_.sentinel-prose_p]:text-sm">
+                  <MarkdownContent text={releaseNotes} />
+                </div>
               </div>
             </section>
           ) : null}

@@ -10,6 +10,7 @@ import {
   getUpdateStatusColor,
   getUpdateStatusLabel,
   normalizeGitHubLatestRelease,
+  normalizeReleaseNotesContent,
   selectDesktopReleaseAsset,
 } from "./updates";
 
@@ -145,12 +146,14 @@ describe("desktop update formatting helpers", () => {
         },
       ],
       html_url: "https://github.com/Cronacl/Sentinel/releases/tag/v1.2.0",
+      body: "## Features\n\n- Faster updates",
       name: "Sentinel 1.2.0",
       published_at: "2026-03-29T10:00:00.000Z",
       tag_name: "v1.2.0",
     });
 
     expect(release).toMatchObject({
+      releaseNotes: "## Features\n\n- Faster updates",
       releasePageUrl: "https://github.com/Cronacl/Sentinel/releases/tag/v1.2.0",
       version: "1.2.0",
     });
@@ -195,5 +198,15 @@ describe("desktop update formatting helpers", () => {
     expect(selectDesktopReleaseAsset(release, "linux", "arm64")).toMatchObject({
       name: "Sentinel-1.2.0-arm64.AppImage",
     });
+  });
+
+  it("converts HTML release notes into readable markdown", () => {
+    expect(
+      normalizeReleaseNotesContent(
+        "<h2>v0.0.48</h2><h3>Features</h3><ul><li><strong>diff-sidebar:</strong> enhance repo diff sidebar functionality</li></ul>",
+      ),
+    ).toBe(
+      "## v0.0.48\n\n### Features\n\n- **diff-sidebar:** enhance repo diff sidebar functionality",
+    );
   });
 });

@@ -9,7 +9,7 @@ const PLATFORM_CONFIG = {
   },
   mac: {
     builderFlag: "--mac",
-    defaultTargets: ["dmg"],
+    defaultTargets: ["dmg", "zip"],
     nodePlatform: "darwin",
   },
   win: {
