@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.50](https://github.com/Cronacl/Sentinel/compare/v0.0.49...v0.0.50) (2026-04-26)
+
+
+### Bug Fixes
+
+* prevent desktop launch crash ([fed944e](https://github.com/Cronacl/Sentinel/commit/fed944ebd052094d185826a4646cec522e96ed33))
+
 ## [0.0.49](https://github.com/Cronacl/Sentinel/compare/v0.0.48...v0.0.49) (2026-04-26)
 
 
