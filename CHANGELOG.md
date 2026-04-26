@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.49](https://github.com/Cronacl/Sentinel/compare/v0.0.48...v0.0.49) (2026-04-26)
+
+
+### Features
+
+* **updater:** enhance release notes handling and macOS packaging ([70693fc](https://github.com/Cronacl/Sentinel/commit/70693fc2f3dc6739995ee665f4663cefb2224c96))
+
 ## [0.0.48](https://github.com/Cronacl/Sentinel/compare/v0.0.47...v0.0.48) (2026-04-25)
 
 
