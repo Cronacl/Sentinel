@@ -48,3 +48,16 @@ export function createThreadChatErrorResponse(error: unknown) {
     { status: 500 },
   );
 }
+
+export function normalizeThreadChatErrorMessage(
+  error: unknown,
+  fallback = "Chat run failed.",
+) {
+  const message = getErrorMessage(error, fallback).trim();
+
+  if (message && message !== "[object Object]") {
+    return message;
+  }
+
+  return fallback;
+}

@@ -29,7 +29,10 @@ import {
   streamContext,
 } from "@/lib/streams";
 
-import { ThreadChatConflictError } from "../errors";
+import {
+  normalizeThreadChatErrorMessage,
+  ThreadChatConflictError,
+} from "../errors";
 import * as persist from "../persistence";
 import {
   beginThreadRepoCheckpointRun,
@@ -998,6 +1001,13 @@ async function finishCopilotRun(
           threadId: control.threadId,
         })
       : (await clearThreadRepoCheckpointRun(control.runId), null);
+  const errorMessage =
+    input.status === "error"
+      ? normalizeThreadChatErrorMessage(
+          input.errorMessage,
+          "GitHub Copilot run failed.",
+        )
+      : (input.errorMessage ?? null);
 
   persist.clearActiveStream(control.threadId);
   persist.setThreadStatus(control.threadId, input.threadStatus);
@@ -1007,7 +1017,7 @@ async function finishCopilotRun(
     control.runId,
     input.status,
     input.finishReason,
-    input.errorMessage,
+    errorMessage,
     { repoCheckpointId },
   );
   await emitThreadSnapshot(control.threadId, control.eventChannel);
@@ -1020,8 +1030,15 @@ async function finishCopilotRun(
       type: "run.cancelled",
     });
   } else if (input.status === "error") {
+    log.error("copilot_run_failed", {
+      error: errorMessage,
+      runId: control.runId,
+      threadId: control.threadId,
+      userId: control.userId,
+      workspaceId: control.workspaceId,
+    });
     control.eventChannel.emit({
-      error: input.errorMessage ?? "GitHub Copilot run failed.",
+      error: errorMessage ?? "GitHub Copilot run failed.",
       runId: control.runId,
       threadStatus: input.threadStatus,
       type: "run.failed",

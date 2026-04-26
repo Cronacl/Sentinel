@@ -30,7 +30,10 @@ import {
   streamContext,
 } from "@/lib/streams";
 
-import { ThreadChatConflictError } from "../errors";
+import {
+  normalizeThreadChatErrorMessage,
+  ThreadChatConflictError,
+} from "../errors";
 import * as persist from "../persistence";
 import { getThreadCheckpointAnchorMessageId } from "../repo-checkpoints";
 import {
@@ -418,6 +421,13 @@ async function finishOpenCodeRun(
   if (control.finished) return;
 
   control.finished = true;
+  const errorMessage =
+    input.status === "error"
+      ? normalizeThreadChatErrorMessage(
+          input.errorMessage,
+          "OpenCode run failed.",
+        )
+      : (input.errorMessage ?? null);
   control.abortController.abort();
   persist.clearActiveStream(control.threadId);
   persist.setThreadStatus(control.threadId, input.threadStatus);
@@ -426,7 +436,7 @@ async function finishOpenCodeRun(
     control.runId,
     input.status,
     input.finishReason,
-    input.errorMessage,
+    errorMessage,
   );
   await emitThreadSnapshot(
     control.threadId,
@@ -442,8 +452,15 @@ async function finishOpenCodeRun(
       type: "run.cancelled",
     });
   } else if (input.status === "error") {
+    log.error("opencode_run_failed", {
+      error: errorMessage,
+      runId: control.runId,
+      threadId: control.threadId,
+      userId: control.userId,
+      workspaceId: control.workspaceId,
+    });
     control.eventChannel.emit({
-      error: input.errorMessage ?? "OpenCode run failed.",
+      error: errorMessage ?? "OpenCode run failed.",
       runId: control.runId,
       threadStatus: input.threadStatus,
       type: "run.failed",

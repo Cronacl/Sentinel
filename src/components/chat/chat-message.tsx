@@ -46,6 +46,7 @@ import type { ChatEngine } from "@/server/db/enums";
 const VARIABLE_TOKEN_REGEX = /(\{\{[^{}]+\}\})/g;
 const USER_MESSAGE_COLLAPSE_CHAR_THRESHOLD = 420;
 const USER_MESSAGE_COLLAPSE_LINE_THRESHOLD = 6;
+const FAILURE_SUMMARY_CHAR_LIMIT = 220;
 
 export function isVisibleAssistantPart(part: MessagePart) {
   if (part.type === "text") {
@@ -112,6 +113,29 @@ function normalizeInlineErrorText(value: string) {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+export function getAssistantFailureSummary(errorText: string) {
+  const normalized = errorText.replace(/\r\n/g, "\n").trim();
+  const firstMeaningfulLine =
+    normalized
+      .split("\n")
+      .map((line) => line.trim())
+      .find(Boolean) ?? "Generation failed.";
+  const singleLine = firstMeaningfulLine.replace(/\s+/g, " ");
+
+  if (singleLine.length <= FAILURE_SUMMARY_CHAR_LIMIT) {
+    return singleLine;
+  }
+
+  return `${singleLine.slice(0, FAILURE_SUMMARY_CHAR_LIMIT - 1).trimEnd()}...`;
+}
+
+export function shouldShowAssistantFailureDetails(errorText: string) {
+  const normalized = errorText.replace(/\r\n/g, "\n").trim();
+  const summary = getAssistantFailureSummary(normalized);
+
+  return normalized.length > summary.length || normalized.includes("\n");
+}
+
 function partIncludesFailureText(part: MessagePart, failureText: string) {
   const normalizedFailureText = normalizeInlineErrorText(failureText);
 
@@ -173,18 +197,85 @@ function FailedAssistantStatus({
   errorText: string;
   variant?: "inline" | "standalone";
 }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const summary = getAssistantFailureSummary(errorText);
+  const hasDetails = shouldShowAssistantFailureDetails(errorText);
+  const containerClassName =
+    variant === "inline"
+      ? "rounded-md border border-danger/15 bg-danger/5 px-3 py-2"
+      : "rounded-lg border border-danger-soft-hover bg-danger-soft px-3 py-2.5";
+  const titleClassName =
+    variant === "inline"
+      ? "text-[11px] font-medium text-danger/75"
+      : "text-[11px] font-medium text-danger-soft-foreground";
+  const textClassName =
+    variant === "inline"
+      ? "text-[11px] leading-5 text-danger/85"
+      : "text-xs leading-5 text-danger-soft-foreground";
+
   if (variant === "inline") {
     return (
-      <div className="rounded-md border border-danger/15 bg-danger/5 px-3 py-2">
-        <p className="text-[11px] font-medium text-danger/75">Run failed</p>
-        <p className="mt-1 text-[11px] leading-5 text-danger/85">{errorText}</p>
+      <div className={containerClassName}>
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className={titleClassName}>Run failed</p>
+            <p className={`mt-1 max-h-10 overflow-hidden ${textClassName}`}>
+              {summary}
+            </p>
+          </div>
+          <CopyButton text={errorText} title="Copy error" />
+        </div>
+        {hasDetails ? (
+          <div className="mt-2">
+            <Button
+              className="h-6 min-h-6 px-2 text-[11px]"
+              size="sm"
+              type="button"
+              variant="ghost"
+              onClick={() => setIsExpanded((current) => !current)}
+            >
+              {isExpanded ? "Hide details" : "Details"}
+            </Button>
+            {isExpanded ? (
+              <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-background/60 p-2 text-[11px] leading-5 text-danger/85">
+                {errorText}
+              </pre>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg border border-danger-soft-hover bg-danger-soft px-3 py-2.5">
-      <p className="text-xs text-danger-soft-foreground">{errorText}</p>
+    <div className={containerClassName}>
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className={titleClassName}>Run failed</p>
+          <p className={`mt-1 max-h-10 overflow-hidden ${textClassName}`}>
+            {summary}
+          </p>
+        </div>
+        <CopyButton text={errorText} title="Copy error" />
+      </div>
+      {hasDetails ? (
+        <div className="mt-2">
+          <Button
+            className="h-6 min-h-6 px-2 text-[11px]"
+            size="sm"
+            type="button"
+            variant="ghost"
+            onClick={() => setIsExpanded((current) => !current)}
+          >
+            {isExpanded ? "Hide details" : "Details"}
+          </Button>
+          {isExpanded ? (
+            <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-background/60 p-2 text-[11px] leading-5 text-danger-soft-foreground">
+              {errorText}
+            </pre>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

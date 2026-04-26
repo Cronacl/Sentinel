@@ -71,7 +71,10 @@ import {
 import { buildPlanModePromptPreamble } from "./plan-mode-instructions";
 import { serializeComposerContextToText } from "@/lib/composer-context/serialize";
 import { getToolPermissionMode, getWorkspaceRootPath } from "./workspace";
-import { ThreadChatConflictError } from "../errors";
+import {
+  normalizeThreadChatErrorMessage,
+  ThreadChatConflictError,
+} from "../errors";
 
 const log = createLogger("ClaudeThreadChat");
 
@@ -1334,6 +1337,13 @@ async function finishClaudeRun(
           threadId: control.threadId,
         })
       : (await clearThreadRepoCheckpointRun(control.runId), null);
+  const errorMessage =
+    input.status === "error"
+      ? normalizeThreadChatErrorMessage(
+          input.errorMessage,
+          "Claude run failed.",
+        )
+      : (input.errorMessage ?? null);
 
   persist.clearActiveStream(control.threadId);
   persist.setThreadStatus(control.threadId, input.threadStatus);
@@ -1343,7 +1353,7 @@ async function finishClaudeRun(
     control.runId,
     input.status === "cancelled" ? "cancelled" : input.status,
     input.finishReason,
-    input.errorMessage,
+    errorMessage,
     { repoCheckpointId },
   );
   await emitThreadSnapshot(control.threadId, control.eventChannel);
@@ -1355,8 +1365,15 @@ async function finishClaudeRun(
       type: "run.cancelled",
     });
   } else if (input.status === "error") {
+    log.error("claude_run_failed", {
+      error: errorMessage,
+      runId: control.runId,
+      threadId: control.threadId,
+      userId: control.userId,
+      workspaceId: control.workspaceId,
+    });
     control.eventChannel.emit({
-      error: input.errorMessage ?? "Claude run failed.",
+      error: errorMessage ?? "Claude run failed.",
       runId: control.runId,
       threadStatus: input.threadStatus,
       type: "run.failed",

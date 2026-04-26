@@ -18,6 +18,7 @@ const setThreadStatus = mock(
 const setActiveStream = mock((_threadId: string, streamId: string) => {
   sessionSnapshotState.activeRunId = streamId;
 });
+const loadThread = mock(async () => ({ chatEngineState: null }));
 const loadThreadMessages = mock(async () => []);
 const updateThreadRepoState = mock(() => {});
 const updateThreadChatSettings = mock(async () => {});
@@ -85,6 +86,7 @@ mock.module("@/lib/ai/chat/engines/codex-app-server", () => ({
 const persistenceModuleMock = () => ({
   clearActiveStream,
   ensureThread: mock(async () => ({ created: true })),
+  loadThread,
   loadThreadMessages,
   setActiveMessage,
   setActiveStream,
@@ -166,6 +168,7 @@ function getLatestAssistantMessage() {
 
   return assistantCalls.at(-1)?.[1] as
     | {
+        metadata?: Record<string, unknown>;
         parts: Array<Record<string, unknown>>;
         role: "assistant";
       }
@@ -180,6 +183,7 @@ describe("runCodexThreadChat editing", () => {
   beforeEach(() => {
     beginThreadRepoCheckpointRun.mockClear();
     clearActiveStream.mockClear();
+    loadThread.mockClear();
     loadThreadMessages.mockClear();
     loadThreadSessionSnapshot.mockClear();
     sessionSnapshotState.activeRunId = "run-1";
@@ -327,6 +331,59 @@ describe("runCodexThreadChat editing", () => {
         },
       }),
     );
+  });
+
+  it("persists a normalized error message when a Codex turn fails", async () => {
+    const response = await runCodexThreadChat(
+      {
+        message: {
+          id: "user-failed-1",
+          metadata: {},
+          parts: [{ text: "Trigger a failure", type: "text" }],
+          role: "user",
+        },
+        modelId: "gpt-5.4",
+        threadId: "thread-failed-1",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      {
+        chatEngineState: null,
+        mode: "chat",
+        status: "idle",
+      } as any,
+    );
+
+    expect(response.status).toBe(202);
+
+    await emitCodexEvent({
+      method: "turn/completed",
+      params: {
+        turn: {
+          error: {},
+          id: "turn-1",
+          items: [],
+          status: "failed",
+        },
+      },
+    });
+
+    expect(updateMessageMetadata).toHaveBeenCalledWith(
+      "thread-failed-1",
+      expect.any(String),
+      expect.objectContaining({
+        errorMessage: "Codex turn failed.",
+        status: "error",
+      }),
+    );
+    expect(getLatestAssistantMessage()?.metadata).toEqual(
+      expect.objectContaining({
+        errorMessage: "Codex turn failed.",
+        status: "error",
+      }),
+    );
+    expect(setThreadStatus).toHaveBeenLastCalledWith("thread-failed-1", "idle");
   });
 
   it("converts non-image attachments into text input instead of rejecting them", async () => {

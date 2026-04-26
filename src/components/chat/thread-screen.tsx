@@ -163,6 +163,10 @@ export function ThreadScreen({
   }, [thread.id]);
 
   const handleError = useCallback((error: Error) => {
+    if (isCommittedThreadActionError(error)) {
+      return;
+    }
+
     setChatError(error.message);
   }, []);
   const repoContextQueryInput = useMemo(

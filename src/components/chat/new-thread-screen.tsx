@@ -247,6 +247,10 @@ export function NewThreadScreen({
     threadId: draftThreadId,
   });
   const handleError = useCallback((error: Error) => {
+    if (isCommittedThreadActionError(error)) {
+      return;
+    }
+
     setChatError(error.message);
   }, []);
   const handleSnapshot = useCallback(

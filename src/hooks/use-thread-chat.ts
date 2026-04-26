@@ -108,6 +108,10 @@ export function isCommittedThreadActionError(
   return error instanceof ThreadActionError && error.committed;
 }
 
+export function shouldSurfaceThreadActionError(error: unknown) {
+  return !isCommittedThreadActionError(error);
+}
+
 type ThreadSessionState = {
   activeRunId: string | null;
   chatEngine: ChatEngine;
@@ -1441,8 +1445,10 @@ export function useThreadChat({
           committed,
         });
 
-        store.setRequestError(baseErrorMessage);
-        onError?.(nextError);
+        if (shouldSurfaceThreadActionError(nextError)) {
+          store.setRequestError(baseErrorMessage);
+          onError?.(nextError);
+        }
 
         throw nextError;
       } finally {

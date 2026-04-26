@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 
 const ensureThread = mock(async () => ({ created: true }));
+const clearActiveStream = mock(() => {});
 const loadThread = mock(async () => null);
 const loadThreadMessages = mock(async () => []);
 const setActiveStream = mock(() => {});
 const setThreadStatus = mock(() => {});
+const updateCodexThreadState = mock(() => {});
 const updateCursorThreadState = mock(() => {});
 const updateOpenCodeThreadState = mock(() => {});
 const updateThreadChatSettings = mock(async () => {});
@@ -47,6 +49,9 @@ const startOpenCodeSession = mock(async () => ({
       promptAsync: mock(async () => {}),
     },
   },
+  server: {
+    close: mock(() => {}),
+  },
   sessionId: "opencode-session-1",
 }));
 
@@ -62,11 +67,13 @@ mock.module("@/lib/ai/chat/engines/opencode-sdk", () => ({
 }));
 
 const persistenceModuleMock = () => ({
+  clearActiveStream,
   ensureThread,
   loadThread,
   loadThreadMessages,
   setActiveStream,
   setThreadStatus,
+  updateCodexThreadState,
   updateCursorThreadState,
   updateOpenCodeThreadState,
   updateThreadChatSettings,
@@ -120,10 +127,12 @@ function createDeferred<T>() {
 describe("runOpenCodeThreadChat", () => {
   beforeEach(() => {
     ensureThread.mockClear();
+    clearActiveStream.mockClear();
     loadThread.mockClear();
     loadThreadMessages.mockClear();
     setActiveStream.mockClear();
     setThreadStatus.mockClear();
+    updateCodexThreadState.mockClear();
     updateCursorThreadState.mockClear();
     updateOpenCodeThreadState.mockClear();
     updateThreadChatSettings.mockClear();
@@ -146,6 +155,9 @@ describe("runOpenCodeThreadChat", () => {
           abort: () => Promise<void>;
           promptAsync: () => Promise<void>;
         };
+      };
+      server: {
+        close: () => void;
       };
       sessionId: string;
     }>();
@@ -197,10 +209,73 @@ describe("runOpenCodeThreadChat", () => {
           promptAsync: mock(async () => {}),
         },
       },
+      server: {
+        close: mock(() => {}),
+      },
       sessionId: "opencode-session-1",
     });
 
     const response = await responsePromise;
     expect(response.headers.get("Content-Type")).toBe("text/event-stream");
+  });
+
+  it("persists compactable assistant failure metadata for OpenCode prompt errors", async () => {
+    startOpenCodeSession.mockImplementation(async () => ({
+      client: {
+        event: {
+          subscribe: mock(async () => ({
+            stream: (async function* () {})(),
+          })),
+        },
+        permission: {
+          reply: mock(async () => {}),
+        },
+        question: {
+          reply: mock(async () => {}),
+        },
+        session: {
+          abort: mock(async () => {}),
+          promptAsync: mock(async () => {
+            throw new Error("OpenCode provider failed\nstack: noisy details");
+          }),
+        },
+      },
+      server: {
+        close: mock(() => {}),
+      },
+      sessionId: "opencode-session-1",
+    }));
+
+    const response = await runOpenCodeThreadChat(
+      {
+        message: {
+          id: "user-error-1",
+          metadata: {},
+          parts: [{ text: "Inspect the repo", type: "text" }],
+          role: "user",
+        },
+        modelId: "openai/gpt-5.2",
+        threadId: "thread-error-1",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      } as any,
+      null,
+    );
+    const errorMessage = upsertMessage.mock.calls.find(
+      (call: unknown[]) => (call[1] as any)?.metadata?.status === "error",
+    )?.[1];
+
+    expect(response.headers.get("Content-Type")).toBe("text/event-stream");
+    expect(errorMessage).toEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          errorMessage: "OpenCode provider failed\nstack: noisy details",
+          status: "error",
+        }),
+        role: "assistant",
+      }),
+    );
+    expect(setThreadStatus).toHaveBeenLastCalledWith("thread-error-1", "idle");
   });
 });

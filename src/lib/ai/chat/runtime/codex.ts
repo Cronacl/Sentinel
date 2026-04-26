@@ -44,6 +44,7 @@ import {
 } from "../session-server";
 import type { ThreadStreamEvent } from "../session-types";
 import type { ThreadChatRequest } from "../types";
+import { normalizeThreadChatErrorMessage } from "../errors";
 import {
   buildActiveThreadMessages,
   getFirstUserText,
@@ -1124,7 +1125,7 @@ function emitAssistantMessageUpdate(
   state: CodexMirrorState,
   runId: string,
   status: "pending" | "streaming" | "completed" | "error" | "cancelled",
-  options?: { repoCheckpointId?: string | null },
+  options?: { errorMessage?: string | null; repoCheckpointId?: string | null },
 ) {
   const message = persist.upsertMessage(state.threadId, {
     id: state.assistantId,
@@ -1136,6 +1137,7 @@ function emitAssistantMessageUpdate(
       ...(options?.repoCheckpointId
         ? { repoCheckpointId: options.repoCheckpointId }
         : {}),
+      ...(options?.errorMessage ? { errorMessage: options.errorMessage } : {}),
       runId,
       status,
       usage: state.usage ?? undefined,
@@ -1235,6 +1237,10 @@ async function finalizeCodexRun(input: {
   if (!control) {
     return;
   }
+  const errorMessage =
+    input.messageStatus === "error"
+      ? normalizeThreadChatErrorMessage(input.errorMessage, "Codex run failed.")
+      : (input.errorMessage ?? null);
 
   const repoCheckpointId =
     input.messageStatus === "completed" && input.threadStatus === "idle"
@@ -1248,14 +1254,20 @@ async function finalizeCodexRun(input: {
   persist.clearActiveStream(input.state.threadId);
   persist.setThreadStatus(input.state.threadId, input.threadStatus);
   persist.updateMessageMetadata(input.state.threadId, input.state.assistantId, {
-    errorMessage: input.errorMessage ?? undefined,
+    errorMessage: errorMessage ?? undefined,
     ...(repoCheckpointId ? { repoCheckpointId } : {}),
     runId: input.runId,
     status: input.messageStatus,
   });
-  const currentThread = await persist.loadThread(input.state.threadId);
+  const currentThread =
+    typeof persist.loadThread === "function"
+      ? await persist.loadThread(input.state.threadId)
+      : null;
   const currentCodexState = getCodexThreadState(currentThread?.chatEngineState);
-  if (currentCodexState) {
+  if (
+    currentCodexState &&
+    typeof persist.updateCodexThreadState === "function"
+  ) {
     persist.updateCodexThreadState(input.state.threadId, {
       ...currentCodexState,
       pendingTurnId: null,
@@ -1269,13 +1281,18 @@ async function finalizeCodexRun(input: {
       : input.messageStatus === "cancelled"
         ? "cancelled"
         : "completed",
-    { repoCheckpointId },
+    { errorMessage, repoCheckpointId },
   );
 
   await emitLatestSnapshot(input.runId, input.state.threadId);
   if (input.messageStatus === "error") {
+    log.error("codex_run_failed", {
+      error: errorMessage,
+      runId: input.runId,
+      threadId: input.state.threadId,
+    });
     control.eventChannel.emit({
-      error: input.errorMessage ?? "Codex run failed.",
+      error: errorMessage ?? "Codex run failed.",
       runId: input.runId,
       threadStatus: input.threadStatus,
       type: "run.failed",
@@ -2014,28 +2031,30 @@ export async function runCodexThreadChat(
       control.codexTurnId = turnResponse.turn.id;
     }
 
-    persist.updateCodexThreadState(
-      request.threadId,
-      buildInitialCodexThreadState({
-        approvalPolicy,
-        cliVersion:
-          threadStartResponse.thread.cliVersion ||
-          resumableCodexState?.cliVersion,
-        codexThreadId: threadStartResponse.thread.id,
-        cwd: threadStartResponse.cwd ?? workspaceRoot,
-        modelId: request.modelId ?? threadStartResponse.model ?? null,
-        modelProvider:
-          threadStartResponse.modelProvider ??
-          resumableCodexState?.modelProvider ??
-          null,
-        pendingTurnId: turnResponse.turn.id,
-        reasoningEffort:
-          request.reasoningEffort ??
-          threadStartResponse.reasoningEffort ??
-          null,
-        sandboxMode,
-      }),
-    );
+    if (typeof persist.updateCodexThreadState === "function") {
+      persist.updateCodexThreadState(
+        request.threadId,
+        buildInitialCodexThreadState({
+          approvalPolicy,
+          cliVersion:
+            threadStartResponse.thread.cliVersion ||
+            resumableCodexState?.cliVersion,
+          codexThreadId: threadStartResponse.thread.id,
+          cwd: threadStartResponse.cwd ?? workspaceRoot,
+          modelId: request.modelId ?? threadStartResponse.model ?? null,
+          modelProvider:
+            threadStartResponse.modelProvider ??
+            resumableCodexState?.modelProvider ??
+            null,
+          pendingTurnId: turnResponse.turn.id,
+          reasoningEffort:
+            request.reasoningEffort ??
+            threadStartResponse.reasoningEffort ??
+            null,
+          sandboxMode,
+        }),
+      );
+    }
 
     for (const item of turnResponse.turn.items) {
       upsertMirrorItemFromCodexItem(mirror, item);
@@ -2059,12 +2078,22 @@ export async function runCodexThreadChat(
     activeCodexRunControls.delete(runId);
     if (typeof persist.updateMessageMetadata === "function") {
       await persist.updateMessageMetadata(request.threadId, assistantId, {
-        errorMessage:
-          error instanceof Error ? error.message : "Unable to start Codex.",
+        errorMessage: normalizeThreadChatErrorMessage(
+          error,
+          "Unable to start Codex.",
+        ),
         runId,
         status: "error",
       });
     }
+    log.error("codex_start_failed", {
+      error: normalizeThreadChatErrorMessage(error, "Unable to start Codex."),
+      runId,
+      threadId: request.threadId,
+      trigger: request.trigger,
+      userId: request.userId,
+      workspaceId: request.workspaceId,
+    });
     throw error;
   }
 }

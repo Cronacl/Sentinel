@@ -4,9 +4,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   ChatMessage,
+  getAssistantFailureSummary,
   getAssistantFailureText,
   getPendingAssistantStatusLabel,
   isVisibleAssistantPart,
+  shouldShowAssistantFailureDetails,
 } from "./chat-message";
 
 describe("chat-message helpers", () => {
@@ -107,6 +109,17 @@ describe("chat-message helpers", () => {
         messageStatus: "cancelled",
       }),
     ).toBeNull();
+  });
+
+  it("summarizes long provider errors to the first compact line", () => {
+    const errorText = [
+      "Provider request failed with status 500 after retrying the request several times and receiving a very long diagnostic payload that should not fill the entire chat viewport because the upstream provider included a verbose transport dump.",
+      "stack: at provider.call",
+    ].join("\n");
+
+    expect(getAssistantFailureSummary(errorText).endsWith("...")).toBe(true);
+    expect(getAssistantFailureSummary(errorText)).not.toContain("stack:");
+    expect(shouldShowAssistantFailureDetails(errorText)).toBe(true);
   });
 });
 
@@ -212,6 +225,35 @@ describe("ChatMessage", () => {
     expect(markup).toContain("Run failed");
     expect(markup).toContain("Provider request failed.");
     expect(markup).toContain("bg-danger/5");
+  });
+
+  it("keeps long assistant failures collapsed by default with details available", () => {
+    const errorText = [
+      "Provider request failed with status 500 after retrying the request several times and receiving a very long diagnostic payload that should not fill the entire chat viewport.",
+      "stack: at provider.call",
+      "raw payload: secret-free-but-extremely-noisy diagnostics",
+    ].join("\n");
+
+    const markup = renderToStaticMarkup(
+      createElement(ChatMessage, {
+        chatEngine: "sentinel",
+        message: {
+          id: "assistant-long-error",
+          metadata: {
+            errorMessage: errorText,
+            status: "error",
+          },
+          parts: [{ text: " ", type: "text" }],
+          role: "assistant",
+        },
+        onRetry: () => {},
+      }),
+    );
+
+    expect(markup).toContain("Run failed");
+    expect(markup).toContain("Details");
+    expect(markup).toContain("Copy error");
+    expect(markup).not.toContain("raw payload:");
   });
 
   it("does not render a failure banner or retry action for cancelled runs", () => {

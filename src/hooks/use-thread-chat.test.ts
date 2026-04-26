@@ -15,6 +15,7 @@ import {
   mergeThreadSessionStateWithError,
   moveQueuedFollowUpToFront,
   readThreadChatErrorMessage,
+  shouldSurfaceThreadActionError,
 } from "./use-thread-chat";
 
 function createMessage(
@@ -654,6 +655,7 @@ describe("ThreadActionError", () => {
 
     expect(isCommittedThreadActionError(error)).toBe(true);
     expect(error.committed).toBe(true);
+    expect(shouldSurfaceThreadActionError(error)).toBe(false);
   });
 
   it("treats uncommitted failures as banner-worthy request errors", () => {
@@ -661,6 +663,7 @@ describe("ThreadActionError", () => {
 
     expect(isCommittedThreadActionError(error)).toBe(false);
     expect(error.committed).toBe(false);
+    expect(shouldSurfaceThreadActionError(error)).toBe(true);
   });
 });
 

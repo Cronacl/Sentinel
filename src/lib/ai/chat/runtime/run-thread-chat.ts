@@ -98,6 +98,7 @@ import {
 } from "./workspace";
 import { refreshThreadContextCompactionCheckpoint } from "./context-compaction-refresh";
 import type { ThreadChatRequest } from "../types";
+import { normalizeThreadChatErrorMessage } from "../errors";
 import type { PersistedThreadMessageRecord } from "@/lib/ai/messages/branches";
 import {
   loadThreadSessionSnapshot,
@@ -801,7 +802,10 @@ async function failThreadRun(
   >,
   error: unknown,
 ) {
-  const message = getErrorMessage(error, "Unknown error");
+  const message = normalizeThreadChatErrorMessage(
+    error,
+    "Sentinel run failed.",
+  );
 
   await clearThreadRepoCheckpointRun(run.runId);
   persist.clearActiveStream(run.request.threadId);
@@ -818,6 +822,15 @@ async function failThreadRun(
     runId: run.runId,
     threadStatus: "idle",
     type: "run.failed",
+  });
+  log.error("run_failed", {
+    engine: run.request.engine ?? "sentinel",
+    error: message,
+    runId: run.runId,
+    threadId: run.request.threadId,
+    trigger: run.request.trigger,
+    userId: run.request.userId,
+    workspaceId: run.request.workspaceId,
   });
   logRuntimeTiming(
     "run_failed",
@@ -1746,8 +1759,10 @@ async function runParsedThreadChat(
       { status: 202 },
     );
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : String(error ?? "Unknown error");
+    const errorMessage = normalizeThreadChatErrorMessage(
+      error,
+      "Unable to start Sentinel run.",
+    );
 
     if (
       persistedUserId &&
@@ -1774,6 +1789,15 @@ async function runParsedThreadChat(
       activeRunControls.get(activeRunId)?.eventChannel.close();
       activeRunControls.delete(activeRunId);
     }
+    log.error("run_bootstrap_failed", {
+      engine,
+      error: errorMessage,
+      runId: activeRunId,
+      threadId: request.threadId,
+      trigger: request.trigger,
+      userId: request.userId,
+      workspaceId: request.workspaceId,
+    });
     throw error;
   }
 }

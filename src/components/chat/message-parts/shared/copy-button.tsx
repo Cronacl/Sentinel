@@ -33,6 +33,7 @@ export function CopyButton({
       size="sm"
       variant="ghost"
       isIconOnly
+      aria-label={copied ? "Copied" : title}
       className="h-6 min-h-6 w-6 min-w-6"
       onClick={() => void handleCopy()}
       type="button"
