@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.55](https://github.com/Cronacl/Sentinel/compare/v0.0.54...v0.0.55) (2026-04-27)
+
+
+### Bug Fixes
+
+* improve linux native startup portability ([dafc10f](https://github.com/Cronacl/Sentinel/commit/dafc10f347b3f7e5123e2b456e37c94e6bc6a574))
+* stack update settings layout ([2b24e6c](https://github.com/Cronacl/Sentinel/commit/2b24e6c31d7bb04183e2e580dd87d39026df1e1d))
+
 ## [0.0.54](https://github.com/Cronacl/Sentinel/compare/v0.0.53...v0.0.54) (2026-04-27)
 
 
