@@ -156,7 +156,22 @@ import { CopilotShellTool } from "./renderers/copilot-shell";
 import { CopilotTodoTool } from "./renderers/copilot-todo";
 import { CopilotUserInputTool } from "./renderers/copilot-user-input";
 import { CopilotWebFetchTool } from "./renderers/copilot-web";
-import { GenericTool } from "./generic";
+import {
+  CursorFileTool,
+  CursorPermissionTool,
+  CursorPlanTool,
+  CursorRuntimeTool,
+  CursorSearchTool,
+  CursorShellTool,
+  CursorUserInputTool,
+  OpenCodeFileTool,
+  OpenCodePermissionTool,
+  OpenCodePlanTool,
+  OpenCodeRuntimeTool,
+  OpenCodeSearchTool,
+  OpenCodeShellTool,
+  OpenCodeUserInputTool,
+} from "./renderers/external-runtime";
 
 const renderers: Record<string, Renderer> = {
   apply_patch: WorkspaceTool,
@@ -385,6 +400,9 @@ const codexRenderers: Record<string, Renderer> = {
   codex_user_input: CodexUserInputTool,
   codex_web_search: CodexWebSearchTool,
 };
+export const KNOWN_CODEX_RENDERER_TOOL_NAMES = Object.freeze(
+  Object.keys(codexRenderers).sort(),
+);
 
 const claudeRenderers: Record<string, Renderer> = {
   claude_agent: ClaudeAgentTool,
@@ -473,6 +491,115 @@ export const KNOWN_COPILOT_RENDERER_TOOL_NAMES = Object.freeze(
   Object.keys(copilotRenderers).sort(),
 );
 
+const cursorRenderers: Record<string, Renderer> = {
+  cursor_apply_patch: CursorFileTool,
+  cursor_approval: CursorPermissionTool,
+  cursor_ask_question: CursorUserInputTool,
+  cursor_ask_user: CursorUserInputTool,
+  cursor_ask_user_question: CursorUserInputTool,
+  cursor_bash: CursorShellTool,
+  cursor_command: CursorShellTool,
+  cursor_create_file: CursorFileTool,
+  cursor_create_plan: CursorPlanTool,
+  cursor_delete_file: CursorFileTool,
+  cursor_edit: CursorFileTool,
+  cursor_edit_file: CursorFileTool,
+  cursor_execute_command: CursorShellTool,
+  cursor_file: CursorFileTool,
+  cursor_file_edit: CursorFileTool,
+  cursor_find: CursorSearchTool,
+  cursor_glob: CursorSearchTool,
+  cursor_grep: CursorSearchTool,
+  cursor_list: CursorSearchTool,
+  cursor_list_dir: CursorSearchTool,
+  cursor_list_files: CursorSearchTool,
+  cursor_ls: CursorSearchTool,
+  cursor_permission: CursorPermissionTool,
+  cursor_plan: CursorPlanTool,
+  cursor_read: CursorFileTool,
+  cursor_read_file: CursorFileTool,
+  cursor_request_permission: CursorPermissionTool,
+  cursor_request_user_input: CursorUserInputTool,
+  cursor_rg: CursorSearchTool,
+  cursor_run_command: CursorShellTool,
+  cursor_search: CursorSearchTool,
+  cursor_session: CursorRuntimeTool,
+  cursor_shell: CursorShellTool,
+  cursor_terminal: CursorShellTool,
+  cursor_todo: CursorPlanTool,
+  cursor_todo_read: CursorPlanTool,
+  cursor_todo_write: CursorPlanTool,
+  cursor_tool_permission: CursorPermissionTool,
+  cursor_update_file: CursorFileTool,
+  cursor_update_plan: CursorPlanTool,
+  cursor_update_todo: CursorPlanTool,
+  cursor_view: CursorFileTool,
+  cursor_write: CursorFileTool,
+  cursor_write_file: CursorFileTool,
+};
+export const KNOWN_CURSOR_RENDERER_TOOL_NAMES = Object.freeze(
+  Object.keys(cursorRenderers).sort(),
+);
+
+const openCodeRenderers: Record<string, Renderer> = {
+  opencode_apply_patch: OpenCodeFileTool,
+  opencode_approval: OpenCodePermissionTool,
+  opencode_ask_question: OpenCodeUserInputTool,
+  opencode_ask_user: OpenCodeUserInputTool,
+  opencode_ask_user_question: OpenCodeUserInputTool,
+  opencode_bash: OpenCodeShellTool,
+  opencode_command: OpenCodeShellTool,
+  opencode_create_file: OpenCodeFileTool,
+  opencode_create_plan: OpenCodePlanTool,
+  opencode_delete_file: OpenCodeFileTool,
+  opencode_edit: OpenCodeFileTool,
+  opencode_edit_file: OpenCodeFileTool,
+  opencode_execute: OpenCodeShellTool,
+  opencode_execute_command: OpenCodeShellTool,
+  opencode_file: OpenCodeFileTool,
+  opencode_file_edit: OpenCodeFileTool,
+  opencode_find: OpenCodeSearchTool,
+  opencode_glob: OpenCodeSearchTool,
+  opencode_grep: OpenCodeSearchTool,
+  opencode_list: OpenCodeSearchTool,
+  opencode_list_dir: OpenCodeSearchTool,
+  opencode_list_files: OpenCodeSearchTool,
+  opencode_ls: OpenCodeSearchTool,
+  opencode_permission: OpenCodePermissionTool,
+  opencode_plan: OpenCodePlanTool,
+  opencode_read: OpenCodeFileTool,
+  opencode_read_file: OpenCodeFileTool,
+  opencode_request_permission: OpenCodePermissionTool,
+  opencode_request_user_input: OpenCodeUserInputTool,
+  opencode_rg: OpenCodeSearchTool,
+  opencode_run_command: OpenCodeShellTool,
+  opencode_search: OpenCodeSearchTool,
+  opencode_session: OpenCodeRuntimeTool,
+  opencode_shell: OpenCodeShellTool,
+  opencode_terminal: OpenCodeShellTool,
+  opencode_todo: OpenCodePlanTool,
+  opencode_todo_read: OpenCodePlanTool,
+  opencode_todo_write: OpenCodePlanTool,
+  opencode_tool_permission: OpenCodePermissionTool,
+  opencode_update_file: OpenCodeFileTool,
+  opencode_update_plan: OpenCodePlanTool,
+  opencode_update_todo: OpenCodePlanTool,
+  opencode_view: OpenCodeFileTool,
+  opencode_write: OpenCodeFileTool,
+  opencode_write_file: OpenCodeFileTool,
+};
+export const KNOWN_OPENCODE_RENDERER_TOOL_NAMES = Object.freeze(
+  Object.keys(openCodeRenderers).sort(),
+);
+
+export const ENGINE_TOOL_RENDERING_COVERAGE = Object.freeze({
+  claude: KNOWN_CLAUDE_RENDERER_TOOL_NAMES,
+  codex: KNOWN_CODEX_RENDERER_TOOL_NAMES,
+  copilot: KNOWN_COPILOT_RENDERER_TOOL_NAMES,
+  cursor: KNOWN_CURSOR_RENDERER_TOOL_NAMES,
+  opencode: KNOWN_OPENCODE_RENDERER_TOOL_NAMES,
+});
+
 function normalizeLooseToolName(name: string) {
   return name.replace(/[^a-z0-9]+/gi, "").toLowerCase();
 }
@@ -548,49 +675,137 @@ function resolveIntegrationFallback(name: string): Renderer | undefined {
   return undefined;
 }
 
+function matchesAny(name: string, tokens: string[]) {
+  return tokens.some((token) => name.includes(token));
+}
+
+function resolveCursorRenderer(name: string): Renderer {
+  const exact = cursorRenderers[name];
+  if (exact) return exact;
+  const toolName = name.replace(/^cursor_/, "");
+
+  if (isStructuredUserInputToolName(name)) return CursorUserInputTool;
+  if (matchesAny(toolName, ["permission", "approval"])) {
+    return CursorPermissionTool;
+  }
+  if (matchesAny(toolName, ["bash", "shell", "command", "terminal", "exec"])) {
+    return CursorShellTool;
+  }
+  if (
+    matchesAny(toolName, [
+      "file",
+      "read",
+      "write",
+      "edit",
+      "patch",
+      "create",
+      "delete",
+      "view",
+      "open",
+      "save",
+    ])
+  ) {
+    return CursorFileTool;
+  }
+  if (
+    matchesAny(toolName, ["grep", "glob", "search", "find", "list", "ls", "rg"])
+  ) {
+    return CursorSearchTool;
+  }
+  if (matchesAny(toolName, ["plan", "todo"])) return CursorPlanTool;
+
+  return CursorRuntimeTool;
+}
+
+function resolveOpenCodeRenderer(name: string): Renderer {
+  const exact = openCodeRenderers[name];
+  if (exact) return exact;
+  const toolName = name.replace(/^opencode_/, "");
+
+  if (isStructuredUserInputToolName(name)) return OpenCodeUserInputTool;
+  if (matchesAny(toolName, ["permission", "approval"])) {
+    return OpenCodePermissionTool;
+  }
+  if (matchesAny(toolName, ["bash", "shell", "command", "terminal", "exec"])) {
+    return OpenCodeShellTool;
+  }
+  if (
+    matchesAny(toolName, [
+      "file",
+      "read",
+      "write",
+      "edit",
+      "patch",
+      "create",
+      "delete",
+      "view",
+      "open",
+      "save",
+    ])
+  ) {
+    return OpenCodeFileTool;
+  }
+  if (
+    matchesAny(toolName, ["grep", "glob", "search", "find", "list", "ls", "rg"])
+  ) {
+    return OpenCodeSearchTool;
+  }
+  if (matchesAny(toolName, ["plan", "todo"])) return OpenCodePlanTool;
+
+  return OpenCodeRuntimeTool;
+}
+
+function resolveEngineRenderer(name: string): Renderer | undefined {
+  if (name.startsWith("codex_")) {
+    return codexRenderers[name] ?? CodexRuntimeTool;
+  }
+
+  if (name.startsWith("claude_")) {
+    return claudeRenderers[name] ?? ClaudeRuntimeTool;
+  }
+
+  if (name.startsWith("copilot_")) {
+    return copilotRenderers[name] ?? CopilotRuntimeTool;
+  }
+
+  if (name.startsWith("cursor_")) {
+    return resolveCursorRenderer(name);
+  }
+
+  if (name.startsWith("opencode_")) {
+    return resolveOpenCodeRenderer(name);
+  }
+
+  return undefined;
+}
+
+function resolveStructuredUserInputRenderer(name: string) {
+  if (!isStructuredUserInputToolName(name)) return undefined;
+
+  if (name.startsWith("copilot_")) return CopilotUserInputTool;
+  if (name.startsWith("cursor_")) return CursorUserInputTool;
+  if (name.startsWith("opencode_")) return OpenCodeUserInputTool;
+
+  return ClaudeUserInputTool;
+}
+
+function resolveToolNameRenderer(name: string): Renderer | undefined {
+  const exact = renderers[name];
+  if (exact) return exact;
+
+  const structuredUserInput = resolveStructuredUserInputRenderer(name);
+  if (structuredUserInput) return structuredUserInput;
+
+  const engineRenderer = resolveEngineRenderer(name);
+  if (engineRenderer) return engineRenderer;
+
+  return resolveIntegrationFallback(name);
+}
+
 export function resolveRenderer(part: ToolPart): Renderer | undefined {
   if (shouldUseIntegrationGeneric(part)) {
     return IntegrationGenericTool;
   }
 
-  if (part.type === "dynamic-tool") {
-    if (isStructuredUserInputToolName(part.toolName)) {
-      if (part.toolName.startsWith("copilot_")) {
-        return CopilotUserInputTool;
-      }
-
-      return ClaudeUserInputTool;
-    }
-
-    if (part.toolName.startsWith("codex_")) {
-      return codexRenderers[part.toolName] ?? CodexRuntimeTool;
-    }
-
-    if (part.toolName.startsWith("claude_")) {
-      return claudeRenderers[part.toolName] ?? ClaudeRuntimeTool;
-    }
-
-    if (part.toolName.startsWith("copilot_")) {
-      return copilotRenderers[part.toolName] ?? CopilotRuntimeTool;
-    }
-
-    if (part.toolName.startsWith("opencode_")) {
-      return GenericTool;
-    }
-
-    return (
-      renderers[part.toolName] ?? resolveIntegrationFallback(part.toolName)
-    );
-  }
-
-  const staticToolName = part.type.slice(5);
-  if (isStructuredUserInputToolName(staticToolName)) {
-    if (staticToolName.startsWith("copilot_")) {
-      return CopilotUserInputTool;
-    }
-
-    return ClaudeUserInputTool;
-  }
-
-  return renderers[staticToolName];
+  return resolveToolNameRenderer(getToolName(part));
 }

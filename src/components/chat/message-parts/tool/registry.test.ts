@@ -1,8 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  ENGINE_TOOL_RENDERING_COVERAGE,
+  KNOWN_CODEX_RENDERER_TOOL_NAMES,
   KNOWN_CLAUDE_RENDERER_TOOL_NAMES,
   KNOWN_COPILOT_RENDERER_TOOL_NAMES,
+  KNOWN_CURSOR_RENDERER_TOOL_NAMES,
+  KNOWN_OPENCODE_RENDERER_TOOL_NAMES,
   resolveRenderer,
 } from "./registry";
 import { CodexRuntimeTool } from "./renderers/codex-runtime";
@@ -54,6 +58,22 @@ import { CopilotShellTool } from "./renderers/copilot-shell";
 import { CopilotTodoTool } from "./renderers/copilot-todo";
 import { CopilotUserInputTool } from "./renderers/copilot-user-input";
 import { CopilotWebFetchTool } from "./renderers/copilot-web";
+import {
+  CursorFileTool,
+  CursorPermissionTool,
+  CursorPlanTool,
+  CursorRuntimeTool,
+  CursorSearchTool,
+  CursorShellTool,
+  CursorUserInputTool,
+  OpenCodeFileTool,
+  OpenCodePermissionTool,
+  OpenCodePlanTool,
+  OpenCodeRuntimeTool,
+  OpenCodeSearchTool,
+  OpenCodeShellTool,
+  OpenCodeUserInputTool,
+} from "./renderers/external-runtime";
 import { GenericTool } from "./generic";
 import { SkillTool } from "./renderers/skill";
 import { GenerateVideoTool } from "./renderers/generate-video";
@@ -1053,7 +1073,7 @@ describe("resolveRenderer", () => {
     expect(renderer).toBe(CopilotUserInputTool);
   });
 
-  it("uses the structured user input renderer for OpenCode questions", () => {
+  it("uses the OpenCode user input renderer for OpenCode questions", () => {
     const renderer = resolveRenderer({
       approval: { id: "approval-1" },
       input: { prompt: "Need more detail?" },
@@ -1063,10 +1083,10 @@ describe("resolveRenderer", () => {
       type: "dynamic-tool",
     } as any);
 
-    expect(renderer).toBe(ClaudeUserInputTool);
+    expect(renderer).toBe(OpenCodeUserInputTool);
   });
 
-  it("uses the generic renderer for OpenCode permissions", () => {
+  it("uses the OpenCode shell renderer for OpenCode shell approvals", () => {
     const renderer = resolveRenderer({
       approval: { id: "approval-1" },
       input: { command: "bun test" },
@@ -1076,7 +1096,99 @@ describe("resolveRenderer", () => {
       type: "dynamic-tool",
     } as any);
 
-    expect(renderer).toBe(GenericTool);
+    expect(renderer).toBe(OpenCodeShellTool);
+  });
+
+  it("uses Cursor engine renderers by tool category", () => {
+    const cases = [
+      ["cursor_bash", CursorShellTool],
+      ["cursor_read_file", CursorFileTool],
+      ["cursor_search", CursorSearchTool],
+      ["cursor_update_plan", CursorPlanTool],
+      ["cursor_ask_question", CursorUserInputTool],
+      ["cursor_permission", CursorPermissionTool],
+    ] as const;
+
+    for (const [toolName, expected] of cases) {
+      const renderer = resolveRenderer({
+        approval:
+          toolName === "cursor_permission" || toolName === "cursor_ask_question"
+            ? { id: `approval-${toolName}` }
+            : undefined,
+        input: {
+          command: "bun test",
+          path: "src/index.ts",
+          prompt: "Continue?",
+        },
+        state:
+          toolName === "cursor_permission" || toolName === "cursor_ask_question"
+            ? "approval-requested"
+            : "output-available",
+        toolCallId: `tool-call-${toolName}`,
+        toolName,
+        type: "dynamic-tool",
+      } as any);
+
+      expect(renderer).toBe(expected);
+    }
+  });
+
+  it("uses OpenCode engine renderers by tool category", () => {
+    const cases = [
+      ["opencode_bash", OpenCodeShellTool],
+      ["opencode_read", OpenCodeFileTool],
+      ["opencode_grep", OpenCodeSearchTool],
+      ["opencode_update_plan", OpenCodePlanTool],
+      ["opencode_ask_question", OpenCodeUserInputTool],
+      ["opencode_permission", OpenCodePermissionTool],
+    ] as const;
+
+    for (const [toolName, expected] of cases) {
+      const renderer = resolveRenderer({
+        approval:
+          toolName === "opencode_permission" ||
+          toolName === "opencode_ask_question"
+            ? { id: `approval-${toolName}` }
+            : undefined,
+        input: {
+          command: "bun test",
+          path: "src/index.ts",
+          prompt: "Continue?",
+        },
+        state:
+          toolName === "opencode_permission" ||
+          toolName === "opencode_ask_question"
+            ? "approval-requested"
+            : "output-available",
+        toolCallId: `tool-call-${toolName}`,
+        toolName,
+        type: "dynamic-tool",
+      } as any);
+
+      expect(renderer).toBe(expected);
+    }
+  });
+
+  it("uses Cursor and OpenCode runtime fallbacks for unknown engine tools", () => {
+    const cursorRenderer = resolveRenderer({
+      input: { foo: "bar" },
+      output: { ok: true },
+      state: "output-available",
+      toolCallId: "tool-call-cursor-unknown",
+      toolName: "cursor_unknown_future_tool",
+      type: "dynamic-tool",
+    } as any);
+    const openCodeRenderer = resolveRenderer({
+      input: { foo: "bar" },
+      output: { ok: true },
+      state: "output-available",
+      toolCallId: "tool-call-opencode-unknown",
+      toolName: "opencode_unknown_future_tool",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(cursorRenderer).toBe(CursorRuntimeTool);
+    expect(openCodeRenderer).toBe(OpenCodeRuntimeTool);
   });
 
   it("uses the CopilotSessionUtilityTool renderer for copilot_report_intent", () => {
@@ -1155,6 +1267,23 @@ describe("resolveRenderer", () => {
     );
   });
 
+  it("tracks the full known Codex renderer inventory", () => {
+    expect(KNOWN_CODEX_RENDERER_TOOL_NAMES).toEqual(
+      [
+        "codex_collab_agent",
+        "codex_command_execution",
+        "codex_context_compaction",
+        "codex_file_change",
+        "codex_image_view",
+        "codex_mcp_tool_call",
+        "codex_plan",
+        "codex_review_mode",
+        "codex_user_input",
+        "codex_web_search",
+      ].sort(),
+    );
+  });
+
   it("tracks the full known Copilot renderer inventory", () => {
     const cliToolNames = [
       "apply_patch",
@@ -1206,5 +1335,133 @@ describe("resolveRenderer", () => {
     expect(KNOWN_COPILOT_RENDERER_TOOL_NAMES).toEqual(
       [...new Set([...cliToolNames, ...runtimeBridgeToolNames])].sort(),
     );
+  });
+
+  it("tracks the known Cursor renderer inventory", () => {
+    expect(KNOWN_CURSOR_RENDERER_TOOL_NAMES).toEqual(
+      [
+        "cursor_apply_patch",
+        "cursor_approval",
+        "cursor_ask_question",
+        "cursor_ask_user",
+        "cursor_ask_user_question",
+        "cursor_bash",
+        "cursor_command",
+        "cursor_create_file",
+        "cursor_create_plan",
+        "cursor_delete_file",
+        "cursor_edit",
+        "cursor_edit_file",
+        "cursor_execute_command",
+        "cursor_file",
+        "cursor_file_edit",
+        "cursor_find",
+        "cursor_glob",
+        "cursor_grep",
+        "cursor_list",
+        "cursor_list_dir",
+        "cursor_list_files",
+        "cursor_ls",
+        "cursor_permission",
+        "cursor_plan",
+        "cursor_read",
+        "cursor_read_file",
+        "cursor_request_permission",
+        "cursor_request_user_input",
+        "cursor_rg",
+        "cursor_run_command",
+        "cursor_search",
+        "cursor_session",
+        "cursor_shell",
+        "cursor_terminal",
+        "cursor_todo",
+        "cursor_todo_read",
+        "cursor_todo_write",
+        "cursor_tool_permission",
+        "cursor_update_file",
+        "cursor_update_plan",
+        "cursor_update_todo",
+        "cursor_view",
+        "cursor_write",
+        "cursor_write_file",
+      ].sort(),
+    );
+  });
+
+  it("tracks the known OpenCode renderer inventory", () => {
+    expect(KNOWN_OPENCODE_RENDERER_TOOL_NAMES).toEqual(
+      [
+        "opencode_apply_patch",
+        "opencode_approval",
+        "opencode_ask_question",
+        "opencode_ask_user",
+        "opencode_ask_user_question",
+        "opencode_bash",
+        "opencode_command",
+        "opencode_create_file",
+        "opencode_create_plan",
+        "opencode_delete_file",
+        "opencode_edit",
+        "opencode_edit_file",
+        "opencode_execute",
+        "opencode_execute_command",
+        "opencode_file",
+        "opencode_file_edit",
+        "opencode_find",
+        "opencode_glob",
+        "opencode_grep",
+        "opencode_list",
+        "opencode_list_dir",
+        "opencode_list_files",
+        "opencode_ls",
+        "opencode_permission",
+        "opencode_plan",
+        "opencode_read",
+        "opencode_read_file",
+        "opencode_request_permission",
+        "opencode_request_user_input",
+        "opencode_rg",
+        "opencode_run_command",
+        "opencode_search",
+        "opencode_session",
+        "opencode_shell",
+        "opencode_terminal",
+        "opencode_todo",
+        "opencode_todo_read",
+        "opencode_todo_write",
+        "opencode_tool_permission",
+        "opencode_update_file",
+        "opencode_update_plan",
+        "opencode_update_todo",
+        "opencode_view",
+        "opencode_write",
+        "opencode_write_file",
+      ].sort(),
+    );
+  });
+
+  it("resolves every covered engine tool to an intentional non-generic renderer", () => {
+    for (const toolNames of Object.values(ENGINE_TOOL_RENDERING_COVERAGE)) {
+      for (const toolName of toolNames) {
+        const renderer = resolveRenderer({
+          approval:
+            toolName.includes("ask") || toolName.includes("permission")
+              ? { id: `approval-${toolName}` }
+              : undefined,
+          input: { command: "bun test", path: "src/index.ts", prompt: "Go?" },
+          output: { ok: true },
+          state:
+            toolName.includes("ask") || toolName.includes("permission")
+              ? "approval-requested"
+              : "output-available",
+          toolCallId: `tool-call-${toolName}`,
+          toolName,
+          type: "dynamic-tool",
+        } as any);
+
+        expect(renderer).toBeDefined();
+        expect(renderer).not.toBe(GenericTool);
+      }
+    }
   });
 });
