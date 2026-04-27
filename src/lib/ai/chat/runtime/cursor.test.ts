@@ -1,14 +1,20 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 
 const ensureThread = mock(async () => ({ created: true }));
+const clearActiveStream = mock(() => {});
 const loadThread = mock(async () => null);
 const loadThreadMessages = mock(async () => []);
+const setActiveMessage = mock(async () => {});
 const setActiveStream = mock(() => {});
 const setThreadStatus = mock(() => {});
 const upsertMessage = mock((_threadId: string, message: unknown) => message);
+const updateCopilotThreadState = mock(() => {});
 const updateCursorThreadState = mock(() => {});
+const updateMessageMetadata = mock(async () => {});
 const updateOpenCodeThreadState = mock(() => {});
 const updateThreadChatSettings = mock(async () => {});
+const updateThreadRepoState = mock(() => {});
+const updateThreadTitle = mock(() => {});
 const loadThreadSessionSnapshot = mock(async (threadId: string) => ({
   activeRunId: "run-1",
   chatEngine: "cursor" as const,
@@ -28,8 +34,13 @@ const resumeExistingStream = mock(
     }),
 );
 const getToolPermissionMode = mock(async () => "default");
+const getToolApprovalPolicies = mock(async () => ({}));
 const getWorkspaceRootPath = mock(async () => "/tmp/workspace");
 const applyCursorSessionConfig = mock(async () => {});
+let latestCursorSessionOptions: any = null;
+const beginThreadRepoCheckpointRun = mock(async () => true);
+const clearThreadRepoCheckpointRun = mock(async () => {});
+const finalizeThreadRepoCheckpointRun = mock(async () => "checkpoint-1");
 const startCursorAcpSession = mock(async () => ({
   client: {
     close: mock(() => {}),
@@ -44,18 +55,27 @@ mock.module("server-only", () => ({}));
 mock.module("@/lib/ai/chat/engines/cursor-acp", () => ({
   applyCursorSessionConfig,
   buildCursorThreadState: mock((state: unknown) => state),
-  startCursorAcpSession,
+  startCursorAcpSession: (options: unknown) => {
+    latestCursorSessionOptions = options;
+    return startCursorAcpSession(options);
+  },
 }));
 
 const persistenceModuleMock = () => ({
+  clearActiveStream,
   ensureThread,
   loadThread,
   loadThreadMessages,
+  setActiveMessage,
   setActiveStream,
   setThreadStatus,
+  updateCopilotThreadState,
   updateCursorThreadState: updateCursorThreadState,
+  updateMessageMetadata,
   updateOpenCodeThreadState,
   updateThreadChatSettings,
+  updateThreadRepoState,
+  updateThreadTitle,
   upsertMessage,
 });
 
@@ -64,6 +84,9 @@ mock.module("../persistence.ts", persistenceModuleMock);
 mock.module("@/lib/ai/chat/persistence", persistenceModuleMock);
 
 mock.module("../repo-checkpoints", () => ({
+  beginThreadRepoCheckpointRun,
+  clearThreadRepoCheckpointRun,
+  finalizeThreadRepoCheckpointRun,
   getThreadCheckpointAnchorMessageId: mock(() => null),
 }));
 
@@ -87,6 +110,7 @@ mock.module("@/lib/streams", () => ({
 }));
 
 mock.module("./workspace", () => ({
+  getToolApprovalPolicies,
   getToolPermissionMode,
   getWorkspaceRootPath,
 }));
@@ -106,21 +130,42 @@ function createDeferred<T>() {
 describe("runCursorThreadChat", () => {
   beforeEach(() => {
     ensureThread.mockClear();
+    clearActiveStream.mockClear();
     loadThread.mockClear();
     loadThreadMessages.mockClear();
+    setActiveMessage.mockClear();
     setActiveStream.mockClear();
     setThreadStatus.mockClear();
     upsertMessage.mockClear();
+    updateCopilotThreadState.mockClear();
     updateCursorThreadState.mockClear();
+    updateMessageMetadata.mockClear();
     updateOpenCodeThreadState.mockClear();
     updateThreadChatSettings.mockClear();
+    updateThreadRepoState.mockClear();
+    updateThreadTitle.mockClear();
     loadThreadSessionSnapshot.mockClear();
     createNewResumableStream.mockClear();
     resumeExistingStream.mockClear();
     getToolPermissionMode.mockClear();
+    getToolApprovalPolicies.mockClear();
     getWorkspaceRootPath.mockClear();
     applyCursorSessionConfig.mockClear();
+    beginThreadRepoCheckpointRun.mockClear();
+    clearThreadRepoCheckpointRun.mockClear();
+    finalizeThreadRepoCheckpointRun.mockClear();
     startCursorAcpSession.mockClear();
+    getToolPermissionMode.mockImplementation(async () => "default");
+    getWorkspaceRootPath.mockImplementation(async () => "/tmp/workspace");
+    startCursorAcpSession.mockImplementation(async () => ({
+      client: {
+        close: mock(() => {}),
+        prompt: mock(() => new Promise(() => {})),
+      },
+      configOptions: {},
+      sessionId: "cursor-session-1",
+    }));
+    latestCursorSessionOptions = null;
   });
 
   it("shows a visible startup label before the Cursor session is ready", async () => {
@@ -170,5 +215,104 @@ describe("runCursorThreadChat", () => {
 
     const response = await responsePromise;
     expect(response.headers.get("Content-Type")).toBe("text/event-stream");
+  });
+
+  it("anchors Cursor runs to the resolved workspace and checkpoint lifecycle", async () => {
+    const prompt = mock(async () => {});
+    startCursorAcpSession.mockImplementation(async () => ({
+      client: {
+        close: mock(() => {}),
+        prompt,
+      },
+      configOptions: {},
+      sessionId: "cursor-session-1",
+    }));
+
+    const response = await runCursorThreadChat(
+      {
+        message: {
+          id: "user-1",
+          metadata: {},
+          parts: [{ text: "Implement the change", type: "text" }],
+          role: "user",
+        },
+        modelId: "gpt-5.2",
+        threadId: "thread-1",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      } as any,
+      null,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(response.headers.get("Content-Type")).toBe("text/event-stream");
+    expect(getWorkspaceRootPath).toHaveBeenCalledWith(
+      "workspace-1",
+      "user-1",
+      "thread-1",
+    );
+    expect(beginThreadRepoCheckpointRun).toHaveBeenCalledWith({
+      projectPath: "/tmp/workspace",
+      runId: expect.any(String),
+      thread: null,
+    });
+    expect(finalizeThreadRepoCheckpointRun).toHaveBeenCalledWith({
+      assistantMessageId: expect.any(String),
+      runId: expect.any(String),
+      threadId: "thread-1",
+    });
+    expect(clearThreadRepoCheckpointRun).not.toHaveBeenCalled();
+    expect(startCursorAcpSession).toHaveBeenCalledWith(
+      expect.objectContaining({ cwd: "/tmp/workspace" }),
+    );
+    expect(updateCursorThreadState).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({ cwd: "/tmp/workspace" }),
+    );
+  });
+
+  it("auto-selects Cursor allow permission option in full mode", async () => {
+    getToolPermissionMode.mockImplementation(async () => "full");
+
+    await runCursorThreadChat(
+      {
+        message: {
+          id: "user-1",
+          metadata: {},
+          parts: [{ text: "Run tests", type: "text" }],
+          role: "user",
+        },
+        modelId: "gpt-5.2",
+        threadId: "thread-1",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      } as any,
+      null,
+    );
+
+    const result = await latestCursorSessionOptions.onRequestPermission({
+      options: [
+        { kind: "reject", optionId: "deny" },
+        { kind: "allow_once", optionId: "allow" },
+      ],
+      toolCall: {
+        kind: "shell",
+        title: "Bash",
+        toolCallId: "tool-1",
+      },
+    });
+
+    expect(result).toEqual({
+      outcome: {
+        outcome: "selected",
+        optionId: "allow",
+      },
+    });
+    expect(setThreadStatus).not.toHaveBeenCalledWith(
+      "thread-1",
+      "awaiting_approval",
+    );
   });
 });

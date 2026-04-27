@@ -4,12 +4,17 @@ const ensureThread = mock(async () => ({ created: true }));
 const clearActiveStream = mock(() => {});
 const loadThread = mock(async () => null);
 const loadThreadMessages = mock(async () => []);
+const setActiveMessage = mock(async () => {});
 const setActiveStream = mock(() => {});
 const setThreadStatus = mock(() => {});
 const updateCodexThreadState = mock(() => {});
+const updateCopilotThreadState = mock(() => {});
 const updateCursorThreadState = mock(() => {});
+const updateMessageMetadata = mock(async () => {});
 const updateOpenCodeThreadState = mock(() => {});
 const updateThreadChatSettings = mock(async () => {});
+const updateThreadRepoState = mock(() => {});
+const updateThreadTitle = mock(() => {});
 const upsertMessage = mock((_threadId: string, message: unknown) => message);
 const loadThreadSessionSnapshot = mock(async (threadId: string) => ({
   activeRunId: "run-1",
@@ -33,7 +38,11 @@ const resumeExistingStream = mock(
     }),
 );
 const getToolPermissionMode = mock(async () => "default");
+const getToolApprovalPolicies = mock(async () => ({}));
 const getWorkspaceRootPath = mock(async () => "/tmp/workspace");
+const beginThreadRepoCheckpointRun = mock(async () => true);
+const clearThreadRepoCheckpointRun = mock(async () => {});
+const finalizeThreadRepoCheckpointRun = mock(async () => "checkpoint-1");
 const startOpenCodeSession = mock(async () => ({
   client: {
     event: {
@@ -45,6 +54,7 @@ const startOpenCodeSession = mock(async () => ({
       reply: mock(async () => {}),
     },
     question: {
+      reject: mock(async () => {}),
       reply: mock(async () => {}),
     },
     session: {
@@ -74,12 +84,17 @@ const persistenceModuleMock = () => ({
   ensureThread,
   loadThread,
   loadThreadMessages,
+  setActiveMessage,
   setActiveStream,
   setThreadStatus,
   updateCodexThreadState,
+  updateCopilotThreadState,
   updateCursorThreadState,
+  updateMessageMetadata,
   updateOpenCodeThreadState,
   updateThreadChatSettings,
+  updateThreadRepoState,
+  updateThreadTitle,
   upsertMessage,
 });
 
@@ -88,6 +103,9 @@ mock.module("../persistence.ts", persistenceModuleMock);
 mock.module("@/lib/ai/chat/persistence", persistenceModuleMock);
 
 mock.module("../repo-checkpoints", () => ({
+  beginThreadRepoCheckpointRun,
+  clearThreadRepoCheckpointRun,
+  finalizeThreadRepoCheckpointRun,
   getThreadCheckpointAnchorMessageId: mock(() => null),
 }));
 
@@ -109,6 +127,7 @@ mock.module("@/lib/streams", () => ({
 }));
 
 mock.module("./workspace", () => ({
+  getToolApprovalPolicies,
   getToolPermissionMode,
   getWorkspaceRootPath,
 }));
@@ -172,20 +191,55 @@ describe("runOpenCodeThreadChat", () => {
     clearActiveStream.mockClear();
     loadThread.mockClear();
     loadThreadMessages.mockClear();
+    setActiveMessage.mockClear();
     setActiveStream.mockClear();
     setThreadStatus.mockClear();
     updateCodexThreadState.mockClear();
+    updateCopilotThreadState.mockClear();
     updateCursorThreadState.mockClear();
+    updateMessageMetadata.mockClear();
     updateOpenCodeThreadState.mockClear();
     updateThreadChatSettings.mockClear();
+    updateThreadRepoState.mockClear();
+    updateThreadTitle.mockClear();
     upsertMessage.mockClear();
     loadThreadSessionSnapshot.mockClear();
     serializeThreadStreamEvent.mockClear();
     createNewResumableStream.mockClear();
     resumeExistingStream.mockClear();
     getToolPermissionMode.mockClear();
+    getToolApprovalPolicies.mockClear();
     getWorkspaceRootPath.mockClear();
+    beginThreadRepoCheckpointRun.mockClear();
+    clearThreadRepoCheckpointRun.mockClear();
+    finalizeThreadRepoCheckpointRun.mockClear();
     startOpenCodeSession.mockClear();
+    getToolPermissionMode.mockImplementation(async () => "default");
+    getWorkspaceRootPath.mockImplementation(async () => "/tmp/workspace");
+    startOpenCodeSession.mockImplementation(async () => ({
+      client: {
+        event: {
+          subscribe: mock(async () => ({
+            stream: (async function* () {})(),
+          })),
+        },
+        permission: {
+          reply: mock(async () => {}),
+        },
+        question: {
+          reject: mock(async () => {}),
+          reply: mock(async () => {}),
+        },
+        session: {
+          abort: mock(async () => {}),
+          promptAsync: mock(async () => {}),
+        },
+      },
+      server: {
+        close: mock(() => {}),
+      },
+      sessionId: "opencode-session-1",
+    }));
   });
 
   it("shows a visible startup label before the OpenCode session is ready", async () => {
@@ -305,6 +359,7 @@ describe("runOpenCodeThreadChat", () => {
       } as any,
       null,
     );
+    await new Promise((resolve) => setTimeout(resolve, 0));
     const errorMessage = upsertMessage.mock.calls.find(
       (call: unknown[]) => (call[1] as any)?.metadata?.status === "error",
     )?.[1];
@@ -378,6 +433,156 @@ describe("runOpenCodeThreadChat", () => {
 
     expect(setThreadStatus).toHaveBeenLastCalledWith("thread-stream-1", "idle");
     expect(clearActiveStream).toHaveBeenCalledWith("thread-stream-1");
+  });
+
+  it("anchors OpenCode runs to the resolved workspace and finalizes checkpoints on idle", async () => {
+    const events = createEventQueue();
+    startOpenCodeSession.mockImplementation(async () => ({
+      client: {
+        event: {
+          subscribe: mock(async () => ({
+            stream: events.stream,
+          })),
+        },
+        permission: {
+          reply: mock(async () => {}),
+        },
+        question: {
+          reject: mock(async () => {}),
+          reply: mock(async () => {}),
+        },
+        session: {
+          abort: mock(async () => {}),
+          promptAsync: mock(async () => {}),
+        },
+      },
+      server: {
+        close: mock(() => {}),
+      },
+      sessionId: "opencode-session-1",
+    }));
+
+    const response = await runOpenCodeThreadChat(
+      {
+        message: {
+          id: "user-checkpoint-1",
+          metadata: {},
+          parts: [{ text: "Implement the change", type: "text" }],
+          role: "user",
+        },
+        modelId: "openai/gpt-5.2",
+        threadId: "thread-checkpoint-1",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      } as any,
+      null,
+    );
+
+    events.push({
+      properties: { sessionID: "opencode-session-1" },
+      type: "session.idle",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(response.headers.get("Content-Type")).toBe("text/event-stream");
+    expect(beginThreadRepoCheckpointRun).toHaveBeenCalledWith({
+      projectPath: "/tmp/workspace",
+      runId: expect.any(String),
+      thread: null,
+    });
+    expect(finalizeThreadRepoCheckpointRun).toHaveBeenCalledWith({
+      assistantMessageId: expect.any(String),
+      runId: expect.any(String),
+      threadId: "thread-checkpoint-1",
+    });
+    expect(clearThreadRepoCheckpointRun).not.toHaveBeenCalled();
+    expect(startOpenCodeSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: "/tmp/workspace",
+        fullAccess: false,
+      }),
+    );
+    expect(updateOpenCodeThreadState).toHaveBeenCalledWith(
+      "thread-checkpoint-1",
+      expect.objectContaining({ cwd: "/tmp/workspace" }),
+    );
+
+    events.close();
+  });
+
+  it("maps full permission mode to OpenCode fullAccess and auto-approval", async () => {
+    const events = createEventQueue();
+    const permissionReply = mock(async () => {});
+    getToolPermissionMode.mockImplementation(async () => "full");
+    startOpenCodeSession.mockImplementation(async () => ({
+      client: {
+        event: {
+          subscribe: mock(async () => ({
+            stream: events.stream,
+          })),
+        },
+        permission: {
+          reply: permissionReply,
+        },
+        question: {
+          reject: mock(async () => {}),
+          reply: mock(async () => {}),
+        },
+        session: {
+          abort: mock(async () => {}),
+          promptAsync: mock(async () => {}),
+        },
+      },
+      server: {
+        close: mock(() => {}),
+      },
+      sessionId: "opencode-session-1",
+    }));
+
+    await runOpenCodeThreadChat(
+      {
+        message: {
+          id: "user-permission-1",
+          metadata: {},
+          parts: [{ text: "Run tests", type: "text" }],
+          role: "user",
+        },
+        modelId: "openai/gpt-5.2",
+        threadId: "thread-permission-1",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      } as any,
+      null,
+    );
+
+    events.push({
+      properties: {
+        always: [],
+        id: "permission-1",
+        metadata: { command: "bun test" },
+        patterns: ["bun test"],
+        permission: "shell",
+        sessionID: "opencode-session-1",
+      },
+      type: "permission.asked",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(startOpenCodeSession).toHaveBeenCalledWith(
+      expect.objectContaining({ fullAccess: true }),
+    );
+    expect(permissionReply).toHaveBeenCalledWith({
+      reply: "allow",
+      requestID: "permission-1",
+    });
+    expect(setThreadStatus).not.toHaveBeenCalledWith(
+      "thread-permission-1",
+      "awaiting_approval",
+    );
+
+    events.close();
   });
 
   it("persists streaming text deltas before full part updates arrive", async () => {

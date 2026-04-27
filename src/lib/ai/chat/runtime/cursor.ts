@@ -15,7 +15,6 @@ import {
   mergeThreadMessageMetadata,
   type ThreadUIMessage,
 } from "@/lib/ai/messages/types";
-import { serializeComposerContextToText } from "@/lib/composer-context/serialize";
 import { createLogger } from "@/lib/logger";
 import { normalizeThreadMode } from "@/lib/plan";
 import {
@@ -48,8 +47,16 @@ import {
   resolveCursorPromptResponse,
   type CursorPromptResponse,
 } from "./cursor-event-helpers";
-import { buildPlanModePromptPreamble } from "./plan-mode-instructions";
-import { getWorkspaceRootPath } from "./workspace";
+import {
+  beginExternalRuntimeRepoCheckpoint,
+  buildExternalRuntimePromptText,
+  clearExternalRuntimeRepoCheckpoint,
+  finalizeExternalRuntimeRepoCheckpoint,
+  shouldAutoApproveExternalPermission,
+  shouldAutoDenyExternalPermission,
+} from "./external-runtime";
+import { getToolPermissionMode, getWorkspaceRootPath } from "./workspace";
+import type { PermissionMode } from "@/server/db/enums";
 
 type ThreadEventChannel = Awaited<ReturnType<typeof createThreadEventChannel>>;
 
@@ -114,6 +121,7 @@ type ActiveCursorRunControl = {
   assistantId: string;
   eventChannel: ThreadEventChannel;
   finished: boolean;
+  permissionMode: PermissionMode;
   pendingApprovals: Map<string, PendingCursorApproval>;
   pendingQuestions: Map<string, PendingCursorQuestion>;
   promptPromise: Promise<unknown>;
@@ -121,6 +129,7 @@ type ActiveCursorRunControl = {
   session: Awaited<ReturnType<typeof startCursorAcpSession>>;
   state: CursorMirrorState;
   threadId: string;
+  toolsEnabled: boolean;
   userId: string;
   workspaceId: string;
 };
@@ -304,6 +313,7 @@ async function emitAssistantMessageUpdate(
   status: "pending" | "streaming" | "completed" | "error" | "cancelled",
   finishReason?: string | null,
   errorMessage?: string | null,
+  options?: { repoCheckpointId?: string | null },
 ) {
   persist.upsertMessage(state.threadId, {
     id: state.assistantId,
@@ -316,8 +326,12 @@ async function emitAssistantMessageUpdate(
         requestedModelId: state.requestedModelId ?? undefined,
         responseModelId: state.responseModelId ?? undefined,
       },
+      ...(options?.repoCheckpointId
+        ? { repoCheckpointId: options.repoCheckpointId }
+        : {}),
       runId,
       status,
+      statusLabel: null,
     },
     parts: buildAssistantParts(state),
     role: "assistant",
@@ -553,6 +567,14 @@ async function finishCursorRun(
           "Cursor run failed.",
         )
       : (input.errorMessage ?? null);
+  const repoCheckpointId =
+    input.status === "completed" && input.threadStatus === "idle"
+      ? await finalizeExternalRuntimeRepoCheckpoint({
+          assistantMessageId: control.assistantId,
+          runId: control.runId,
+          threadId: control.threadId,
+        })
+      : (await clearExternalRuntimeRepoCheckpoint(control.runId), null);
   persist.clearActiveStream(control.threadId);
   persist.setThreadStatus(control.threadId, input.threadStatus);
   await emitAssistantMessageUpdate(
@@ -561,6 +583,7 @@ async function finishCursorRun(
     input.status,
     input.finishReason,
     errorMessage,
+    { repoCheckpointId },
   );
   await emitThreadSnapshot(
     control.threadId,
@@ -770,12 +793,29 @@ function buildCursorQuestionInput(params: {
 async function handleCursorPermissionRequest(
   control: ActiveCursorRunControl,
   request: CursorPermissionRequest,
-  options?: { interactive: boolean },
+  options?: { interactive: boolean; permissionMode: PermissionMode },
 ) {
-  if (options?.interactive === false) {
-    throw new Error(
-      "Cursor requested an interactive approval step during a background run.",
-    );
+  const permissionMode = options?.permissionMode ?? control.permissionMode;
+  const toolsEnabled = options?.interactive !== false && control.toolsEnabled;
+
+  if (
+    shouldAutoApproveExternalPermission({
+      permissionMode,
+      toolsEnabled,
+    }) ||
+    shouldAutoDenyExternalPermission({ toolsEnabled })
+  ) {
+    const approved = permissionMode === "full" && toolsEnabled;
+    const optionId = normalizeCursorPermissionOptionId(request, approved);
+    if (!optionId) {
+      throw new Error("Cursor approval options were missing.");
+    }
+    return {
+      outcome: {
+        outcome: "selected",
+        optionId,
+      },
+    };
   }
 
   const toolCallId = request.toolCall?.toolCallId ?? crypto.randomUUID();
@@ -957,50 +997,6 @@ async function handleCursorExtNotification(
   await emitAssistantMessageUpdate(control.state, control.runId, "streaming");
 }
 
-function buildCursorPromptText(input: {
-  message: ThreadUIMessage;
-  threadMode: "chat" | "plan";
-  transcript: ThreadUIMessage[];
-}) {
-  const history = input.transcript
-    .map((message) => {
-      const text = message.parts
-        .filter(
-          (
-            part,
-          ): part is Extract<
-            ThreadUIMessage["parts"][number],
-            { type: "text" }
-          > => part.type === "text",
-        )
-        .map((part) => part.text)
-        .join("\n")
-        .trim();
-      if (!text) {
-        return null;
-      }
-      return `${message.role.toUpperCase()}:\n${text}`;
-    })
-    .filter(Boolean)
-    .join("\n\n");
-
-  const latestText = input.message.parts
-    .filter(
-      (
-        part,
-      ): part is Extract<ThreadUIMessage["parts"][number], { type: "text" }> =>
-        part.type === "text",
-    )
-    .map((part) => part.text)
-    .join("\n")
-    .trim();
-
-  const body = [history, latestText].filter(Boolean).join("\n\n");
-  return input.threadMode === "plan"
-    ? `${buildPlanModePromptPreamble()}\n\n${body}`
-    : body;
-}
-
 export async function stopCursorThreadRun(
   request: ThreadChatRequest,
   existingThread: Awaited<ReturnType<typeof persist.loadThread>>,
@@ -1097,8 +1093,11 @@ export async function runCursorThreadChat(
   }
 
   const workspaceRoot =
-    (await getWorkspaceRootPath(request.userId, request.workspaceId)) ??
-    process.cwd();
+    (await getWorkspaceRootPath(
+      request.workspaceId,
+      request.userId,
+      request.threadId,
+    )) ?? process.cwd();
   const allRecords = await persist.loadThreadMessages(request.threadId);
   const checkpointAnchorMessageId =
     getThreadCheckpointAnchorMessageId(existingThread);
@@ -1162,6 +1161,17 @@ export async function runCursorThreadChat(
   persist.upsertMessage(request.threadId, placeholder);
   persist.setActiveStream(request.threadId, runId);
   persist.setThreadStatus(request.threadId, "streaming");
+  await persist.updateThreadChatSettings(request.threadId, {
+    engine: "cursor",
+    modelId: request.modelId ?? null,
+    mode: threadMode,
+    reasoningEffort: request.reasoningEffort ?? null,
+  });
+  await beginExternalRuntimeRepoCheckpoint({
+    projectPath: workspaceRoot,
+    runId,
+    thread: existingThread,
+  });
   await emitThreadSnapshot(request.threadId, eventChannel, runId);
   eventChannel.emit({
     message: placeholder,
@@ -1179,57 +1189,74 @@ export async function runCursorThreadChat(
     workspaceId: request.workspaceId,
   });
 
-  const resumeSessionId = getCursorThreadState(
-    existingThread?.chatEngineState,
-  )?.sessionId;
-  const session = await startCursorAcpSession({
-    cwd: workspaceRoot,
-    onExtNotification: (extRequest) => {
-      const control = activeCursorRunControls.get(runId);
-      if (!control) {
-        return;
-      }
-      void handleCursorExtNotification(control, extRequest);
-    },
-    onExtRequest: async (extRequest) => {
-      const control = activeCursorRunControls.get(runId);
-      if (!control) {
-        throw new Error("Cursor run is no longer active.");
-      }
-      return await handleCursorExtRequest(control, extRequest, {
-        interactive: request.toolsEnabled !== false,
-      });
-    },
-    onProcessExit: (error) => {
-      const control = activeCursorRunControls.get(runId);
-      if (!control || control.finished) {
-        return;
-      }
-      void finishCursorRun(control, {
-        errorMessage: error.message,
-        finishReason: null,
-        status: "error",
-        threadStatus: "idle",
-      });
-    },
-    onRequestPermission: async (permissionRequest) => {
-      const control = activeCursorRunControls.get(runId);
-      if (!control) {
-        throw new Error("Cursor run is no longer active.");
-      }
-      return await handleCursorPermissionRequest(control, permissionRequest, {
-        interactive: request.toolsEnabled !== false,
-      });
-    },
-    onSessionUpdate: (notification) => {
-      const control = activeCursorRunControls.get(runId);
-      if (!control) {
-        return;
-      }
-      void handleCursorSessionUpdate(control, notification);
-    },
-    resumeSessionId,
-  });
+  const toolsEnabled = request.toolsEnabled !== false;
+  let permissionMode: PermissionMode;
+  let session: Awaited<ReturnType<typeof startCursorAcpSession>>;
+  try {
+    permissionMode = await getToolPermissionMode(
+      request.userId,
+      request.workspaceId,
+      request.threadId,
+    );
+    const resumeSessionId = getCursorThreadState(
+      existingThread?.chatEngineState,
+    )?.sessionId;
+    session = await startCursorAcpSession({
+      cwd: workspaceRoot,
+      onExtNotification: (extRequest) => {
+        const control = activeCursorRunControls.get(runId);
+        if (!control) {
+          return;
+        }
+        void handleCursorExtNotification(control, extRequest);
+      },
+      onExtRequest: async (extRequest) => {
+        const control = activeCursorRunControls.get(runId);
+        if (!control) {
+          throw new Error("Cursor run is no longer active.");
+        }
+        return await handleCursorExtRequest(control, extRequest, {
+          interactive: toolsEnabled,
+        });
+      },
+      onProcessExit: (error) => {
+        const control = activeCursorRunControls.get(runId);
+        if (!control || control.finished) {
+          return;
+        }
+        void finishCursorRun(control, {
+          errorMessage: error.message,
+          finishReason: null,
+          status: "error",
+          threadStatus: "idle",
+        });
+      },
+      onRequestPermission: async (permissionRequest) => {
+        const control = activeCursorRunControls.get(runId);
+        if (!control) {
+          throw new Error("Cursor run is no longer active.");
+        }
+        return await handleCursorPermissionRequest(control, permissionRequest, {
+          interactive: toolsEnabled,
+          permissionMode,
+        });
+      },
+      onSessionUpdate: (notification) => {
+        const control = activeCursorRunControls.get(runId);
+        if (!control) {
+          return;
+        }
+        void handleCursorSessionUpdate(control, notification);
+      },
+      resumeSessionId,
+    });
+  } catch (error) {
+    await clearExternalRuntimeRepoCheckpoint(runId);
+    persist.clearActiveStream(request.threadId);
+    persist.setThreadStatus(request.threadId, "idle");
+    eventChannel.close();
+    throw error;
+  }
   logRuntimeTiming("session_start_ready", timingStartedAt, {
     runId,
     threadId: request.threadId,
@@ -1258,6 +1285,7 @@ export async function runCursorThreadChat(
     assistantId,
     eventChannel,
     finished: false,
+    permissionMode,
     pendingApprovals: new Map(),
     pendingQuestions: new Map(),
     promptPromise: Promise.resolve(),
@@ -1265,12 +1293,13 @@ export async function runCursorThreadChat(
     session,
     state,
     threadId: request.threadId,
+    toolsEnabled,
     userId: request.userId,
     workspaceId: request.workspaceId,
   };
   activeCursorRunControls.set(runId, control);
 
-  const promptText = buildCursorPromptText({
+  const promptText = buildExternalRuntimePromptText({
     message:
       request.message ??
       ({
@@ -1281,26 +1310,31 @@ export async function runCursorThreadChat(
       } satisfies ThreadUIMessage),
     threadMode,
     transcript: modelTranscript,
+    workspaceRoot,
   });
-  const composerContextText = request.message?.metadata?.composerContext
-    ? serializeComposerContextToText(request.message.metadata.composerContext)
-    : null;
-  const finalPromptText = [composerContextText, promptText]
-    .filter(Boolean)
-    .join("\n\n");
 
-  await applyCursorSessionConfig({
-    client: session.client,
-    configOptions: session.configOptions,
-    modelId: request.modelId,
-    reasoningEffort: request.reasoningEffort ?? null,
-    sessionId: session.sessionId,
-  });
+  try {
+    await applyCursorSessionConfig({
+      client: session.client,
+      configOptions: session.configOptions,
+      modelId: request.modelId,
+      reasoningEffort: request.reasoningEffort ?? null,
+      sessionId: session.sessionId,
+    });
+  } catch (error) {
+    await finishCursorRun(control, {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      finishReason: null,
+      status: "error",
+      threadStatus: "idle",
+    });
+    throw error;
+  }
 
   control.promptPromise = (async () => {
     try {
       await session.client.prompt({
-        prompt: [{ text: finalPromptText, type: "text" }],
+        prompt: [{ text: promptText, type: "text" }],
         sessionId: session.sessionId,
       });
 

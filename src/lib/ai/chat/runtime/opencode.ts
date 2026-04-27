@@ -21,7 +21,6 @@ import {
   mergeThreadMessageMetadata,
   type ThreadUIMessage,
 } from "@/lib/ai/messages/types";
-import { serializeComposerContextToText } from "@/lib/composer-context/serialize";
 import { createLogger } from "@/lib/logger";
 import { normalizeThreadMode } from "@/lib/plan";
 import {
@@ -54,8 +53,16 @@ import {
   resolveOpenCodePromptResponse,
   type OpenCodePromptResponse,
 } from "./opencode-event-helpers";
-import { buildPlanModePromptPreamble } from "./plan-mode-instructions";
+import {
+  beginExternalRuntimeRepoCheckpoint,
+  buildExternalRuntimePromptText,
+  clearExternalRuntimeRepoCheckpoint,
+  finalizeExternalRuntimeRepoCheckpoint,
+  shouldAutoApproveExternalPermission,
+  shouldAutoDenyExternalPermission,
+} from "./external-runtime";
 import { getToolPermissionMode, getWorkspaceRootPath } from "./workspace";
+import type { PermissionMode } from "@/server/db/enums";
 
 type ThreadEventChannel = Awaited<ReturnType<typeof createThreadEventChannel>>;
 
@@ -112,12 +119,14 @@ type ActiveOpenCodeRunControl = {
   assistantId: string;
   eventChannel: ThreadEventChannel;
   finished: boolean;
+  permissionMode: PermissionMode;
   pendingApprovals: Map<string, PendingOpenCodeApproval>;
   pendingQuestions: Map<string, PendingOpenCodeQuestion>;
   runId: string;
   session: OpenCodeSession;
   state: OpenCodeMirrorState;
   threadId: string;
+  toolsEnabled: boolean;
   userId: string;
   workspaceId: string;
 };
@@ -283,6 +292,7 @@ async function emitAssistantMessageUpdate(
   finishReason?: string | null,
   errorMessage?: string | null,
   eventChannel?: ThreadEventChannel | null,
+  options?: { repoCheckpointId?: string | null },
 ) {
   const message = persist.upsertMessage(state.threadId, {
     id: state.assistantId,
@@ -295,6 +305,9 @@ async function emitAssistantMessageUpdate(
         requestedModelId: state.requestedModelId ?? undefined,
         responseModelId: state.responseModelId ?? undefined,
       },
+      ...(options?.repoCheckpointId
+        ? { repoCheckpointId: options.repoCheckpointId }
+        : {}),
       runId,
       status,
       statusLabel: null,
@@ -444,6 +457,14 @@ async function finishOpenCodeRun(
           "OpenCode run failed.",
         )
       : (input.errorMessage ?? null);
+  const repoCheckpointId =
+    input.status === "completed" && input.threadStatus === "idle"
+      ? await finalizeExternalRuntimeRepoCheckpoint({
+          assistantMessageId: control.assistantId,
+          runId: control.runId,
+          threadId: control.threadId,
+        })
+      : (await clearExternalRuntimeRepoCheckpoint(control.runId), null);
   control.abortController.abort();
   persist.clearActiveStream(control.threadId);
   persist.setThreadStatus(control.threadId, input.threadStatus);
@@ -454,6 +475,7 @@ async function finishOpenCodeRun(
     input.finishReason,
     errorMessage,
     control.eventChannel,
+    { repoCheckpointId },
   );
   await emitThreadSnapshot(
     control.threadId,
@@ -652,6 +674,45 @@ async function handleOpenCodeEvent(
     }
     case "permission.asked": {
       const request = event.properties as PermissionRequest;
+      const shouldAutoApprove = shouldAutoApproveExternalPermission({
+        permissionMode: control.permissionMode,
+        toolsEnabled: control.toolsEnabled,
+      });
+      const shouldAutoDeny = shouldAutoDenyExternalPermission({
+        toolsEnabled: control.toolsEnabled,
+      });
+      if (shouldAutoApprove || shouldAutoDeny) {
+        const approved = shouldAutoApprove && !shouldAutoDeny;
+        upsertOpenCodeTool(control.state, {
+          approval: {
+            approved,
+            decision: approved ? "accept" : "decline",
+            id: request.id,
+            reason:
+              request.patterns.length > 0
+                ? request.patterns.join("\n")
+                : request.permission,
+          },
+          id: request.id,
+          input: request.metadata,
+          name: normalizeOpenCodeToolName(request.permission || "permission"),
+          state: approved ? "approval-responded" : "output-denied",
+        });
+        await control.session.client.permission.reply({
+          reply: toOpenCodePermissionReply(approved),
+          requestID: request.id,
+        });
+        persist.setThreadStatus(control.threadId, "streaming");
+        await emitAssistantMessageUpdate(
+          control.state,
+          control.runId,
+          "streaming",
+          null,
+          null,
+          control.eventChannel,
+        );
+        break;
+      }
       control.pendingApprovals.set(request.id, { request });
       upsertOpenCodeTool(control.state, {
         approval: {
@@ -710,6 +771,48 @@ async function handleOpenCodeEvent(
     }
     case "question.asked": {
       const request = event.properties as QuestionRequest;
+      if (!control.toolsEnabled) {
+        const firstQuestion = request.questions[0];
+        upsertOpenCodeTool(control.state, {
+          approval: {
+            id: request.id,
+            reason: firstQuestion?.question ?? "OpenCode requested input.",
+          },
+          id: request.id,
+          input: {
+            questions: request.questions.map((question, index) => ({
+              header: question.header,
+              id: openCodeQuestionId(index, question),
+              options: question.options,
+              question: question.question,
+            })),
+          },
+          name: "opencode_ask_question",
+          state: "output-denied",
+        });
+        const questionClient = control.session.client.question as {
+          reject?: (input: { requestID: string }) => Promise<unknown>;
+          reply: (input: {
+            answers?: unknown[];
+            requestID: string;
+          }) => Promise<unknown>;
+        };
+        if (typeof questionClient.reject === "function") {
+          await questionClient.reject({ requestID: request.id });
+        } else {
+          await questionClient.reply({ answers: [], requestID: request.id });
+        }
+        persist.setThreadStatus(control.threadId, "streaming");
+        await emitAssistantMessageUpdate(
+          control.state,
+          control.runId,
+          "streaming",
+          null,
+          null,
+          control.eventChannel,
+        );
+        break;
+      }
       control.pendingQuestions.set(request.id, { request });
       const firstQuestion = request.questions[0];
       upsertOpenCodeTool(control.state, {
@@ -922,48 +1025,6 @@ async function applyOpenCodePromptResponse(
   return true;
 }
 
-function buildOpenCodePromptText(input: {
-  message: ThreadUIMessage;
-  threadMode: "chat" | "plan";
-  transcript: ThreadUIMessage[];
-}) {
-  const history = input.transcript
-    .map((message) => {
-      const text = message.parts
-        .filter(
-          (
-            part,
-          ): part is Extract<
-            ThreadUIMessage["parts"][number],
-            { type: "text" }
-          > => part.type === "text",
-        )
-        .map((part) => part.text)
-        .join("\n")
-        .trim();
-      if (!text) return null;
-      return `${message.role.toUpperCase()}:\n${text}`;
-    })
-    .filter(Boolean)
-    .join("\n\n");
-
-  const latestText = input.message.parts
-    .filter(
-      (
-        part,
-      ): part is Extract<ThreadUIMessage["parts"][number], { type: "text" }> =>
-        part.type === "text",
-    )
-    .map((part) => part.text)
-    .join("\n")
-    .trim();
-
-  const body = [history, latestText].filter(Boolean).join("\n\n");
-  return input.threadMode === "plan"
-    ? `${buildPlanModePromptPreamble()}\n\n${body}`
-    : body;
-}
-
 export async function stopOpenCodeThreadRun(
   request: ThreadChatRequest,
   existingThread: Awaited<ReturnType<typeof persist.loadThread>>,
@@ -1150,11 +1211,12 @@ export async function runOpenCodeThreadChat(
     workspaceId: request.workspaceId,
   });
 
-  const permissionMode = await getToolPermissionMode(
-    request.userId,
-    request.workspaceId,
-    request.threadId,
-  );
+  await beginExternalRuntimeRepoCheckpoint({
+    projectPath: workspaceRoot,
+    runId,
+    thread: existingThread,
+  });
+  const toolsEnabled = request.toolsEnabled !== false;
   const existingOpenCodeState = getOpenCodeThreadState(
     existingThread?.chatEngineState,
   );
@@ -1164,11 +1226,26 @@ export async function runOpenCodeThreadChat(
     (threadMode === "plan" ? "plan" : null);
   const selectedVariant =
     request.openCode?.variant ?? existingOpenCodeState?.selectedVariant ?? null;
-  const session = await startOpenCodeSession({
-    cwd: workspaceRoot,
-    fullAccess: permissionMode === "full" && request.toolsEnabled !== false,
-    title: fallbackTitle,
-  });
+  let permissionMode: PermissionMode;
+  let session: OpenCodeSession;
+  try {
+    permissionMode = await getToolPermissionMode(
+      request.userId,
+      request.workspaceId,
+      request.threadId,
+    );
+    session = await startOpenCodeSession({
+      cwd: workspaceRoot,
+      fullAccess: permissionMode === "full" && toolsEnabled,
+      title: fallbackTitle,
+    });
+  } catch (error) {
+    await clearExternalRuntimeRepoCheckpoint(runId);
+    persist.clearActiveStream(request.threadId);
+    persist.setThreadStatus(request.threadId, "idle");
+    eventChannel.close();
+    throw error;
+  }
   logRuntimeTiming("session_start_ready", timingStartedAt, {
     runId,
     threadId: request.threadId,
@@ -1187,12 +1264,14 @@ export async function runOpenCodeThreadChat(
     assistantId,
     eventChannel,
     finished: false,
+    permissionMode,
     pendingApprovals: new Map(),
     pendingQuestions: new Map(),
     runId,
     session,
     state,
     threadId: request.threadId,
+    toolsEnabled,
     userId: request.userId,
     workspaceId: request.workspaceId,
   };
@@ -1211,7 +1290,7 @@ export async function runOpenCodeThreadChat(
 
   await startOpenCodeEventPump(control);
 
-  const promptText = buildOpenCodePromptText({
+  const promptText = buildExternalRuntimePromptText({
     message:
       request.message ??
       ({
@@ -1222,18 +1301,13 @@ export async function runOpenCodeThreadChat(
       } satisfies ThreadUIMessage),
     threadMode,
     transcript: modelTranscript,
+    workspaceRoot,
   });
-  const composerContextText = request.message?.metadata?.composerContext
-    ? serializeComposerContextToText(request.message.metadata.composerContext)
-    : null;
-  const finalPromptText = [composerContextText, promptText]
-    .filter(Boolean)
-    .join("\n\n");
 
   const promptInput = {
     ...(selectedAgent ? { agent: selectedAgent } : {}),
     model: parsedModel,
-    parts: [{ text: finalPromptText, type: "text" as const }],
+    parts: [{ text: promptText, type: "text" as const }],
     sessionID: session.sessionId,
     ...(selectedVariant ? { variant: selectedVariant } : {}),
   };
