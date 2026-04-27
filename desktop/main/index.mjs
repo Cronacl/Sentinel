@@ -63,6 +63,21 @@ const desktopUpdater = createDesktopUpdaterController({
   updater: autoUpdater,
 });
 
+function configureLinuxSandbox() {
+  if (process.platform !== "linux") {
+    return;
+  }
+
+  const sandboxPreference = process.env.SENTINEL_LINUX_SANDBOX?.trim();
+  if (sandboxPreference === "1" || sandboxPreference === "true") {
+    return;
+  }
+
+  app.commandLine.appendSwitch("no-sandbox");
+}
+
+configureLinuxSandbox();
+
 function normalizeFontFamilies(fontFamilies) {
   const seen = new Set();
 

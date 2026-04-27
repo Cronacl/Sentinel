@@ -2,14 +2,29 @@
 
 ## Environment variables
 
-| Variable              | Required | Description                               |
-| --------------------- | -------- | ----------------------------------------- |
-| `ENCRYPTION_KEY`      | No       | Generated on first launch if omitted      |
-| `SENTINEL_DB_PATH`    | No       | Custom path for the local SQLite database |
-| `SENTINEL_STATE_PATH` | No       | Custom path for app state                 |
-| `SENTINEL_APP_URL`    | No       | Override the default app URL              |
+| Variable                 | Required | Description                                                                                     |
+| ------------------------ | -------- | ----------------------------------------------------------------------------------------------- |
+| `ENCRYPTION_KEY`         | No       | Generated on first launch if omitted                                                            |
+| `SENTINEL_DB_PATH`       | No       | Custom path for the local SQLite database                                                       |
+| `SENTINEL_STATE_PATH`    | No       | Custom path for app state                                                                       |
+| `SENTINEL_APP_URL`       | No       | Override the default app URL                                                                    |
+| `SENTINEL_LINUX_SANDBOX` | No       | Set to `true` to force Electron's Chromium sandbox when launching the Linux executable directly |
 
 ## Local development
+
+Sentinel repairs native Node dependencies before local dev, builds, preview, and start commands. It uses prebuilt binaries when available and falls back to a local source build for runtime, OS, or CPU combinations without matching prebuilds.
+
+Source builds need platform build tools:
+
+- macOS: Xcode Command Line Tools
+- Linux: `build-essential`, `python3`, `make`, and `g++`
+- Windows: Visual Studio Build Tools with Desktop development with C++
+
+Linux launch notes:
+
+- AppImage files must be executable before launch.
+- Debian/Ubuntu systems may need `libfuse2` for AppImage support.
+- Sentinel disables Electron's Chromium process sandbox on Linux by default because some systems do not expose user namespaces or the setuid sandbox. Linux packages also launch with `--no-sandbox` from their desktop entries. Set `SENTINEL_LINUX_SANDBOX=true` when launching the executable directly to force the sandbox back on.
 
 ```bash
 bun install

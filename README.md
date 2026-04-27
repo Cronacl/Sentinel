@@ -137,6 +137,11 @@ This is a desktop app first. A lot of the useful parts depend on running close t
 ### Prerequisites
 
 - [Bun](https://bun.sh)
+- Node.js
+- Platform build tools for native dependencies when prebuilt binaries are not available:
+  - macOS: Xcode Command Line Tools
+  - Linux: `build-essential`, `python3`, `make`, and `g++`
+  - Windows: Visual Studio Build Tools with Desktop development with C++
 
 ### Run locally
 
@@ -150,14 +155,19 @@ The app runs at `http://localhost:3232`.
 
 `ENCRYPTION_KEY` can be left empty in `.env`. Sentinel will generate one on first desktop launch.
 
+Sentinel repairs native Node dependencies at startup. Most machines use prebuilt binaries. If a runtime, OS, or CPU combination has no matching prebuild, the startup script builds the native dependency locally and prints the platform package to install when build tools are missing.
+
+On Linux, Sentinel disables Electron's Chromium process sandbox by default for compatibility with systems where user namespaces or the setuid sandbox are unavailable. Linux packages also launch with `--no-sandbox` from their desktop entries. Set `SENTINEL_LINUX_SANDBOX=true` when launching the executable directly to force the Chromium sandbox back on.
+
 ### Environment variables
 
-| Variable              | Required | Description                               |
-| --------------------- | -------- | ----------------------------------------- |
-| `ENCRYPTION_KEY`      | No       | Generated on first launch if omitted      |
-| `SENTINEL_DB_PATH`    | No       | Custom path for the local SQLite database |
-| `SENTINEL_STATE_PATH` | No       | Custom path for app state                 |
-| `SENTINEL_APP_URL`    | No       | Override the default app URL              |
+| Variable                 | Required | Description                                                                                     |
+| ------------------------ | -------- | ----------------------------------------------------------------------------------------------- |
+| `ENCRYPTION_KEY`         | No       | Generated on first launch if omitted                                                            |
+| `SENTINEL_DB_PATH`       | No       | Custom path for the local SQLite database                                                       |
+| `SENTINEL_STATE_PATH`    | No       | Custom path for app state                                                                       |
+| `SENTINEL_APP_URL`       | No       | Override the default app URL                                                                    |
+| `SENTINEL_LINUX_SANDBOX` | No       | Set to `true` to force Electron's Chromium sandbox when launching the Linux executable directly |
 
 ## Build
 

@@ -20,6 +20,28 @@ const prebuildInstallCliPath = path.join(
   "bin.js",
 );
 
+const nativeBuildHelp = {
+  darwin: "Install Xcode Command Line Tools with `xcode-select --install`.",
+  linux:
+    "Install a compiler toolchain, Python, and make. On Debian/Ubuntu: `sudo apt install -y build-essential python3 make g++`.",
+  win32:
+    "Install Visual Studio Build Tools with the Desktop development with C++ workload, then run the command again from a fresh shell.",
+};
+
+function getEnvWithoutBuildFromSource() {
+  const env = { ...process.env };
+  delete env.npm_config_build_from_source;
+  delete env.NPM_CONFIG_BUILD_FROM_SOURCE;
+  return env;
+}
+
+function shouldForceSourceBuild() {
+  return (
+    process.env.npm_config_build_from_source === "true" ||
+    process.env.NPM_CONFIG_BUILD_FROM_SOURCE === "true"
+  );
+}
+
 function canLoadNativeModule(moduleName) {
   try {
     if (moduleName === "better-sqlite3") {
@@ -73,6 +95,28 @@ async function runNodeCli(cliPath, args, options = {}) {
   await run(process.execPath, [cliPath, ...args], options);
 }
 
+async function runSourceBuild(moduleName, args, options = {}) {
+  try {
+    await runNodeCli(nodeGypCliPath, args, {
+      ...options,
+      env: {
+        ...process.env,
+        ...options.env,
+        npm_config_build_from_source: "true",
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const help =
+      nativeBuildHelp[process.platform] ??
+      "Install the platform compiler toolchain, Python, and make, then run the command again.";
+
+    throw new Error(
+      `[native] Failed to build ${moduleName} from source for Node ${process.versions.node} on ${process.platform}-${process.arch}.\n${help}\nOriginal error: ${message}`,
+    );
+  }
+}
+
 function getModuleRoot(moduleName) {
   return path.join(projectRoot, "node_modules", moduleName);
 }
@@ -80,44 +124,69 @@ function getModuleRoot(moduleName) {
 async function rebuildBetterSqlite3() {
   const moduleRoot = getModuleRoot("better-sqlite3");
 
-  try {
-    await runNodeCli(prebuildInstallCliPath, [], {
-      cwd: moduleRoot,
-      env: {
-        ...process.env,
-        npm_config_build_from_source: "true",
-      },
-    });
-  } catch {
-    // Fall back to a local source build when a matching prebuild is unavailable.
+  if (!shouldForceSourceBuild()) {
+    try {
+      await runNodeCli(prebuildInstallCliPath, [], {
+        cwd: moduleRoot,
+        env: getEnvWithoutBuildFromSource(),
+      });
+
+      if (canLoadNativeModule("better-sqlite3")) {
+        return;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[native] no usable prebuilt better-sqlite3 binary was found: ${message}`,
+      );
+    }
   }
 
-  await runNodeCli(nodeGypCliPath, ["rebuild", "--release"], {
+  await runSourceBuild("better-sqlite3", ["rebuild", "--release"], {
     cwd: moduleRoot,
-    env: {
-      ...process.env,
-      npm_config_build_from_source: "true",
-    },
   });
 }
 
 async function rebuildNodePty(needsSourceRebuild) {
   const moduleRoot = getModuleRoot("node-pty");
-  const rebuildEnv = needsSourceRebuild
-    ? {
-        ...process.env,
-        npm_config_build_from_source: "true",
-      }
+  const usePrebuilds = !needsSourceRebuild && !shouldForceSourceBuild();
+  const rebuildEnv = usePrebuilds
+    ? getEnvWithoutBuildFromSource()
     : process.env;
 
-  await runNodeCli(nodeGypCliPath, ["rebuild"], {
+  if (usePrebuilds) {
+    try {
+      await run(process.execPath, ["scripts/prebuild.js"], {
+        cwd: moduleRoot,
+        env: rebuildEnv,
+      });
+
+      await run(process.execPath, ["scripts/post-install.js"], {
+        cwd: moduleRoot,
+        env: rebuildEnv,
+      });
+
+      if (canLoadNativeModule("node-pty")) {
+        return;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[native] no usable prebuilt node-pty binary was found: ${message}`,
+      );
+    }
+  }
+
+  await runSourceBuild("node-pty", ["rebuild"], {
     cwd: moduleRoot,
     env: rebuildEnv,
   });
-
   await run(process.execPath, ["scripts/post-install.js"], {
     cwd: moduleRoot,
-    env: rebuildEnv,
+    env: {
+      ...rebuildEnv,
+      npm_config_build_from_source: "true",
+    },
   });
 }
 
