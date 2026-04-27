@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.53](https://github.com/Cronacl/Sentinel/compare/v0.0.52...v0.0.53) (2026-04-27)
+
+
+### Bug Fixes
+
+* surface chat engine failures ([92c3aa5](https://github.com/Cronacl/Sentinel/commit/92c3aa525d064fb6c02ace4f3b402370fe07ecf5))
+
 ## [0.0.52](https://github.com/Cronacl/Sentinel/compare/v0.0.51...v0.0.52) (2026-04-26)
 
 
