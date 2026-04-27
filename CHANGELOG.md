@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.54](https://github.com/Cronacl/Sentinel/compare/v0.0.53...v0.0.54) (2026-04-27)
+
+
+### Features
+
+* add external engine tool renderers ([c50746e](https://github.com/Cronacl/Sentinel/commit/c50746ee548d4ca9db7615cbc1cbbed75bd58a3b))
+* improve engines parity with the sentinel engine ([b8caff4](https://github.com/Cronacl/Sentinel/commit/b8caff4ea759c2f75a3c97577c65582fdeb329cb))
+
+
+### Performance Improvements
+
+* warm startup data and simplify splash ([b7d30d7](https://github.com/Cronacl/Sentinel/commit/b7d30d702d29ae609cee3772f8a1061df9fa0d48))
+
 ## [0.0.53](https://github.com/Cronacl/Sentinel/compare/v0.0.52...v0.0.53) (2026-04-27)
 
 
