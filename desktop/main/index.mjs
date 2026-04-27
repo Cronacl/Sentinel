@@ -249,68 +249,100 @@ async function listSystemFontFamilies() {
 // Only disable if a specific driver issue is confirmed on a target platform.
 // app.disableHardwareAcceleration();
 
-function buildInlineHtml({ body, title }) {
+function buildInlineHtml({ body, theme = resolvedTheme, title }) {
+  const safeTheme = theme === "light" ? "light" : "dark";
+
   return `data:text/html;charset=utf-8,${encodeURIComponent(`
     <!doctype html>
-    <html lang="en">
+    <html lang="en" data-theme="${safeTheme}">
       <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>${title}</title>
         <style>
-          :root { color-scheme: dark; }
+          :root {
+            color-scheme: light dark;
+            --bg: #f5f5f5;
+            --fg: #18181b;
+            --muted: rgba(24, 24, 27, .5);
+            --mark-bg: rgba(255, 255, 255, .64);
+            --mark-border: rgba(24, 24, 27, .08);
+            --rail: rgba(24, 24, 27, .08);
+            --bar: rgba(24, 24, 27, .56);
+          }
+          html[data-theme="dark"] {
+            color-scheme: dark;
+            --bg: #090909;
+            --fg: #f5f5f5;
+            --muted: rgba(245, 245, 245, .46);
+            --mark-bg: rgba(255, 255, 255, .035);
+            --mark-border: rgba(255, 255, 255, .075);
+            --rail: rgba(255, 255, 255, .08);
+            --bar: rgba(255, 255, 255, .58);
+          }
+          html[data-theme="light"] {
+            color-scheme: light;
+          }
+          * {
+            box-sizing: border-box;
+          }
           body {
             margin: 0;
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: #090909;
-            color: #f5f5f5;
+            background: var(--bg);
+            color: var(--fg);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            -webkit-font-smoothing: antialiased;
           }
           .shell {
-            width: min(420px, calc(100vw - 48px));
-            padding: 32px 24px;
+            width: min(360px, calc(100vw - 56px));
+            padding: 28px 24px;
             text-align: center;
           }
-          .mark {
-            width: 56px;
-            height: 56px;
-            border-radius: 12px;
-            margin: 0 auto 18px;
-            display: grid;
-            place-items: center;
-            background: #121212;
-            border: 1px solid rgba(255,255,255,.08);
-          }
-          .mark svg {
-            width: 30px;
-            height: 30px;
+          .logo {
+            width: 34px;
+            height: 34px;
+            margin: 0 auto 20px;
             display: block;
             fill: currentColor;
           }
           h1 {
-            margin: 0 0 10px;
-            font-size: 24px;
-            line-height: 1.15;
+            margin: 0 0 8px;
+            font-size: 18px;
+            font-weight: 560;
+            line-height: 1.2;
+            letter-spacing: 0;
           }
           p {
             margin: 0;
-            color: #a1a1aa;
-            line-height: 1.55;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.45;
           }
-          .spinner {
-            width: 18px;
-            height: 18px;
-            margin: 18px auto 0;
+          .progress {
+            position: relative;
+            width: 112px;
+            height: 2px;
+            margin: 22px auto 0;
             border-radius: 999px;
-            border: 2px solid rgba(255,255,255,.14);
-            border-top-color: rgba(255,255,255,.78);
-            animation: spin .8s linear infinite;
+            background: var(--rail);
+            overflow: hidden;
           }
-          @keyframes spin {
-            to { transform: rotate(360deg); }
+          .progress::after {
+            content: "";
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 38%;
+            border-radius: inherit;
+            background: var(--bar);
+            animation: progress 1.1s cubic-bezier(.65, 0, .35, 1) infinite;
+          }
+          @keyframes progress {
+            0% { transform: translateX(-120%); }
+            100% { transform: translateX(295%); }
           }
         </style>
       </head>
@@ -326,22 +358,21 @@ function buildInlineHtml({ body, title }) {
 function getLoadingPageUrl() {
   return buildInlineHtml({
     title: "Opening Sentinel",
+    theme: resolvedTheme,
     body: `
-      <div class="mark" aria-hidden="true">
-        <svg viewBox="0 0 201 200" xmlns="http://www.w3.org/2000/svg">
-          <g clip-path="url(#sentinel-logo-clip)">
-            <path d="M91.9711 91.6947C236.385 236.108 -35.8253 236.108 108.582 91.6947C-35.832 236.108 -35.832 -36.1018 108.582 108.305C-35.832 -36.1084 236.378 -36.1084 91.9711 108.305C236.385 -36.1084 236.385 236.102 91.9711 91.6947Z" />
-          </g>
-          <defs>
-            <clipPath id="sentinel-logo-clip">
-              <rect height="200" transform="translate(0.276367)" width="200" />
-            </clipPath>
-          </defs>
-        </svg>
-      </div>
+      <svg aria-hidden="true" class="logo" viewBox="0 0 201 200" xmlns="http://www.w3.org/2000/svg">
+        <g clip-path="url(#sentinel-logo-clip)">
+          <path d="M91.9711 91.6947C236.385 236.108 -35.8253 236.108 108.582 91.6947C-35.832 236.108 -35.832 -36.1018 108.582 108.305C-35.832 -36.1084 236.378 -36.1084 91.9711 108.305C236.385 -36.1084 236.385 236.102 91.9711 91.6947Z" />
+        </g>
+        <defs>
+          <clipPath id="sentinel-logo-clip">
+            <rect height="200" transform="translate(0.276367)" width="200" />
+          </clipPath>
+        </defs>
+      </svg>
       <h1>Opening Sentinel</h1>
       <p>Preparing your local workspace…</p>
-      <div class="spinner" aria-hidden="true"></div>
+      <div class="progress" aria-hidden="true"></div>
     `,
   });
 }

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { collectRepoStateCandidates } from "@/components/chat/thread-repo-actions.helpers";
 import { scheduleIdleTask } from "@/lib/browser/idle-task";
 import { preflightMicrophonePermissionOnStartup } from "@/lib/desktop/permissions";
 import { api } from "@/trpc/react";
@@ -13,6 +14,18 @@ import {
 } from "./app-warmup-config";
 
 let hasStartedAppWarmup = false;
+
+const DEFAULT_THREAD_LIST_INPUT = {
+  organizeBy: "workspace",
+  sortBy: "updated",
+} as const;
+const THREAD_LIST_WARMUP_INPUTS = [
+  DEFAULT_THREAD_LIST_INPUT,
+  { organizeBy: "workspace", sortBy: "created" },
+  { organizeBy: "chronological", sortBy: "updated" },
+  { organizeBy: "chronological", sortBy: "created" },
+] as const;
+const REPO_STATE_PREFETCH_LIMIT = 12;
 
 export function AppWarmupCoordinator() {
   const router = useRouter();
@@ -27,16 +40,55 @@ export function AppWarmupCoordinator() {
     const cleanups: Array<() => void> = [];
     let cancelled = false;
 
-    // Warm the composer-critical data immediately so the first thread/new-thread
-    // render doesn't become the first place these queries start.
+    const prefetchPrimaryThreadList = () => {
+      void utils.threads.list
+        .fetch(DEFAULT_THREAD_LIST_INPUT)
+        .then((data) => {
+          if (cancelled) {
+            return;
+          }
+
+          const candidates = collectRepoStateCandidates({
+            groups: "groups" in data ? (data.groups ?? []) : [],
+            items: "items" in data ? (data.items ?? []) : [],
+            maxCandidates: REPO_STATE_PREFETCH_LIMIT,
+          });
+
+          if (candidates.length === 0) {
+            return;
+          }
+
+          void utils.repo.listThreadGitStates.prefetch({
+            threads: candidates,
+          });
+        })
+        .catch(() => {});
+    };
+
+    // Warm startup-critical data immediately so the first sidebar, composer,
+    // or thread render doesn't become the first place these queries start.
+    void utils.workspaces.getCurrent.prefetch();
+    void utils.workspaces.list.prefetch();
+    void utils.workspaces.getPreferences.prefetch();
+    prefetchPrimaryThreadList();
+    for (const input of THREAD_LIST_WARMUP_INPUTS.slice(1)) {
+      void utils.threads.list.prefetch(input);
+    }
+    void utils.threads.listQuickChats.prefetch();
     void utils.chatPreferences.get.prefetch();
+    void utils.generalSettings.get.prefetch();
+    void utils.appearance.get.prefetch();
+    void utils.auth.me.prefetch();
+    void utils.security.get.prefetch();
     void utils.engines.list.prefetch();
     void utils.engines.models.prefetch({ engine: "sentinel" });
     void utils.engines.models.prefetch({ engine: "codex" });
     void utils.engines.models.prefetch({ engine: "claude" });
     void utils.engines.models.prefetch({ engine: "copilot" });
     void utils.engines.models.prefetch({ engine: "cursor" });
-    void utils.workspaces.getCurrent.prefetch();
+    void utils.engines.models.prefetch({ engine: "opencode" });
+    void utils.scratchpad.getCurrent.prefetch();
+    void utils.automations.list.prefetch();
     void preflightMicrophonePermissionOnStartup().catch(() => {});
 
     const tasks: Array<() => void> = [
