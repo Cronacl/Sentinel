@@ -5,6 +5,7 @@ import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 
 import {
   ThreadActionError,
+  applyRunFailedEventToMessages,
   didSnapshotCommitMessage,
   fetchThreadSessionSnapshot,
   formatClientTimingLog,
@@ -664,6 +665,81 @@ describe("ThreadActionError", () => {
     expect(isCommittedThreadActionError(error)).toBe(false);
     expect(error.committed).toBe(false);
     expect(shouldSurfaceThreadActionError(error)).toBe(true);
+  });
+});
+
+describe("applyRunFailedEventToMessages", () => {
+  it("attaches run failures to the matching assistant message", () => {
+    const messages = [
+      {
+        id: "assistant-1",
+        metadata: { runId: "run-1", status: "streaming" as const },
+        parts: [{ text: " ", type: "text" as const }],
+        role: "assistant" as const,
+      },
+    ];
+
+    const result = applyRunFailedEventToMessages(messages, {
+      error: "Provider request failed.",
+      messageId: "assistant-1",
+      runId: "run-1",
+      threadStatus: "idle",
+      type: "run.failed",
+    });
+
+    expect(result.didApply).toBe(true);
+    expect(result.messages[0]?.metadata).toEqual(
+      expect.objectContaining({
+        errorMessage: "Provider request failed.",
+        status: "error",
+        statusLabel: null,
+      }),
+    );
+  });
+
+  it("creates a compact failed assistant turn when the placeholder is missing locally", () => {
+    const messages = [
+      {
+        id: "user-1",
+        metadata: { runId: "run-1", status: "completed" as const },
+        parts: [{ text: "hello", type: "text" as const }],
+        role: "user" as const,
+      },
+    ];
+
+    const result = applyRunFailedEventToMessages(messages, {
+      error: "Provider request failed.",
+      messageId: "assistant-1",
+      runId: "run-1",
+      threadStatus: "idle",
+      type: "run.failed",
+    });
+
+    expect(result.didApply).toBe(true);
+    expect(result.messages).toHaveLength(2);
+    expect(result.messages[1]).toEqual({
+      id: "assistant-1",
+      metadata: {
+        errorMessage: "Provider request failed.",
+        runId: "run-1",
+        status: "error",
+        statusLabel: null,
+      },
+      parts: [],
+      role: "assistant",
+    });
+  });
+
+  it("reports when no transcript message can own the run failure", () => {
+    const result = applyRunFailedEventToMessages([], {
+      error: "Provider request failed.",
+      runId: "run-1",
+      threadStatus: "idle",
+      type: "run.failed",
+    });
+
+    expect(result.didApply).toBe(false);
+    expect(result.messages).toEqual([]);
   });
 });
 

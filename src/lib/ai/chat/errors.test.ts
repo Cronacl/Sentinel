@@ -4,6 +4,7 @@ import {
   InvalidThreadChatRequestError,
   ThreadChatConflictError,
   createThreadChatErrorResponse,
+  normalizeThreadChatErrorMessage,
 } from "./errors";
 
 describe("createThreadChatErrorResponse", () => {
@@ -42,5 +43,20 @@ describe("createThreadChatErrorResponse", () => {
     await expect(response.json()).resolves.toEqual({
       error: { message: "Provider request failed." },
     });
+  });
+
+  it("normalizes nested provider error arrays", () => {
+    expect(
+      normalizeThreadChatErrorMessage({
+        response: {
+          data: {
+            errors: [
+              { message: "First provider failure." },
+              { details: "Second provider detail." },
+            ],
+          },
+        },
+      }),
+    ).toBe("First provider failure.\nSecond provider detail.");
   });
 });

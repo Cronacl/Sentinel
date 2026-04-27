@@ -20,6 +20,9 @@ const loadThreadSessionSnapshot = mock(async (threadId: string) => ({
   threadTitle: "OpenCode thread",
   threadStatus: "streaming" as const,
 }));
+const serializeThreadStreamEvent = mock(
+  (event: unknown) => `event: test\ndata: ${JSON.stringify(event)}\n\n`,
+);
 const createNewResumableStream = mock(async () => {});
 const resumeExistingStream = mock(
   async () =>
@@ -90,9 +93,7 @@ mock.module("../repo-checkpoints", () => ({
 
 const sessionServerModuleMock = () => ({
   loadThreadSessionSnapshot,
-  serializeThreadStreamEvent: mock(
-    (event: unknown) => `event: test\ndata: ${JSON.stringify(event)}\n\n`,
-  ),
+  serializeThreadStreamEvent,
 });
 
 mock.module("../session-server", sessionServerModuleMock);
@@ -124,6 +125,47 @@ function createDeferred<T>() {
   return { promise, reject, resolve };
 }
 
+function createEventQueue() {
+  const pending: unknown[] = [];
+  const waiters: Array<(value: IteratorResult<unknown>) => void> = [];
+  let closed = false;
+
+  return {
+    close() {
+      closed = true;
+      while (waiters.length > 0) {
+        waiters.shift()?.({ done: true, value: undefined });
+      }
+    },
+    push(event: unknown) {
+      const waiter = waiters.shift();
+      if (waiter) {
+        waiter({ done: false, value: event });
+        return;
+      }
+      pending.push(event);
+    },
+    stream: {
+      [Symbol.asyncIterator]() {
+        return {
+          next() {
+            const event = pending.shift();
+            if (event) {
+              return Promise.resolve({ done: false, value: event });
+            }
+            if (closed) {
+              return Promise.resolve({ done: true, value: undefined });
+            }
+            return new Promise<IteratorResult<unknown>>((resolve) => {
+              waiters.push(resolve);
+            });
+          },
+        };
+      },
+    },
+  };
+}
+
 describe("runOpenCodeThreadChat", () => {
   beforeEach(() => {
     ensureThread.mockClear();
@@ -138,6 +180,7 @@ describe("runOpenCodeThreadChat", () => {
     updateThreadChatSettings.mockClear();
     upsertMessage.mockClear();
     loadThreadSessionSnapshot.mockClear();
+    serializeThreadStreamEvent.mockClear();
     createNewResumableStream.mockClear();
     resumeExistingStream.mockClear();
     getToolPermissionMode.mockClear();
@@ -277,5 +320,151 @@ describe("runOpenCodeThreadChat", () => {
       }),
     );
     expect(setThreadStatus).toHaveBeenLastCalledWith("thread-error-1", "idle");
+  });
+
+  it("returns the event stream before the OpenCode prompt finishes", async () => {
+    const prompt = createDeferred<void>();
+    const promptAsync = mock(() => prompt.promise);
+    startOpenCodeSession.mockImplementation(async () => ({
+      client: {
+        event: {
+          subscribe: mock(async () => ({
+            stream: (async function* () {})(),
+          })),
+        },
+        permission: {
+          reply: mock(async () => {}),
+        },
+        question: {
+          reply: mock(async () => {}),
+        },
+        session: {
+          abort: mock(async () => {}),
+          promptAsync,
+        },
+      },
+      server: {
+        close: mock(() => {}),
+      },
+      sessionId: "opencode-session-1",
+    }));
+
+    const response = await runOpenCodeThreadChat(
+      {
+        message: {
+          id: "user-stream-1",
+          metadata: {},
+          parts: [{ text: "Stream this response", type: "text" }],
+          role: "user",
+        },
+        modelId: "openai/gpt-5.2",
+        threadId: "thread-stream-1",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      } as any,
+      null,
+    );
+
+    expect(response.headers.get("Content-Type")).toBe("text/event-stream");
+    expect(promptAsync).toHaveBeenCalledTimes(1);
+    expect(setThreadStatus).toHaveBeenLastCalledWith(
+      "thread-stream-1",
+      "streaming",
+    );
+
+    prompt.reject(new Error("OpenCode provider failed after stream returned"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(setThreadStatus).toHaveBeenLastCalledWith("thread-stream-1", "idle");
+    expect(clearActiveStream).toHaveBeenCalledWith("thread-stream-1");
+  });
+
+  it("persists streaming text deltas before full part updates arrive", async () => {
+    const events = createEventQueue();
+    startOpenCodeSession.mockImplementation(async () => ({
+      client: {
+        event: {
+          subscribe: mock(async () => ({
+            stream: events.stream,
+          })),
+        },
+        permission: {
+          reply: mock(async () => {}),
+        },
+        question: {
+          reply: mock(async () => {}),
+        },
+        session: {
+          abort: mock(async () => {}),
+          promptAsync: mock(async () => {}),
+        },
+      },
+      server: {
+        close: mock(() => {}),
+      },
+      sessionId: "opencode-session-1",
+    }));
+
+    await runOpenCodeThreadChat(
+      {
+        message: {
+          id: "user-delta-1",
+          metadata: {},
+          parts: [{ text: "Stream a poem", type: "text" }],
+          role: "user",
+        },
+        modelId: "openai/gpt-5.2",
+        threadId: "thread-delta-1",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      } as any,
+      null,
+    );
+
+    events.push({
+      properties: {
+        info: {
+          id: "opencode-assistant-message-1",
+          role: "assistant",
+        },
+        sessionID: "opencode-session-1",
+      },
+      type: "message.updated",
+    });
+    events.push({
+      properties: {
+        delta: "Line one",
+        field: "text",
+        messageID: "opencode-assistant-message-1",
+        partID: "part-1",
+        sessionID: "opencode-session-1",
+      },
+      type: "message.part.delta",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(upsertMessage.mock.calls.at(-1)?.[1]).toEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          status: "streaming",
+          statusLabel: null,
+        }),
+        parts: [{ text: "Line one", type: "text" }],
+        role: "assistant",
+      }),
+    );
+    expect(serializeThreadStreamEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.objectContaining({
+          parts: [{ text: "Line one", type: "text" }],
+          role: "assistant",
+        }),
+        type: "message.upsert",
+      }),
+    );
+
+    events.close();
   });
 });

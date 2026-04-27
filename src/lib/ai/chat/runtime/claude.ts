@@ -1374,6 +1374,7 @@ async function finishClaudeRun(
     });
     control.eventChannel.emit({
       error: errorMessage ?? "Claude run failed.",
+      messageId: control.assistantId,
       runId: control.runId,
       threadStatus: input.threadStatus,
       type: "run.failed",

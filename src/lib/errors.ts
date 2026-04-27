@@ -2,6 +2,25 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function extractArrayErrorMessage(
+  values: unknown,
+  seen: Set<unknown>,
+): string | null {
+  if (!Array.isArray(values)) {
+    return null;
+  }
+
+  const messages = values
+    .map((value) =>
+      typeof value === "string"
+        ? value
+        : extractObjectErrorMessage(value, seen),
+    )
+    .filter(isNonEmptyString);
+
+  return messages.length > 0 ? messages.join("\n") : null;
+}
+
 function extractObjectErrorMessage(
   value: unknown,
   seen: Set<unknown> = new Set(),
@@ -28,8 +47,15 @@ function extractObjectErrorMessage(
 
   const candidate = value as {
     cause?: unknown;
+    data?: unknown;
+    description?: unknown;
+    details?: unknown;
     error?: unknown;
+    errors?: unknown;
     message?: unknown;
+    reason?: unknown;
+    response?: unknown;
+    statusText?: unknown;
   };
 
   if (
@@ -39,9 +65,27 @@ function extractObjectErrorMessage(
     return candidate.message;
   }
 
+  for (const field of [
+    candidate.description,
+    candidate.details,
+    candidate.reason,
+    candidate.statusText,
+  ]) {
+    if (isNonEmptyString(field) && field.trim() !== "[object Object]") {
+      return field;
+    }
+  }
+
+  const arrayMessage = extractArrayErrorMessage(candidate.errors, seen);
+  if (arrayMessage) {
+    return arrayMessage;
+  }
+
   return (
     extractObjectErrorMessage(candidate.error, seen) ??
-    extractObjectErrorMessage(candidate.cause, seen)
+    extractObjectErrorMessage(candidate.cause, seen) ??
+    extractObjectErrorMessage(candidate.response, seen) ??
+    extractObjectErrorMessage(candidate.data, seen)
   );
 }
 

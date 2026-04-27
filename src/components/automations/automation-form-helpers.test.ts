@@ -58,8 +58,7 @@ describe("automation form helpers", () => {
       ] as any),
     ).toEqual([
       {
-        description:
-          "Cursor runtime. Experimental integration; behavior may change or fail unexpectedly.",
+        description: "Cursor runtime",
         isDisabled: false,
         label: "Cursor",
         value: "cursor",

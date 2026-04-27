@@ -135,6 +135,29 @@ function materializeNodes(records: PersistedThreadMessageRecord[]) {
     const editedFromMessageId = node.metadata.editedFromMessageId;
     const previous = nodes[index - 1];
 
+    // Compatibility repair for failed assistant turns that were briefly saved
+    // with the submitted user message payload after provider stream errors.
+    if (
+      node.message.role === "user" &&
+      node.metadata.status === "error" &&
+      node.metadata.errorMessage &&
+      previous?.message.role === "user" &&
+      node.parentMessageId === previous.message.id &&
+      node.metadata.runId &&
+      node.metadata.runId === previous.metadata.runId
+    ) {
+      const repairedMessage: ThreadUIMessage = {
+        ...node.message,
+        parts: [{ text: " ", type: "text" }],
+        role: "assistant",
+      };
+
+      return {
+        ...node,
+        message: repairedMessage,
+      };
+    }
+
     // Compatibility repair for Codex-backed turns that were previously stored
     // with the assistant attached to the user's parent instead of the user.
     if (

@@ -1039,6 +1039,7 @@ async function finishCopilotRun(
     });
     control.eventChannel.emit({
       error: errorMessage ?? "GitHub Copilot run failed.",
+      messageId: control.assistantId,
       runId: control.runId,
       threadStatus: input.threadStatus,
       type: "run.failed",

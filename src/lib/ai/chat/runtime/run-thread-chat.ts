@@ -819,6 +819,7 @@ async function failThreadRun(
   await emitLatestThreadSnapshot(run.request.threadId, run.eventChannel);
   run.eventChannel.emit({
     error: message,
+    messageId: run.assistantId,
     runId: run.runId,
     threadStatus: "idle",
     type: "run.failed",
@@ -1434,25 +1435,52 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           eventChannel,
           run.runId,
         );
-        eventChannel.emit({
-          runId: run.runId,
-          threadStatus: hasApprovalPending ? "awaiting_approval" : "idle",
-          type: "run.finished",
-        });
-        logRuntimeTiming("run_finished", run.timingStartedAt, {
-          runId: run.runId,
-          threadId: run.request.threadId,
-          trigger: run.request.trigger,
-          userId: run.request.userId,
-          workspaceId: run.request.workspaceId,
-        });
+        if (streamErrorMessage) {
+          eventChannel.emit({
+            error: streamErrorMessage,
+            messageId: persistedAssistant.id,
+            runId: run.runId,
+            threadStatus: "idle",
+            type: "run.failed",
+          });
+          log.error("run_failed", {
+            engine: run.request.engine ?? "sentinel",
+            error: streamErrorMessage,
+            messageId: persistedAssistant.id,
+            runId: run.runId,
+            threadId: run.request.threadId,
+            trigger: run.request.trigger,
+            userId: run.request.userId,
+            workspaceId: run.request.workspaceId,
+          });
+          logRuntimeTiming("run_failed", run.timingStartedAt, {
+            runId: run.runId,
+            threadId: run.request.threadId,
+            trigger: run.request.trigger,
+            userId: run.request.userId,
+            workspaceId: run.request.workspaceId,
+          });
+        } else {
+          eventChannel.emit({
+            runId: run.runId,
+            threadStatus: hasApprovalPending ? "awaiting_approval" : "idle",
+            type: "run.finished",
+          });
+          logRuntimeTiming("run_finished", run.timingStartedAt, {
+            runId: run.runId,
+            threadId: run.request.threadId,
+            trigger: run.request.trigger,
+            userId: run.request.userId,
+            workspaceId: run.request.workspaceId,
+          });
+        }
         if (titleUpdatePromise) {
           await titleUpdatePromise;
         }
         eventChannel.close();
         activeRunControls.delete(run.runId);
 
-        if (!hasApprovalPending) {
+        if (!streamErrorMessage && !hasApprovalPending) {
           await drainFollowUpQueue(run.request);
         }
       },

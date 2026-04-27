@@ -76,6 +76,7 @@ export type ThreadStreamEvent =
     }
   | {
       error: string;
+      messageId?: string;
       runId: string;
       threadStatus: ThreadStatus;
       type: "run.failed";

@@ -97,8 +97,8 @@ describe("chat composer model helpers", () => {
     ).toBe(false);
   });
 
-  it("marks only Cursor as unstable", () => {
-    expect(isUnstableChatEngine("cursor")).toBe(true);
+  it("does not mark Cursor as unstable", () => {
+    expect(isUnstableChatEngine("cursor")).toBe(false);
     expect(isUnstableChatEngine("opencode")).toBe(false);
     expect(isUnstableChatEngine("codex")).toBe(false);
   });

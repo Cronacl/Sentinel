@@ -224,6 +224,68 @@ export function isMeaningfulAssistantStreamEvent(event: ThreadStreamEvent) {
   return event.type === "message.status" || event.type === "message.upsert";
 }
 
+export function applyRunFailedEventToMessages(
+  messages: ThreadUIMessage[],
+  event: Extract<ThreadStreamEvent, { type: "run.failed" }>,
+) {
+  let targetIndex = event.messageId
+    ? messages.findIndex((message) => message.id === event.messageId)
+    : -1;
+
+  if (targetIndex < 0 && !event.messageId) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (
+        message?.role === "assistant" &&
+        message.metadata?.runId === event.runId
+      ) {
+        targetIndex = index;
+        break;
+      }
+    }
+  }
+
+  if (targetIndex < 0) {
+    if (event.messageId) {
+      const failedAssistantMessage: ThreadUIMessage = {
+        id: event.messageId,
+        metadata: {
+          errorMessage: event.error,
+          runId: event.runId,
+          status: "error",
+          statusLabel: null,
+        },
+        parts: [],
+        role: "assistant",
+      };
+
+      return {
+        didApply: true,
+        messages: [...messages, failedAssistantMessage],
+      };
+    }
+
+    return { didApply: false, messages };
+  }
+
+  return {
+    didApply: true,
+    messages: messages.map((message, index) =>
+      index === targetIndex
+        ? {
+            ...message,
+            metadata: mergeThreadMessageMetadata(message.metadata, {
+              errorMessage: event.error,
+              runId: event.runId,
+              status: "error",
+              statusLabel: null,
+            }),
+          }
+        : message,
+    ),
+  };
+}
+
 function areMessagesEqual(left: ThreadUIMessage[], right: ThreadUIMessage[]) {
   if (left === right) {
     return true;
@@ -972,7 +1034,6 @@ function createSessionStore(
         });
         return;
       case "run.cancelled":
-      case "run.failed":
       case "run.finished":
         setState((current) => ({
           ...current,
@@ -982,6 +1043,24 @@ function createSessionStore(
           lastSyncedAt: Date.now(),
           threadStatus: event.threadStatus,
         }));
+        return;
+      case "run.failed":
+        setState((current) => {
+          const applied = applyRunFailedEventToMessages(
+            current.messages,
+            event,
+          );
+
+          return {
+            ...current,
+            activeRunId: null,
+            connectionState: "idle",
+            errorMessage: applied.didApply ? null : event.error,
+            lastSyncedAt: Date.now(),
+            messages: applied.messages,
+            threadStatus: event.threadStatus,
+          };
+        });
         return;
       case "run.started":
         setState((current) => ({

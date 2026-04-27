@@ -16,12 +16,14 @@ export function buildPersistedAssistantMessage({
   placeholder: ThreadUIMessage;
   repoCheckpointId?: string | null;
 }): ThreadUIMessage {
-  const merged = finalAssistant ?? placeholder;
+  const merged =
+    finalAssistant?.role === "assistant" ? finalAssistant : placeholder;
   const placeholderMetadata = placeholder.metadata ?? {};
 
   return {
     ...merged,
     id: assistantId,
+    role: "assistant",
     metadata: mergeThreadMessageMetadata(
       mergeThreadMessageMetadata(placeholder.metadata, merged.metadata ?? {}),
       {

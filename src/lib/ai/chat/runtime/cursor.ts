@@ -585,6 +585,7 @@ async function finishCursorRun(
     });
     control.eventChannel.emit({
       error: errorMessage ?? "Cursor run failed.",
+      messageId: control.assistantId,
       runId: control.runId,
       threadStatus: input.threadStatus,
       type: "run.failed",

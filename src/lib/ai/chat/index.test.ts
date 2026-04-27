@@ -1316,6 +1316,9 @@ describe("runThreadChat bootstrap failure recovery", () => {
         message: "Provider request failed.",
       },
     };
+    createNewResumableStream.mockImplementationOnce(async (_runId, create) => {
+      create();
+    });
 
     const response = await runThreadChat(createSubmitRequest(), "user-1");
     await flushAsyncWork();
@@ -1324,6 +1327,21 @@ describe("runThreadChat bootstrap failure recovery", () => {
     expect(buildPersistedAssistantMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         errorMessage: "Provider request failed.",
+      }),
+    );
+    const emittedEvents = serializeThreadStreamEvent.mock.calls.map(
+      ([event]) => event,
+    );
+    expect(emittedEvents).toContainEqual(
+      expect.objectContaining({
+        error: "Provider request failed.",
+        messageId: expect.any(String),
+        type: "run.failed",
+      }),
+    );
+    expect(emittedEvents).not.toContainEqual(
+      expect.objectContaining({
+        type: "run.finished",
       }),
     );
   });

@@ -282,8 +282,9 @@ async function emitAssistantMessageUpdate(
   status: "pending" | "streaming" | "completed" | "error" | "cancelled",
   finishReason?: string | null,
   errorMessage?: string | null,
+  eventChannel?: ThreadEventChannel | null,
 ) {
-  persist.upsertMessage(state.threadId, {
+  const message = persist.upsertMessage(state.threadId, {
     id: state.assistantId,
     metadata: {
       branchId: state.assistantId,
@@ -296,10 +297,25 @@ async function emitAssistantMessageUpdate(
       },
       runId,
       status,
+      statusLabel: null,
     },
     parts: buildAssistantParts(state),
     role: "assistant",
   });
+
+  eventChannel?.emit({
+    message,
+    runId,
+    type: "message.upsert",
+  });
+  eventChannel?.emit({
+    messageId: message.id,
+    runId,
+    status: message.metadata?.status,
+    type: "message.status",
+  });
+
+  return message;
 }
 
 async function emitThreadSnapshot(
@@ -437,6 +453,7 @@ async function finishOpenCodeRun(
     input.status,
     input.finishReason,
     errorMessage,
+    control.eventChannel,
   );
   await emitThreadSnapshot(
     control.threadId,
@@ -461,6 +478,7 @@ async function finishOpenCodeRun(
     });
     control.eventChannel.emit({
       error: errorMessage ?? "OpenCode run failed.",
+      messageId: control.assistantId,
       runId: control.runId,
       threadStatus: input.threadStatus,
       type: "run.failed",
@@ -548,6 +566,9 @@ async function handleOpenCodeEvent(
               control.state,
               control.runId,
               "streaming",
+              null,
+              null,
+              control.eventChannel,
             );
           }
         }
@@ -560,22 +581,49 @@ async function handleOpenCodeEvent(
     }
     case "message.part.delta": {
       const existingPart = control.state.partById.get(event.properties.partID);
+      const role =
+        event.properties.messageID &&
+        control.state.messageRoleById.get(event.properties.messageID);
       if (
-        !existingPart ||
-        messageRoleForPart(control.state, existingPart) !== "assistant"
+        role !== "assistant" &&
+        (!existingPart ||
+          messageRoleForPart(control.state, existingPart) !== "assistant")
       ) {
         break;
       }
-      if (existingPart.type !== "text" && existingPart.type !== "reasoning") {
+      if (
+        existingPart &&
+        existingPart.type !== "text" &&
+        existingPart.type !== "reasoning"
+      ) {
+        break;
+      }
+      if (
+        !existingPart &&
+        event.properties.field !== "text" &&
+        event.properties.field !== "message"
+      ) {
         break;
       }
       const delta = String(event.properties.delta ?? "");
       if (!delta) break;
       control.state.text += delta;
+      if (!existingPart) {
+        control.state.partById.set(event.properties.partID, {
+          id: event.properties.partID,
+          messageID: event.properties.messageID,
+          sessionID: event.properties.sessionID,
+          text: control.state.text,
+          type: "text",
+        });
+      }
       await emitAssistantMessageUpdate(
         control.state,
         control.runId,
         "streaming",
+        null,
+        null,
+        control.eventChannel,
       );
       break;
     }
@@ -596,6 +644,9 @@ async function handleOpenCodeEvent(
         control.state,
         control.runId,
         "streaming",
+        null,
+        null,
+        control.eventChannel,
       );
       break;
     }
@@ -620,6 +671,9 @@ async function handleOpenCodeEvent(
         control.state,
         control.runId,
         "streaming",
+        null,
+        null,
+        control.eventChannel,
       );
       await emitThreadSnapshot(
         control.threadId,
@@ -648,6 +702,9 @@ async function handleOpenCodeEvent(
         control.state,
         control.runId,
         "streaming",
+        null,
+        null,
+        control.eventChannel,
       );
       break;
     }
@@ -677,6 +734,9 @@ async function handleOpenCodeEvent(
         control.state,
         control.runId,
         "streaming",
+        null,
+        null,
+        control.eventChannel,
       );
       await emitThreadSnapshot(
         control.threadId,
@@ -701,6 +761,9 @@ async function handleOpenCodeEvent(
         control.state,
         control.runId,
         "streaming",
+        null,
+        null,
+        control.eventChannel,
       );
       break;
     }
@@ -720,6 +783,9 @@ async function handleOpenCodeEvent(
         control.state,
         control.runId,
         "streaming",
+        null,
+        null,
+        control.eventChannel,
       );
       break;
     }
@@ -759,10 +825,22 @@ async function startOpenCodeEventPump(control: ActiveOpenCodeRunControl) {
         signal: control.abortController.signal,
       },
     );
-    for await (const event of subscription.stream) {
-      if (control.finished) return;
-      await handleOpenCodeEvent(control, event);
-    }
+    void (async () => {
+      try {
+        for await (const event of subscription.stream) {
+          if (control.finished) return;
+          await handleOpenCodeEvent(control, event);
+        }
+      } catch (error) {
+        if (control.finished || control.abortController.signal.aborted) return;
+        await finishOpenCodeRun(control, {
+          errorMessage: error instanceof Error ? error.message : String(error),
+          finishReason: null,
+          status: "error",
+          threadStatus: "idle",
+        });
+      }
+    })();
   } catch (error) {
     if (control.finished || control.abortController.signal.aborted) return;
     await finishOpenCodeRun(control, {
@@ -799,7 +877,14 @@ async function applyOpenCodePromptResponse(
       ),
       requestID: response.approvalId,
     });
-    await emitAssistantMessageUpdate(control.state, control.runId, "streaming");
+    await emitAssistantMessageUpdate(
+      control.state,
+      control.runId,
+      "streaming",
+      null,
+      null,
+      control.eventChannel,
+    );
     return true;
   }
 
@@ -826,7 +911,14 @@ async function applyOpenCodePromptResponse(
     reply: toOpenCodePermissionReply(approved),
     requestID: response.approvalId,
   });
-  await emitAssistantMessageUpdate(control.state, control.runId, "streaming");
+  await emitAssistantMessageUpdate(
+    control.state,
+    control.runId,
+    "streaming",
+    null,
+    null,
+    control.eventChannel,
+  );
   return true;
 }
 
@@ -1117,7 +1209,7 @@ export async function runOpenCodeThreadChat(
     }),
   );
 
-  void startOpenCodeEventPump(control);
+  await startOpenCodeEventPump(control);
 
   const promptText = buildOpenCodePromptText({
     message:
@@ -1138,16 +1230,26 @@ export async function runOpenCodeThreadChat(
     .filter(Boolean)
     .join("\n\n");
 
+  const promptInput = {
+    ...(selectedAgent ? { agent: selectedAgent } : {}),
+    model: parsedModel,
+    parts: [{ text: finalPromptText, type: "text" as const }],
+    sessionID: session.sessionId,
+    ...(selectedVariant ? { variant: selectedVariant } : {}),
+  };
+
   try {
-    await session.client.session.promptAsync({
-      ...(selectedAgent ? { agent: selectedAgent } : {}),
-      model: parsedModel,
-      parts: [{ text: finalPromptText, type: "text" }],
-      sessionID: session.sessionId,
-      ...(selectedVariant ? { variant: selectedVariant } : {}),
+    const promptPromise = session.client.session.promptAsync(promptInput);
+    void Promise.resolve(promptPromise).catch(async (error) => {
+      await finishOpenCodeRun(control, {
+        errorMessage: error instanceof Error ? error.message : String(error),
+        finishReason: null,
+        status: "error",
+        threadStatus: "idle",
+      });
     });
   } catch (error) {
-    await finishOpenCodeRun(control, {
+    void finishOpenCodeRun(control, {
       errorMessage: error instanceof Error ? error.message : String(error),
       finishReason: null,
       status: "error",

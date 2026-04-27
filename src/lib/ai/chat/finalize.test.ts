@@ -121,9 +121,44 @@ describe("buildPersistedAssistantMessage", () => {
     expect(finalAssistant.metadata?.status).toBe("error");
   });
 
-  it("keeps server-assigned lineage when streamed assistant metadata clears it", () => {
+  it("does not persist a failed assistant with a user response payload", () => {
     const placeholder: ThreadUIMessage = {
       id: "assistant-4",
+      metadata: {
+        branchId: "user-1",
+        isActive: true,
+        parentMessageId: "user-1",
+        status: "pending",
+      },
+      parts: [{ text: " ", type: "text" }],
+      role: "assistant",
+    };
+    const userPayload: ThreadUIMessage = {
+      id: "user-response",
+      metadata: {
+        status: "completed",
+      },
+      parts: [{ text: "hello", type: "text" }],
+      role: "user",
+    };
+
+    const finalAssistant = buildPersistedAssistantMessage({
+      assistantId: placeholder.id,
+      errorMessage: "model not found",
+      finalAssistant: userPayload,
+      placeholder,
+    });
+
+    expect(finalAssistant.role).toBe("assistant");
+    expect(finalAssistant.parts).toEqual([{ text: " ", type: "text" }]);
+    expect(finalAssistant.metadata?.errorMessage).toBe("model not found");
+    expect(finalAssistant.metadata?.parentMessageId).toBe("user-1");
+    expect(finalAssistant.metadata?.status).toBe("error");
+  });
+
+  it("keeps server-assigned lineage when streamed assistant metadata clears it", () => {
+    const placeholder: ThreadUIMessage = {
+      id: "assistant-5",
       metadata: {
         branchId: "user-2",
         isActive: true,
@@ -221,6 +256,50 @@ describe("buildPersistedAssistantMessage", () => {
     ]);
     expect(transcript[1]?.metadata?.parentMessageId).toBe("user-1");
     expect(transcript[3]?.metadata?.parentMessageId).toBe("user-2");
+  });
+
+  it("repairs failed assistant rows that were accidentally stored as users", () => {
+    const transcript = buildActiveThreadMessages([
+      {
+        createdAt: new Date("2026-03-10T10:00:00.000Z"),
+        id: "db-user-1",
+        messageId: "user-1",
+        metadata: {
+          branchId: "user-1",
+          isActive: true,
+          parentMessageId: null,
+          runId: "run-1",
+          status: "completed",
+        },
+        parts: [{ text: "hello", type: "text" }],
+        role: "user",
+        updatedAt: new Date("2026-03-10T10:00:00.000Z"),
+      },
+      {
+        createdAt: new Date("2026-03-10T10:00:01.000Z"),
+        id: "db-assistant-1",
+        messageId: "assistant-1",
+        metadata: {
+          branchId: "user-1",
+          errorMessage: "model not found",
+          isActive: true,
+          parentMessageId: "user-1",
+          runId: "run-1",
+          status: "error",
+        },
+        parts: [{ text: "hello", type: "text" }],
+        role: "user",
+        updatedAt: new Date("2026-03-10T10:00:01.000Z"),
+      },
+    ]);
+
+    expect(transcript.map((message) => [message.id, message.role])).toEqual([
+      ["user-1", "user"],
+      ["assistant-1", "assistant"],
+    ]);
+    expect(transcript[1]?.parts).toEqual([{ text: " ", type: "text" }]);
+    expect(transcript[1]?.metadata?.errorMessage).toBe("model not found");
+    expect(transcript[1]?.metadata?.status).toBe("error");
   });
 
   it("repairs edited user messages that were accidentally stored as child messages", () => {

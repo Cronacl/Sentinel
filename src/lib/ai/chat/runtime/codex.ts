@@ -1293,6 +1293,7 @@ async function finalizeCodexRun(input: {
     });
     control.eventChannel.emit({
       error: errorMessage ?? "Codex run failed.",
+      messageId: input.state.assistantId,
       runId: input.runId,
       threadStatus: input.threadStatus,
       type: "run.failed",

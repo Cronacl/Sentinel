@@ -7,7 +7,6 @@ import {
   isUnstableChatEngine,
   resolveReasoningEffort,
   UNSTABLE_CHAT_ENGINE_DESCRIPTION,
-  UNSTABLE_CHAT_ENGINE_LABEL,
   type ChatComposerModel,
 } from "@/components/chat/chat-composer-helpers";
 import type { SelectOption } from "@/components/forms/controlled-fields";
@@ -92,7 +91,7 @@ function getEngineModelDescription(engine: ChatEngine) {
     case "copilot":
       return "Copilot runtime";
     case "cursor":
-      return `Cursor runtime (${UNSTABLE_CHAT_ENGINE_LABEL})`;
+      return "Cursor runtime";
     case "opencode":
       return "OpenCode runtime";
   }

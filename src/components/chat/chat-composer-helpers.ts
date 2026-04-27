@@ -42,8 +42,8 @@ export const UNSTABLE_CHAT_ENGINE_LABEL = "Unstable";
 export const UNSTABLE_CHAT_ENGINE_DESCRIPTION =
   "Experimental integration; behavior may change or fail unexpectedly.";
 
-export function isUnstableChatEngine(engine: ChatEngine | null | undefined) {
-  return engine === "cursor";
+export function isUnstableChatEngine(_engine: ChatEngine | null | undefined) {
+  return false;
 }
 
 function normalizeOpenCodeTraitToken(value: string) {
