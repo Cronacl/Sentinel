@@ -327,9 +327,9 @@ export default function UpdatesSettingsPage() {
       ) : (
         <div className="flex flex-col gap-6">
           <section className="border-separator/20 bg-surface rounded-2xl border p-6 sm:p-8">
-            <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] xl:items-start">
+            <div className="grid gap-8">
               <div className="min-w-0 space-y-8">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="grid gap-6">
                   <div className="min-w-0 space-y-2">
                     <p className="text-muted text-sm">Current version</p>
                     <div className="flex min-w-0 flex-wrap items-center gap-3">
@@ -346,7 +346,7 @@ export default function UpdatesSettingsPage() {
                     </div>
                   </div>
 
-                  <div className="min-w-0 space-y-2 sm:text-right">
+                  <div className="min-w-0 space-y-2">
                     <p className="text-muted text-sm">Latest version</p>
                     <span className="text-foreground block font-mono text-2xl font-semibold tracking-normal">
                       {latestVersion}
@@ -354,7 +354,7 @@ export default function UpdatesSettingsPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-x-10 gap-y-8 border-t border-border/50 pt-7 md:grid-cols-2">
+                <div className="grid gap-8 border-t border-border/50 pt-7">
                   <UpdateDetail label="Last checked">
                     <span className="text-foreground block max-w-64 text-lg font-medium leading-7">
                       {formatUpdateTimestamp(state.checkedAt)}
@@ -369,7 +369,7 @@ export default function UpdatesSettingsPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3 border-t border-border/50 pt-6 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-8">
+              <div className="flex flex-col gap-3 border-t border-border/50 pt-6">
                 {state.isSupported ? (
                   <Button
                     className="w-full justify-center"
