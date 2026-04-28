@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.56](https://github.com/Cronacl/Sentinel/compare/v0.0.55...v0.0.56) (2026-04-28)
+
+
+### Features
+
+* enhance repo checkpoint management with pending run handling and context compaction ([9247d97](https://github.com/Cronacl/Sentinel/commit/9247d97204d4033d2dc4ea1e4fac4f7f6ef65546))
+* implement uploaded media handling with API endpoints and file management ([75ca965](https://github.com/Cronacl/Sentinel/commit/75ca9653ce18bc8085fcb07f4d79dcc7a79c56d7))
+
 ## [0.0.55](https://github.com/Cronacl/Sentinel/compare/v0.0.54...v0.0.55) (2026-04-27)
 
 
