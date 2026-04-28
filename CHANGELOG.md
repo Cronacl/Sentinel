@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.57](https://github.com/Cronacl/Sentinel/compare/v0.0.56...v0.0.57) (2026-04-28)
+
+
+### Features
+
+* enhance output handling in GenericTool with text extraction and improved rendering ([946e817](https://github.com/Cronacl/Sentinel/commit/946e8170ee4e04ac6c0fb5287f25f25def7bf64a))
+
 ## [0.0.56](https://github.com/Cronacl/Sentinel/compare/v0.0.55...v0.0.56) (2026-04-28)
 
 
