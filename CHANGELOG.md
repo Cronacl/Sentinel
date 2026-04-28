@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.58](https://github.com/Cronacl/Sentinel/compare/v0.0.57...v0.0.58) (2026-04-28)
+
+
+### Bug Fixes
+
+* autosave appearance settings ([b24523d](https://github.com/Cronacl/Sentinel/commit/b24523d90fcc06b188c0081d699c41e2111bbbab))
+
 ## [0.0.57](https://github.com/Cronacl/Sentinel/compare/v0.0.56...v0.0.57) (2026-04-28)
 
 
