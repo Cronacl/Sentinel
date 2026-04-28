@@ -157,21 +157,35 @@ import { CopilotTodoTool } from "./renderers/copilot-todo";
 import { CopilotUserInputTool } from "./renderers/copilot-user-input";
 import { CopilotWebFetchTool } from "./renderers/copilot-web";
 import {
+  CursorAgentTool,
   CursorFileTool,
+  CursorImageTool,
+  CursorMcpTool,
   CursorPermissionTool,
   CursorPlanTool,
   CursorRuntimeTool,
   CursorSearchTool,
   CursorShellTool,
-  CursorUserInputTool,
+  CursorTodoTool,
+  CursorWebFetchTool,
+  CursorWebSearchTool,
+  OpenCodeAgentTool,
   OpenCodeFileTool,
+  OpenCodeImageTool,
+  OpenCodeMcpTool,
   OpenCodePermissionTool,
   OpenCodePlanTool,
   OpenCodeRuntimeTool,
   OpenCodeSearchTool,
   OpenCodeShellTool,
-  OpenCodeUserInputTool,
+  OpenCodeTodoTool,
+  OpenCodeWebFetchTool,
+  OpenCodeWebSearchTool,
 } from "./renderers/external-runtime";
+import {
+  CursorUserInputTool,
+  OpenCodeUserInputTool,
+} from "./renderers/external-runtime/user-input";
 
 const renderers: Record<string, Renderer> = {
   apply_patch: WorkspaceTool,
@@ -492,6 +506,7 @@ export const KNOWN_COPILOT_RENDERER_TOOL_NAMES = Object.freeze(
 );
 
 const cursorRenderers: Record<string, Renderer> = {
+  cursor_agent: CursorAgentTool,
   cursor_apply_patch: CursorFileTool,
   cursor_approval: CursorPermissionTool,
   cursor_ask_question: CursorUserInputTool,
@@ -502,18 +517,23 @@ const cursorRenderers: Record<string, Renderer> = {
   cursor_create_file: CursorFileTool,
   cursor_create_plan: CursorPlanTool,
   cursor_delete_file: CursorFileTool,
+  cursor_dispatch_agent: CursorAgentTool,
   cursor_edit: CursorFileTool,
   cursor_edit_file: CursorFileTool,
   cursor_execute_command: CursorShellTool,
   cursor_file: CursorFileTool,
   cursor_file_edit: CursorFileTool,
   cursor_find: CursorSearchTool,
+  cursor_generate_image: CursorImageTool,
   cursor_glob: CursorSearchTool,
   cursor_grep: CursorSearchTool,
+  cursor_image: CursorImageTool,
   cursor_list: CursorSearchTool,
   cursor_list_dir: CursorSearchTool,
   cursor_list_files: CursorSearchTool,
   cursor_ls: CursorSearchTool,
+  cursor_mcp: CursorMcpTool,
+  cursor_mcp_tool: CursorMcpTool,
   cursor_permission: CursorPermissionTool,
   cursor_plan: CursorPlanTool,
   cursor_read: CursorFileTool,
@@ -522,18 +542,26 @@ const cursorRenderers: Record<string, Renderer> = {
   cursor_request_user_input: CursorUserInputTool,
   cursor_rg: CursorSearchTool,
   cursor_run_command: CursorShellTool,
+  cursor_run_task: CursorAgentTool,
   cursor_search: CursorSearchTool,
   cursor_session: CursorRuntimeTool,
   cursor_shell: CursorShellTool,
+  cursor_subagent: CursorAgentTool,
+  cursor_task: CursorAgentTool,
   cursor_terminal: CursorShellTool,
-  cursor_todo: CursorPlanTool,
-  cursor_todo_read: CursorPlanTool,
-  cursor_todo_write: CursorPlanTool,
+  cursor_todo: CursorTodoTool,
+  cursor_todo_read: CursorTodoTool,
+  cursor_todo_write: CursorTodoTool,
+  cursor_todowrite: CursorTodoTool,
   cursor_tool_permission: CursorPermissionTool,
   cursor_update_file: CursorFileTool,
   cursor_update_plan: CursorPlanTool,
-  cursor_update_todo: CursorPlanTool,
+  cursor_update_todo: CursorTodoTool,
   cursor_view: CursorFileTool,
+  cursor_web_fetch: CursorWebFetchTool,
+  cursor_web_search: CursorWebSearchTool,
+  cursor_webfetch: CursorWebFetchTool,
+  cursor_websearch: CursorWebSearchTool,
   cursor_write: CursorFileTool,
   cursor_write_file: CursorFileTool,
 };
@@ -542,6 +570,7 @@ export const KNOWN_CURSOR_RENDERER_TOOL_NAMES = Object.freeze(
 );
 
 const openCodeRenderers: Record<string, Renderer> = {
+  opencode_agent: OpenCodeAgentTool,
   opencode_apply_patch: OpenCodeFileTool,
   opencode_approval: OpenCodePermissionTool,
   opencode_ask_question: OpenCodeUserInputTool,
@@ -549,9 +578,11 @@ const openCodeRenderers: Record<string, Renderer> = {
   opencode_ask_user_question: OpenCodeUserInputTool,
   opencode_bash: OpenCodeShellTool,
   opencode_command: OpenCodeShellTool,
+  opencode_codesearch: OpenCodeSearchTool,
   opencode_create_file: OpenCodeFileTool,
   opencode_create_plan: OpenCodePlanTool,
   opencode_delete_file: OpenCodeFileTool,
+  opencode_dispatch_agent: OpenCodeAgentTool,
   opencode_edit: OpenCodeFileTool,
   opencode_edit_file: OpenCodeFileTool,
   opencode_execute: OpenCodeShellTool,
@@ -559,32 +590,45 @@ const openCodeRenderers: Record<string, Renderer> = {
   opencode_file: OpenCodeFileTool,
   opencode_file_edit: OpenCodeFileTool,
   opencode_find: OpenCodeSearchTool,
+  opencode_generate_image: OpenCodeImageTool,
   opencode_glob: OpenCodeSearchTool,
   opencode_grep: OpenCodeSearchTool,
+  opencode_image: OpenCodeImageTool,
   opencode_list: OpenCodeSearchTool,
   opencode_list_dir: OpenCodeSearchTool,
   opencode_list_files: OpenCodeSearchTool,
   opencode_ls: OpenCodeSearchTool,
+  opencode_mcp: OpenCodeMcpTool,
+  opencode_mcp_tool: OpenCodeMcpTool,
   opencode_permission: OpenCodePermissionTool,
   opencode_plan: OpenCodePlanTool,
+  opencode_question: OpenCodeUserInputTool,
   opencode_read: OpenCodeFileTool,
   opencode_read_file: OpenCodeFileTool,
   opencode_request_permission: OpenCodePermissionTool,
   opencode_request_user_input: OpenCodeUserInputTool,
   opencode_rg: OpenCodeSearchTool,
   opencode_run_command: OpenCodeShellTool,
+  opencode_run_task: OpenCodeAgentTool,
   opencode_search: OpenCodeSearchTool,
   opencode_session: OpenCodeRuntimeTool,
   opencode_shell: OpenCodeShellTool,
+  opencode_subagent: OpenCodeAgentTool,
+  opencode_task: OpenCodeAgentTool,
   opencode_terminal: OpenCodeShellTool,
-  opencode_todo: OpenCodePlanTool,
-  opencode_todo_read: OpenCodePlanTool,
-  opencode_todo_write: OpenCodePlanTool,
+  opencode_todo: OpenCodeTodoTool,
+  opencode_todo_read: OpenCodeTodoTool,
+  opencode_todo_write: OpenCodeTodoTool,
+  opencode_todowrite: OpenCodeTodoTool,
   opencode_tool_permission: OpenCodePermissionTool,
   opencode_update_file: OpenCodeFileTool,
   opencode_update_plan: OpenCodePlanTool,
-  opencode_update_todo: OpenCodePlanTool,
+  opencode_update_todo: OpenCodeTodoTool,
   opencode_view: OpenCodeFileTool,
+  opencode_web_fetch: OpenCodeWebFetchTool,
+  opencode_web_search: OpenCodeWebSearchTool,
+  opencode_webfetch: OpenCodeWebFetchTool,
+  opencode_websearch: OpenCodeWebSearchTool,
   opencode_write: OpenCodeFileTool,
   opencode_write_file: OpenCodeFileTool,
 };
@@ -688,6 +732,26 @@ function resolveCursorRenderer(name: string): Renderer {
   if (matchesAny(toolName, ["permission", "approval"])) {
     return CursorPermissionTool;
   }
+
+  if (matchesAny(toolName, ["websearch", "web_search"])) {
+    return CursorWebSearchTool;
+  }
+  if (
+    matchesAny(toolName, ["webfetch", "web_fetch", "fetch_url", "url_fetch"])
+  ) {
+    return CursorWebFetchTool;
+  }
+  if (matchesAny(toolName, ["agent", "task", "subagent", "dispatch"])) {
+    return CursorAgentTool;
+  }
+  if (matchesAny(toolName, ["mcp"])) return CursorMcpTool;
+  if (matchesAny(toolName, ["generate_image", "image_gen"])) {
+    return CursorImageTool;
+  }
+  if (matchesAny(toolName, ["todowrite", "todo_write", "todo_read"])) {
+    return CursorTodoTool;
+  }
+
   if (matchesAny(toolName, ["bash", "shell", "command", "terminal", "exec"])) {
     return CursorShellTool;
   }
@@ -712,7 +776,9 @@ function resolveCursorRenderer(name: string): Renderer {
   ) {
     return CursorSearchTool;
   }
-  if (matchesAny(toolName, ["plan", "todo"])) return CursorPlanTool;
+  if (matchesAny(toolName, ["plan"])) return CursorPlanTool;
+  if (matchesAny(toolName, ["todo"])) return CursorTodoTool;
+  if (matchesAny(toolName, ["image"])) return CursorImageTool;
 
   return CursorRuntimeTool;
 }
@@ -726,6 +792,26 @@ function resolveOpenCodeRenderer(name: string): Renderer {
   if (matchesAny(toolName, ["permission", "approval"])) {
     return OpenCodePermissionTool;
   }
+
+  if (matchesAny(toolName, ["websearch", "web_search"])) {
+    return OpenCodeWebSearchTool;
+  }
+  if (
+    matchesAny(toolName, ["webfetch", "web_fetch", "fetch_url", "url_fetch"])
+  ) {
+    return OpenCodeWebFetchTool;
+  }
+  if (matchesAny(toolName, ["agent", "task", "subagent", "dispatch"])) {
+    return OpenCodeAgentTool;
+  }
+  if (matchesAny(toolName, ["mcp"])) return OpenCodeMcpTool;
+  if (matchesAny(toolName, ["generate_image", "image_gen"])) {
+    return OpenCodeImageTool;
+  }
+  if (matchesAny(toolName, ["todowrite", "todo_write", "todo_read"])) {
+    return OpenCodeTodoTool;
+  }
+
   if (matchesAny(toolName, ["bash", "shell", "command", "terminal", "exec"])) {
     return OpenCodeShellTool;
   }
@@ -750,7 +836,9 @@ function resolveOpenCodeRenderer(name: string): Renderer {
   ) {
     return OpenCodeSearchTool;
   }
-  if (matchesAny(toolName, ["plan", "todo"])) return OpenCodePlanTool;
+  if (matchesAny(toolName, ["plan"])) return OpenCodePlanTool;
+  if (matchesAny(toolName, ["todo"])) return OpenCodeTodoTool;
+  if (matchesAny(toolName, ["image"])) return OpenCodeImageTool;
 
   return OpenCodeRuntimeTool;
 }
