@@ -4,7 +4,6 @@ import {
   Button,
   ColorSlider,
   ColorSwatch,
-  Form,
   Spinner,
   Switch,
 } from "@heroui/react";
@@ -16,10 +15,9 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { parseColor } from "react-aria-components";
-import { sileo } from "sileo";
 
 import {
   ControlledNumberField,
@@ -27,7 +25,6 @@ import {
 } from "@/components/forms/controlled-fields";
 import { FontFamilySelector } from "@/components/settings/font-family-selector";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
-import { useOptimisticMutation } from "@/hooks/use-optimistic-mutation";
 import {
   applyAppearanceSettings,
   CODE_THEME_OPTIONS,
@@ -54,6 +51,7 @@ const THEME_ICON = {
 } as const;
 
 const DEFAULT_ACCENT_COLOR_HUE = 220;
+const AUTO_SAVE_DELAY_MS = 400;
 
 function dispatchAppearanceEvents() {
   window.dispatchEvent(new Event("sentinel-appearance-change"));
@@ -127,6 +125,9 @@ function ResetAction({
 export default function AppearanceSettingsPage() {
   const utils = api.useUtils();
   const [submitError, setSubmitError] = useState("");
+  const resetFormRef = useRef(false);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestSaveRef = useRef(0);
 
   const form = useForm<AppearanceFormValues>({
     defaultValues: DEFAULT_APPEARANCE_SETTINGS,
@@ -135,37 +136,113 @@ export default function AppearanceSettingsPage() {
 
   const { data: appearance, error, isPending } = api.appearance.get.useQuery();
 
+  const updateAppearance = api.appearance.update.useMutation();
+
+  const resetForm = useCallback(
+    (values: AppearanceFormValues) => {
+      resetFormRef.current = true;
+      form.reset(values);
+      queueMicrotask(() => {
+        resetFormRef.current = false;
+      });
+    },
+    [form],
+  );
+
   useEffect(() => {
     if (!appearance) {
       return;
     }
 
-    form.reset(appearance);
-  }, [appearance, form]);
+    resetForm(appearance);
+  }, [appearance, resetForm]);
 
-  const updateAppearance = api.appearance.update.useMutation(
-    useOptimisticMutation({
-      applyOptimisticUpdate: (_current, values: AppearanceFormValues) => values,
-      getData: () => utils.appearance.get.getData(),
-      onError: (mutationError, _values, context) => {
-        const fallback = context.previousData ?? DEFAULT_APPEARANCE_SETTINGS;
-        setSubmitError(mutationError.message);
-        applyAppearanceSettings(fallback);
-        form.reset(fallback);
-        dispatchAppearanceEvents();
-      },
-      onSuccess: (data) => {
+  const applyPreviewValues = useCallback((values: AppearanceFormValues) => {
+    applyAppearanceSettings(values);
+    dispatchAppearanceEvents();
+  }, []);
+
+  const persistValues = useCallback(
+    async (values: AppearanceFormValues, saveId: number) => {
+      const previousValues =
+        utils.appearance.get.getData() ?? DEFAULT_APPEARANCE_SETTINGS;
+
+      setSubmitError("");
+      utils.appearance.get.setData(undefined, values);
+
+      try {
+        const savedValues = await updateAppearance.mutateAsync(values);
+
+        if (latestSaveRef.current !== saveId) {
+          return;
+        }
+
         setSubmitError("");
-        applyAppearanceSettings(data);
-        form.reset(data);
-        dispatchAppearanceEvents();
-        sileo.success({ description: "Appearance updated." });
-      },
-      setData: (value) => {
-        utils.appearance.get.setData(undefined, value);
-      },
-    }),
+        utils.appearance.get.setData(undefined, savedValues);
+        applyPreviewValues(savedValues);
+        resetForm(savedValues);
+      } catch (mutationError) {
+        if (latestSaveRef.current !== saveId) {
+          return;
+        }
+
+        const message =
+          mutationError instanceof Error
+            ? mutationError.message
+            : "Failed to update appearance.";
+
+        setSubmitError(message);
+        utils.appearance.get.setData(undefined, previousValues);
+        applyPreviewValues(previousValues);
+        resetForm(previousValues);
+      }
+    },
+    [applyPreviewValues, resetForm, updateAppearance, utils.appearance.get],
   );
+
+  const schedulePersistValues = useCallback(
+    (values: AppearanceFormValues, delay = AUTO_SAVE_DELAY_MS) => {
+      const saveId = latestSaveRef.current + 1;
+      latestSaveRef.current = saveId;
+
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+
+      saveTimeoutRef.current = setTimeout(() => {
+        saveTimeoutRef.current = null;
+        void persistValues(values, saveId);
+      }, delay);
+    },
+    [persistValues],
+  );
+
+  useEffect(
+    () => () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const subscription = form.watch((values, { name }) => {
+      if (!name || resetFormRef.current) {
+        return;
+      }
+
+      const parsed = appearanceFormSchema.safeParse(values);
+      if (!parsed.success) {
+        return;
+      }
+
+      applyPreviewValues(parsed.data);
+      schedulePersistValues(parsed.data);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [applyPreviewValues, form, schedulePersistValues]);
 
   const appearanceValues = form.watch();
   const themePreference = appearanceValues.themePreference;
@@ -192,21 +269,12 @@ export default function AppearanceSettingsPage() {
     });
   };
 
-  const applyPreviewValues = (values: AppearanceFormValues) => {
-    applyAppearanceSettings(values);
-    dispatchAppearanceEvents();
-  };
-
   const handleThemeChange = async (nextTheme: ThemePreference) => {
     const currentValues = form.getValues();
-    if (
-      nextTheme === currentValues.themePreference ||
-      updateAppearance.isPending
-    ) {
+    if (nextTheme === currentValues.themePreference) {
       return;
     }
 
-    const previousValues = appearance ?? currentValues;
     const nextValues = {
       ...currentValues,
       themePreference: nextTheme,
@@ -219,13 +287,7 @@ export default function AppearanceSettingsPage() {
       shouldValidate: true,
     });
     applyPreviewValues(nextValues);
-
-    try {
-      await updateAppearance.mutateAsync(nextValues);
-    } catch {
-      applyPreviewValues(previousValues);
-      form.reset(previousValues);
-    }
+    schedulePersistValues(nextValues, 0);
   };
 
   const handleAccentColorChange = (
@@ -252,19 +314,6 @@ export default function AppearanceSettingsPage() {
     });
   };
 
-  const handleSubmit = async (values: AppearanceFormValues) => {
-    const previousValues = appearance ?? DEFAULT_APPEARANCE_SETTINGS;
-    setSubmitError("");
-    applyPreviewValues(values);
-
-    try {
-      await updateAppearance.mutateAsync(values);
-    } catch {
-      applyPreviewValues(previousValues);
-      form.reset(previousValues);
-    }
-  };
-
   return (
     <SettingsPageWrapper
       subtitle="Adjust theme, fonts, and reading scale."
@@ -285,7 +334,7 @@ export default function AppearanceSettingsPage() {
       {!appearance && isPending ? (
         <SettingsLoadingSpinner />
       ) : (
-        <Form onSubmit={form.handleSubmit(handleSubmit)}>
+        <div>
           <section className="border-separator/20 bg-surface rounded-2xl border">
             <SettingsSectionRow
               description="Choose the overall light, dark, or system appearance."
@@ -300,7 +349,6 @@ export default function AppearanceSettingsPage() {
                   return (
                     <Button
                       className="justify-center rounded-full"
-                      isDisabled={updateAppearance.isPending}
                       key={option.value}
                       onPress={() => void handleThemeChange(option.value)}
                       size="sm"
@@ -463,26 +511,8 @@ export default function AppearanceSettingsPage() {
                 </div>
               </SettingsRowControl>
             </SettingsSectionRow>
-
-            <div className="flex justify-end border-t border-border/50 p-5">
-              <Button
-                isDisabled={
-                  updateAppearance.isPending || !form.formState.isDirty
-                }
-                isPending={updateAppearance.isPending}
-                size="sm"
-                type="submit"
-              >
-                {({ isPending }) => (
-                  <>
-                    {isPending ? <Spinner color="current" size="sm" /> : null}
-                    Save
-                  </>
-                )}
-              </Button>
-            </div>
           </section>
-        </Form>
+        </div>
       )}
     </SettingsPageWrapper>
   );
