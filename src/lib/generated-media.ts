@@ -1,17 +1,7 @@
-import {
-  mkdir,
-  readdir,
-  readFile,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
-import os from "node:os";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { GENERATED_MEDIA_TTL_MS } from "@/lib/video-generation";
-
-const GENERATED_MEDIA_ROOT = path.join(os.tmpdir(), "sentinel-generated-media");
+import { getSentinelMediaRoot } from "@/lib/runtime/local-state";
 
 const MEDIA_EXTENSION_BY_TYPE: Record<string, string> = {
   "video/mp4": "mp4",
@@ -22,9 +12,6 @@ const MEDIA_EXTENSION_BY_TYPE: Record<string, string> = {
   "video/x-ms-wmv": "wmv",
 };
 
-let cleanupPromise: Promise<void> | null = null;
-let lastCleanupAt = 0;
-
 function toSafePathSegment(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]+/g, "_");
 }
@@ -34,7 +21,7 @@ function getMediaExtension(mediaType: string) {
 }
 
 export function getGeneratedMediaRoot() {
-  return GENERATED_MEDIA_ROOT;
+  return path.join(getSentinelMediaRoot(), "generated");
 }
 
 export function resolveGeneratedMediaArtifactPath({
@@ -44,25 +31,23 @@ export function resolveGeneratedMediaArtifactPath({
   artifactPath: string;
   userId?: string;
 }) {
+  const generatedMediaRoot = getGeneratedMediaRoot();
   const normalizedArtifactPath = artifactPath
     .split("/")
     .filter(Boolean)
     .join(path.sep);
-  const absolutePath = path.resolve(
-    GENERATED_MEDIA_ROOT,
-    normalizedArtifactPath,
-  );
-  const rootWithSep = `${path.resolve(GENERATED_MEDIA_ROOT)}${path.sep}`;
+  const absolutePath = path.resolve(generatedMediaRoot, normalizedArtifactPath);
+  const rootWithSep = `${path.resolve(generatedMediaRoot)}${path.sep}`;
 
   if (
-    absolutePath !== path.resolve(GENERATED_MEDIA_ROOT) &&
+    absolutePath !== path.resolve(generatedMediaRoot) &&
     !absolutePath.startsWith(rootWithSep)
   ) {
     throw new Error("Invalid generated media artifact path.");
   }
 
   const pathSegments = path
-    .relative(GENERATED_MEDIA_ROOT, absolutePath)
+    .relative(generatedMediaRoot, absolutePath)
     .split(path.sep);
   const ownerSegment = pathSegments[0];
   if (userId && ownerSegment !== userId) {
@@ -75,61 +60,8 @@ export function resolveGeneratedMediaArtifactPath({
   };
 }
 
-async function cleanupDirectory(directory: string, now: number) {
-  let entries;
-
-  try {
-    entries = await readdir(directory, { withFileTypes: true });
-  } catch {
-    return;
-  }
-
-  await Promise.all(
-    entries.map(async (entry) => {
-      const entryPath = path.join(directory, entry.name);
-
-      if (entry.isDirectory()) {
-        await cleanupDirectory(entryPath, now);
-
-        try {
-          const remaining = await readdir(entryPath);
-          if (remaining.length === 0) {
-            await rm(entryPath, { force: true, recursive: true });
-          }
-        } catch {
-          // ignore cleanup races
-        }
-        return;
-      }
-
-      try {
-        const fileStat = await stat(entryPath);
-        if (now - fileStat.mtimeMs > GENERATED_MEDIA_TTL_MS) {
-          await rm(entryPath, { force: true });
-        }
-      } catch {
-        // ignore cleanup races
-      }
-    }),
-  );
-}
-
 export async function cleanupGeneratedMediaArtifacts() {
-  const now = Date.now();
-  if (cleanupPromise && now - lastCleanupAt < 60_000) {
-    return await cleanupPromise;
-  }
-
-  lastCleanupAt = now;
-  cleanupPromise = (async () => {
-    try {
-      await cleanupDirectory(GENERATED_MEDIA_ROOT, now);
-    } finally {
-      cleanupPromise = null;
-    }
-  })();
-
-  return await cleanupPromise;
+  await mkdir(getGeneratedMediaRoot(), { recursive: true });
 }
 
 export async function writeGeneratedMediaArtifact({
@@ -150,13 +82,12 @@ export async function writeGeneratedMediaArtifact({
     "/",
   );
   const absolutePath = path.join(
-    GENERATED_MEDIA_ROOT,
+    getGeneratedMediaRoot(),
     ...relativePath.split("/"),
   );
 
   await mkdir(path.dirname(absolutePath), { recursive: true });
   await writeFile(absolutePath, data);
-  void cleanupGeneratedMediaArtifacts();
 
   return {
     absolutePath,

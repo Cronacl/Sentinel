@@ -1,5 +1,7 @@
 import type { streamText } from "ai";
 
+import { readUploadedMediaUrl } from "@/lib/uploaded-media";
+
 function decodeBase64(value: string) {
   return Uint8Array.from(Buffer.from(value, "base64"));
 }
@@ -33,6 +35,14 @@ export function createAttachmentDownloadHandler(): NonNullable<
       requestedDownloads.map(async ({ isUrlSupportedByModel, url }) => {
         if (url.protocol === "data:") {
           return parseDataUrl(url);
+        }
+
+        const uploadedMedia = await readUploadedMediaUrl(url.href);
+        if (uploadedMedia) {
+          return {
+            data: uploadedMedia.data,
+            mediaType: undefined,
+          };
         }
 
         return isUrlSupportedByModel ? null : null;

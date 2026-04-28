@@ -43,6 +43,7 @@ import {
 } from "@/lib/memory/service";
 import { describeMemoryRuntimeUnavailability } from "@/lib/memory/runtime";
 import { normalizeTranscriptDocumentsForModel } from "@/lib/documents/bootstrap";
+import { persistUploadedMediaParts } from "@/lib/uploaded-media";
 import {
   getThreadPlanState,
   answerThreadPlanQuestionSet,
@@ -1546,7 +1547,17 @@ async function runParsedThreadChat(
   _options?: { detached?: boolean },
 ) {
   const timingStartedAt = Date.now();
-  const request = await parseRequest(rawInput, userId);
+  const parsedRequest = await parseRequest(rawInput, userId);
+  const request = parsedRequest.message
+    ? {
+        ...parsedRequest,
+        message: await persistUploadedMediaParts({
+          message: parsedRequest.message,
+          threadId: parsedRequest.threadId,
+          userId: parsedRequest.userId,
+        }),
+      }
+    : parsedRequest;
   logRuntimeTiming("request_received", timingStartedAt, {
     threadId: request.threadId,
     trigger: request.trigger,

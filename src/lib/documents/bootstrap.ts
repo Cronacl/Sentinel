@@ -9,6 +9,7 @@ import {
   getLowercaseExtension,
 } from "./formats";
 import { loadInlineAttachmentDocument } from "./loader";
+import { materializeUploadedMediaUrlAsDataUrl } from "@/lib/uploaded-media";
 
 const DEFAULT_BOOTSTRAP_DOCUMENT_MAX_CHARS = 20_000;
 const FORCE_NORMALIZED_DOCUMENT_MEDIA_TYPES = new Set([
@@ -123,7 +124,12 @@ export async function normalizeTranscriptDocumentsForModel(input: {
               providerId: input.providerId,
             })
           ) {
-            return part;
+            const materializedUrl = await materializeUploadedMediaUrlAsDataUrl({
+              mediaType: part.mediaType,
+              url: part.url,
+            });
+
+            return materializedUrl ? { ...part, url: materializedUrl } : part;
           }
 
           const loaded = await loadInlineAttachmentDocument({

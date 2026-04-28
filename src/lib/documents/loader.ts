@@ -6,6 +6,7 @@ import path from "node:path";
 import TurndownService from "turndown";
 
 import { resolveToolPath } from "@/lib/ai/chat/tools/paths";
+import { readUploadedMediaUrl } from "@/lib/uploaded-media";
 import {
   detectAttachmentType,
   getAttachmentExtension,
@@ -1207,15 +1208,6 @@ async function resolveMessageAttachmentSource(
     );
   }
 
-  if (
-    selected.url.startsWith("http://") ||
-    selected.url.startsWith("https://")
-  ) {
-    throw new Error(
-      `Remote attachment URLs are not supported for "${input.filename}".`,
-    );
-  }
-
   if (selected.url.startsWith("data:")) {
     const parsed = decodeDataUrl(selected.url);
     return {
@@ -1229,6 +1221,29 @@ async function resolveMessageAttachmentSource(
         inferAttachmentMimeType(selected.filename ?? input.filename),
       sourceKind: "message_attachment",
     };
+  }
+
+  const uploadedMedia = await readUploadedMediaUrl(selected.url);
+  if (uploadedMedia) {
+    return {
+      data: Buffer.from(uploadedMedia.data),
+      filename: selected.filename ?? input.filename,
+      format:
+        getAttachmentExtension(selected.filename ?? input.filename) ?? "txt",
+      mediaType:
+        normalizeAttachmentMimeType(selected.mediaType) ??
+        inferAttachmentMimeType(selected.filename ?? input.filename),
+      sourceKind: "message_attachment",
+    };
+  }
+
+  if (
+    selected.url.startsWith("http://") ||
+    selected.url.startsWith("https://")
+  ) {
+    throw new Error(
+      `Remote attachment URLs are not supported for "${input.filename}".`,
+    );
   }
 
   if (path.isAbsolute(selected.url)) {
@@ -1372,20 +1387,33 @@ export async function loadInlineAttachmentDocument(input: {
         inferAttachmentMimeType(input.filename),
       sourceKind: input.sourceKind ?? "message_attachment",
     };
-  } else if (path.isAbsolute(input.url)) {
-    resolved = {
-      data: await readFile(input.url),
-      filename: input.filename,
-      format: getAttachmentExtension(input.filename) ?? "txt",
-      mediaType:
-        normalizeAttachmentMimeType(input.mediaType) ??
-        inferAttachmentMimeType(input.filename),
-      sourceKind: input.sourceKind ?? "message_attachment",
-    };
   } else {
-    throw new Error(
-      `Inline attachment "${input.filename}" uses an unsupported source URL.`,
-    );
+    const uploadedMedia = await readUploadedMediaUrl(input.url);
+    if (uploadedMedia) {
+      resolved = {
+        data: Buffer.from(uploadedMedia.data),
+        filename: input.filename,
+        format: getAttachmentExtension(input.filename) ?? "txt",
+        mediaType:
+          normalizeAttachmentMimeType(input.mediaType) ??
+          inferAttachmentMimeType(input.filename),
+        sourceKind: input.sourceKind ?? "message_attachment",
+      };
+    } else if (path.isAbsolute(input.url)) {
+      resolved = {
+        data: await readFile(input.url),
+        filename: input.filename,
+        format: getAttachmentExtension(input.filename) ?? "txt",
+        mediaType:
+          normalizeAttachmentMimeType(input.mediaType) ??
+          inferAttachmentMimeType(input.filename),
+        sourceKind: input.sourceKind ?? "message_attachment",
+      };
+    } else {
+      throw new Error(
+        `Inline attachment "${input.filename}" uses an unsupported source URL.`,
+      );
+    }
   }
 
   return await loadResolvedDocument(

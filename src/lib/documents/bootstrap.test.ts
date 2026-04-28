@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 import { normalizeTranscriptDocumentsForModel, __internal } from "./bootstrap";
+import { buildUploadedMediaUrl } from "@/lib/uploaded-media-url";
+import { writeUploadedMediaArtifact } from "@/lib/uploaded-media";
 
 function toDataUrl(value: Buffer, mediaType: string) {
   return `data:${mediaType};base64,${value.toString("base64")}`;
@@ -171,6 +176,55 @@ describe("document bootstrap normalization", () => {
         providerId: "openai",
       }),
     ).toBe(false);
+  });
+
+  it("materializes persisted uploaded images before model passthrough", async () => {
+    const previousMediaPath = process.env.SENTINEL_MEDIA_PATH;
+    const mediaRoot = await mkdtemp(path.join(tmpdir(), "sentinel-media-"));
+
+    try {
+      process.env.SENTINEL_MEDIA_PATH = mediaRoot;
+      const artifact = await writeUploadedMediaArtifact({
+        data: Buffer.from("image-bytes"),
+        filename: "screenshot.png",
+        messageId: "message-4",
+        threadId: "thread-1",
+        userId: "user-1",
+      });
+
+      const messages = await normalizeTranscriptDocumentsForModel({
+        messages: [
+          {
+            id: "message-4",
+            metadata: {},
+            parts: [
+              {
+                filename: "screenshot.png",
+                mediaType: "image/png",
+                type: "file",
+                url: buildUploadedMediaUrl(artifact.artifactPath),
+              },
+            ],
+            role: "user",
+          },
+        ],
+        providerId: "google",
+        responseModelId: "gemini-2.5-pro",
+      });
+
+      const part = messages[0]?.parts[0];
+      expect(part?.type).toBe("file");
+      expect(part && "url" in part ? part.url : "").toBe(
+        toDataUrl(Buffer.from("image-bytes"), "image/png"),
+      );
+    } finally {
+      if (previousMediaPath === undefined) {
+        delete process.env.SENTINEL_MEDIA_PATH;
+      } else {
+        process.env.SENTINEL_MEDIA_PATH = previousMediaPath;
+      }
+      await rm(mediaRoot, { force: true, recursive: true });
+    }
   });
 
   it("never passes through markdown and other text-based attachments", () => {

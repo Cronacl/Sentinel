@@ -34,13 +34,13 @@ The app is basically managing a bounded job fan-out there instead of a one-shot 
 
 ## Artifact handling
 
-Generated media goes through temporary artifact storage first.
+Generated media goes through persistent local artifact storage first.
 
 For video, the artifact flow is roughly:
 
 ```mermaid
 flowchart TD
-    A["Provider returns media bytes"] --> B["Write artifact to temporary storage"]
+    A["Provider returns media bytes"] --> B["Write artifact to Sentinel media storage"]
     B --> C["Store user/thread-scoped artifact path"]
     C --> D["Serve artifact back through app route"]
     D --> E["UI plays or displays the result"]
@@ -48,9 +48,9 @@ flowchart TD
 
 Artifacts are scoped to the user and thread.
 
-The storage is temporary and cleaned up on a TTL.
+The storage root defaults to Sentinel's local state directory under `media/generated`, and deployments can override it with `SENTINEL_MEDIA_PATH`.
 
-That makes generated media feel local and fairly disposable instead of becoming part of the permanent app database.
+That keeps large generated media out of the permanent app database while still making it durable across app restarts and OS temp cleanup.
 
 ## Why this stays separate
 

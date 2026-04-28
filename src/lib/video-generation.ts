@@ -7,7 +7,6 @@ export const DEFAULT_VIDEO_GENERATION_COUNT = 1;
 export const MAX_VIDEO_GENERATION_VIDEOS_PER_TARGET = 2;
 export const MAX_VIDEO_GENERATION_TARGETS = 4;
 export const MAX_VIDEO_GENERATION_TOTAL_VIDEOS = 4;
-export const GENERATED_MEDIA_TTL_MS = 1000 * 60 * 60 * 24;
 
 export type VideoGenerationSettings = {
   defaultProvider: AIProvider | null;

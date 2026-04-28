@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import {
   getSentinelDbFilePath,
+  getSentinelMediaRoot,
   getSentinelStateFilePath,
   getSentinelStateRoot,
 } from "./local-state";
@@ -22,12 +23,16 @@ describe("local state helpers", () => {
     expect(getSentinelDbFilePath({ env, platform: "win32" })).toBe(
       "C:\\Users\\sentinel\\.sentinel\\sentinel.db",
     );
+    expect(getSentinelMediaRoot({ env, platform: "win32" })).toBe(
+      "C:\\Users\\sentinel\\.sentinel\\media",
+    );
   });
 
-  it("honors explicit DB and state path overrides", () => {
+  it("honors explicit DB, state, and media path overrides", () => {
     const env: NodeJS.ProcessEnv = {
       NODE_ENV: "test",
       SENTINEL_DB_PATH: "/tmp/sentinel.db",
+      SENTINEL_MEDIA_PATH: "/data/sentinel-media",
       SENTINEL_STATE_PATH: "/tmp/state.json",
     };
 
@@ -37,6 +42,9 @@ describe("local state helpers", () => {
     );
     expect(getSentinelDbFilePath({ env, platform: "linux" })).toBe(
       "/tmp/sentinel.db",
+    );
+    expect(getSentinelMediaRoot({ env, platform: "linux" })).toBe(
+      "/data/sentinel-media",
     );
   });
 });

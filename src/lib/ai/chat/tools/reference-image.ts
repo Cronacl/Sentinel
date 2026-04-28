@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 
 import { buildActiveThreadMessages } from "@/lib/ai/messages/branches";
 import { loadThreadMessages } from "@/lib/ai/chat/persistence";
+import { readUploadedMediaUrl } from "@/lib/uploaded-media";
 
 export type ReferenceImage = {
   data: Uint8Array;
@@ -156,6 +157,14 @@ export async function resolveReferenceImage({
 
   if (selected.url.startsWith("data:")) {
     return decodeDataUrl(selected.url);
+  }
+
+  const uploadedMedia = await readUploadedMediaUrl(selected.url);
+  if (uploadedMedia) {
+    return {
+      data: Uint8Array.from(uploadedMedia.data),
+      mediaType: selected.mediaType,
+    };
   }
 
   if (/^https?:\/\//i.test(selected.url)) {

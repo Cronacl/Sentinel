@@ -66,6 +66,25 @@ export function getSentinelDbFilePath(options?: {
   );
 }
 
+export function getSentinelMediaRoot(options?: {
+  env?: EnvLike;
+  platform?: NodeJS.Platform;
+}) {
+  const env = options?.env ?? process.env;
+  const platform = options?.platform ?? process.platform;
+  const pathModule = getPathModule(platform);
+  const explicitMediaPath = env.SENTINEL_MEDIA_PATH?.trim();
+
+  if (explicitMediaPath) {
+    return explicitMediaPath;
+  }
+
+  return pathModule.join(
+    getSentinelStateRoot({ ...options, platform }),
+    "media",
+  );
+}
+
 export async function applyPrivateFsMode(
   targetPath: string,
   mode: number,

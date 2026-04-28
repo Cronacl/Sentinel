@@ -12,6 +12,7 @@ import {
   validateThreadUIMessage,
   validateThreadUIMessages,
 } from "@/lib/ai/messages/ui";
+import { persistUploadedMediaParts } from "@/lib/uploaded-media";
 import { threadMessages, threads } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
@@ -30,7 +31,11 @@ export const messagesRouter = createTRPCRouter({
         });
       }
 
-      const message = await validateThreadUIMessage(input.message);
+      const message = await persistUploadedMediaParts({
+        message: await validateThreadUIMessage(input.message),
+        threadId: thread.id,
+        userId: ctx.session.user.id,
+      });
       const serialized = serializeThreadUIMessage(message);
 
       let persistedMessage: typeof threadMessages.$inferSelect;
@@ -96,7 +101,15 @@ export const messagesRouter = createTRPCRouter({
         });
       }
 
-      const messages = await validateThreadUIMessages(input.messages);
+      const messages = await Promise.all(
+        (await validateThreadUIMessages(input.messages)).map((message) =>
+          persistUploadedMediaParts({
+            message,
+            threadId: thread.id,
+            userId: ctx.session.user.id,
+          }),
+        ),
+      );
 
       ctx.db.transaction((tx) => {
         tx.delete(threadMessages)
