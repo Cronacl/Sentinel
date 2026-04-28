@@ -1167,7 +1167,7 @@ export async function runCursorThreadChat(
     mode: threadMode,
     reasoningEffort: request.reasoningEffort ?? null,
   });
-  await beginExternalRuntimeRepoCheckpoint({
+  void beginExternalRuntimeRepoCheckpoint({
     projectPath: workspaceRoot,
     runId,
     thread: existingThread,

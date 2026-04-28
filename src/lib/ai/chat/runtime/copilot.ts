@@ -1608,7 +1608,7 @@ export async function runCopilotThreadChat(
         normalizePersistedCopilotReasoningEffort(request.reasoningEffort) ??
         null,
     });
-    await beginThreadRepoCheckpointRun({
+    void beginThreadRepoCheckpointRun({
       projectPath: workspaceRoot,
       runId,
       thread: existingThread,

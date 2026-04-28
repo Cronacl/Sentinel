@@ -34,6 +34,7 @@ type ActiveRepoCheckpointRun = {
 };
 
 const activeRepoCheckpointRuns = new Map<string, ActiveRepoCheckpointRun>();
+const pendingRepoCheckpointRuns = new Map<string, Promise<boolean>>();
 const log = createLogger("RepoCheckpoints");
 
 function getThreadCheckpointCursorId(
@@ -61,30 +62,47 @@ export async function beginThreadRepoCheckpointRun(input: {
     return false;
   }
 
-  try {
-    const repoContext = await resolveRepoContext(input.projectPath);
-    if (!repoContext.isGitRepo || !repoContext.repoRoot) {
-      return false;
-    }
+  const pending = (async () => {
+    try {
+      const repoContext = await resolveRepoContext(input.projectPath!);
+      if (!repoContext.isGitRepo || !repoContext.repoRoot) {
+        return false;
+      }
 
-    const snapshot = await createRepoCheckpointSnapshot(input.projectPath);
-    activeRepoCheckpointRuns.set(input.runId, {
-      parentCheckpointId: getThreadCheckpointCursorId(input.thread),
-      projectPath: input.projectPath,
-      snapshot,
-    });
-    return true;
-  } catch (error) {
-    log.warn("repo_checkpoint_snapshot_start_failed", {
-      error,
-      projectPath: input.projectPath,
-      runId: input.runId,
-    });
-    return false;
+      const snapshot = await createRepoCheckpointSnapshot(input.projectPath!);
+      activeRepoCheckpointRuns.set(input.runId, {
+        parentCheckpointId: getThreadCheckpointCursorId(input.thread),
+        projectPath: input.projectPath!,
+        snapshot,
+      });
+      return true;
+    } catch (error) {
+      log.warn("repo_checkpoint_snapshot_start_failed", {
+        error,
+        projectPath: input.projectPath,
+        runId: input.runId,
+      });
+      return false;
+    } finally {
+      pendingRepoCheckpointRuns.delete(input.runId);
+    }
+  })();
+
+  pendingRepoCheckpointRuns.set(input.runId, pending);
+  return await pending;
+}
+
+async function awaitPendingRepoCheckpointRun(runId: string) {
+  const pending = pendingRepoCheckpointRuns.get(runId);
+  if (!pending) {
+    return;
   }
+
+  await pending.catch(() => false);
 }
 
 export async function clearThreadRepoCheckpointRun(runId: string) {
+  await awaitPendingRepoCheckpointRun(runId);
   const activeRun = activeRepoCheckpointRuns.get(runId);
   activeRepoCheckpointRuns.delete(runId);
   await disposeRepoCheckpointSnapshot(activeRun?.snapshot);
@@ -95,6 +113,7 @@ export async function finalizeThreadRepoCheckpointRun(input: {
   runId: string;
   threadId: string;
 }) {
+  await awaitPendingRepoCheckpointRun(input.runId);
   const activeRun = activeRepoCheckpointRuns.get(input.runId);
   activeRepoCheckpointRuns.delete(input.runId);
 

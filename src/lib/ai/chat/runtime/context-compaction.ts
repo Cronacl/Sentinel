@@ -209,14 +209,13 @@ export async function generateCompactionSummary({
   return sanitizeSummary(result.text);
 }
 
-export async function applyContextCompaction(input: {
+export type ContextCompactionPlan = ReturnType<typeof planContextCompaction>;
+
+export function planContextCompaction(input: {
   checkpoint: ThreadContextCompactionCheckpoint;
   contextWindow?: number | null;
   enabled: boolean;
   fixedWindowSize?: number | null;
-  languageModel: unknown;
-  onCompactionStart?: () => void | Promise<void>;
-  providerOptions?: SharedV3ProviderOptions;
   transcript: ThreadUIMessage[];
   useFixedWindow?: boolean;
   windowPercent: number;
@@ -224,25 +223,14 @@ export async function applyContextCompaction(input: {
   const preparedTranscript = prepareMessagesForModel(input.transcript);
   const exactInputTokens =
     getLatestCompletedAssistantInputTokens(preparedTranscript);
+  const configuredContextWindow = resolveConfiguredContextWindow({
+    contextWindow: input.contextWindow,
+    fixedWindowSize: input.fixedWindowSize,
+    useFixedWindow: input.useFixedWindow,
+  });
   const thresholdTokens = Math.floor(
-    resolveConfiguredContextWindow({
-      contextWindow: input.contextWindow,
-      fixedWindowSize: input.fixedWindowSize,
-      useFixedWindow: input.useFixedWindow,
-    }) *
-      (input.windowPercent / 100),
+    configuredContextWindow * (input.windowPercent / 100),
   );
-
-  if (!input.enabled) {
-    return {
-      checkpointWasInvalid: false,
-      didCompact: false,
-      inputTokens: exactInputTokens,
-      thresholdTokens,
-      transcript: preparedTranscript,
-      updatedCheckpoint: null,
-    };
-  }
 
   const cutoffMessageId = input.checkpoint.coveredThroughMessageId ?? null;
   const cutoffIndex = cutoffMessageId
@@ -265,18 +253,38 @@ export async function applyContextCompaction(input: {
         ]
       : remainingMessages;
 
+  const base = {
+    checkpointWasInvalid,
+    configuredContextWindow,
+    exactInputTokens,
+    existingSummary,
+    preparedTranscript,
+    remainingMessages,
+    thresholdTokens,
+    transcript: withExistingSummary,
+  };
+
+  if (!input.enabled) {
+    return {
+      ...base,
+      canDeferNewSummary: false,
+      compactedMessages: [],
+      coveredThroughMessageId: null,
+      shouldGenerateNewSummary: false,
+    };
+  }
+
   if (
     exactInputTokens == null ||
     exactInputTokens < thresholdTokens ||
     remainingMessages.length <= RAW_TAIL_MESSAGE_COUNT
   ) {
     return {
-      checkpointWasInvalid,
-      didCompact: false,
-      inputTokens: exactInputTokens,
-      thresholdTokens,
-      transcript: withExistingSummary,
-      updatedCheckpoint: null,
+      ...base,
+      canDeferNewSummary: false,
+      compactedMessages: [],
+      coveredThroughMessageId: null,
+      shouldGenerateNewSummary: false,
     };
   }
 
@@ -288,55 +296,83 @@ export async function applyContextCompaction(input: {
   const coveredThroughMessageId =
     compactedMessages.at(-1)?.id ?? cutoffMessageId;
 
-  if (compactedMessages.length < MIN_OLDER_MESSAGES_TO_COMPACT) {
+  if (
+    compactedMessages.length < MIN_OLDER_MESSAGES_TO_COMPACT ||
+    !coveredThroughMessageId
+  ) {
     return {
-      checkpointWasInvalid,
-      didCompact: false,
-      inputTokens: exactInputTokens,
-      thresholdTokens,
-      transcript: withExistingSummary,
-      updatedCheckpoint: null,
+      ...base,
+      canDeferNewSummary: false,
+      compactedMessages,
+      coveredThroughMessageId: null,
+      shouldGenerateNewSummary: false,
     };
   }
 
-  if (!coveredThroughMessageId) {
+  return {
+    ...base,
+    canDeferNewSummary:
+      exactInputTokens != null && exactInputTokens < configuredContextWindow,
+    compactedMessages,
+    coveredThroughMessageId,
+    preservedRecentMessages,
+    shouldGenerateNewSummary: true,
+    strippedCompactedMessages,
+  };
+}
+
+export async function applyContextCompaction(input: {
+  checkpoint: ThreadContextCompactionCheckpoint;
+  contextWindow?: number | null;
+  enabled: boolean;
+  fixedWindowSize?: number | null;
+  languageModel: unknown;
+  onCompactionStart?: () => void | Promise<void>;
+  providerOptions?: SharedV3ProviderOptions;
+  transcript: ThreadUIMessage[];
+  useFixedWindow?: boolean;
+  windowPercent: number;
+}) {
+  const plan = planContextCompaction(input);
+
+  if (!plan.shouldGenerateNewSummary || !plan.coveredThroughMessageId) {
     return {
-      checkpointWasInvalid,
+      checkpointWasInvalid: plan.checkpointWasInvalid,
       didCompact: false,
-      inputTokens: exactInputTokens,
-      thresholdTokens,
-      transcript: withExistingSummary,
+      inputTokens: plan.exactInputTokens,
+      thresholdTokens: plan.thresholdTokens,
+      transcript: plan.transcript,
       updatedCheckpoint: null,
     };
   }
 
   await input.onCompactionStart?.();
   const summary = await generateCompactionSummary({
-    existingSummary,
+    existingSummary: plan.existingSummary,
     languageModel: input.languageModel,
-    messages: compactedMessages,
+    messages: plan.compactedMessages,
     ...(input.providerOptions
       ? { providerOptions: input.providerOptions }
       : {}),
   });
-  const strippedTailMessages = strippedCompactedMessages
+  const strippedTailMessages = plan.strippedCompactedMessages
     .map(buildSyntheticStrippedMessage)
     .filter((message): message is ThreadUIMessage => message != null);
 
   const compactedTranscript = [
-    buildSyntheticSummaryMessage(summary, coveredThroughMessageId),
+    buildSyntheticSummaryMessage(summary, plan.coveredThroughMessageId),
     ...strippedTailMessages,
-    ...preservedRecentMessages,
+    ...plan.preservedRecentMessages,
   ];
 
   return {
-    checkpointWasInvalid,
+    checkpointWasInvalid: plan.checkpointWasInvalid,
     didCompact: true,
-    inputTokens: exactInputTokens,
-    thresholdTokens,
+    inputTokens: plan.exactInputTokens,
+    thresholdTokens: plan.thresholdTokens,
     transcript: compactedTranscript,
     updatedCheckpoint: {
-      coveredThroughMessageId,
+      coveredThroughMessageId: plan.coveredThroughMessageId,
       summary,
     },
   };

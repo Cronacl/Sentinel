@@ -934,6 +934,28 @@ function createTextMessage({
   };
 }
 
+function createLongConversation(
+  messageCount = 14,
+  { assistantInputTokens }: { assistantInputTokens?: number } = {},
+) {
+  return Array.from({ length: messageCount }, (_, index) =>
+    createTextMessage({
+      id: `message-${index + 1}`,
+      metadata:
+        index % 2 === 1 && assistantInputTokens !== undefined
+          ? {
+              status: "completed",
+              usage: {
+                inputTokens: assistantInputTokens,
+              },
+            }
+          : { status: "completed" },
+      role: index % 2 === 0 ? "user" : "assistant",
+      text: `Message ${index + 1}: ${"refactor-details ".repeat(60)}`,
+    }),
+  );
+}
+
 function createMessageWithParts({
   id,
   metadata = {},
@@ -1396,6 +1418,275 @@ describe("runThreadChat bootstrap titles", () => {
         threadTitle: "Fix sidebar thread title updates",
       },
     });
+  });
+});
+
+describe("runThreadChat startup latency", () => {
+  function enableCompaction(contextWindow = 400) {
+    resolvedChatModel.contextWindow = contextWindow;
+    getContextCompactionSettings.mockImplementation(async () => ({
+      enabled: true,
+      fixedWindowSize: 128_000,
+      useFixedWindow: false,
+      windowPercent: 50,
+    }));
+  }
+
+  it("reuses a valid compaction checkpoint for generation", async () => {
+    const messages = createLongConversation(14, {
+      assistantInputTokens: 240,
+    });
+    enableCompaction();
+    setContextCompactionCheckpointState({
+      coveredThroughMessageId: "message-12",
+      summary: "Existing compacted state",
+      updatedAt: new Date("2026-03-10T10:00:00.000Z"),
+    });
+
+    const response = await runThreadChat(
+      {
+        id: "thread-1",
+        messages,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+    await waitForMockCall(createAgentUIStream);
+
+    const runtimeMessages =
+      createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
+
+    expect(response.status).toBe(202);
+    expect(runtimeMessages.map((message: any) => message.id)).toEqual([
+      "context-compaction-summary:message-12",
+      "message-13",
+      "message-14",
+    ]);
+  });
+
+  it("defers new compaction when the raw prepared transcript fits the model window", async () => {
+    const messages = createLongConversation(14, {
+      assistantInputTokens: 240,
+    });
+    const compaction = createDeferred();
+    enableCompaction();
+    generateText.mockImplementation(() => compaction.promise);
+
+    const response = await runThreadChat(
+      {
+        id: "thread-1",
+        messages,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+    await waitForMockCall(createAgentUIStream);
+
+    const runtimeMessages =
+      createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
+
+    expect(response.status).toBe(202);
+    expect(generateText).toHaveBeenCalled();
+    expect(updateThreadContextCompactionCheckpoint).not.toHaveBeenCalled();
+    expect(runtimeMessages.map((message: any) => message.id)).toEqual(
+      messages.map((message) => message.id),
+    );
+
+    compaction.resolve({ text: "<summary>Deferred compacted state</summary>" });
+    await flushAsyncWork();
+
+    expect(updateThreadContextCompactionCheckpoint).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        coveredThroughMessageId: "message-12",
+        summary: "Deferred compacted state",
+      }),
+    );
+  });
+
+  it("blocks new compaction when the raw prepared transcript exceeds the model window", async () => {
+    const messages = createLongConversation(14, {
+      assistantInputTokens: 500,
+    });
+    const compaction = createDeferred();
+    enableCompaction();
+    generateText.mockImplementation(() => compaction.promise);
+
+    const response = await runThreadChat(
+      {
+        id: "thread-1",
+        messages,
+        modelId: "openai:gpt-5.2",
+        reasoningEffort: "high",
+        trigger: "submit-tool-approval",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+    await flushAsyncWork();
+
+    expect(response.status).toBe(202);
+    expect(generateText).toHaveBeenCalled();
+    expect(createAgentUIStream).not.toHaveBeenCalled();
+
+    compaction.resolve({ text: "<summary>Blocking compacted state</summary>" });
+    await waitForMockCall(createAgentUIStream);
+
+    const runtimeMessages =
+      createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
+
+    expect(runtimeMessages[0]).toMatchObject({
+      id: "context-compaction-summary:message-12",
+      role: "system",
+    });
+  });
+
+  it("keeps MCP, memory, integration, and tool context while optimizing startup", async () => {
+    getMemoryRuntimeState.mockImplementation(async () => ({
+      available: true,
+      settings: {
+        autoSaveEnabled: true,
+        autoSavePerTurnLimit: 3,
+        defaultScope: "global",
+        enabled: true,
+        memoryDimensions: 1536,
+        memoryModel: "text-embedding-3-small",
+        memoryProvider: "openai",
+        retrievalLimit: 6,
+      },
+    }));
+    retrieveRelevantMemories.mockImplementation(async () => [
+      {
+        content: "Prefers concise answers.",
+        id: "memory-1",
+        kind: "preference",
+        scope: "global",
+        score: 0.9,
+        summary: "Prefers concise answers.",
+        workspaceId: null,
+      },
+    ]);
+    buildMemoryPromptLines.mockImplementation(() => [
+      "[Global] preference: Prefers concise answers.",
+    ]);
+    getMcpServerRuntime.mockImplementation(async () => [
+      {
+        catalogId: "filesystem",
+        encryptedConfig: null,
+        id: "mcp-1",
+        isEnabled: true,
+        name: "Filesystem",
+        transport: "stdio",
+      },
+    ]);
+    loadMcpTools.mockImplementation(async () => ({
+      closeAll: async () => {},
+      tools: {
+        mcp_filesystem__read_file: { kind: "tool" },
+      },
+    }));
+    getEnabledIntegrations.mockImplementation(async () => [
+      {
+        id: "integration-1",
+        isEnabled: true,
+        provider: "github",
+      },
+    ]);
+    countIntegrationTools.mockImplementation(() => 1);
+    loadIntegrationTools.mockImplementation(async () => ({
+      github_search: { kind: "tool" },
+    }));
+
+    await runThreadChat(createSubmitRequest(), "user-1");
+    await waitForMockCall(createAgentUIStream);
+
+    expect(getSystemPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        promptContext: expect.objectContaining({
+          enabledIntegrations: [
+            expect.objectContaining({
+              provider: "github",
+              toolCount: 1,
+            }),
+          ],
+          enabledMcpServers: [
+            expect.objectContaining({
+              id: "mcp-1",
+              toolCount: 1,
+            }),
+          ],
+          mcpToolNames: ["mcp_filesystem__read_file"],
+          memoryPromptLines: ["[Global] preference: Prefers concise answers."],
+          workspaceRoot: "/tmp/workspace-1",
+        }),
+      }),
+    );
+    expect(aiTestState.prepared?.tools).toHaveProperty(
+      "mcp_filesystem__read_file",
+    );
+    expect(aiTestState.prepared?.tools).toHaveProperty("github_search");
+  });
+
+  it("keeps optional preflight fallback behavior non-fatal", async () => {
+    getMemoryRuntimeState.mockImplementation(async () => ({
+      available: true,
+      settings: {
+        autoSaveEnabled: true,
+        autoSavePerTurnLimit: 3,
+        defaultScope: "global",
+        enabled: true,
+        memoryDimensions: 1536,
+        memoryModel: "text-embedding-3-small",
+        memoryProvider: "openai",
+        retrievalLimit: 6,
+      },
+    }));
+    getEnabledIntegrations.mockImplementation(async () => [
+      {
+        id: "integration-1",
+        isEnabled: true,
+        provider: "github",
+      },
+    ]);
+    getSkillSnapshot.mockImplementation(async () => {
+      throw new Error("skills failed");
+    });
+    retrieveRelevantMemories.mockImplementation(async () => {
+      throw new Error("memory failed");
+    });
+    loadMcpTools.mockImplementation(async () => {
+      throw new Error("mcp failed");
+    });
+    buildIntegrationContext.mockImplementation(async () => {
+      throw new Error("integration context failed");
+    });
+
+    const response = await runThreadChat(createSubmitRequest(), "user-1");
+    await waitForMockCall(createAgentUIStream);
+
+    expect(response.status).toBe(202);
+    expect(getSystemPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        personalization: "",
+        promptContext: expect.objectContaining({
+          availableSkills: [],
+          enabledIntegrations: [
+            expect.objectContaining({
+              provider: "github",
+              toolCount: 0,
+            }),
+          ],
+          memoryPromptLines: [],
+          workspaceRoot: "/tmp/workspace-1",
+        }),
+      }),
+    );
   });
 });
 

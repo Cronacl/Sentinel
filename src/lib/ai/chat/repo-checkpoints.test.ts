@@ -1,126 +1,163 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 
-const findThreadRepoCheckpoints = mock(async () => []);
-const restoreRepoCheckpointTree = mock(async () => ({
-  appliedPaths: ["file.ts"],
-  failedPaths: [],
+mock.module("server-only", () => ({}));
+
+const resolveRepoContext = mock(async () => ({
+  branch: "main",
+  isGitRepo: true,
+  repoRoot: "/tmp/workspace",
 }));
-const applyRepoCheckpointPatch = mock(async () => ({
-  appliedPaths: ["file.ts"],
-  failedPaths: [],
+const createRepoCheckpointSnapshot = mock(async () => ({
+  treeHash: "before-tree",
 }));
-const setActiveMessage = mock(async () => undefined);
-const updateMessageMetadata = mock(async () => undefined);
-const updateThreadRepoState = mock(() => undefined);
+const disposeRepoCheckpointSnapshot = mock(async () => {});
+const buildRepoCheckpointDiff = mock(async () => ({
+  afterTreeHash: "after-tree",
+  changedPaths: ["src/app.ts"],
+  forwardPatch: "diff --git a/src/app.ts b/src/app.ts",
+  reversePatch: "diff --git a/src/app.ts b/src/app.ts",
+}));
+const getRepoHeadCommit = mock(async () => "head-sha");
+const updateMessageMetadata = mock(async () => {});
+const updateThreadRepoState = mock(() => {});
+
+mock.module("@/lib/git/repo", () => ({
+  resolveRepoContext,
+}));
 
 mock.module("@/lib/git/checkpoints", () => ({
-  applyRepoCheckpointPatch,
-  buildRepoCheckpointDiff: mock(async () => ({
-    afterTreeHash: "after-tree",
-    changedPaths: ["file.ts"],
-    forwardPatch: "forward patch",
-    reversePatch: "reverse patch",
-  })),
-  createRepoCheckpointSnapshot: mock(async () => ({
-    treeHash: "before-tree",
-  })),
-  disposeRepoCheckpointSnapshot: mock(async () => undefined),
-  getRepoHeadCommit: mock(async () => "HEAD"),
-  restoreRepoCheckpointTree,
+  applyRepoCheckpointPatch: mock(async () => {}),
+  buildRepoCheckpointDiff,
+  createRepoCheckpointSnapshot,
+  disposeRepoCheckpointSnapshot,
+  getRepoHeadCommit,
+  restoreRepoCheckpointTree: mock(async () => {}),
+}));
+
+mock.module("./persistence", () => ({
+  setActiveMessage: mock(async () => {}),
+  updateMessageMetadata,
+  updateThreadRepoState,
 }));
 
 mock.module("@/server/db", () => ({
   db: {
+    insert: mock(() => ({
+      values: mock(() => ({
+        returning: mock(() => ({
+          all: mock(() => [{ id: "checkpoint-1" }]),
+        })),
+      })),
+    })),
     query: {
       threadMessages: {
         findFirst: mock(async () => null),
       },
       threadRepoCheckpoints: {
-        findMany: findThreadRepoCheckpoints,
+        findFirst: mock(async () => null),
+        findMany: mock(async () => []),
       },
     },
+    update: mock(() => ({
+      set: mock(() => ({
+        where: mock(() => ({
+          run: mock(() => {}),
+        })),
+      })),
+    })),
   },
 }));
 
-mock.module("./persistence", () => ({
-  setActiveMessage,
-  updateMessageMetadata,
-  updateThreadRepoState,
-}));
+const {
+  beginThreadRepoCheckpointRun,
+  clearThreadRepoCheckpointRun,
+  finalizeThreadRepoCheckpointRun,
+} = await import("./repo-checkpoints");
 
-const { resetThreadRepoCheckpoint } = await import("./repo-checkpoints");
-
-describe("resetThreadRepoCheckpoint", () => {
-  beforeEach(() => {
-    applyRepoCheckpointPatch.mockClear();
-    findThreadRepoCheckpoints.mockClear();
-    restoreRepoCheckpointTree.mockClear();
-    setActiveMessage.mockClear();
-    updateMessageMetadata.mockClear();
-    updateThreadRepoState.mockClear();
+function createDeferred<T>() {
+  let resolve: (value: T) => void = () => {};
+  let reject: (error?: unknown) => void = () => {};
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
   });
 
-  it("preserves the previous latest checkpoint when resetting from a non-tip message", async () => {
-    findThreadRepoCheckpoints.mockResolvedValueOnce([
-      {
-        afterTreeHash: "tree-1-after",
-        beforeTreeHash: "tree-1-before",
-        effectiveProjectPath: "/tmp/workspace",
-        id: "checkpoint-1",
-        parentCheckpointId: null,
-        repoRoot: "/tmp/workspace",
-      },
-      {
-        afterTreeHash: "tree-2-after",
-        beforeTreeHash: "tree-2-before",
-        effectiveProjectPath: "/tmp/workspace",
-        id: "checkpoint-2",
-        parentCheckpointId: "checkpoint-1",
-        repoRoot: "/tmp/workspace",
-      },
-      {
-        afterTreeHash: "tree-3-after",
-        beforeTreeHash: "tree-3-before",
-        effectiveProjectPath: "/tmp/workspace",
-        id: "checkpoint-3",
-        parentCheckpointId: "checkpoint-2",
-        repoRoot: "/tmp/workspace",
-      },
-    ]);
+  return { promise, reject, resolve };
+}
 
-    const result = await resetThreadRepoCheckpoint({
-      checkpointId: "checkpoint-2",
+async function flushAsyncWork() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+beforeEach(() => {
+  mock.clearAllMocks();
+  resolveRepoContext.mockImplementation(async () => ({
+    branch: "main",
+    isGitRepo: true,
+    repoRoot: "/tmp/workspace",
+  }));
+  createRepoCheckpointSnapshot.mockImplementation(async () => ({
+    treeHash: "before-tree",
+  }));
+  buildRepoCheckpointDiff.mockImplementation(async () => ({
+    afterTreeHash: "after-tree",
+    changedPaths: ["src/app.ts"],
+    forwardPatch: "diff --git a/src/app.ts b/src/app.ts",
+    reversePatch: "diff --git a/src/app.ts b/src/app.ts",
+  }));
+  getRepoHeadCommit.mockImplementation(async () => "head-sha");
+});
+
+describe("repo checkpoint run coordination", () => {
+  it("lets finalize wait for a pending checkpoint start", async () => {
+    const snapshot = { treeHash: "before-tree" };
+    const snapshotStart = createDeferred<typeof snapshot>();
+    createRepoCheckpointSnapshot.mockImplementationOnce(
+      () => snapshotStart.promise,
+    );
+
+    void beginThreadRepoCheckpointRun({
       projectPath: "/tmp/workspace",
-      thread: {
-        chatEngineState: {
-          repo: {
-            checkpointCursorId: "checkpoint-3",
-            checkpointLatestId: "checkpoint-3",
-            checkpointProjectPath: "/tmp/workspace",
-          },
-        },
-      },
+      runId: "run-1",
+      thread: null,
+    });
+    const finalized = finalizeThreadRepoCheckpointRun({
+      assistantMessageId: "assistant-1",
+      runId: "run-1",
       threadId: "thread-1",
-      userMessageId: "user-2",
     });
+    await flushAsyncWork();
 
-    expect(restoreRepoCheckpointTree).toHaveBeenCalledWith({
+    expect(buildRepoCheckpointDiff).not.toHaveBeenCalled();
+
+    snapshotStart.resolve(snapshot);
+
+    await expect(finalized).resolves.toBe("checkpoint-1");
+    expect(buildRepoCheckpointDiff).toHaveBeenCalledWith(snapshot);
+  });
+
+  it("lets clear wait for a pending checkpoint start before disposing", async () => {
+    const snapshot = { treeHash: "before-tree" };
+    const snapshotStart = createDeferred<typeof snapshot>();
+    createRepoCheckpointSnapshot.mockImplementationOnce(
+      () => snapshotStart.promise,
+    );
+
+    void beginThreadRepoCheckpointRun({
       projectPath: "/tmp/workspace",
-      repoRoot: "/tmp/workspace",
-      targetTreeHash: "tree-2-before",
+      runId: "run-2",
+      thread: null,
     });
-    expect(setActiveMessage).toHaveBeenCalledWith("thread-1", "user-2");
-    expect(updateThreadRepoState).toHaveBeenCalledWith("thread-1", {
-      checkpointAnchorMessageId: "user-2",
-      checkpointCursorId: "checkpoint-1",
-      checkpointLatestId: "checkpoint-3",
-      checkpointProjectPath: "/tmp/workspace",
-    });
-    expect(result).toMatchObject({
-      changed: true,
-      checkpointAnchorMessageId: "user-2",
-      checkpointCursorId: "checkpoint-1",
-      checkpointLatestId: "checkpoint-3",
-    });
+    const cleared = clearThreadRepoCheckpointRun("run-2");
+    await flushAsyncWork();
+
+    expect(disposeRepoCheckpointSnapshot).not.toHaveBeenCalled();
+
+    snapshotStart.resolve(snapshot);
+    await cleared;
+
+    expect(disposeRepoCheckpointSnapshot).toHaveBeenCalledWith(snapshot);
   });
 });

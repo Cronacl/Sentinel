@@ -1211,7 +1211,7 @@ export async function runOpenCodeThreadChat(
     workspaceId: request.workspaceId,
   });
 
-  await beginExternalRuntimeRepoCheckpoint({
+  void beginExternalRuntimeRepoCheckpoint({
     projectPath: workspaceRoot,
     runId,
     thread: existingThread,

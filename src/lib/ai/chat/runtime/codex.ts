@@ -1920,7 +1920,7 @@ export async function runCodexThreadChat(
       mode: threadMode,
       reasoningEffort: request.reasoningEffort ?? null,
     });
-    await beginThreadRepoCheckpointRun({
+    void beginThreadRepoCheckpointRun({
       projectPath: workspaceRoot,
       runId,
       thread: existingThread,

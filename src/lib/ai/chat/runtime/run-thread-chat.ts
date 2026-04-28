@@ -97,7 +97,10 @@ import {
   getWorkspaceRootPath,
   getToolApprovalPolicies,
 } from "./workspace";
-import { refreshThreadContextCompactionCheckpoint } from "./context-compaction-refresh";
+import {
+  prepareThreadContextCompactionForGeneration,
+  refreshThreadContextCompactionCheckpoint,
+} from "./context-compaction-refresh";
 import type { ThreadChatRequest } from "../types";
 import { normalizeThreadChatErrorMessage } from "../errors";
 import type { PersistedThreadMessageRecord } from "@/lib/ai/messages/branches";
@@ -137,7 +140,10 @@ function logRuntimeTiming(
   phase:
     | "agent_stream_created"
     | "bootstrap_ready"
+    | "compaction_blocking"
+    | "compaction_deferred"
     | "compaction_ready"
+    | "compaction_reused"
     | "documents_normalized"
     | "first_message_upsert"
     | "optional_preflight_ready"
@@ -145,6 +151,8 @@ function logRuntimeTiming(
     | "preflight_ready"
     | "prompt_context_ready"
     | "request_received"
+    | "repo_checkpoint_ready"
+    | "repo_checkpoint_started"
     | "run_failed"
     | "run_finished"
     | "stream_execute_started",
@@ -1040,8 +1048,8 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
         })
       : Promise.resolve({});
     const compactionResultPromise = normalizedModelTranscriptPromise
-      .then((normalizedModelTranscript) =>
-        refreshThreadContextCompactionCheckpoint({
+      .then(async (normalizedModelTranscript) => {
+        const prepared = await prepareThreadContextCompactionForGeneration({
           contextWindow: resolvedModel.contextWindow,
           enabled: contextCompactionSettings.enabled,
           fixedWindowSize: contextCompactionSettings.fixedWindowSize,
@@ -1056,8 +1064,41 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           transcript: normalizedModelTranscript,
           useFixedWindow: contextCompactionSettings.useFixedWindow,
           windowPercent: contextCompactionSettings.windowPercent,
-        }),
-      )
+        });
+        if (prepared.mode === "blocking") {
+          logRuntimeTiming("compaction_blocking", run.timingStartedAt, {
+            runId: run.runId,
+            threadId: run.request.threadId,
+            trigger: run.request.trigger,
+            userId: run.request.userId,
+            workspaceId: run.request.workspaceId,
+          });
+        } else if (prepared.mode === "deferred") {
+          logRuntimeTiming("compaction_deferred", run.timingStartedAt, {
+            runId: run.runId,
+            threadId: run.request.threadId,
+            trigger: run.request.trigger,
+            userId: run.request.userId,
+            workspaceId: run.request.workspaceId,
+          });
+          void prepared.backgroundRefresh?.catch((error) => {
+            log.warn(
+              `Skipping deferred context compaction: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+          });
+        } else if (prepared.mode === "reused") {
+          logRuntimeTiming("compaction_reused", run.timingStartedAt, {
+            runId: run.runId,
+            threadId: run.request.threadId,
+            trigger: run.request.trigger,
+            userId: run.request.userId,
+            workspaceId: run.request.workspaceId,
+          });
+        }
+        return prepared.result;
+      })
       .then((compactionResult) => {
         logRuntimeTiming("compaction_ready", run.timingStartedAt, {
           runId: run.runId,
@@ -1749,10 +1790,25 @@ async function runParsedThreadChat(
       request.userId,
       request.threadId,
     );
-    await beginThreadRepoCheckpointRun({
+    logRuntimeTiming("repo_checkpoint_started", timingStartedAt, {
+      runId,
+      threadId: request.threadId,
+      trigger: request.trigger,
+      userId: request.userId,
+      workspaceId: request.workspaceId,
+    });
+    void beginThreadRepoCheckpointRun({
       projectPath: repoCheckpointProjectPath,
       runId,
       thread: existingThread,
+    }).then(() => {
+      logRuntimeTiming("repo_checkpoint_ready", timingStartedAt, {
+        runId,
+        threadId: request.threadId,
+        trigger: request.trigger,
+        userId: request.userId,
+        workspaceId: request.workspaceId,
+      });
     });
     const initialSnapshot = await loadThreadSessionSnapshot(request.threadId);
     if (initialSnapshot) {
