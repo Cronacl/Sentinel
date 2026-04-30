@@ -213,13 +213,9 @@ export const MemoryTool = memo(function MemoryTool({
 
   const body = isRunning ? (
     <p className="text-[11px] text-foreground/50">Working with memory...</p>
-  ) : isError ? (
-    <p className="text-[11px] text-danger-soft-foreground">
-      {errorText ?? "Memory operation failed."}
-    </p>
   ) : isDenied ? (
     <p className="text-[11px] text-muted">Memory operation denied.</p>
-  ) : (
+  ) : isError ? null : (
     <MemoryResultBody output={output ?? null} toolName={toolName} />
   );
 
@@ -241,7 +237,7 @@ export const MemoryTool = memo(function MemoryTool({
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
       errorText={
-        errorText && part.state !== "output-error" ? errorText : undefined
+        isError ? (errorText ?? "Memory operation failed.") : undefined
       }
       footer={footer}
       actions={

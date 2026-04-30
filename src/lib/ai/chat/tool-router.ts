@@ -24,6 +24,7 @@ import {
 } from "./tools/catalog";
 
 const toolCategoryValues = [
+  "browser",
   "execution",
   "inspection",
   "integration",

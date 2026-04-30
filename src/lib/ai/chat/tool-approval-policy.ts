@@ -21,6 +21,18 @@ export const TOOL_APPROVAL_TOOL_NAMES = [
   "forget_memory",
   "websearch",
   "webfetch",
+  "browser_tabs",
+  "browser_open",
+  "browser_navigate",
+  "browser_back",
+  "browser_forward",
+  "browser_reload",
+  "browser_snapshot",
+  "browser_screenshot",
+  "browser_click",
+  "browser_fill",
+  "browser_press",
+  "browser_console_logs",
   "generate_image",
   "generate_video",
   "gmail_search",
@@ -555,6 +567,90 @@ export const TOOL_APPROVAL_METADATA: Record<
     label: "Web fetch",
     riskSummary:
       "Sentinel can access remote URLs immediately, including user-shared documentation and external pages.",
+  },
+  browser_tabs: {
+    defaultRequireApproval: false,
+    description: "List tabs in the built-in desktop browser.",
+    label: "Browser tabs",
+    riskSummary:
+      "Sentinel can inspect the open tabs in its built-in browser sidebar without stopping for confirmation.",
+  },
+  browser_open: {
+    defaultRequireApproval: true,
+    description: "Open a new tab in the built-in desktop browser.",
+    label: "Browser open",
+    riskSummary:
+      "Sentinel can open URLs or searches in the built-in browser sidebar immediately.",
+  },
+  browser_navigate: {
+    defaultRequireApproval: true,
+    description: "Navigate a built-in browser tab.",
+    label: "Browser navigate",
+    riskSummary:
+      "Sentinel can navigate an existing browser tab to URLs or searches immediately.",
+  },
+  browser_back: {
+    defaultRequireApproval: true,
+    description: "Go back in a built-in browser tab.",
+    label: "Browser back",
+    riskSummary:
+      "Sentinel can change the current page in a browser tab immediately.",
+  },
+  browser_forward: {
+    defaultRequireApproval: true,
+    description: "Go forward in a built-in browser tab.",
+    label: "Browser forward",
+    riskSummary:
+      "Sentinel can change the current page in a browser tab immediately.",
+  },
+  browser_reload: {
+    defaultRequireApproval: true,
+    description: "Reload a built-in browser tab.",
+    label: "Browser reload",
+    riskSummary:
+      "Sentinel can reload the current page in a browser tab immediately.",
+  },
+  browser_snapshot: {
+    defaultRequireApproval: false,
+    description: "Read a compact DOM snapshot from a browser tab.",
+    label: "Browser snapshot",
+    riskSummary:
+      "Sentinel can inspect visible page structure in the built-in browser sidebar without stopping for confirmation.",
+  },
+  browser_screenshot: {
+    defaultRequireApproval: false,
+    description: "Capture a visible browser screenshot.",
+    label: "Browser screenshot",
+    riskSummary:
+      "Sentinel can capture a screenshot of the built-in browser sidebar without stopping for confirmation.",
+  },
+  browser_click: {
+    defaultRequireApproval: true,
+    description: "Click inside a built-in browser tab.",
+    label: "Browser click",
+    riskSummary:
+      "Sentinel can click controls in the built-in browser, which may navigate pages or trigger page actions.",
+  },
+  browser_fill: {
+    defaultRequireApproval: true,
+    description: "Fill a browser field.",
+    label: "Browser fill",
+    riskSummary:
+      "Sentinel can type data into browser page fields, which may transmit sensitive data depending on the page.",
+  },
+  browser_press: {
+    defaultRequireApproval: true,
+    description: "Press a key in a browser tab.",
+    label: "Browser press",
+    riskSummary:
+      "Sentinel can press keys in the browser, including keys that may submit forms or trigger page actions.",
+  },
+  browser_console_logs: {
+    defaultRequireApproval: false,
+    description: "Read captured browser console logs.",
+    label: "Browser console logs",
+    riskSummary:
+      "Sentinel can read recent console logs from the built-in browser sidebar without stopping for confirmation.",
   },
   generate_image: {
     defaultRequireApproval: true,

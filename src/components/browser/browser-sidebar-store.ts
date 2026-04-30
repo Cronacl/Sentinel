@@ -13,6 +13,7 @@ export type BrowserTab = {
 
 export type BrowserSidebarState = {
   activeTabId: string | null;
+  automationActiveTabId: string | null;
   tabs: BrowserTab[];
 };
 
@@ -21,6 +22,7 @@ const BROWSER_SIDEBAR_STORAGE_KEY = "sentinel.browser-sidebar-state.v1";
 
 const DEFAULT_STATE: BrowserSidebarState = {
   activeTabId: null,
+  automationActiveTabId: null,
   tabs: [],
 };
 
@@ -123,6 +125,7 @@ function readPersistedBrowserSidebarState(): BrowserSidebarState {
 
     return {
       activeTabId,
+      automationActiveTabId: null,
       tabs,
     };
   } catch {
@@ -202,12 +205,13 @@ export function openBrowserSidebar(initialUrl = DEFAULT_BROWSER_URL) {
   hydrateBrowserSidebarState();
 
   if (state.tabs.length > 0) {
-    return;
+    return state.activeTabId;
   }
 
   const id = generateTabId();
   state = {
     activeTabId: id,
+    automationActiveTabId: null,
     tabs: [
       {
         canGoBack: false,
@@ -221,6 +225,7 @@ export function openBrowserSidebar(initialUrl = DEFAULT_BROWSER_URL) {
   };
   syncSnapshot();
   emit();
+  return id;
 }
 
 export function closeBrowserSidebarState() {
@@ -255,10 +260,12 @@ export function createBrowserTab(url = DEFAULT_BROWSER_URL) {
 
   state = {
     activeTabId: id,
+    automationActiveTabId: state.automationActiveTabId,
     tabs: [...state.tabs, newTab],
   };
   syncSnapshot();
   emit();
+  return id;
 }
 
 export function closeBrowserTab(tabId: string) {
@@ -281,6 +288,10 @@ export function closeBrowserTab(tabId: string) {
 
   state = {
     activeTabId: nextActiveTabId,
+    automationActiveTabId:
+      state.automationActiveTabId === tabId
+        ? null
+        : state.automationActiveTabId,
     tabs: nextTabs,
   };
   syncSnapshot();
@@ -294,6 +305,18 @@ export function setActiveBrowserTab(tabId: string) {
   if (!state.tabs.some((t) => t.id === tabId)) return;
 
   state = { ...state, activeTabId: tabId };
+  syncSnapshot();
+  emit();
+}
+
+export function setBrowserAutomationActiveTab(tabId: string | null) {
+  hydrateBrowserSidebarState();
+
+  const nextTabId =
+    tabId && state.tabs.some((tab) => tab.id === tabId) ? tabId : null;
+  if (state.automationActiveTabId === nextTabId) return;
+
+  state = { ...state, automationActiveTabId: nextTabId };
   syncSnapshot();
   emit();
 }
@@ -336,6 +359,10 @@ function subscribe(listener: () => void) {
 function getBrowserSidebarState() {
   hydrateBrowserSidebarState();
   return snapshot;
+}
+
+export function getBrowserSidebarSnapshot() {
+  return getBrowserSidebarState();
 }
 
 export function useBrowserSidebarState() {

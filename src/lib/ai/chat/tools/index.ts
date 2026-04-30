@@ -5,6 +5,18 @@ import type { ThreadAgentCallOptions } from "../agent";
 import {
   applyPatchDescription,
   askQuestionDescription,
+  browserBackDescription,
+  browserClickDescription,
+  browserConsoleLogsDescription,
+  browserFillDescription,
+  browserForwardDescription,
+  browserNavigateDescription,
+  browserOpenDescription,
+  browserPressDescription,
+  browserReloadDescription,
+  browserScreenshotDescription,
+  browserSnapshotDescription,
+  browserTabsDescription,
   batchReadDescription,
   createFileDescription,
   createPlanDescription,
@@ -49,6 +61,20 @@ import {
   batchReadOutputSchema,
   executeBatchRead,
 } from "./batch-read";
+import {
+  browserClickInputSchema,
+  browserConsoleLogsInputSchema,
+  browserFillInputSchema,
+  browserNavigateInputSchema,
+  browserOpenInputSchema,
+  browserPressInputSchema,
+  browserScreenshotInputSchema,
+  browserTabActionInputSchema,
+  browserTabsInputSchema,
+  browserToolModelOutput,
+  browserToolOutputSchema,
+  executeBrowserTool,
+} from "./browser";
 import {
   executeCreateFile,
   createFileInputSchema,
@@ -131,6 +157,9 @@ import {
 import {
   assertShellCommandAllowed,
   disposeShellSession,
+  getBackgroundShellCommand,
+  startBackgroundShellCommand,
+  stopBackgroundShellCommand,
   streamShellCommand,
 } from "./shell";
 import {
@@ -172,20 +201,77 @@ export type { ToolCategory, ToolCatalogEntry } from "./catalog";
 // Shell command schemas (inline, not exported from shell.ts)
 // ---------------------------------------------------------------------------
 
-const shellCommandInputSchema = z.object({
-  command: z
-    .string()
-    .min(1)
-    .max(2_000)
-    .describe(
-      "One shell command to run in the linked workspace root or discovered skill directory.",
-    ),
-  rationale: z
-    .string()
-    .min(1)
-    .max(500)
-    .describe("Why this command is needed and what you expect to learn."),
-});
+const shellCommandInputSchema = z
+  .object({
+    command: z
+      .string()
+      .min(1)
+      .max(2_000)
+      .optional()
+      .describe(
+        "One shell command to run in the linked workspace root or discovered skill directory. Required for run and start_background modes.",
+      ),
+    mode: z
+      .enum(["run", "start_background", "check_background", "stop_background"])
+      .optional()
+      .describe(
+        "How to use the shell. Use run for normal foreground commands, start_background for long-running commands, check_background to poll a background task, and stop_background to stop one.",
+      ),
+    runInBackground: z
+      .boolean()
+      .optional()
+      .describe(
+        "Convenience flag equivalent to mode=start_background when true.",
+      ),
+    backgroundTaskId: z
+      .string()
+      .min(1)
+      .max(200)
+      .optional()
+      .describe(
+        "Background task id returned by start_background. Required for check_background and stop_background.",
+      ),
+    waitForCompletion: z
+      .boolean()
+      .optional()
+      .describe(
+        "For check_background, wait until the background command completes instead of returning the current snapshot.",
+      ),
+    rationale: z
+      .string()
+      .min(1)
+      .max(500)
+      .describe("Why this command is needed and what you expect to learn."),
+  })
+  .superRefine((input, ctx) => {
+    const mode =
+      input.mode ??
+      (input.backgroundTaskId
+        ? "check_background"
+        : input.runInBackground
+          ? "start_background"
+          : "run");
+
+    if ((mode === "run" || mode === "start_background") && !input.command) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "command is required for run and start_background modes.",
+        path: ["command"],
+      });
+    }
+
+    if (
+      (mode === "check_background" || mode === "stop_background") &&
+      !input.backgroundTaskId
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "backgroundTaskId is required for check_background and stop_background modes.",
+        path: ["backgroundTaskId"],
+      });
+    }
+  });
 
 const shellCommandRunningOutputSchema = z.object({
   boundaryRoot: z.string().nullable(),
@@ -214,9 +300,33 @@ const shellCommandCompletedOutputSchema = z.object({
   truncated: z.boolean(),
 });
 
+const shellCommandBackgroundOutputSchema = z.object({
+  backgroundTaskId: z.string(),
+  boundaryRoot: z.string().nullable(),
+  command: z.string(),
+  cwd: z.string(),
+  durationMs: z.number(),
+  error: z.string().nullable(),
+  exitCode: z.number().nullable(),
+  failureKind: z
+    .enum(["missing_command", "missing_toolchain", "permission", "other"])
+    .nullable(),
+  missingCommand: z.string().nullable(),
+  phase: z.literal("background"),
+  status: z.enum(["completed", "failed", "running", "stopped"]),
+  stderr: z.string(),
+  stdout: z.string(),
+  suggestedNextAction: z
+    .enum(["install", "inspect", "none", "retry"])
+    .nullable(),
+  tail: z.string(),
+  truncated: z.boolean(),
+});
+
 const shellCommandOutputSchema = z.discriminatedUnion("phase", [
   shellCommandRunningOutputSchema,
   shellCommandCompletedOutputSchema,
+  shellCommandBackgroundOutputSchema,
 ]);
 
 // ---------------------------------------------------------------------------
@@ -514,15 +624,65 @@ function buildExecutionTools(options: ThreadAgentCallOptions) {
       outputSchema: shellCommandOutputSchema,
       toModelOutput: ({ output }) => ({
         type: "json" as const,
-        value: output.phase === "completed" ? output : { phase: "running" },
+        value:
+          output.phase === "completed" || output.phase === "background"
+            ? output
+            : { phase: "running" },
       }),
-      execute: async function* ({ command }, { abortSignal }) {
-        if (permissionMode === "default") {
+      execute: async function* (input, { abortSignal }) {
+        const mode =
+          input.mode ??
+          (input.backgroundTaskId
+            ? "check_background"
+            : input.runInBackground
+              ? "start_background"
+              : "run");
+        const command = input.command ?? "";
+
+        if (
+          permissionMode === "default" &&
+          (mode === "run" || mode === "start_background")
+        ) {
           assertShellCommandAllowed(command, [
             ...(defaultDirectory ? [defaultDirectory] : []),
             ...skillRoots,
           ]);
         }
+
+        if (mode === "check_background") {
+          yield await getBackgroundShellCommand({
+            backgroundTaskId: input.backgroundTaskId!,
+            threadId,
+            waitForCompletion: input.waitForCompletion,
+          });
+          return;
+        }
+
+        if (mode === "stop_background") {
+          yield await stopBackgroundShellCommand({
+            backgroundTaskId: input.backgroundTaskId!,
+            threadId,
+          });
+          return;
+        }
+
+        if (mode === "start_background") {
+          yield await startBackgroundShellCommand({
+            allowedRoots:
+              permissionMode === "default"
+                ? [
+                    ...(defaultDirectory ? [defaultDirectory] : []),
+                    ...skillRoots,
+                  ]
+                : undefined,
+            command,
+            defaultDirectory: shellDirectory!,
+            permissionMode,
+            threadId,
+          });
+          return;
+        }
+
         const abortShell = () => {
           void disposeShellSession(threadId);
         };
@@ -750,6 +910,158 @@ function buildWebTools(options: ThreadAgentCallOptions) {
   };
 }
 
+function buildBrowserTools(options: ThreadAgentCallOptions) {
+  const { toolApprovalPolicies, userId } = options;
+
+  return {
+    browser_tabs: tool({
+      description: browserTabsDescription,
+      inputSchema: browserTabsInputSchema,
+      needsApproval: () => toolApprovalPolicies.browser_tabs,
+      outputSchema: browserToolOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeBrowserTool({
+          abortSignal,
+          command: { ...input, type: "tabs" },
+          userId,
+        }),
+    }),
+    browser_open: tool({
+      description: browserOpenDescription,
+      inputSchema: browserOpenInputSchema,
+      needsApproval: () => toolApprovalPolicies.browser_open,
+      outputSchema: browserToolOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeBrowserTool({
+          abortSignal,
+          command: { ...input, type: "open" },
+          userId,
+        }),
+    }),
+    browser_navigate: tool({
+      description: browserNavigateDescription,
+      inputSchema: browserNavigateInputSchema,
+      needsApproval: () => toolApprovalPolicies.browser_navigate,
+      outputSchema: browserToolOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeBrowserTool({
+          abortSignal,
+          command: { ...input, type: "navigate" },
+          userId,
+        }),
+    }),
+    browser_back: tool({
+      description: browserBackDescription,
+      inputSchema: browserTabActionInputSchema,
+      needsApproval: () => toolApprovalPolicies.browser_back,
+      outputSchema: browserToolOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeBrowserTool({
+          abortSignal,
+          command: { ...input, type: "back" },
+          userId,
+        }),
+    }),
+    browser_forward: tool({
+      description: browserForwardDescription,
+      inputSchema: browserTabActionInputSchema,
+      needsApproval: () => toolApprovalPolicies.browser_forward,
+      outputSchema: browserToolOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeBrowserTool({
+          abortSignal,
+          command: { ...input, type: "forward" },
+          userId,
+        }),
+    }),
+    browser_reload: tool({
+      description: browserReloadDescription,
+      inputSchema: browserTabActionInputSchema,
+      needsApproval: () => toolApprovalPolicies.browser_reload,
+      outputSchema: browserToolOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeBrowserTool({
+          abortSignal,
+          command: { ...input, type: "reload" },
+          userId,
+        }),
+    }),
+    browser_snapshot: tool({
+      description: browserSnapshotDescription,
+      inputSchema: browserTabActionInputSchema,
+      needsApproval: () => toolApprovalPolicies.browser_snapshot,
+      outputSchema: browserToolOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeBrowserTool({
+          abortSignal,
+          command: { ...input, type: "snapshot" },
+          userId,
+        }),
+    }),
+    browser_screenshot: tool({
+      description: browserScreenshotDescription,
+      inputSchema: browserScreenshotInputSchema,
+      needsApproval: () => toolApprovalPolicies.browser_screenshot,
+      outputSchema: browserToolOutputSchema,
+      toModelOutput: ({ output }) => browserToolModelOutput(output),
+      execute: async (input, { abortSignal }) =>
+        executeBrowserTool({
+          abortSignal,
+          command: { ...input, type: "screenshot" },
+          userId,
+        }),
+    }),
+    browser_click: tool({
+      description: browserClickDescription,
+      inputSchema: browserClickInputSchema,
+      needsApproval: () => toolApprovalPolicies.browser_click,
+      outputSchema: browserToolOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeBrowserTool({
+          abortSignal,
+          command: { ...input, type: "click" },
+          userId,
+        }),
+    }),
+    browser_fill: tool({
+      description: browserFillDescription,
+      inputSchema: browserFillInputSchema,
+      needsApproval: () => toolApprovalPolicies.browser_fill,
+      outputSchema: browserToolOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeBrowserTool({
+          abortSignal,
+          command: { ...input, type: "fill" },
+          userId,
+        }),
+    }),
+    browser_press: tool({
+      description: browserPressDescription,
+      inputSchema: browserPressInputSchema,
+      needsApproval: () => toolApprovalPolicies.browser_press,
+      outputSchema: browserToolOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeBrowserTool({
+          abortSignal,
+          command: { ...input, type: "press" },
+          userId,
+        }),
+    }),
+    browser_console_logs: tool({
+      description: browserConsoleLogsDescription,
+      inputSchema: browserConsoleLogsInputSchema,
+      needsApproval: () => toolApprovalPolicies.browser_console_logs,
+      outputSchema: browserToolOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeBrowserTool({
+          abortSignal,
+          command: { ...input, type: "console_logs" },
+          userId,
+        }),
+    }),
+  };
+}
+
 function buildPlanTools(options: ThreadAgentCallOptions) {
   const { threadId } = options;
 
@@ -838,6 +1150,7 @@ export function buildTools(options: ThreadAgentCallOptions) {
     ...buildSkillTools(options),
     ...buildTaskTools(options),
     ...buildDelegationTools(options),
+    ...buildBrowserTools(options),
     ...buildWebTools(options),
     ...(hasFilesystemTools
       ? {

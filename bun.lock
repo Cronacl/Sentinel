@@ -60,6 +60,7 @@
         "@xterm/xterm": "^6.0.0",
         "ai": "^6.0.116",
         "better-sqlite3": "12.6.2",
+        "border-beam": "^1.0.1",
         "cmdk": "^1.1.1",
         "cronbake": "^0.4.0",
         "date-fns": "^4.1.0",
@@ -1113,6 +1114,8 @@
     "bmp-js": ["bmp-js@0.1.0", "", {}, "sha512-vHdS19CnY3hwiNdkaqk93DvjVLfbEcI8mys4UjuWrlX1haDmroo8o4xCzh4wD6DGV6HxRCyauwhHRqMTfERtjw=="],
 
     "boolean": ["boolean@3.2.0", "", {}, "sha512-d0II/GO9uf9lfUHH2BQsjxzRJZBdsjgsBiW4BvhWk/3qoKwQFjIDVN19PfX8F2D/r9PCMTtLWjYVCFrpeYUzsw=="],
+
+    "border-beam": ["border-beam@1.0.1", "", { "peerDependencies": { "react": ">=18.0.0", "react-dom": ">=18.0.0" } }, "sha512-kswSYT8zRmt5en+wZMtJAbM8RjJglqSKwyRuQZWXnMHQsBwJisaznTfhD8SWvWJZKAtGbSkE2q/wY7seiNDmcw=="],
 
     "brace-expansion": ["brace-expansion@2.0.2", "", { "dependencies": { "balanced-match": "^1.0.0" } }, "sha512-Jt0vHyM+jmUBqojB7E1NIYadt0vI0Qxjxd2TErW94wDz+E2LAm5vKMXXwg6ZZBTHPuUlDgQHKXvjGBdfcF1ZDQ=="],
 

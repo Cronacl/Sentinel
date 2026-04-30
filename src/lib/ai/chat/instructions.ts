@@ -172,6 +172,11 @@ function buildPathSemanticsSection(
     activeToolNames.includes("shell_command")
       ? "shell_command may invoke host-installed executables such as brew, apt-get, npm, pnpm, yarn, bun, cargo, or pip from the allowed cwd when the runtime exposes them."
       : "shell_command is not active for this step.",
+    ...(activeToolNames.includes("shell_command")
+      ? [
+          "shell_command can run long-lived work in the background with mode=start_background or runInBackground=true, then later inspect it with mode=check_background and the returned backgroundTaskId.",
+        ]
+      : []),
     promptContext.allowedInspectionRoots.length > 0
       ? `Inspection tools must stay inside: ${promptContext.allowedInspectionRoots.join(", ")}.`
       : "Inspection tools are limited by the currently active roots only.",
@@ -374,6 +379,9 @@ function buildDecisionHeuristics(
     heuristics.push(
       `${step++}. For shell_command, propose one non-interactive command at a time, explain the rationale, and wait for approval workflows when required.`,
     );
+    heuristics.push(
+      `${step++}. For long-running shell commands such as dev servers, watchers, or lengthy checks, prefer shell_command background mode, keep the backgroundTaskId, continue useful work, and check it only when you need status or output.`,
+    );
   }
 
   if (categories.has("memory")) {
@@ -467,6 +475,11 @@ function buildExecutionRecoverySection(
     activeToolNames.includes("shell_command")
       ? "Do not claim that you lack access to the host package manager or shell when shell_command is active. Use the tool from the allowed cwd and let approval policies enforce the boundary."
       : "Do not infer host package-manager limitations unless a tool result explicitly reports them.",
+    ...(activeToolNames.includes("shell_command")
+      ? [
+          "When a command is expected to run indefinitely or longer than the current reasoning step, start it with shell_command background mode and poll it later instead of waiting on foreground output.",
+        ]
+      : []),
     "Do not respond with a plain-text refusal when an approval-gated execution path exists; choose the right tool and let the approval workflow handle the boundary.",
     "Treat tool outputs as the source of truth for what is possible. Do not infer fake package-manager, shell, or network limitations that the runtime did not report.",
     "After approval-required shell or install actions, continue automatically through the approval workflow instead of asking redundant chat questions.",

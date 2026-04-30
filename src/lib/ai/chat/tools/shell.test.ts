@@ -10,7 +10,10 @@ const {
   assertShellCommandAllowed,
   disposeShellSession,
   executeShellCommand,
+  getBackgroundShellCommand,
   getShellSessionCount,
+  startBackgroundShellCommand,
+  stopBackgroundShellCommand,
   streamShellCommand,
 } = await import("./shell.ts");
 
@@ -27,6 +30,8 @@ afterEach(async () => {
   await disposeShellSession("thread-shell-tail");
   await disposeShellSession("thread-shell-activity");
   await disposeShellSession("thread-shell-heartbeat");
+  await disposeShellSession("thread-shell-background");
+  await disposeShellSession("thread-shell-background-stop");
   process.env.HOME = originalHome;
   process.env.PATH = originalPath;
   process.env.SHELL = originalShell;
@@ -266,6 +271,48 @@ describe("shell session manager", () => {
 
     expect(runningEvents.length).toBeGreaterThanOrEqual(1);
     expect(runningEvents.at(-1)?.durationMs ?? 0).toBeGreaterThanOrEqual(1_000);
+  });
+
+  it("starts background commands and checks them later", async () => {
+    const started = await startBackgroundShellCommand({
+      allowedRoot: workspaceRoot,
+      command: 'sleep 0.2; printf "background-done\\n"',
+      defaultDirectory: workspaceRoot,
+      permissionMode: "full",
+      threadId: "thread-shell-background",
+    });
+
+    expect(started.phase).toBe("background");
+    expect(started.status).toBe("running");
+    expect(started.backgroundTaskId.startsWith("bg_")).toBe(true);
+
+    const completed = await getBackgroundShellCommand({
+      backgroundTaskId: started.backgroundTaskId,
+      threadId: "thread-shell-background",
+      waitForCompletion: true,
+    });
+
+    expect(completed.status).toBe("completed");
+    expect(completed.exitCode).toBe(0);
+    expect(completed.stdout).toBe("background-done");
+  });
+
+  it("stops background commands by task id", async () => {
+    const started = await startBackgroundShellCommand({
+      allowedRoot: workspaceRoot,
+      command: 'sleep 5; printf "too-late\\n"',
+      defaultDirectory: workspaceRoot,
+      permissionMode: "full",
+      threadId: "thread-shell-background-stop",
+    });
+
+    const stopped = await stopBackgroundShellCommand({
+      backgroundTaskId: started.backgroundTaskId,
+      threadId: "thread-shell-background-stop",
+    });
+
+    expect(stopped.status).toBe("stopped");
+    expect(stopped.error).toContain("stopped");
   });
 
   it("rejects obvious directory escape commands in default mode", () => {

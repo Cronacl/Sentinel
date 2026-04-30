@@ -14,6 +14,7 @@ import { ShellTool } from "./renderers/shell";
 import { SkillTool } from "./renderers/skill";
 import { WebSearchTool } from "./renderers/websearch";
 import { WebFetchTool } from "./renderers/webfetch";
+import { BrowserTool } from "./renderers/browser";
 import { GenerateImageTool } from "./renderers/generate-image";
 import { GenerateVideoTool } from "./renderers/generate-video";
 import { WorkspaceTool } from "./renderers/workspace";
@@ -216,6 +217,18 @@ const renderers: Record<string, Renderer> = {
   update_plan: PlanTool,
   websearch: WebSearchTool,
   webfetch: WebFetchTool,
+  browser_tabs: BrowserTool,
+  browser_open: BrowserTool,
+  browser_navigate: BrowserTool,
+  browser_back: BrowserTool,
+  browser_forward: BrowserTool,
+  browser_reload: BrowserTool,
+  browser_snapshot: BrowserTool,
+  browser_screenshot: BrowserTool,
+  browser_click: BrowserTool,
+  browser_fill: BrowserTool,
+  browser_press: BrowserTool,
+  browser_console_logs: BrowserTool,
   generate_image: GenerateImageTool,
   generate_video: GenerateVideoTool,
 

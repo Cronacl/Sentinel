@@ -282,18 +282,16 @@ function FileMatchGroup({
 }
 
 function GrepBody({
-  errorText,
   output,
   pattern,
 }: {
-  errorText?: string;
   output: GrepToolOutput | null;
   pattern: string;
 }) {
   if (!output) {
     return (
       <p className="font-mono text-[11px] text-foreground/50">
-        {errorText ?? `Searching /${pattern}/`}
+        Searching /{pattern}/
       </p>
     );
   }
@@ -354,18 +352,10 @@ export const GrepTool = memo(function GrepTool({ part }: RendererProps) {
       isExpandable={true}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={
-        partErrorText && part.state !== "output-error"
-          ? partErrorText
-          : undefined
-      }
+      errorText={isErrorState ? partErrorText : undefined}
       footer={footer}
     >
-      <GrepBody
-        errorText={partErrorText}
-        output={grepOutput}
-        pattern={pattern}
-      />
+      <GrepBody output={grepOutput} pattern={pattern} />
     </ToolLayout>
   );
 });

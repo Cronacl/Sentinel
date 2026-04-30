@@ -11,6 +11,7 @@ import { AnimatePresence, motion } from "motion/react";
 import {
   type PointerEvent as ReactPointerEvent,
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -24,8 +25,11 @@ import {
   createTerminalSession,
   getTerminalDefaultCwd,
   killTerminalSession,
+  refreshTerminalShellTasks,
   setActiveTerminalSession,
   setTerminalPanelHeight,
+  stopTerminalShellTask,
+  type TerminalShellTask,
   useTerminalState,
 } from "./terminal-store";
 
@@ -53,17 +57,37 @@ const TAB_MOTION_TRANSITION = {
   },
 };
 
+function formatTaskDuration(durationMs: number) {
+  if (durationMs < 60_000) {
+    return `${Math.max(1, Math.round(durationMs / 1000))}s`;
+  }
+
+  const minutes = Math.floor(durationMs / 60_000);
+  const seconds = Math.floor((durationMs % 60_000) / 1000);
+  return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+}
+
+function getTaskLabel(task: TerminalShellTask) {
+  const firstLine = task.command.split(/\r?\n/)[0]?.trim() ?? "";
+  if (!firstLine) {
+    return task.backgroundTaskId;
+  }
+
+  return firstLine.length > 56 ? `${firstLine.slice(0, 56)}...` : firstLine;
+}
+
 export function TerminalPanel() {
-  const { activeSessionId, isOpen, panelHeight, sessions } = useTerminalState(
-    (state) => ({
+  const { activeSessionId, isOpen, panelHeight, sessions, shellTasks } =
+    useTerminalState((state) => ({
       activeSessionId: state.activeSessionId,
       isOpen: state.isOpen,
       panelHeight: state.panelHeight,
       sessions: state.sessions,
-    }),
-  );
+      shellTasks: state.shellTasks,
+    }));
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
+  const [stoppingTaskId, setStoppingTaskId] = useState<string | null>(null);
   const [isResizing, setIsResizing] = useState(false);
 
   const activeSession = useMemo(
@@ -75,6 +99,34 @@ export function TerminalPanel() {
   );
 
   const defaultCwd = getTerminalDefaultCwd();
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const refresh = async () => {
+      try {
+        await refreshTerminalShellTasks();
+      } catch {
+        // The terminal panel should keep working even if the task API is not ready.
+      }
+    };
+
+    void refresh();
+    const interval = window.setInterval(() => {
+      if (!cancelled) {
+        void refresh();
+      }
+    }, 1500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [isOpen]);
 
   const handleCreateSession = useCallback(async () => {
     setIsCreatingSession(true);
@@ -104,6 +156,23 @@ export function TerminalPanel() {
     } finally {
       setClosingSessionId((current) =>
         current === sessionId ? null : current,
+      );
+    }
+  }, []);
+
+  const handleStopShellTask = useCallback(async (backgroundTaskId: string) => {
+    setStoppingTaskId(backgroundTaskId);
+
+    try {
+      await stopTerminalShellTask(backgroundTaskId);
+    } catch (error) {
+      sileo.error({
+        description: getErrorMessage(error, "Unable to stop this shell task."),
+        title: "Shell task failed",
+      });
+    } finally {
+      setStoppingTaskId((current) =>
+        current === backgroundTaskId ? null : current,
       );
     }
   }, []);
@@ -250,6 +319,54 @@ export function TerminalPanel() {
                   </AnimatePresence>
                 </motion.div>
               </ScrollShadow>
+
+              {shellTasks.length > 0 ? (
+                <ScrollShadow
+                  className="max-w-[42%] min-w-0 shrink border-l border-separator/30 pl-1.5"
+                  hideScrollBar
+                  orientation="horizontal"
+                >
+                  <div className="flex min-w-max items-center gap-1 pr-1">
+                    {shellTasks.map((task) => (
+                      <div
+                        className="group flex h-6 max-w-64 items-center gap-1 rounded-full border border-border/70 bg-foreground/[0.035] px-1.5 text-[10px] text-foreground/75 dark:bg-foreground/[0.05]"
+                        key={task.backgroundTaskId}
+                        title={`${task.command}\n${task.cwd}`}
+                      >
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
+                        <HugeiconsIcon
+                          color="currentColor"
+                          icon={ComputerTerminal01Icon}
+                          size={11}
+                          strokeWidth={1.9}
+                        />
+                        <span className="truncate font-mono leading-none">
+                          {getTaskLabel(task)}
+                        </span>
+                        <span className="shrink-0 text-muted">
+                          {formatTaskDuration(task.durationMs)}
+                        </span>
+                        <button
+                          aria-label="Stop shell task"
+                          className="flex h-[17px] w-[17px] shrink-0 items-center justify-center rounded-full text-muted opacity-70 transition-[opacity,background-color,color,transform] hover:bg-foreground/[0.06] hover:text-foreground group-hover:opacity-100 active:scale-95"
+                          disabled={stoppingTaskId === task.backgroundTaskId}
+                          onClick={() => {
+                            void handleStopShellTask(task.backgroundTaskId);
+                          }}
+                          type="button"
+                        >
+                          <HugeiconsIcon
+                            color="currentColor"
+                            icon={Cancel01Icon}
+                            size={9}
+                            strokeWidth={2}
+                          />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollShadow>
+              ) : null}
 
               <Button
                 className="size-6 shrink-0"

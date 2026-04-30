@@ -168,7 +168,7 @@ describe("ChatMessage", () => {
     expect(markup).toContain('aria-busy="true"');
   });
 
-  it("does not repeat the same failure text when a rendered tool part already shows it", () => {
+  it("keeps rendered tool failure text behind a disclosure", () => {
     const errorText =
       'Reference image attachment "placeholder.png" was not found.';
     const markup = renderToStaticMarkup(
@@ -199,7 +199,9 @@ describe("ChatMessage", () => {
       }),
     );
 
-    expect(markup.match(/placeholder\.png/g)?.length ?? 0).toBe(1);
+    expect(markup).toContain("Video generation failed");
+    expect(markup).not.toContain("Error details");
+    expect(markup).not.toContain("placeholder.png");
     expect(markup).toContain("Retry");
     expect(markup).not.toContain("Run failed");
   });

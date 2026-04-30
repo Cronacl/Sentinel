@@ -150,9 +150,7 @@ function buildBody(
   const content = output.content?.trim();
   if (!content && output.lines.length === 0) {
     if (errorText) {
-      return (
-        <p className="text-[11px] text-danger-soft-foreground">{errorText}</p>
-      );
+      return null;
     }
     return (
       <p className="font-mono text-[11px] text-foreground/50">(empty file)</p>
@@ -235,11 +233,7 @@ export const ReadTool = memo(function ReadTool({ part }: RendererProps) {
       isExpandable={true}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={
-        partErrorText && part.state !== "output-error"
-          ? partErrorText
-          : undefined
-      }
+      errorText={isErrorState ? partErrorText : undefined}
       footer={footer}
     >
       {body}

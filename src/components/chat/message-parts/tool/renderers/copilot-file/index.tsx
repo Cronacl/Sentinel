@@ -297,11 +297,7 @@ function BaseCopilotFileTool({ onApprove, onDeny, part }: RendererProps) {
   return (
     <ToolLayout
       actions={actions}
-      errorText={
-        partErrorText && part.state !== "output-error"
-          ? partErrorText
-          : undefined
-      }
+      errorText={isError ? partErrorText : undefined}
       footer={
         isFinished && filePath ? (
           <div className="flex items-center justify-between">

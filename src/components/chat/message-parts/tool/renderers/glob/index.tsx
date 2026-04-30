@@ -126,18 +126,16 @@ function FileEntry({ path }: { path: string }) {
 }
 
 function GlobBody({
-  errorText,
   output,
   pattern,
 }: {
-  errorText?: string;
   output: GlobToolOutput | null;
   pattern: string;
 }) {
   if (!output) {
     return (
       <p className="font-mono text-[11px] text-foreground/50">
-        {errorText ?? `Searching for ${pattern}`}
+        Searching for {pattern}
       </p>
     );
   }
@@ -195,18 +193,10 @@ export const GlobTool = memo(function GlobTool({ part }: RendererProps) {
       isExpandable={true}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={
-        partErrorText && part.state !== "output-error"
-          ? partErrorText
-          : undefined
-      }
+      errorText={isErrorState ? partErrorText : undefined}
       footer={footer}
     >
-      <GlobBody
-        errorText={partErrorText}
-        output={globOutput}
-        pattern={pattern}
-      />
+      <GlobBody output={globOutput} pattern={pattern} />
     </ToolLayout>
   );
 });

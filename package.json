@@ -98,6 +98,7 @@
     "@xterm/xterm": "^6.0.0",
     "ai": "^6.0.116",
     "better-sqlite3": "12.6.2",
+    "border-beam": "^1.0.1",
     "cmdk": "^1.1.1",
     "cronbake": "^0.4.0",
     "date-fns": "^4.1.0",

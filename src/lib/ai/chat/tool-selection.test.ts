@@ -97,6 +97,16 @@ describe("tool selection baselines", () => {
     "generate_video",
     "search_memory",
   ];
+  const browserToolNames = [
+    "browser_tabs",
+    "browser_open",
+    "browser_navigate",
+    "browser_snapshot",
+    "browser_screenshot",
+    "browser_click",
+    "browser_fill",
+    "browser_console_logs",
+  ];
 
   it("keeps local and web tools always active in chat mode", () => {
     const promptContext = createPromptContext();
@@ -199,6 +209,27 @@ describe("tool selection baselines", () => {
       }),
     ).toEqual([]);
   });
+
+  it("activates native browser tools for browser-oriented requests", () => {
+    const promptContext = createPromptContext({
+      latestUserText: "open localhost:3000 in the browser and inspect the UI",
+    });
+
+    const activeTools = selectInitialActiveTools({
+      availableToolNames: [...availableToolNames, ...browserToolNames],
+      promptContext,
+    });
+
+    expect(activeTools).toEqual(
+      expect.arrayContaining([
+        "browser_open",
+        "browser_snapshot",
+        "browser_screenshot",
+        "browser_click",
+      ]),
+    );
+  });
+
   it("does not deterministically activate specialized tools from user text", () => {
     const promptContext = createPromptContext({
       enabledIntegrations: [

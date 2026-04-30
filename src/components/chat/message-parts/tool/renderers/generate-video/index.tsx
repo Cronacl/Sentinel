@@ -7,6 +7,7 @@ import { Video } from "react-video-kit";
 import { buildGeneratedMediaUrl } from "@/lib/generated-media-url";
 
 import type { RendererProps } from "../../renderer";
+import { ToolErrorDisclosure } from "../shared/tool-layout";
 
 type GenerateVideoInput = {
   count?: number;
@@ -245,19 +246,26 @@ export const GenerateVideoTool = memo(function GenerateVideoTool({
     return null;
   }
 
+  const summaryText = buildSummaryText(part, partErrorText, output);
+  const summaryClassName = `text-[13px] ${
+    isErrorState
+      ? "text-foreground/50"
+      : isRunning
+        ? "sentinel-thinking-shimmer"
+        : "text-foreground/70"
+  }`;
+
   return (
     <div>
-      <p
-        className={`text-[13px] ${
-          isErrorState
-            ? "text-danger"
-            : isRunning
-              ? "sentinel-thinking-shimmer"
-              : "text-foreground/70"
-        }`}
-      >
-        {buildSummaryText(part, partErrorText, output)}
-      </p>
+      {partErrorText ? (
+        <ToolErrorDisclosure
+          errorText={partErrorText}
+          trigger={summaryText}
+          triggerClassName={summaryClassName}
+        />
+      ) : (
+        <p className={summaryClassName}>{summaryText}</p>
+      )}
 
       {output ? (
         <div className="mt-2">
@@ -288,12 +296,6 @@ export const GenerateVideoTool = memo(function GenerateVideoTool({
           >
             Deny
           </Button>
-        </div>
-      ) : null}
-
-      {partErrorText ? (
-        <div className="mt-1 rounded-lg border border-danger/20 bg-danger-soft px-3 py-1.5 text-[11px] text-danger-soft-foreground">
-          {partErrorText}
         </div>
       ) : null}
     </div>

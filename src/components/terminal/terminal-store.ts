@@ -13,10 +13,23 @@ export type TerminalSession = {
   pid: number;
 };
 
+export type TerminalShellTask = {
+  backgroundTaskId: string;
+  command: string;
+  cwd: string;
+  durationMs: number;
+  error: string | null;
+  exitCode: number | null;
+  status: "completed" | "failed" | "running" | "stopped";
+  tail: string;
+  truncated: boolean;
+};
+
 type TerminalState = {
   activeSessionId: string | null;
   isOpen: boolean;
   panelHeight: number;
+  shellTasks: TerminalShellTask[];
   sessions: TerminalSession[];
 };
 
@@ -59,6 +72,7 @@ const DEFAULT_STATE: TerminalState = {
   activeSessionId: null,
   isOpen: false,
   panelHeight: getInitialPanelHeight(),
+  shellTasks: [],
   sessions: [],
 };
 
@@ -137,6 +151,41 @@ function markTerminalSessionExited(sessionId: string, exitCode?: number) {
   emit();
 }
 
+function isTerminalShellTask(value: unknown): value is TerminalShellTask {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<Record<keyof TerminalShellTask, unknown>>;
+
+  return (
+    typeof candidate.backgroundTaskId === "string" &&
+    typeof candidate.command === "string" &&
+    typeof candidate.cwd === "string" &&
+    typeof candidate.durationMs === "number" &&
+    (candidate.error === null || typeof candidate.error === "string") &&
+    (candidate.exitCode === null || typeof candidate.exitCode === "number") &&
+    (candidate.status === "completed" ||
+      candidate.status === "failed" ||
+      candidate.status === "running" ||
+      candidate.status === "stopped") &&
+    typeof candidate.tail === "string" &&
+    typeof candidate.truncated === "boolean"
+  );
+}
+
+function normalizeShellTasks(value: unknown): TerminalShellTask[] {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !Array.isArray((value as { tasks?: unknown }).tasks)
+  ) {
+    return [];
+  }
+
+  return (value as { tasks: unknown[] }).tasks.filter(isTerminalShellTask);
+}
+
 function bindDesktopEvents() {
   if (didBindDesktopEvents) {
     return;
@@ -190,6 +239,49 @@ export function getTerminalDefaultCwd() {
     state.sessions[0]?.cwd ??
     null
   );
+}
+
+export async function refreshTerminalShellTasks() {
+  if (typeof window === "undefined") {
+    return state.shellTasks;
+  }
+
+  const response = await fetch("/api/shell-tasks", {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error("Unable to load shell tasks.");
+  }
+
+  const tasks = normalizeShellTasks(await response.json());
+  state = {
+    ...state,
+    shellTasks: tasks,
+  };
+  emit();
+  return tasks;
+}
+
+export async function stopTerminalShellTask(backgroundTaskId: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const response = await fetch("/api/shell-tasks", {
+    body: JSON.stringify({ backgroundTaskId }),
+    cache: "no-store",
+    headers: {
+      "content-type": "application/json",
+    },
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    throw new Error("Unable to stop shell task.");
+  }
+
+  await refreshTerminalShellTasks();
 }
 
 export function openTerminal(cwd?: string | null) {

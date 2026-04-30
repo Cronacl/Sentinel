@@ -619,9 +619,7 @@ function renderBody(
   }
 
   if (errorText) {
-    return (
-      <p className="text-[11px] text-danger-soft-foreground">{errorText}</p>
-    );
+    return null;
   }
 
   return null;
@@ -674,11 +672,7 @@ export const WorkspaceTool = memo(function WorkspaceTool({
       isExpandable={Boolean(body)}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={
-        partErrorText && part.state !== "output-error"
-          ? partErrorText
-          : undefined
-      }
+      errorText={isErrorState ? partErrorText : undefined}
       actions={renderActions({ onApprove, onDeny, part, rationale })}
     >
       {body}

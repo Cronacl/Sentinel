@@ -134,18 +134,16 @@ function TreeEntry({ entry }: { entry: ListToolEntry }) {
 }
 
 function ListBody({
-  errorText,
   output,
   requestedPath,
 }: {
-  errorText?: string;
   output: ListToolOutput | null;
   requestedPath: string;
 }) {
   if (!output) {
     return (
       <p className="font-mono text-[11px] text-foreground/50">
-        {errorText ?? `Listing ${requestedPath}`}
+        Listing {requestedPath}
       </p>
     );
   }
@@ -206,18 +204,10 @@ export const ListTool = memo(function ListTool({ part }: RendererProps) {
       isExpandable={true}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={
-        partErrorText && part.state !== "output-error"
-          ? partErrorText
-          : undefined
-      }
+      errorText={isErrorState ? partErrorText : undefined}
       footer={footer}
     >
-      <ListBody
-        errorText={partErrorText}
-        output={listOutput}
-        requestedPath={requestedPath}
-      />
+      <ListBody output={listOutput} requestedPath={requestedPath} />
     </ToolLayout>
   );
 });

@@ -344,11 +344,7 @@ export const CodexShellTool = memo(function CodexShellTool({
       isExpandable={isFinished || isRunning}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={
-        partErrorText && part.state !== "output-error"
-          ? partErrorText
-          : undefined
-      }
+      errorText={isError ? partErrorText : undefined}
       footer={footer}
       actions={
         showApprovalActions ? (

@@ -11,6 +11,8 @@ import {
 
 const COMMAND_INACTIVITY_TIMEOUT_MS = 5 * 60_000;
 const COMMAND_MAX_DURATION_MS = 30 * 60_000;
+const BACKGROUND_COMMAND_INACTIVITY_TIMEOUT_MS = 12 * 60 * 60_000;
+const BACKGROUND_COMMAND_MAX_DURATION_MS = 12 * 60 * 60_000;
 const IDLE_TIMEOUT_MS = 15 * 60_000;
 const MAX_OUTPUT_BYTES = 64 * 1024;
 const MAX_LIVE_TAIL_BYTES = 8 * 1024;
@@ -41,9 +43,35 @@ export type ShellCommandCompletedOutput = {
   truncated: boolean;
 };
 
+export type ShellCommandBackgroundStatus =
+  | "completed"
+  | "failed"
+  | "running"
+  | "stopped";
+
+export type ShellCommandBackgroundOutput = {
+  backgroundTaskId: string;
+  boundaryRoot: string | null;
+  command: string;
+  cwd: string;
+  durationMs: number;
+  error: string | null;
+  exitCode: number | null;
+  failureKind: ShellCommandFailureKind | null;
+  missingCommand: string | null;
+  phase: "background";
+  status: ShellCommandBackgroundStatus;
+  stderr: string;
+  stdout: string;
+  suggestedNextAction: ShellCommandSuggestedNextAction | null;
+  tail: string;
+  truncated: boolean;
+};
+
 export type ShellCommandOutput =
   | ShellCommandRunningOutput
-  | ShellCommandCompletedOutput;
+  | ShellCommandCompletedOutput
+  | ShellCommandBackgroundOutput;
 
 export type ShellCommandResult = ShellCommandCompletedOutput;
 
@@ -111,7 +139,25 @@ type ShellSession = {
   threadId: string;
 };
 
+type ShellBackgroundTask = {
+  allowedRoot?: string;
+  allowedRoots?: string[];
+  command: string;
+  defaultDirectory: string;
+  error: string | null;
+  finishedAt: number | null;
+  id: string;
+  lastRunning: ShellCommandRunningOutput | null;
+  output: ShellCommandCompletedOutput | null;
+  promise: Promise<void>;
+  sessionThreadId: string;
+  startedAt: number;
+  status: ShellCommandBackgroundStatus;
+  threadId: string;
+};
+
 const sessions = new Map<string, ShellSession>();
+const backgroundTasks = new Map<string, ShellBackgroundTask>();
 
 function isNodeTimer(value: Timer): value is NodeJS.Timeout {
   return typeof value === "object" && value !== null && "unref" in value;
@@ -1262,6 +1308,207 @@ export async function executeShellCommand({
   }
 
   return completed;
+}
+
+function buildBackgroundOutput(
+  task: ShellBackgroundTask,
+): ShellCommandBackgroundOutput {
+  const completed = task.output;
+  const running = task.lastRunning;
+  const finishedAt = task.finishedAt ?? Date.now();
+
+  return {
+    backgroundTaskId: task.id,
+    boundaryRoot:
+      completed?.boundaryRoot ??
+      running?.boundaryRoot ??
+      task.allowedRoot ??
+      task.allowedRoots?.[0] ??
+      null,
+    command: task.command,
+    cwd: completed?.cwd ?? running?.cwd ?? task.defaultDirectory,
+    durationMs: Math.max(0, finishedAt - task.startedAt),
+    error: task.error,
+    exitCode: completed?.exitCode ?? null,
+    failureKind: completed?.failureKind ?? null,
+    missingCommand: completed?.missingCommand ?? null,
+    phase: "background",
+    status: task.status,
+    stderr: completed?.stderr ?? "",
+    stdout: completed?.stdout ?? "",
+    suggestedNextAction: completed?.suggestedNextAction ?? null,
+    tail: running?.tail ?? "",
+    truncated: completed?.truncated ?? running?.truncated ?? false,
+  };
+}
+
+function getBackgroundTaskOrThrow(threadId: string, backgroundTaskId: string) {
+  const task = backgroundTasks.get(backgroundTaskId);
+  if (!task || task.threadId !== threadId) {
+    throw new Error(`Background shell task not found: ${backgroundTaskId}`);
+  }
+
+  return task;
+}
+
+function isBackgroundTaskStopped(task: ShellBackgroundTask) {
+  return task.status === "stopped";
+}
+
+export async function startBackgroundShellCommand({
+  allowedRoot,
+  allowedRoots,
+  command,
+  defaultDirectory,
+  maxOutputBytes,
+  permissionMode,
+  timeoutMs,
+  inactivityTimeoutMs,
+  threadId,
+}: {
+  allowedRoot?: string;
+  allowedRoots?: string[];
+  command: string;
+  defaultDirectory: string;
+  inactivityTimeoutMs?: number;
+  maxOutputBytes?: number;
+  permissionMode: PermissionMode;
+  timeoutMs?: number;
+  threadId: string;
+}) {
+  assertShellWorkingDirectoryAvailable(defaultDirectory);
+
+  const id = `bg_${crypto.randomUUID()}`;
+  const sessionThreadId = `${threadId}:background:${id}`;
+  const task: ShellBackgroundTask = {
+    allowedRoot: permissionMode === "default" ? allowedRoot : undefined,
+    allowedRoots: permissionMode === "default" ? allowedRoots : undefined,
+    command,
+    defaultDirectory,
+    error: null,
+    finishedAt: null,
+    id,
+    lastRunning: null,
+    output: null,
+    promise: Promise.resolve(),
+    sessionThreadId,
+    startedAt: Date.now(),
+    status: "running",
+    threadId,
+  };
+
+  task.promise = (async () => {
+    if (isBackgroundTaskStopped(task)) {
+      return;
+    }
+
+    try {
+      for await (const event of streamShellCommand({
+        allowedRoot,
+        allowedRoots,
+        command,
+        defaultDirectory,
+        inactivityTimeoutMs:
+          inactivityTimeoutMs ?? BACKGROUND_COMMAND_INACTIVITY_TIMEOUT_MS,
+        maxOutputBytes,
+        permissionMode,
+        timeoutMs: timeoutMs ?? BACKGROUND_COMMAND_MAX_DURATION_MS,
+        threadId: sessionThreadId,
+      })) {
+        if (event.type === "running") {
+          if (isBackgroundTaskStopped(task)) {
+            break;
+          }
+          task.lastRunning = event.output;
+          continue;
+        }
+
+        if (event.type === "completed") {
+          if (isBackgroundTaskStopped(task)) {
+            break;
+          }
+          task.output = event.output;
+          task.status = "completed";
+          task.finishedAt = Date.now();
+          break;
+        }
+
+        throw event.error;
+      }
+    } catch (error) {
+      if (!isBackgroundTaskStopped(task)) {
+        task.status = "failed";
+        task.error = error instanceof Error ? error.message : String(error);
+        task.finishedAt = Date.now();
+      }
+    } finally {
+      await disposeShellSession(sessionThreadId);
+    }
+  })();
+
+  backgroundTasks.set(id, task);
+  void task.promise;
+
+  return buildBackgroundOutput(task);
+}
+
+export async function getBackgroundShellCommand({
+  backgroundTaskId,
+  threadId,
+  waitForCompletion = false,
+}: {
+  backgroundTaskId: string;
+  threadId: string;
+  waitForCompletion?: boolean;
+}) {
+  const task = getBackgroundTaskOrThrow(threadId, backgroundTaskId);
+  if (waitForCompletion && task.status === "running") {
+    await task.promise;
+  }
+
+  return buildBackgroundOutput(task);
+}
+
+export function listBackgroundShellCommands({
+  includeCompleted = false,
+}: {
+  includeCompleted?: boolean;
+} = {}) {
+  return Array.from(backgroundTasks.values())
+    .filter((task) => includeCompleted || task.status === "running")
+    .map((task) => buildBackgroundOutput(task))
+    .sort((a, b) => b.durationMs - a.durationMs);
+}
+
+export async function stopBackgroundShellCommand({
+  backgroundTaskId,
+  threadId,
+}: {
+  backgroundTaskId: string;
+  threadId: string;
+}) {
+  const task = getBackgroundTaskOrThrow(threadId, backgroundTaskId);
+  if (task.status === "running") {
+    task.status = "stopped";
+    task.error = "Background shell command was stopped.";
+    task.finishedAt = Date.now();
+    await disposeShellSession(task.sessionThreadId);
+    await task.promise.catch(() => undefined);
+  }
+
+  return buildBackgroundOutput(task);
+}
+
+export async function stopBackgroundShellCommandById(backgroundTaskId: string) {
+  const task = backgroundTasks.get(backgroundTaskId);
+  if (!task) {
+    throw new Error(`Background shell task not found: ${backgroundTaskId}`);
+  }
+
+  return stopBackgroundShellCommand({
+    backgroundTaskId,
+    threadId: task.threadId,
+  });
 }
 
 export async function disposeShellSession(threadId: string) {

@@ -210,6 +210,8 @@ export const CodexMcpTool = memo(function CodexMcpTool({
 
   const summary = buildSummary(part, mcpInput, mcpOutput);
   const errorText = mcpOutput ? extractMcpErrorText(mcpOutput.error) : null;
+  const displayErrorText =
+    errorText ?? (partErrorText && isError ? partErrorText : undefined);
   const resultText = mcpOutput ? extractMcpResultText(mcpOutput.result) : null;
   const resultImages = mcpOutput
     ? extractMcpResultImages(mcpOutput.result)
@@ -227,11 +229,7 @@ export const CodexMcpTool = memo(function CodexMcpTool({
       isExpandable={isFinished || isRunning || hasArgs}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={
-        partErrorText && part.state !== "output-error"
-          ? partErrorText
-          : undefined
-      }
+      errorText={displayErrorText}
       footer={
         mcpOutput ? (
           <div className="flex items-center justify-between">
@@ -282,13 +280,7 @@ export const CodexMcpTool = memo(function CodexMcpTool({
           <JsonBlock label="Arguments" value={mcpInput.arguments} />
         ) : null}
 
-        {errorText ? (
-          <div className="rounded-lg border border-danger/20 bg-danger-soft px-3 py-2 text-[11px] text-danger-soft-foreground">
-            {errorText}
-          </div>
-        ) : null}
-
-        {hasResult && !errorText ? (
+        {hasResult && !displayErrorText ? (
           resultText ? (
             <div>
               <span className="mb-1 block text-[10px] font-medium text-foreground/30">

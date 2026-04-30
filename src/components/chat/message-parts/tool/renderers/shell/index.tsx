@@ -13,14 +13,18 @@ import { highlightToTokens, type ThemedToken } from "@/lib/syntax/highlighter";
 import { useResolvedTheme } from "@/lib/syntax/use-resolved-theme";
 
 type ShellToolInput = {
-  command: string;
+  backgroundTaskId?: string;
+  command?: string;
+  mode?: "run" | "start_background" | "check_background" | "stop_background";
   rationale: string;
+  runInBackground?: boolean;
+  waitForCompletion?: boolean;
 };
 
 type ShellToolOutput = {
   cwd: string;
   durationMs: number;
-  phase: "completed" | "running";
+  phase: "background" | "completed" | "running";
   truncated: boolean;
 } & (
   | {
@@ -28,6 +32,17 @@ type ShellToolOutput = {
       exitCode: number;
       stderr: string;
       stdout: string;
+    }
+  | {
+      backgroundTaskId: string;
+      command: string;
+      error: string | null;
+      exitCode: number | null;
+      phase: "background";
+      status: "completed" | "failed" | "running" | "stopped";
+      stderr: string;
+      stdout: string;
+      tail: string;
     }
   | {
       phase: "running";
@@ -39,20 +54,25 @@ function isShellToolInput(value: unknown): value is ShellToolInput {
   return (
     !!value &&
     typeof value === "object" &&
-    "command" in value &&
-    typeof value.command === "string" &&
     "rationale" in value &&
-    typeof value.rationale === "string"
+    typeof value.rationale === "string" &&
+    (!("command" in value) || typeof value.command === "string") &&
+    (!("backgroundTaskId" in value) ||
+      typeof value.backgroundTaskId === "string")
   );
 }
 
 function isShellToolOutput(value: unknown): value is ShellToolOutput {
   const candidate = value as {
+    backgroundTaskId?: unknown;
+    command?: unknown;
     cwd?: unknown;
     durationMs?: unknown;
+    error?: unknown;
     exitCode?: unknown;
     phase?: unknown;
     stderr?: unknown;
+    status?: unknown;
     stdout?: unknown;
     tail?: unknown;
     truncated?: unknown;
@@ -63,13 +83,25 @@ function isShellToolOutput(value: unknown): value is ShellToolOutput {
     typeof value === "object" &&
     typeof candidate.cwd === "string" &&
     typeof candidate.durationMs === "number" &&
-    (candidate.phase === "running" || candidate.phase === "completed") &&
+    (candidate.phase === "running" ||
+      candidate.phase === "completed" ||
+      candidate.phase === "background") &&
     typeof candidate.truncated === "boolean" &&
     (candidate.phase === "running"
       ? typeof candidate.tail === "string"
-      : typeof candidate.exitCode === "number" &&
-        typeof candidate.stderr === "string" &&
-        typeof candidate.stdout === "string")
+      : candidate.phase === "background"
+        ? typeof candidate.backgroundTaskId === "string" &&
+          typeof candidate.command === "string" &&
+          typeof candidate.status === "string" &&
+          typeof candidate.tail === "string" &&
+          typeof candidate.stdout === "string" &&
+          typeof candidate.stderr === "string" &&
+          (candidate.error === null || typeof candidate.error === "string") &&
+          (candidate.exitCode === null ||
+            typeof candidate.exitCode === "number")
+        : typeof candidate.exitCode === "number" &&
+          typeof candidate.stderr === "string" &&
+          typeof candidate.stdout === "string")
   );
 }
 
@@ -83,6 +115,23 @@ function isCompletedShellOutput(
   output: ShellToolOutput | null,
 ): output is Extract<ShellToolOutput, { phase: "completed" }> {
   return output?.phase === "completed";
+}
+
+function isBackgroundShellOutput(
+  output: ShellToolOutput | null,
+): output is Extract<ShellToolOutput, { phase: "background" }> {
+  return output?.phase === "background";
+}
+
+function getDisplayCommand(
+  input: ShellToolInput,
+  output: ShellToolOutput | null,
+) {
+  if (input.command) return input.command;
+  if (isBackgroundShellOutput(output)) return output.command;
+  return input.backgroundTaskId
+    ? `background task ${input.backgroundTaskId}`
+    : "shell command";
 }
 
 function formatDuration(durationMs: number) {
@@ -99,7 +148,7 @@ function buildSummary(
   input: ShellToolInput,
   output: ShellToolOutput | null,
 ): ReactNode {
-  const cmd = truncateCommand(input.command);
+  const cmd = truncateCommand(getDisplayCommand(input, output));
 
   if (part.state === "output-denied") {
     return <>Shell command denied</>;
@@ -126,6 +175,28 @@ function buildSummary(
     );
   }
 
+  if (isBackgroundShellOutput(output)) {
+    const label =
+      output.status === "running"
+        ? "Background"
+        : output.status === "completed"
+          ? "Completed"
+          : output.status === "stopped"
+            ? "Stopped"
+            : "Failed";
+    return (
+      <>
+        {label} <span className="font-mono text-[12px]">$ {cmd}</span>
+        <span className="ml-1.5 text-[11px] text-foreground/40">
+          {formatDuration(output.durationMs)}
+          {output.exitCode != null && output.exitCode !== 0
+            ? ` · exit ${output.exitCode}`
+            : ""}
+        </span>
+      </>
+    );
+  }
+
   if (part.state === "approval-requested") {
     return (
       <>
@@ -147,7 +218,8 @@ function getTerminalText(
   state: RendererProps["part"]["state"],
   errorText?: string,
 ) {
-  const lines = [`$ ${input.command}`];
+  const command = getDisplayCommand(input, output);
+  const lines = [`$ ${command}`];
 
   if (state === "output-denied") {
     lines.push("Execution denied.");
@@ -157,6 +229,19 @@ function getTerminalText(
   if (output) {
     if (output.phase === "running") {
       if (output.tail.trim()) lines.push(output.tail.trimEnd());
+      return lines.join("\n");
+    }
+    if (output.phase === "background") {
+      const stdout = output.stdout.trimEnd();
+      const stderr = output.stderr.trimEnd();
+      const tail = output.tail.trimEnd();
+      if (stdout) lines.push(stdout);
+      if (stderr) lines.push(stderr);
+      if (!stdout && !stderr && tail) lines.push(tail);
+      if (output.error) lines.push(output.error);
+      if (!stdout && !stderr && !tail && !output.error) {
+        lines.push(`Background task: ${output.backgroundTaskId}`);
+      }
       return lines.join("\n");
     }
     const stdout = output.stdout.trimEnd();
@@ -311,15 +396,24 @@ export const ShellTool = memo(function ShellTool({
     part.state === "approval-requested" && approvalId && onApprove && onDeny;
   const isRunningShellState =
     part.state === "approval-responded" ||
-    (part.state === "output-available" && isRunningShellOutput(shellOutput));
+    (part.state === "output-available" &&
+      (isRunningShellOutput(shellOutput) ||
+        (isBackgroundShellOutput(shellOutput) &&
+          shellOutput.status === "running")));
   const isFinishedShellState =
     part.state === "output-denied" ||
     part.state === "output-error" ||
-    (part.state === "output-available" && isCompletedShellOutput(shellOutput));
+    (part.state === "output-available" &&
+      (isCompletedShellOutput(shellOutput) ||
+        (isBackgroundShellOutput(shellOutput) &&
+          shellOutput.status !== "running")));
   const isErrorState =
     part.state === "output-denied" ||
     part.state === "output-error" ||
-    (isCompletedShellOutput(shellOutput) && shellOutput.exitCode !== 0);
+    (isCompletedShellOutput(shellOutput) && shellOutput.exitCode !== 0) ||
+    (isBackgroundShellOutput(shellOutput) &&
+      (shellOutput.status === "failed" ||
+        (shellOutput.exitCode != null && shellOutput.exitCode !== 0)));
   const [isExpanded, setIsExpanded] = useToolExpansionState({
     toolCallId: part.toolCallId,
     defaultExpanded: part.state === "approval-requested" || isRunningShellState,
@@ -352,6 +446,23 @@ export const ShellTool = memo(function ShellTool({
             ? "Success"
             : `Exit ${shellOutput.exitCode}`}
         </span>
+      ) : isBackgroundShellOutput(shellOutput) ? (
+        <span
+          className={
+            shellOutput.status === "failed" ||
+            (shellOutput.exitCode != null && shellOutput.exitCode !== 0)
+              ? "text-danger"
+              : shellOutput.status === "stopped"
+                ? "text-warning"
+                : "text-success"
+          }
+        >
+          {shellOutput.status === "completed" && shellOutput.exitCode != null
+            ? shellOutput.exitCode === 0
+              ? "Completed"
+              : `Exit ${shellOutput.exitCode}`
+            : shellOutput.status}
+        </span>
       ) : null}
     </div>
   ) : null;
@@ -364,11 +475,7 @@ export const ShellTool = memo(function ShellTool({
       isExpandable={isFinishedShellState || isRunningShellState}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={
-        partErrorText && part.state !== "output-error"
-          ? partErrorText
-          : undefined
-      }
+      errorText={isErrorState ? partErrorText : undefined}
       footer={footer}
       actions={
         <>

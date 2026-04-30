@@ -453,9 +453,7 @@ function buildBody(
   }
 
   if (errorText) {
-    return (
-      <p className="text-[11px] text-danger-soft-foreground">{errorText}</p>
-    );
+    return null;
   }
 
   return null;
@@ -500,11 +498,7 @@ export const FileTool = memo(function FileTool({
       isExpandable={Boolean(body)}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={
-        partErrorText && part.state !== "output-error"
-          ? partErrorText
-          : undefined
-      }
+      errorText={isErrorState ? partErrorText : undefined}
       actions={
         <>
           {part.state === "approval-requested" && rationale ? (

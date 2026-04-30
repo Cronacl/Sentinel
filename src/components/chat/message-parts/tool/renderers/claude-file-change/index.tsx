@@ -263,11 +263,7 @@ export const ClaudeFileEditTool = memo(function ClaudeFileEditTool({
       }
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={
-        partErrorText && part.state !== "output-error"
-          ? partErrorText
-          : undefined
-      }
+      errorText={isError ? partErrorText : undefined}
       footer={
         fileOutput ? (
           <div className="flex items-center justify-between">
@@ -355,11 +351,7 @@ export const ClaudeFileWriteTool = memo(function ClaudeFileWriteTool({
       }
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={
-        partErrorText && part.state !== "output-error"
-          ? partErrorText
-          : undefined
-      }
+      errorText={isError ? partErrorText : undefined}
       footer={
         fileOutput ? (
           <div className="flex items-center justify-between">

@@ -334,16 +334,13 @@ function buildBody(
   input: WebFetchToolInput,
   output: WebFetchToolOutput | null,
   state: RendererProps["part"]["state"],
-  errorText?: string,
 ): ReactNode {
   if (state === "output-denied") {
     return <p className="text-[11px] text-muted">Execution denied.</p>;
   }
 
-  if (errorText && !output) {
-    return (
-      <p className="text-[11px] text-danger-soft-foreground">{errorText}</p>
-    );
+  if (state === "output-error") {
+    return null;
   }
 
   if (!output) {
@@ -370,10 +367,8 @@ function buildBody(
   if (firstSuccess) return buildSingleResultBody(firstSuccess);
 
   const firstError = output.results.find(isErrorResult);
-  return (
-    <p className="text-[11px] text-danger-soft-foreground">
-      {firstError?.error ?? "No output."}
-    </p>
+  return firstError ? null : (
+    <p className="text-[11px] text-foreground/50">No output.</p>
   );
 }
 
@@ -410,7 +405,12 @@ export const WebFetchTool = memo(function WebFetchTool({
   if (!input) return null;
 
   const summary = buildSummary(part, input, output);
-  const body = buildBody(input, output, part.state, partErrorText);
+  const body = buildBody(input, output, part.state);
+  const firstError = output?.results.find(isErrorResult) ?? null;
+  const displayErrorText =
+    partErrorText ??
+    firstError?.error ??
+    (isErrorState ? "Fetch failed." : undefined);
 
   const firstSuccess = output?.results.find(isSuccessResult) ?? null;
   const footer = output ? (
@@ -438,11 +438,7 @@ export const WebFetchTool = memo(function WebFetchTool({
       isExpandable={Boolean(body)}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={
-        partErrorText && part.state !== "output-error"
-          ? partErrorText
-          : undefined
-      }
+      errorText={displayErrorText}
       footer={footer}
       actions={
         <>

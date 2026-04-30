@@ -98,6 +98,30 @@ function selectWebTools(activeTools: string[], availableTools: string[]) {
   ]);
 }
 
+function selectBrowserTools(activeTools: string[], availableTools: string[]) {
+  appendMatchingTools(activeTools, availableTools, [
+    "browser_tabs",
+    "browser_open",
+    "browser_navigate",
+    "browser_back",
+    "browser_forward",
+    "browser_reload",
+    "browser_snapshot",
+    "browser_screenshot",
+    "browser_click",
+    "browser_fill",
+    "browser_press",
+    "browser_console_logs",
+  ]);
+}
+
+function userRequestNeedsBrowserTools(promptContext: ThreadPromptContext) {
+  const text = promptContext.latestUserText ?? "";
+  return /\b(browser|webview|page|tab|localhost|127\.0\.0\.1|::1|click|screenshot|console logs?|dom snapshot|inspect ui|test ui)\b/i.test(
+    text,
+  );
+}
+
 export function selectAlwaysOnChatTools({
   availableToolNames,
   promptContext,
@@ -123,6 +147,10 @@ export function selectAlwaysOnChatTools({
   }
 
   selectWebTools(activeTools, availableToolNames);
+
+  if (userRequestNeedsBrowserTools(promptContext)) {
+    selectBrowserTools(activeTools, availableToolNames);
+  }
 
   return uniqueToolNames(activeTools);
 }

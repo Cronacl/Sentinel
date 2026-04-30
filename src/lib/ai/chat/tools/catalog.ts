@@ -1,4 +1,5 @@
 export type ToolCategory =
+  | "browser"
   | "delegation"
   | "execution"
   | "inspection"
@@ -128,6 +129,66 @@ export const TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     capability: "to read web pages, documentation, and URLs",
     category: "web",
     label: "the webfetch tool",
+  },
+  browser_tabs: {
+    capability: "to list built-in browser tabs",
+    category: "browser",
+    label: "browser_tabs",
+  },
+  browser_open: {
+    capability: "to open a URL or search in the built-in browser panel",
+    category: "browser",
+    label: "browser_open",
+  },
+  browser_navigate: {
+    capability: "to navigate a built-in browser tab",
+    category: "browser",
+    label: "browser_navigate",
+  },
+  browser_back: {
+    capability: "to go back in a built-in browser tab",
+    category: "browser",
+    label: "browser_back",
+  },
+  browser_forward: {
+    capability: "to go forward in a built-in browser tab",
+    category: "browser",
+    label: "browser_forward",
+  },
+  browser_reload: {
+    capability: "to reload a built-in browser tab",
+    category: "browser",
+    label: "browser_reload",
+  },
+  browser_snapshot: {
+    capability: "to inspect the current browser page DOM",
+    category: "browser",
+    label: "browser_snapshot",
+  },
+  browser_screenshot: {
+    capability: "to capture the current browser page visually",
+    category: "browser",
+    label: "browser_screenshot",
+  },
+  browser_click: {
+    capability: "to click inside a built-in browser tab",
+    category: "browser",
+    label: "browser_click",
+  },
+  browser_fill: {
+    capability: "to fill a field inside a built-in browser tab",
+    category: "browser",
+    label: "browser_fill",
+  },
+  browser_press: {
+    capability: "to press keys inside a built-in browser tab",
+    category: "browser",
+    label: "browser_press",
+  },
+  browser_console_logs: {
+    capability: "to read captured browser console logs",
+    category: "browser",
+    label: "browser_console_logs",
   },
   generate_image: {
     capability: "to generate images from text prompts or reference images",

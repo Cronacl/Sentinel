@@ -9,6 +9,7 @@ import {
   LinkSquare02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { BorderBeam } from "border-beam";
 import {
   Button,
   CloseButton,
@@ -39,8 +40,13 @@ import {
   useBrowserSidebarState,
   type BrowserTab,
 } from "./browser-sidebar-store";
+import {
+  recordBrowserAutomationConsoleLog,
+  registerBrowserAutomationWebview,
+  type BrowserAutomationWebviewElement,
+} from "./browser-automation";
 
-type BrowserWebviewElement = HTMLElement & {
+type BrowserWebviewElement = BrowserAutomationWebviewElement & {
   canGoBack: () => boolean;
   canGoForward: () => boolean;
   getURL: () => string;
@@ -55,6 +61,8 @@ type BrowserWebviewEvent = Event & {
   errorCode?: number;
   errorDescription?: string;
   isMainFrame?: boolean;
+  level?: string;
+  message?: string;
   title?: string;
   url?: string;
   validatedURL?: string;
@@ -201,10 +209,12 @@ function syncWebviewNavigationState(
 }
 
 function BrowserViewport({
+  isAutomationActive,
   isActive,
   onRegisterWebview,
   tab,
 }: {
+  isAutomationActive: boolean;
   isActive: boolean;
   onRegisterWebview: (
     tabId: string,
@@ -292,6 +302,13 @@ function BrowserViewport({
         browserEvent.validatedURL ?? tab.url,
       );
     };
+    const handleConsoleMessage = (event: Event) => {
+      const browserEvent = event as BrowserWebviewEvent;
+      recordBrowserAutomationConsoleLog(tab.id, {
+        level: browserEvent.level,
+        message: browserEvent.message,
+      });
+    };
 
     webview.addEventListener("did-start-loading", handleLoadStart);
     webview.addEventListener("did-stop-loading", handleLoadStop);
@@ -300,6 +317,7 @@ function BrowserViewport({
     webview.addEventListener("dom-ready", handleLoadStop);
     webview.addEventListener("page-title-updated", handleTitleUpdate);
     webview.addEventListener("did-fail-load", handleFailLoad);
+    webview.addEventListener("console-message", handleConsoleMessage);
 
     return () => {
       webview.removeEventListener("did-start-loading", handleLoadStart);
@@ -309,6 +327,7 @@ function BrowserViewport({
       webview.removeEventListener("dom-ready", handleLoadStop);
       webview.removeEventListener("page-title-updated", handleTitleUpdate);
       webview.removeEventListener("did-fail-load", handleFailLoad);
+      webview.removeEventListener("console-message", handleConsoleMessage);
     };
   }, [tab.id, tab.url]);
 
@@ -328,6 +347,7 @@ function BrowserViewport({
     (node: HTMLElement | null) => {
       const nextWebview = node as BrowserWebviewElement | null;
       webviewRef.current = nextWebview;
+      registerBrowserAutomationWebview(tab.id, nextWebview);
       onRegisterWebview(tab.id, nextWebview);
     },
     [onRegisterWebview, tab.id],
@@ -358,16 +378,32 @@ function BrowserViewport({
           width: "100%",
         }}
       />
+      <BorderBeam
+        active={isAutomationActive}
+        borderRadius={0}
+        brightness={1.08}
+        className="pointer-events-none absolute inset-0 z-10"
+        colorVariant="ocean"
+        duration={7.2}
+        saturation={0.95}
+        size="md"
+        strength={0.42}
+        theme="dark"
+      >
+        <div className="h-full w-full" />
+      </BorderBeam>
     </div>
   );
 }
 
 function BrowserTabButton({
+  isAutomationActive,
   isActive,
   onClose,
   onSelect,
   tab,
 }: {
+  isAutomationActive: boolean;
   isActive: boolean;
   onClose: () => void;
   onSelect: () => void;
@@ -385,48 +421,60 @@ function BrowserTabButton({
       style={{ originX: 0.5 }}
       transition={TAB_MOTION_TRANSITION}
     >
-      <div
-        className={`group relative flex min-h-[24px] min-w-0 max-w-28 items-center rounded-full border p-[1px] px-[4px] transition-[background-color,color,border-color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          isActive
-            ? "border-border bg-foreground/[0.04] text-foreground dark:bg-foreground/[0.06]"
-            : "border-transparent text-muted hover:bg-foreground/[0.02] hover:text-foreground dark:hover:bg-foreground/[0.03]"
-        }`}
+      <BorderBeam
+        active={isAutomationActive}
+        borderRadius={999}
+        brightness={1.05}
+        colorVariant="ocean"
+        duration={5.8}
+        saturation={0.95}
+        size="sm"
+        strength={0.38}
+        theme="dark"
       >
-        <button
-          aria-selected={isActive}
-          className="flex h-[16px] min-w-0 flex-1 items-center justify-start gap-1 rounded-full px-[4px] py-0 text-left transition-[padding,color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
-          onClick={onSelect}
-          style={{ fontFamily: "var(--font-display)" }}
-          type="button"
-        >
-          {faviconUrl ? (
-            <span className="flex h-2.5 w-2.5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-content2/80 text-[9px] text-foreground/80">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                alt=""
-                className="h-full w-full"
-                draggable={false}
-                src={faviconUrl}
-              />
-            </span>
-          ) : null}
-          <span className="min-w-0 truncate text-[10px] font-medium leading-[1.15]">
-            {getTabTitle(tab)}
-          </span>
-        </button>
-        <button
-          aria-label={`Close tab ${getTabTitle(tab)}`}
-          className={`flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full transition-[opacity,background-color,color,transform] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-foreground/[0.05] hover:text-foreground active:scale-95 ${
+        <div
+          className={`group relative flex min-h-[24px] min-w-0 max-w-28 items-center rounded-full border p-[1px] px-[4px] transition-[background-color,color,border-color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
             isActive
-              ? "opacity-100 text-foreground/70"
-              : "opacity-0 text-muted group-hover:opacity-100 group-focus-within:opacity-100"
+              ? "border-border bg-foreground/[0.04] text-foreground dark:bg-foreground/[0.06]"
+              : "border-transparent text-muted hover:bg-foreground/[0.02] hover:text-foreground dark:hover:bg-foreground/[0.03]"
           }`}
-          onClick={onClose}
-          type="button"
         >
-          <HugeiconsIcon color="currentColor" icon={Cancel01Icon} size={10} />
-        </button>
-      </div>
+          <button
+            aria-selected={isActive}
+            className="flex h-[16px] min-w-0 flex-1 items-center justify-start gap-1 rounded-full px-[4px] py-0 text-left transition-[padding,color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            onClick={onSelect}
+            style={{ fontFamily: "var(--font-display)" }}
+            type="button"
+          >
+            {faviconUrl ? (
+              <span className="flex h-2.5 w-2.5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-content2/80 text-[9px] text-foreground/80">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  alt=""
+                  className="h-full w-full"
+                  draggable={false}
+                  src={faviconUrl}
+                />
+              </span>
+            ) : null}
+            <span className="min-w-0 truncate text-[10px] font-medium leading-[1.15]">
+              {getTabTitle(tab)}
+            </span>
+          </button>
+          <button
+            aria-label={`Close tab ${getTabTitle(tab)}`}
+            className={`flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full transition-[opacity,background-color,color,transform] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:bg-foreground/[0.05] hover:text-foreground active:scale-95 ${
+              isActive
+                ? "opacity-100 text-foreground/70"
+                : "opacity-0 text-muted group-hover:opacity-100 group-focus-within:opacity-100"
+            }`}
+            onClick={onClose}
+            type="button"
+          >
+            <HugeiconsIcon color="currentColor" icon={Cancel01Icon} size={10} />
+          </button>
+        </div>
+      </BorderBeam>
     </motion.div>
   );
 }
@@ -435,7 +483,7 @@ export function BrowserSidebar() {
   const desktop = getDesktopApi();
   const platform = desktop?.app.platform ?? null;
   const rightSidebar = useRightSidebar();
-  const { activeTabId, tabs } = useBrowserSidebarState();
+  const { activeTabId, automationActiveTabId, tabs } = useBrowserSidebarState();
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
   const [addressInput, setAddressInput] = useState(
     formatAddressInput(activeTab?.url ?? ""),
@@ -602,6 +650,7 @@ export function BrowserSidebar() {
                 {tabs.map((tab) => (
                   <BrowserTabButton
                     key={tab.id}
+                    isAutomationActive={tab.id === automationActiveTabId}
                     isActive={tab.id === activeTabId}
                     onClose={() => handleCloseTab(tab.id)}
                     onSelect={() => handleTabSwitch(tab.id)}
@@ -695,6 +744,7 @@ export function BrowserSidebar() {
         {tabs.map((tab) => (
           <BrowserViewport
             key={tab.id}
+            isAutomationActive={tab.id === automationActiveTabId}
             isActive={tab.id === activeTabId}
             onRegisterWebview={registerWebview}
             tab={tab}

@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { type PropsWithChildren, useEffect, useRef } from "react";
 
 import { NewThreadScreen } from "@/components/chat/new-thread-screen";
+import { BrowserAutomationBridge } from "@/components/browser/browser-automation-bridge";
 import { getDesktopApi } from "@/lib/desktop/client";
 import { ShortcutProvider, useShortcutAction } from "@/lib/shortcuts/provider";
 import { api } from "@/trpc/react";
@@ -229,6 +230,7 @@ export function AppShell({ children }: PropsWithChildren) {
       <ShellProvider>
         <ShellWarmCache />
         <AppWarmupCoordinator />
+        <BrowserAutomationBridge />
         <AppShellShortcutBindings />
         <AppShellRouteEffects />
         <div className="flex h-dvh flex-col overflow-clip">

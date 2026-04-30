@@ -466,11 +466,7 @@ export const CopilotShellTool = memo(function CopilotShellTool({
   return (
     <ToolLayout
       actions={actions}
-      errorText={
-        partErrorText && part.state !== "output-error"
-          ? partErrorText
-          : undefined
-      }
+      errorText={isError ? partErrorText : undefined}
       footer={footer}
       isError={isError}
       isExpandable={

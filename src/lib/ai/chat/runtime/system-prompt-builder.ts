@@ -46,6 +46,12 @@ export const buildSystemPrompt = prompt<{
       "When a discovered skill is a clear match for the request, call load_skill before relying on general reasoning or bundled resources.",
     ]),
 
+    section("Shell Background Work", [
+      "When shell_command is available, use its background mode for long-running commands that should not block the model turn, such as dev servers, file watchers, and lengthy checks that can be inspected later.",
+      "Start those commands with mode=start_background or runInBackground=true, keep the returned backgroundTaskId, continue useful work, and call mode=check_background only when status or output is needed.",
+      "Use mode=stop_background when a background shell command is no longer needed.",
+    ]),
+
     section("Approval And Permission Semantics", [
       "Approval-required tools are still available capabilities. Treat approval as a workflow boundary, not as proof that the action is impossible.",
       "Respect permission boundaries, selected roots, active tool sets, and thread mode constraints exactly as the runtime describes them.",

@@ -29,7 +29,7 @@ import {
   syncPlanSidebarDraft,
 } from "@/components/chat/plan-sidebar-store";
 
-import { ToolLayout } from "../shared/tool-layout";
+import { ToolErrorDisclosure, ToolLayout } from "../shared/tool-layout";
 import {
   getPlanToolName,
   useStablePlanDraft,
@@ -641,9 +641,17 @@ const PlanDocCard = memo(function PlanDocCard({
           {isError ? (
             <>
               <span>·</span>
-              <span className="text-danger">
-                {part.state === "output-denied" ? "Denied" : "Failed"}
-              </span>
+              {errorText && part.state === "output-error" ? (
+                <ToolErrorDisclosure
+                  errorText={errorText}
+                  trigger="Failed"
+                  triggerClassName="text-[10px] text-foreground/50"
+                />
+              ) : (
+                <span className="text-foreground/50">
+                  {part.state === "output-denied" ? "Denied" : "Failed"}
+                </span>
+              )}
             </>
           ) : null}
         </div>
@@ -669,12 +677,6 @@ const PlanDocCard = memo(function PlanDocCard({
           </Button>
         ) : null}
       </div>
-
-      {errorText && part.state === "output-error" ? (
-        <div className="border-t border-danger/10 px-3.5 py-1.5 text-[11px] text-danger">
-          {errorText}
-        </div>
-      ) : null}
     </div>
   );
 });

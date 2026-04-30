@@ -796,11 +796,7 @@ function ExternalRuntimeTool({
       isExpandable={isExpandable}
       isExpanded={isExpanded}
       onExpandedChange={setIsExpanded}
-      errorText={
-        partErrorText && part.state !== "output-error"
-          ? partErrorText
-          : undefined
-      }
+      errorText={isErrorS ? partErrorText : undefined}
       footer={footer}
       actions={
         showApprovalActions ? (

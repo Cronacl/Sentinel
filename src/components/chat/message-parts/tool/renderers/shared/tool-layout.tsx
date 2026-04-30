@@ -22,6 +22,13 @@ type UseToolExpansionStateOptions = {
   autoExpand?: boolean;
 };
 
+type ToolErrorDisclosureProps = {
+  errorText: string;
+  trigger: ReactNode;
+  className?: string;
+  triggerClassName?: string;
+};
+
 export function useToolExpansionState({
   toolCallId,
   defaultExpanded: _defaultExpanded,
@@ -40,6 +47,37 @@ export function useToolExpansionState({
   return [isExpanded, setIsExpanded] as const;
 }
 
+export function ToolErrorDisclosure({
+  errorText,
+  trigger,
+  className,
+  triggerClassName = "text-[13px] text-foreground/50",
+}: ToolErrorDisclosureProps) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    setIsOpen(false);
+  }, [errorText]);
+
+  return (
+    <div className={className}>
+      <button
+        className={`${triggerClassName} text-left underline-offset-4 hover:underline`}
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((current) => !current)}
+        type="button"
+      >
+        {trigger}
+      </button>
+      {isOpen ? (
+        <div className="mt-1 rounded-lg border border-danger/20 bg-danger-soft px-3 py-1.5 text-[11px] text-danger-soft-foreground">
+          {errorText}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export const ToolLayout = memo(function ToolLayout({
   summary,
   isRunning,
@@ -54,11 +92,18 @@ export const ToolLayout = memo(function ToolLayout({
 }: ToolLayoutProps) {
   const hasContent = Boolean(children);
   const canToggle = isExpandable && hasContent;
+  const hasErrorDetails = Boolean(errorText);
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
-  const effectiveExpanded = canToggle ? (userExpanded ?? _isExpanded) : false;
+  const [isErrorOpen, setIsErrorOpen] = useState(false);
+  const effectiveExpanded =
+    canToggle && !hasErrorDetails ? (userExpanded ?? _isExpanded) : false;
   const prefersReducedMotion = useReducedMotion();
   const [shouldRenderContent, setShouldRenderContent] =
     useState(effectiveExpanded);
+
+  useEffect(() => {
+    setIsErrorOpen(false);
+  }, [errorText]);
 
   useEffect(() => {
     if (effectiveExpanded) {
@@ -82,7 +127,7 @@ export const ToolLayout = memo(function ToolLayout({
     <p
       className={`min-w-0 flex-1 text-[13px] ${
         isError
-          ? "text-danger"
+          ? "text-foreground/50"
           : isRunning
             ? "sentinel-thinking-shimmer"
             : "text-foreground/70"
@@ -94,13 +139,21 @@ export const ToolLayout = memo(function ToolLayout({
 
   return (
     <div>
-      {canToggle ? (
+      {canToggle || hasErrorDetails ? (
         <button
+          aria-expanded={hasErrorDetails ? isErrorOpen : effectiveExpanded}
           className="flex w-full items-center gap-2 text-left"
           onClick={() => {
-            const nextExpanded = !effectiveExpanded;
-            setUserExpanded(nextExpanded);
-            onExpandedChange(nextExpanded);
+            if (hasErrorDetails) {
+              setIsErrorOpen((current) => !current);
+              return;
+            }
+
+            if (canToggle) {
+              const nextExpanded = !effectiveExpanded;
+              setUserExpanded(nextExpanded);
+              onExpandedChange(nextExpanded);
+            }
           }}
           type="button"
         >
@@ -142,13 +195,13 @@ export const ToolLayout = memo(function ToolLayout({
         </div>
       ) : null}
 
-      {actions ? <div className="mt-2 ml-5">{actions}</div> : null}
-
-      {errorText ? (
-        <div className="mt-1 rounded-lg border border-danger/20 bg-danger-soft px-3 py-1.5 text-[11px] text-danger-soft-foreground">
+      {errorText && isErrorOpen ? (
+        <div className="mt-1.5 rounded-lg border border-danger/20 bg-danger-soft px-3 py-2 text-[11px] text-danger-soft-foreground">
           {errorText}
         </div>
       ) : null}
+
+      {actions ? <div className="mt-2 ml-5">{actions}</div> : null}
     </div>
   );
 });

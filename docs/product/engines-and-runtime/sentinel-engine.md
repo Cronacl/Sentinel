@@ -66,6 +66,36 @@ It routes tools based on the thread, workspace, and active runtime. That matters
 
 This matters even more once the thread can delegate child work or trigger media generation, because the runtime has to keep those surfaces scoped and predictable.
 
+### Background shell work
+
+The built-in `shell_command` tool can detach long-running work from the foreground model turn.
+
+For commands that are expected to keep running, such as `bun run dev`, watch scripts, local servers, or lengthy checks that should not hold the model in a waiting state, the Sentinel engine should start the command with `mode: "start_background"` or `runInBackground: true`.
+
+That call returns a `backgroundTaskId`. The model should keep that ID in the thread context, continue with useful inspection or editing, and poll only when it needs the result:
+
+```json
+{
+  "mode": "check_background",
+  "backgroundTaskId": "bg_...",
+  "rationale": "Check whether the dev server is ready."
+}
+```
+
+If the task is no longer needed, the engine can stop it explicitly:
+
+```json
+{
+  "mode": "stop_background",
+  "backgroundTaskId": "bg_...",
+  "rationale": "Stop the dev server after verification."
+}
+```
+
+Foreground `mode: "run"` remains the right default for quick commands where the model needs the final output before it can continue.
+
+Active background shell tasks are also exposed to the terminal panel through the shell task API. The terminal UI keeps the normal Electron PTY tabs, and shows detached `shell_command` tasks beside them so users can see long-running model-started work and stop it without hunting through the chat transcript.
+
 ## Thread state
 
 The harness manages more than message history.

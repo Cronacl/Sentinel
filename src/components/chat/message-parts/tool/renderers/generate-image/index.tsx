@@ -6,6 +6,7 @@ import { Button } from "@heroui/react";
 import { ImagePreviewModal } from "@/components/chat/image-preview-modal";
 
 import type { RendererProps } from "../../renderer";
+import { ToolErrorDisclosure } from "../shared/tool-layout";
 
 type GenerateImageInput = {
   count?: number;
@@ -195,28 +196,31 @@ export const GenerateImageTool = memo(function GenerateImageTool({
     return null;
   }
 
+  const summaryText = buildSummaryText(part, input, output);
+  const summaryClassName = `text-[13px] ${
+    isErrorState
+      ? "text-foreground/50"
+      : isRunning
+        ? "sentinel-thinking-shimmer"
+        : "text-foreground/70"
+  }`;
+
   return (
     <div>
-      <p
-        className={`text-[13px] ${
-          isErrorState
-            ? "text-danger"
-            : isRunning
-              ? "sentinel-thinking-shimmer"
-              : "text-foreground/70"
-        }`}
-      >
-        {buildSummaryText(part, input, output)}
-      </p>
+      {partErrorText ? (
+        <ToolErrorDisclosure
+          errorText={partErrorText}
+          trigger={summaryText}
+          triggerClassName={summaryClassName}
+        />
+      ) : (
+        <p className={summaryClassName}>{summaryText}</p>
+      )}
 
       {output ? (
         <div className="mt-2">
           <ImageGrid output={output} />
         </div>
-      ) : partErrorText ? (
-        <p className="mt-1 text-[11px] text-danger-soft-foreground">
-          {partErrorText}
-        </p>
       ) : !isFinishedState ? (
         <p className="mt-1 text-[11px] text-foreground/50">
           Waiting for images...
@@ -242,12 +246,6 @@ export const GenerateImageTool = memo(function GenerateImageTool({
           >
             Deny
           </Button>
-        </div>
-      ) : null}
-
-      {partErrorText && part.state !== "output-error" ? (
-        <div className="mt-1 rounded-lg border border-danger/20 bg-danger-soft px-3 py-1.5 text-[11px] text-danger-soft-foreground">
-          {partErrorText}
         </div>
       ) : null}
     </div>
