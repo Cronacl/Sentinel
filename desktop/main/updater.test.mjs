@@ -206,6 +206,14 @@ describe("desktop updater controller", () => {
     ).toBe(
       "Background update metadata is missing the macOS ZIP artifact. Download the latest installer manually, then try background updates again after the next release.",
     );
+
+    expect(
+      serializeUpdateError(
+        'Cannot download "https://github.com/Cronacl/Sentinel/releases/download/v0.0.58/Sentinel-0.0.58-arm64.zip", status 404:',
+      ),
+    ).toBe(
+      "Background update metadata is missing the macOS ZIP artifact. Download the latest installer manually, then try background updates again after the next release.",
+    );
   });
 
   it("suppresses transient missing release metadata updater errors", async () => {

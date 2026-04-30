@@ -102,6 +102,7 @@ jobs:
             artifact_name: release-mac-arm64
             artifact_paths: |
               dist/*.dmg
+              dist/*.zip
               dist/*.blockmap
               dist/latest-mac.yml
             platform: mac

@@ -292,7 +292,11 @@ export function serializeUpdateError(error) {
         ? error
         : "";
 
-  if (message.includes("ZIP file not provided")) {
+  if (
+    message.includes("ZIP file not provided") ||
+    (/Cannot download .+\.zip/i.test(message) &&
+      /\bstatus 404\b/i.test(message))
+  ) {
     return MISSING_MAC_ZIP_ERROR;
   }
 

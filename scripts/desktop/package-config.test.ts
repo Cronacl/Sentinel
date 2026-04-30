@@ -24,4 +24,20 @@ describe("desktop packaging configuration", () => {
       "--target dmg,zip",
     );
   });
+
+  it("uploads macOS ZIP artifacts with release and verify workflows", async () => {
+    const [publishReleaseWorkflow, desktopVerifyWorkflow] = await Promise.all([
+      readFile(
+        path.join(process.cwd(), ".github/workflows/publish-release.yml"),
+        "utf8",
+      ),
+      readFile(
+        path.join(process.cwd(), ".github/workflows/desktop-verify.yml"),
+        "utf8",
+      ),
+    ]);
+
+    expect(publishReleaseWorkflow).toContain("dist/*.zip");
+    expect(desktopVerifyWorkflow).toContain('echo "dist/*.zip"');
+  });
 });

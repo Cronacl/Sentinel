@@ -149,6 +149,7 @@ jobs:
               {
                 echo "artifact_paths<<EOF"
                 echo "dist/*.dmg"
+                echo "dist/*.zip"
                 echo "dist/*.blockmap"
                 echo "dist/latest-mac.yml"
                 echo "EOF"
