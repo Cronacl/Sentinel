@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.60](https://github.com/Cronacl/Sentinel/compare/v0.0.59...v0.0.60) (2026-04-30)
+
+
+### Bug Fixes
+
+* upload mac updater zip artifacts ([d50918f](https://github.com/Cronacl/Sentinel/commit/d50918f5d1c5b981d0c17288156c0a0982678cbd))
+
 ## [0.0.59](https://github.com/Cronacl/Sentinel/compare/v0.0.58...v0.0.59) (2026-04-30)
 
 
