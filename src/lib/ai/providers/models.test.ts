@@ -71,6 +71,24 @@ describe("DeepSeek model catalog", () => {
 });
 
 describe("OpenAI reasoning configs", () => {
+  it("lists GPT-5.5 as the newest OpenAI model", () => {
+    expect(getModelsForProvider("openai")[0]).toMatchObject({
+      id: "gpt-5.5",
+      displayName: "GPT-5.5",
+    });
+  });
+
+  it("keeps frontier GPT-5.5 models on the full OpenAI effort set", () => {
+    expect(getDefaultReasoningEffort("openai", "gpt-5.5")).toBe("none");
+    expect(getSupportedReasoningEfforts("openai", "gpt-5.5")).toEqual([
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+  });
+
   it("keeps frontier GPT-5.4 models on the full OpenAI effort set", () => {
     expect(getDefaultReasoningEffort("openai", "gpt-5.4")).toBe("none");
     expect(getSupportedReasoningEfforts("openai", "gpt-5.4")).toEqual([

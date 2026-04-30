@@ -67,7 +67,7 @@ const OPENAI_GPT_5_1_REASONING_CONFIG: ReasoningConfig = {
   supportedEfforts: ["none", "low", "medium", "high"],
 };
 
-const OPENAI_GPT_5_2_AND_5_4_REASONING_CONFIG: ReasoningConfig = {
+const OPENAI_FRONTIER_GPT_5_REASONING_CONFIG: ReasoningConfig = {
   defaultEffort: "none",
   reasoningSummary: "detailed",
   strategy: "openai-reasoning-effort",
@@ -181,12 +181,20 @@ const DEEPSEEK_REASONER_CONFIG: ReasoningConfig = {
 export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
   openai: [
     {
-      id: "gpt-5.4",
-      displayName: "GPT-5.4",
+      id: "gpt-5.5",
+      displayName: "GPT-5.5",
       description: "Latest frontier agentic coding model.",
       capabilities: ["vision", "tool_use", "object_generation"],
       contextWindow: 128_000,
-      reasoning: OPENAI_GPT_5_2_AND_5_4_REASONING_CONFIG,
+      reasoning: OPENAI_FRONTIER_GPT_5_REASONING_CONFIG,
+    },
+    {
+      id: "gpt-5.4",
+      displayName: "GPT-5.4",
+      description: "Frontier agentic coding model.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 128_000,
+      reasoning: OPENAI_FRONTIER_GPT_5_REASONING_CONFIG,
     },
     {
       id: "gpt-5.4-mini",
@@ -194,7 +202,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       description: "Smaller frontier agentic coding model.",
       capabilities: ["vision", "tool_use", "object_generation"],
       contextWindow: 128_000,
-      reasoning: OPENAI_GPT_5_2_AND_5_4_REASONING_CONFIG,
+      reasoning: OPENAI_FRONTIER_GPT_5_REASONING_CONFIG,
     },
     {
       id: "gpt-5.3-codex",
@@ -202,7 +210,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       description: "Frontier Codex-optimized agentic coding model.",
       capabilities: ["tool_use", "object_generation"],
       contextWindow: 128_000,
-      reasoning: OPENAI_GPT_5_2_AND_5_4_REASONING_CONFIG,
+      reasoning: OPENAI_FRONTIER_GPT_5_REASONING_CONFIG,
     },
     {
       id: "gpt-5.2-pro",
@@ -218,7 +226,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       description: "Latest GPT-5.2 model.",
       capabilities: ["vision", "tool_use", "object_generation"],
       contextWindow: 128_000,
-      reasoning: OPENAI_GPT_5_2_AND_5_4_REASONING_CONFIG,
+      reasoning: OPENAI_FRONTIER_GPT_5_REASONING_CONFIG,
     },
     {
       id: "gpt-5.1",
@@ -1161,12 +1169,13 @@ function getCustomOpenAIReasoningConfig(
   }
 
   if (
+    modelId.startsWith("gpt-5.5") ||
     modelId.startsWith("gpt-5.4") ||
     modelId.startsWith("gpt-5.3") ||
     modelId.startsWith("gpt-5.2")
   ) {
     return {
-      ...OPENAI_GPT_5_2_AND_5_4_REASONING_CONFIG,
+      ...OPENAI_FRONTIER_GPT_5_REASONING_CONFIG,
       forceReasoning: true,
     };
   }
@@ -1420,6 +1429,7 @@ export function getModelAttachmentCapabilities(
       "gemini-1.5-flash",
     ]),
     openai: new Set([
+      "gpt-5.5",
       "gpt-5.4",
       "gpt-5.4-mini",
       "gpt-5.3-codex",
