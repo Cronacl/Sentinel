@@ -133,7 +133,7 @@ describe("GenerateVideoTool", () => {
     );
 
     expect(markup).toContain("Video generation failed");
-    expect(markup).toContain(
+    expect(markup).not.toContain(
       "Reference image attachment &quot;placeholder.png&quot; was not found.",
     );
     expect(markup).not.toContain("Approve");
