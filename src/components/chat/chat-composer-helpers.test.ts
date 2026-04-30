@@ -61,6 +61,16 @@ describe("chat composer model helpers", () => {
     expect(stableModels).toBe(cachedModels);
   });
 
+  it("can hide cached models when live provider models are inactive", () => {
+    const stableModels = resolveStableSelectableModels(
+      [createModel({ isConnected: false })],
+      [createModel()],
+      { reuseCacheWhenLiveHasOnlyInactiveModels: false },
+    );
+
+    expect(stableModels).toEqual([]);
+  });
+
   it("detects when selectable model sets are unchanged", () => {
     expect(
       haveSameSelectableModelSet(

@@ -238,10 +238,21 @@ export function haveSameSelectableModelSet(
 export function resolveStableSelectableModels(
   liveModels: ChatComposerModel[],
   cachedModels: ChatComposerModel[],
+  options: { reuseCacheWhenLiveHasOnlyInactiveModels?: boolean } = {},
 ) {
   const selectableLiveModels = filterSelectableModels(liveModels);
+  const shouldReuseCacheWhenInactive =
+    options.reuseCacheWhenLiveHasOnlyInactiveModels ?? true;
 
-  return selectableLiveModels.length > 0 ? selectableLiveModels : cachedModels;
+  if (selectableLiveModels.length > 0) {
+    return selectableLiveModels;
+  }
+
+  if (liveModels.length > 0 && !shouldReuseCacheWhenInactive) {
+    return [];
+  }
+
+  return cachedModels;
 }
 
 export function resolveStableEngineOptions(

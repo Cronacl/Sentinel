@@ -13,6 +13,7 @@ import {
   ControlledTextAreaField,
   ControlledTextField,
 } from "@/components/forms/controlled-fields";
+import { setSentinelProviderConnected } from "@/components/settings/model-cache-updates";
 import {
   accessKeySecretKeyProviderConfigFormSchema,
   apiKeyProviderConfigFormSchema,
@@ -36,6 +37,8 @@ interface ProviderConfigModalProps {
   provider: AIProvider;
   providerName: string;
 }
+
+const SENTINEL_MODELS_QUERY_INPUT = { engine: "sentinel" as const };
 
 function createDefaultValues(): ProviderConfigFormValues {
   return {
@@ -299,6 +302,16 @@ export function ProviderConfigModal({
             : item,
         ),
       );
+      utils.engines.models.setData(SENTINEL_MODELS_QUERY_INPUT, (current) =>
+        setSentinelProviderConnected(current, {
+          isConnected: values.isEnabled,
+          provider,
+        }),
+      );
+      void Promise.all([
+        utils.models.list.invalidate(),
+        utils.engines.models.invalidate(SENTINEL_MODELS_QUERY_INPUT),
+      ]);
       sileo.success({ description: "Provider saved." });
       state.close();
     } catch (mutationError) {
@@ -334,6 +347,16 @@ export function ProviderConfigModal({
             : item,
         ),
       );
+      utils.engines.models.setData(SENTINEL_MODELS_QUERY_INPUT, (current) =>
+        setSentinelProviderConnected(current, {
+          isConnected: false,
+          provider,
+        }),
+      );
+      void Promise.all([
+        utils.models.list.invalidate(),
+        utils.engines.models.invalidate(SENTINEL_MODELS_QUERY_INPUT),
+      ]);
       sileo.success({ description: "Provider removed." });
       state.close();
     } catch (mutationError) {

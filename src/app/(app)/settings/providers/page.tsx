@@ -5,6 +5,7 @@ import { useState } from "react";
 import { sileo } from "sileo";
 
 import { ProviderIcon } from "@/components/icons/provider-icon";
+import { setSentinelProviderConnected } from "@/components/settings/model-cache-updates";
 import { ProviderConfigModal } from "@/components/settings/provider-config-modal";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { getErrorMessage } from "@/lib/errors";
@@ -13,6 +14,8 @@ import { api } from "@/trpc/react";
 import type { AIProvider } from "@/server/db/enums";
 
 type ProviderKey = AIProvider;
+
+const SENTINEL_MODELS_QUERY_INPUT = { engine: "sentinel" as const };
 
 const STATUS_COLOR = {
   active: "success",
@@ -45,8 +48,15 @@ export default function ProvidersPage() {
 
   const toggle = api.providers.toggle.useMutation({
     onMutate: async ({ isEnabled, provider }) => {
+      await Promise.all([
+        utils.models.list.cancel(),
+        utils.engines.models.cancel(SENTINEL_MODELS_QUERY_INPUT),
+      ]);
       const previousProviders = utils.providers.list.getData();
       const previousModels = utils.models.list.getData();
+      const previousSentinelModels = utils.engines.models.getData(
+        SENTINEL_MODELS_QUERY_INPUT,
+      );
 
       utils.providers.list.setData(undefined, (current) =>
         current?.map((item) =>
@@ -65,18 +75,35 @@ export default function ProvidersPage() {
             : item,
         ),
       );
+      utils.engines.models.setData(SENTINEL_MODELS_QUERY_INPUT, (current) =>
+        setSentinelProviderConnected(current, {
+          isConnected: isEnabled,
+          provider,
+        }),
+      );
 
       return {
         previousModels,
         previousProviders,
+        previousSentinelModels,
       };
     },
     onError: (error, _variables, context) => {
       utils.providers.list.setData(undefined, context?.previousProviders ?? []);
       utils.models.list.setData(undefined, context?.previousModels ?? []);
+      utils.engines.models.setData(
+        SENTINEL_MODELS_QUERY_INPUT,
+        context?.previousSentinelModels,
+      );
       sileo.error({
         description: getErrorMessage(error, "Failed to update provider."),
       });
+    },
+    onSettled: () => {
+      void Promise.all([
+        utils.models.list.invalidate(),
+        utils.engines.models.invalidate(SENTINEL_MODELS_QUERY_INPUT),
+      ]);
     },
   });
   const isToggling = toggle.isPending;

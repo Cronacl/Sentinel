@@ -274,6 +274,7 @@ export function useModelSelection({
       sentinel: resolveStableSelectableModels(
         modelsByEngine.sentinel,
         cachedAvailableModelsByEngine.sentinel,
+        { reuseCacheWhenLiveHasOnlyInactiveModels: false },
       ),
     }),
     [
@@ -293,7 +294,11 @@ export function useModelSelection({
   );
   const availableModels = availableModelsByEngine[selectedEngine];
   const displayModels =
-    selectedEngineModels.length > 0 ? selectedEngineModels : availableModels;
+    selectedEngine === "sentinel"
+      ? availableModels
+      : selectedEngineModels.length > 0
+        ? selectedEngineModels
+        : availableModels;
 
   const selectedModel =
     displayModels.find((model) => model.modelId === selectedModelKey) ?? null;
@@ -545,6 +550,10 @@ export function useModelSelection({
     }
 
     if (availableModels.length === 0) {
+      if (selectedEngine === "sentinel" && selectedEngineModels.length > 0) {
+        setSelectedModelKey(null);
+        setSelectedReasoningEffort(null);
+      }
       return;
     }
 
@@ -571,6 +580,7 @@ export function useModelSelection({
     onSelectionChange,
     persistSelection,
     selectedEngine,
+    selectedEngineModels.length,
     selectedModelKey,
   ]);
 
