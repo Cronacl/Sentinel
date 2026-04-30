@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.59](https://github.com/Cronacl/Sentinel/compare/v0.0.58...v0.0.59) (2026-04-30)
+
+
+### Features
+
+* **models:** add GPT-5.5 metadata ([c36d5c8](https://github.com/Cronacl/Sentinel/commit/c36d5c8fc49bfe369f712e35ff41a85a07f2c6a4))
+* **settings:** add engines settings page ([49f8666](https://github.com/Cronacl/Sentinel/commit/49f86661bf1e1bb2f603f31577b8e837f5eb8c34))
+* **tools:** add browser automation and background shell tasks ([9aec34d](https://github.com/Cronacl/Sentinel/commit/9aec34db0178a1ed1a6c8e19dfe6e37df07acec1))
+
 ## [0.0.58](https://github.com/Cronacl/Sentinel/compare/v0.0.57...v0.0.58) (2026-04-28)
 
 
