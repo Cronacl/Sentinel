@@ -491,6 +491,7 @@ export function BrowserSidebar() {
     formatAddressInput(activeTab?.url ?? ""),
   );
   const tabButtonRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const tabListContentRef = useRef<HTMLDivElement | null>(null);
   const webviewRefs = useRef<Map<string, BrowserWebviewElement>>(new Map());
   const titleBarInset = getDesktopWindowControlsInset(platform);
   const hasLivePage = Boolean(
@@ -509,10 +510,22 @@ export function BrowserSidebar() {
     if (!targetTabId) return;
 
     const frame = window.requestAnimationFrame(() => {
-      tabButtonRefs.current.get(targetTabId)?.scrollIntoView({
+      const tabButton = tabButtonRefs.current.get(targetTabId);
+      const tabListScroller = tabListContentRef.current?.parentElement;
+      if (!tabButton || !tabListScroller) return;
+
+      const tabRect = tabButton.getBoundingClientRect();
+      const scrollerRect = tabListScroller.getBoundingClientRect();
+      const tabLeft =
+        tabRect.left - scrollerRect.left + tabListScroller.scrollLeft;
+      const centeredLeft =
+        tabLeft - (tabListScroller.clientWidth - tabButton.offsetWidth) / 2;
+      const maxScrollLeft =
+        tabListScroller.scrollWidth - tabListScroller.clientWidth;
+
+      tabListScroller.scrollTo({
         behavior: "smooth",
-        block: "nearest",
-        inline: "center",
+        left: Math.max(0, Math.min(centeredLeft, maxScrollLeft)),
       });
     });
 
@@ -662,6 +675,7 @@ export function BrowserSidebar() {
             <motion.div
               className="flex min-w-max items-center gap-0 pr-7"
               layout
+              ref={tabListContentRef}
               transition={TAB_MOTION_TRANSITION}
             >
               <AnimatePresence initial={false} mode="popLayout">
