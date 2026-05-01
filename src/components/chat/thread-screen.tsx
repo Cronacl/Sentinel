@@ -30,6 +30,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { sileo } from "sileo";
 
 import { PageWrapper } from "@/components/shell";
+import { BrowserToggleButton } from "@/components/browser/browser-toggle-button";
 import { useShell } from "@/components/shell/shell-context";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import { isCommittedThreadActionError } from "@/hooks/use-thread-chat";
@@ -1104,7 +1105,9 @@ export function ThreadScreen({
   return (
     <PageWrapper
       actions={
-        isQuickChat ? undefined : (
+        isQuickChat ? (
+          <BrowserToggleButton />
+        ) : (
           <ThreadRepoActions
             threadId={thread.id}
             workspaceId={workspace.id}

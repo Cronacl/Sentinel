@@ -31,12 +31,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { sileo } from "sileo";
 
-import { BrowserSidebar } from "@/components/browser/browser-sidebar";
 import { BrowserToggleButton } from "@/components/browser/browser-toggle-button";
-import {
-  openBrowserSidebar,
-  useBrowserSidebarState,
-} from "@/components/browser/browser-sidebar-store";
 import {
   OpenTargetGlyph,
   isCustomOpenTargetGlyph,
@@ -46,7 +41,6 @@ import { TerminalToggleButton } from "@/components/terminal/terminal-toggle-butt
 import { getDesktopApi, isDesktopRuntime } from "@/lib/desktop/client";
 import type { DesktopOpenTarget } from "@/lib/desktop/contracts";
 import { getErrorMessage } from "@/lib/errors";
-import { useShortcutAction } from "@/lib/shortcuts/provider";
 import { api } from "@/trpc/react";
 import {
   openOrCreateTerminalSession,
@@ -127,7 +121,6 @@ export function ThreadRepoActions({
   const isDesktop = isDesktopRuntime();
   const utils = api.useUtils();
   const rightSidebar = useRightSidebar();
-  const browserState = useBrowserSidebarState();
   const isTerminalOpen = useTerminalState((state) => state.isOpen);
   const [launchTargets, setLaunchTargets] = useState<DesktopOpenTarget[]>([]);
   const [isLoadingTargets, setIsLoadingTargets] = useState(false);
@@ -201,32 +194,6 @@ export function ThreadRepoActions({
     workspaceRootPath ??
     null;
   const isRepoContextLoading = repoContextQuery.isLoading && !repoContext;
-  const isBrowserSidebarActive =
-    rightSidebar.isOpen &&
-    rightSidebar.panelId === "browser" &&
-    browserState.tabs.length > 0;
-
-  const handleToggleBrowser = useCallback(() => {
-    if (!isDesktop) {
-      return;
-    }
-
-    if (isBrowserSidebarActive) {
-      rightSidebar.close();
-      return;
-    }
-
-    openBrowserSidebar();
-    rightSidebar.open(<BrowserSidebar />, {
-      panelId: "browser",
-      size: "browser",
-    });
-  }, [isBrowserSidebarActive, isDesktop, rightSidebar]);
-
-  useShortcutAction("browser.toggle", handleToggleBrowser, {
-    enabled: isDesktop,
-  });
-
   const snapshotRef = useRef(repoContext);
   const syncedPullRequestKeyRef = useRef<string | null>(null);
   if (!anyModalOpen) {

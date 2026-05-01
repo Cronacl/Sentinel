@@ -208,6 +208,17 @@ function syncWebviewNavigationState(
   });
 }
 
+function BrowserAutomationViewportFrame({ active }: { active: boolean }) {
+  if (!active) return null;
+
+  return (
+    <div
+      aria-hidden="true"
+      className="sentinel-browser-frame pointer-events-none absolute inset-0"
+    />
+  );
+}
+
 function BrowserViewport({
   isAutomationActive,
   isActive,
@@ -363,35 +374,26 @@ function BrowserViewport({
 
   return (
     <div
-      ref={containerRef}
-      className={`absolute inset-0 ${isActive ? "flex" : "hidden"} min-h-0 min-w-0`}
+      className={`absolute inset-0 ${isActive ? "block" : "hidden"} min-h-0 min-w-0`}
     >
-      <WebviewTag
-        allowpopups="true"
-        className="min-h-0 min-w-0 flex-1 border-0 bg-transparent"
-        partition="persist:sentinel-browser"
-        ref={setWebviewRef}
-        src={tab.url}
-        style={{
-          display: "flex",
-          height: "100%",
-          width: "100%",
-        }}
-      />
-      <BorderBeam
-        active={isAutomationActive}
-        borderRadius={0}
-        brightness={1.08}
-        className="pointer-events-none absolute inset-0 z-10"
-        colorVariant="ocean"
-        duration={7.2}
-        saturation={0.95}
-        size="md"
-        strength={0.42}
-        theme="dark"
+      <BrowserAutomationViewportFrame active={isAutomationActive} />
+      <div
+        ref={containerRef}
+        className="absolute inset-[3px] flex min-h-0 min-w-0"
       >
-        <div className="h-full w-full" />
-      </BorderBeam>
+        <WebviewTag
+          allowpopups="true"
+          className="min-h-0 min-w-0 flex-1 border-0 bg-transparent"
+          partition="persist:sentinel-browser"
+          ref={setWebviewRef}
+          src={tab.url}
+          style={{
+            display: "flex",
+            height: "100%",
+            width: "100%",
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -424,12 +426,12 @@ function BrowserTabButton({
       <BorderBeam
         active={isAutomationActive}
         borderRadius={999}
-        brightness={1.05}
+        brightness={1.02}
         colorVariant="ocean"
-        duration={5.8}
-        saturation={0.95}
+        duration={6.4}
+        saturation={0.88}
         size="sm"
-        strength={0.38}
+        strength={0.32}
         theme="dark"
       >
         <div

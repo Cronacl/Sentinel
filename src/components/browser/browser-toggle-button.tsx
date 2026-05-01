@@ -6,6 +6,7 @@ import { Button } from "@heroui/react";
 
 import { useRightSidebar } from "@/components/shell/shell-context";
 import { isDesktopRuntime } from "@/lib/desktop/client";
+import { useShortcutAction } from "@/lib/shortcuts/provider";
 
 import { BrowserSidebar } from "./browser-sidebar";
 import {
@@ -17,10 +18,6 @@ export function BrowserToggleButton() {
   const isDesktop = isDesktopRuntime();
   const rightSidebar = useRightSidebar();
   const browserState = useBrowserSidebarState();
-
-  if (!isDesktop) {
-    return null;
-  }
 
   const isBrowserSidebarActive =
     rightSidebar.isOpen &&
@@ -39,6 +36,14 @@ export function BrowserToggleButton() {
       size: "browser",
     });
   };
+
+  useShortcutAction("browser.toggle", handleToggle, {
+    enabled: isDesktop,
+  });
+
+  if (!isDesktop) {
+    return null;
+  }
 
   return (
     <Button

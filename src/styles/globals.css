@@ -966,3 +966,67 @@ button[type="button"] {
 [data-sidebar-glass="true"] .sentinel-sidebar-window-chrome {
   background: transparent;
 }
+
+@property --sentinel-frame-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.sentinel-browser-frame {
+  z-index: 10;
+}
+
+/* Soft static ambient glow overlay */
+.sentinel-browser-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      ellipse at 50% 0%,
+      oklch(0.72 0.1 230 / 6%) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse at 50% 100%,
+      oklch(0.68 0.1 260 / 5%) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse at 0% 50%,
+      oklch(0.7 0.08 240 / 4%) 0%,
+      transparent 50%
+    ),
+    radial-gradient(
+      ellipse at 100% 50%,
+      oklch(0.7 0.08 240 / 4%) 0%,
+      transparent 50%
+    );
+}
+
+/* Animated sweeping glow that rotates around the viewport */
+.sentinel-browser-frame::after {
+  content: "";
+  position: absolute;
+  inset: -40px;
+  background: conic-gradient(
+    from var(--sentinel-frame-angle),
+    transparent 0%,
+    oklch(0.76 0.06 220 / 3%) 4%,
+    oklch(0.8 0.12 228 / 10%) 8%,
+    oklch(0.78 0.14 250 / 12%) 12%,
+    oklch(0.74 0.1 268 / 8%) 16%,
+    oklch(0.76 0.06 280 / 3%) 20%,
+    transparent 24%,
+    transparent 100%
+  );
+  filter: blur(32px);
+  animation: sentinel-browser-frame-rotate 7s linear infinite;
+}
+
+@keyframes sentinel-browser-frame-rotate {
+  to {
+    --sentinel-frame-angle: 360deg;
+  }
+}

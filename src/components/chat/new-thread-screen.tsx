@@ -15,6 +15,7 @@ import { sileo } from "sileo";
 
 import { SentinelLogoBadge } from "@/components/shared/logo";
 import { PageWrapper } from "@/components/shell";
+import { BrowserToggleButton } from "@/components/browser/browser-toggle-button";
 import { useShell } from "@/components/shell/shell-context";
 import { useOutsideClick } from "@/hooks/use-outside-click";
 import { useThreadChat } from "@/hooks/use-thread-chat";
@@ -334,15 +335,16 @@ export function NewThreadScreen({
       </div>
     </div>
   ) : null;
-  const pageActions =
-    selectedWorkspace && !isQuickChat && repoThreadId ? (
-      <ThreadRepoActions
-        deferRepoContextFetch={isDraftThreadHandoffPending && !threadId}
-        threadId={repoThreadId}
-        workspaceId={selectedWorkspace.id}
-        workspaceRootPath={selectedWorkspace.rootPath}
-      />
-    ) : undefined;
+  const pageActions = isQuickChat ? (
+    <BrowserToggleButton />
+  ) : selectedWorkspace && repoThreadId ? (
+    <ThreadRepoActions
+      deferRepoContextFetch={isDraftThreadHandoffPending && !threadId}
+      threadId={repoThreadId}
+      workspaceId={selectedWorkspace.id}
+      workspaceRootPath={selectedWorkspace.rootPath}
+    />
+  ) : undefined;
   const threadDetailsQuery = api.threads.get.useQuery(
     { threadId: draftThreadId },
     {
