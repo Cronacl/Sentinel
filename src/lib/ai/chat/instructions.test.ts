@@ -367,6 +367,43 @@ describe("buildThreadAgentInstructions", () => {
     expect(instructions).toContain("... and 2 more enabled MCP servers.");
   });
 
+  it("describes browser and web tool surface boundaries", () => {
+    const instructions = buildThreadAgentInstructions({
+      activeToolNames: [
+        "websearch",
+        "webfetch",
+        "browser_open",
+        "browser_snapshot",
+        "browser_screenshot",
+        "browser_click",
+      ],
+      allToolNames: [
+        "websearch",
+        "webfetch",
+        "browser_open",
+        "browser_snapshot",
+        "browser_screenshot",
+        "browser_click",
+      ],
+      promptContext: createPromptContext(),
+      systemPrompt: "System prompt",
+    });
+
+    expect(instructions).toContain("## Tool Surface Boundaries");
+    expect(instructions).toContain(
+      "Browser tools operate on Sentinel's live desktop browser sidebar",
+    );
+    expect(instructions).toContain(
+      "Web tools operate on external/static web content",
+    );
+    expect(instructions).toContain(
+      "use browser tools for user-visible page state or interaction",
+    );
+    expect(instructions).toContain(
+      "Do not use browser_open or browser_navigate as a substitute for websearch/webfetch",
+    );
+  });
+
   it("omits empty optional sections cleanly", () => {
     const instructions = buildThreadAgentInstructions({
       activeToolNames: ["websearch", "webfetch"],

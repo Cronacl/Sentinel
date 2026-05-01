@@ -117,8 +117,17 @@ function selectBrowserTools(activeTools: string[], availableTools: string[]) {
 
 function userRequestNeedsBrowserTools(promptContext: ThreadPromptContext) {
   const text = promptContext.latestUserText ?? "";
-  return /\b(browser|webview|page|tab|localhost|127\.0\.0\.1|::1|click|screenshot|console logs?|dom snapshot|inspect ui|test ui)\b/i.test(
-    text,
+  const browserSurfacePattern =
+    /\b(browser|webview|tab|localhost|127\.0\.0\.1|::1|screenshot|console logs?|dom snapshot|inspect ui|test ui)\b/i;
+  const browserInteractionPattern =
+    /\b(click|fill|type|press|reload|go back|go forward)\b/i;
+  const livePagePattern =
+    /\b(open|navigate|inspect|test|screenshot|click|fill|type|press)\b[\s\S]{0,40}\b(page|ui)\b|\b(page|ui)\b[\s\S]{0,40}\b(open|navigate|inspect|test|screenshot|click|fill|type|press)\b/i;
+
+  return (
+    browserSurfacePattern.test(text) ||
+    browserInteractionPattern.test(text) ||
+    livePagePattern.test(text)
   );
 }
 

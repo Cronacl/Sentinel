@@ -262,6 +262,7 @@ export const websearchDescription = lines(
     "- Maximum 25 results per query.",
     "- Use this tool to discover sources, articles, documentation, or references.",
     "- Prefer webfetch after websearch when you need to read one specific result in full.",
+    "- Do not use for the currently visible Sentinel browser tab; use browser tools for live browser state or interactions.",
   ].join("\n"),
 );
 
@@ -307,6 +308,7 @@ export const webfetchDescription = lines(
     "- Use this tool when the answer depends on a known URL or a link from the conversation.",
     "- Prefer websearch first when you need to discover which URLs are relevant.",
     "- Use batch fetch only when comparing or gathering multiple pages is clearly useful.",
+    "- Do not use as a substitute for browser_snapshot or browser_screenshot when the user asks about the live browser tab.",
   ].join("\n"),
 );
 
@@ -324,6 +326,7 @@ export const browserOpenDescription = lines(
     "- Opens the browser sidebar when needed.",
     "- Accepts full URLs, localhost URLs, domains, or search text.",
     "- Use for local app testing and interactive page inspection.",
+    "- Do not use for static documentation/article reading when webfetch can answer without opening the browser UI.",
   ].join("\n"),
 );
 

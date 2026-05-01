@@ -101,10 +101,14 @@ describe("tool selection baselines", () => {
     "browser_tabs",
     "browser_open",
     "browser_navigate",
+    "browser_back",
+    "browser_forward",
+    "browser_reload",
     "browser_snapshot",
     "browser_screenshot",
     "browser_click",
     "browser_fill",
+    "browser_press",
     "browser_console_logs",
   ];
 
@@ -225,6 +229,45 @@ describe("tool selection baselines", () => {
         "browser_open",
         "browser_snapshot",
         "browser_screenshot",
+        "browser_click",
+      ]),
+    );
+  });
+
+  it("keeps native browser tools inactive for static web page reading", () => {
+    const promptContext = createPromptContext({
+      latestUserText:
+        "read the web page at https://example.com and summarize the article",
+    });
+
+    const activeTools = selectInitialActiveTools({
+      availableToolNames: [...availableToolNames, ...browserToolNames],
+      promptContext,
+    });
+
+    expect(activeTools).toEqual(
+      expect.arrayContaining(["websearch", "webfetch"]),
+    );
+    expect(activeTools).not.toEqual(
+      expect.arrayContaining(["browser_open", "browser_snapshot"]),
+    );
+  });
+
+  it("activates native browser tools for live page interactions without saying browser", () => {
+    const promptContext = createPromptContext({
+      latestUserText:
+        "open the checkout page and click the apply coupon button",
+    });
+
+    const activeTools = selectInitialActiveTools({
+      availableToolNames: [...availableToolNames, ...browserToolNames],
+      promptContext,
+    });
+
+    expect(activeTools).toEqual(
+      expect.arrayContaining([
+        "browser_open",
+        "browser_snapshot",
         "browser_click",
       ]),
     );

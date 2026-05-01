@@ -303,6 +303,36 @@ function buildIntegrationsSection(promptContext: ThreadPromptContext) {
   );
 }
 
+function buildToolSurfaceBoundariesSection(activeToolNames: string[]) {
+  const categories = getActiveCategories(activeToolNames);
+  const hasBrowserTools = categories.has("browser");
+  const hasWebTools = categories.has("web");
+
+  if (!hasBrowserTools && !hasWebTools) {
+    return "";
+  }
+
+  const guidance = [
+    hasBrowserTools
+      ? "Browser tools operate on Sentinel's live desktop browser sidebar: visible tab state, localhost/manual UI testing, DOM snapshots, screenshots, console logs, navigation history, clicks, fills, and key presses."
+      : "Browser tools are not active for this step. Do not imply you can inspect or control the live browser sidebar unless they become active.",
+    hasWebTools
+      ? "Web tools operate on external/static web content: websearch discovers relevant URLs and sources; webfetch reads a known URL or a selected search result as page content."
+      : "Web search/fetch tools are not active for this step. Do not imply you can discover or fetch external pages unless they become active.",
+    hasBrowserTools && hasWebTools
+      ? "When both surfaces are available, choose by task target: use browser tools for user-visible page state or interaction; use websearch/webfetch for source discovery, documentation, articles, current facts, or reading a URL without needing the live browser UI."
+      : "",
+    hasBrowserTools
+      ? "Do not use browser_open or browser_navigate as a substitute for websearch/webfetch when the task only needs information from a URL or documentation page."
+      : "",
+    hasWebTools
+      ? "Do not use websearch or webfetch as a substitute for browser_snapshot, browser_screenshot, browser_console_logs, or browser interactions when the user asks to inspect or operate the live browser tab."
+      : "",
+  ].filter(Boolean);
+
+  return section("Tool Surface Boundaries", guidance);
+}
+
 function buildDecisionHeuristics(
   promptContext: ThreadPromptContext,
   activeToolNames: string[],
@@ -399,6 +429,21 @@ function buildDecisionHeuristics(
     );
     heuristics.push(
       `${step++}. For research tasks, prefer direct evidence over speculation, synthesize across sources when useful, and distinguish sourced facts from your own inference.`,
+    );
+    heuristics.push(
+      `${step++}. Use websearch/webfetch for external source discovery, documentation, articles, current facts, and static URL reading. Do not open a browser tab just to read a page unless the user needs visible browser state or interaction.`,
+    );
+  }
+
+  if (categories.has("browser")) {
+    heuristics.push(
+      `${step++}. Use browser tools only for Sentinel's live browser sidebar: local app testing, current tab state, visible UI inspection, screenshots, console logs, navigation, clicks, fills, and key presses.`,
+    );
+    heuristics.push(
+      `${step++}. Start browser interactions with browser_snapshot when selectors or page state matter. Use browser_screenshot only when visual confirmation is needed.`,
+    );
+    heuristics.push(
+      `${step++}. Do not use websearch/webfetch to answer questions about the currently visible browser tab, and do not use browser tools for generic research or static documentation reading.`,
     );
   }
 
@@ -583,6 +628,7 @@ export function buildThreadAgentInstructions({
     buildRuntimeSnapshot(promptContext, activeToolNames),
     buildPathSemanticsSection(promptContext, activeToolNames),
     buildCapabilityManifest(promptContext, activeToolNames, allToolNames),
+    buildToolSurfaceBoundariesSection(activeToolNames),
     buildSkillsSection(promptContext),
     buildIntegrationsSection(promptContext),
     buildMcpToolsSection(promptContext),
