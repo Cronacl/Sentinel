@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.61](https://github.com/Cronacl/Sentinel/compare/v0.0.60...v0.0.61) (2026-05-01)
+
+
+### Bug Fixes
+
+* clarify browser and web tool routing ([7904b80](https://github.com/Cronacl/Sentinel/commit/7904b80cdcc47702f654c16fabf8fc7d1486a612))
+* stabilize browser automation panel ([15128a9](https://github.com/Cronacl/Sentinel/commit/15128a9842bb999ddae90dfb740236bf1929f1d1))
+
 ## [0.0.60](https://github.com/Cronacl/Sentinel/compare/v0.0.59...v0.0.60) (2026-04-30)
 
 
