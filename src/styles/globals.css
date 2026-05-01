@@ -985,22 +985,22 @@ button[type="button"] {
   background:
     radial-gradient(
       ellipse at 50% 0%,
-      oklch(0.72 0.1 230 / 6%) 0%,
+      oklch(0.72 0.1 230 / 10%) 0%,
       transparent 60%
     ),
     radial-gradient(
       ellipse at 50% 100%,
-      oklch(0.68 0.1 260 / 5%) 0%,
+      oklch(0.68 0.1 260 / 9%) 0%,
       transparent 60%
     ),
     radial-gradient(
       ellipse at 0% 50%,
-      oklch(0.7 0.08 240 / 4%) 0%,
+      oklch(0.7 0.08 240 / 7%) 0%,
       transparent 50%
     ),
     radial-gradient(
       ellipse at 100% 50%,
-      oklch(0.7 0.08 240 / 4%) 0%,
+      oklch(0.7 0.08 240 / 7%) 0%,
       transparent 50%
     );
 }
@@ -1013,11 +1013,11 @@ button[type="button"] {
   background: conic-gradient(
     from var(--sentinel-frame-angle),
     transparent 0%,
-    oklch(0.76 0.06 220 / 3%) 4%,
-    oklch(0.8 0.12 228 / 10%) 8%,
-    oklch(0.78 0.14 250 / 12%) 12%,
-    oklch(0.74 0.1 268 / 8%) 16%,
-    oklch(0.76 0.06 280 / 3%) 20%,
+    oklch(0.76 0.06 220 / 5%) 4%,
+    oklch(0.8 0.12 228 / 16%) 8%,
+    oklch(0.78 0.14 250 / 18%) 12%,
+    oklch(0.74 0.1 268 / 13%) 16%,
+    oklch(0.76 0.06 280 / 5%) 20%,
     transparent 24%,
     transparent 100%
   );

@@ -377,10 +377,7 @@ function BrowserViewport({
       className={`absolute inset-0 ${isActive ? "block" : "hidden"} min-h-0 min-w-0`}
     >
       <BrowserAutomationViewportFrame active={isAutomationActive} />
-      <div
-        ref={containerRef}
-        className="absolute inset-[3px] flex min-h-0 min-w-0"
-      >
+      <div ref={containerRef} className="absolute inset-0 flex min-h-0 min-w-0">
         <WebviewTag
           allowpopups="true"
           className="min-h-0 min-w-0 flex-1 border-0 bg-transparent"
@@ -403,12 +400,14 @@ function BrowserTabButton({
   isActive,
   onClose,
   onSelect,
+  tabRef,
   tab,
 }: {
   isAutomationActive: boolean;
   isActive: boolean;
   onClose: () => void;
   onSelect: () => void;
+  tabRef: (node: HTMLDivElement | null) => void;
   tab: BrowserTab;
 }) {
   const faviconUrl = getFaviconUrl(tab.url);
@@ -420,6 +419,7 @@ function BrowserTabButton({
       exit={{ opacity: 0, scale: 0.94, width: 0, x: -10 }}
       initial={{ opacity: 0, scale: 0.94, width: 0, x: 10 }}
       layout="position"
+      ref={tabRef}
       style={{ originX: 0.5 }}
       transition={TAB_MOTION_TRANSITION}
     >
@@ -490,6 +490,7 @@ export function BrowserSidebar() {
   const [addressInput, setAddressInput] = useState(
     formatAddressInput(activeTab?.url ?? ""),
   );
+  const tabButtonRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const webviewRefs = useRef<Map<string, BrowserWebviewElement>>(new Map());
   const titleBarInset = getDesktopWindowControlsInset(platform);
   const hasLivePage = Boolean(
@@ -502,6 +503,21 @@ export function BrowserSidebar() {
   useEffect(() => {
     setAddressInput(formatAddressInput(activeTab?.url ?? ""));
   }, [activeTab?.id, activeTab?.url]);
+
+  useEffect(() => {
+    const targetTabId = automationActiveTabId ?? activeTabId;
+    if (!targetTabId) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      tabButtonRefs.current.get(targetTabId)?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "center",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTabId, automationActiveTabId, tabs.length]);
 
   const registerWebview = useCallback(
     (tabId: string, webview: BrowserWebviewElement | null) => {
@@ -644,7 +660,7 @@ export function BrowserSidebar() {
             orientation="horizontal"
           >
             <motion.div
-              className="flex min-w-max items-center gap-0 pr-2"
+              className="flex min-w-max items-center gap-0 pr-7"
               layout
               transition={TAB_MOTION_TRANSITION}
             >
@@ -657,6 +673,14 @@ export function BrowserSidebar() {
                     onClose={() => handleCloseTab(tab.id)}
                     onSelect={() => handleTabSwitch(tab.id)}
                     tab={tab}
+                    tabRef={(node) => {
+                      if (node) {
+                        tabButtonRefs.current.set(tab.id, node);
+                        return;
+                      }
+
+                      tabButtonRefs.current.delete(tab.id);
+                    }}
                   />
                 ))}
               </AnimatePresence>
