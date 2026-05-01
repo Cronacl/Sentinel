@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.62](https://github.com/Cronacl/Sentinel/compare/v0.0.61...v0.0.62) (2026-05-01)
+
+
+### Bug Fixes
+
+* constrain browser tab auto scroll ([dce78e5](https://github.com/Cronacl/Sentinel/commit/dce78e5ec3970fd0ea48b4cb7f4b295dbfec3fd0))
+* polish browser automation focus ([76b5632](https://github.com/Cronacl/Sentinel/commit/76b5632cba42dd7582e9eb5a769487e12fb16941))
+
 ## [0.0.61](https://github.com/Cronacl/Sentinel/compare/v0.0.60...v0.0.61) (2026-05-01)
 
 
