@@ -10,6 +10,7 @@ import {
   isVisibleAssistantPart,
   shouldShowAssistantFailureDetails,
 } from "./chat-message";
+import { ReasoningPart } from "./message-parts/reasoning";
 
 describe("chat-message helpers", () => {
   it("treats whitespace-only text parts as not visible", () => {
@@ -278,5 +279,106 @@ describe("ChatMessage", () => {
     expect(markup).not.toContain("Run failed");
     expect(markup).not.toContain("Generation stopped.");
     expect(markup).not.toContain("Retry");
+  });
+
+  it("renders completed reasoning as a closed generic trigger", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ChatMessage, {
+        chatEngine: "sentinel",
+        message: {
+          id: "assistant-reasoning",
+          metadata: {
+            reasoning: {
+              durationMs: 12_000,
+            },
+            status: "completed",
+            usage: {
+              reasoningTokens: 1234,
+            },
+          },
+          parts: [
+            {
+              text: [
+                "**Inspect renderer**",
+                "Checking how reasoning is currently displayed.",
+                "",
+                "**Replace surface**",
+                "Rendering the parsed steps inline with dot mode.",
+              ].join("\n"),
+              type: "reasoning",
+            },
+            { text: "Done.", type: "text" },
+          ],
+          role: "assistant",
+        },
+      }),
+    );
+
+    expect(markup).toContain("Thought for 12s");
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).not.toContain("reasoning tokens");
+    expect(markup).toContain("Inspect renderer");
+    expect(markup).toContain("Checking how reasoning is currently displayed.");
+    expect(markup).toContain("Replace surface");
+    expect(markup).toContain(
+      "Rendering the parsed steps inline with dot mode.",
+    );
+    expect(markup).not.toContain("Close reasoning sidebar");
+  });
+
+  it("marks the latest streaming reasoning step as active", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ChatMessage, {
+        chatEngine: "sentinel",
+        isStreaming: true,
+        message: {
+          id: "assistant-streaming-reasoning",
+          metadata: {
+            reasoning: {
+              activeSinceMs: Date.now(),
+              isActive: true,
+            },
+            status: "streaming",
+          },
+          parts: [
+            {
+              text: [
+                "**Inspect renderer**",
+                "Checking the existing implementation.",
+                "",
+                "**Wire component**",
+                "Mounting the HeroUI thinking steps.",
+              ].join("\n"),
+              type: "reasoning",
+            },
+          ],
+          role: "assistant",
+        },
+      }),
+    );
+
+    expect(markup).toContain("Wire component");
+    expect(markup).toContain("Wire component...");
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain('role="status"');
+    expect(markup).toContain("Thinking...");
+    expect(markup).not.toContain("Planning");
+    expect(markup).not.toContain("Refining");
+    expect(markup).toContain("sentinel-thinking-shimmer");
+  });
+
+  it("renders inactive empty reasoning as a closed generic trigger", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ReasoningPart, {
+        isLastStreamingPart: false,
+        isStreaming: false,
+        reasoningKey: "empty-reasoning",
+        text: "",
+      }),
+    );
+
+    expect(markup).toContain("Thinking");
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain("Planning next moves");
   });
 });

@@ -1,15 +1,121 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 
-import { useRightSidebar } from "@/components/shell/shell-context";
-
-import { ReasoningSidebar } from "./reasoning-sidebar";
+import { ThinkingIndicator } from "./thinking-indicator";
+import { extractLastTitle, parseReasoning } from "./reasoning-utils";
 import {
-  getReasoningSidebarState,
-  setReasoningSidebarState,
-} from "./reasoning-sidebar-store";
-import { extractLastTitle } from "./reasoning-utils";
+  ThinkingStep,
+  ThinkingSteps,
+  ThinkingStepsContent,
+  ThinkingStepsHeader,
+  type StepStatus,
+} from "./thinking-steps";
+
+export const ReasoningPart = memo(function ReasoningPart({
+  activeSinceMs,
+  durationMs,
+  isLastStreamingPart,
+  isStreaming,
+  reasoningKey,
+  text,
+}: {
+  activeSinceMs?: number | null;
+  durationMs?: number;
+  isLastStreamingPart: boolean;
+  isStreaming: boolean;
+  reasoningKey: string;
+  text: string;
+  tokenCount?: number;
+}) {
+  const isActivelyStreaming = isStreaming && isLastStreamingPart;
+  const [open, setOpen] = useState(false);
+  const wasActivelyStreamingRef = useRef(isActivelyStreaming);
+  const elapsedSeconds = useElapsedSeconds(
+    isActivelyStreaming && activeSinceMs != null,
+  );
+  const title = useMemo(() => {
+    const parsed = extractLastTitle(text);
+    if (parsed) return parsed;
+    if (isStreaming) return "Thinking...";
+    return "Planning next moves";
+  }, [isStreaming, text]);
+
+  const parsedSteps = useMemo(() => {
+    const steps = parseReasoning(text);
+    if (steps.length > 0) return steps;
+
+    return [
+      {
+        content: "",
+        title: title || "Thinking",
+      },
+    ];
+  }, [text, title]);
+
+  const stepCount = parsedSteps.length;
+  const activeStepIndex = isActivelyStreaming ? Math.max(0, stepCount - 1) : -1;
+  const liveDurationMs = useMemo(() => {
+    if (!isActivelyStreaming || activeSinceMs == null) {
+      return durationMs;
+    }
+
+    return (durationMs ?? 0) + elapsedSeconds * 1000;
+  }, [activeSinceMs, durationMs, elapsedSeconds, isActivelyStreaming]);
+  const durationLabel =
+    liveDurationMs && liveDurationMs > 0
+      ? `Thought for ${formatDuration(liveDurationMs)}`
+      : "Thinking";
+
+  useEffect(() => {
+    if (isActivelyStreaming) {
+      setOpen(false);
+    } else if (wasActivelyStreamingRef.current) {
+      setOpen(false);
+    }
+
+    wasActivelyStreamingRef.current = isActivelyStreaming;
+  }, [isActivelyStreaming]);
+
+  return (
+    <div
+      className="w-full overflow-hidden rounded-lg"
+      aria-busy={isStreaming}
+      data-reasoning-key={reasoningKey}
+    >
+      <ThinkingSteps open={open} onOpenChange={setOpen}>
+        <ThinkingStepsHeader>
+          <span className="flex min-w-0 items-center gap-1.5">
+            {isActivelyStreaming ? (
+              <ThinkingIndicator />
+            ) : (
+              <span className="truncate">{durationLabel}</span>
+            )}
+          </span>
+        </ThinkingStepsHeader>
+        <ThinkingStepsContent>
+          {parsedSteps.map((step, index) => {
+            const status: StepStatus =
+              index === activeStepIndex ? "active" : "complete";
+
+            return (
+              <ThinkingStep
+                description={step.content}
+                index={index}
+                isLast={index === parsedSteps.length - 1}
+                key={`${reasoningKey}:step:${index}:${step.title.slice(0, 24)}`}
+                label={step.title}
+                shouldAnimate={index === activeStepIndex}
+                showIcon={false}
+                status={status}
+              />
+            );
+          })}
+        </ThinkingStepsContent>
+      </ThinkingSteps>
+    </div>
+  );
+});
 
 function useElapsedSeconds(active: boolean) {
   const [elapsed, setElapsed] = useState(0);
@@ -34,137 +140,6 @@ function useElapsedSeconds(active: boolean) {
 
   return active ? elapsed : lastElapsedRef.current;
 }
-
-export const ReasoningPart = memo(function ReasoningPart({
-  activeSinceMs,
-  durationMs,
-  isLastStreamingPart,
-  isStreaming,
-  reasoningKey,
-  text,
-  tokenCount,
-}: {
-  activeSinceMs?: number | null;
-  durationMs?: number;
-  isLastStreamingPart: boolean;
-  isStreaming: boolean;
-  reasoningKey: string;
-  text: string;
-  tokenCount?: number;
-}) {
-  const { isOpen, open } = useRightSidebar();
-  const elapsedSeconds = useElapsedSeconds(
-    isStreaming && isLastStreamingPart && activeSinceMs != null,
-  );
-  const title = useMemo(() => {
-    const parsed = extractLastTitle(text);
-    if (parsed) return parsed;
-    if (isStreaming) return "Thinking...";
-    return "Planning next moves";
-  }, [isStreaming, text]);
-
-  const liveDurationMs = useMemo(() => {
-    if (!isStreaming || !isLastStreamingPart || activeSinceMs == null) {
-      return durationMs;
-    }
-
-    return (durationMs ?? 0) + elapsedSeconds * 1000;
-  }, [
-    activeSinceMs,
-    durationMs,
-    elapsedSeconds,
-    isLastStreamingPart,
-    isStreaming,
-  ]);
-
-  const summaryText = useMemo(() => {
-    if (isStreaming && isLastStreamingPart) {
-      if (liveDurationMs && liveDurationMs > 0) {
-        return `Thought for ${formatDuration(liveDurationMs)}`;
-      }
-      return title;
-    }
-
-    if (liveDurationMs && liveDurationMs > 0) {
-      return `Thought for ${formatDuration(liveDurationMs)}`;
-    }
-
-    return title;
-  }, [isLastStreamingPart, isStreaming, liveDurationMs, title]);
-
-  const stateRef = useRef({
-    isLastStreamingPart,
-    isStreaming,
-    reasoningKey,
-    text,
-    title,
-    tokenCount,
-  });
-  stateRef.current = {
-    isLastStreamingPart,
-    isStreaming,
-    reasoningKey,
-    text,
-    title,
-    tokenCount,
-  };
-
-  const syncSidebarState = useCallback(() => {
-    const s = stateRef.current;
-    setReasoningSidebarState({
-      isLastStreamingPart: s.isLastStreamingPart,
-      isStreaming: s.isStreaming,
-      reasoning: s.text,
-      reasoningKey: s.reasoningKey,
-      title: s.title,
-      tokenCount: s.tokenCount,
-    });
-  }, []);
-
-  const handleOpen = useCallback(() => {
-    syncSidebarState();
-    open(<ReasoningSidebar />);
-  }, [open, syncSidebarState]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    if (getReasoningSidebarState().reasoningKey !== reasoningKey) return;
-    syncSidebarState();
-  }, [
-    isOpen,
-    reasoningKey,
-    syncSidebarState,
-    isStreaming,
-    isLastStreamingPart,
-    text,
-    title,
-    tokenCount,
-  ]);
-
-  return (
-    <div className="w-full overflow-hidden rounded-lg" aria-busy={isStreaming}>
-      <div className="flex w-full items-center justify-between gap-3 pr-1">
-        <button
-          className="group cursor-pointer flex min-w-0 flex-1 items-center gap-2 text-left text-default-600 transition-colors hover:text-foreground dark:text-default-400"
-          onClick={handleOpen}
-          type="button"
-        >
-          <p className="flex min-w-0 items-center gap-2 text-xs font-medium text-foreground/70">
-            <span
-              className={`truncate ${
-                isStreaming && isLastStreamingPart
-                  ? "sentinel-thinking-shimmer"
-                  : ""
-              }`}
-            >
-              {summaryText}
-            </span>
-          </p>
-        </button>
-      </div>
-    </div>
-  );
-});
 
 function formatDuration(durationMs: number) {
   const totalSeconds = Math.max(1, Math.round(durationMs / 1000));
