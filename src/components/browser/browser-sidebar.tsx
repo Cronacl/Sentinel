@@ -572,7 +572,7 @@ function BrowserMoreOptionsMenu({
       <Tooltip.Root delay={150}>
         <Button
           aria-label="More options"
-          className="h-7 w-7 min-h-7 min-w-7 shrink-0 rounded-sm"
+          className="h-7 w-7 min-h-7 min-w-7 shrink-0 rounded-lg"
           isIconOnly
           size="sm"
           variant="ghost"
@@ -780,16 +780,28 @@ function DeviceToolbar({
       <div className="flex items-center gap-1.5 px-2.5 py-1">
         <Dropdown>
           <Button
-            className="h-6 min-h-6 shrink-0 gap-1 rounded-sm px-1.5"
+            className="h-6 min-h-6 shrink-0 gap-1 rounded-lg px-1.5"
             size="sm"
             variant="ghost"
           >
-            <HugeiconsIcon
-              color="currentColor"
-              icon={Tablet01Icon}
-              size={12}
-              strokeWidth={1.5}
-            />
+            <svg
+              className="w-3 h-3"
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+            >
+              <g
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="1.5"
+              >
+                <path d="M13.5 2h-3c-2.357 0-3.536 0-4.268.732S5.5 4.643 5.5 7v10c0 2.357 0 3.535.732 4.268S8.143 22 10.5 22h3c2.357 0 3.535 0 4.268-.732c.732-.733.732-1.911.732-4.268V7c0-2.357 0-3.536-.732-4.268C17.035 2 15.857 2 13.5 2" />
+                <path d="M12.125 19H12m.25 0a.25.25 0 1 1-.5 0a.25.25 0 0 1 .5 0" />
+              </g>
+            </svg>
             <span
               className="text-[11px] font-medium"
               style={{ fontFamily: "var(--font-display)" }}
@@ -817,9 +829,9 @@ function DeviceToolbar({
           </Dropdown.Popover>
         </Dropdown>
 
-        <div className="flex items-center gap-0.5 rounded-sm bg-content1/20 px-1 py-px">
+        <div className="flex items-center gap-0.5 rounded-lg bg-content1/20 px-1 py-px">
           <Input.Root
-            className="h-5 min-h-5 w-[48px] rounded-sm bg-transparent px-0.5 font-mono text-[11px] outline-none ring-0 shadow-none focus-within:ring-0"
+            className="h-5 min-h-5 w-[48px] rounded-lg bg-transparent px-0.5 font-mono text-[11px] outline-none ring-0 shadow-none focus-within:ring-0"
             onChange={(e) => setWidthInput(e.currentTarget.value)}
             onBlur={handleWidthCommit}
             onKeyDown={handleWidthKeyDown}
@@ -1172,7 +1184,7 @@ export function BrowserSidebar() {
         </div>
 
         <div className="app-region-no-drag px-2 pb-1.5">
-          <div className="flex items-center gap-1 rounded-sm bg-content1/20 p-0.5">
+          <div className="flex items-center gap-1 rounded-lg bg-content1/20 p-0.5">
             <NavButton
               ariaLabel="Go back"
               icon={ArrowLeft02Icon}
@@ -1202,7 +1214,7 @@ export function BrowserSidebar() {
             )}
 
             <Input.Root
-              className="h-8 min-h-8 flex-1 rounded-sm bg-transparent px-1 font-mono text-xs outline-none ring-0 shadow-none focus-within:outline-none focus-within:ring-0 data-[focus=true]:outline-none data-[focus=true]:ring-0"
+              className="h-8 min-h-8 flex-1 rounded-lg bg-transparent px-1 font-mono text-xs outline-none ring-0 shadow-none focus-within:outline-none focus-within:ring-0 data-[focus=true]:outline-none data-[focus=true]:ring-0"
               onChange={(event) => setAddressInput(event.currentTarget.value)}
               onKeyDown={handleAddressKeyDown}
               placeholder="Search or enter a URL"
@@ -1294,7 +1306,7 @@ function NavButton({
     <Tooltip.Root delay={150}>
       <Button
         aria-label={ariaLabel}
-        className={`h-7 w-7 min-h-7 min-w-7 shrink-0 rounded-sm ${isActive ? "bg-content2/80 text-foreground" : ""}`}
+        className={`h-7 w-7 min-h-7 min-w-7 shrink-0 rounded-lg ${isActive ? "bg-content2/80 text-foreground" : ""}`}
         isDisabled={isDisabled}
         isIconOnly
         onPress={onPress}
