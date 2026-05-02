@@ -203,3 +203,25 @@ export function useRepoDiffSidebarState() {
     getRepoDiffSidebarState,
   );
 }
+
+// ── Git action dispatch ──
+// Allows the diff sidebar to trigger git actions (commit, push, etc.)
+// that are handled by ThreadRepoActions which owns the modals/mutations.
+
+export type DiffSidebarGitAction =
+  | "commit"
+  | "push"
+  | "pull-request"
+  | "branch";
+
+type GitActionCallback = (action: DiffSidebarGitAction) => void;
+
+let gitActionCallback: GitActionCallback | null = null;
+
+export function setDiffSidebarGitActionHandler(cb: GitActionCallback | null) {
+  gitActionCallback = cb;
+}
+
+export function dispatchDiffSidebarGitAction(action: DiffSidebarGitAction) {
+  gitActionCallback?.(action);
+}

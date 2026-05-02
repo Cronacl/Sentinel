@@ -110,7 +110,7 @@ type CodeThemeDefinition = Record<ResolvedTheme, CodeThemePalette>;
 
 const FIXED_CODE_THEME_BACKGROUNDS: Record<ResolvedTheme, string> = {
   dark: "#0d0d0d",
-  light: "#f5f5f5",
+  light: "#fff",
 };
 
 export const DEFAULT_THEME_PREFERENCE: ThemePreference = "system";

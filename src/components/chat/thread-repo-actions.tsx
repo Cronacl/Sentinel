@@ -52,6 +52,7 @@ import { RepoDiffSidebar } from "./repo-diff-sidebar";
 import { WorkspaceRunCommandButton } from "./workspace-run-command-button";
 import {
   closeRepoDiffSidebarState,
+  setDiffSidebarGitActionHandler,
   setRepoDiffSidebarState,
   useRepoDiffSidebarState,
 } from "./repo-diff-sidebar-store";
@@ -910,6 +911,19 @@ export function ThreadRepoActions({
     );
   }, [rightSidebar, threadId, workspaceId]);
 
+  // Register git action handler so the diff sidebar can trigger modals.
+  // Uses a ref-based pattern so the callback always has access to the
+  // latest render-phase values (like pullRequestOpenUrl) without needing
+  // to list every dependency.
+  const gitActionHandlerRef = useRef<((action: string) => void) | null>(null);
+
+  useEffect(() => {
+    setDiffSidebarGitActionHandler((action) => {
+      gitActionHandlerRef.current?.(action);
+    });
+    return () => setDiffSidebarGitActionHandler(null);
+  }, []);
+
   useEffect(() => {
     if (!rightSidebar.isOpen) {
       return;
@@ -1055,6 +1069,22 @@ export function ThreadRepoActions({
         title: "Open PR failed",
       });
     }
+  };
+
+  // Keep the git action handler ref up to date with the latest render values
+  gitActionHandlerRef.current = (action: string) => {
+    if (action === "commit") handleOpenCommitModal();
+    if (action === "push") handleOpenPushModal();
+    if (action === "pull-request") {
+      if (pullRequestStatus) {
+        handleOpenPullRequestSidebar();
+      } else if (pullRequestOpenUrl) {
+        void handleViewPullRequest();
+      } else {
+        handleCreatePullRequest();
+      }
+    }
+    if (action === "branch") handleOpenBranchModal();
   };
 
   return (
@@ -1207,141 +1237,149 @@ export function ThreadRepoActions({
           </div>
         ) : null}
 
-        <div className="flex items-center">
-          <Button
-            aria-label="Commit changes"
-            className="max-h-7 pl-2 pr-3 rounded-r-none"
-            variant="tertiary"
-            isDisabled={!hasChanges || isRepoActionDisabled}
-            isPending={isGitBusy}
-            onPress={handleOpenCommitModal}
-            {...{ [BUTTON_GROUP_CHILD]: true }}
-          >
-            {({ isPending }) => (
-              <>
-                {isPending ? (
-                  <Spinner
-                    className="size-3.5 min-w-3.5"
-                    color="current"
-                    size="sm"
-                  />
-                ) : (
-                  <HugeiconsIcon
-                    color="currentColor"
-                    icon={GitCommitIcon}
-                    size={16}
-                    strokeWidth={1.5}
-                  />
-                )}
-              </>
-            )}
-          </Button>
-
-          <Dropdown>
+        {/* Git actions: hidden when diff sidebar is active (moved there) */}
+        {!isRepoDiffSidebarActive ? (
+          <div className="flex items-center">
             <Button
-              className="max-h-7 max-w-6 rounded-l-none"
-              isDisabled={isRepoActionDisabled}
-              isIconOnly
-              {...{ [BUTTON_GROUP_CHILD]: true }}
+              aria-label="Commit changes"
+              className="max-h-7 pl-2 pr-3 rounded-r-none"
               variant="tertiary"
+              isDisabled={!hasChanges || isRepoActionDisabled}
+              isPending={isGitBusy}
+              onPress={handleOpenCommitModal}
+              {...{ [BUTTON_GROUP_CHILD]: true }}
             >
-              <HugeiconsIcon
-                color="currentColor"
-                icon={ArrowDown01Icon}
-                size={14}
-                strokeWidth={1.6}
-              />
+              {({ isPending }) => (
+                <>
+                  {isPending ? (
+                    <Spinner
+                      className="size-3.5 min-w-3.5"
+                      color="current"
+                      size="sm"
+                    />
+                  ) : (
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={GitCommitIcon}
+                      size={16}
+                      strokeWidth={1.5}
+                    />
+                  )}
+                </>
+              )}
             </Button>
 
-            <Dropdown.Popover className="min-w-[180px]" placement="bottom end">
-              <Dropdown.Menu
-                onAction={(key) => {
-                  if (key === "commit") handleOpenCommitModal();
-                  if (key === "push") handleOpenPushModal();
-                  if (key === "pull-request") {
-                    if (pullRequestStatus) {
-                      handleOpenPullRequestSidebar();
-                    } else if (pullRequestOpenUrl) {
-                      void handleViewPullRequest();
-                    } else {
-                      handleCreatePullRequest();
-                    }
-                  }
-                  if (key === "branch") handleOpenBranchModal();
-                }}
+            <Dropdown>
+              <Button
+                className="max-h-7 max-w-6 rounded-l-none"
+                isDisabled={isRepoActionDisabled}
+                isIconOnly
+                {...{ [BUTTON_GROUP_CHILD]: true }}
+                variant="tertiary"
               >
-                <Dropdown.Item
-                  id="commit"
-                  isDisabled={!hasChanges || isThreadContextMisaligned}
-                  textValue="Commit"
+                <HugeiconsIcon
+                  color="currentColor"
+                  icon={ArrowDown01Icon}
+                  size={14}
+                  strokeWidth={1.6}
+                />
+              </Button>
+
+              <Dropdown.Popover
+                className="min-w-[180px]"
+                placement="bottom end"
+              >
+                <Dropdown.Menu
+                  onAction={(key) => {
+                    if (key === "commit") handleOpenCommitModal();
+                    if (key === "push") handleOpenPushModal();
+                    if (key === "pull-request") {
+                      if (pullRequestStatus) {
+                        handleOpenPullRequestSidebar();
+                      } else if (pullRequestOpenUrl) {
+                        void handleViewPullRequest();
+                      } else {
+                        handleCreatePullRequest();
+                      }
+                    }
+                    if (key === "branch") handleOpenBranchModal();
+                  }}
                 >
-                  <HugeiconsIcon
-                    color="currentColor"
-                    icon={GitCommitIcon}
-                    size={14}
-                    strokeWidth={1.5}
-                  />
-                  <Label>Commit</Label>
-                </Dropdown.Item>
-                <Dropdown.Item
-                  id="push"
-                  isDisabled={!hasPushableCommits || isThreadContextMisaligned}
-                  textValue="Push"
-                >
-                  <HugeiconsIcon
-                    color="currentColor"
-                    icon={ArrowUp01Icon}
-                    size={14}
-                    strokeWidth={1.5}
-                  />
-                  <Label>Push</Label>
-                </Dropdown.Item>
-                <Dropdown.Item
-                  id="pull-request"
-                  isDisabled={!hasGithubRemote || isThreadContextMisaligned}
-                  textValue={
-                    pullRequestStatus
-                      ? "PR details"
-                      : linkedPullRequest?.kind === "github"
-                        ? "Open linked PR"
-                        : pullRequestOpenUrl
-                          ? "Open compare"
-                          : "Create PR"
-                  }
-                >
-                  <HugeiconsIcon
-                    color="currentColor"
-                    icon={GitPullRequestIcon}
-                    size={14}
-                    strokeWidth={1.5}
-                  />
-                  <Label>
-                    {pullRequestStatus
-                      ? "PR details"
-                      : linkedPullRequest?.kind === "github"
-                        ? "Open linked PR"
-                        : pullRequestOpenUrl
-                          ? "Open compare"
-                          : "Create PR"}
-                  </Label>
-                </Dropdown.Item>
-                <Dropdown.Item
-                  id="branch"
-                  isDisabled={isThreadContextMisaligned}
-                  textValue="Create branch"
-                >
-                  <HugeiconsIcon
-                    color="currentColor"
-                    icon={GitBranchIcon}
-                    size={14}
-                    strokeWidth={1.5}
-                  />
-                  <Label>Create branch</Label>
-                </Dropdown.Item>
-              </Dropdown.Menu>
-            </Dropdown.Popover>
-          </Dropdown>
-        </div>
+                  <Dropdown.Item
+                    id="commit"
+                    isDisabled={!hasChanges || isThreadContextMisaligned}
+                    textValue="Commit"
+                  >
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={GitCommitIcon}
+                      size={14}
+                      strokeWidth={1.5}
+                    />
+                    <Label>Commit</Label>
+                  </Dropdown.Item>
+                  <Dropdown.Item
+                    id="push"
+                    isDisabled={
+                      !hasPushableCommits || isThreadContextMisaligned
+                    }
+                    textValue="Push"
+                  >
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={ArrowUp01Icon}
+                      size={14}
+                      strokeWidth={1.5}
+                    />
+                    <Label>Push</Label>
+                  </Dropdown.Item>
+                  <Dropdown.Item
+                    id="pull-request"
+                    isDisabled={!hasGithubRemote || isThreadContextMisaligned}
+                    textValue={
+                      pullRequestStatus
+                        ? "PR details"
+                        : linkedPullRequest?.kind === "github"
+                          ? "Open linked PR"
+                          : pullRequestOpenUrl
+                            ? "Open compare"
+                            : "Create PR"
+                    }
+                  >
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={GitPullRequestIcon}
+                      size={14}
+                      strokeWidth={1.5}
+                    />
+                    <Label>
+                      {pullRequestStatus
+                        ? "PR details"
+                        : linkedPullRequest?.kind === "github"
+                          ? "Open linked PR"
+                          : pullRequestOpenUrl
+                            ? "Open compare"
+                            : "Create PR"}
+                    </Label>
+                  </Dropdown.Item>
+                  <Dropdown.Item
+                    id="branch"
+                    isDisabled={isThreadContextMisaligned}
+                    textValue="Create branch"
+                  >
+                    <HugeiconsIcon
+                      color="currentColor"
+                      icon={GitBranchIcon}
+                      size={14}
+                      strokeWidth={1.5}
+                    />
+                    <Label>Create branch</Label>
+                  </Dropdown.Item>
+                </Dropdown.Menu>
+              </Dropdown.Popover>
+            </Dropdown>
+          </div>
+        ) : null}
         {branchResumeReason && !isThreadContextMisaligned ? (
           <span className="max-w-52 truncate text-xs text-muted">
             {branchResumeReason}
