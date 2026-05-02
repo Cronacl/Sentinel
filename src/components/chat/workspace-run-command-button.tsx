@@ -105,9 +105,10 @@ export function WorkspaceRunCommandButton({
         <ButtonGroup size="sm" variant="tertiary">
           <Button
             aria-label="Run saved command"
-            className="max-h-7 rounded-r-none"
+            className="h-7 min-h-7 w-8 min-w-8 rounded-l-xl rounded-r-none"
             isDisabled={!cwd}
             isPending={isRunning}
+            isIconOnly
             onPress={() => {
               void handleRun();
             }}
@@ -135,7 +136,7 @@ export function WorkspaceRunCommandButton({
           <Dropdown>
             <Button
               aria-label="Saved run command options"
-              className="max-h-7 max-w-6 rounded-l-none"
+              className="h-7 min-h-7 w-7 min-w-7 rounded-l-none rounded-r-xl"
               isDisabled={isRunning}
               isIconOnly
               size="sm"
@@ -185,8 +186,9 @@ export function WorkspaceRunCommandButton({
       ) : (
         <Button
           aria-label="Create run command"
-          className="max-h-7"
+          className="h-7 min-h-7 w-8 min-w-8 rounded-xl"
           isDisabled={!cwd}
+          isIconOnly
           onPress={handleOpenEditor}
           size="sm"
           variant="tertiary"

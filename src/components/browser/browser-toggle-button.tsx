@@ -1,6 +1,6 @@
 "use client";
 
-import { WebDesign02Icon } from "@hugeicons/core-free-icons";
+import { InternetIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@heroui/react";
 
@@ -48,7 +48,7 @@ export function BrowserToggleButton() {
   return (
     <Button
       aria-label="Toggle built-in browser"
-      className="max-h-7"
+      className="h-7 min-h-7 w-8 min-w-8 rounded-xl"
       isIconOnly
       onPress={handleToggle}
       size="sm"
@@ -56,7 +56,7 @@ export function BrowserToggleButton() {
     >
       <HugeiconsIcon
         color="currentColor"
-        icon={WebDesign02Icon}
+        icon={InternetIcon}
         size={16}
         strokeWidth={1.6}
       />

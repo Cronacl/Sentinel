@@ -41,8 +41,9 @@ export function TerminalToggleButton({ cwd }: TerminalToggleButtonProps) {
   return (
     <Button
       aria-label="Toggle embedded terminal"
-      className="max-h-7"
+      className="h-7 min-h-7 w-8 min-w-8 rounded-xl"
       isDisabled={!cwd}
+      isIconOnly
       onPress={() => {
         void handlePress();
       }}
