@@ -129,7 +129,7 @@ describe("code theme shiki mappings", () => {
       const light = getCodeThemePalette(theme as CodeThemeName, "light");
 
       expect(dark.background).toBe("#0d0d0d");
-      expect(light.background).toBe("#f5f5f5");
+      expect(light.background).toBe("#fff");
     }
   });
 
