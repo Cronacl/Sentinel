@@ -5,15 +5,24 @@ import {
   ArrowLeft02Icon,
   ArrowReloadHorizontalIcon,
   ArrowRight02Icon,
+  Camera01Icon,
   Cancel01Icon,
+  CleanIcon,
+  CookieIcon,
   LinkSquare02Icon,
+  MinusSignIcon,
+  MoreVerticalIcon,
+  PlusSignIcon,
+  Tablet01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { BorderBeam } from "border-beam";
 import {
   Button,
   CloseButton,
+  Dropdown,
   Input,
+  Label,
   ScrollShadow,
   Tooltip,
 } from "@heroui/react";
@@ -36,6 +45,9 @@ import {
   closeBrowserTab,
   createBrowserTab,
   setActiveBrowserTab,
+  setDevicePreset,
+  setDeviceToolbarEnabled,
+  setDeviceWidth,
   updateBrowserTab,
   useBrowserSidebarState,
   type BrowserTab,
@@ -50,9 +62,12 @@ type BrowserWebviewElement = BrowserAutomationWebviewElement & {
   canGoBack: () => boolean;
   canGoForward: () => boolean;
   getURL: () => string;
+  getZoomFactor: () => number;
   goBack: () => void;
   goForward: () => void;
   reload: () => void;
+  reloadIgnoringCache: () => void;
+  setZoomFactor: (factor: number) => void;
   src: string;
   stop: () => void;
 };
@@ -90,6 +105,19 @@ const TAB_MOTION_TRANSITION = {
     ease: [0.16, 1, 0.3, 1] as const,
   },
 };
+
+const DEVICE_PRESETS = [
+  { id: "responsive", label: "Responsive", width: null },
+  { id: "iphone-se", label: "iPhone SE", width: 375 },
+  { id: "iphone-14-pro", label: "iPhone 14 Pro", width: 393 },
+  { id: "iphone-16-pro-max", label: "iPhone 16 Pro Max", width: 440 },
+  { id: "ipad", label: "iPad", width: 768 },
+  { id: "ipad-pro", label: "iPad Pro", width: 1024 },
+] as const;
+
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 3.0;
+const ZOOM_STEP = 0.1;
 
 function hasWebviewNavigationApi(
   webview: BrowserWebviewElement | null,
@@ -220,11 +248,13 @@ function BrowserAutomationViewportFrame({ active }: { active: boolean }) {
 }
 
 function BrowserViewport({
+  deviceWidth,
   isAutomationActive,
   isActive,
   onRegisterWebview,
   tab,
 }: {
+  deviceWidth: number | null;
   isAutomationActive: boolean;
   isActive: boolean;
   onRegisterWebview: (
@@ -371,26 +401,61 @@ function BrowserViewport({
   }
 
   const WebviewTag: any = "webview";
+  const hasDeviceConstraint = deviceWidth !== null && deviceWidth > 0;
 
   return (
     <div
       className={`absolute inset-0 ${isActive ? "block" : "hidden"} min-h-0 min-w-0`}
     >
       <BrowserAutomationViewportFrame active={isAutomationActive} />
-      <div ref={containerRef} className="absolute inset-0 flex min-h-0 min-w-0">
-        <WebviewTag
-          allowpopups="true"
-          className="min-h-0 min-w-0 flex-1 border-0 bg-transparent"
-          partition="persist:sentinel-browser"
-          ref={setWebviewRef}
-          src={tab.url}
-          style={{
-            display: "flex",
-            height: "100%",
-            width: "100%",
-          }}
-        />
-      </div>
+      {hasDeviceConstraint ? (
+        <div className="absolute inset-0 flex min-h-0 min-w-0 bg-foreground/[0.02]">
+          <div
+            className="shrink-0 border-r border-dashed border-foreground/[0.06]"
+            style={{ flex: "1 1 0" }}
+          />
+          <div
+            ref={containerRef}
+            className="relative flex min-h-0 shrink-0 bg-background"
+            style={{ width: `${deviceWidth}px`, maxWidth: "100%" }}
+          >
+            <WebviewTag
+              allowpopups="true"
+              className="min-h-0 min-w-0 flex-1 border-0 bg-transparent"
+              partition="persist:sentinel-browser"
+              ref={setWebviewRef}
+              src={tab.url}
+              style={{
+                display: "flex",
+                height: "100%",
+                width: "100%",
+              }}
+            />
+          </div>
+          <div
+            className="shrink-0 border-l border-dashed border-foreground/[0.06]"
+            style={{ flex: "1 1 0" }}
+          />
+        </div>
+      ) : (
+        <div
+          ref={containerRef}
+          className="absolute inset-0 flex min-h-0 min-w-0"
+        >
+          <WebviewTag
+            allowpopups="true"
+            className="min-h-0 min-w-0 flex-1 border-0 bg-transparent"
+            partition="persist:sentinel-browser"
+            ref={setWebviewRef}
+            src={tab.url}
+            style={{
+              display: "flex",
+              height: "100%",
+              width: "100%",
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -481,15 +546,310 @@ function BrowserTabButton({
   );
 }
 
+function BrowserMoreOptionsMenu({
+  deviceToolbarEnabled,
+  hasLivePage,
+  onClearCache,
+  onClearCookies,
+  onHardReload,
+  onToggleDeviceToolbar,
+  onZoomChange,
+  zoomFactor,
+}: {
+  deviceToolbarEnabled: boolean;
+  hasLivePage: boolean;
+  onClearCache: () => void;
+  onClearCookies: () => void;
+  onHardReload: () => void;
+  onToggleDeviceToolbar: () => void;
+  onZoomChange: (factor: number) => void;
+  zoomFactor: number;
+}) {
+  const zoomPercent = Math.round(zoomFactor * 100);
+
+  return (
+    <Dropdown>
+      <Tooltip.Root delay={150}>
+        <Button
+          aria-label="More options"
+          className="h-7 w-7 min-h-7 min-w-7 shrink-0 rounded-sm"
+          isIconOnly
+          size="sm"
+          variant="ghost"
+        >
+          <HugeiconsIcon
+            color="currentColor"
+            icon={MoreVerticalIcon}
+            size={14}
+            strokeWidth={1.5}
+          />
+        </Button>
+        <Tooltip.Content offset={10}>More options</Tooltip.Content>
+      </Tooltip.Root>
+      <Dropdown.Popover className="min-w-[196px]" placement="bottom end">
+        <Dropdown.Menu
+          onAction={(key) => {
+            switch (key) {
+              case "hard-reload":
+                onHardReload();
+                break;
+              case "toggle-device-toolbar":
+                onToggleDeviceToolbar();
+                break;
+              case "clear-cookies":
+                onClearCookies();
+                break;
+              case "clear-cache":
+                onClearCache();
+                break;
+            }
+          }}
+        >
+          <Dropdown.Item
+            id="hard-reload"
+            isDisabled={!hasLivePage}
+            textValue="Hard reload"
+          >
+            <HugeiconsIcon
+              color="currentColor"
+              icon={ArrowReloadHorizontalIcon}
+              size={14}
+              strokeWidth={1.5}
+            />
+            <Label>Hard reload</Label>
+          </Dropdown.Item>
+          <Dropdown.Item
+            id="toggle-device-toolbar"
+            textValue={
+              deviceToolbarEnabled
+                ? "Hide device toolbar"
+                : "Show device toolbar"
+            }
+          >
+            <HugeiconsIcon
+              color="currentColor"
+              icon={Tablet01Icon}
+              size={14}
+              strokeWidth={1.5}
+            />
+            <Label>
+              {deviceToolbarEnabled
+                ? "Hide device toolbar"
+                : "Show device toolbar"}
+            </Label>
+          </Dropdown.Item>
+          <Dropdown.Item id="zoom-controls" textValue={`Zoom ${zoomPercent}%`}>
+            <div
+              className="flex w-full items-center"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <span className="flex-1 text-[13px]">Zoom</span>
+              <div className="flex items-center gap-0.5">
+                <button
+                  className="flex h-5 w-5 items-center justify-center rounded-md transition-colors hover:bg-content2 disabled:opacity-30"
+                  disabled={zoomFactor <= MIN_ZOOM}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onZoomChange(Math.max(MIN_ZOOM, zoomFactor - ZOOM_STEP));
+                  }}
+                  type="button"
+                >
+                  <HugeiconsIcon
+                    color="currentColor"
+                    icon={MinusSignIcon}
+                    size={11}
+                  />
+                </button>
+                <span className="min-w-[36px] text-center text-[11px] tabular-nums text-foreground/60">
+                  {zoomPercent}%
+                </span>
+                <button
+                  className="flex h-5 w-5 items-center justify-center rounded-md transition-colors hover:bg-content2 disabled:opacity-30"
+                  disabled={zoomFactor >= MAX_ZOOM}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onZoomChange(Math.min(MAX_ZOOM, zoomFactor + ZOOM_STEP));
+                  }}
+                  type="button"
+                >
+                  <HugeiconsIcon
+                    color="currentColor"
+                    icon={PlusSignIcon}
+                    size={11}
+                  />
+                </button>
+                {zoomFactor !== 1 ? (
+                  <button
+                    className="ml-0.5 rounded-md px-1 py-px text-[10px] font-medium text-foreground/50 transition-colors hover:bg-content2 hover:text-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onZoomChange(1);
+                    }}
+                    type="button"
+                  >
+                    Reset
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </Dropdown.Item>
+          <Dropdown.Item
+            id="clear-cookies"
+            isDisabled={!hasLivePage}
+            textValue="Clear cookies"
+          >
+            <HugeiconsIcon
+              color="currentColor"
+              icon={CookieIcon}
+              size={14}
+              strokeWidth={1.5}
+            />
+            <Label>Clear cookies</Label>
+          </Dropdown.Item>
+          <Dropdown.Item
+            id="clear-cache"
+            isDisabled={!hasLivePage}
+            textValue="Clear cache"
+          >
+            <HugeiconsIcon
+              color="currentColor"
+              icon={CleanIcon}
+              size={14}
+              strokeWidth={1.5}
+            />
+            <Label>Clear cache</Label>
+          </Dropdown.Item>
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown>
+  );
+}
+
+function DeviceToolbar({
+  devicePreset,
+  deviceWidth,
+}: {
+  devicePreset: string;
+  deviceWidth: number | null;
+}) {
+  const [widthInput, setWidthInput] = useState(
+    deviceWidth !== null ? String(deviceWidth) : "",
+  );
+
+  useEffect(() => {
+    setWidthInput(deviceWidth !== null ? String(deviceWidth) : "");
+  }, [deviceWidth]);
+
+  const handlePresetChange = useCallback((key: React.Key) => {
+    const preset = DEVICE_PRESETS.find((p) => p.id === key);
+    if (preset) {
+      setDevicePreset(preset.id, preset.width);
+    }
+  }, []);
+
+  const handleWidthCommit = useCallback(() => {
+    const parsed = Number.parseInt(widthInput, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      setDeviceWidth(parsed);
+    } else {
+      setWidthInput(deviceWidth !== null ? String(deviceWidth) : "");
+    }
+  }, [widthInput, deviceWidth]);
+
+  const handleWidthKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        handleWidthCommit();
+      }
+    },
+    [handleWidthCommit],
+  );
+
+  const activePreset = DEVICE_PRESETS.find((p) => p.id === devicePreset);
+
+  return (
+    <motion.div
+      animate={{ height: "auto", opacity: 1 }}
+      className="shrink-0 overflow-hidden border-b border-border/30"
+      exit={{ height: 0, opacity: 0 }}
+      initial={{ height: 0, opacity: 0 }}
+      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+    >
+      <div className="flex items-center gap-1.5 px-2.5 py-1">
+        <Dropdown>
+          <Button
+            className="h-6 min-h-6 shrink-0 gap-1 rounded-sm px-1.5"
+            size="sm"
+            variant="ghost"
+          >
+            <HugeiconsIcon
+              color="currentColor"
+              icon={Tablet01Icon}
+              size={12}
+              strokeWidth={1.5}
+            />
+            <span
+              className="text-[11px] font-medium"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              {activePreset?.label ?? "Custom"}
+            </span>
+          </Button>
+          <Dropdown.Popover className="min-w-[176px]" placement="bottom start">
+            <Dropdown.Menu onAction={handlePresetChange}>
+              {DEVICE_PRESETS.map((preset) => (
+                <Dropdown.Item
+                  id={preset.id}
+                  key={preset.id}
+                  textValue={preset.label}
+                >
+                  <Label className="flex-1">{preset.label}</Label>
+                  {preset.width !== null ? (
+                    <span className="text-[11px] tabular-nums text-foreground/40">
+                      {preset.width}
+                    </span>
+                  ) : null}
+                </Dropdown.Item>
+              ))}
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown>
+
+        <div className="flex items-center gap-0.5 rounded-sm bg-content1/20 px-1 py-px">
+          <Input.Root
+            className="h-5 min-h-5 w-[48px] rounded-sm bg-transparent px-0.5 font-mono text-[11px] outline-none ring-0 shadow-none focus-within:ring-0"
+            onChange={(e) => setWidthInput(e.currentTarget.value)}
+            onBlur={handleWidthCommit}
+            onKeyDown={handleWidthKeyDown}
+            placeholder="—"
+            value={widthInput}
+          />
+          <span className="text-[10px] text-foreground/30">px</span>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export function BrowserSidebar() {
   const desktop = getDesktopApi();
   const platform = desktop?.app.platform ?? null;
   const rightSidebar = useRightSidebar();
-  const { activeTabId, automationActiveTabId, tabs } = useBrowserSidebarState();
+  const {
+    activeTabId,
+    automationActiveTabId,
+    devicePreset,
+    deviceToolbarEnabled,
+    deviceWidth,
+    tabs,
+  } = useBrowserSidebarState();
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
   const [addressInput, setAddressInput] = useState(
     formatAddressInput(activeTab?.url ?? ""),
   );
+  const [zoomFactor, setZoomFactorState] = useState(1);
   const tabButtonRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const tabListContentRef = useRef<HTMLDivElement | null>(null);
   const webviewRefs = useRef<Map<string, BrowserWebviewElement>>(new Map());
@@ -500,6 +860,7 @@ export function BrowserSidebar() {
   const browserChromeStyle = {
     paddingRight: titleBarInset ? titleBarInset + 14 : undefined,
   } as CSSProperties;
+  const effectiveDeviceWidth = deviceToolbarEnabled ? deviceWidth : null;
 
   useEffect(() => {
     setAddressInput(formatAddressInput(activeTab?.url ?? ""));
@@ -660,6 +1021,90 @@ export function BrowserSidebar() {
     [activeTabId, handleClose, tabs],
   );
 
+  const handleZoomChange = useCallback(
+    (factor: number) => {
+      const clamped = Math.round(factor * 100) / 100;
+      setZoomFactorState(clamped);
+      if (!activeTabId) return;
+      const webview = webviewRefs.current.get(activeTabId) ?? null;
+      if (webview && typeof webview.setZoomFactor === "function") {
+        webview.setZoomFactor(clamped);
+      }
+    },
+    [activeTabId],
+  );
+
+  const handleHardReload = useCallback(() => {
+    if (!activeTabId) return;
+    const webview = webviewRefs.current.get(activeTabId) ?? null;
+    if (webview && typeof webview.reloadIgnoringCache === "function") {
+      updateBrowserTab(activeTabId, { isLoading: true });
+      webview.reloadIgnoringCache();
+    }
+  }, [activeTabId]);
+
+  const handleClearCookies = useCallback(() => {
+    if (!activeTabId) return;
+    const webview = webviewRefs.current.get(activeTabId) ?? null;
+    if (webview && typeof webview.executeJavaScript === "function") {
+      void webview.executeJavaScript(
+        "document.cookie.split(';').forEach(c => document.cookie = c.trim().split('=')[0] + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/')",
+        true,
+      );
+    }
+  }, [activeTabId]);
+
+  const handleClearCache = useCallback(() => {
+    if (!activeTabId) return;
+    const webview = webviewRefs.current.get(activeTabId) ?? null;
+    if (webview && typeof webview.executeJavaScript === "function") {
+      void webview.executeJavaScript(
+        "caches.keys().then(names => Promise.all(names.map(name => caches.delete(name))))",
+        true,
+      );
+    }
+  }, [activeTabId]);
+
+  const handleToggleDeviceToolbar = useCallback(() => {
+    setDeviceToolbarEnabled(!deviceToolbarEnabled);
+  }, [deviceToolbarEnabled]);
+
+  const handleScreenshot = useCallback(async () => {
+    if (!activeTabId) return;
+    const webview = webviewRefs.current.get(activeTabId) ?? null;
+    if (!webview || typeof webview.capturePage !== "function") return;
+
+    try {
+      const image = await webview.capturePage();
+      const dataUrl = image?.toDataURL?.();
+      if (!dataUrl) return;
+
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], `screenshot-${Date.now()}.png`, {
+        type: "image/png",
+      });
+
+      window.dispatchEvent(
+        new CustomEvent("sentinel:browser-screenshot", { detail: file }),
+      );
+    } catch {
+      // silently ignore capture failures
+    }
+  }, [activeTabId]);
+
+  useEffect(() => {
+    if (!activeTabId) return;
+    const webview = webviewRefs.current.get(activeTabId) ?? null;
+    if (webview && typeof webview.getZoomFactor === "function") {
+      try {
+        setZoomFactorState(webview.getZoomFactor());
+      } catch {
+        setZoomFactorState(1);
+      }
+    }
+  }, [activeTabId]);
+
   return (
     <div className="flex h-full w-full flex-col bg-background">
       <header
@@ -765,10 +1210,36 @@ export function BrowserSidebar() {
             />
 
             <NavButton
+              ariaLabel="Screenshot to chat"
+              icon={Camera01Icon}
+              isDisabled={!hasLivePage}
+              onPress={() => void handleScreenshot()}
+            />
+            <NavButton
+              ariaLabel={
+                deviceToolbarEnabled
+                  ? "Hide device toolbar"
+                  : "Show device toolbar"
+              }
+              icon={Tablet01Icon}
+              isActive={deviceToolbarEnabled}
+              onPress={handleToggleDeviceToolbar}
+            />
+            <NavButton
               ariaLabel="Open in browser"
               icon={LinkSquare02Icon}
               isDisabled={!hasLivePage}
               onPress={() => void handleOpenExternal()}
+            />
+            <BrowserMoreOptionsMenu
+              deviceToolbarEnabled={deviceToolbarEnabled}
+              hasLivePage={hasLivePage}
+              onClearCache={handleClearCache}
+              onClearCookies={handleClearCookies}
+              onHardReload={handleHardReload}
+              onToggleDeviceToolbar={handleToggleDeviceToolbar}
+              onZoomChange={handleZoomChange}
+              zoomFactor={zoomFactor}
             />
           </div>
         </div>
@@ -780,10 +1251,21 @@ export function BrowserSidebar() {
         ) : null}
       </header>
 
+      <AnimatePresence initial={false}>
+        {deviceToolbarEnabled ? (
+          <DeviceToolbar
+            key="device-toolbar"
+            devicePreset={devicePreset}
+            deviceWidth={deviceWidth}
+          />
+        ) : null}
+      </AnimatePresence>
+
       <div className="relative min-h-0 flex-1 bg-background">
         {tabs.map((tab) => (
           <BrowserViewport
             key={tab.id}
+            deviceWidth={effectiveDeviceWidth}
             isAutomationActive={tab.id === automationActiveTabId}
             isActive={tab.id === activeTabId}
             onRegisterWebview={registerWebview}
@@ -798,11 +1280,13 @@ export function BrowserSidebar() {
 function NavButton({
   ariaLabel,
   icon,
+  isActive,
   isDisabled,
   onPress,
 }: {
   ariaLabel: string;
   icon: React.ComponentProps<typeof HugeiconsIcon>["icon"];
+  isActive?: boolean;
   isDisabled?: boolean;
   onPress: () => void;
 }) {
@@ -810,7 +1294,7 @@ function NavButton({
     <Tooltip.Root delay={150}>
       <Button
         aria-label={ariaLabel}
-        className="h-7 w-7 min-h-7 min-w-7 shrink-0 rounded-sm"
+        className={`h-7 w-7 min-h-7 min-w-7 shrink-0 rounded-sm ${isActive ? "bg-content2/80 text-foreground" : ""}`}
         isDisabled={isDisabled}
         isIconOnly
         onPress={onPress}
@@ -821,7 +1305,7 @@ function NavButton({
           color="currentColor"
           icon={icon}
           size={14}
-          strokeWidth={1.6}
+          strokeWidth={1.5}
         />
       </Button>
       <Tooltip.Content offset={10}>{ariaLabel}</Tooltip.Content>

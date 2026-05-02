@@ -14,6 +14,9 @@ export type BrowserTab = {
 export type BrowserSidebarState = {
   activeTabId: string | null;
   automationActiveTabId: string | null;
+  devicePreset: string;
+  deviceToolbarEnabled: boolean;
+  deviceWidth: number | null;
   tabs: BrowserTab[];
 };
 
@@ -23,6 +26,9 @@ const BROWSER_SIDEBAR_STORAGE_KEY = "sentinel.browser-sidebar-state.v1";
 const DEFAULT_STATE: BrowserSidebarState = {
   activeTabId: null,
   automationActiveTabId: null,
+  devicePreset: "responsive",
+  deviceToolbarEnabled: false,
+  deviceWidth: null,
   tabs: [],
 };
 
@@ -105,6 +111,9 @@ function readPersistedBrowserSidebarState(): BrowserSidebarState {
 
     const parsed = JSON.parse(raw) as {
       activeTabId?: unknown;
+      devicePreset?: unknown;
+      deviceToolbarEnabled?: unknown;
+      deviceWidth?: unknown;
       tabs?: unknown;
     };
     const tabs = Array.isArray(parsed.tabs)
@@ -126,6 +135,15 @@ function readPersistedBrowserSidebarState(): BrowserSidebarState {
     return {
       activeTabId,
       automationActiveTabId: null,
+      devicePreset:
+        typeof parsed.devicePreset === "string"
+          ? parsed.devicePreset
+          : "responsive",
+      deviceToolbarEnabled: parsed.deviceToolbarEnabled === true,
+      deviceWidth:
+        typeof parsed.deviceWidth === "number" && parsed.deviceWidth > 0
+          ? parsed.deviceWidth
+          : null,
       tabs,
     };
   } catch {
@@ -165,6 +183,9 @@ function persistBrowserSidebarState() {
       BROWSER_SIDEBAR_STORAGE_KEY,
       JSON.stringify({
         activeTabId: state.activeTabId,
+        devicePreset: state.devicePreset,
+        deviceToolbarEnabled: state.deviceToolbarEnabled,
+        deviceWidth: state.deviceWidth,
         tabs: state.tabs.map((tab) => ({
           id: tab.id,
           title: tab.title,
@@ -212,6 +233,9 @@ export function openBrowserSidebar(initialUrl = DEFAULT_BROWSER_URL) {
   state = {
     activeTabId: id,
     automationActiveTabId: null,
+    devicePreset: state.devicePreset,
+    deviceToolbarEnabled: state.deviceToolbarEnabled,
+    deviceWidth: state.deviceWidth,
     tabs: [
       {
         canGoBack: false,
@@ -259,6 +283,7 @@ export function createBrowserTab(url = DEFAULT_BROWSER_URL) {
   };
 
   state = {
+    ...state,
     activeTabId: id,
     automationActiveTabId: state.automationActiveTabId,
     tabs: [...state.tabs, newTab],
@@ -287,6 +312,7 @@ export function closeBrowserTab(tabId: string) {
   }
 
   state = {
+    ...state,
     activeTabId: nextActiveTabId,
     automationActiveTabId:
       state.automationActiveTabId === tabId
@@ -317,6 +343,36 @@ export function setBrowserAutomationActiveTab(tabId: string | null) {
   if (state.automationActiveTabId === nextTabId) return;
 
   state = { ...state, automationActiveTabId: nextTabId };
+  syncSnapshot();
+  emit();
+}
+
+export function setDeviceToolbarEnabled(enabled: boolean) {
+  hydrateBrowserSidebarState();
+
+  if (state.deviceToolbarEnabled === enabled) return;
+
+  state = { ...state, deviceToolbarEnabled: enabled };
+  syncSnapshot();
+  emit();
+}
+
+export function setDevicePreset(preset: string, width: number | null) {
+  hydrateBrowserSidebarState();
+
+  if (state.devicePreset === preset && state.deviceWidth === width) return;
+
+  state = { ...state, devicePreset: preset, deviceWidth: width };
+  syncSnapshot();
+  emit();
+}
+
+export function setDeviceWidth(width: number | null) {
+  hydrateBrowserSidebarState();
+
+  if (state.deviceWidth === width) return;
+
+  state = { ...state, devicePreset: "custom", deviceWidth: width };
   syncSnapshot();
   emit();
 }

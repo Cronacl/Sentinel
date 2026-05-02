@@ -56,6 +56,25 @@ export function useAttachments({
     setAttachments((current) => [...current, ...accepted]);
   }, []);
 
+  useEffect(() => {
+    const handleBrowserScreenshot = (event: Event) => {
+      const file = (event as CustomEvent<File>).detail;
+      if (file instanceof File) {
+        addBrowserFiles([file]);
+      }
+    };
+
+    window.addEventListener(
+      "sentinel:browser-screenshot",
+      handleBrowserScreenshot,
+    );
+    return () =>
+      window.removeEventListener(
+        "sentinel:browser-screenshot",
+        handleBrowserScreenshot,
+      );
+  }, [addBrowserFiles]);
+
   const removeAttachment = useCallback((id: string) => {
     setAttachments((current) => {
       const removed = current.find((a) => a.id === id);
