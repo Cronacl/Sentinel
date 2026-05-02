@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.63](https://github.com/Cronacl/Sentinel/compare/v0.0.62...v0.0.63) (2026-05-02)
+
+
+### Features
+
+* add device toolbar functionality and state management to browser sidebar ([d85c9c2](https://github.com/Cronacl/Sentinel/commit/d85c9c2dace28c57ab52d0ff494388c13d688239))
+* enhance reasoning display with new components and remove sidebar ([b7a0dcf](https://github.com/Cronacl/Sentinel/commit/b7a0dcf1903be4de95b0b45f7555dd075e21cd3e))
+
+
+### Bug Fixes
+
+* fix tests ([5dfc47e](https://github.com/Cronacl/Sentinel/commit/5dfc47efc20f37b2271d4ac239373ae3662be435))
+
 ## [0.0.62](https://github.com/Cronacl/Sentinel/compare/v0.0.61...v0.0.62) (2026-05-01)
 
 
