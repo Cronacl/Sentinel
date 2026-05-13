@@ -98,6 +98,7 @@ export const browserAutomationCommandInputSchema = z
 export const browserAutomationCommandEnvelopeSchema = z.object({
   command: browserAutomationCommandInputSchema,
   id: z.string().min(1),
+  threadId: z.string().min(1),
 });
 
 export const browserAutomationTabSchema = z.object({
@@ -162,11 +163,13 @@ export const browserAutomationResultEnvelopeSchema = z.discriminatedUnion(
       commandId: z.string().min(1),
       ok: z.literal(true),
       result: browserAutomationCommandResultSchema,
+      threadId: z.string().min(1),
     }),
     z.object({
       commandId: z.string().min(1),
       error: z.string().min(1),
       ok: z.literal(false),
+      threadId: z.string().min(1),
     }),
   ],
 );

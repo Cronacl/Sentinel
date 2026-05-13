@@ -1,20 +1,22 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import type {
   BrowserAutomationCommandEnvelope,
   BrowserAutomationCommandResult,
   BrowserAutomationResultEnvelope,
 } from "@/lib/browser/automation-types";
+import { useRightSidebar, useShell } from "@/components/shell/shell-context";
 import { getDesktopApi } from "@/lib/desktop/client";
-import { useRightSidebar } from "@/components/shell/shell-context";
 
-import { BrowserSidebar } from "./browser-sidebar";
+import { BrowserSidebar, BrowserViewport } from "./browser-sidebar";
 import {
   getBrowserSidebarSnapshot,
-  setActiveBrowserTab,
   setBrowserAutomationActiveTab,
+  setVisibleBrowserScopeId,
+  useBrowserSidebarScopesSnapshot,
+  useVisibleBrowserScopeId,
 } from "./browser-sidebar-store";
 import { executeBrowserAutomationCommand } from "./browser-automation";
 
@@ -26,9 +28,58 @@ async function postResult(result: BrowserAutomationResultEnvelope) {
   });
 }
 
+function BrowserAutomationHost() {
+  const scopedSnapshots = useBrowserSidebarScopesSnapshot();
+  const visibleScopeId = useVisibleBrowserScopeId();
+  const registerWebview = useCallback(() => {}, []);
+
+  const scopesWithTabs = scopedSnapshots.filter(
+    ({ scopeId, state }) => scopeId !== visibleScopeId && state.tabs.length > 0,
+  );
+
+  if (scopesWithTabs.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none fixed top-0 left-[-10000px] h-[800px] w-[1280px] overflow-hidden"
+    >
+      {scopesWithTabs.map(({ scopeId, state }) => {
+        const deviceWidth = state.deviceToolbarEnabled
+          ? state.deviceWidth
+          : null;
+
+        return (
+          <div className="absolute inset-0" key={scopeId}>
+            {state.tabs.map((tab) => (
+              <BrowserViewport
+                deviceWidth={deviceWidth}
+                isAutomationActive={tab.id === state.automationActiveTabId}
+                isActive
+                key={tab.id}
+                onRegisterWebview={registerWebview}
+                scopeId={scopeId}
+                tab={tab}
+              />
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function BrowserAutomationBridgeInner() {
+  const { selectedThreadId } = useShell();
   const rightSidebar = useRightSidebar();
+  const selectedThreadIdRef = useRef(selectedThreadId);
   const rightSidebarRef = useRef(rightSidebar);
+
+  useEffect(() => {
+    selectedThreadIdRef.current = selectedThreadId;
+  }, [selectedThreadId]);
 
   useEffect(() => {
     rightSidebarRef.current = rightSidebar;
@@ -49,25 +100,31 @@ function BrowserAutomationBridgeInner() {
       clearAutomationTimer = undefined;
     };
 
-    const markAutomationTab = (tabId: string | null | undefined) => {
+    const markAutomationTab = (
+      scopeId: string,
+      tabId: string | null | undefined,
+    ) => {
       cancelAutomationClear();
       if (!tabId) {
-        setBrowserAutomationActiveTab(null);
+        setBrowserAutomationActiveTab(null, scopeId);
         return;
       }
 
-      setBrowserAutomationActiveTab(tabId);
+      setBrowserAutomationActiveTab(tabId, scopeId);
     };
 
-    const scheduleAutomationClear = (tabId: string | null | undefined) => {
+    const scheduleAutomationClear = (
+      scopeId: string,
+      tabId: string | null | undefined,
+    ) => {
       cancelAutomationClear();
       if (!tabId) {
-        setBrowserAutomationActiveTab(null);
+        setBrowserAutomationActiveTab(null, scopeId);
         return;
       }
 
       clearAutomationTimer = window.setTimeout(() => {
-        setBrowserAutomationActiveTab(null);
+        setBrowserAutomationActiveTab(null, scopeId);
         clearAutomationTimer = undefined;
       }, automationGlowLingerMs);
     };
@@ -82,7 +139,7 @@ function BrowserAutomationBridgeInner() {
       if (input.type === "open" || input.type === "tabs") {
         return null;
       }
-      return getBrowserSidebarSnapshot().activeTabId;
+      return getBrowserSidebarSnapshot(command.threadId).activeTabId;
     };
 
     const getResultTabId = (result: BrowserAutomationCommandResult) => {
@@ -95,32 +152,36 @@ function BrowserAutomationBridgeInner() {
       return null;
     };
 
-    const openBrowserPanel = (tabId?: string | null) => {
-      if (tabId) {
-        setActiveBrowserTab(tabId);
-      }
-
-      rightSidebarRef.current.open(<BrowserSidebar />, {
-        panelId: "browser",
-        size: "browser",
-      });
-    };
-
-    const focusBrowserPanel = (command: BrowserAutomationCommandEnvelope) => {
-      const currentState = getBrowserSidebarSnapshot();
+    const markCommandTarget = (command: BrowserAutomationCommandEnvelope) => {
+      const currentState = getBrowserSidebarSnapshot(command.threadId);
       const targetTabId = getCommandTargetTabId(command);
 
       if (targetTabId) {
-        setActiveBrowserTab(targetTabId);
-        markAutomationTab(targetTabId);
+        markAutomationTab(command.threadId, targetTabId);
       }
 
       if (command.command.type === "tabs" && currentState.tabs.length === 0) {
         return;
       }
 
-      openBrowserPanel(targetTabId ?? currentState.activeTabId);
       return targetTabId ?? currentState.activeTabId;
+    };
+
+    const openVisibleBrowserIfCurrentThread = (
+      command: BrowserAutomationCommandEnvelope,
+    ) => {
+      if (command.threadId !== selectedThreadIdRef.current) {
+        return;
+      }
+
+      setVisibleBrowserScopeId(command.threadId);
+      rightSidebarRef.current.open(
+        <BrowserSidebar scopeId={command.threadId} />,
+        {
+          panelId: "browser",
+          size: "browser",
+        },
+      );
     };
 
     const run = async () => {
@@ -145,16 +206,17 @@ function BrowserAutomationBridgeInner() {
 
           let commandTabId: string | null = null;
           try {
-            commandTabId = focusBrowserPanel(command) ?? null;
+            openVisibleBrowserIfCurrentThread(command);
+            commandTabId = markCommandTarget(command) ?? null;
             const result = await executeBrowserAutomationCommand(command);
             const resultTabId = getResultTabId(result);
             commandTabId = resultTabId ?? commandTabId;
-            markAutomationTab(commandTabId);
-            openBrowserPanel(resultTabId);
+            markAutomationTab(command.threadId, commandTabId);
             await postResult({
               commandId: command.id,
               ok: true,
               result,
+              threadId: command.threadId,
             });
           } catch (error) {
             await postResult({
@@ -164,9 +226,10 @@ function BrowserAutomationBridgeInner() {
                   ? error.message
                   : "Browser command failed.",
               ok: false,
+              threadId: command.threadId,
             });
           } finally {
-            scheduleAutomationClear(commandTabId);
+            scheduleAutomationClear(command.threadId, commandTabId);
           }
         } catch (error) {
           if (abortController.signal.aborted) {
@@ -185,12 +248,11 @@ function BrowserAutomationBridgeInner() {
     return () => {
       stopped = true;
       cancelAutomationClear();
-      setBrowserAutomationActiveTab(null);
       abortController.abort();
     };
   }, []);
 
-  return null;
+  return <BrowserAutomationHost />;
 }
 
 export function BrowserAutomationBridge() {

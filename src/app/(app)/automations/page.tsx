@@ -19,7 +19,6 @@ import {
 } from "@/components/automations/automation-templates";
 import { upsertAutomationInList } from "@/components/automations/automation-list-cache";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
-import { SidebarToggle, useShell } from "@/components/shell";
 import { api, type RouterOutputs } from "@/trpc/react";
 
 type AutomationItem = RouterOutputs["automations"]["list"]["active"][number];
@@ -167,7 +166,6 @@ function AutomationsSkeleton() {
 }
 
 export default function AutomationsPage() {
-  const { leftSidebarOpen } = useShell();
   const utils = api.useUtils();
   const [query, setQuery] = useState("");
   const [togglingSet, setTogglingSet] = useState<Set<string>>(new Set());
@@ -256,12 +254,7 @@ export default function AutomationsPage() {
           New automation
         </Button>
       }
-      title={
-        <div>
-          {!leftSidebarOpen ? <SidebarToggle /> : null}
-          Automations
-        </div>
-      }
+      title="Automations"
     >
       {automationsQuery.error ? (
         <p className="border-danger-soft-hover bg-danger-soft text-danger-soft-foreground mb-4 rounded-2xl border px-3 py-2.5 text-xs">

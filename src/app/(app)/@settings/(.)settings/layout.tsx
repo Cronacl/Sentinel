@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { type PropsWithChildren, useCallback } from "react";
 
 import { closeSettingsRoute } from "@/components/shell/settings-navigation";
+import { useShell } from "@/components/shell/shell-context";
 import { DesktopTitleBar } from "@/components/shell/sidebar-window-chrome";
 import { getDesktopApi } from "@/lib/desktop/client";
 import { useShortcutAction, useShortcutScope } from "@/lib/shortcuts/provider";
@@ -14,6 +15,7 @@ export default function SettingsModalLayout({ children }: PropsWithChildren) {
   const pathname = usePathname();
   const router = useRouter();
 
+  const { leftSidebarOpen } = useShell();
   const desktop = getDesktopApi();
   const platform = desktop?.app.platform ?? null;
   const isWindows = platform === "win32";
@@ -42,8 +44,8 @@ export default function SettingsModalLayout({ children }: PropsWithChildren) {
       <div className="flex min-h-0 flex-1">
         <div
           aria-hidden
-          className="shrink-0"
-          style={{ width: SETTINGS_SIDEBAR_WIDTH }}
+          className="shrink-0 transition-[width] duration-300 ease-out"
+          style={{ width: leftSidebarOpen ? SETTINGS_SIDEBAR_WIDTH : 0 }}
         />
 
         <main className="pointer-events-auto relative flex min-h-0 min-w-0 flex-1 flex-col overflow-clip bg-background">

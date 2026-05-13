@@ -85,15 +85,18 @@ export type BrowserToolOutput = z.infer<typeof browserToolOutputSchema>;
 export async function executeBrowserTool({
   abortSignal,
   command,
+  threadId,
   userId,
 }: {
   abortSignal?: AbortSignal;
   command: BrowserAutomationCommandInput;
+  threadId: string;
   userId: string;
 }): Promise<BrowserAutomationCommandResult> {
   return dispatchBrowserCommand({
     abortSignal,
     command,
+    threadId,
     userId,
   });
 }

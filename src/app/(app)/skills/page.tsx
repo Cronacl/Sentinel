@@ -50,7 +50,6 @@ import {
   VercelIcon,
   WordIcon,
 } from "@/components/skills/skill-icons";
-import { SidebarToggle, useShell } from "@/components/shell";
 import { api, type RouterOutputs } from "@/trpc/react";
 
 /* -------------------------------------------------------------------------- */
@@ -955,7 +954,6 @@ function SkillInstallModal({
 /* -------------------------------------------------------------------------- */
 
 export default function SkillsPage() {
-  const { leftSidebarOpen } = useShell();
   const [installDrawerOpen, setInstallDrawerOpen] = useState(false);
   const [installModalSkill, setInstallModalSkill] =
     useState<UnifiedSkill | null>(null);
@@ -1096,12 +1094,7 @@ export default function SkillsPage() {
           Add custom
         </Button>
       }
-      title={
-        <div>
-          {!leftSidebarOpen ? <SidebarToggle /> : null}
-          Skills
-        </div>
-      }
+      title="Skills"
     >
       {skills.error ? (
         <p className="border-danger-soft-hover bg-danger-soft text-danger-soft-foreground mb-4 rounded-2xl border px-3 py-2.5 text-xs">

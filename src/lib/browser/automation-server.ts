@@ -22,14 +22,19 @@ type PendingCommand = {
 type BrowserAutomationClientState = {
   lastSeenAt: number;
   pending: Map<string, PendingCommand>;
+};
+
+type BrowserAutomationUserState = {
+  lastSeenAt: number;
   pollWaiters: Set<(command: BrowserAutomationCommandEnvelope | null) => void>;
   queue: BrowserAutomationCommandEnvelope[];
+  threads: Map<string, BrowserAutomationClientState>;
 };
 
 declare global {
   // eslint-disable-next-line no-var
   var __sentinelBrowserAutomationClients:
-    | Map<string, BrowserAutomationClientState>
+    | Map<string, BrowserAutomationUserState>
     | undefined;
 }
 
@@ -37,16 +42,29 @@ const clients =
   globalThis.__sentinelBrowserAutomationClients ??
   (globalThis.__sentinelBrowserAutomationClients = new Map());
 
-function getClientState(userId: string) {
-  let state = clients.get(userId);
+function getUserState(userId: string) {
+  let userState = clients.get(userId);
+  if (!userState) {
+    userState = {
+      lastSeenAt: 0,
+      pollWaiters: new Set(),
+      queue: [],
+      threads: new Map(),
+    };
+    clients.set(userId, userState);
+  }
+  return userState;
+}
+
+function getClientState(userId: string, threadId: string) {
+  const userState = getUserState(userId);
+  let state = userState.threads.get(threadId);
   if (!state) {
     state = {
       lastSeenAt: 0,
       pending: new Map(),
-      pollWaiters: new Set(),
-      queue: [],
     };
-    clients.set(userId, state);
+    userState.threads.set(threadId, state);
   }
   return state;
 }
@@ -61,7 +79,7 @@ function rejectPendingCommand(
 }
 
 function deliverCommand(
-  state: BrowserAutomationClientState,
+  state: BrowserAutomationUserState,
   command: BrowserAutomationCommandEnvelope,
 ) {
   const waiter = state.pollWaiters.values().next().value as
@@ -80,17 +98,20 @@ function deliverCommand(
 export async function dispatchBrowserCommand({
   abortSignal,
   command,
+  threadId,
   timeoutMs = DEFAULT_COMMAND_TIMEOUT_MS,
   userId,
 }: {
   abortSignal?: AbortSignal;
   command: BrowserAutomationCommandInput;
+  threadId: string;
   timeoutMs?: number;
   userId: string;
 }): Promise<BrowserAutomationCommandResult> {
-  const state = getClientState(userId);
+  const userState = getUserState(userId);
+  const state = getClientState(userId, threadId);
   const commandId = randomUUID();
-  const envelope = { command, id: commandId };
+  const envelope = { command, id: commandId, threadId };
 
   return await new Promise<BrowserAutomationCommandResult>(
     (resolve, reject) => {
@@ -112,7 +133,7 @@ export async function dispatchBrowserCommand({
         cleanup();
         reject(
           new Error(
-            state.lastSeenAt > 0
+            state.lastSeenAt > 0 || userState.lastSeenAt > 0
               ? "Timed out waiting for the browser panel to respond."
               : "Desktop browser bridge is unavailable. Open Sentinel in the desktop app and keep the browser bridge mounted.",
           ),
@@ -132,7 +153,7 @@ export async function dispatchBrowserCommand({
       });
 
       abortSignal?.addEventListener("abort", abort, { once: true });
-      deliverCommand(state, envelope);
+      deliverCommand(userState, envelope);
     },
   );
 }
@@ -146,11 +167,13 @@ export async function pollBrowserAutomationCommand({
   timeoutMs?: number;
   userId: string;
 }): Promise<BrowserAutomationCommandEnvelope | null> {
-  const state = getClientState(userId);
-  state.lastSeenAt = Date.now();
+  const state = getUserState(userId);
+  const now = Date.now();
+  state.lastSeenAt = now;
 
   const queued = state.queue.shift();
   if (queued) {
+    getClientState(userId, queued.threadId).lastSeenAt = now;
     return queued;
   }
 
@@ -177,8 +200,11 @@ export function submitBrowserAutomationResult(
   userId: string,
   envelope: BrowserAutomationResultEnvelope,
 ) {
-  const state = getClientState(userId);
-  state.lastSeenAt = Date.now();
+  const userState = getUserState(userId);
+  const state = getClientState(userId, envelope.threadId);
+  const now = Date.now();
+  userState.lastSeenAt = now;
+  state.lastSeenAt = now;
 
   const pending = state.pending.get(envelope.commandId);
   if (!pending) {
@@ -195,22 +221,26 @@ export function submitBrowserAutomationResult(
 }
 
 export function markBrowserAutomationClientSeen(userId: string) {
-  const state = getClientState(userId);
+  const state = getUserState(userId);
   state.lastSeenAt = Date.now();
 }
 
 export function getBrowserAutomationClientStatus(userId: string) {
-  const state = getClientState(userId);
+  const state = getUserState(userId);
   const now = Date.now();
   const connected =
     state.lastSeenAt > 0 && now - state.lastSeenAt <= CLIENT_STALE_AFTER_MS;
+  let pendingCount = 0;
+  for (const threadState of state.threads.values()) {
+    pendingCount += threadState.pending.size;
+  }
 
   return {
     connected,
     lastSeenAt: state.lastSeenAt
       ? new Date(state.lastSeenAt).toISOString()
       : null,
-    pendingCount: state.pending.size,
+    pendingCount,
     queuedCount: state.queue.length,
   };
 }
@@ -219,14 +249,16 @@ export function clearBrowserAutomationStateForTests(userId: string) {
   const state = clients.get(userId);
   if (!state) return;
 
-  for (const [commandId, pending] of state.pending) {
-    rejectPendingCommand(
-      commandId,
-      pending,
-      new Error("Browser automation state was cleared."),
-    );
+  for (const threadState of state.threads.values()) {
+    for (const [commandId, pending] of threadState.pending) {
+      rejectPendingCommand(
+        commandId,
+        pending,
+        new Error("Browser automation state was cleared."),
+      );
+    }
+    threadState.pending.clear();
   }
-  state.pending.clear();
   state.queue = [];
   state.pollWaiters.forEach(
     (waiter: (command: BrowserAutomationCommandEnvelope | null) => void) =>

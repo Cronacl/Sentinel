@@ -42,12 +42,14 @@ import { getDesktopApi } from "@/lib/desktop/client";
 
 import {
   DEFAULT_BROWSER_URL,
+  GLOBAL_BROWSER_SCOPE_ID,
   closeBrowserTab,
   createBrowserTab,
   setActiveBrowserTab,
   setDevicePreset,
   setDeviceToolbarEnabled,
   setDeviceWidth,
+  setVisibleBrowserScopeId,
   updateBrowserTab,
   useBrowserSidebarState,
   type BrowserTab,
@@ -214,26 +216,35 @@ function safelyGetWebviewHistoryState(webview: BrowserWebviewElement | null) {
 }
 
 function syncWebviewNavigationState(
+  scopeId: string,
   tabId: string,
   webview: BrowserWebviewElement,
   nextUrl?: string,
 ) {
   if (!hasWebviewNavigationApi(webview)) {
-    updateBrowserTab(tabId, {
-      canGoBack: false,
-      canGoForward: false,
-      url: nextUrl ?? DEFAULT_BROWSER_URL,
-    });
+    updateBrowserTab(
+      tabId,
+      {
+        canGoBack: false,
+        canGoForward: false,
+        url: nextUrl ?? DEFAULT_BROWSER_URL,
+      },
+      scopeId,
+    );
     return;
   }
 
   const resolvedUrl = nextUrl ?? safelyGetWebviewUrl(webview);
   const historyState = safelyGetWebviewHistoryState(webview);
-  updateBrowserTab(tabId, {
-    canGoBack: historyState.canGoBack,
-    canGoForward: historyState.canGoForward,
-    url: resolvedUrl ?? DEFAULT_BROWSER_URL,
-  });
+  updateBrowserTab(
+    tabId,
+    {
+      canGoBack: historyState.canGoBack,
+      canGoForward: historyState.canGoForward,
+      url: resolvedUrl ?? DEFAULT_BROWSER_URL,
+    },
+    scopeId,
+  );
 }
 
 function BrowserAutomationViewportFrame({ active }: { active: boolean }) {
@@ -247,11 +258,12 @@ function BrowserAutomationViewportFrame({ active }: { active: boolean }) {
   );
 }
 
-function BrowserViewport({
+export function BrowserViewport({
   deviceWidth,
   isAutomationActive,
   isActive,
   onRegisterWebview,
+  scopeId,
   tab,
 }: {
   deviceWidth: number | null;
@@ -261,6 +273,7 @@ function BrowserViewport({
     tabId: string,
     webview: BrowserWebviewElement | null,
   ) => void;
+  scopeId: string;
   tab: BrowserTab;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -309,22 +322,26 @@ function BrowserViewport({
     }
 
     const handleLoadStart = () => {
-      updateBrowserTab(tab.id, { isLoading: true });
+      updateBrowserTab(tab.id, { isLoading: true }, scopeId);
     };
     const handleLoadStop = () => {
-      updateBrowserTab(tab.id, { isLoading: false });
-      syncWebviewNavigationState(tab.id, webview);
+      updateBrowserTab(tab.id, { isLoading: false }, scopeId);
+      syncWebviewNavigationState(scopeId, tab.id, webview);
     };
     const handleNavigate = (event: Event) => {
       const nextUrl = (event as BrowserWebviewEvent).url;
-      updateBrowserTab(tab.id, { isLoading: false });
-      syncWebviewNavigationState(tab.id, webview, nextUrl);
+      updateBrowserTab(tab.id, { isLoading: false }, scopeId);
+      syncWebviewNavigationState(scopeId, tab.id, webview, nextUrl);
     };
     const handleTitleUpdate = (event: Event) => {
       const nextTitle = (event as BrowserWebviewEvent).title?.trim();
-      updateBrowserTab(tab.id, {
-        title: nextTitle || getTabHostname(tab.url),
-      });
+      updateBrowserTab(
+        tab.id,
+        {
+          title: nextTitle || getTabHostname(tab.url),
+        },
+        scopeId,
+      );
     };
     const handleFailLoad = (event: Event) => {
       const browserEvent = event as BrowserWebviewEvent;
@@ -332,12 +349,17 @@ function BrowserViewport({
         return;
       }
 
-      updateBrowserTab(tab.id, {
-        isLoading: false,
-        title: getTabHostname(browserEvent.validatedURL ?? tab.url),
-        url: browserEvent.validatedURL ?? tab.url,
-      });
+      updateBrowserTab(
+        tab.id,
+        {
+          isLoading: false,
+          title: getTabHostname(browserEvent.validatedURL ?? tab.url),
+          url: browserEvent.validatedURL ?? tab.url,
+        },
+        scopeId,
+      );
       syncWebviewNavigationState(
+        scopeId,
         tab.id,
         webview,
         browserEvent.validatedURL ?? tab.url,
@@ -345,7 +367,7 @@ function BrowserViewport({
     };
     const handleConsoleMessage = (event: Event) => {
       const browserEvent = event as BrowserWebviewEvent;
-      recordBrowserAutomationConsoleLog(tab.id, {
+      recordBrowserAutomationConsoleLog(scopeId, tab.id, {
         level: browserEvent.level,
         message: browserEvent.message,
       });
@@ -370,7 +392,7 @@ function BrowserViewport({
       webview.removeEventListener("did-fail-load", handleFailLoad);
       webview.removeEventListener("console-message", handleConsoleMessage);
     };
-  }, [tab.id, tab.url]);
+  }, [scopeId, tab.id, tab.url]);
 
   useEffect(() => {
     const webview = webviewRef.current;
@@ -387,11 +409,17 @@ function BrowserViewport({
   const setWebviewRef = useCallback(
     (node: HTMLElement | null) => {
       const nextWebview = node as BrowserWebviewElement | null;
+      const previousWebview = webviewRef.current;
       webviewRef.current = nextWebview;
-      registerBrowserAutomationWebview(tab.id, nextWebview);
+      registerBrowserAutomationWebview(
+        scopeId,
+        tab.id,
+        nextWebview,
+        previousWebview,
+      );
       onRegisterWebview(tab.id, nextWebview);
     },
-    [onRegisterWebview, tab.id],
+    [onRegisterWebview, scopeId, tab.id],
   );
 
   if (tab.url === DEFAULT_BROWSER_URL) {
@@ -729,9 +757,11 @@ function BrowserMoreOptionsMenu({
 function DeviceToolbar({
   devicePreset,
   deviceWidth,
+  scopeId,
 }: {
   devicePreset: string;
   deviceWidth: number | null;
+  scopeId: string;
 }) {
   const [widthInput, setWidthInput] = useState(
     deviceWidth !== null ? String(deviceWidth) : "",
@@ -741,21 +771,24 @@ function DeviceToolbar({
     setWidthInput(deviceWidth !== null ? String(deviceWidth) : "");
   }, [deviceWidth]);
 
-  const handlePresetChange = useCallback((key: React.Key) => {
-    const preset = DEVICE_PRESETS.find((p) => p.id === key);
-    if (preset) {
-      setDevicePreset(preset.id, preset.width);
-    }
-  }, []);
+  const handlePresetChange = useCallback(
+    (key: React.Key) => {
+      const preset = DEVICE_PRESETS.find((p) => p.id === key);
+      if (preset) {
+        setDevicePreset(preset.id, preset.width, scopeId);
+      }
+    },
+    [scopeId],
+  );
 
   const handleWidthCommit = useCallback(() => {
     const parsed = Number.parseInt(widthInput, 10);
     if (Number.isFinite(parsed) && parsed > 0) {
-      setDeviceWidth(parsed);
+      setDeviceWidth(parsed, scopeId);
     } else {
       setWidthInput(deviceWidth !== null ? String(deviceWidth) : "");
     }
-  }, [widthInput, deviceWidth]);
+  }, [widthInput, deviceWidth, scopeId]);
 
   const handleWidthKeyDown = useCallback(
     (event: KeyboardEvent<HTMLInputElement>) => {
@@ -845,7 +878,12 @@ function DeviceToolbar({
   );
 }
 
-export function BrowserSidebar() {
+export function BrowserSidebar({
+  scopeId = GLOBAL_BROWSER_SCOPE_ID,
+}: {
+  scopeId?: string | null;
+}) {
+  const resolvedScopeId = scopeId ?? GLOBAL_BROWSER_SCOPE_ID;
   const desktop = getDesktopApi();
   const platform = desktop?.app.platform ?? null;
   const rightSidebar = useRightSidebar();
@@ -856,7 +894,7 @@ export function BrowserSidebar() {
     deviceToolbarEnabled,
     deviceWidth,
     tabs,
-  } = useBrowserSidebarState();
+  } = useBrowserSidebarState(resolvedScopeId);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
   const [addressInput, setAddressInput] = useState(
     formatAddressInput(activeTab?.url ?? ""),
@@ -873,6 +911,13 @@ export function BrowserSidebar() {
     paddingRight: titleBarInset ? titleBarInset + 14 : undefined,
   } as CSSProperties;
   const effectiveDeviceWidth = deviceToolbarEnabled ? deviceWidth : null;
+
+  useEffect(() => {
+    setVisibleBrowserScopeId(resolvedScopeId);
+    return () => {
+      setVisibleBrowserScopeId(null);
+    };
+  }, [resolvedScopeId]);
 
   useEffect(() => {
     setAddressInput(formatAddressInput(activeTab?.url ?? ""));
@@ -928,14 +973,18 @@ export function BrowserSidebar() {
       if (!normalized) return;
 
       setAddressInput(normalized);
-      updateBrowserTab(activeTabId, {
-        isLoading: normalized !== DEFAULT_BROWSER_URL,
-        title:
-          normalized === DEFAULT_BROWSER_URL
-            ? "Start Page"
-            : getTabHostname(normalized),
-        url: normalized,
-      });
+      updateBrowserTab(
+        activeTabId,
+        {
+          isLoading: normalized !== DEFAULT_BROWSER_URL,
+          title:
+            normalized === DEFAULT_BROWSER_URL
+              ? "Start Page"
+              : getTabHostname(normalized),
+          url: normalized,
+        },
+        resolvedScopeId,
+      );
 
       const webview = webviewRefs.current.get(activeTabId) ?? null;
       if (
@@ -945,7 +994,7 @@ export function BrowserSidebar() {
         webview.src = normalized;
       }
     },
-    [activeTabId],
+    [activeTabId, resolvedScopeId],
   );
 
   const handleAddressKeyDown = useCallback(
@@ -962,19 +1011,19 @@ export function BrowserSidebar() {
     if (!activeTabId) return;
     const webview = webviewRefs.current.get(activeTabId) ?? null;
     if (hasWebviewNavigationApi(webview)) {
-      updateBrowserTab(activeTabId, { isLoading: true });
+      updateBrowserTab(activeTabId, { isLoading: true }, resolvedScopeId);
       webview.reload();
     }
-  }, [activeTabId]);
+  }, [activeTabId, resolvedScopeId]);
 
   const handleStop = useCallback(() => {
     if (!activeTabId) return;
     const webview = webviewRefs.current.get(activeTabId) ?? null;
     if (hasWebviewNavigationApi(webview)) {
       webview.stop();
-      updateBrowserTab(activeTabId, { isLoading: false });
+      updateBrowserTab(activeTabId, { isLoading: false }, resolvedScopeId);
     }
-  }, [activeTabId]);
+  }, [activeTabId, resolvedScopeId]);
 
   const handleBack = useCallback(() => {
     if (!activeTabId) return;
@@ -1001,23 +1050,23 @@ export function BrowserSidebar() {
 
   const handleTabSwitch = useCallback(
     (tabId: string) => {
-      setActiveBrowserTab(tabId);
+      setActiveBrowserTab(tabId, resolvedScopeId);
       const tab = tabs.find((item) => item.id === tabId);
       if (tab) {
         setAddressInput(formatAddressInput(tab.url));
       }
     },
-    [tabs],
+    [tabs, resolvedScopeId],
   );
 
   const handleNewTab = useCallback(() => {
-    createBrowserTab();
+    createBrowserTab(DEFAULT_BROWSER_URL, resolvedScopeId);
     setAddressInput("");
-  }, []);
+  }, [resolvedScopeId]);
 
   const handleCloseTab = useCallback(
     (tabId: string) => {
-      closeBrowserTab(tabId);
+      closeBrowserTab(tabId, resolvedScopeId);
       if (tabs.length <= 1) {
         handleClose();
         return;
@@ -1030,7 +1079,7 @@ export function BrowserSidebar() {
         }
       }
     },
-    [activeTabId, handleClose, tabs],
+    [activeTabId, handleClose, tabs, resolvedScopeId],
   );
 
   const handleZoomChange = useCallback(
@@ -1050,10 +1099,10 @@ export function BrowserSidebar() {
     if (!activeTabId) return;
     const webview = webviewRefs.current.get(activeTabId) ?? null;
     if (webview && typeof webview.reloadIgnoringCache === "function") {
-      updateBrowserTab(activeTabId, { isLoading: true });
+      updateBrowserTab(activeTabId, { isLoading: true }, resolvedScopeId);
       webview.reloadIgnoringCache();
     }
-  }, [activeTabId]);
+  }, [activeTabId, resolvedScopeId]);
 
   const handleClearCookies = useCallback(() => {
     if (!activeTabId) return;
@@ -1078,8 +1127,8 @@ export function BrowserSidebar() {
   }, [activeTabId]);
 
   const handleToggleDeviceToolbar = useCallback(() => {
-    setDeviceToolbarEnabled(!deviceToolbarEnabled);
-  }, [deviceToolbarEnabled]);
+    setDeviceToolbarEnabled(!deviceToolbarEnabled, resolvedScopeId);
+  }, [deviceToolbarEnabled, resolvedScopeId]);
 
   const handleScreenshot = useCallback(async () => {
     if (!activeTabId) return;
@@ -1269,6 +1318,7 @@ export function BrowserSidebar() {
             key="device-toolbar"
             devicePreset={devicePreset}
             deviceWidth={deviceWidth}
+            scopeId={resolvedScopeId}
           />
         ) : null}
       </AnimatePresence>
@@ -1281,6 +1331,7 @@ export function BrowserSidebar() {
             isAutomationActive={tab.id === automationActiveTabId}
             isActive={tab.id === activeTabId}
             onRegisterWebview={registerWebview}
+            scopeId={resolvedScopeId}
             tab={tab}
           />
         ))}

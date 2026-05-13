@@ -19,7 +19,7 @@ import { ProviderIcon } from "@/components/icons/provider-icon";
 import { SubagentThreadPanel } from "@/components/chat/subagent-thread-panel";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
-import { SidebarToggle, useRightSidebar, useShell } from "@/components/shell";
+import { useRightSidebar } from "@/components/shell";
 import { getErrorMessage } from "@/lib/errors";
 import {
   applyThreadStatusCacheUpdate,
@@ -719,7 +719,6 @@ function ScratchpadLiveTaskObserver({
 }
 
 export default function ScratchpadPage() {
-  const { leftSidebarOpen } = useShell();
   const { close, isOpen, open } = useRightSidebar();
   const utils = api.useUtils();
   const composerRef = useRef<HTMLInputElement>(null);
@@ -1165,14 +1164,7 @@ export default function ScratchpadPage() {
   );
 
   return (
-    <SettingsPageWrapper
-      title={
-        <div>
-          {!leftSidebarOpen ? <SidebarToggle /> : null}
-          Scratchpad
-        </div>
-      }
-    >
+    <SettingsPageWrapper title="Scratchpad">
       {scratchpad.error ? (
         <p className="border-danger-soft-hover bg-danger-soft text-danger-soft-foreground mb-4 rounded-2xl border px-3 py-2.5 text-xs">
           {scratchpad.error.message}

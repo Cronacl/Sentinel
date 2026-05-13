@@ -911,7 +911,7 @@ function buildWebTools(options: ThreadAgentCallOptions) {
 }
 
 function buildBrowserTools(options: ThreadAgentCallOptions) {
-  const { toolApprovalPolicies, userId } = options;
+  const { threadId, toolApprovalPolicies, userId } = options;
 
   return {
     browser_tabs: tool({
@@ -923,6 +923,7 @@ function buildBrowserTools(options: ThreadAgentCallOptions) {
         executeBrowserTool({
           abortSignal,
           command: { ...input, type: "tabs" },
+          threadId,
           userId,
         }),
     }),
@@ -935,6 +936,7 @@ function buildBrowserTools(options: ThreadAgentCallOptions) {
         executeBrowserTool({
           abortSignal,
           command: { ...input, type: "open" },
+          threadId,
           userId,
         }),
     }),
@@ -947,6 +949,7 @@ function buildBrowserTools(options: ThreadAgentCallOptions) {
         executeBrowserTool({
           abortSignal,
           command: { ...input, type: "navigate" },
+          threadId,
           userId,
         }),
     }),
@@ -959,6 +962,7 @@ function buildBrowserTools(options: ThreadAgentCallOptions) {
         executeBrowserTool({
           abortSignal,
           command: { ...input, type: "back" },
+          threadId,
           userId,
         }),
     }),
@@ -971,6 +975,7 @@ function buildBrowserTools(options: ThreadAgentCallOptions) {
         executeBrowserTool({
           abortSignal,
           command: { ...input, type: "forward" },
+          threadId,
           userId,
         }),
     }),
@@ -983,6 +988,7 @@ function buildBrowserTools(options: ThreadAgentCallOptions) {
         executeBrowserTool({
           abortSignal,
           command: { ...input, type: "reload" },
+          threadId,
           userId,
         }),
     }),
@@ -995,6 +1001,7 @@ function buildBrowserTools(options: ThreadAgentCallOptions) {
         executeBrowserTool({
           abortSignal,
           command: { ...input, type: "snapshot" },
+          threadId,
           userId,
         }),
     }),
@@ -1008,6 +1015,7 @@ function buildBrowserTools(options: ThreadAgentCallOptions) {
         executeBrowserTool({
           abortSignal,
           command: { ...input, type: "screenshot" },
+          threadId,
           userId,
         }),
     }),
@@ -1020,6 +1028,7 @@ function buildBrowserTools(options: ThreadAgentCallOptions) {
         executeBrowserTool({
           abortSignal,
           command: { ...input, type: "click" },
+          threadId,
           userId,
         }),
     }),
@@ -1032,6 +1041,7 @@ function buildBrowserTools(options: ThreadAgentCallOptions) {
         executeBrowserTool({
           abortSignal,
           command: { ...input, type: "fill" },
+          threadId,
           userId,
         }),
     }),
@@ -1044,6 +1054,7 @@ function buildBrowserTools(options: ThreadAgentCallOptions) {
         executeBrowserTool({
           abortSignal,
           command: { ...input, type: "press" },
+          threadId,
           userId,
         }),
     }),
@@ -1056,6 +1067,7 @@ function buildBrowserTools(options: ThreadAgentCallOptions) {
         executeBrowserTool({
           abortSignal,
           command: { ...input, type: "console_logs" },
+          threadId,
           userId,
         }),
     }),

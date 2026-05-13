@@ -36,22 +36,26 @@ const webviews = new Map<string, BrowserAutomationWebviewElement>();
 const consoleLogs = new Map<string, BrowserAutomationConsoleLog[]>();
 const MAX_LOGS_PER_TAB = 300;
 
+function scopedKey(scopeId: string, tabId: string) {
+  return `${scopeId}:${tabId}`;
+}
+
 function getNowIso() {
   return new Date().toISOString();
 }
 
-function getActiveTabId() {
-  return getBrowserSidebarSnapshot().activeTabId;
+function getActiveTabId(scopeId: string) {
+  return getBrowserSidebarSnapshot(scopeId).activeTabId;
 }
 
-function toAutomationTab(tabId: string): BrowserAutomationTab {
-  const state = getBrowserSidebarSnapshot();
+function toAutomationTab(scopeId: string, tabId: string): BrowserAutomationTab {
+  const state = getBrowserSidebarSnapshot(scopeId);
   const tab = state.tabs.find((item) => item.id === tabId);
   if (!tab) {
     throw new Error(`Browser tab not found: ${tabId}`);
   }
 
-  const webview = webviews.get(tabId);
+  const webview = webviews.get(scopedKey(scopeId, tabId));
   let url = tab.url;
   let title = tab.title;
   let canGoBack = tab.canGoBack;
@@ -79,23 +83,27 @@ function toAutomationTab(tabId: string): BrowserAutomationTab {
   };
 }
 
-function getTargetTabId(tabId?: string) {
-  const targetTabId = tabId ?? getActiveTabId();
+function getTargetTabId(scopeId: string, tabId?: string) {
+  const targetTabId = tabId ?? getActiveTabId(scopeId);
   if (!targetTabId) {
     throw new Error("No browser tab is open.");
   }
   return targetTabId;
 }
 
-function focusAutomationTab(tabId: string) {
-  setActiveBrowserTab(tabId);
-  setBrowserAutomationActiveTab(tabId);
+function focusAutomationTab(scopeId: string, tabId: string) {
+  setActiveBrowserTab(tabId, scopeId);
+  setBrowserAutomationActiveTab(tabId, scopeId);
 }
 
-async function waitForWebview(tabId: string, timeoutMs = 8_000) {
+async function waitForWebview(
+  scopeId: string,
+  tabId: string,
+  timeoutMs = 8_000,
+) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
-    const webview = webviews.get(tabId);
+    const webview = webviews.get(scopedKey(scopeId, tabId));
     if (webview) return webview;
     await new Promise((resolve) => window.setTimeout(resolve, 50));
   }
@@ -116,14 +124,13 @@ function normalizeUrl(input: string) {
   return `https://www.google.com/search?q=${encodeURIComponent(trimmed)}`;
 }
 
-function getTabsResult(): Extract<
-  BrowserAutomationCommandResult,
-  { type: "tabs" }
-> {
-  const state = getBrowserSidebarSnapshot();
+function getTabsResult(
+  scopeId: string,
+): Extract<BrowserAutomationCommandResult, { type: "tabs" }> {
+  const state = getBrowserSidebarSnapshot(scopeId);
   return {
     activeTabId: state.activeTabId,
-    tabs: state.tabs.map((tab) => toAutomationTab(tab.id)),
+    tabs: state.tabs.map((tab) => toAutomationTab(scopeId, tab.id)),
     type: "tabs",
   };
 }
@@ -168,8 +175,12 @@ function buildSnapshotScript() {
 `;
 }
 
-async function executeJavaScript<T>(tabId: string, code: string): Promise<T> {
-  const webview = await waitForWebview(tabId);
+async function executeJavaScript<T>(
+  scopeId: string,
+  tabId: string,
+  code: string,
+): Promise<T> {
+  const webview = await waitForWebview(scopeId, tabId);
   if (typeof webview.executeJavaScript !== "function") {
     throw new Error("This browser tab does not support script execution.");
   }
@@ -187,56 +198,67 @@ function selectorScript(selector: string, body: string) {
 `;
 }
 
-async function openTab(url?: string) {
+async function openTab(scopeId: string, url?: string) {
   const normalizedUrl = url ? normalizeUrl(url) : DEFAULT_BROWSER_URL;
-  const state = getBrowserSidebarSnapshot();
+  const state = getBrowserSidebarSnapshot(scopeId);
   const tabId =
     state.tabs.length === 0
-      ? openBrowserSidebar(normalizedUrl)
-      : createBrowserTab(normalizedUrl);
+      ? openBrowserSidebar(normalizedUrl, scopeId)
+      : createBrowserTab(normalizedUrl, scopeId);
 
   if (!tabId) {
     throw new Error("Unable to create browser tab.");
   }
 
-  setActiveBrowserTab(tabId);
-  setBrowserAutomationActiveTab(tabId);
+  setActiveBrowserTab(tabId, scopeId);
+  setBrowserAutomationActiveTab(tabId, scopeId);
   if (normalizedUrl !== DEFAULT_BROWSER_URL) {
-    await waitForWebview(tabId);
+    await waitForWebview(scopeId, tabId);
   }
-  return toAutomationTab(tabId);
+  return toAutomationTab(scopeId, tabId);
 }
 
-async function navigateTab(tabId: string, url: string) {
+async function navigateTab(scopeId: string, tabId: string, url: string) {
   const normalizedUrl = normalizeUrl(url);
-  updateBrowserTab(tabId, {
-    isLoading: normalizedUrl !== DEFAULT_BROWSER_URL,
-    title: normalizedUrl === DEFAULT_BROWSER_URL ? "Start Page" : "Loading...",
-    url: normalizedUrl,
-  });
-  focusAutomationTab(tabId);
+  updateBrowserTab(
+    tabId,
+    {
+      isLoading: normalizedUrl !== DEFAULT_BROWSER_URL,
+      title:
+        normalizedUrl === DEFAULT_BROWSER_URL ? "Start Page" : "Loading...",
+      url: normalizedUrl,
+    },
+    scopeId,
+  );
+  focusAutomationTab(scopeId, tabId);
 
   if (normalizedUrl !== DEFAULT_BROWSER_URL) {
-    const webview = await waitForWebview(tabId);
+    const webview = await waitForWebview(scopeId, tabId);
     webview.src = normalizedUrl;
   }
 
-  return toAutomationTab(tabId);
+  return toAutomationTab(scopeId, tabId);
 }
 
 export function registerBrowserAutomationWebview(
+  scopeId: string,
   tabId: string,
   webview: BrowserAutomationWebviewElement | null,
+  previousWebview?: BrowserAutomationWebviewElement | null,
 ) {
+  const key = scopedKey(scopeId, tabId);
   if (webview) {
-    webviews.set(tabId, webview);
+    webviews.set(key, webview);
     return;
   }
 
-  webviews.delete(tabId);
+  if (!previousWebview || webviews.get(key) === previousWebview) {
+    webviews.delete(key);
+  }
 }
 
 export function recordBrowserAutomationConsoleLog(
+  scopeId: string,
   tabId: string,
   event: {
     level?: string;
@@ -251,63 +273,69 @@ export function recordBrowserAutomationConsoleLog(
     event.level === "error"
       ? event.level
       : "log";
-  const logs = consoleLogs.get(tabId) ?? [];
+  const key = scopedKey(scopeId, tabId);
+  const logs = consoleLogs.get(key) ?? [];
   logs.push({
     level,
     message: event.message ?? "",
     timestamp: getNowIso(),
-    url: toAutomationTab(tabId).url || null,
+    url: toAutomationTab(scopeId, tabId).url || null,
   });
   if (logs.length > MAX_LOGS_PER_TAB) {
     logs.splice(0, logs.length - MAX_LOGS_PER_TAB);
   }
-  consoleLogs.set(tabId, logs);
+  consoleLogs.set(key, logs);
 }
 
 export async function executeBrowserAutomationCommand(
   envelope: BrowserAutomationCommandEnvelope,
 ): Promise<BrowserAutomationCommandResult> {
   const command = envelope.command as BrowserAutomationCommandInput;
+  const scopeId = envelope.threadId;
 
   switch (command.type) {
     case "tabs":
-      return getTabsResult();
+      return getTabsResult(scopeId);
     case "open":
-      return { tab: await openTab(command.url), type: "tab" };
+      return { tab: await openTab(scopeId, command.url), type: "tab" };
     case "navigate": {
-      const tabId = getTargetTabId(command.tabId);
-      return { tab: await navigateTab(tabId, command.url), type: "tab" };
+      const tabId = getTargetTabId(scopeId, command.tabId);
+      return {
+        tab: await navigateTab(scopeId, tabId, command.url),
+        type: "tab",
+      };
     }
     case "back": {
-      const tabId = getTargetTabId(command.tabId);
-      focusAutomationTab(tabId);
-      const webview = await waitForWebview(tabId);
+      const tabId = getTargetTabId(scopeId, command.tabId);
+      focusAutomationTab(scopeId, tabId);
+      const webview = await waitForWebview(scopeId, tabId);
       webview.goBack?.();
-      return { tab: toAutomationTab(tabId), type: "tab" };
+      return { tab: toAutomationTab(scopeId, tabId), type: "tab" };
     }
     case "forward": {
-      const tabId = getTargetTabId(command.tabId);
-      focusAutomationTab(tabId);
-      const webview = await waitForWebview(tabId);
+      const tabId = getTargetTabId(scopeId, command.tabId);
+      focusAutomationTab(scopeId, tabId);
+      const webview = await waitForWebview(scopeId, tabId);
       webview.goForward?.();
-      return { tab: toAutomationTab(tabId), type: "tab" };
+      return { tab: toAutomationTab(scopeId, tabId), type: "tab" };
     }
     case "reload": {
-      const tabId = getTargetTabId(command.tabId);
-      focusAutomationTab(tabId);
-      const webview = await waitForWebview(tabId);
-      updateBrowserTab(tabId, { isLoading: true });
+      const tabId = getTargetTabId(scopeId, command.tabId);
+      focusAutomationTab(scopeId, tabId);
+      const webview = await waitForWebview(scopeId, tabId);
+      updateBrowserTab(tabId, { isLoading: true }, scopeId);
       webview.reload?.();
-      return { tab: toAutomationTab(tabId), type: "tab" };
+      return { tab: toAutomationTab(scopeId, tabId), type: "tab" };
     }
     case "snapshot": {
-      const tabId = getTargetTabId(command.tabId);
-      focusAutomationTab(tabId);
+      const tabId = getTargetTabId(scopeId, command.tabId);
+      focusAutomationTab(scopeId, tabId);
       const content = await executeJavaScript<string>(
+        scopeId,
         tabId,
         buildSnapshotScript(),
       );
-      const tab = toAutomationTab(tabId);
+      const tab = toAutomationTab(scopeId, tabId);
       return {
         activeTabId: tabId,
         content,
@@ -318,21 +346,26 @@ export async function executeBrowserAutomationCommand(
       };
     }
     case "screenshot": {
-      const tabId = getTargetTabId(command.tabId);
-      focusAutomationTab(tabId);
-      const webview = await waitForWebview(tabId);
+      const tabId = getTargetTabId(scopeId, command.tabId);
+      focusAutomationTab(scopeId, tabId);
+      const webview = await waitForWebview(scopeId, tabId);
       const image = await webview.capturePage?.();
       const dataUrl = image?.toDataURL?.();
       if (!dataUrl) {
         throw new Error("This browser tab does not support screenshots.");
       }
-      return { dataUrl, tab: toAutomationTab(tabId), type: "screenshot" };
+      return {
+        dataUrl,
+        tab: toAutomationTab(scopeId, tabId),
+        type: "screenshot",
+      };
     }
     case "click": {
-      const tabId = getTargetTabId(command.tabId);
-      focusAutomationTab(tabId);
+      const tabId = getTargetTabId(scopeId, command.tabId);
+      focusAutomationTab(scopeId, tabId);
       if (command.selector) {
         await executeJavaScript(
+          scopeId,
           tabId,
           selectorScript(
             command.selector,
@@ -341,6 +374,7 @@ export async function executeBrowserAutomationCommand(
         );
       } else {
         await executeJavaScript(
+          scopeId,
           tabId,
           `
 (() => {
@@ -354,14 +388,15 @@ export async function executeBrowserAutomationCommand(
       }
       return {
         message: "Clicked browser page.",
-        tab: toAutomationTab(tabId),
+        tab: toAutomationTab(scopeId, tabId),
         type: "ok",
       };
     }
     case "fill": {
-      const tabId = getTargetTabId(command.tabId);
-      focusAutomationTab(tabId);
+      const tabId = getTargetTabId(scopeId, command.tabId);
+      focusAutomationTab(scopeId, tabId);
       await executeJavaScript(
+        scopeId,
         tabId,
         selectorScript(
           command.selector,
@@ -377,16 +412,17 @@ return true;
       );
       return {
         message: "Filled browser field.",
-        tab: toAutomationTab(tabId),
+        tab: toAutomationTab(scopeId, tabId),
         type: "ok",
       };
     }
     case "press": {
-      const tabId = getTargetTabId(command.tabId);
-      focusAutomationTab(tabId);
-      const webview = await waitForWebview(tabId);
+      const tabId = getTargetTabId(scopeId, command.tabId);
+      focusAutomationTab(scopeId, tabId);
+      const webview = await waitForWebview(scopeId, tabId);
       if (command.selector) {
         await executeJavaScript(
+          scopeId,
           tabId,
           selectorScript(
             command.selector,
@@ -398,19 +434,23 @@ return true;
       webview.sendInputEvent?.({ keyCode: command.key, type: "keyUp" });
       return {
         message: `Pressed ${command.key}.`,
-        tab: toAutomationTab(tabId),
+        tab: toAutomationTab(scopeId, tabId),
         type: "ok",
       };
     }
     case "console_logs": {
-      const tabId = getTargetTabId(command.tabId);
-      focusAutomationTab(tabId);
+      const tabId = getTargetTabId(scopeId, command.tabId);
+      focusAutomationTab(scopeId, tabId);
       const levels = new Set(command.levels ?? []);
       const limit = command.limit ?? 50;
-      const logs = (consoleLogs.get(tabId) ?? [])
+      const logs = (consoleLogs.get(scopedKey(scopeId, tabId)) ?? [])
         .filter((log) => levels.size === 0 || levels.has(log.level))
         .slice(-limit);
-      return { logs, tab: toAutomationTab(tabId), type: "console_logs" };
+      return {
+        logs,
+        tab: toAutomationTab(scopeId, tabId),
+        type: "console_logs",
+      };
     }
   }
 }

@@ -4,20 +4,25 @@ import { InternetIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button } from "@heroui/react";
 
-import { useRightSidebar } from "@/components/shell/shell-context";
+import { useRightSidebar, useShell } from "@/components/shell/shell-context";
 import { isDesktopRuntime } from "@/lib/desktop/client";
 import { useShortcutAction } from "@/lib/shortcuts/provider";
 
 import { BrowserSidebar } from "./browser-sidebar";
 import {
+  DEFAULT_BROWSER_URL,
+  GLOBAL_BROWSER_SCOPE_ID,
   openBrowserSidebar,
+  setVisibleBrowserScopeId,
   useBrowserSidebarState,
 } from "./browser-sidebar-store";
 
 export function BrowserToggleButton() {
   const isDesktop = isDesktopRuntime();
   const rightSidebar = useRightSidebar();
-  const browserState = useBrowserSidebarState();
+  const { selectedThreadId } = useShell();
+  const scopeId = selectedThreadId ?? GLOBAL_BROWSER_SCOPE_ID;
+  const browserState = useBrowserSidebarState(scopeId);
 
   const isBrowserSidebarActive =
     rightSidebar.isOpen &&
@@ -30,8 +35,9 @@ export function BrowserToggleButton() {
       return;
     }
 
-    openBrowserSidebar();
-    rightSidebar.open(<BrowserSidebar />, {
+    openBrowserSidebar(DEFAULT_BROWSER_URL, scopeId);
+    setVisibleBrowserScopeId(scopeId);
+    rightSidebar.open(<BrowserSidebar scopeId={scopeId} />, {
       panelId: "browser",
       size: "browser",
     });

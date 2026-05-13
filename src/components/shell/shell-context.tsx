@@ -13,7 +13,6 @@ import {
   useState,
 } from "react";
 
-import { closeBrowserSidebarState } from "@/components/browser/browser-sidebar-store";
 import { closeRepoDiffSidebarState } from "@/components/chat/repo-diff-sidebar-store";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { DEFAULT_BROWSER_SESSION_PERSISTENCE_ENABLED } from "@/schemas/general-settings.schema";
@@ -132,10 +131,6 @@ export function ShellProvider({ children }: PropsWithChildren) {
       panelId: rightSidebarPanelId,
       size: rightSidebarSize,
     });
-
-    if (rightSidebarPanelId === "browser") {
-      closeBrowserSidebarState();
-    }
 
     if (rightSidebarPanelId === "repo-diff") {
       closeRepoDiffSidebarState();

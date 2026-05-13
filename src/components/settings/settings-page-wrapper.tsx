@@ -4,6 +4,7 @@ import { getDesktopApi } from "@/lib/desktop/client";
 import type { PropsWithChildren, ReactNode } from "react";
 
 import { useShell } from "@/components/shell";
+import { SidebarToggle } from "@/components/shell/sidebar-toggle";
 import {
   getDesktopChromeMetrics,
   getDesktopWindowControlsInset,
@@ -51,6 +52,7 @@ export function SettingsPageWrapper({
             >
               <div className="app-region-no-drag min-w-0">
                 <div className="flex items-center gap-3">
+                  {!leftSidebarOpen && <SidebarToggle />}
                   <h1 className="text-foreground text-xl font-medium">
                     {title}
                   </h1>
