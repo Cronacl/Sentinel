@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.64](https://github.com/Cronacl/Sentinel/compare/v0.0.63...v0.0.64) (2026-05-13)
+
+
+### Features
+
+* scope browser automation by thread ([6ff0ccf](https://github.com/Cronacl/Sentinel/commit/6ff0ccf926997b8a3cabc8d9bbb761de135340fb))
+
 ## [0.0.63](https://github.com/Cronacl/Sentinel/compare/v0.0.62...v0.0.63) (2026-05-02)
 
 
