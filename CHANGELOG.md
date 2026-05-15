@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.65](https://github.com/Cronacl/Sentinel/compare/v0.0.64...v0.0.65) (2026-05-15)
+
+
+### Features
+
+* add macOS computer use tools ([e41a5ab](https://github.com/Cronacl/Sentinel/commit/e41a5ab454c7b6860e76a214508b21e58fb11711))
+
 ## [0.0.64](https://github.com/Cronacl/Sentinel/compare/v0.0.63...v0.0.64) (2026-05-13)
 
 
