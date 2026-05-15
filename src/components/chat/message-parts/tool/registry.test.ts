@@ -91,6 +91,7 @@ import {
 import { GenericTool } from "./generic";
 import { SkillTool } from "./renderers/skill";
 import { GenerateVideoTool } from "./renderers/generate-video";
+import { ComputerTool } from "./renderers/computer";
 import { RunSubagentTool } from "./renderers/run-subagent";
 import { GCalCreateEventTool } from "./renderers/integrations/gcal/gcal-create-event";
 import { IntegrationGenericTool } from "./renderers/integrations/shared/generic";
@@ -181,6 +182,66 @@ describe("resolveRenderer", () => {
     } as any);
 
     expect(renderer).toBe(GenerateVideoTool);
+  });
+
+  it("uses the ComputerTool renderer for desktop computer-use tools", () => {
+    const renderer = resolveRenderer({
+      input: {},
+      output: {
+        accessibilityTrusted: false,
+        cursor: null,
+        displays: [],
+        platform: "darwin",
+        screenCaptureTrusted: false,
+        supported: true,
+        type: "status",
+      },
+      state: "output-available",
+      toolCallId: "tool-call-computer-1",
+      toolName: "computer_status",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(ComputerTool);
+  });
+
+  it("uses the ComputerTool renderer for Mac helper computer-use tools", () => {
+    const renderer = resolveRenderer({
+      input: { appName: "Finder", mode: "focus" },
+      output: {
+        app: { bundleId: null, name: "Finder" },
+        mode: "focus",
+        platform: "darwin",
+        supported: true,
+        type: "app",
+      },
+      state: "output-available",
+      toolCallId: "tool-call-computer-app-1",
+      toolName: "computer_app",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(ComputerTool);
+  });
+
+  it("uses the ComputerTool renderer for Mac Accessibility tools", () => {
+    const renderer = resolveRenderer({
+      input: { query: { title: "Open" } },
+      output: {
+        frontmostApp: { bundleId: "com.apple.finder", name: "Finder" },
+        matches: [{ axPath: "0/1", role: "AXButton", title: "Open" }],
+        nodeCount: 12,
+        platform: "darwin",
+        supported: true,
+        type: "ax_find",
+      },
+      state: "output-available",
+      toolCallId: "tool-call-computer-ax-1",
+      toolName: "computer_ax_find",
+      type: "dynamic-tool",
+    } as any);
+
+    expect(renderer).toBe(ComputerTool);
   });
 
   it("uses the RunSubagentTool renderer for run_subagent", () => {

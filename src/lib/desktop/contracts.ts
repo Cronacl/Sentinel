@@ -75,6 +75,82 @@ export type SentinelDesktopApi = {
   clipboard: {
     writeText: (text: string) => Promise<void>;
   };
+  computer?: {
+    action: (input: {
+      actions: ComputerAutomationAction[];
+      appName?: string;
+      bundleId?: string;
+    }) => Promise<Extract<ComputerAutomationCommandResult, { type: "action" }>>;
+    app: (input: {
+      appName?: string;
+      bundleId?: string;
+      mode: "focus" | "open";
+    }) => Promise<Extract<ComputerAutomationCommandResult, { type: "app" }>>;
+    apps: () => Promise<
+      Extract<ComputerAutomationCommandResult, { type: "apps" }>
+    >;
+    axAction: (input: {
+      action:
+        | "decrement"
+        | "focus"
+        | "increment"
+        | "press"
+        | "setValue"
+        | "showMenu";
+      appName?: string;
+      axPath?: string;
+      bundleId?: string;
+      query?: {
+        description?: string;
+        role?: string;
+        subrole?: string;
+        title?: string;
+        value?: string;
+      };
+      value?: string;
+    }) => Promise<
+      Extract<ComputerAutomationCommandResult, { type: "ax_action" }>
+    >;
+    axFind: (input: {
+      appName?: string;
+      bundleId?: string;
+      maxDepth?: number;
+      maxMatches?: number;
+      maxNodes?: number;
+      query: {
+        description?: string;
+        role?: string;
+        subrole?: string;
+        title?: string;
+        value?: string;
+      };
+    }) => Promise<
+      Extract<ComputerAutomationCommandResult, { type: "ax_find" }>
+    >;
+    axTree: (input?: {
+      appName?: string;
+      bundleId?: string;
+      maxDepth?: number;
+      maxNodes?: number;
+    }) => Promise<
+      Extract<ComputerAutomationCommandResult, { type: "ax_tree" }>
+    >;
+    clipboard: (
+      text: string,
+    ) => Promise<
+      Extract<ComputerAutomationCommandResult, { type: "clipboard" }>
+    >;
+    screenshot: (input?: {
+      appName?: string;
+      bundleId?: string;
+      displayId?: number;
+    }) => Promise<
+      Extract<ComputerAutomationCommandResult, { type: "screenshot" }>
+    >;
+    status: () => Promise<
+      Extract<ComputerAutomationCommandResult, { type: "status" }>
+    >;
+  };
   openExternal: (url: string) => Promise<void>;
   permissions: {
     getStatus: (name: DesktopPermissionName) => Promise<DesktopPermissionState>;
@@ -127,3 +203,7 @@ export type SentinelDesktopApi = {
     toggleMaximize: () => Promise<boolean>;
   };
 };
+import type {
+  ComputerAutomationAction,
+  ComputerAutomationCommandResult,
+} from "@/lib/computer/automation-types";

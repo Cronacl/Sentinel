@@ -33,6 +33,15 @@ export const TOOL_APPROVAL_TOOL_NAMES = [
   "browser_fill",
   "browser_press",
   "browser_console_logs",
+  "computer_status",
+  "computer_screenshot",
+  "computer_action",
+  "computer_apps",
+  "computer_app",
+  "computer_clipboard",
+  "computer_ax_tree",
+  "computer_ax_find",
+  "computer_ax_action",
   "generate_image",
   "generate_video",
   "gmail_search",
@@ -651,6 +660,71 @@ export const TOOL_APPROVAL_METADATA: Record<
     label: "Browser console logs",
     riskSummary:
       "Sentinel can read recent console logs from the built-in browser sidebar without stopping for confirmation.",
+  },
+  computer_status: {
+    defaultRequireApproval: false,
+    description:
+      "Inspect desktop computer-use support, macOS permissions, displays, and cursor position.",
+    label: "Computer status",
+    riskSummary:
+      "Sentinel can inspect desktop computer-use availability and display geometry without stopping for confirmation.",
+  },
+  computer_screenshot: {
+    defaultRequireApproval: true,
+    description: "Capture a macOS desktop screenshot.",
+    label: "Computer screenshot",
+    riskSummary:
+      "Sentinel can capture a screenshot of your desktop, which may include sensitive information.",
+  },
+  computer_action: {
+    defaultRequireApproval: true,
+    description:
+      "Perform macOS desktop mouse, keyboard, drag, scroll, type, wait, and screenshot actions.",
+    label: "Computer action",
+    riskSummary:
+      "Sentinel can control your desktop with mouse and keyboard actions after approval.",
+  },
+  computer_apps: {
+    defaultRequireApproval: false,
+    description: "List visible macOS applications and the frontmost app.",
+    label: "Computer apps",
+    riskSummary:
+      "Sentinel can inspect visible desktop application names without stopping for confirmation.",
+  },
+  computer_app: {
+    defaultRequireApproval: true,
+    description: "Open or focus a macOS application.",
+    label: "Computer app",
+    riskSummary:
+      "Sentinel can launch a desktop app after approval; focusing an already available app is allowed so approval flows can refocus the intended target.",
+  },
+  computer_clipboard: {
+    defaultRequireApproval: true,
+    description: "Write text to the macOS clipboard for later paste actions.",
+    label: "Computer clipboard",
+    riskSummary:
+      "Sentinel can place text on your clipboard, including content that may later be pasted into another app.",
+  },
+  computer_ax_tree: {
+    defaultRequireApproval: false,
+    description: "Inspect the macOS Accessibility UI tree.",
+    label: "Computer AX tree",
+    riskSummary:
+      "Sentinel can inspect accessible UI structure and text from the active or named Mac app.",
+  },
+  computer_ax_find: {
+    defaultRequireApproval: false,
+    description: "Search the macOS Accessibility UI tree.",
+    label: "Computer AX find",
+    riskSummary:
+      "Sentinel can search accessible UI structure and text from the active or named Mac app.",
+  },
+  computer_ax_action: {
+    defaultRequireApproval: true,
+    description: "Perform an Accessibility action on a Mac UI element.",
+    label: "Computer AX action",
+    riskSummary:
+      "Sentinel can press, focus, or edit accessible UI elements in Mac apps after approval.",
   },
   generate_image: {
     defaultRequireApproval: true,

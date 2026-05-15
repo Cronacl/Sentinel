@@ -18,6 +18,15 @@ import {
   browserSnapshotDescription,
   browserTabsDescription,
   batchReadDescription,
+  computerActionDescription,
+  computerAppDescription,
+  computerAppsDescription,
+  computerAxActionDescription,
+  computerAxFindDescription,
+  computerAxTreeDescription,
+  computerClipboardDescription,
+  computerScreenshotDescription,
+  computerStatusDescription,
   createFileDescription,
   createPlanDescription,
   deleteFileDescription,
@@ -75,6 +84,20 @@ import {
   browserToolOutputSchema,
   executeBrowserTool,
 } from "./browser";
+import {
+  computerActionInputSchema,
+  computerAppInputSchema,
+  computerAppsInputSchema,
+  computerAxActionInputSchema,
+  computerAxFindInputSchema,
+  computerAxTreeInputSchema,
+  computerClipboardInputSchema,
+  computerScreenshotInputSchema,
+  computerStatusInputSchema,
+  computerToolModelOutput,
+  computerToolOutputSchema,
+  executeComputerTool,
+} from "./computer";
 import {
   executeCreateFile,
   createFileInputSchema,
@@ -1074,6 +1097,133 @@ function buildBrowserTools(options: ThreadAgentCallOptions) {
   };
 }
 
+function buildComputerTools(options: ThreadAgentCallOptions) {
+  const { threadId, toolApprovalPolicies, userId } = options;
+
+  return {
+    computer_status: tool({
+      description: computerStatusDescription,
+      inputSchema: computerStatusInputSchema,
+      needsApproval: () => toolApprovalPolicies.computer_status,
+      outputSchema: computerToolOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeComputerTool({
+          abortSignal,
+          command: { ...input, type: "status" },
+          threadId,
+          userId,
+        }),
+    }),
+    computer_screenshot: tool({
+      description: computerScreenshotDescription,
+      inputSchema: computerScreenshotInputSchema,
+      needsApproval: () => toolApprovalPolicies.computer_screenshot,
+      outputSchema: computerToolOutputSchema,
+      toModelOutput: ({ output }) => computerToolModelOutput(output),
+      execute: async (input, { abortSignal }) =>
+        executeComputerTool({
+          abortSignal,
+          command: { ...input, type: "screenshot" },
+          threadId,
+          userId,
+        }),
+    }),
+    computer_action: tool({
+      description: computerActionDescription,
+      inputSchema: computerActionInputSchema,
+      needsApproval: () => toolApprovalPolicies.computer_action,
+      outputSchema: computerToolOutputSchema,
+      toModelOutput: ({ output }) => computerToolModelOutput(output),
+      execute: async (input, { abortSignal }) =>
+        executeComputerTool({
+          abortSignal,
+          command: { ...input, type: "action" },
+          threadId,
+          userId,
+        }),
+    }),
+    computer_apps: tool({
+      description: computerAppsDescription,
+      inputSchema: computerAppsInputSchema,
+      needsApproval: () => toolApprovalPolicies.computer_apps,
+      outputSchema: computerToolOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeComputerTool({
+          abortSignal,
+          command: { ...input, type: "apps" },
+          threadId,
+          userId,
+        }),
+    }),
+    computer_app: tool({
+      description: computerAppDescription,
+      inputSchema: computerAppInputSchema,
+      needsApproval: (input) =>
+        input.mode === "focus" ? false : toolApprovalPolicies.computer_app,
+      outputSchema: computerToolOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeComputerTool({
+          abortSignal,
+          command: { ...input, type: "app" },
+          threadId,
+          userId,
+        }),
+    }),
+    computer_clipboard: tool({
+      description: computerClipboardDescription,
+      inputSchema: computerClipboardInputSchema,
+      needsApproval: () => toolApprovalPolicies.computer_clipboard,
+      outputSchema: computerToolOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeComputerTool({
+          abortSignal,
+          command: { ...input, type: "clipboard" },
+          threadId,
+          userId,
+        }),
+    }),
+    computer_ax_tree: tool({
+      description: computerAxTreeDescription,
+      inputSchema: computerAxTreeInputSchema,
+      needsApproval: () => toolApprovalPolicies.computer_ax_tree,
+      outputSchema: computerToolOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeComputerTool({
+          abortSignal,
+          command: { ...input, type: "ax_tree" },
+          threadId,
+          userId,
+        }),
+    }),
+    computer_ax_find: tool({
+      description: computerAxFindDescription,
+      inputSchema: computerAxFindInputSchema,
+      needsApproval: () => toolApprovalPolicies.computer_ax_find,
+      outputSchema: computerToolOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeComputerTool({
+          abortSignal,
+          command: { ...input, type: "ax_find" },
+          threadId,
+          userId,
+        }),
+    }),
+    computer_ax_action: tool({
+      description: computerAxActionDescription,
+      inputSchema: computerAxActionInputSchema,
+      needsApproval: () => toolApprovalPolicies.computer_ax_action,
+      outputSchema: computerToolOutputSchema,
+      execute: async (input, { abortSignal }) =>
+        executeComputerTool({
+          abortSignal,
+          command: { ...input, type: "ax_action" },
+          threadId,
+          userId,
+        }),
+    }),
+  };
+}
+
 function buildPlanTools(options: ThreadAgentCallOptions) {
   const { threadId } = options;
 
@@ -1163,6 +1313,7 @@ export function buildTools(options: ThreadAgentCallOptions) {
     ...buildTaskTools(options),
     ...buildDelegationTools(options),
     ...buildBrowserTools(options),
+    ...buildComputerTools(options),
     ...buildWebTools(options),
     ...(hasFilesystemTools
       ? {

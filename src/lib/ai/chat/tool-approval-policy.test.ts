@@ -17,4 +17,19 @@ describe("tool approval policies", () => {
     expect(policies.browser_fill).toBe(true);
     expect(policies.browser_press).toBe(true);
   });
+
+  it("keeps passive desktop computer tools open and gates sensitive actions", () => {
+    const policies = getDefaultToolApprovalPolicies();
+
+    expect(policies.computer_status).toBe(false);
+    expect(policies.computer_apps).toBe(false);
+    expect(policies.computer_ax_tree).toBe(false);
+    expect(policies.computer_ax_find).toBe(false);
+
+    expect(policies.computer_screenshot).toBe(true);
+    expect(policies.computer_action).toBe(true);
+    expect(policies.computer_app).toBe(true);
+    expect(policies.computer_clipboard).toBe(true);
+    expect(policies.computer_ax_action).toBe(true);
+  });
 });

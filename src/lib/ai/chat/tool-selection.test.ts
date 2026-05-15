@@ -111,6 +111,17 @@ describe("tool selection baselines", () => {
     "browser_press",
     "browser_console_logs",
   ];
+  const computerToolNames = [
+    "computer_status",
+    "computer_screenshot",
+    "computer_action",
+    "computer_apps",
+    "computer_app",
+    "computer_clipboard",
+    "computer_ax_tree",
+    "computer_ax_find",
+    "computer_ax_action",
+  ];
 
   it("keeps local and web tools always active in chat mode", () => {
     const promptContext = createPromptContext();
@@ -234,6 +245,25 @@ describe("tool selection baselines", () => {
     );
   });
 
+  it("activates native browser tools for explicit browser-use requests", () => {
+    const promptContext = createPromptContext({
+      latestUserText: "use browser use to open localhost and click sign in",
+    });
+
+    const activeTools = selectInitialActiveTools({
+      availableToolNames: [...availableToolNames, ...browserToolNames],
+      promptContext,
+    });
+
+    expect(activeTools).toEqual(
+      expect.arrayContaining([
+        "browser_open",
+        "browser_snapshot",
+        "browser_click",
+      ]),
+    );
+  });
+
   it("keeps native browser tools inactive for static web page reading", () => {
     const promptContext = createPromptContext({
       latestUserText:
@@ -269,6 +299,82 @@ describe("tool selection baselines", () => {
         "browser_open",
         "browser_snapshot",
         "browser_click",
+      ]),
+    );
+  });
+
+  it("activates desktop computer tools for OS-level desktop requests", () => {
+    const promptContext = createPromptContext({
+      latestUserText:
+        "use full desktop computer use to screenshot the screen and click the macOS app window",
+    });
+
+    const activeTools = selectInitialActiveTools({
+      availableToolNames: [...availableToolNames, ...computerToolNames],
+      promptContext,
+    });
+
+    expect(activeTools).toEqual(
+      expect.arrayContaining([
+        "computer_status",
+        "computer_screenshot",
+        "computer_action",
+        "computer_apps",
+        "computer_app",
+        "computer_clipboard",
+      ]),
+    );
+  });
+
+  it("activates desktop computer tools for local Mac app workflows", () => {
+    const promptContext = createPromptContext({
+      latestUserText: "add a reminder on my mac reminders app",
+    });
+
+    const activeTools = selectInitialActiveTools({
+      availableToolNames: [...availableToolNames, ...computerToolNames],
+      promptContext,
+    });
+
+    expect(activeTools).toEqual(
+      expect.arrayContaining([
+        "computer_status",
+        "computer_app",
+        "computer_ax_tree",
+        "computer_ax_find",
+        "computer_ax_action",
+      ]),
+    );
+  });
+
+  it("keeps desktop computer tools active for short follow-ups inside a Mac UI task", () => {
+    const promptContext = createPromptContext({
+      latestUserText: "same",
+      planSummary: {
+        audience: "technical",
+        goal: "Add a new reminder using the macOS Reminders UI.",
+        hasPendingQuestions: false,
+        summary:
+          "Use computer-use tools to interact with the Mac Reminders app through the UI.",
+        taskCount: 1,
+        title: "Add new reminder using macOS UI",
+      },
+    });
+
+    const activeTools = selectStepActiveTools({
+      availableToolNames: [...availableToolNames, ...computerToolNames],
+      initialActiveTools: ["manage_task"],
+      promptContext,
+      steps: [],
+    });
+
+    expect(activeTools).toEqual(
+      expect.arrayContaining([
+        "computer_status",
+        "computer_app",
+        "computer_ax_tree",
+        "computer_ax_find",
+        "computer_ax_action",
       ]),
     );
   });

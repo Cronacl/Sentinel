@@ -14,6 +14,23 @@ contextBridge.exposeInMainWorld("sentinelDesktop", {
     writeText: (text) =>
       ipcRenderer.invoke(DESKTOP_CHANNELS.CLIPBOARD_WRITE_TEXT, text),
   },
+  computer: {
+    action: (input) =>
+      ipcRenderer.invoke(DESKTOP_CHANNELS.COMPUTER_ACTION, input),
+    app: (input) => ipcRenderer.invoke(DESKTOP_CHANNELS.COMPUTER_APP, input),
+    apps: () => ipcRenderer.invoke(DESKTOP_CHANNELS.COMPUTER_APPS),
+    axAction: (input) =>
+      ipcRenderer.invoke(DESKTOP_CHANNELS.COMPUTER_AX_ACTION, input),
+    axFind: (input) =>
+      ipcRenderer.invoke(DESKTOP_CHANNELS.COMPUTER_AX_FIND, input),
+    axTree: (input) =>
+      ipcRenderer.invoke(DESKTOP_CHANNELS.COMPUTER_AX_TREE, input),
+    clipboard: (text) =>
+      ipcRenderer.invoke(DESKTOP_CHANNELS.COMPUTER_CLIPBOARD, text),
+    screenshot: (input) =>
+      ipcRenderer.invoke(DESKTOP_CHANNELS.COMPUTER_SCREENSHOT, input),
+    status: () => ipcRenderer.invoke(DESKTOP_CHANNELS.COMPUTER_STATUS),
+  },
   openExternal: (url) =>
     ipcRenderer.invoke(DESKTOP_CHANNELS.OPEN_EXTERNAL, url),
   permissions: {

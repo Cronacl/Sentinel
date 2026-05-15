@@ -13,7 +13,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { chmodSync, existsSync } from "node:fs";
-import { stat } from "node:fs/promises";
+import { readFile, rm, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -55,6 +55,7 @@ const terminalSessions = new Map();
 const WINDOWS_TITLE_BAR_HEIGHT = 32;
 let systemFontFamiliesCache = null;
 let systemFontFamiliesPromise = null;
+let macComputerHelperPromise = null;
 const desktopUpdater = createDesktopUpdaterController({
   appVersion: () => app.getVersion(),
   isPackaged: () => app.isPackaged,
@@ -1189,6 +1190,488 @@ async function runOpenCommand(command, args) {
   });
 }
 
+function desktopPlatform() {
+  if (process.platform === "darwin") return "darwin";
+  if (process.platform === "win32") return "win32";
+  return "linux";
+}
+
+function unsupportedComputerResult(type) {
+  const base = {
+    message:
+      "Desktop computer use is currently supported only in Sentinel for macOS.",
+    platform: desktopPlatform(),
+    supported: false,
+    type,
+  };
+  if (type === "status") {
+    return {
+      ...base,
+      accessibilityTrusted: null,
+      cursor: null,
+      displays: [],
+      screenCaptureTrusted: null,
+    };
+  }
+  if (type === "screenshot") {
+    return { ...base, bounds: null, dataUrl: null, displayId: null };
+  }
+  if (type === "apps") {
+    return { ...base, apps: [], frontmostApp: null };
+  }
+  if (type === "app") {
+    return { ...base, app: null, mode: "focus" };
+  }
+  if (type === "clipboard") {
+    return { ...base, textLength: 0 };
+  }
+  if (type === "ax_tree") {
+    return { ...base, frontmostApp: null, nodeCount: 0, root: null };
+  }
+  if (type === "ax_find") {
+    return { ...base, frontmostApp: null, matches: [], nodeCount: 0 };
+  }
+  if (type === "ax_action") {
+    return { ...base, action: "press", element: null, ok: false };
+  }
+  return { ...base, actions: [], cursor: null };
+}
+
+async function runProcessCapture(command, args, options = {}) {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      ...options,
+    });
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout?.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.once("error", reject);
+    child.once("close", (code) => {
+      if (code === 0) {
+        resolve({ stderr, stdout });
+        return;
+      }
+
+      reject(
+        new Error(
+          stderr.trim() || `Command ${command} failed with exit code ${code}`,
+        ),
+      );
+    });
+  });
+}
+
+function macComputerHelperSourcePath() {
+  const candidates = [
+    path.join(__dirname, "../helpers/macos-computer-use.swift"),
+    path.join(
+      process.resourcesPath ?? "",
+      "app.asar.unpacked/desktop/helpers/macos-computer-use.swift",
+    ),
+    path.join(
+      process.resourcesPath ?? "",
+      "desktop/helpers/macos-computer-use.swift",
+    ),
+  ];
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0];
+}
+
+async function getMacComputerHelperPath() {
+  if (macComputerHelperPromise) return macComputerHelperPromise;
+
+  macComputerHelperPromise = (async () => {
+    const helperPath = path.join(
+      app.getPath("userData"),
+      "macos-computer-use-helper",
+    );
+    const sourcePath = macComputerHelperSourcePath();
+    const sourceStat = await stat(sourcePath).catch(() => null);
+    const helperStat = await stat(helperPath).catch(() => null);
+    if (
+      helperStat?.isFile() &&
+      (!sourceStat || helperStat.mtimeMs >= sourceStat.mtimeMs)
+    ) {
+      return helperPath;
+    }
+
+    await runProcessCapture("xcrun", ["swiftc", sourcePath, "-o", helperPath]);
+    chmodSync(helperPath, 0o755);
+    return helperPath;
+  })();
+
+  return macComputerHelperPromise;
+}
+
+async function runMacComputerHelper(command, payload) {
+  const helperPath = await getMacComputerHelperPath();
+  const args = payload === undefined ? [command] : [command, payload];
+  const { stdout } = await runProcessCapture(helperPath, args);
+  const parsed = JSON.parse(stdout.trim() || "{}");
+  if (parsed?.ok === false) {
+    throw new Error(parsed.error || "macOS computer-use helper failed.");
+  }
+  return parsed;
+}
+
+async function getDesktopComputerStatus() {
+  if (process.platform !== "darwin") {
+    return unsupportedComputerResult("status");
+  }
+
+  try {
+    return await runMacComputerHelper("status");
+  } catch (error) {
+    return {
+      ...unsupportedComputerResult("status"),
+      message:
+        error instanceof Error
+          ? error.message
+          : "Unable to read desktop computer-use status.",
+      platform: "darwin",
+      supported: true,
+    };
+  }
+}
+
+async function captureDesktopScreenshot(input) {
+  if (process.platform !== "darwin") {
+    return unsupportedComputerResult("screenshot");
+  }
+
+  const displayId =
+    typeof input === "number"
+      ? input
+      : Number.isInteger(input?.displayId)
+        ? input.displayId
+        : undefined;
+  const screenshotPath = path.join(
+    app.getPath("temp"),
+    `sentinel-computer-${randomUUID()}.png`,
+  );
+
+  try {
+    const focusResult =
+      typeof input === "object" && input
+        ? await refocusComputerTarget(input)
+        : null;
+    if (focusResult?.message) {
+      throw new Error(focusResult.message);
+    }
+
+    const args = ["-x", "-t", "png"];
+    if (Number.isInteger(displayId)) {
+      args.push("-D", String(displayId));
+    }
+    args.push(screenshotPath);
+    await runProcessCapture("/usr/sbin/screencapture", args);
+    const data = await readFile(screenshotPath);
+    if (data.length === 0) {
+      throw new Error(
+        "macOS returned an empty screenshot. Grant Screen Recording permission to Sentinel.",
+      );
+    }
+    const status = await getDesktopComputerStatus();
+    const display =
+      Number.isInteger(displayId) && Array.isArray(status.displays)
+        ? status.displays.find((entry) => entry.id === displayId)
+        : Array.isArray(status.displays)
+          ? (status.displays.find((entry) => entry.primary) ??
+            status.displays[0])
+          : null;
+
+    return {
+      bounds: display?.bounds ?? null,
+      dataUrl: `data:image/png;base64,${data.toString("base64")}`,
+      displayId:
+        display?.id ?? (Number.isInteger(displayId) ? displayId : null),
+      platform: "darwin",
+      supported: true,
+      type: "screenshot",
+    };
+  } catch (error) {
+    return {
+      ...unsupportedComputerResult("screenshot"),
+      message:
+        error instanceof Error
+          ? error.message
+          : "Unable to capture the desktop screenshot.",
+      platform: "darwin",
+      supported: true,
+    };
+  } finally {
+    await rm(screenshotPath, { force: true }).catch(() => {});
+  }
+}
+
+async function listDesktopComputerApps() {
+  if (process.platform !== "darwin") {
+    return unsupportedComputerResult("apps");
+  }
+
+  const script = `
+    const systemEvents = Application("System Events");
+    const processes = systemEvents.applicationProcesses.whose({ backgroundOnly: false })();
+    const apps = processes
+      .map((process) => ({ name: process.name(), bundleId: null }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+    const frontmost = systemEvents.applicationProcesses.whose({ frontmost: true })()[0];
+    JSON.stringify({
+      apps,
+      frontmostApp: frontmost ? { name: frontmost.name(), bundleId: null } : null,
+    });
+  `;
+
+  try {
+    const { stdout } = await runProcessCapture("/usr/bin/osascript", [
+      "-l",
+      "JavaScript",
+      "-e",
+      script,
+    ]);
+    const parsed = JSON.parse(stdout.trim() || "{}");
+    return {
+      apps: Array.isArray(parsed.apps) ? parsed.apps : [],
+      frontmostApp: parsed.frontmostApp ?? null,
+      platform: "darwin",
+      supported: true,
+      type: "apps",
+    };
+  } catch (error) {
+    return {
+      ...unsupportedComputerResult("apps"),
+      message:
+        error instanceof Error
+          ? error.message
+          : "Unable to list visible macOS applications.",
+      platform: "darwin",
+      supported: true,
+    };
+  }
+}
+
+async function focusDesktopComputerApp(input) {
+  if (process.platform !== "darwin") {
+    return {
+      ...unsupportedComputerResult("app"),
+      mode: input?.mode === "open" ? "open" : "focus",
+    };
+  }
+
+  const appName =
+    typeof input?.appName === "string" ? input.appName.trim() : "";
+  const bundleId =
+    typeof input?.bundleId === "string" ? input.bundleId.trim() : "";
+  const mode = input?.mode === "open" ? "open" : "focus";
+  if (!appName && !bundleId) {
+    throw new Error("Provide appName or bundleId.");
+  }
+
+  try {
+    if (bundleId) {
+      await runProcessCapture("/usr/bin/open", ["-b", bundleId]);
+    } else {
+      await runProcessCapture("/usr/bin/open", ["-a", appName]);
+    }
+
+    return {
+      app: {
+        bundleId: bundleId || null,
+        name: appName || bundleId,
+      },
+      mode,
+      platform: "darwin",
+      supported: true,
+      type: "app",
+    };
+  } catch (error) {
+    return {
+      app: {
+        bundleId: bundleId || null,
+        name: appName || bundleId,
+      },
+      message:
+        error instanceof Error
+          ? error.message
+          : "Unable to open or focus the macOS application.",
+      mode,
+      platform: "darwin",
+      supported: true,
+      type: "app",
+    };
+  }
+}
+
+function normalizeComputerFocusTarget(input) {
+  const appName =
+    typeof input?.appName === "string" ? input.appName.trim() : "";
+  const bundleId =
+    typeof input?.bundleId === "string" ? input.bundleId.trim() : "";
+
+  return appName || bundleId ? { appName, bundleId } : null;
+}
+
+async function refocusComputerTarget(input) {
+  const target = normalizeComputerFocusTarget(input);
+  if (!target) {
+    return null;
+  }
+
+  const result = await focusDesktopComputerApp({
+    ...target,
+    mode: "focus",
+  });
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  return result;
+}
+
+async function setDesktopComputerClipboard(text) {
+  if (process.platform !== "darwin") {
+    return unsupportedComputerResult("clipboard");
+  }
+  if (typeof text !== "string") {
+    throw new Error("Clipboard text must be a string.");
+  }
+
+  clipboard.writeText(text);
+  return {
+    platform: "darwin",
+    supported: true,
+    textLength: text.length,
+    type: "clipboard",
+  };
+}
+
+async function runDesktopComputerAx(command, input) {
+  if (process.platform !== "darwin") {
+    return unsupportedComputerResult(command);
+  }
+
+  try {
+    if (input?.appName || input?.bundleId) {
+      const focusResult = await refocusComputerTarget(input);
+      if (focusResult?.message) {
+        throw new Error(focusResult.message);
+      }
+    }
+
+    return await runMacComputerHelper(command, JSON.stringify(input ?? {}));
+  } catch (error) {
+    return {
+      ...unsupportedComputerResult(command),
+      message:
+        error instanceof Error
+          ? error.message
+          : "Unable to use macOS Accessibility APIs.",
+      platform: "darwin",
+      supported: true,
+    };
+  }
+}
+
+function sanitizeComputerActions(actions) {
+  if (!Array.isArray(actions)) {
+    throw new Error("Computer actions must be an array.");
+  }
+  if (actions.length < 1 || actions.length > 25) {
+    throw new Error("Computer action batches must contain 1 to 25 actions.");
+  }
+  return actions;
+}
+
+async function runDesktopComputerActions(input) {
+  if (process.platform !== "darwin") {
+    return unsupportedComputerResult("action");
+  }
+
+  try {
+    const actions = Array.isArray(input) ? input : input?.actions;
+    const sanitized = sanitizeComputerActions(actions);
+    const results = [];
+    let cursor = null;
+    const focusResult =
+      !Array.isArray(input) && input
+        ? await refocusComputerTarget(input)
+        : null;
+    if (focusResult?.message) {
+      throw new Error(focusResult.message);
+    }
+
+    for (const [index, action] of sanitized.entries()) {
+      if (action?.type === "screenshot") {
+        const screenshot = await captureDesktopScreenshot({
+          appName: !Array.isArray(input) ? input?.appName : undefined,
+          bundleId: !Array.isArray(input) ? input?.bundleId : undefined,
+          displayId: action.displayId,
+        });
+        const ok = screenshot.supported && Boolean(screenshot.dataUrl);
+        results.push({
+          index,
+          message: screenshot.message,
+          ok,
+          screenshot: {
+            bounds: screenshot.bounds ?? null,
+            dataUrl: screenshot.dataUrl,
+            displayId: screenshot.displayId ?? null,
+          },
+          type: "screenshot",
+        });
+        if (!ok) {
+          break;
+        }
+        continue;
+      }
+
+      const result = await runMacComputerHelper(
+        "action",
+        JSON.stringify([action]),
+      );
+      const actionResult = result.actions?.[0] ?? {
+        index: 0,
+        message: "No action result returned.",
+        ok: false,
+        type: action?.type ?? "unknown",
+      };
+      results.push({ ...actionResult, index });
+      cursor = result.cursor ?? cursor;
+      if (!actionResult.ok) {
+        break;
+      }
+    }
+
+    if (!cursor) {
+      const status = await getDesktopComputerStatus();
+      cursor = status.cursor ?? null;
+    }
+
+    return {
+      actions: results,
+      cursor,
+      platform: "darwin",
+      supported: true,
+      type: "action",
+    };
+  } catch (error) {
+    return {
+      ...unsupportedComputerResult("action"),
+      actions: [],
+      message:
+        error instanceof Error
+          ? error.message
+          : "Unable to perform desktop computer actions.",
+      platform: "darwin",
+      supported: true,
+    };
+  }
+}
+
 function registerIpc() {
   ipcMain.handle(DESKTOP_CHANNELS.APP_LIST_SYSTEM_FONTS, async () =>
     listSystemFontFamilies(),
@@ -1202,6 +1685,41 @@ function registerIpc() {
 
       clipboard.writeText(text);
     },
+  );
+  ipcMain.handle(DESKTOP_CHANNELS.COMPUTER_STATUS, async () =>
+    getDesktopComputerStatus(),
+  );
+  ipcMain.handle(DESKTOP_CHANNELS.COMPUTER_APPS, async () =>
+    listDesktopComputerApps(),
+  );
+  ipcMain.handle(DESKTOP_CHANNELS.COMPUTER_APP, async (_event, input) =>
+    focusDesktopComputerApp(input),
+  );
+  ipcMain.handle(DESKTOP_CHANNELS.COMPUTER_CLIPBOARD, async (_event, text) =>
+    setDesktopComputerClipboard(text),
+  );
+  ipcMain.handle(DESKTOP_CHANNELS.COMPUTER_AX_TREE, async (_event, input) =>
+    runDesktopComputerAx("ax_tree", input),
+  );
+  ipcMain.handle(DESKTOP_CHANNELS.COMPUTER_AX_FIND, async (_event, input) =>
+    runDesktopComputerAx("ax_find", input),
+  );
+  ipcMain.handle(DESKTOP_CHANNELS.COMPUTER_AX_ACTION, async (_event, input) =>
+    runDesktopComputerAx("ax_action", input),
+  );
+  ipcMain.handle(
+    DESKTOP_CHANNELS.COMPUTER_SCREENSHOT,
+    async (_event, input) => {
+      const displayId = typeof input === "number" ? input : input?.displayId;
+      if (displayId !== undefined && !Number.isInteger(displayId)) {
+        throw new Error("Display id must be an integer.");
+      }
+
+      return await captureDesktopScreenshot(input);
+    },
+  );
+  ipcMain.handle(DESKTOP_CHANNELS.COMPUTER_ACTION, async (_event, input) =>
+    runDesktopComputerActions(input),
   );
   ipcMain.handle(
     DESKTOP_CHANNELS.PERMISSIONS_GET_STATUS,

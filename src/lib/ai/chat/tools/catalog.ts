@@ -1,5 +1,6 @@
 export type ToolCategory =
   | "browser"
+  | "computer"
   | "delegation"
   | "execution"
   | "inspection"
@@ -189,6 +190,54 @@ export const TOOL_CATALOG: Record<string, ToolCatalogEntry> = {
     capability: "to read captured browser console logs",
     category: "browser",
     label: "browser_console_logs",
+  },
+  computer_status: {
+    capability:
+      "to inspect desktop computer-use support, permissions, displays, and cursor position",
+    category: "computer",
+    label: "computer_status",
+  },
+  computer_screenshot: {
+    capability: "to capture a macOS desktop screenshot for visual inspection",
+    category: "computer",
+    label: "computer_screenshot",
+  },
+  computer_action: {
+    capability:
+      "to perform approved macOS desktop mouse, keyboard, drag, scroll, type, wait, and screenshot action batches",
+    category: "computer",
+    label: "computer_action",
+  },
+  computer_apps: {
+    capability: "to list visible macOS applications and the frontmost app",
+    category: "computer",
+    label: "computer_apps",
+  },
+  computer_app: {
+    capability: "to open or focus a macOS application",
+    category: "computer",
+    label: "computer_app",
+  },
+  computer_clipboard: {
+    capability: "to write text to the macOS clipboard for a later paste action",
+    category: "computer",
+    label: "computer_clipboard",
+  },
+  computer_ax_tree: {
+    capability:
+      "to inspect a Mac app's Accessibility UI tree without a screenshot",
+    category: "computer",
+    label: "computer_ax_tree",
+  },
+  computer_ax_find: {
+    capability: "to find Mac UI elements in the Accessibility tree",
+    category: "computer",
+    label: "computer_ax_find",
+  },
+  computer_ax_action: {
+    capability: "to perform approved Accessibility actions on Mac UI elements",
+    category: "computer",
+    label: "computer_ax_action",
   },
   generate_image: {
     capability: "to generate images from text prompts or reference images",

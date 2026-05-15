@@ -177,7 +177,11 @@
       }
     ],
     "asar": true,
+    "asarUnpack": [
+      "desktop/helpers/**/*"
+    ],
     "files": [
+      "desktop/helpers/**/*",
       "desktop/main/**/*",
       "desktop/preload/**/*",
       "desktop/shared/**/*",

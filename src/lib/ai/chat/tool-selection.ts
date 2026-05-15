@@ -115,8 +115,35 @@ function selectBrowserTools(activeTools: string[], availableTools: string[]) {
   ]);
 }
 
+function selectComputerTools(activeTools: string[], availableTools: string[]) {
+  appendMatchingTools(activeTools, availableTools, [
+    "computer_status",
+    "computer_screenshot",
+    "computer_action",
+    "computer_apps",
+    "computer_app",
+    "computer_clipboard",
+    "computer_ax_tree",
+    "computer_ax_find",
+    "computer_ax_action",
+  ]);
+}
+
+function toolSelectionContextText(promptContext: ThreadPromptContext) {
+  return [
+    promptContext.latestUserText,
+    promptContext.planSummary?.title,
+    promptContext.planSummary?.goal,
+    promptContext.planSummary?.summary,
+  ]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .join("\n");
+}
+
 function userRequestNeedsBrowserTools(promptContext: ThreadPromptContext) {
-  const text = promptContext.latestUserText ?? "";
+  const text = toolSelectionContextText(promptContext);
+  const explicitBrowserUsePattern =
+    /\b(browser[-\s]?use|browser tools?|use (?:the )?browser|in-app browser|browser sidebar|current browser tab|live browser)\b/i;
   const browserSurfacePattern =
     /\b(browser|webview|tab|localhost|127\.0\.0\.1|::1|screenshot|console logs?|dom snapshot|inspect ui|test ui)\b/i;
   const browserInteractionPattern =
@@ -125,9 +152,32 @@ function userRequestNeedsBrowserTools(promptContext: ThreadPromptContext) {
     /\b(open|navigate|inspect|test|screenshot|click|fill|type|press)\b[\s\S]{0,40}\b(page|ui)\b|\b(page|ui)\b[\s\S]{0,40}\b(open|navigate|inspect|test|screenshot|click|fill|type|press)\b/i;
 
   return (
+    explicitBrowserUsePattern.test(text) ||
     browserSurfacePattern.test(text) ||
     browserInteractionPattern.test(text) ||
     livePagePattern.test(text)
+  );
+}
+
+function userRequestNeedsComputerTools(promptContext: ThreadPromptContext) {
+  const text = toolSelectionContextText(promptContext);
+  const explicitComputerUsePattern =
+    /\b(computer[-\s]?use|computer tools?|desktop tools?|full desktop|desktop automation|control (?:my )?(?:mac|computer|desktop))\b/i;
+  const desktopSurfacePattern =
+    /\b(desktop|screen|display|cursor|mouse|keyboard|macos|accessibility|screen recording|os-level|full desktop)\b/i;
+  const desktopInteractionPattern =
+    /\b(click|move|scroll|type|keypress|press|screenshot|control|operate|open|launch|focus)\b[\s\S]{0,50}\b(desktop|screen|computer|mac|app|window)\b|\b(desktop|screen|computer|mac|app|window)\b[\s\S]{0,50}\b(click|move|scroll|type|keypress|press|screenshot|control|operate|open|launch|focus)\b/i;
+  const macAppTargetPattern =
+    /\b(?:on|in|using|with)\s+(?:my\s+)?mac\b[\s\S]{0,80}\b(app|application|reminders?|calendar|notes?|finder|safari|mail|messages|photos|music|textedit|system settings)\b|\b(reminders?|calendar|notes?|finder|safari|mail|messages|photos|music|textedit|system settings|settings|craft)\s+(?:mac\s+)?(?:app|application)\b|\bmac\s+(?:reminders?|calendar|notes?|finder|safari|mail|messages|photos|music|textedit|system settings|settings)\s+(?:app|application)\b/i;
+  const macAppWorkflowPattern =
+    /\b(add|create|make|schedule|set|edit|delete|mark|open|launch|focus|use)\b[\s\S]{0,80}\b(?:on|in|using|with)\s+(?:my\s+)?mac\b/i;
+
+  return (
+    explicitComputerUsePattern.test(text) ||
+    desktopSurfacePattern.test(text) ||
+    desktopInteractionPattern.test(text) ||
+    macAppTargetPattern.test(text) ||
+    macAppWorkflowPattern.test(text)
   );
 }
 
@@ -159,6 +209,10 @@ export function selectAlwaysOnChatTools({
 
   if (userRequestNeedsBrowserTools(promptContext)) {
     selectBrowserTools(activeTools, availableToolNames);
+  }
+
+  if (userRequestNeedsComputerTools(promptContext)) {
+    selectComputerTools(activeTools, availableToolNames);
   }
 
   return uniqueToolNames(activeTools);

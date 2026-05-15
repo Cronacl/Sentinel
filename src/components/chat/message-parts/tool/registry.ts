@@ -15,6 +15,7 @@ import { SkillTool } from "./renderers/skill";
 import { WebSearchTool } from "./renderers/websearch";
 import { WebFetchTool } from "./renderers/webfetch";
 import { BrowserTool } from "./renderers/browser";
+import { ComputerTool } from "./renderers/computer";
 import { GenerateImageTool } from "./renderers/generate-image";
 import { GenerateVideoTool } from "./renderers/generate-video";
 import { WorkspaceTool } from "./renderers/workspace";
@@ -229,6 +230,15 @@ const renderers: Record<string, Renderer> = {
   browser_fill: BrowserTool,
   browser_press: BrowserTool,
   browser_console_logs: BrowserTool,
+  computer_status: ComputerTool,
+  computer_screenshot: ComputerTool,
+  computer_action: ComputerTool,
+  computer_apps: ComputerTool,
+  computer_app: ComputerTool,
+  computer_clipboard: ComputerTool,
+  computer_ax_tree: ComputerTool,
+  computer_ax_find: ComputerTool,
+  computer_ax_action: ComputerTool,
   generate_image: GenerateImageTool,
   generate_video: GenerateVideoTool,
 

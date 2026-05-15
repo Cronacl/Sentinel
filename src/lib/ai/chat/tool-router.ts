@@ -25,6 +25,7 @@ import {
 
 const toolCategoryValues = [
   "browser",
+  "computer",
   "execution",
   "inspection",
   "integration",
@@ -420,6 +421,8 @@ export function buildToolRouterSystemPrompt() {
     "Default to inspection first when a workspace or skill root can answer the question.",
     "Do not spend routing budget on inspection, execution, mutation, or web in chat mode unless the thread is in plan mode; those baseline tools are already handled separately.",
     "Use the browser category only for Sentinel's live desktop browser surface: current tabs, localhost/manual UI testing, DOM snapshots, screenshots, console logs, navigation, clicks, fills, and key presses.",
+    "Route browser when the user explicitly asks for browser-use/browser tools, the current browser tab, or live page interaction.",
+    "Use the computer category for OS-level desktop work, Accessibility/AX inspection, screenshots, mouse/keyboard control, and local Mac app workflows such as Finder, Reminders, Calendar, Notes, System Settings, or other native apps.",
     "Use web tools for external/static information work: source discovery, documentation, articles, current facts, and reading known URLs without needing visible browser state.",
     "Do not route browser merely because the user mentions a web page, URL, documentation, or search; route browser when the request needs the live browser panel or page interaction.",
     "Do not route web as a replacement for browser when the user asks to inspect or operate the current browser tab.",
