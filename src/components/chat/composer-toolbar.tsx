@@ -27,6 +27,20 @@ import { ContextWindowIndicator } from "./chat-composer/context-window-indicator
 
 const NO_DISABLED_KEYS: string[] = [];
 const PLAN_MODE_DISABLED_KEYS = ["plan-mode"];
+const TOOL_TAG_ACTIONS = [
+  {
+    icon: BrowserIcon,
+    id: "tool-tag-browser",
+    label: "Browser",
+    tag: "browser" as const,
+  },
+  {
+    icon: ComputerIcon,
+    id: "tool-tag-computer",
+    label: "Computer",
+    tag: "computer" as const,
+  },
+];
 
 type ComposerToolbarProps = {
   canSend: boolean;
@@ -92,9 +106,13 @@ export const ComposerToolbar = memo(function ComposerToolbar({
 }: ComposerToolbarProps) {
   const [composerMenuOpen, setComposerMenuOpen] = useState(false);
   const [engineSubOpen, setEngineSubOpen] = useState(false);
-  const disabledComposerActionKeys = planModeAvailable
-    ? NO_DISABLED_KEYS
-    : PLAN_MODE_DISABLED_KEYS;
+  const disabledComposerActionKeys = useMemo(() => {
+    const keys = planModeAvailable ? [] : [...PLAN_MODE_DISABLED_KEYS];
+    if (isLocked) {
+      keys.push(...TOOL_TAG_ACTIONS.map((action) => action.id));
+    }
+    return keys.length > 0 ? keys : NO_DISABLED_KEYS;
+  }, [isLocked, planModeAvailable]);
   const disabledEngineKeys = useMemo(
     () =>
       engineOptions
@@ -107,6 +125,13 @@ export const ComposerToolbar = memo(function ComposerToolbar({
   const isToolTagSelected = useCallback(
     (tag: SentinelComposerToolTag) => toolTags.includes(tag),
     [toolTags],
+  );
+  const activeToolTagActions = useMemo(
+    () =>
+      showSentinelToolTags
+        ? TOOL_TAG_ACTIONS.filter((action) => toolTags.includes(action.tag))
+        : [],
+    [showSentinelToolTags, toolTags],
   );
 
   return (
@@ -150,6 +175,10 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                     onTogglePlanMode();
                   } else if (key === "engine") {
                     setEngineSubOpen((prev) => !prev);
+                  } else if (key === "tool-tag-browser") {
+                    onToggleToolTag("browser");
+                  } else if (key === "tool-tag-computer") {
+                    onToggleToolTag("computer");
                   }
                 }}
               >
@@ -168,7 +197,7 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                 </ListBox.Item>
                 <ListBox.Item
                   className={`min-h-8 rounded-xl px-2 py-1.5 text-[13px] ${
-                    planMode ? "text-[#3F8DD8]" : ""
+                    planMode ? "text-accent" : ""
                   }`}
                   id="plan-mode"
                   textValue="Plan mode"
@@ -218,6 +247,39 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                     />
                   </ListBox.Item>
                 ) : null}
+                {showSentinelToolTags
+                  ? TOOL_TAG_ACTIONS.map((item) => {
+                      const selected = isToolTagSelected(item.tag);
+
+                      return (
+                        <ListBox.Item
+                          className={`min-h-8 rounded-xl px-2 py-1.5 text-[13px] ${
+                            selected ? "text-accent" : ""
+                          }`}
+                          id={item.id}
+                          key={item.id}
+                          textValue={`${item.label} tools`}
+                        >
+                          <HugeiconsIcon
+                            color="currentColor"
+                            icon={item.icon}
+                            size={15}
+                            strokeWidth={1.5}
+                          />
+                          <span className="flex-1">{item.label}</span>
+                          <div className="pointer-events-none">
+                            <Switch isSelected={selected} size="sm">
+                              <Switch.Control>
+                                <Switch.Thumb>
+                                  <Switch.Icon />
+                                </Switch.Thumb>
+                              </Switch.Control>
+                            </Switch>
+                          </div>
+                        </ListBox.Item>
+                      );
+                    })
+                  : null}
               </ListBox>
 
               {showEngineSelector && engineSubOpen ? (
@@ -270,10 +332,10 @@ export const ComposerToolbar = memo(function ComposerToolbar({
         {modelSelector}
 
         {planMode ? (
-          <div className="ml-1 inline-flex h-[24px] items-center gap-1.5 rounded-full bg-blue-500/10 py-0.5 pl-1.5 pr-2.5 text-[#3F8DD8] dark:bg-blue-500/10">
+          <div className="ml-1 inline-flex h-[24px] items-center gap-1.5 rounded-full bg-accent/10 py-0.5 pl-1.5 pr-2.5 text-accent">
             <button
               aria-label="Exit plan mode"
-              className="flex size-3 shrink-0 items-center justify-center rounded-full bg-[#3F8DD8] text-white dark:text-black transition-opacity duration-150 ease-out hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45"
+              className="flex size-3 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground transition-opacity duration-150 ease-out hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/45"
               onClick={onTogglePlanMode}
               type="button"
             >
@@ -287,49 +349,36 @@ export const ComposerToolbar = memo(function ComposerToolbar({
             <span className="text-[12px] font-medium leading-none">Plan</span>
           </div>
         ) : null}
-
-        {showSentinelToolTags ? (
-          <div className="ml-1 flex items-center gap-1">
-            {[
-              {
-                icon: BrowserIcon,
-                label: "Browser",
-                tag: "browser" as const,
-              },
-              {
-                icon: ComputerIcon,
-                label: "Computer",
-                tag: "computer" as const,
-              },
-            ].map((item) => {
-              const selected = isToolTagSelected(item.tag);
-
-              return (
-                <button
-                  aria-label={`${selected ? "Disable" : "Enable"} ${item.label} Use tools`}
-                  aria-pressed={selected}
-                  className={`inline-flex h-[24px] items-center gap-1 rounded-full border px-2 text-[11px] font-medium leading-none transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 ${
-                    selected
-                      ? "border-[#3F8DD8]/40 bg-blue-500/10 text-[#3F8DD8]"
-                      : "border-separator bg-transparent text-muted hover:bg-default/40 hover:text-foreground"
-                  }`}
-                  disabled={isLocked}
-                  key={item.tag}
-                  onClick={() => onToggleToolTag(item.tag)}
-                  type="button"
-                >
-                  <HugeiconsIcon
-                    color="currentColor"
-                    icon={item.icon}
-                    size={13}
-                    strokeWidth={1.6}
-                  />
-                  <span className="hidden sm:inline">{item.label}</span>
-                </button>
-              );
-            })}
+        {activeToolTagActions.map((item) => (
+          <div
+            className="ml-1 inline-flex h-[24px] items-center gap-1.5 rounded-full bg-accent/10 py-0.5 pl-1.5 pr-2.5 text-accent"
+            key={item.tag}
+          >
+            <button
+              aria-label={`Disable ${item.label} tools`}
+              className="flex size-3 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground transition-opacity duration-150 ease-out hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/45 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={isLocked}
+              onClick={() => onToggleToolTag(item.tag)}
+              type="button"
+            >
+              <HugeiconsIcon
+                color="currentColor"
+                icon={Cancel01Icon}
+                size={8}
+                strokeWidth={2}
+              />
+            </button>
+            <HugeiconsIcon
+              color="currentColor"
+              icon={item.icon}
+              size={13}
+              strokeWidth={1.6}
+            />
+            <span className="text-[12px] font-medium leading-none">
+              {item.label}
+            </span>
           </div>
-        ) : null}
+        ))}
       </div>
 
       <div className="flex items-center gap-2">
