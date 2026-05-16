@@ -7,6 +7,7 @@ import { validateThreadUIMessage } from "@/lib/ai/messages/ui";
 import { type ThreadPlanAnswer } from "@/lib/plan";
 import { CHAT_ENGINES, type ChatEngine } from "@/server/db/enums";
 import { repoThreadStateSchema } from "@/lib/ai/chat/engines/types";
+import { normalizeSentinelComposerToolTags } from "@/lib/ai/chat/tools/selection/tags";
 
 import { InvalidThreadChatRequestError } from "../errors";
 import type {
@@ -117,6 +118,7 @@ export async function parseRequest(
       : undefined;
   const toolsEnabled =
     typeof input.toolsEnabled === "boolean" ? input.toolsEnabled : undefined;
+  const toolTags = normalizeSentinelComposerToolTags(input.toolTags);
   const draftRepoState = input.draftRepoState
     ? repoThreadStateSchema.partial().safeParse(input.draftRepoState)
     : null;
@@ -178,6 +180,7 @@ export async function parseRequest(
     threadId,
     ...(threadMode ? { threadMode } : {}),
     ...(toolsEnabled !== undefined ? { toolsEnabled } : {}),
+    ...(toolTags.length > 0 ? { toolTags } : {}),
     ...(toolApprovalResponse ? { toolApprovalResponse } : {}),
     trigger,
     userId,

@@ -1,4 +1,4 @@
-import type { ThreadPromptContext } from "../prompt-context";
+import type { ThreadPromptContext } from "../context/prompt-context";
 import { buildSystemPrompt } from "./system-prompt-builder";
 
 export function getSystemPrompt({

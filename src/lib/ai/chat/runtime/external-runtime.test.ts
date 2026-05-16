@@ -1,7 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 
 mock.module("server-only", () => ({}));
-mock.module("../repo-checkpoints", () => ({
+mock.module("../repo/checkpoints", () => ({
   beginThreadRepoCheckpointRun: mock(async () => true),
   clearThreadRepoCheckpointRun: mock(async () => {}),
   finalizeThreadRepoCheckpointRun: mock(async () => "checkpoint-1"),

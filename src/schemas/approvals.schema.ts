@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { TOOL_APPROVAL_TOOL_NAMES } from "@/lib/ai/chat/tool-approval-policy";
+import { TOOL_APPROVAL_TOOL_NAMES } from "@/lib/ai/chat/tools/policy";
 
 export const toolApprovalNameSchema = z.enum(TOOL_APPROVAL_TOOL_NAMES);
 

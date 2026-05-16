@@ -105,7 +105,7 @@ mock.module("../persistence", persistenceModuleMock);
 mock.module("../persistence.ts", persistenceModuleMock);
 mock.module("@/lib/ai/chat/persistence", persistenceModuleMock);
 
-mock.module("../repo-checkpoints", () => ({
+mock.module("../repo/checkpoints", () => ({
   beginThreadRepoCheckpointRun,
   clearThreadRepoCheckpointRun: mock(async () => {}),
   finalizeThreadRepoCheckpointRun: mock(async () => null),
@@ -118,7 +118,7 @@ mock.module("../repo-checkpoints", () => ({
   ),
 }));
 
-mock.module("../session-server", () => ({
+mock.module("../session/server", () => ({
   loadThreadSessionSnapshot,
   serializeThreadStreamEvent: mock(
     (event: unknown) => `event: test\ndata: ${JSON.stringify(event)}\n\n`,

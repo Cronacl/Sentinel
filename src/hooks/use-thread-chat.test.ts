@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
 
-import type { ThreadSessionSnapshot } from "@/lib/ai/chat/session-types";
+import type { ThreadSessionSnapshot } from "@/lib/ai/chat/session/types";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 
 import {

@@ -4,7 +4,7 @@ import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
 import {
   getLatestCompletedAssistantInputTokens,
   resolveConfiguredContextWindow,
-} from "@/lib/ai/chat/context-window";
+} from "@/lib/ai/chat/context/context-window";
 import type { ThreadContextCompactionCheckpoint } from "@/lib/ai/chat/persistence";
 import {
   prepareMessagesForModel,

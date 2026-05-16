@@ -19,7 +19,7 @@ import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper
 import {
   TOOL_APPROVAL_GROUPS,
   type EffectiveToolApprovalPolicy,
-} from "@/lib/ai/chat/tool-approval-policy";
+} from "@/lib/ai/chat/tools/policy";
 import { api } from "@/trpc/react";
 import type { IntegrationProvider } from "@/server/db/enums";
 

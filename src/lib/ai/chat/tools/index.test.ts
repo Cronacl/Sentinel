@@ -2,8 +2,7 @@ import { describe, expect, it, mock } from "bun:test";
 
 mock.module("server-only", () => ({}));
 
-const { getDefaultToolApprovalPolicies } =
-  await import("../tool-approval-policy");
+const { getDefaultToolApprovalPolicies } = await import("./policy");
 const { buildTools } = await import("./index");
 
 function createOptions(overrides: Record<string, unknown> = {}) {

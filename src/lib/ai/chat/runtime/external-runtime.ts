@@ -6,7 +6,7 @@ import {
   beginThreadRepoCheckpointRun,
   clearThreadRepoCheckpointRun,
   finalizeThreadRepoCheckpointRun,
-} from "../repo-checkpoints";
+} from "../repo/checkpoints";
 import { buildPlanModePromptPreamble } from "./plan-mode-instructions";
 
 function getTextContent(message: ThreadUIMessage) {

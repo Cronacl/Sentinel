@@ -287,7 +287,7 @@ mock.module("@/lib/ai/chat/persistence", () => ({
   upsertMessage: persistenceNoopSync,
 }));
 
-mock.module("@/lib/ai/chat/repo-checkpoints", () => ({
+mock.module("@/lib/ai/chat/repo/checkpoints", () => ({
   beginThreadRepoCheckpointRun: mock(async () => false),
   clearThreadRepoCheckpointRun: mock(async () => {}),
   finalizeThreadRepoCheckpointRun: mock(async () => null),

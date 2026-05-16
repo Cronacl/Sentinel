@@ -1,6 +1,6 @@
 import { each, lines, prompt, section, when } from "@/lib/prompt";
 
-import type { ThreadPromptContext } from "../prompt-context";
+import type { ThreadPromptContext } from "../context/prompt-context";
 import { buildPlanModeSystemPromptLines } from "./plan-mode-instructions";
 
 export const buildSystemPrompt = prompt<{

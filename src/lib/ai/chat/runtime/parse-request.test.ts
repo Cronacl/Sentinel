@@ -127,6 +127,27 @@ describe("parseRequest", () => {
     });
   });
 
+  it("normalizes composer tool tags", async () => {
+    const result = await parseRequest(
+      {
+        id: "thread-tools-1",
+        message: {
+          id: "user-1",
+          metadata: {},
+          parts: [{ text: "same", type: "text" }],
+          role: "user",
+        },
+        modelId: "gpt-5.5",
+        toolTags: ["computer", "browser", "computer", "unknown"],
+        trigger: "submit-user-message",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+
+    expect(result.toolTags).toEqual(["computer", "browser"]);
+  });
+
   it("parses explicit tool approval responses additively", async () => {
     const result = await parseRequest(
       {

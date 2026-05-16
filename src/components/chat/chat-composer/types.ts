@@ -1,13 +1,14 @@
 import type { FileUIPart } from "ai";
 
-import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
+import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ComposerContext } from "@/lib/composer-context/types";
 import type { RepoThreadState } from "@/lib/ai/chat/engines/types";
+import type { SentinelComposerToolTag } from "@/lib/ai/chat/tools/selection/tags";
 import type { ChatEngine } from "@/server/db/enums";
 import type { DraftProjectMode } from "../draft-thread-project-mode";
 
-export type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
+export type { QueuedFollowUpSummary } from "@/lib/ai/chat/session/types";
 
 export type ChatComposerOpenCodeSelection = {
   agent: string | null;
@@ -34,6 +35,7 @@ export type ComposerSendInput = {
   reasoningEffort?: ReasoningEffort | null;
   text: string;
   threadMode?: "chat" | "plan";
+  toolTags?: SentinelComposerToolTag[];
 };
 
 export type ChatComposerStartPlanImplementationHandler = () => Promise<void>;

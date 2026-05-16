@@ -14,9 +14,10 @@ import type {
   QueuedFollowUpSummary,
   ThreadSessionSnapshot,
   ThreadStreamEvent,
-} from "@/lib/ai/chat/session-types";
+} from "@/lib/ai/chat/session/types";
 import type { RepoThreadState } from "@/lib/ai/chat/engines/types";
 import type { ThreadToolApprovalResponse } from "@/lib/ai/chat/types";
+import type { SentinelComposerToolTag } from "@/lib/ai/chat/tools/selection/tags";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ComposerContext } from "@/lib/composer-context/types";
 import {
@@ -57,6 +58,7 @@ type SendThreadMessageInput = {
   reasoningEffort?: ReasoningEffort | null;
   text: string;
   threadMode?: ThreadMode;
+  toolTags?: SentinelComposerToolTag[];
 };
 
 type EditThreadMessageInput = SendThreadMessageInput & {
@@ -1548,6 +1550,7 @@ export function useThreadChat({
       reasoningEffort,
       text,
       threadMode,
+      toolTags,
     }: SendThreadMessageInput) => {
       const message = createUserThreadMessage({
         composerContext,
@@ -1572,6 +1575,7 @@ export function useThreadChat({
             ...(openCode ? { openCode } : {}),
             ...(reasoningEffort ? { reasoningEffort } : {}),
             ...(threadMode ? { threadMode } : {}),
+            ...(toolTags?.length ? { toolTags } : {}),
             trigger: "submit-user-message",
             workspaceId: workspaceIdRef.current,
           },
@@ -1649,6 +1653,7 @@ export function useThreadChat({
       reasoningEffort,
       text,
       threadMode,
+      toolTags,
     }: SendThreadMessageInput) => {
       const message = createUserThreadMessage({ composerContext, files, text });
       store.applyLocalQueuedFollowUp(
@@ -1671,6 +1676,7 @@ export function useThreadChat({
           ...(openCode ? { openCode } : {}),
           ...(reasoningEffort ? { reasoningEffort } : {}),
           ...(threadMode ? { threadMode } : {}),
+          ...(toolTags?.length ? { toolTags } : {}),
           trigger: "queue-follow-up",
           workspaceId: workspaceIdRef.current,
         });
@@ -1693,6 +1699,7 @@ export function useThreadChat({
       reasoningEffort,
       text,
       threadMode,
+      toolTags,
     }: SendThreadMessageInput) => {
       const message = createUserThreadMessage({ composerContext, files, text });
       store.applyLocalQueuedFollowUp(
@@ -1715,6 +1722,7 @@ export function useThreadChat({
           ...(openCode ? { openCode } : {}),
           ...(reasoningEffort ? { reasoningEffort } : {}),
           ...(threadMode ? { threadMode } : {}),
+          ...(toolTags?.length ? { toolTags } : {}),
           trigger: "steer-follow-up",
           workspaceId: workspaceIdRef.current,
         });

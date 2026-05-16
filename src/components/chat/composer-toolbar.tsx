@@ -6,15 +6,18 @@ import {
   ArrowRight01Icon,
   ArrowUp02Icon,
   Attachment01Icon,
+  BrowserIcon,
   Cancel01Icon,
+  ComputerIcon,
   DashboardSquare01Icon,
   Mic02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Button, ListBox, Popover, Switch } from "@heroui/react";
-import { memo, useMemo, useState, type ReactNode } from "react";
+import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
 
 import type { ChatEngine } from "@/server/db/enums";
+import type { SentinelComposerToolTag } from "@/lib/ai/chat/tools/selection/tags";
 import {
   isUnstableChatEngine,
   UNSTABLE_CHAT_ENGINE_LABEL,
@@ -51,12 +54,14 @@ type ComposerToolbarProps = {
   onSend: () => void;
   onStop?: () => void;
   onStartVoiceInput?: () => void;
+  onToggleToolTag: (tag: SentinelComposerToolTag) => void;
   onTogglePlanMode: () => void;
   planModeAvailable: boolean;
   planMode: boolean;
   selectedEngine: ChatEngine;
   selectedModelKey: string | null;
   showVoiceInput?: boolean;
+  toolTags: SentinelComposerToolTag[];
   voiceInputDisabled?: boolean;
   showEngineSelector: boolean;
 };
@@ -74,12 +79,14 @@ export const ComposerToolbar = memo(function ComposerToolbar({
   onSend,
   onStop,
   onStartVoiceInput,
+  onToggleToolTag,
   onTogglePlanMode,
   planModeAvailable,
   planMode,
   selectedEngine,
   selectedModelKey,
   showVoiceInput = false,
+  toolTags,
   voiceInputDisabled = false,
   showEngineSelector,
 }: ComposerToolbarProps) {
@@ -96,6 +103,11 @@ export const ComposerToolbar = memo(function ComposerToolbar({
     [engineOptions],
   );
   const selectedEngineKeys = useMemo(() => [selectedEngine], [selectedEngine]);
+  const showSentinelToolTags = selectedEngine === "sentinel" && !planMode;
+  const isToolTagSelected = useCallback(
+    (tag: SentinelComposerToolTag) => toolTags.includes(tag),
+    [toolTags],
+  );
 
   return (
     <div className="flex h-7 items-center justify-between px-1">
@@ -273,6 +285,49 @@ export const ComposerToolbar = memo(function ComposerToolbar({
               />
             </button>
             <span className="text-[12px] font-medium leading-none">Plan</span>
+          </div>
+        ) : null}
+
+        {showSentinelToolTags ? (
+          <div className="ml-1 flex items-center gap-1">
+            {[
+              {
+                icon: BrowserIcon,
+                label: "Browser",
+                tag: "browser" as const,
+              },
+              {
+                icon: ComputerIcon,
+                label: "Computer",
+                tag: "computer" as const,
+              },
+            ].map((item) => {
+              const selected = isToolTagSelected(item.tag);
+
+              return (
+                <button
+                  aria-label={`${selected ? "Disable" : "Enable"} ${item.label} Use tools`}
+                  aria-pressed={selected}
+                  className={`inline-flex h-[24px] items-center gap-1 rounded-full border px-2 text-[11px] font-medium leading-none transition-colors duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/45 ${
+                    selected
+                      ? "border-[#3F8DD8]/40 bg-blue-500/10 text-[#3F8DD8]"
+                      : "border-separator bg-transparent text-muted hover:bg-default/40 hover:text-foreground"
+                  }`}
+                  disabled={isLocked}
+                  key={item.tag}
+                  onClick={() => onToggleToolTag(item.tag)}
+                  type="button"
+                >
+                  <HugeiconsIcon
+                    color="currentColor"
+                    icon={item.icon}
+                    size={13}
+                    strokeWidth={1.6}
+                  />
+                  <span className="hidden sm:inline">{item.label}</span>
+                </button>
+              );
+            })}
           </div>
         ) : null}
       </div>

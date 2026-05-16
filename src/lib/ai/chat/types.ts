@@ -6,6 +6,7 @@ import type { ReasoningEffort } from "../providers/models";
 import type { ThreadUIMessage } from "../messages/types";
 import type { ThreadMode, ThreadPlanAnswer } from "@/lib/plan";
 import type { RepoThreadState } from "@/lib/ai/chat/engines/types";
+import type { SentinelComposerToolTag } from "@/lib/ai/chat/tools/selection/tags";
 
 export type ThreadChatTrigger =
   | "submit-user-message"
@@ -45,6 +46,7 @@ export type ThreadChatRequest = {
   threadId: string;
   threadMode?: ThreadMode;
   toolsEnabled?: boolean;
+  toolTags?: SentinelComposerToolTag[];
   toolApprovalResponse?: ThreadToolApprovalResponse;
   trigger: ThreadChatTrigger;
   userId: string;

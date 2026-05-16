@@ -44,7 +44,7 @@ import type { ChatEngine } from "@/server/db/enums";
 import {
   resetThreadRepoCheckpoint,
   toggleThreadRepoCheckpoint,
-} from "@/lib/ai/chat/repo-checkpoints";
+} from "@/lib/ai/chat/repo/checkpoints";
 import { updateThreadRepoState } from "@/lib/ai/chat/persistence";
 import { GitHubService } from "@/lib/integrations/providers/github/service";
 import { getValidAccessToken } from "@/lib/integrations/oauth/token-manager";

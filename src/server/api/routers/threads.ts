@@ -28,7 +28,7 @@ import {
   removeThreadFollowUp,
   setActiveMessage,
 } from "@/lib/ai/chat/persistence";
-import { summarizeQueuedFollowUp } from "@/lib/ai/chat/session-server";
+import { summarizeQueuedFollowUp } from "@/lib/ai/chat/session/server";
 import { disposeShellSession } from "@/lib/ai/chat/tools/shell";
 import { mapThreadMessagesToUIMessages } from "@/lib/ai/messages/ui";
 import { threadMessages, threads, workspaces } from "@/server/db/schema";

@@ -1,7 +1,7 @@
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
-import type { ThreadPromptProjectCandidate } from "../prompt-context";
+import type { ThreadPromptProjectCandidate } from "../context/prompt-context";
 
 const PROJECT_AWARENESS_CACHE_TTL_MS = 15_000;
 const ROOT_MARKER_SCORES = [

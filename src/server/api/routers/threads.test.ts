@@ -69,7 +69,7 @@ mock.module("@/lib/ai/chat/persistence", () => ({
   setActiveMessage: mock(async () => undefined),
 }));
 
-mock.module("@/lib/ai/chat/session-server", () => ({
+mock.module("@/lib/ai/chat/session/server", () => ({
   summarizeQueuedFollowUp: (value: unknown) => value,
 }));
 

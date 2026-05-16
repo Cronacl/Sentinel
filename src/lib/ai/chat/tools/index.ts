@@ -54,7 +54,7 @@ import {
   updatePlanDescription,
   webfetchDescription,
   websearchDescription,
-} from "../tool-descriptions";
+} from "./selection/descriptions";
 import {
   applyPatchInputSchema,
   applyPatchOutputSchema,

@@ -1,6 +1,6 @@
 import { getLocalSession } from "@/server/local-profile";
 import { createThreadChatErrorResponse } from "@/lib/ai/chat/errors";
-import { loadThreadSessionSnapshot } from "@/lib/ai/chat/session-server";
+import { loadThreadSessionSnapshot } from "@/lib/ai/chat/session/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

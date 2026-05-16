@@ -1,4 +1,4 @@
-import type { ThreadSessionSnapshot } from "@/lib/ai/chat/session-types";
+import type { ThreadSessionSnapshot } from "@/lib/ai/chat/session/types";
 import type { RouterOutputs } from "@/trpc/react";
 import {
   isThreadRouteHandoffFresh,

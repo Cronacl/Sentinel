@@ -6,7 +6,7 @@ import {
   getDefaultToolApproval,
   isToolApprovalToolName,
   TOOL_APPROVAL_GROUPS,
-} from "@/lib/ai/chat/tool-approval-policy";
+} from "@/lib/ai/chat/tools/policy";
 import {
   approvalsUpdateSchema,
   type ToolApprovalUpdateInput,

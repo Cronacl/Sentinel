@@ -83,7 +83,7 @@ mock.module("../persistence", persistenceModuleMock);
 mock.module("../persistence.ts", persistenceModuleMock);
 mock.module("@/lib/ai/chat/persistence", persistenceModuleMock);
 
-mock.module("../repo-checkpoints", () => ({
+mock.module("../repo/checkpoints", () => ({
   beginThreadRepoCheckpointRun,
   clearThreadRepoCheckpointRun,
   finalizeThreadRepoCheckpointRun,
@@ -97,8 +97,8 @@ const sessionServerModuleMock = () => ({
   ),
 });
 
-mock.module("../session-server", sessionServerModuleMock);
-mock.module("../session-server.ts", sessionServerModuleMock);
+mock.module("../session/server", sessionServerModuleMock);
+mock.module("../session/server", sessionServerModuleMock);
 
 mock.module("@/lib/streams", () => ({
   safelyCloseReadableStreamController: mock(() => true),

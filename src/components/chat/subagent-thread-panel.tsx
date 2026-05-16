@@ -7,7 +7,7 @@ import { Icon } from "@iconify/react";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import { isCommittedThreadActionError } from "@/hooks/use-thread-chat";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
-import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
+import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session/types";
 import { api, type RouterOutputs } from "@/trpc/react";
 import { useRightSidebar } from "@/components/shell/shell-context";
 

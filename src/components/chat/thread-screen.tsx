@@ -35,7 +35,7 @@ import { useShell } from "@/components/shell/shell-context";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import { isCommittedThreadActionError } from "@/hooks/use-thread-chat";
 import { moveQueuedFollowUpToFront } from "@/hooks/use-thread-chat";
-import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session-types";
+import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import { getErrorMessage } from "@/lib/errors";
@@ -470,6 +470,7 @@ export function ThreadScreen({
       reasoningEffort,
       text,
       threadMode,
+      toolTags,
     }: {
       composerContext?: import("@/lib/composer-context/types").ComposerContext;
       files?: FileUIPart[];
@@ -479,6 +480,7 @@ export function ThreadScreen({
       reasoningEffort?: ReasoningEffort | null;
       text: string;
       threadMode?: "chat" | "plan";
+      toolTags?: import("@/lib/ai/chat/tools/selection/tags").SentinelComposerToolTag[];
     }) => {
       setChatError(null);
       setThreadSelectionState({
@@ -508,6 +510,7 @@ export function ThreadScreen({
         reasoningEffort,
         text,
         threadMode: threadMode ?? threadSelectionState.mode,
+        ...(toolTags?.length ? { toolTags } : {}),
       });
     },
     [
@@ -530,6 +533,7 @@ export function ThreadScreen({
       reasoningEffort,
       text,
       threadMode,
+      toolTags,
     }: {
       composerContext?: import("@/lib/composer-context/types").ComposerContext;
       files?: FileUIPart[];
@@ -539,6 +543,7 @@ export function ThreadScreen({
       reasoningEffort?: ReasoningEffort | null;
       text: string;
       threadMode?: "chat" | "plan";
+      toolTags?: import("@/lib/ai/chat/tools/selection/tags").SentinelComposerToolTag[];
     }) => {
       setChatError(null);
       await queueFollowUp({
@@ -550,6 +555,7 @@ export function ThreadScreen({
         reasoningEffort,
         text,
         threadMode: threadMode ?? threadSelectionState.mode,
+        ...(toolTags?.length ? { toolTags } : {}),
       });
       void utils.threads.list.invalidate();
       if (isQuickChat) {
@@ -569,6 +575,7 @@ export function ThreadScreen({
       reasoningEffort,
       text,
       threadMode,
+      toolTags,
     }: {
       composerContext?: import("@/lib/composer-context/types").ComposerContext;
       files?: FileUIPart[];
@@ -578,6 +585,7 @@ export function ThreadScreen({
       reasoningEffort?: ReasoningEffort | null;
       text: string;
       threadMode?: "chat" | "plan";
+      toolTags?: import("@/lib/ai/chat/tools/selection/tags").SentinelComposerToolTag[];
     }) => {
       setChatError(null);
       await steerFollowUp({
@@ -589,6 +597,7 @@ export function ThreadScreen({
         reasoningEffort,
         text,
         threadMode: threadMode ?? threadSelectionState.mode,
+        ...(toolTags?.length ? { toolTags } : {}),
       });
       void utils.threads.list.invalidate();
       if (isQuickChat) {

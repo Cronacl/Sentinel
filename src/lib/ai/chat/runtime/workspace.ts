@@ -8,7 +8,7 @@ import {
   buildToolApprovalOverrideMap,
   resolveToolApprovalPolicies,
   type ToolApprovalPolicyMap,
-} from "@/lib/ai/chat/tool-approval-policy";
+} from "@/lib/ai/chat/tools/policy";
 import {
   buildImageGenerationProviderEntries,
   buildImageGenerationRuntime,

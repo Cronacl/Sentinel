@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
-import { buildThreadPromptContext } from "../prompt-context";
-import { getDefaultToolApprovalPolicies } from "../tool-approval-policy";
+import { buildThreadPromptContext } from "../context/prompt-context";
+import { getDefaultToolApprovalPolicies } from "../tools/policy";
 import { buildSystemPrompt } from "./system-prompt-builder";
 
 function createPromptContext(memoryPromptLines: string[] = []) {

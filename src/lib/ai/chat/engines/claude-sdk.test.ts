@@ -10,7 +10,53 @@ import {
 import os from "node:os";
 import path from "node:path";
 
+const setLocalRuntimeEnvValueMock = mock(
+  async (key: string, value: string | null | undefined) => {
+    const normalizedValue = value?.trim() ?? "";
+    if (normalizedValue) {
+      process.env[key] = normalizedValue;
+    } else {
+      delete process.env[key];
+    }
+
+    const homePath = process.env.HOME;
+    if (!homePath) {
+      return;
+    }
+
+    const envDir = path.join(homePath, ".sentinel");
+    const envPath = path.join(envDir, "desktop.env");
+    await mkdir(envDir, { recursive: true });
+
+    let current = "";
+    try {
+      current = await readFile(envPath, "utf8");
+    } catch {
+      current = "";
+    }
+
+    const nextLines = current
+      .split(/\r?\n/)
+      .filter((line) => line && !line.startsWith(`${key}=`));
+    if (normalizedValue) {
+      const escapedValue = normalizedValue
+        .replaceAll("\\", "\\\\")
+        .replaceAll('"', '\\"');
+      nextLines.push(`${key}="${escapedValue}"`);
+    }
+
+    await writeFile(
+      envPath,
+      nextLines.length > 0 ? `${nextLines.join("\n")}\n` : "",
+      "utf8",
+    );
+  },
+);
+
 mock.module("server-only", () => ({}));
+mock.module("@/lib/runtime/local-runtime-env", () => ({
+  setLocalRuntimeEnvValue: setLocalRuntimeEnvValueMock,
+}));
 
 const {
   parseClaudeShellLookupOutput,
@@ -43,6 +89,7 @@ afterEach(async () => {
   } else {
     delete process.env.SENTINEL_STATE_PATH;
   }
+  setLocalRuntimeEnvValueMock.mockClear();
   resetClaudeCodeRuntimeCache();
 });
 

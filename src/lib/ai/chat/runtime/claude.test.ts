@@ -14,6 +14,8 @@ const updateThreadRepoState = mock(() => {});
 const updateThreadChatSettings = mock(async () => {});
 const updateCodexThreadState = mock(() => {});
 const updateCopilotThreadState = mock(() => {});
+const updateCursorThreadState = mock(() => {});
+const updateOpenCodeThreadState = mock(() => {});
 const updateThreadTitle = mock(() => {});
 const updateMessageMetadata = mock(async () => {});
 const beginThreadRepoCheckpointRun = mock(async () => {});
@@ -49,14 +51,16 @@ mock.module("../persistence", () => ({
   updateCodexThreadState,
   updateClaudeThreadState: mock(() => {}),
   updateCopilotThreadState,
+  updateCursorThreadState,
   updateMessageMetadata,
+  updateOpenCodeThreadState,
   updateThreadRepoState,
   updateThreadChatSettings,
   updateThreadTitle,
   upsertMessage,
 }));
 
-mock.module("../repo-checkpoints", () => ({
+mock.module("../repo/checkpoints", () => ({
   beginThreadRepoCheckpointRun,
   clearThreadRepoCheckpointRun: mock(async () => {}),
   finalizeThreadRepoCheckpointRun: mock(async () => null),
@@ -69,7 +73,7 @@ mock.module("../repo-checkpoints", () => ({
   ),
 }));
 
-mock.module("../session-server", () => ({
+mock.module("../session/server", () => ({
   loadThreadSessionSnapshot,
   serializeThreadStreamEvent: mock(
     (event: unknown) => `event: test\ndata: ${JSON.stringify(event)}\n\n`,

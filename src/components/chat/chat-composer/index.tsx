@@ -12,7 +12,8 @@ import {
 } from "react";
 import { Button } from "@heroui/react";
 import { DEFAULT_FOLLOW_UP_BEHAVIOR } from "@/schemas/general-settings.schema";
-import { getExactContextWindowUsage } from "@/lib/ai/chat/context-window";
+import { getExactContextWindowUsage } from "@/lib/ai/chat/context/context-window";
+import type { SentinelComposerToolTag } from "@/lib/ai/chat/tools/selection/tags";
 import {
   extractComposerContext,
   hasComposerContext,
@@ -91,6 +92,7 @@ export function ChatComposer({
   const hasWorkspace = Boolean(activeWorkspace);
   const isBusy = status === "submitted" || status === "streaming";
   const [isRepoSetupPending, setIsRepoSetupPending] = useState(false);
+  const [toolTags, setToolTags] = useState<SentinelComposerToolTag[]>([]);
   const canPersistThreadSelection = Boolean(
     threadId && threadSelection && (persistThreadSelection ?? true),
   );
@@ -391,6 +393,20 @@ export function ChatComposer({
     [followUpBehavior, isBusy, onQueueFollowUp, onSend, onSteerFollowUp],
   );
 
+  useEffect(() => {
+    if (selectedEngine !== "sentinel" || planMode) {
+      setToolTags([]);
+    }
+  }, [planMode, selectedEngine]);
+
+  const handleToggleToolTag = useCallback((tag: SentinelComposerToolTag) => {
+    setToolTags((current) =>
+      current.includes(tag)
+        ? current.filter((entry) => entry !== tag)
+        : [...current, tag],
+    );
+  }, []);
+
   const handleSend = useCallback(async () => {
     if (!editor || !selectedModelKey || !onSend || !canSend) return;
     const text = editor.getText().trim();
@@ -425,6 +441,9 @@ export function ChatComposer({
         reasoningEffort: selectedReasoningEffort,
         text,
         threadMode: (planMode ? "plan" : "chat") as "chat" | "plan",
+        ...(selectedEngine === "sentinel" && !planMode && toolTags.length > 0
+          ? { toolTags }
+          : {}),
       };
     } catch {
       setAttachmentError("Unable to attach one or more selected files.");
@@ -472,6 +491,7 @@ export function ChatComposer({
     selectedReasoningEffort,
     setAttachmentError,
     setPreviewAttachment,
+    toolTags,
   ]);
 
   const handleStartPlanImplementation = useCallback(async () => {
@@ -837,6 +857,7 @@ export function ChatComposer({
               onSend={handleSend}
               onStartVoiceInput={handleStartVoiceInput}
               onStop={onStop}
+              onToggleToolTag={handleToggleToolTag}
               onTogglePlanMode={handleTogglePlanMode}
               planMode={planMode}
               planModeAvailable={planModeAvailable}
@@ -844,6 +865,7 @@ export function ChatComposer({
               selectedModelKey={selectedModelKey}
               showEngineSelector={showEngineSelector}
               showVoiceInput={showVoiceInput}
+              toolTags={toolTags}
               voiceInputDisabled={!editor}
             />
           )}
