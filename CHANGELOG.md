@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.66](https://github.com/Cronacl/Sentinel/compare/v0.0.65...v0.0.66) (2026-05-16)
+
+
+### Bug Fixes
+
+* move tool toggles into composer menu ([161f572](https://github.com/Cronacl/Sentinel/commit/161f5729989eb7cddd3b9d8c08e57788b9461173))
+
 ## [0.0.65](https://github.com/Cronacl/Sentinel/compare/v0.0.64...v0.0.65) (2026-05-15)
 
 
