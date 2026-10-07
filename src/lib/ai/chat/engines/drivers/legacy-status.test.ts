@@ -174,6 +174,29 @@ describe("fromLegacyStatus", () => {
     }
   });
 
+  it("turns a status the engine did not consider available into an error", () => {
+    expect(
+      fromLegacyStatus(status({ error: "slow", state: "timeout_no_cache" }), {
+        available: false,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        message: "slow",
+        stale: true,
+        status: "error",
+      }),
+    );
+    // Already unusable results keep their status (and auth) as mapped.
+    expect(
+      fromLegacyStatus(status({ error: "x", state: "auth_unavailable" }), {
+        available: false,
+      }).status,
+    ).toBe("warning");
+    expect(
+      fromLegacyStatus(status({ state: "ready" }), { available: true }).status,
+    ).toBe("ready");
+  });
+
   it("offers fallback models only for an installed runtime that timed out without any", () => {
     const fallback = [model({ displayName: "Auto", id: "default" })];
     const options = { fallbackModels: () => fallback };

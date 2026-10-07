@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   getCopilotEngineStatus,
+  isCopilotEngineAvailable,
   resetCopilotEngineStatusCache,
   resetCopilotRuntimeCache,
   resolveCopilotRuntime,
@@ -45,6 +46,7 @@ export function fromCopilotStatus(
       version: status.cliVersion,
     },
     {
+      available: isCopilotEngineAvailable(status),
       // Copilot only offers its fallback model once signed in.
       fallbackModels: (legacy) =>
         legacy.authReady ? buildFallbackCopilotModels() : null,

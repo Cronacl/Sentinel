@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   getCursorEngineStatus,
+  isCursorEngineAvailable,
   resetCursorEngineStatusCache,
   resetCursorRuntimeCache,
   resolveCursorRuntime,
@@ -30,7 +31,10 @@ export function fromCursorStatus(
       state: status.state,
       version: status.cliVersion,
     },
-    { fallbackModels: buildFallbackCursorModels },
+    {
+      available: isCursorEngineAvailable(status),
+      fallbackModels: buildFallbackCursorModels,
+    },
   );
 }
 

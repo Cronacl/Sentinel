@@ -61,6 +61,8 @@ const getClaudeEngineStatus = mock(async (_options?: unknown) => ({
 mock.module("@/lib/ai/chat/engines/claude-sdk", () => ({
   buildClaudeFallbackModels: () => [],
   getClaudeEngineStatus,
+  isClaudeEngineAvailable: (status: { state: string }) =>
+    status.state === "ready" || status.state === "timeout_no_cache",
   resetClaudeCodeRuntimeCache: () => {},
   resetClaudeEngineStatusCache: () => {},
   resolveClaudeCodeRuntime: async () => ({ source: "config" }),
@@ -87,6 +89,8 @@ const getCopilotEngineStatus = mock(async (_options?: unknown) => ({
 }));
 mock.module("@/lib/ai/chat/engines/copilot-sdk", () => ({
   getCopilotEngineStatus,
+  isCopilotEngineAvailable: (status: { authReady: boolean; state: string }) =>
+    status.state === "ready" && status.authReady,
   resetCopilotEngineStatusCache: () => {},
   resetCopilotRuntimeCache: () => {},
   resolveCopilotRuntime: async () => ({ installSource: "sdk-bundled" }),
@@ -108,6 +112,8 @@ const getCursorEngineStatus = mock(async (_options?: unknown) => ({
 const resolveCursorRuntime = mock(async () => ({ source: "managed-path" }));
 mock.module("@/lib/ai/chat/engines/cursor-acp", () => ({
   getCursorEngineStatus,
+  isCursorEngineAvailable: (status: { authReady: boolean; state: string }) =>
+    status.state === "ready" && status.authReady,
   resetCursorEngineStatusCache: () => {},
   resetCursorRuntimeCache: () => {},
   resolveCursorRuntime,
@@ -134,6 +140,8 @@ const getOpenCodeEngineStatus = mock(async (_options?: unknown) => ({
 }));
 mock.module("@/lib/ai/chat/engines/opencode-sdk", () => ({
   getOpenCodeEngineStatus,
+  isOpenCodeEngineAvailable: (status: { state: string }) =>
+    status.state === "ready" || status.state === "timeout_no_cache",
   resetOpenCodeEngineStatusCache: () => {},
   resetOpenCodeRuntimeCache: () => {},
   resolveOpenCodeRuntime: async () => ({ source: "login-shell" }),
@@ -262,6 +270,8 @@ describe("legacy drivers", () => {
     expect(result.auth.label).toBe("octocat");
     expect(result.install.source).toBe("sdk-bundled");
     expect(result.models.map((model) => model.id)).toEqual(["gpt-4.1-preview"]);
+    // Copilot never counted a status timeout as available.
+    expect(result.status).toBe("error");
 
     getCopilotEngineStatus.mockImplementationOnce(async () => ({
       ...(await getCopilotEngineStatus()),

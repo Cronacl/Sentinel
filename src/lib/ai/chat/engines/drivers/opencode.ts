@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   getOpenCodeEngineStatus,
+  isOpenCodeEngineAvailable,
   resetOpenCodeEngineStatusCache,
   resetOpenCodeRuntimeCache,
   resolveOpenCodeRuntime,
@@ -31,7 +32,10 @@ export function fromOpenCodeStatus(
       state: status.state,
       version: status.cliVersion,
     },
-    { fallbackModels: buildFallbackOpenCodeModels },
+    {
+      available: isOpenCodeEngineAvailable(status),
+      fallbackModels: buildFallbackOpenCodeModels,
+    },
   );
 }
 

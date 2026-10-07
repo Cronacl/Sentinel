@@ -32,6 +32,17 @@ function toCodexAccount(account: CodexAccountInfo | null) {
     : { email: null, label: null, method: account.type, plan: null };
 }
 
+/**
+ * The router's isCodexEngineAvailable (routers/engines.ts), without the
+ * timeout that had no CLI to time out (driver-contract.md §2.2).
+ */
+export function isCodexStatusAvailable(status: CodexEngineStatus) {
+  return (
+    status.cliDetected &&
+    (status.state === "ready" || status.state === "timeout_no_cache")
+  );
+}
+
 export function fromCodexStatus(
   status: CodexEngineStatus,
   source: EngineInstallSource | null,
@@ -49,6 +60,7 @@ export function fromCodexStatus(
       version: status.cliVersion,
     },
     {
+      available: isCodexStatusAvailable(status),
       // Codex signs in through its app-server (account/login/start).
       canLogin: true,
       canLogout: status.account !== null,

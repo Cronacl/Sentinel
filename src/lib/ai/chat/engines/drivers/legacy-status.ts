@@ -1,6 +1,7 @@
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 
 import {
+  computeEngineSnapshotUsable,
   engineModelInputModalitySchema,
   type EngineAuthSummary,
   type EngineCompatibilityAdvisory,
@@ -14,7 +15,12 @@ import {
 // Adapters from the status objects the engines reported before the platform
 // (get<X>EngineStatus) to the driver contract's probe result. They only
 // translate: what an engine reports, and when it counts as available, does
-// not change.
+// not change. Each engine's own availability predicate (isXEngineAvailable)
+// is passed in as `available`, so a status the engine did not consider
+// available is never usable, whatever the state table below says. The one
+// deliberate change (driver-contract.md §2.2): a runtime that is not
+// installed is never usable, which retires Codex treating a timeout without
+// a CLI as available.
 
 export type LegacyEngineState =
   | "auth_unavailable"
@@ -67,6 +73,12 @@ export type LegacyStatus = {
 };
 
 export type FromLegacyStatusOptions = {
+  /**
+   * The engine's own verdict (its isXEngineAvailable on the raw status).
+   * False turns a result that would otherwise be usable into an error, so
+   * snapshots keep the availability the engine reported before the platform.
+   */
+  available?: boolean;
   canLogin?: boolean;
   canLogout?: boolean;
   /**
@@ -189,6 +201,9 @@ function isMissingState(state: LegacyEngineState) {
  *   auth_unavailable    → warning, unauthenticated
  *   missing_*           → error, not installed
  *   error               → error
+ * and then error whenever the engine's own predicate (`available: false`)
+ * says it cannot be used (Cursor and Copilot timeouts without auth or
+ * models, for example).
  */
 export function fromLegacyStatus(
   status: LegacyStatus,
@@ -227,7 +242,7 @@ export function fromLegacyStatus(
       : null;
   const models = toEngineModels(fallback ?? status.models);
 
-  return {
+  const result: EngineProbeResult = {
     auth: {
       canLogin: options.canLogin ?? false,
       canLogout: options.canLogout ?? false,
@@ -256,6 +271,20 @@ export function fromLegacyStatus(
       status.state === "timeout_no_cache",
     status: probeStatus,
   };
+
+  if (
+    options.available === false &&
+    computeEngineSnapshotUsable({
+      ...result,
+      availability: "available",
+      compatibilityAdvisory: result.compatibilityAdvisory ?? null,
+      enabled: true,
+    })
+  ) {
+    result.status = "error";
+  }
+
+  return result;
 }
 
 export const NO_LEGACY_ACCOUNT: LegacyStatus["account"] = {

@@ -5,6 +5,7 @@ import type { AccountInfo } from "@anthropic-ai/claude-agent-sdk";
 import {
   buildClaudeFallbackModels,
   getClaudeEngineStatus,
+  isClaudeEngineAvailable,
   resetClaudeCodeRuntimeCache,
   resetClaudeEngineStatusCache,
   resolveClaudeCodeRuntime,
@@ -45,7 +46,10 @@ export function fromClaudeStatus(
       state: status.state,
       version: status.binaryVersion,
     },
-    { fallbackModels: buildClaudeFallbackModels },
+    {
+      available: isClaudeEngineAvailable(status),
+      fallbackModels: buildClaudeFallbackModels,
+    },
   );
 }
 
