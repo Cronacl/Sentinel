@@ -267,7 +267,13 @@ describe("parseThreadChatEngineState", () => {
     });
   });
 
-  it("rejects state that is missing a session id", () => {
-    expect(parseThreadChatEngineState({ claude: { cwd: "/tmp" } })).toBeNull();
+  it("leaves out a driver entry that is missing its session id", () => {
+    expect(
+      parseThreadChatEngineState({
+        claude: { cwd: "/tmp" },
+        repo: { projectMode: "local" },
+      }),
+    ).toStrictEqual({ repo: { projectMode: "local" } });
+    expect(parseThreadChatEngineState("not state")).toBeNull();
   });
 });

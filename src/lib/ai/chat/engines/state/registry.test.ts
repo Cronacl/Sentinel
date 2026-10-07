@@ -17,6 +17,7 @@ import {
   isThreadStateForInstance,
   mergeThreadChatEngineState,
   parseThreadChatEngineState,
+  patchStoredThreadChatEngineState,
   stampThreadState,
 } from "./registry";
 
@@ -86,11 +87,44 @@ describe("legacy thread state", () => {
       codex: { codexThreadId: "codex-thread-1" },
     };
 
-    expect(parseThreadChatEngineState(raw)).toBeNull();
+    // The malformed entry is left out; everything else still reads.
+    expect(parseThreadChatEngineState(raw)).toEqual({
+      codex: { codexThreadId: "codex-thread-1" },
+    });
     expect(getCodexThreadState(raw)).toEqual({
       codexThreadId: "codex-thread-1",
     });
     expect(getClaudeThreadState(raw)).toBeNull();
+  });
+
+  it("reads repo and the permission override next to a malformed entry", () => {
+    const raw = {
+      grok: { conversation: 42 },
+      permissionModeOverride: "accept_edits",
+      repo: { activeBranch: "main" },
+      someday: { anything: true },
+    };
+
+    expect(parseThreadChatEngineState(raw)).toEqual({
+      permissionModeOverride: "accept_edits",
+      repo: { activeBranch: "main" },
+      someday: { anything: true },
+    });
+    expect(getThreadPermissionMode(raw)).toBe("accept_edits");
+    expect(
+      parseThreadChatEngineState({ permissionModeOverride: "sometimes" }),
+    ).toEqual({});
+  });
+
+  it("keeps a stored __proto__ key as data", () => {
+    const raw = JSON.parse(
+      '{"__proto__": {"polluted": true}, "claude": {"cwd": 1}}',
+    );
+    const parsed = parseThreadChatEngineState(raw) as Record<string, unknown>;
+
+    expect(Object.getPrototypeOf(parsed)).toBe(Object.prototype);
+    expect(Object.hasOwn(parsed, "__proto__")).toBe(true);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 
   it("returns null for non-object values", () => {
@@ -182,6 +216,38 @@ describe("mergeThreadChatEngineState", () => {
       ),
     ).toBeNull();
     expect(mergeThreadChatEngineState(null, null)).toBeNull();
+  });
+});
+
+describe("patchStoredThreadChatEngineState", () => {
+  it("writes back untouched entries exactly as stored", () => {
+    const stored = {
+      claude: { cwd: "/repo" },
+      codex: { codexThreadId: "codex-thread-1", futureField: 1 },
+      gemini: { sessionId: "gemini-1" },
+      permissionModeOverride: "full",
+    };
+
+    expect(
+      patchStoredThreadChatEngineState(
+        stored,
+        buildThreadChatEngineState("cursor", { sessionId: "cursor-1" }),
+      ),
+    ).toEqual({ ...stored, cursor: { sessionId: "cursor-1" } });
+  });
+
+  it("starts from nothing for a non-object and clears to null", () => {
+    expect(
+      patchStoredThreadChatEngineState("garbage", {
+        repo: { activeBranch: "main" },
+      }),
+    ).toEqual({ repo: { activeBranch: "main" } });
+    expect(
+      patchStoredThreadChatEngineState(
+        { codex: { codexThreadId: "codex-thread-1" } },
+        buildThreadChatEngineState("codex", null),
+      ),
+    ).toBeNull();
   });
 });
 

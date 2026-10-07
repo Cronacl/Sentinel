@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { engineInstanceIdForEngineWrite } from "@/lib/ai/chat/engines/platform/instance-columns";
 import { createLogger } from "@/lib/logger";
 import {
   createAutomationSchema,
@@ -242,8 +243,14 @@ export const automationsRouter = createTRPCRouter({
         updateData.title = updateFields.title;
       if (updateFields.prompt !== undefined)
         updateData.prompt = updateFields.prompt;
-      if (updateFields.chatEngine !== undefined)
+      if (updateFields.chatEngine !== undefined) {
         updateData.chatEngine = updateFields.chatEngine;
+        updateData.chatEngineInstanceId = engineInstanceIdForEngineWrite({
+          engine: updateFields.chatEngine,
+          engineColumn: automations.chatEngine,
+          instanceColumn: automations.chatEngineInstanceId,
+        });
+      }
       if (updateFields.workspaceId !== undefined)
         updateData.workspaceId = merged.workspaceId;
       if (updateFields.scheduleType !== undefined)

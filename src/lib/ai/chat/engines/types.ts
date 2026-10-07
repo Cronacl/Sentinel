@@ -65,6 +65,7 @@ export {
   isThreadStateForInstance,
   mergeThreadChatEngineState,
   parseThreadChatEngineState,
+  patchStoredThreadChatEngineState,
   stampThreadState,
   threadChatEngineStateSchema,
   type ThreadChatEngineState,

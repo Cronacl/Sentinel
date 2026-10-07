@@ -1,6 +1,7 @@
 // @ts-nocheck
 
 import { describe, expect, it, mock } from "bun:test";
+import { SQL } from "drizzle-orm";
 
 const set = mock(() => ({
   where: mock(() => ({
@@ -84,6 +85,8 @@ describe("chatPreferencesRouter.updateGlobal", () => {
 
     expect(set).toHaveBeenCalledWith({
       defaultChatEngine: "codex",
+      // Cleared in SQL when the stored default engine is another driver.
+      defaultChatEngineInstanceId: expect.any(SQL),
       defaultChatModelId: "gpt-5-codex",
       defaultChatReasoningEffort: "high",
     });

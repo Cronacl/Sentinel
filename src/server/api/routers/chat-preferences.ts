@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 
+import { engineInstanceIdForEngineWrite } from "@/lib/ai/chat/engines/platform/instance-columns";
 import { getEnabledModels } from "@/lib/ai/providers/resolver";
 import { normalizeSelectedModelId } from "@/lib/ai/providers/model-selection";
 import { chatSelectionSchema } from "@/schemas/chat-preferences.schema";
@@ -45,7 +46,14 @@ export const chatPreferencesRouter = createTRPCRouter({
         .update(users)
         .set({
           ...(input.engine !== undefined
-            ? { defaultChatEngine: input.engine ?? null }
+            ? {
+                defaultChatEngine: input.engine ?? null,
+                defaultChatEngineInstanceId: engineInstanceIdForEngineWrite({
+                  engine: input.engine ?? "sentinel",
+                  engineColumn: users.defaultChatEngine,
+                  instanceColumn: users.defaultChatEngineInstanceId,
+                }),
+              }
             : {}),
           ...(input.mode !== undefined
             ? { defaultChatMode: input.mode ?? null }

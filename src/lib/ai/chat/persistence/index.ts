@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
 
 import { db } from "@/server/db";
 import { threadFollowUps, threadMessages, threads } from "@/server/db/schema";
@@ -22,9 +22,10 @@ import {
 } from "@/lib/ai/chat/engines/contract";
 import {
   buildThreadChatEngineState,
-  mergeThreadChatEngineState,
   parseThreadChatEngineState,
+  patchStoredThreadChatEngineState,
 } from "@/lib/ai/chat/engines/types";
+import { engineInstanceIdForEngineWrite } from "@/lib/ai/chat/engines/platform/instance-columns";
 
 import {
   buildActiveThreadMessages,
@@ -240,15 +241,12 @@ export function updateThreadChatSettings(
       ...(settings.engine === undefined
         ? {}
         : {
-            chatEngineInstanceId:
-              settings.engineInstanceId === undefined
-                ? // An instance belongs to one driver: never keep it across
-                  // a driver change. SET expressions see the old row.
-                  sql`CASE WHEN ${threads.chatEngine} = ${settings.engine ?? "sentinel"} THEN ${threads.chatEngineInstanceId} ELSE NULL END`
-                : toStoredEngineInstanceId(
-                    settings.engine ?? "sentinel",
-                    settings.engineInstanceId,
-                  ),
+            chatEngineInstanceId: engineInstanceIdForEngineWrite({
+              engine: settings.engine ?? "sentinel",
+              engineColumn: threads.chatEngine,
+              instanceColumn: threads.chatEngineInstanceId,
+              instanceId: settings.engineInstanceId,
+            }),
           }),
       ...(settings.modelOptions === undefined
         ? {}
@@ -279,8 +277,10 @@ export function updateThreadChatEngineState(
     .from(threads)
     .where(eq(threads.id, threadId))
     .get();
-  const nextState = mergeThreadChatEngineState(
-    parseThreadChatEngineState(existing?.chatEngineState),
+  // Patch the stored value, not a parse of it: entries this write does not
+  // touch are kept exactly as stored, even ones this build cannot parse.
+  const nextState = patchStoredThreadChatEngineState(
+    existing?.chatEngineState,
     engineState,
   );
 
@@ -875,8 +875,10 @@ export async function syncThreadFromThread(input: {
       columns: {
         activeStreamId: true,
         chatEngine: true,
+        chatEngineInstanceId: true,
         chatEngineState: true,
         chatModelId: true,
+        chatModelOptions: true,
         chatReasoningEffort: true,
         mode: true,
         status: true,
@@ -898,9 +900,12 @@ export async function syncThreadFromThread(input: {
     tx.update(threads)
       .set({
         activeStreamId: sourceThread.activeStreamId,
+        // The engine, its instance and the stamped state travel together.
         chatEngine: sourceThread.chatEngine,
+        chatEngineInstanceId: sourceThread.chatEngineInstanceId,
         chatEngineState: sourceThread.chatEngineState,
         chatModelId: sourceThread.chatModelId,
+        chatModelOptions: sourceThread.chatModelOptions,
         chatReasoningEffort: sourceThread.chatReasoningEffort,
         mode: sourceThread.mode,
         status: sourceThread.status,
@@ -954,6 +959,7 @@ export async function promoteVirtualThreadToVisibleChild(input: {
     db.insert(threads)
       .values({
         chatEngine: virtualThread.chatEngine,
+        chatEngineInstanceId: virtualThread.chatEngineInstanceId,
         chatEngineState: virtualThread.chatEngineState,
         id: childThreadId,
         mode: virtualThread.mode,
@@ -969,6 +975,7 @@ export async function promoteVirtualThreadToVisibleChild(input: {
     db.update(threads)
       .set({
         chatEngine: virtualThread.chatEngine,
+        chatEngineInstanceId: virtualThread.chatEngineInstanceId,
         chatEngineState: virtualThread.chatEngineState,
         mode: virtualThread.mode,
         parentThreadId: input.parentThreadId,

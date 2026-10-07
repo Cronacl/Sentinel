@@ -89,6 +89,16 @@ export const threadChatEngineStateSchema = z
 
 export type ThreadChatEngineState = z.infer<typeof threadChatEngineStateSchema>;
 
+/** The schema of every key this build knows, by top-level key. */
+const THREAD_STATE_KEY_SCHEMAS: Readonly<Record<string, z.ZodType>> =
+  Object.fromEntries([
+    ...Object.values(THREAD_STATE_BINDINGS).map(
+      (binding) => [binding.key, binding.schema] as const,
+    ),
+    ["permissionModeOverride", z.enum(PERMISSION_MODES)] as const,
+    ["repo", repoThreadStateSchema] as const,
+  ]);
+
 /** The identity a stamped driver state is checked against. */
 export type ThreadStateInstanceRef = {
   continuationKey: string;
@@ -108,11 +118,41 @@ export function getThreadStateBinding(
     : null;
 }
 
+/**
+ * Reads a chat_engine_state value key by key: a malformed entry (a known
+ * driver's state written by a fork or another build) is left out instead of
+ * hiding repo, permissionModeOverride and every other driver's entry. Keys
+ * this build does not know are carried through. Null for a non-object.
+ *
+ * Do not write the result back: use patchStoredThreadChatEngineState, which
+ * keeps malformed and unknown entries exactly as stored.
+ */
 export function parseThreadChatEngineState(
   value: unknown,
 ): ThreadChatEngineState | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
   const parsed = threadChatEngineStateSchema.safeParse(value);
-  return parsed.success ? parsed.data : null;
+  if (parsed.success) {
+    return parsed.data;
+  }
+
+  // Object.fromEntries defines own properties, so a stored "__proto__" key
+  // stays data.
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, entry]) => {
+      const schema = Object.hasOwn(THREAD_STATE_KEY_SCHEMAS, key)
+        ? THREAD_STATE_KEY_SCHEMAS[key]
+        : null;
+      if (!schema || entry == null) {
+        return [[key, entry]];
+      }
+      const entryResult = schema.safeParse(entry);
+      return entryResult.success ? [[key, entryResult.data]] : [];
+    }),
+  ) as ThreadChatEngineState;
 }
 
 /**
@@ -207,6 +247,23 @@ export function mergeThreadChatEngineState(
   };
 
   return Object.values(next).some((value) => value != null) ? next : null;
+}
+
+/**
+ * The value to write back after applying `patch` to a stored
+ * chat_engine_state. Starts from the stored object itself rather than a
+ * parse of it, so every key the patch does not touch (another driver's
+ * entry, one this build cannot parse, one it does not know) is written back
+ * exactly as stored. Null when no key is left.
+ */
+export function patchStoredThreadChatEngineState(
+  stored: unknown,
+  patch: ThreadChatEngineState | null | undefined,
+): ThreadChatEngineState | null {
+  return mergeThreadChatEngineState(
+    isRecord(stored) ? (stored as ThreadChatEngineState) : null,
+    patch,
+  );
 }
 
 /** A patch that sets (or with null clears) one driver's state. */

@@ -21,6 +21,7 @@ import {
   getRepoThreadState,
 } from "@/lib/ai/chat/engines/types";
 import { runThreadChat } from "@/lib/ai/chat";
+import { engineInstanceIdForEngineWrite } from "@/lib/ai/chat/engines/platform/instance-columns";
 import {
   getLatestAssistantMessageId,
   listThreadFollowUps,
@@ -514,7 +515,16 @@ export const threadsRouter = createTRPCRouter({
       const [updated] = ctx.db
         .update(threads)
         .set({
-          ...(input.engine === undefined ? {} : { chatEngine: input.engine }),
+          ...(input.engine === undefined
+            ? {}
+            : {
+                chatEngine: input.engine,
+                chatEngineInstanceId: engineInstanceIdForEngineWrite({
+                  engine: input.engine,
+                  engineColumn: threads.chatEngine,
+                  instanceColumn: threads.chatEngineInstanceId,
+                }),
+              }),
           ...(input.modelId === undefined
             ? {}
             : { chatModelId: input.modelId }),
