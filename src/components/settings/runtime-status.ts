@@ -120,7 +120,9 @@ type ClaudeRuntimeStatusLike = RuntimeStatusLike;
 type CopilotRuntimeStatusLike = RuntimeStatusLike;
 type CodexRuntimeStatusLike = RuntimeStatusLike;
 type CursorRuntimeStatusLike = RuntimeStatusLike;
-type OpenCodeRuntimeStatusLike = RuntimeStatusLike;
+type OpenCodeRuntimeStatusLike = RuntimeStatusLike & {
+  compatibilityAdvisory?: { message: string | null } | null;
+};
 
 export function formatClaudeRuntimeTimestamp(
   value: string,
@@ -303,7 +305,13 @@ export function getOpenCodeRuntimeFallbackMessage(
   status: OpenCodeRuntimeStatusLike | null | undefined,
   formatter?: (date: Date) => string,
 ) {
-  return getRuntimeFallbackMessage("OpenCode", status, formatter);
+  // The version advisory ("update recommended", "too old", "2.x not supported
+  // yet") is the only OpenCode-specific notice the card shows.
+  return (
+    getRuntimeFallbackMessage("OpenCode", status, formatter) ??
+    status?.compatibilityAdvisory?.message ??
+    null
+  );
 }
 
 export function getOpenCodeComposerUnavailableMessage(

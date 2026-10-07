@@ -297,6 +297,14 @@ export const TRIPWIRES = [
     pattern: /state\.text\s*=\s*event\.data\.content\b/,
     include: /^src\/lib\/ai\/chat\/runtime\/copilot\//,
   },
+  {
+    id: "P9-opencode-ready-prefix",
+    description:
+      "OpenCode readiness parses whole lines loosely and polls /global/health instead of a strict stdout prefix",
+    pattern:
+      /\bOPENCODE_SERVER_READY_PREFIX\b|startsWith\(\s*["'`]opencode server listening/,
+    include: /^src\/.*\.[cm]?[jt]sx?$/,
+  },
 ];
 
 const DEFAULT_EXCLUDE =

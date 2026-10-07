@@ -188,3 +188,38 @@ export function resolveOpenCodePromptResponse(input: {
       : {}),
   };
 }
+
+export type OpenCodeSessionErrorOutcome = {
+  aborted: boolean;
+  message: string;
+};
+
+// `session.error` carries `{error?: {name, data: {message}}}` (the SDK's
+// ProviderAuthError | UnknownError | APIError | … union); the readable text is
+// `data.message`, not `error.message`. Mirrors t3code's openCodeErrorMessage.
+export function resolveOpenCodeSessionError(
+  properties: unknown,
+): OpenCodeSessionErrorOutcome {
+  const record =
+    properties && typeof properties === "object"
+      ? (properties as { error?: unknown; message?: unknown })
+      : {};
+  const error =
+    record.error && typeof record.error === "object"
+      ? (record.error as { data?: unknown; message?: unknown; name?: unknown })
+      : null;
+  const data =
+    error?.data && typeof error.data === "object"
+      ? (error.data as { message?: unknown })
+      : null;
+  const name = typeof error?.name === "string" ? error.name : null;
+  const message = [data?.message, error?.message, record.message, name].find(
+    (value): value is string =>
+      typeof value === "string" && value.trim().length > 0,
+  );
+
+  return {
+    aborted: name === "MessageAbortedError",
+    message: message ?? "OpenCode run failed.",
+  };
+}

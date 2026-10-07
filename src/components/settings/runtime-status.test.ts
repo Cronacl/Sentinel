@@ -14,6 +14,7 @@ import {
   getCopilotRuntimeCliLabel,
   getCopilotRuntimeFallbackMessage,
   getCopilotRuntimeSourceLabel,
+  getOpenCodeRuntimeFallbackMessage,
 } from "./runtime-status";
 
 describe("Claude runtime settings helpers", () => {
@@ -205,5 +206,33 @@ describe("Copilot runtime settings helpers", () => {
       "Not detected",
     );
     expect(getCopilotRuntimeSourceLabel(undefined)).toBe("Not detected");
+  });
+});
+
+describe("OpenCode runtime settings helpers", () => {
+  it("shows the compatibility advisory message on the runtime card", () => {
+    expect(
+      getOpenCodeRuntimeFallbackMessage({
+        cliDetected: true,
+        compatibilityAdvisory: {
+          message:
+            "OpenCode 1.3.17 still works with Sentinel, but 1.14.19 or newer is recommended.",
+        },
+        state: "ready",
+      }),
+    ).toBe(
+      "OpenCode 1.3.17 still works with Sentinel, but 1.14.19 or newer is recommended.",
+    );
+  });
+
+  it("stays quiet for supported versions and unknown statuses", () => {
+    expect(
+      getOpenCodeRuntimeFallbackMessage({
+        cliDetected: true,
+        compatibilityAdvisory: { message: null },
+        state: "ready",
+      }),
+    ).toBeNull();
+    expect(getOpenCodeRuntimeFallbackMessage(null)).toBeNull();
   });
 });

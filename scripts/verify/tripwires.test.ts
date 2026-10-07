@@ -282,3 +282,23 @@ describe("P9 Copilot SDK 1.x tripwires", () => {
     ).toEqual(["P9-copilot-message-overwrite:1"]);
   });
 });
+
+describe("P9 OpenCode tripwires", () => {
+  it("flags the strict stdout readiness prefix", () => {
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/opencode-sdk/index.ts",
+        'const OPENCODE_SERVER_READY_PREFIX = "opencode server listening";\nif (!line.startsWith("opencode server listening")) continue;',
+      ),
+    ).toEqual(["P9-opencode-ready-prefix:1", "P9-opencode-ready-prefix:2"]);
+  });
+
+  it("accepts the loose readiness pattern", () => {
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/opencode-sdk/index.ts",
+        "const OPENCODE_SERVER_READY_PATTERN = /server listening on\\s+(https?:\\/\\/\\S+)/i;",
+      ),
+    ).toEqual([]);
+  });
+});

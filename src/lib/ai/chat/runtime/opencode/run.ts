@@ -47,6 +47,7 @@ import {
 } from "../transcript";
 import {
   resolveOpenCodePromptResponse,
+  resolveOpenCodeSessionError,
   type OpenCodePromptResponse,
 } from "./event-helpers";
 import {
@@ -723,18 +724,11 @@ async function handleOpenCodeEvent(
           name: "opencode_ask_question",
           state: "output-denied",
         });
-        const questionClient = control.session.client.question as {
-          reject?: (input: { requestID: string }) => Promise<unknown>;
-          reply: (input: {
-            answers?: unknown[];
-            requestID: string;
-          }) => Promise<unknown>;
-        };
-        if (typeof questionClient.reject === "function") {
-          await questionClient.reject({ requestID: request.id });
-        } else {
-          await questionClient.reply({ answers: [], requestID: request.id });
-        }
+        // POST /question/{requestID}/reject exists on every supported server
+        // (>= 1.2.0), so the old reply-with-no-answers fallback is gone.
+        await control.session.client.question.reject({
+          requestID: request.id,
+        });
         persist.setThreadStatus(control.threadId, "streaming");
         await emitAssistantMessageUpdate(
           control.state,
@@ -839,18 +833,46 @@ async function handleOpenCodeEvent(
       break;
     }
     case "session.error": {
-      await finishOpenCodeRun(control, {
-        errorMessage:
-          event.properties?.error?.message ??
-          event.properties?.message ??
-          "OpenCode run failed.",
-        finishReason: null,
-        status: "error",
-        threadStatus: "idle",
-      });
+      const sessionError = resolveOpenCodeSessionError(event.properties);
+      await finishOpenCodeRun(
+        control,
+        sessionError.aborted
+          ? {
+              errorMessage: "Generation stopped.",
+              finishReason: null,
+              status: "cancelled",
+              threadStatus: "idle",
+            }
+          : {
+              errorMessage: sessionError.message,
+              finishReason: null,
+              status: "error",
+              threadStatus: "idle",
+            },
+      );
       break;
     }
   }
+}
+
+function isOpenCodeRunSettled(control: ActiveOpenCodeRunControl) {
+  return control.finished || control.abortController.signal.aborted;
+}
+
+// Without this a crashed server leaves the thread "streaming" forever: the
+// SDK's SSE reader retries a dead connection indefinitely.
+function watchOpenCodeServerExit(control: ActiveOpenCodeRunControl) {
+  void control.session.server.exited.then(async ({ code, signal }) => {
+    if (isOpenCodeRunSettled(control)) return;
+    await finishOpenCodeRun(control, {
+      errorMessage: `OpenCode server exited unexpectedly (${
+        signal ?? `code ${code ?? "unknown"}`
+      }).`,
+      finishReason: null,
+      status: "error",
+      threadStatus: "idle",
+    });
+  });
 }
 
 async function startOpenCodeEventPump(control: ActiveOpenCodeRunControl) {
@@ -867,6 +889,15 @@ async function startOpenCodeEventPump(control: ActiveOpenCodeRunControl) {
           if (control.finished) return;
           await handleOpenCodeEvent(control, event);
         }
+        // The SDK ends the stream when the server closes it (for example on
+        // `server.instance.disposed`); no session.idle can follow after that.
+        if (isOpenCodeRunSettled(control)) return;
+        await finishOpenCodeRun(control, {
+          errorMessage: "OpenCode event stream ended unexpectedly.",
+          finishReason: null,
+          status: "error",
+          threadStatus: "idle",
+        });
       } catch (error) {
         if (control.finished || control.abortController.signal.aborted) return;
         await finishOpenCodeRun(control, {
@@ -1221,6 +1252,7 @@ export async function runOpenCodeThreadChat(
     }),
   );
 
+  watchOpenCodeServerExit(control);
   await startOpenCodeEventPump(control);
 
   const promptText = buildExternalRuntimePromptText({
