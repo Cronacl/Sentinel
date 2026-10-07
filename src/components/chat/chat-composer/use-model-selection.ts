@@ -15,7 +15,10 @@ import {
   resolveStableSelectableModels,
   type ChatComposerEngineOption,
 } from "../chat-composer-helpers";
-import { resolveOpenCodeTraitSelectionValue } from "./use-model-selection.helpers";
+import {
+  findPreferredModel,
+  resolveOpenCodeTraitSelectionValue,
+} from "./use-model-selection.helpers";
 
 import type { usePersistSelection } from "./use-persist-selection";
 
@@ -436,7 +439,7 @@ export function useModelSelection({
 
     if (availableModels.length === 0) {
       const fallbackDisplayModel =
-        displayModels.find((model) => model.modelId === preferredModelId) ??
+        findPreferredModel(displayModels, preferredModelId) ??
         displayModels[0] ??
         null;
 
@@ -453,8 +456,9 @@ export function useModelSelection({
       return;
     }
 
-    const preferredModel = availableModels.find(
-      (model) => model.modelId === preferredModelId,
+    const preferredModel = findPreferredModel(
+      availableModels,
+      preferredModelId,
     );
     const nextModel = preferredModel ?? availableModels[0] ?? null;
     const nextReasoningEffort = nextModel
@@ -502,8 +506,9 @@ export function useModelSelection({
       return;
     }
 
-    const preferredModel = availableModels.find(
-      (model) => model.modelId === preferredModelId,
+    const preferredModel = findPreferredModel(
+      availableModels,
+      preferredModelId,
     );
     const nextModel = preferredModel ?? availableModels[0] ?? null;
 

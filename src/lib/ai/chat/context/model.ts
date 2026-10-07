@@ -6,6 +6,7 @@ import { threads } from "@/server/db/schema";
 import {
   findModel,
   getReasoningProviderOptions,
+  resolveStoredCompositeModelId,
   type ReasoningEffort,
 } from "../../providers/models";
 import {
@@ -42,12 +43,17 @@ export async function resolveThreadChatModel(
   const enabledModelIds = new Set(
     (await getEnabledModels(request.userId)).map((model) => model.compositeId),
   );
+  // Threads, automations and older messages can store a built-in model id
+  // that its provider has retired; those resolve to the successor model.
+  const threadModelId = thread?.chatModelId
+    ? resolveStoredCompositeModelId(thread.chatModelId, enabledModelIds)
+    : undefined;
   const usableThreadModelId =
-    thread?.chatModelId && enabledModelIds.has(thread.chatModelId)
-      ? thread.chatModelId
+    threadModelId && enabledModelIds.has(threadModelId)
+      ? threadModelId
       : undefined;
 
-  const requestedModelId =
+  const storedRequestedModelId =
     request.modelId ??
     usableThreadModelId ??
     request.message?.metadata?.model?.requestedModelId ??
@@ -55,9 +61,14 @@ export async function resolveThreadChatModel(
     targetMeta?.model?.requestedModelId ??
     targetMeta?.model?.responseModelId;
 
-  if (!requestedModelId) {
+  if (!storedRequestedModelId) {
     throw new Error("Model id is required for this chat operation.");
   }
+
+  const requestedModelId = resolveStoredCompositeModelId(
+    storedRequestedModelId,
+    enabledModelIds,
+  );
 
   const parsedModel = parseModelId(requestedModelId);
   const reasoningEffort =

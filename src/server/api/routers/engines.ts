@@ -73,11 +73,15 @@ function canUseCodexFallbackModels(status: CodexEngineStatus) {
   );
 }
 
+// Shown only while the Codex runtime has not reported its own model list.
+// OpenAI shut the gpt-5(.1)-codex and codex-mini models down in 2026.
+const FALLBACK_CODEX_DEFAULT_MODEL_ID = "gpt-6-astra";
+
 function buildFallbackCodexModels() {
   const allowedIds = new Set([
-    "gpt-5-codex",
-    "gpt-5.1-codex-mini",
-    "codex-mini-latest",
+    FALLBACK_CODEX_DEFAULT_MODEL_ID,
+    "gpt-6.1-sol",
+    "gpt-6-luna",
   ]);
 
   return getModelsForProvider("openai")
@@ -90,7 +94,7 @@ function buildFallbackCodexModels() {
       inputModalities: model.capabilities.includes("vision")
         ? ["text", "image"]
         : ["text"],
-      isDefault: model.id === "gpt-5-codex",
+      isDefault: model.id === FALLBACK_CODEX_DEFAULT_MODEL_ID,
       model: model.id,
       supportedReasoningEfforts: getSupportedReasoningEfforts(
         "openai",

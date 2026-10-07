@@ -3,7 +3,6 @@ import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import { z } from "zod";
 
 import type { AIProvider } from "@/server/db/enums";
-import { getReasoningProviderOptions } from "@/lib/ai/providers/models";
 import {
   findIntegrationProviderByToolName,
   getIntegrationToolPrefix,
@@ -738,11 +737,8 @@ export async function routeToolExposure(
 
     routerModelId = resolved.requestedModelId;
 
-    const providerOptions = getReasoningProviderOptions(
-      resolved.providerId,
-      resolved.responseModelId,
-      "minimal",
-    );
+    // The helper model already asks for the least reasoning it supports.
+    const providerOptions = resolved.providerOptions;
 
     const { output } = await generateText({
       model: resolved.languageModel as Parameters<

@@ -264,16 +264,16 @@ mock.module("@/lib/ai/providers/models", async () => {
         : provider === "openai"
           ? [
               {
-                capabilities: ["tool_use", "object_generation"],
-                description: "Codex flagship model.",
-                displayName: "GPT-5 Codex",
-                id: "gpt-5-codex",
+                capabilities: ["vision", "tool_use", "object_generation"],
+                description: "OpenAI flagship model.",
+                displayName: "GPT-6 Astra",
+                id: "gpt-6-astra",
               },
               {
-                capabilities: ["tool_use", "object_generation"],
-                description: "Compact Codex model.",
-                displayName: "Codex Mini Latest",
-                id: "codex-mini-latest",
+                capabilities: ["vision", "tool_use", "object_generation"],
+                description: "Retired Codex model.",
+                displayName: "GPT-5 Codex",
+                id: "gpt-5-codex",
               },
             ]
           : [],
@@ -964,15 +964,13 @@ describe("enginesRouter.models", () => {
       input: { engine: "codex" },
     });
 
-    expect(result).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          displayName: "GPT-5 Codex",
-          isConnected: true,
-          modelId: "gpt-5-codex",
-        }),
-      ]),
-    );
+    expect(result).toEqual([
+      expect.objectContaining({
+        displayName: "GPT-6 Astra",
+        isConnected: true,
+        modelId: "gpt-6-astra",
+      }),
+    ]);
   });
 
   it("returns fallback Codex models when the CLI is detected but the runtime is unreachable", async () => {
@@ -1002,10 +1000,10 @@ describe("enginesRouter.models", () => {
     expect(result).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          displayName: "GPT-5 Codex",
+          displayName: "GPT-6 Astra",
           isConnected: true,
           isEnabled: true,
-          modelId: "gpt-5-codex",
+          modelId: "gpt-6-astra",
         }),
       ]),
     );

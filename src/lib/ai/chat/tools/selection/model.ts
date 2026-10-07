@@ -1,25 +1,27 @@
 import type { AIProvider } from "@/server/db/enums";
 
-import { toCompositeModelId } from "../../../providers/models";
-import { getLanguageModel } from "../../../providers/resolver";
+import { resolveHelperModel } from "../../helper-model";
 
 import type { ResolvedThreadTitleModel } from "../../types";
 
+// Small, fast models per provider. Every id must be a built-in catalog entry
+// (title/model.test.ts checks this); Azure ids are deployment names.
 const TOOL_SELECTION_MODEL_IDS: Partial<Record<AIProvider, string>> = {
   anthropic: "claude-haiku-4-5",
-  google: "gemini-2.5-flash-lite",
-  google_vertex: "gemini-2.5-flash-lite",
-  openai: "gpt-4.1-nano",
-  vercel: "gpt-4.1-nano",
-  xai: "grok-3-mini",
+  google: "gemini-3.5-flash-lite",
+  google_vertex: "gemini-3.5-flash-lite",
+  openai: "gpt-6-luna",
+  vercel: "google/gemini-3.5-flash-lite",
+  xai: "grok-4.20-non-reasoning",
   azure: "gpt-4.1-nano",
-  amazon_bedrock: "anthropic.claude-haiku-4-5-v1",
+  amazon_bedrock: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
   groq: "llama-3.3-70b-versatile",
   cohere: "command-a-03-2025",
-  moonshotai: "moonshot-v1-8k",
+  moonshotai: "kimi-k2.6",
   mistral: "mistral-small-latest",
   ollama: "llama3.2",
-  openrouter: "openai/gpt-4.1-nano",
+  openrouter: "google/gemini-3.5-flash-lite",
+  deepseek: "deepseek-flash",
 };
 
 export type ResolvedToolSelectionModel = ResolvedThreadTitleModel;
@@ -37,13 +39,9 @@ export async function resolveToolSelectionModel({
   providerId: AIProvider;
   userId: string;
 }): Promise<ResolvedToolSelectionModel> {
-  const responseModelId = getToolSelectionModelId(providerId);
-  const requestedModelId = toCompositeModelId(providerId, responseModelId);
-
-  return {
-    languageModel: await getLanguageModel(userId, requestedModelId),
+  return await resolveHelperModel({
     providerId,
-    requestedModelId,
-    responseModelId,
-  };
+    responseModelId: getToolSelectionModelId(providerId),
+    userId,
+  });
 }

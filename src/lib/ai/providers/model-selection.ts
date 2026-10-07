@@ -1,5 +1,7 @@
 import type { AIProvider } from "@/server/db/enums";
 
+import { getRetiredCompositeModelReplacement } from "./models";
+
 type ModelSelectionCandidate = {
   modelId: string;
   provider: AIProvider;
@@ -30,7 +32,19 @@ export function normalizeSelectedModelId(
   }
 
   if (trimmed.includes(":")) {
-    return null;
+    // A stored built-in model that its provider has since retired selects
+    // its successor when that model is available.
+    const replacement = getRetiredCompositeModelReplacement(trimmed);
+    const replacementMatch = replacement
+      ? availableModels.find(
+          (model) =>
+            getCompositeModelId(model.provider, model.modelId) === replacement,
+        )
+      : undefined;
+
+    return replacementMatch
+      ? getCompositeModelId(replacementMatch.provider, replacementMatch.modelId)
+      : null;
   }
 
   const byModelId = availableModels.filter(

@@ -113,6 +113,13 @@ export const TRIPWIRES = [
     include: /\.[cm]?[jt]sx?$/,
   },
   {
+    id: "P8-invalid-helper-model-ids",
+    description:
+      "Helper-model ids must exist: Bedrock Claude Haiku 4.5 is us.anthropic.claude-haiku-4-5-20251001-v1:0 and Ollama has no bare llama3 entry",
+    pattern: /anthropic\.claude-haiku-4-5-v1["'`]|\bollama:\s*["']llama3["']/,
+    include: /^src\/.*\.[cm]?[jt]sx?$/,
+  },
+  {
     id: "P5-next-turbo-flag",
     description: "Turbopack is the Next 16 dev default; --turbo is redundant",
     pattern: /--turbo\b/,

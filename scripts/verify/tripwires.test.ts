@@ -97,3 +97,23 @@ describe("P6 Electron 44 tripwires", () => {
     ).toEqual([]);
   });
 });
+
+describe("P8 model catalog tripwires", () => {
+  it("flags the invalid helper-model ids fixed in the P8 catalog refresh", () => {
+    expect(
+      hitIds(
+        "src/lib/ai/chat/tools/selection/model.ts",
+        '  amazon_bedrock: "anthropic.claude-haiku-4-5-v1",\n  ollama: "llama3",',
+      ),
+    ).toEqual([
+      "P8-invalid-helper-model-ids:1",
+      "P8-invalid-helper-model-ids:2",
+    ]);
+    expect(
+      hitIds(
+        "src/lib/ai/chat/title/model.ts",
+        '  amazon_bedrock: "us.anthropic.claude-haiku-4-5-20251001-v1:0",\n  ollama: "llama3.2",',
+      ),
+    ).toEqual([]);
+  });
+});
