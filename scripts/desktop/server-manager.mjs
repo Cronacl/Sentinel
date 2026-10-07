@@ -1,6 +1,11 @@
 import { execFileSync, spawn } from "node:child_process";
 import path from "node:path";
 
+import {
+  createInternalToken,
+  INTERNAL_TOKEN_ENV_KEY,
+  requestAgentShutdown,
+} from "./agent-shutdown.mjs";
 import { APP_HOST, APP_PORT, APP_URL } from "./constants.mjs";
 import { loadRuntimeEnv } from "./service-manager.mjs";
 
@@ -143,6 +148,7 @@ export async function startLocalServer(runtimePaths) {
   await killProcessOnPort(APP_PORT);
 
   const env = await loadRuntimeEnv(runtimePaths);
+  const internalToken = createInternalToken();
   const runtimeCommand = getPackagedServerRuntimeCommand();
   const child = spawn(
     runtimeCommand.command,
@@ -158,6 +164,7 @@ export async function startLocalServer(runtimePaths) {
         HOSTNAME: APP_HOST,
         NODE_ENV: "production",
         PORT: String(APP_PORT),
+        [INTERNAL_TOKEN_ENV_KEY]: internalToken,
       },
       stdio: "pipe",
     },
@@ -191,6 +198,7 @@ export async function startLocalServer(runtimePaths) {
   }
 
   return {
+    internalToken,
     process: child,
     url: APP_URL,
   };
@@ -202,6 +210,7 @@ export async function stopLocalServer(serverState) {
   }
 
   const child = serverState.process;
+  await requestAgentShutdown(serverState);
 
   await new Promise((resolve) => {
     let exited = false;

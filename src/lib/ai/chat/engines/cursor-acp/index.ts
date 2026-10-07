@@ -2,7 +2,6 @@ import "server-only";
 
 import {
   execFile,
-  spawn,
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
 import { constants as fsConstants } from "node:fs";
@@ -12,6 +11,7 @@ import path from "node:path";
 import type { CursorThreadState } from "@/lib/ai/chat/engines/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import { setLocalRuntimeEnvValue } from "@/lib/runtime/local-runtime-env";
+import { spawnManagedProcess } from "@/lib/runtime/process/spawn";
 import {
   applyPrivateFsMode,
   getSentinelStateRoot,
@@ -20,6 +20,7 @@ import {
   buildManagedExecutablePathValue,
   buildPreferredExecutablePathValue,
 } from "@/lib/runtime/platform-paths";
+import { withTimeout } from "@/lib/runtime/process/with-timeout";
 
 const CURSOR_RUNTIME_CACHE_TTL_MS = 15_000;
 const CURSOR_STATUS_CACHE_TTL_MS = 15_000;
@@ -190,43 +191,6 @@ function getLocalStateDirectory() {
 
 function getCursorStatusSnapshotPath() {
   return path.join(getLocalStateDirectory(), CURSOR_STATUS_SNAPSHOT_FILE);
-}
-
-function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-): Promise<T | null> {
-  return new Promise((resolve) => {
-    let settled = false;
-    const timeoutId = setTimeout(() => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      resolve(null);
-    }, timeoutMs);
-
-    void promise
-      .then((value) => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve(value);
-      })
-      .catch(() => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve(null);
-      });
-  });
 }
 
 function normalizeCandidatePath(candidatePath: string) {
@@ -903,12 +867,18 @@ export class CursorAcpClient {
     this.onProcessExit = input.onProcessExit;
     this.onRequestPermission = input.onRequestPermission;
     this.onSessionUpdate = input.onSessionUpdate;
-    this.child = spawn(input.command, ["acp"], {
+    // A managed agent process: kill() ends the whole tree (the Windows
+    // .cmd shim and the agent under it) and the pid is recorded so a server
+    // shutdown cannot orphan it.
+    this.child = spawnManagedProcess({
+      args: ["acp"],
+      command: input.command,
       cwd: input.cwd,
       env: input.env,
-      shell: process.platform === "win32",
+      extendEnv: false,
+      label: "cursor acp",
       stdio: ["pipe", "pipe", "pipe"],
-    });
+    }) as ChildProcessWithoutNullStreams;
 
     this.child.stdout.setEncoding("utf8");
     this.child.stderr.setEncoding("utf8");
@@ -1261,7 +1231,10 @@ async function discoverCursorModels(
   return { models, parameterizedModelPicker };
 }
 
-async function probeCursorEngineStatus(runtime: ResolvedCursorRuntime) {
+async function probeCursorEngineStatus(
+  runtime: ResolvedCursorRuntime,
+  signal?: AbortSignal,
+) {
   if (!runtime.cliDetected || !runtime.cliPath) {
     return buildCursorEngineStatus({
       authReady: false,
@@ -1282,6 +1255,8 @@ async function probeCursorEngineStatus(runtime: ResolvedCursorRuntime) {
     cwd: process.cwd(),
     env: runtime.env,
   });
+  const closeOnAbort = () => client.close();
+  signal?.addEventListener("abort", closeOnAbort, { once: true });
 
   try {
     const initializeResult = await client.initialize({
@@ -1350,6 +1325,7 @@ async function probeCursorEngineStatus(runtime: ResolvedCursorRuntime) {
       usedCachedStatus: false,
     });
   } finally {
+    signal?.removeEventListener("abort", closeOnAbort);
     client.close();
   }
 }
@@ -1382,9 +1358,12 @@ export async function getCursorEngineStatus(options?: {
       });
     }
 
+    // On timeout the probe's signal closes its ACP client, which kills the
+    // `agent acp` child instead of leaving it running in the background.
     const status = await withTimeout(
-      probeCursorEngineStatus(runtime),
+      (signal) => probeCursorEngineStatus(runtime, signal),
       CURSOR_STATUS_QUERY_TIMEOUT_MS,
+      { nullOnError: true },
     );
 
     if (status) {

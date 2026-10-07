@@ -40,7 +40,9 @@ const {
   applyCursorSessionConfig,
   buildCursorThreadState,
   CursorAcpClient,
+  getCursorEngineStatus,
   parseCursorShellLookupOutput,
+  resetCursorEngineStatusCache,
   resetCursorRuntimeCache,
   resolveCursorRuntime,
   // @ts-expect-error Bun test-only cache-busting import for module isolation.
@@ -84,6 +86,7 @@ afterEach(async () => {
 
   setLocalRuntimeEnvValueMock.mockClear();
   resetCursorRuntimeCache();
+  resetCursorEngineStatusCache();
 });
 
 describe("parseCursorShellLookupOutput", () => {
@@ -144,6 +147,51 @@ describe("resolveCursorRuntime", () => {
     expect(runtime.cliPath).toBe(scriptPath);
     expect(process.env.SENTINEL_CURSOR_PATH).toBe(scriptPath);
   });
+});
+
+describe("getCursorEngineStatus timeout", () => {
+  it.skipIf(process.platform === "win32")(
+    "kills the probe's agent process when the probe times out",
+    async () => {
+      const tempRoot = await mkdtemp(
+        path.join(os.tmpdir(), "cursor-acp-timeout-test-"),
+      );
+      tempRoots.push(tempRoot);
+      const pidPath = path.join(tempRoot, "agent.pid");
+      const scriptPath = path.join(tempRoot, "agent");
+      // Answers --version, then never answers ACP: `exec` keeps the pid.
+      await writeFile(
+        scriptPath,
+        [
+          "#!/bin/sh",
+          'if [ "$1" = "--version" ]; then echo "agent 1.0.0"; exit 0; fi',
+          `echo $$ > '${pidPath}'`,
+          "exec sleep 600",
+        ].join("\n"),
+        "utf8",
+      );
+      await chmod(scriptPath, 0o755);
+      process.env.SENTINEL_CURSOR_PATH = scriptPath;
+
+      const status = await getCursorEngineStatus({ forceRefresh: true });
+      expect(status.state).toBe("timeout_no_cache");
+
+      const pid = Number((await readFile(pidPath, "utf8")).trim());
+      const isAlive = () => {
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      for (let attempt = 0; attempt < 50 && isAlive(); attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      expect(isAlive()).toBe(false);
+    },
+    10_000,
+  );
 });
 
 describe("CursorAcpClient.cancel", () => {

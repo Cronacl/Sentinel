@@ -1,7 +1,5 @@
 import {
   execFile,
-  spawn,
-  type ChildProcess,
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
 import { access, readdir } from "node:fs/promises";
@@ -10,6 +8,11 @@ import os from "node:os";
 import path from "node:path";
 
 import { setLocalRuntimeEnvValue } from "@/lib/runtime/local-runtime-env";
+import {
+  buildSpawnInvocation,
+  spawnManagedProcess,
+  type SpawnInvocation,
+} from "@/lib/runtime/process/spawn";
 import {
   buildManagedExecutablePathValue,
   buildPreferredExecutablePathValue,
@@ -424,56 +427,18 @@ export function resetCodexCliResolutionCache() {
   cachedResolution = null;
 }
 
-// cmd.exe metacharacters. The quoting below is ported from cross-spawn (MIT),
-// lib/util/escape.js, which follows https://qntm.org/cmd.
-const WINDOWS_CMD_META_CHARS = /([()\][%!^"`<>&|;, *?])/g;
-
-function escapeWindowsCmdCommand(command: string) {
-  return command.replace(WINDOWS_CMD_META_CHARS, "^$1");
-}
-
-function escapeWindowsCmdArgument(argument: string) {
-  let escaped = `${argument}`;
-  // Backslashes before a quote are doubled and the quote is escaped.
-  escaped = escaped.replace(/(?=(\\+?)?)\1"/g, '$1$1\\"');
-  // Trailing backslashes are doubled (they precede the closing quote).
-  escaped = escaped.replace(/(?=(\\+?)?)\1$/, "$1$1");
-  escaped = `"${escaped}"`;
-  return escaped.replace(WINDOWS_CMD_META_CHARS, "^$1");
-}
-
-export type CodexCliInvocation = {
-  args: string[];
-  command: string;
-  windowsVerbatimArguments?: boolean;
-};
+export type CodexCliInvocation = SpawnInvocation;
 
 /**
- * npm installs Codex on Windows as a `codex.cmd` shim. Node refuses to spawn
- * `.cmd`/`.bat` files without a shell (CVE-2024-27980), and `shell: true`
- * would pass the arguments unescaped, so batch files run through
- * `cmd.exe /d /s /c` with every argument quoted for cmd.
+ * npm installs Codex on Windows as a `codex.cmd` shim, which runs through
+ * `cmd.exe /d /s /c` with every argument quoted (see buildSpawnInvocation).
  */
 export function buildCodexCliInvocation(
   command: string,
   args: string[],
   options?: { comSpec?: string; platform?: NodeJS.Platform },
 ): CodexCliInvocation {
-  const platform = options?.platform ?? process.platform;
-  if (platform !== "win32" || !/\.(?:cmd|bat)$/i.test(command)) {
-    return { args, command };
-  }
-
-  const commandLine = [
-    escapeWindowsCmdCommand(path.win32.normalize(command)),
-    ...args.map(escapeWindowsCmdArgument),
-  ].join(" ");
-
-  return {
-    args: ["/d", "/s", "/c", `"${commandLine}"`],
-    command: options?.comSpec ?? (process.env.ComSpec?.trim() || "cmd.exe"),
-    windowsVerbatimArguments: true,
-  };
+  return buildSpawnInvocation(command, args, options);
 }
 
 export async function readCodexCliVersion(
@@ -511,6 +476,11 @@ export async function readCodexCliVersion(
   }).catch(() => null);
 }
 
+/**
+ * Starts Codex as a managed agent process: its own process group on POSIX,
+ * the .cmd shim through cmd.exe on Windows, kill() ending the whole tree
+ * (taskkill /T /F on Windows) and the pid recorded for shutdown.
+ */
 export async function spawnCodexCli(
   args: string[],
   options?: {
@@ -523,74 +493,17 @@ export async function spawnCodexCli(
     throw new Error("Codex CLI is not installed or not available on PATH.");
   }
 
-  const invocation = buildCodexCliInvocation(resolvedCli.command, args);
-
-  return installWindowsTreeKill(
-    spawn(invocation.command, invocation.args, {
-      cwd: options?.cwd,
-      env: {
-        ...resolvedCli.env,
-        ...(options?.env ?? {}),
-      },
-      stdio: ["pipe", "pipe", "pipe"],
-      ...(invocation.windowsVerbatimArguments
-        ? { windowsVerbatimArguments: true }
-        : {}),
-    }) as ChildProcessWithoutNullStreams,
-  );
-}
-
-function runWindowsTaskkill(pid: number) {
-  return new Promise<void>((resolve, reject) => {
-    execFile(
-      "taskkill",
-      ["/pid", String(pid), "/T", "/F"],
-      { windowsHide: true },
-      (error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        resolve();
-      },
-    );
-  });
-}
-
-/**
- * On Windows `child.kill()` ends only the direct child: cmd.exe for a
- * wrapped codex.cmd, or npm's node launcher. The Codex binary underneath
- * keeps running. Route kill() through `taskkill /T /F` so the whole tree
- * ends, falling back to the direct kill if taskkill fails. P10's
- * runtime/process kill-tree helper replaces this.
- */
-export function installWindowsTreeKill<
-  TChild extends Pick<ChildProcess, "exitCode" | "kill" | "pid" | "signalCode">,
->(
-  child: TChild,
-  options?: {
-    platform?: NodeJS.Platform;
-    taskkill?: (pid: number) => Promise<void>;
-  },
-) {
-  if ((options?.platform ?? process.platform) !== "win32") {
-    return child;
-  }
-
-  const killDirect = child.kill.bind(child);
-  const taskkill = options?.taskkill ?? runWindowsTaskkill;
-  child.kill = (signal?: NodeJS.Signals | number) => {
-    const pid = child.pid;
-    if (pid == null || child.exitCode !== null || child.signalCode !== null) {
-      return killDirect(signal);
-    }
-
-    void taskkill(pid).catch(() => {
-      killDirect(signal);
-    });
-    return true;
-  };
-
-  return child;
+  return spawnManagedProcess({
+    args,
+    command: resolvedCli.command,
+    cwd: options?.cwd,
+    env: {
+      ...resolvedCli.env,
+      ...(options?.env ?? {}),
+    },
+    // resolvedCli.env already starts from process.env.
+    extendEnv: false,
+    label: `codex ${args[0] ?? ""}`.trim(),
+    stdio: ["pipe", "pipe", "pipe"],
+  }) as ChildProcessWithoutNullStreams;
 }

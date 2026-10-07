@@ -14,7 +14,6 @@ mock.module("server-only", () => ({}));
 
 const {
   buildCodexCliInvocation,
-  installWindowsTreeKill,
   parseShellLookupOutput,
   resetCodexCliResolutionCache,
   resolveCodexCli,
@@ -278,62 +277,6 @@ describe("resolveCodexCli on Windows", () => {
     } finally {
       await rm(tempRoot, { force: true, recursive: true });
     }
-  });
-});
-
-describe("installWindowsTreeKill", () => {
-  function createChild(overrides?: { exitCode?: number | null }) {
-    return {
-      exitCode: overrides?.exitCode ?? null,
-      kill: mock((_signal?: NodeJS.Signals | number) => true),
-      pid: 4242,
-      signalCode: null,
-    };
-  }
-
-  it("ends the whole process tree with taskkill on Windows", async () => {
-    const child = createChild();
-    const directKill = child.kill;
-    const taskkill = mock(async (_pid: number) => {});
-
-    installWindowsTreeKill(child, { platform: "win32", taskkill });
-    expect(child.kill()).toBe(true);
-    await Promise.resolve();
-
-    expect(taskkill).toHaveBeenCalledWith(4242);
-    expect(directKill).not.toHaveBeenCalled();
-  });
-
-  it("falls back to the direct kill when taskkill fails", async () => {
-    const child = createChild();
-    const directKill = child.kill;
-
-    installWindowsTreeKill(child, {
-      platform: "win32",
-      taskkill: async () => {
-        throw new Error("taskkill missing");
-      },
-    });
-    child.kill("SIGTERM");
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(directKill).toHaveBeenCalledWith("SIGTERM");
-  });
-
-  it("leaves kill() alone outside Windows and after exit", () => {
-    const posixChild = createChild();
-    const posixKill = posixChild.kill;
-    installWindowsTreeKill(posixChild, { platform: "darwin" });
-    expect(posixChild.kill).toBe(posixKill);
-
-    const exitedChild = createChild({ exitCode: 0 });
-    const exitedKill = exitedChild.kill;
-    const taskkill = mock(async (_pid: number) => {});
-    installWindowsTreeKill(exitedChild, { platform: "win32", taskkill });
-    exitedChild.kill();
-
-    expect(taskkill).not.toHaveBeenCalled();
-    expect(exitedKill).toHaveBeenCalled();
   });
 });
 

@@ -1117,6 +1117,7 @@ function createDatabase() {
 }
 
 const globalForDb = globalThis as unknown as {
+  agentProcessSweepInit: Promise<void> | undefined;
   automationSchedulerInit: Promise<void> | undefined;
   startupBackupInit: Promise<void> | undefined;
   db: ReturnType<typeof createDatabase> | undefined;
@@ -1199,10 +1200,41 @@ function startStartupBackup() {
   return globalForDb.startupBackupInit;
 }
 
+// Ends agent processes (Codex app-server, Cursor ACP, OpenCode servers) that
+// a crashed or force-killed server left running. Each is only killed while
+// its command line still matches the recorded one.
+function startAgentProcessSweep() {
+  if (shouldSkipStartupTasks || globalForDb.agentProcessSweepInit) {
+    return globalForDb.agentProcessSweepInit;
+  }
+
+  globalForDb.agentProcessSweepInit = Promise.resolve()
+    .then(async () => {
+      const { sweepStaleAgentProcesses } =
+        await import("@/lib/runtime/process/shutdown");
+      const result = await sweepStaleAgentProcesses();
+      if (result.killed > 0) {
+        createLogger("Agents").info(
+          `Ended ${result.killed} orphaned agent process(es) from an earlier run.`,
+        );
+      }
+    })
+    .catch((error) => {
+      globalForDb.agentProcessSweepInit = undefined;
+      createLogger("Agents").error(
+        `Agent process sweep failed: ${error instanceof Error ? error.message : error}`,
+      );
+    });
+
+  return globalForDb.agentProcessSweepInit;
+}
+
 export async function startDeferredStartupTasks() {
-  const tasks = [startAutomationScheduler(), startStartupBackup()].filter(
-    (task): task is Promise<void> => Boolean(task),
-  );
+  const tasks = [
+    startAgentProcessSweep(),
+    startAutomationScheduler(),
+    startStartupBackup(),
+  ].filter((task): task is Promise<void> => Boolean(task));
 
   await Promise.all(tasks);
 }

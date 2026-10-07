@@ -27,6 +27,8 @@ import {
   buildManagedExecutablePathValue,
   getPlatformHomeDirectory,
 } from "@/lib/runtime/platform-paths";
+import { SENTINEL_PRIVATE_ENV_KEYS } from "@/lib/runtime/process/spawn";
+import { withTimeout } from "@/lib/runtime/process/with-timeout";
 
 import { resolveBundledCopilotRuntime } from "./bundled-runtime";
 
@@ -127,43 +129,6 @@ function getLocalStateDirectory() {
 
 function getCopilotStatusSnapshotPath() {
   return path.join(getLocalStateDirectory(), COPILOT_STATUS_SNAPSHOT_FILE);
-}
-
-function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-): Promise<T | null> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const timeoutId = setTimeout(() => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      resolve(null);
-    }, timeoutMs);
-
-    void promise
-      .then((value) => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve(value);
-      })
-      .catch((error) => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        clearTimeout(timeoutId);
-        reject(error);
-      });
-  });
 }
 
 async function writeCopilotStatusSnapshot(snapshot: CopilotStatusSnapshot) {
@@ -994,9 +959,7 @@ export function resetCopilotRuntimeCache() {
 
 // Sentinel's own secrets stay out of the runtime and of the shell commands,
 // MCP servers and extensions it starts (an extension can be granted env access
-// without a prompt in full access mode). ENCRYPTION_KEY decrypts the provider
-// credentials Sentinel stores.
-const SENTINEL_PRIVATE_ENV_KEYS = new Set(["ENCRYPTION_KEY"]);
+// without a prompt in full access mode); see SENTINEL_PRIVATE_ENV_KEYS.
 
 function toCopilotRuntimeEnv(env: NodeJS.ProcessEnv) {
   return Object.fromEntries(

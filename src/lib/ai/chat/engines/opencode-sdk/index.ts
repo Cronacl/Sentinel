@@ -1,11 +1,6 @@
 import "server-only";
 
-import {
-  execFile,
-  spawn,
-  spawnSync,
-  type ChildProcessByStdio,
-} from "node:child_process";
+import { execFile, type ChildProcessByStdio } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
@@ -33,6 +28,9 @@ import {
   buildManagedExecutablePathValue,
   buildPreferredExecutablePathValue,
 } from "@/lib/runtime/platform-paths";
+import { terminateProcessTree } from "@/lib/runtime/process/kill-tree";
+import { spawnManagedProcess } from "@/lib/runtime/process/spawn";
+import { withTimeout } from "@/lib/runtime/process/with-timeout";
 
 // `opencode serve` prints "opencode server listening on http://<host>:<port>"
 // once it accepts connections (packages/opencode/src/cli/cmd/serve.ts; the
@@ -229,34 +227,6 @@ function getLocalStateDirectory() {
 
 function getOpenCodeStatusSnapshotPath() {
   return path.join(getLocalStateDirectory(), OPENCODE_STATUS_SNAPSHOT_FILE);
-}
-
-function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-): Promise<T | null> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const timeoutId = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      resolve(null);
-    }, timeoutMs);
-
-    void promise
-      .then((value) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve(value);
-      })
-      .catch((error) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeoutId);
-        reject(error);
-      });
-  });
 }
 
 function normalizeCandidatePath(candidatePath: string) {
@@ -1024,29 +994,14 @@ function hasOpenCodeServerExited(child: OpenCodeServerChild) {
   return child.exitCode !== null || child.signalCode !== null;
 }
 
-// Adapted from @opencode-ai/sdk dist/process.js `stop()` (MIT): on Windows the
-// spawn goes through a shell, so the tree is killed with taskkill. Elsewhere a
-// SIGTERM (the npm launcher forwards it) escalates to SIGKILL after a grace
-// period so a wedged server cannot outlive the run.
+// The server is a managed agent process (its own process group on POSIX,
+// taskkill /T /F on Windows): SIGTERM (the npm launcher forwards it)
+// escalates to SIGKILL after a grace period so a wedged server cannot outlive
+// the run.
 function stopOpenCodeServerChild(child: OpenCodeServerChild) {
   if (hasOpenCodeServerExited(child)) return;
 
-  if (process.platform === "win32" && child.pid) {
-    const result = spawnSync(
-      "taskkill",
-      ["/pid", String(child.pid), "/T", "/F"],
-      { windowsHide: true },
-    );
-    if (!result.error && result.status === 0) return;
-  }
-
-  child.kill("SIGTERM");
-  const escalation = setTimeout(() => {
-    if (!hasOpenCodeServerExited(child)) {
-      child.kill("SIGKILL");
-    }
-  }, OPENCODE_SERVER_KILL_GRACE_MS);
-  escalation.unref?.();
+  void terminateProcessTree(child, { graceMs: OPENCODE_SERVER_KILL_GRACE_MS });
 }
 
 function appendCappedOutput(current: string, chunk: string | Buffer) {
@@ -1070,23 +1025,23 @@ export async function startOpenCodeServerProcess(input: {
   const password = randomBytes(24).toString("base64url");
   const authorization = buildOpenCodeServerAuthorization(password);
   const timeoutMs = input.timeoutMs ?? OPENCODE_SERVER_START_TIMEOUT_MS;
-  const child: OpenCodeServerChild = spawn(
-    input.binaryPath,
-    ["serve", `--hostname=${OPENCODE_SERVER_HOSTNAME}`, `--port=${port}`],
-    {
-      cwd: input.cwd,
-      env: {
-        ...baseEnv,
-        // Keep a caller's or the user's OPENCODE_CONFIG_CONTENT; forcing "{}"
-        // clobbered it (t3code resolveOpenCodeConfigContent).
-        OPENCODE_CONFIG_CONTENT: baseEnv.OPENCODE_CONFIG_CONTENT ?? "{}",
-        OPENCODE_SERVER_PASSWORD: password,
-        OPENCODE_SERVER_USERNAME,
-      },
-      shell: process.platform === "win32",
-      stdio: ["ignore", "pipe", "pipe"],
+  const child = spawnManagedProcess({
+    args: ["serve", `--hostname=${OPENCODE_SERVER_HOSTNAME}`, `--port=${port}`],
+    command: input.binaryPath,
+    cwd: input.cwd,
+    env: {
+      ...baseEnv,
+      // Keep a caller's or the user's OPENCODE_CONFIG_CONTENT; forcing "{}"
+      // clobbered it (t3code resolveOpenCodeConfigContent).
+      OPENCODE_CONFIG_CONTENT: baseEnv.OPENCODE_CONFIG_CONTENT ?? "{}",
+      OPENCODE_SERVER_PASSWORD: password,
+      OPENCODE_SERVER_USERNAME,
     },
-  );
+    // Only the given env: the caller's copy already starts from process.env.
+    extendEnv: false,
+    label: "opencode serve",
+    stdio: ["ignore", "pipe", "pipe"],
+  }) as OpenCodeServerChild;
 
   child.stdout.setEncoding("utf8");
   child.stderr.setEncoding("utf8");

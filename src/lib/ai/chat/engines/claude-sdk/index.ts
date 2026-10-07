@@ -22,6 +22,7 @@ import {
   buildPreferredExecutablePathValue,
   getPlatformHomeDirectory,
 } from "@/lib/runtime/platform-paths";
+import { withTimeout } from "@/lib/runtime/process/with-timeout";
 import type {
   ClaudePermissionMode,
   ClaudeThreadState,
@@ -105,43 +106,6 @@ type ClaudeStatusSnapshot = {
   binaryVersion: string | null;
   recordedAt: string;
 };
-
-function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-): Promise<T | null> {
-  return new Promise((resolve) => {
-    let settled = false;
-    const timeoutId = setTimeout(() => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      resolve(null);
-    }, timeoutMs);
-
-    void promise
-      .then((value) => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve(value);
-      })
-      .catch(() => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve(null);
-      });
-  });
-}
 
 let cachedStatus: {
   expiresAt: number;
@@ -959,9 +923,12 @@ async function probeClaudeStatus(input: {
       }),
     });
 
+    // A failure counts as no answer, like a timeout; `finally` closes the
+    // query either way.
     const initialization = await withTimeout(
       claudeQuery.initializationResult(),
       CLAUDE_STATUS_QUERY_TIMEOUT_MS,
+      { nullOnError: true },
     );
 
     if (!initialization) {

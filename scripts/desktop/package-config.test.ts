@@ -153,6 +153,61 @@ async function listPackagesWithInstallScripts(nodeModulesPath: string) {
   return packages;
 }
 
+describe("desktop shell runtime scripts", () => {
+  const scriptsRoot = path.join(process.cwd(), "scripts", "desktop");
+  const importPattern = /from\s+["']([^"']+\.mjs)["']/g;
+
+  async function readImports(file: string) {
+    const content = await readFile(file, "utf8");
+    return [...content.matchAll(importPattern)].map((match) =>
+      path.resolve(path.dirname(file), match[1]!),
+    );
+  }
+
+  it("copies every scripts/desktop module the shell imports, transitively", async () => {
+    const mainRoot = path.join(process.cwd(), "desktop", "main");
+    const pending = (
+      await Promise.all(
+        (await readdir(mainRoot))
+          .filter((name) => name.endsWith(".mjs"))
+          .map((name) => readImports(path.join(mainRoot, name))),
+      )
+    )
+      .flat()
+      .filter((file) => file.startsWith(`${scriptsRoot}${path.sep}`));
+    const required = new Set<string>();
+    while (pending.length > 0) {
+      const file = pending.pop()!;
+      if (required.has(file)) continue;
+      required.add(file);
+      pending.push(
+        ...(await readImports(file)).filter((next) =>
+          next.startsWith(`${scriptsRoot}${path.sep}`),
+        ),
+      );
+    }
+
+    const prepareShell = await readFile(
+      path.join(scriptsRoot, "prepare-shell.mjs"),
+      "utf8",
+    );
+    const listed = new Set(
+      [
+        ...(
+          prepareShell.match(/runtimeScripts = \[([^\]]*)\]/)?.[1] ?? ""
+        ).matchAll(/"([^"]+)"/g),
+      ].map((match) => match[1]),
+    );
+
+    expect([...required].map((file) => path.basename(file)).sort()).toEqual(
+      expect.arrayContaining(["agent-shutdown.mjs", "server-manager.mjs"]),
+    );
+    for (const file of required) {
+      expect(listed.has(path.basename(file))).toBe(true);
+    }
+  });
+});
+
 describe("dependency lifecycle scripts", () => {
   it("trusts every installed package with install scripts except better-sqlite3", async () => {
     const packageJson = JSON.parse(

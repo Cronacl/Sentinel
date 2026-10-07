@@ -435,3 +435,41 @@ describe("P10 runtime path tripwires", () => {
     ).toEqual([]);
   });
 });
+
+describe("P10 process utility tripwires", () => {
+  it("flags local withTimeout copies in engine and runtime code", () => {
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/cursor-acp/index.ts",
+        "function withTimeout<T>(\n  promise: Promise<T>,",
+      ),
+    ).toEqual(["P10-engine-local-with-timeout:1"]);
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/cursor-acp/index.ts",
+        'import { withTimeout } from "@/lib/runtime/process/with-timeout";',
+      ),
+    ).toEqual([]);
+    expect(
+      hitIds(
+        "src/lib/runtime/process/with-timeout.ts",
+        "export function withTimeout<T>(",
+      ),
+    ).toEqual([]);
+  });
+
+  it("flags Windows tree-kill copies and shell spawns", () => {
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/codex-cli/index.ts",
+        "return installWindowsTreeKill(child);",
+      ),
+    ).toEqual(["P10-windows-tree-kill-copy:1"]);
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/cursor-acp/index.ts",
+        'spawn(command, ["acp"], { shell: process.platform === "win32" });',
+      ),
+    ).toEqual(["P10-engine-windows-shell-spawn:1"]);
+  });
+});

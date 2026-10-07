@@ -371,6 +371,29 @@ export const TRIPWIRES = [
     multiline: true,
   },
   {
+    id: "P10-engine-local-with-timeout",
+    description:
+      "Engines time out through src/lib/runtime/process/with-timeout.ts, whose timeout aborts the work (kills the probe's child); local copies leaked it",
+    pattern: /^\s*(?:export\s+)?(?:async\s+)?function\s+withTimeout\b/,
+    include: /^src\/lib\/ai\/chat\/(?:engines|runtime)\/.*\.[cm]?[jt]sx?$/,
+    exclude: /\.test\.[cm]?[jt]sx?$/,
+  },
+  {
+    id: "P10-windows-tree-kill-copy",
+    description:
+      "Process trees end through src/lib/runtime/process/kill-tree.ts (process groups on POSIX, taskkill /T /F on Windows)",
+    pattern: /\binstallWindowsTreeKill\b|\bfunction\s+runWindowsTaskkill\b/,
+    include: /^src\/.*\.[cm]?[jt]sx?$/,
+  },
+  {
+    id: "P10-engine-windows-shell-spawn",
+    description:
+      "Agent processes start through spawnManagedProcess, which runs .cmd shims via cmd.exe with quoted arguments; shell: true on Windows passes them unescaped",
+    pattern: /\bshell:\s*process\.platform\s*===\s*["']win32["']/,
+    include: /^src\/lib\/ai\/chat\/(?:engines|runtime)\/.*\.[cm]?[jt]sx?$/,
+    exclude: /\.test\.[cm]?[jt]sx?$/,
+  },
+  {
     id: "fixtures-in-app-code",
     description:
       "scripts/fixtures protocol fakes are test-only; app code never references them",

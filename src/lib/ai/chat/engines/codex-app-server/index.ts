@@ -9,6 +9,7 @@ import {
   applyPrivateFsMode,
   getSentinelStateRoot,
 } from "@/lib/runtime/local-state";
+import { withTimeout } from "@/lib/runtime/process/with-timeout";
 import type {
   CodexApprovalPolicy,
   CodexSandboxMode,
@@ -669,43 +670,6 @@ function toCodexError(message: string, error?: unknown) {
   return new Error(message);
 }
 
-function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-): Promise<T | null> {
-  return new Promise((resolve) => {
-    let settled = false;
-    const timeoutId = setTimeout(() => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      resolve(null);
-    }, timeoutMs);
-
-    void promise
-      .then((value) => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve(value);
-      })
-      .catch(() => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve(null);
-      });
-  });
-}
-
 let cachedStatus: {
   expiresAt: number;
   promise: Promise<CodexEngineStatus>;
@@ -1029,6 +993,7 @@ export class CodexAppServerManager {
           return { account, availableModels, requiresOpenaiAuth };
         })(),
         CODEX_STATUS_QUERY_TIMEOUT_MS,
+        { nullOnError: true },
       );
 
       if (!statusPayload) {
