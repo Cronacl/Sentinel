@@ -127,6 +127,13 @@ export const TRIPWIRES = [
     include: /^src\/.*\.[cm]?[jt]sx?$/,
   },
   {
+    id: "P8-bedrock-in-region-claude-ids",
+    description:
+      "Current Claude models have no in-region (on-demand) Bedrock endpoint; list them under an inference profile id such as us.anthropic.*",
+    pattern: /\bid:\s*["']anthropic\.claude-/,
+    include: /^src\/.*\.[cm]?[jt]sx?$/,
+  },
+  {
     id: "P5-next-turbo-flag",
     description: "Turbopack is the Next 16 dev default; --turbo is redundant",
     pattern: /--turbo\b/,

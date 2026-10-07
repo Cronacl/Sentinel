@@ -64,6 +64,7 @@ const RETIRED_MODEL_IDS: Array<[AIProvider, string]> = [
   ["xai", "grok-3-mini"],
   ["amazon_bedrock", "anthropic.claude-3-5-sonnet-20241022-v2:0"],
   ["amazon_bedrock", "anthropic.claude-3-haiku-20240307-v1:0"],
+  ["amazon_bedrock", "anthropic.claude-sonnet-4-5-20250929-v1:0"],
   ["groq", "gemma2-9b-it"],
   ["groq", "mixtral-8x7b-32768"],
   ["groq", "qwen-qwq-32b"],
@@ -119,7 +120,8 @@ describe("model catalog", () => {
     ).toEqual({
       amazon_bedrock: "us.anthropic.claude-opus-5-5",
       anthropic: "claude-opus-5-5",
-      azure: "gpt-5.5",
+      // Azure ids are deployment names; gpt-5 is the pre-refresh default.
+      azure: "gpt-5",
       cohere: "command-a-plus-05-2026",
       deepseek: "deepseek-v4-pro",
       google: "gemini-3.8-flash",
@@ -242,6 +244,11 @@ describe("retired model ids", () => {
     expect(resolveStoredCompositeModelId("ollama:my-model", enabled)).toBe(
       "ollama:my-model",
     );
+    // The successor (claude-opus-5-5) is turned off: keep the stored id so
+    // the caller's own fallback applies instead of a model the user disabled.
+    expect(
+      resolveStoredCompositeModelId("anthropic:claude-opus-4-1", enabled),
+    ).toBe("anthropic:claude-opus-4-1");
   });
 
   it("selects the successor when normalizing a stored default model", () => {
@@ -553,9 +560,6 @@ describe("Anthropic reasoning configs", () => {
 
   it("sends effort with adaptive, summarized thinking on Claude 4.7+ models", () => {
     for (const modelId of [
-      "claude-opus-5-5",
-      "claude-sonnet-5-5",
-      "claude-fable-5-1",
       "claude-opus-5",
       "claude-sonnet-5",
       "claude-fable-5",
@@ -574,6 +578,43 @@ describe("Anthropic reasoning configs", () => {
     expect(getDefaultReasoningEffort("anthropic", "claude-sonnet-5-5")).toBe(
       "high",
     );
+  });
+
+  it("drops stale thinking blocks on preserved-thinking Claude models", () => {
+    for (const modelId of [
+      "claude-opus-5-5",
+      "claude-sonnet-5-5",
+      "claude-fable-5-1",
+    ]) {
+      expect(
+        getReasoningProviderOptions("anthropic", modelId, "xhigh"),
+      ).toEqual({
+        anthropic: {
+          effort: "xhigh",
+          thinking: {
+            type: "adaptive",
+            display: "summarized",
+            blockBinding: { prefixMismatchBehavior: "drop_block" },
+          },
+        },
+      });
+      // Without a usable effort the model keeps its default thinking mode
+      // but still opts out of failing on edited history.
+      for (const effort of [null, undefined, "none"] as const) {
+        expect(
+          getReasoningProviderOptions("anthropic", modelId, effort),
+        ).toEqual({
+          anthropic: {
+            thinking: {
+              blockBinding: { prefixMismatchBehavior: "drop_block" },
+            },
+          },
+        });
+      }
+    }
+    expect(
+      getReasoningProviderOptions("anthropic", "claude-opus-4-8", null),
+    ).toBeUndefined();
   });
 
   it("maps the top level to max on Claude Opus 4.6 and Sonnet 4.6", () => {
@@ -685,11 +726,23 @@ describe("other provider reasoning configs", () => {
       xai: { reasoningEffort: "xhigh" },
     });
     expect(getDefaultReasoningEffort("xai", "grok-4.3")).toBe("low");
-    expect(getSupportedReasoningEfforts("xai", "grok-4.5")).toEqual([
+    expect(getSupportedReasoningEfforts("xai", "grok-4.3")).toEqual([
+      "none",
+      "low",
+      "medium",
+      "high",
+    ]);
+    // xhigh exists on grok-4.6 and later; grok-4.5 treats it as high.
+    expect(getSupportedReasoningEfforts("xai", "grok-4.6")).toEqual([
       "low",
       "medium",
       "high",
       "xhigh",
+    ]);
+    expect(getSupportedReasoningEfforts("xai", "grok-4.5")).toEqual([
+      "low",
+      "medium",
+      "high",
     ]);
     // grok-4.20 reasoning variants reject the parameter for every value.
     expect(getSupportedReasoningEfforts("xai", "grok-4.20-reasoning")).toEqual(
@@ -710,8 +763,13 @@ describe("other provider reasoning configs", () => {
 
   it("uses the provider's own reasoning options for Mistral, Groq and Cohere", () => {
     expect(
-      getReasoningProviderOptions("mistral", "mistral-large-latest", "none"),
+      getReasoningProviderOptions("mistral", "mistral-large-4", "none"),
     ).toEqual({ mistral: { reasoningEffort: "none" } });
+    // mistral-large-latest is Large 3, which has no adjustable reasoning
+    // (and @ai-sdk/mistral would not send it for that id).
+    expect(
+      getSupportedReasoningEfforts("mistral", "mistral-large-latest"),
+    ).toEqual([]);
     expect(
       getReasoningProviderOptions("groq", "openai/gpt-oss-120b", "low"),
     ).toEqual({ groq: { reasoningEffort: "low" } });

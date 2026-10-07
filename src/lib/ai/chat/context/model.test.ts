@@ -90,7 +90,11 @@ describe("resolveThreadChatModel", () => {
     expect(resolved.providerOptions).toEqual({
       anthropic: {
         effort: "high",
-        thinking: { type: "adaptive", display: "summarized" },
+        thinking: {
+          type: "adaptive",
+          display: "summarized",
+          blockBinding: { prefixMismatchBehavior: "drop_block" },
+        },
       },
     });
     expect(getLanguageModel).toHaveBeenCalledWith(
@@ -112,6 +116,31 @@ describe("resolveThreadChatModel", () => {
       responseModelId: "deepseek-flash",
       providerOptions: { deepseek: { thinking: { type: "disabled" } } },
     });
+  });
+
+  it("does not switch to a successor the user has turned off", async () => {
+    // claude-opus-4-1 retires to claude-opus-5-5, which is not enabled here.
+    storedThread = {
+      chatModelId: "anthropic:claude-opus-4-1",
+      chatReasoningEffort: "high",
+    };
+
+    await expect(resolveThreadChatModel(request())).rejects.toThrow(
+      "Model id is required for this chat operation.",
+    );
+
+    const resolved = await resolveThreadChatModel(
+      request({ modelId: "anthropic:claude-opus-4-1" }),
+    );
+    expect(resolved.requestedModelId).toBe("anthropic:claude-opus-4-1");
+    expect(getLanguageModel).toHaveBeenCalledWith(
+      "user-1",
+      "anthropic:claude-opus-4-1",
+    );
+    expect(getLanguageModel).not.toHaveBeenCalledWith(
+      "user-1",
+      "anthropic:claude-opus-5-5",
+    );
   });
 
   it("keeps a retired id that the user re-added as a custom model", async () => {

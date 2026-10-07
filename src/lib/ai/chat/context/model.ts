@@ -44,7 +44,8 @@ export async function resolveThreadChatModel(
     (await getEnabledModels(request.userId)).map((model) => model.compositeId),
   );
   // Threads, automations and older messages can store a built-in model id
-  // that its provider has retired; those resolve to the successor model.
+  // that its provider has retired; those resolve to the successor model when
+  // the user has it enabled.
   const threadModelId = thread?.chatModelId
     ? resolveStoredCompositeModelId(thread.chatModelId, enabledModelIds)
     : undefined;

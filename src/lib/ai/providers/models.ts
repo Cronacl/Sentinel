@@ -38,6 +38,12 @@ type ReasoningConfig = {
    * set, and Opus 4.6 / Sonnet 4.6 only think when adaptive thinking is on.
    */
   anthropicAdaptiveThinking?: boolean;
+  /**
+   * Anthropic only: the model ties each thinking block to the conversation
+   * that produced it ("preserved thinking"). Requests then ask the API to drop
+   * thinking blocks whose earlier history changed instead of rejecting them.
+   */
+  anthropicPreservedThinking?: boolean;
   defaultEffort: ReasoningEffort;
   forceReasoning?: boolean;
   /**
@@ -164,8 +170,8 @@ const ANTHROPIC_ADAPTIVE_CONFIG: ReasoningConfig = {
   supportedEfforts: ["low", "medium", "high", "xhigh"],
 };
 
-// Claude Opus 4.7+, Opus 5, Sonnet 5/5.5 and Fable 5/5.1: adaptive thinking
-// with `xhigh`. The API default effort is `high`.
+// Claude Opus 4.7+, Opus 5, Sonnet 5 and Fable 5: adaptive thinking with
+// `xhigh`. The API default effort is `high`.
 const ANTHROPIC_ADAPTIVE_XHIGH_CONFIG: ReasoningConfig = {
   anthropicAdaptiveThinking: true,
   defaultEffort: "high",
@@ -173,9 +179,23 @@ const ANTHROPIC_ADAPTIVE_XHIGH_CONFIG: ReasoningConfig = {
   supportedEfforts: ["low", "medium", "high", "xhigh"],
 };
 
+// Claude Sonnet 5.5 and Fable 5.1 (and Opus 5.5 below) bind thinking blocks to
+// the conversation: replaying a block after an earlier message, the system
+// prompt or the tool set changed is a 400 for accounts created on or after
+// 2026-08-31. Sentinel's chat runtime does change earlier history (context
+// compaction keeps recent turns behind a new summary, and the tool router
+// changes the active tool set between steps), so these requests set
+// `prefix_mismatch_behavior: "drop_block"`: the API drops the stale blocks and
+// answers instead of failing. @ai-sdk/anthropic adds the
+// `thinking-binding-controls-2026-08-01` beta header for it.
+const ANTHROPIC_PRESERVED_THINKING_CONFIG: ReasoningConfig = {
+  ...ANTHROPIC_ADAPTIVE_XHIGH_CONFIG,
+  anthropicPreservedThinking: true,
+};
+
 // Claude Opus 5.5 defaults to `medium` effort (one level below Opus 5).
 const ANTHROPIC_OPUS_5_5_CONFIG: ReasoningConfig = {
-  ...ANTHROPIC_ADAPTIVE_XHIGH_CONFIG,
+  ...ANTHROPIC_PRESERVED_THINKING_CONFIG,
   defaultEffort: "medium",
 };
 
@@ -274,20 +294,29 @@ const GEMINI_2_5_PRO_REASONING_CONFIG: ReasoningConfig = {
   supportedEfforts: ["low", "medium", "high"],
 };
 
-// Grok 4.5, 4.6 and 4.7: low through xhigh, `high` by default
-// (https://docs.x.ai/developers/models model pages). The grok-4.20 reasoning
+// Grok 4.6 and 4.7: low through xhigh, `high` by default. xAI's reasoning
+// guide (https://docs.x.ai/docs/guides/reasoning) limits `xhigh` to grok-4.6
+// and later and treats it as `high` on grok-4.5. The grok-4.20 reasoning
 // models reject the parameter, so they get no config.
-const XAI_GROK_4_5_PLUS_REASONING_CONFIG: ReasoningConfig = {
+const XAI_GROK_4_6_PLUS_REASONING_CONFIG: ReasoningConfig = {
   defaultEffort: "high",
   strategy: "reasoning-effort",
   supportedEfforts: ["low", "medium", "high", "xhigh"],
 };
 
-// Grok 4.3: none through xhigh, `low` by default.
+// Grok 4.5: low through high, `high` by default.
+const XAI_GROK_4_5_REASONING_CONFIG: ReasoningConfig = {
+  defaultEffort: "high",
+  strategy: "reasoning-effort",
+  supportedEfforts: ["low", "medium", "high"],
+};
+
+// Grok 4.3: none through high, `low` by default (its model page lists
+// "none (no reasoning at all), low, medium, and high").
 const XAI_GROK_4_3_REASONING_CONFIG: ReasoningConfig = {
   defaultEffort: "low",
   strategy: "reasoning-effort",
-  supportedEfforts: ["none", "low", "medium", "high", "xhigh"],
+  supportedEfforts: ["none", "low", "medium", "high"],
 };
 
 // DeepSeek V4: thinking on by default; `reasoningEffort` is low | high | max
@@ -346,7 +375,8 @@ const GROQ_GPT_OSS_REASONING_CONFIG: ReasoningConfig = {
 
 // Catalog order matters: the first entry of each provider is the model new
 // threads fall back to, so every list starts with the current flagship
-// (Ollama keeps a small local default instead). Context windows are the
+// (Ollama keeps a small local default, Azure its existing deployment name,
+// and Mistral its GA Large while Large 4 is a preview). Context windows are the
 // provider's documented limits; for OpenAI models they are the maximum
 // prompt size (272K of the 400K window, 922K of the 1.05M window), because
 // compaction must trigger before that cap. Retired ids live in
@@ -561,7 +591,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       description: "Fast, capable Sonnet for everyday coding and agent work.",
       capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
       contextWindow: 1_000_000,
-      reasoning: ANTHROPIC_ADAPTIVE_XHIGH_CONFIG,
+      reasoning: ANTHROPIC_PRESERVED_THINKING_CONFIG,
     },
     {
       id: "claude-fable-5-1",
@@ -570,7 +600,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
         "Anthropic's most capable model for the hardest long-horizon work.",
       capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
       contextWindow: 1_000_000,
-      reasoning: ANTHROPIC_ADAPTIVE_XHIGH_CONFIG,
+      reasoning: ANTHROPIC_PRESERVED_THINKING_CONFIG,
     },
     {
       id: "claude-haiku-4-5",
@@ -936,7 +966,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       description: "Most capable Grok model for coding and knowledge work.",
       capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
       contextWindow: 500_000,
-      reasoning: XAI_GROK_4_5_PLUS_REASONING_CONFIG,
+      reasoning: XAI_GROK_4_6_PLUS_REASONING_CONFIG,
     },
     {
       id: "grok-4.6",
@@ -944,7 +974,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       description: "Previous Grok reasoning model.",
       capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
       contextWindow: 500_000,
-      reasoning: XAI_GROK_4_5_PLUS_REASONING_CONFIG,
+      reasoning: XAI_GROK_4_6_PLUS_REASONING_CONFIG,
     },
     {
       id: "grok-4.5",
@@ -952,7 +982,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       description: "Grok 4.5 reasoning model.",
       capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
       contextWindow: 500_000,
-      reasoning: XAI_GROK_4_5_PLUS_REASONING_CONFIG,
+      reasoning: XAI_GROK_4_5_REASONING_CONFIG,
     },
     {
       id: "grok-4.3",
@@ -978,7 +1008,17 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
     },
   ],
   // Azure model ids are deployment names; these match the default names.
+  // gpt-5 stays first because it is the deployment new Azure threads used
+  // before the catalog refresh; a user without a gpt-5.5 deployment would
+  // otherwise get a "deployment not found" error on every new thread.
   azure: [
+    {
+      id: "gpt-5",
+      displayName: "GPT-5 (Azure)",
+      description: "OpenAI GPT-5 via Azure deployment.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 272_000,
+    },
     {
       id: "gpt-5.5",
       displayName: "GPT-5.5 (Azure)",
@@ -990,13 +1030,6 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       id: "gpt-5.4-mini",
       displayName: "GPT-5.4 Mini (Azure)",
       description: "Compact GPT-5.4 via Azure deployment.",
-      capabilities: ["vision", "tool_use", "object_generation"],
-      contextWindow: 272_000,
-    },
-    {
-      id: "gpt-5",
-      displayName: "GPT-5 (Azure)",
-      description: "OpenAI GPT-5 via Azure deployment.",
       capabilities: ["vision", "tool_use", "object_generation"],
       contextWindow: 272_000,
     },
@@ -1047,7 +1080,7 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       contextWindow: 200_000,
     },
     {
-      id: "anthropic.claude-sonnet-4-5-20250929-v1:0",
+      id: "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
       displayName: "Claude Sonnet 4.5 (Bedrock)",
       description: "Legacy Claude Sonnet 4.5 via Amazon Bedrock.",
       capabilities: ["vision", "tool_use", "object_generation"],
@@ -1192,13 +1225,26 @@ export const MODEL_CATALOG: Partial<Record<AIProvider, ModelMeta[]>> = {
       reasoning: THINKING_TOGGLE_CONFIG,
     },
   ],
-  // `-latest` aliases follow Mistral's current release of each tier
-  // (Large 4, Medium 3.5, Small 4 as of October 2026).
+  // `-latest` aliases follow Mistral's current GA release of each tier
+  // (https://docs.mistral.ai/models, October 2026): Large 3
+  // (mistral-large-2512), Medium 3.5 and Small 4. Mistral Large 4 is a public
+  // preview under its own id. Large 3 has no adjustable reasoning, and
+  // @ai-sdk/mistral only sends `reasoning_effort` for model ids on its own
+  // allow-list, which has mistral-large-4 but not mistral-large-latest.
   mistral: [
     {
       id: "mistral-large-latest",
-      displayName: "Mistral Large",
-      description: "Mistral's multimodal flagship with adjustable reasoning.",
+      displayName: "Mistral Large 3",
+      description: "Mistral's generally available multimodal flagship.",
+      capabilities: ["vision", "tool_use", "object_generation"],
+      contextWindow: 262_144,
+    },
+    {
+      // Mistral lists a 1M context; the AI Gateway and OpenRouter serve
+      // 524,288 tokens, the safer cap for compaction.
+      id: "mistral-large-4",
+      displayName: "Mistral Large 4 (Preview)",
+      description: "Mistral's newest flagship with adjustable reasoning.",
       capabilities: ["vision", "reasoning", "tool_use", "object_generation"],
       contextWindow: 524_288,
       reasoning: MISTRAL_REASONING_CONFIG,
@@ -1558,6 +1604,10 @@ const RETIRED_MODEL_REPLACEMENTS: Partial<
     "grok-3-mini": "grok-4.3",
   },
   amazon_bedrock: {
+    // Claude Sonnet 4.5 has no in-region (on-demand) endpoint on Bedrock; it
+    // is only served through inference profiles.
+    "anthropic.claude-sonnet-4-5-20250929-v1:0":
+      "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
     "anthropic.claude-3-5-sonnet-20241022-v2:0":
       "us.anthropic.claude-sonnet-5-5",
     "anthropic.claude-3-haiku-20240307-v1:0":
@@ -1658,9 +1708,10 @@ export function getRetiredCompositeModelReplacement(
 
 /**
  * Keeps a stored composite model id when it is still available, otherwise
- * upgrades a retired built-in id to its replacement. Ids that are neither
- * available nor retired are returned unchanged so callers keep their own
- * fallback behavior.
+ * upgrades a retired built-in id to its replacement when the user has that
+ * replacement available (a model the user turned off, or whose provider is
+ * not connected, is never picked). Every other id is returned unchanged so
+ * callers keep their own fallback behavior, as in normalizeSelectedModelId.
  */
 export function resolveStoredCompositeModelId(
   compositeId: string,
@@ -1670,7 +1721,10 @@ export function resolveStoredCompositeModelId(
     return compositeId;
   }
 
-  return getRetiredCompositeModelReplacement(compositeId) ?? compositeId;
+  const replacement = getRetiredCompositeModelReplacement(compositeId);
+  return replacement && availableCompositeIds.has(replacement)
+    ? replacement
+    : compositeId;
 }
 
 export function toCompositeModelId(
@@ -1892,6 +1946,12 @@ export function getLowestReasoningEffort(
   );
 }
 
+// `thinking.blockBinding` for preserved-thinking Claude models (see
+// ANTHROPIC_PRESERVED_THINKING_CONFIG).
+const ANTHROPIC_DROP_STALE_THINKING = {
+  prefixMismatchBehavior: "drop_block",
+} as const;
+
 export function getReasoningProviderOptions(
   provider: AIProvider,
   modelId: string,
@@ -1899,15 +1959,24 @@ export function getReasoningProviderOptions(
 ): ProviderOptions | undefined {
   const config = getReasoningConfig(provider, modelId);
 
-  if (!reasoningEffort || !config) {
-    return undefined;
-  }
-
-  if (!config.supportedEfforts.includes(reasoningEffort)) {
+  if (!config) {
     return undefined;
   }
 
   const providerOptionsKey = getProviderOptionsKey(provider);
+
+  if (!reasoningEffort || !config.supportedEfforts.includes(reasoningEffort)) {
+    // No effort to send: keep the model's default thinking mode, but still
+    // opt preserved-thinking models out of failing on edited history.
+    return config.anthropicPreservedThinking
+      ? {
+          [providerOptionsKey]: {
+            thinking: { blockBinding: ANTHROPIC_DROP_STALE_THINKING },
+          },
+        }
+      : undefined;
+  }
+
   const mappedProviderOptions = config.providerOptionsMap?.[reasoningEffort];
 
   if (mappedProviderOptions) {
@@ -1934,7 +2003,15 @@ export function getReasoningProviderOptions(
       [providerOptionsKey]: {
         effort: providerValue,
         ...(config.anthropicAdaptiveThinking
-          ? { thinking: { type: "adaptive", display: "summarized" } }
+          ? {
+              thinking: {
+                type: "adaptive",
+                display: "summarized",
+                ...(config.anthropicPreservedThinking
+                  ? { blockBinding: ANTHROPIC_DROP_STALE_THINKING }
+                  : {}),
+              },
+            }
           : {}),
       },
     };
