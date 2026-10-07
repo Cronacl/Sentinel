@@ -7,6 +7,12 @@ import { validateThreadUIMessage } from "@/lib/ai/messages/ui";
 import { type ThreadPlanAnswer } from "@/lib/plan";
 import { CHAT_ENGINES, type ChatEngine } from "@/server/db/enums";
 import { repoThreadStateSchema } from "@/lib/ai/chat/engines/types";
+import { isEngineSlug } from "@/lib/ai/chat/engines/contract/ids";
+import {
+  buildEngineOptionSelections,
+  legacyRequestOptionsFromSelections,
+  parseEngineOptionSelections,
+} from "@/lib/ai/chat/engines/model-options";
 import { normalizeSentinelComposerToolTags } from "@/lib/ai/chat/tools/selection/tags";
 
 import { InvalidThreadChatRequestError } from "../errors";
@@ -108,9 +114,27 @@ export async function parseRequest(
   const toolApprovalResponse = parseToolApprovalResponse(
     input.toolApprovalResponse,
   );
-  const openCode = parseOpenCodeOptions(input.openCode);
-  const reasoningEffort = str(input.reasoningEffort) as
+  const engineInstanceId =
+    engine && isEngineSlug(input.engineInstanceId)
+      ? input.engineInstanceId
+      : undefined;
+  // Option selections and the legacy fields describe the same choices: the
+  // explicit field wins, and each side is completed from the other so the
+  // runtimes reading `reasoningEffort` / `openCode` see the selections.
+  const explicitOpenCode = parseOpenCodeOptions(input.openCode);
+  const explicitReasoningEffort = str(input.reasoningEffort) as
     ThreadChatRequest["reasoningEffort"] | undefined;
+  const modelOptions = buildEngineOptionSelections({
+    modelOptions: parseEngineOptionSelections(input.modelOptions),
+    openCode: explicitOpenCode,
+    reasoningEffort: explicitReasoningEffort,
+  });
+  const legacyOptions = legacyRequestOptionsFromSelections(modelOptions);
+  const openCode = explicitOpenCode ?? legacyOptions.openCode;
+  const reasoningEffort =
+    explicitReasoningEffort ?? legacyOptions.reasoningEffort;
+  const interactive =
+    typeof input.interactive === "boolean" ? input.interactive : undefined;
   const threadMode =
     input.threadMode === "plan" || input.threadMode === "chat"
       ? (input.threadMode as "plan" | "chat")
@@ -170,8 +194,11 @@ export async function parseRequest(
     ...(message ? { message } : {}),
     ...(messages ? { messages } : {}),
     ...(engine ? { engine } : {}),
+    ...(engineInstanceId ? { engineInstanceId } : {}),
+    ...(interactive !== undefined ? { interactive } : {}),
     ...(messageId ? { messageId } : {}),
     ...(modelId ? { modelId } : {}),
+    ...(modelOptions ? { modelOptions } : {}),
     ...(openCode ? { openCode } : {}),
     ...(rawPlanAnswers ? { planAnswers: rawPlanAnswers } : {}),
     ...(planQuestionSetId ? { planQuestionSetId } : {}),

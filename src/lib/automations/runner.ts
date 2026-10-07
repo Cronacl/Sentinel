@@ -8,6 +8,8 @@ import { automationRuns, automations } from "@/server/db/schema";
 import { runThreadChat } from "@/lib/ai/chat";
 import type { ChatEngine } from "@/server/db/enums";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import type { EngineOptionSelection } from "@/lib/ai/chat/engines/contract";
+import { parseEngineOptionSelections } from "@/lib/ai/chat/engines/model-options";
 import { computeNextRunAt } from "./schedule-utils";
 
 const log = createLogger("Automations");
@@ -93,24 +95,27 @@ async function executeAutomationChat(params: {
       role: "user";
     };
     modelId?: string;
+    modelOptions?: EngineOptionSelection[];
     reasoningEffort?: ReasoningEffort;
     toolsEnabled?: boolean;
     trigger: "submit-user-message";
     workspaceId: string;
   };
   engine: ChatEngine;
+  /** The automation's instance of `engine`; null for the default. */
+  engineInstanceId?: string | null;
   userId: string;
 }) {
-  const toolsEnabled =
-    params.engine === "cursor" || params.engine === "opencode"
-      ? false
-      : params.chatInput.toolsEnabled;
-
   return runThreadChat(
     {
       ...params.chatInput,
       engine: params.engine,
-      ...(toolsEnabled === undefined ? {} : { toolsEnabled }),
+      ...(params.engineInstanceId
+        ? { engineInstanceId: params.engineInstanceId }
+        : {}),
+      // Nobody watches an automation run: requests that would ask the user
+      // are declined, and full access still approves on its own.
+      interactive: false,
     },
     params.userId,
   );
@@ -201,6 +206,7 @@ export async function executeAutomationRun(
 
   try {
     const messageId = generateId();
+    const modelOptions = parseEngineOptionSelections(automation.modelOptions);
     const chatInput = {
       id: startedRun.threadId,
       workspaceId,
@@ -216,11 +222,13 @@ export async function executeAutomationRun(
       ...(automation.reasoningEffort
         ? { reasoningEffort: automation.reasoningEffort }
         : {}),
+      ...(modelOptions ? { modelOptions } : {}),
     };
     const engine = automation.chatEngine ?? "sentinel";
     const response = await executeAutomationChat({
       chatInput,
       engine,
+      engineInstanceId: automation.chatEngineInstanceId ?? null,
       userId: automation.userId,
     });
 

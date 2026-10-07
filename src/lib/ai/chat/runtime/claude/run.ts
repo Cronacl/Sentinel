@@ -13,6 +13,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 
 import { DRIVER_CATALOG } from "@/lib/ai/chat/engines/catalog";
+import type { ResolvedEngineInstance } from "@/lib/ai/chat/engines/contract";
 import { resolveSupportedPermissionMode } from "@/lib/security";
 import {
   buildClaudeSdkBaseOptions,
@@ -42,6 +43,10 @@ import {
 } from "../../repo/checkpoints";
 import { loadThreadSessionSnapshot } from "../../session/server";
 import type { ThreadChatRequest } from "../../types";
+import {
+  getFollowUpModelRequestOptions,
+  resolveThreadEngineInstance,
+} from "../engine-instance";
 import {
   createThreadEventChannel,
   type ThreadEventChannel,
@@ -647,6 +652,7 @@ function buildClaudePermissionMode(
 
 async function buildClaudeRuntimeOptions(input: {
   cwd: string;
+  instance: ResolvedEngineInstance | null;
   permissionMode: "default" | "full";
   reasoningEffort: ReasoningEffort | null;
   requestedModelId: string | null;
@@ -658,7 +664,9 @@ async function buildClaudeRuntimeOptions(input: {
     input.threadMode,
     input.permissionMode,
   );
-  const runtime = await resolveClaudeCodeRuntime();
+  const runtime = await resolveClaudeCodeRuntime({
+    instance: input.instance,
+  });
   const effort = resolveClaudeSdkEffort({
     modelId: input.requestedModelId,
     models: await getCachedClaudeModels(runtime.executablePath),
@@ -939,9 +947,7 @@ async function drainQueuedClaudeFollowUp(
           role: "user",
         },
         modelId: nextFollowUp.modelId,
-        ...(nextFollowUp.reasoningEffort
-          ? { reasoningEffort: nextFollowUp.reasoningEffort }
-          : {}),
+        ...getFollowUpModelRequestOptions(nextFollowUp),
         threadId: request.threadId,
         threadMode: nextFollowUp.threadMode,
         trigger: "submit-user-message",
@@ -949,6 +955,8 @@ async function drainQueuedClaudeFollowUp(
         workspaceId: request.workspaceId,
       },
       thread,
+      // Queued turns run on the instance the thread is bound to.
+      await resolveThreadEngineInstance(request.userId, thread),
     );
     persist.deleteThreadFollowUp(request.threadId, nextFollowUp.id);
   } catch (error) {
@@ -1587,6 +1595,8 @@ export async function stopClaudeThreadRun(
 export async function runClaudeThreadChat(
   request: ThreadChatRequest,
   existingThread: Awaited<ReturnType<typeof persist.loadThread>>,
+  /** The thread's engine instance (the dispatcher resolves it). */
+  instance?: ResolvedEngineInstance | null,
 ) {
   if (request.trigger === "submit-tool-approval") {
     const latestAssistant = request.messages
@@ -1679,6 +1689,7 @@ export async function runClaudeThreadChat(
     threadMode,
     "claude",
     request.draftRepoState ? { repo: request.draftRepoState } : null,
+    instance?.id,
   );
 
   const workspaceRoot = await getWorkspaceRootPath(
@@ -1694,8 +1705,10 @@ export async function runClaudeThreadChat(
     ),
     DRIVER_CATALOG.claude.capabilities.permissionModes,
   );
+  // Null under another instance or home: a fresh Claude session starts.
   const existingClaudeState = getClaudeThreadState(
     existingThread?.chatEngineState,
+    instance,
   );
   const requestedModelId =
     request.modelId ?? existingClaudeState?.modelId ?? null;
@@ -1716,6 +1729,7 @@ export async function runClaudeThreadChat(
       : null;
   const { options, permissionMode } = await buildClaudeRuntimeOptions({
     cwd,
+    instance: instance ?? null,
     permissionMode: workspacePermissionMode,
     reasoningEffort: request.reasoningEffort ?? null,
     requestedModelId,
@@ -1770,6 +1784,7 @@ export async function runClaudeThreadChat(
       engine: "claude",
       modelId: requestedModelId,
       mode: threadMode,
+      ...(request.modelOptions ? { modelOptions: request.modelOptions } : {}),
       reasoningEffort: request.reasoningEffort ?? null,
     });
     void beginThreadRepoCheckpointRun({
@@ -1785,6 +1800,7 @@ export async function runClaudeThreadChat(
         permissionMode,
         sessionId,
       }),
+      instance,
     );
     launchClaudeThreadTitleGeneration({
       eventChannel,

@@ -514,3 +514,38 @@ describe("P10 snapshot tripwire", () => {
     ).toEqual([]);
   });
 });
+
+describe("P10 dispatch tripwires", () => {
+  it("flags thread-chat modules importing an engine runtime", () => {
+    expect(
+      hitIds(
+        "src/lib/ai/chat/runtime/thread-chat/engine-dispatcher.ts",
+        'import { runCodexThreadChat, stopCodexThreadRun } from "../codex";',
+      ),
+    ).toEqual(["P10-thread-chat-runtime-imports:1"]);
+    expect(
+      hitIds(
+        "src/lib/ai/chat/runtime/thread-chat/orchestrator.ts",
+        'import { stopCursorThreadRun } from "@/lib/ai/chat/runtime/cursor/run";',
+      ),
+    ).toEqual(["P10-thread-chat-runtime-imports:1"]);
+    expect(
+      hitIds(
+        "src/lib/ai/chat/runtime/thread-chat/orchestrator.ts",
+        'import { getFirstUserText } from "../transcript";',
+      ),
+    ).toEqual([]);
+  });
+
+  it("flags per-engine switches in the automation runner", () => {
+    expect(
+      hitIds(
+        "src/lib/automations/runner.ts",
+        'params.engine === "cursor" || params.engine === "opencode"',
+      ),
+    ).toEqual(["P10-automation-engine-special-case:1"]);
+    expect(
+      hitIds("src/lib/automations/runner.ts", "interactive: false,"),
+    ).toEqual([]);
+  });
+});

@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { ThreadChatRequest, ThreadChatTrigger } from "../../types";
 import type { EngineDriverMeta } from "../catalog";
 import type {
   BaseInstanceConfig,
@@ -23,9 +24,10 @@ import type {
 // platform/instance-resources.ts. Static metadata, capabilities and the
 // instance config schema live in the client-safe catalog (`meta`).
 //
-// Thread handlers (run/stop through the dispatcher), auth controllers and
-// maintenance hooks are added to this interface by the phases that build
-// those services (P10c dispatcher, P11 auth/maintenance).
+// Thread handlers run and stop a thread's turns for drivers whose runtime
+// owns the run (every external engine); the built-in engine has none and
+// runs through the orchestrator. Auth controllers and maintenance hooks are
+// added by the phases that build those services (P11).
 
 export type ProbeOptions = {
   /**
@@ -52,6 +54,76 @@ export type ResolvedEngineRuntime = {
   source: EngineInstallSource | null;
   version: string | null;
 };
+
+/** A thread as the persistence layer loads it (null before its first turn). */
+export type LoadedEngineThread = Awaited<
+  ReturnType<typeof import("@/lib/ai/chat/persistence").loadThread>
+>;
+
+export type EngineThreadRunInput = {
+  /** The instance the thread is bound to (the request's, for a new thread). */
+  instance: ResolvedEngineInstance;
+  request: ThreadChatRequest;
+  thread: LoadedEngineThread;
+};
+
+export type EngineThreadStopInput = Omit<EngineThreadRunInput, "instance"> & {
+  /**
+   * Null when the thread's instance can no longer be resolved (removed,
+   * disabled): stopping a run never depends on the instance being usable.
+   */
+  instance: ResolvedEngineInstance | null;
+};
+
+export interface EngineThreadHandlers {
+  /** Triggers `run` handles; the dispatcher answers others with 409. */
+  readonly triggers: readonly ThreadChatTrigger[];
+  run(input: EngineThreadRunInput): Promise<Response>;
+  stop(input: EngineThreadStopInput): Promise<Response>;
+}
+
+/** The run/stop pair every runtime written before the driver contract exports. */
+export type LegacyThreadRuntime = {
+  run(
+    request: ThreadChatRequest,
+    thread: LoadedEngineThread,
+    instance?: ResolvedEngineInstance | null,
+  ): Promise<Response>;
+  stop(
+    request: ThreadChatRequest,
+    thread: LoadedEngineThread,
+    instance?: ResolvedEngineInstance | null,
+  ): Promise<Response>;
+};
+
+/** What the runtimes written before the driver contract accept. */
+export const LEGACY_EXTERNAL_THREAD_TRIGGERS = [
+  "submit-user-message",
+  "edit-user-message",
+  "submit-tool-approval",
+] as const satisfies readonly ThreadChatTrigger[];
+
+/**
+ * Thread handlers over a legacy runtime. The runtime module is loaded on
+ * first use: drivers are also imported for status probes (snapshot service,
+ * router), which must not pull in every runtime and its dependencies.
+ */
+export function legacyThreadHandlers(
+  load: () => Promise<LegacyThreadRuntime>,
+  triggers: readonly ThreadChatTrigger[] = LEGACY_EXTERNAL_THREAD_TRIGGERS,
+): EngineThreadHandlers {
+  return {
+    async run({ instance, request, thread }) {
+      const runtime = await load();
+      return await runtime.run(request, thread, instance);
+    },
+    async stop({ instance, request, thread }) {
+      const runtime = await load();
+      return await runtime.stop(request, thread, instance);
+    },
+    triggers,
+  };
+}
 
 export interface EngineDriver<
   C extends BaseInstanceConfig = BaseInstanceConfig,
@@ -116,6 +188,11 @@ export interface EngineDriver<
   };
   /** End the instance's long-lived processes (removed or disabled). */
   dispose?(instance: Pick<ResolvedEngineInstance<C>, "id">): Promise<void>;
+  /**
+   * Runs and stops threads bound to this driver. Absent for the built-in
+   * engine: the dispatcher then leaves the run to the orchestrator.
+   */
+  readonly thread?: EngineThreadHandlers;
 }
 
 export function defineEngineDriver<C extends BaseInstanceConfig>(

@@ -3,6 +3,7 @@ import "server-only";
 import { generateId } from "ai";
 
 import { DRIVER_CATALOG } from "@/lib/ai/chat/engines/catalog";
+import type { ResolvedEngineInstance } from "@/lib/ai/chat/engines/contract";
 import { resolveSupportedPermissionMode } from "@/lib/security";
 import {
   applyCursorSessionConfig,
@@ -29,6 +30,10 @@ import * as persist from "../../persistence";
 import { getThreadCheckpointAnchorMessageId } from "../../repo/checkpoints";
 import { loadThreadSessionSnapshot } from "../../session/server";
 import type { ThreadChatRequest } from "../../types";
+import {
+  getFollowUpModelRequestOptions,
+  resolveThreadEngineInstance,
+} from "../engine-instance";
 import {
   createThreadEventChannel,
   type ThreadEventChannel,
@@ -384,9 +389,7 @@ async function drainQueuedCursorFollowUp(
           role: "user",
         },
         modelId: nextFollowUp.modelId,
-        ...(nextFollowUp.reasoningEffort
-          ? { reasoningEffort: nextFollowUp.reasoningEffort }
-          : {}),
+        ...getFollowUpModelRequestOptions(nextFollowUp),
         threadId: request.threadId,
         threadMode: nextFollowUp.threadMode,
         trigger: "submit-user-message",
@@ -394,6 +397,8 @@ async function drainQueuedCursorFollowUp(
         workspaceId: request.workspaceId,
       },
       thread,
+      // Queued turns run on the instance the thread is bound to.
+      await resolveThreadEngineInstance(request.userId, thread),
     );
     persist.deleteThreadFollowUp(request.threadId, nextFollowUp.id);
   } catch (error) {
@@ -720,16 +725,22 @@ async function handleCursorPermissionRequest(
   options?: { interactive: boolean; permissionMode: PermissionMode },
 ) {
   const permissionMode = options?.permissionMode ?? control.permissionMode;
-  const toolsEnabled = options?.interactive !== false && control.toolsEnabled;
+  const toolsEnabled = control.toolsEnabled;
+  const autoApprove = shouldAutoApproveExternalPermission({
+    permissionMode,
+    toolsEnabled,
+  });
 
+  // Full access approves on its own; without tools, or with nobody to ask
+  // (an unattended run), the request is declined.
   if (
-    shouldAutoApproveExternalPermission({
-      permissionMode,
+    autoApprove ||
+    shouldAutoDenyExternalPermission({
+      interactive: options?.interactive !== false,
       toolsEnabled,
-    }) ||
-    shouldAutoDenyExternalPermission({ toolsEnabled })
+    })
   ) {
-    const approved = permissionMode === "full" && toolsEnabled;
+    const approved = autoApprove;
     const optionId = normalizeCursorPermissionOptionId(request, approved);
     if (!optionId) {
       throw new Error("Cursor approval options were missing.");
@@ -965,6 +976,8 @@ export async function stopCursorThreadRun(
 export async function runCursorThreadChat(
   request: ThreadChatRequest,
   existingThread: Awaited<ReturnType<typeof persist.loadThread>>,
+  /** The thread's engine instance (the dispatcher resolves it). */
+  instance?: ResolvedEngineInstance | null,
 ) {
   const timingStartedAt = Date.now();
 
@@ -1063,6 +1076,8 @@ export async function runCursorThreadChat(
     fallbackTitle,
     threadMode,
     "cursor",
+    undefined,
+    instance?.id,
   );
 
   if (request.message) {
@@ -1102,6 +1117,7 @@ export async function runCursorThreadChat(
     engine: "cursor",
     modelId: request.modelId ?? null,
     mode: threadMode,
+    ...(request.modelOptions ? { modelOptions: request.modelOptions } : {}),
     reasoningEffort: request.reasoningEffort ?? null,
   });
   void beginExternalRuntimeRepoCheckpoint({
@@ -1127,6 +1143,8 @@ export async function runCursorThreadChat(
   });
 
   const toolsEnabled = request.toolsEnabled !== false;
+  // Unattended runs (automations) cannot ask the user anything.
+  const interactive = toolsEnabled && request.interactive !== false;
   let permissionMode: PermissionMode;
   let session: Awaited<ReturnType<typeof startCursorAcpSession>>;
   try {
@@ -1138,8 +1156,10 @@ export async function runCursorThreadChat(
       ),
       DRIVER_CATALOG.cursor.capabilities.permissionModes,
     );
+    // Only a session of this instance (and home) is resumed.
     const resumeSessionId = getCursorThreadState(
       existingThread?.chatEngineState,
+      instance,
     )?.sessionId;
     session = await startCursorAcpSession({
       cwd: workspaceRoot,
@@ -1156,7 +1176,7 @@ export async function runCursorThreadChat(
           throw new Error("Cursor run is no longer active.");
         }
         return await handleCursorExtRequest(control, extRequest, {
-          interactive: toolsEnabled,
+          interactive,
         });
       },
       onProcessExit: (error) => {
@@ -1177,7 +1197,7 @@ export async function runCursorThreadChat(
           throw new Error("Cursor run is no longer active.");
         }
         return await handleCursorPermissionRequest(control, permissionRequest, {
-          interactive: toolsEnabled,
+          interactive,
           permissionMode,
         });
       },
@@ -1188,6 +1208,7 @@ export async function runCursorThreadChat(
         }
         void handleCursorSessionUpdate(control, notification);
       },
+      instance: instance ?? null,
       resumeSessionId,
     });
   } catch (error) {
@@ -1219,6 +1240,7 @@ export async function runCursorThreadChat(
       reasoningEffort: request.reasoningEffort ?? null,
       sessionId: session.sessionId,
     }),
+    instance,
   );
 
   const control: ActiveCursorRunControl = {

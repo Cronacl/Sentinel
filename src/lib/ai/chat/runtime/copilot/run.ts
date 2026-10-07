@@ -12,6 +12,7 @@ import type {
 } from "@github/copilot-sdk";
 
 import { DRIVER_CATALOG } from "@/lib/ai/chat/engines/catalog";
+import type { ResolvedEngineInstance } from "@/lib/ai/chat/engines/contract";
 import { resolveSupportedPermissionMode } from "@/lib/security";
 import {
   buildCopilotThreadState,
@@ -40,6 +41,10 @@ import {
 } from "../../repo/checkpoints";
 import { loadThreadSessionSnapshot } from "../../session/server";
 import type { ThreadChatRequest } from "../../types";
+import {
+  getFollowUpModelRequestOptions,
+  resolveThreadEngineInstance,
+} from "../engine-instance";
 import {
   createThreadEventChannel,
   type ThreadEventChannel,
@@ -1215,9 +1220,7 @@ async function drainQueuedCopilotFollowUp(
           role: "user",
         },
         modelId: nextFollowUp.modelId,
-        ...(nextFollowUp.reasoningEffort
-          ? { reasoningEffort: nextFollowUp.reasoningEffort }
-          : {}),
+        ...getFollowUpModelRequestOptions(nextFollowUp),
         threadId: request.threadId,
         threadMode: nextFollowUp.threadMode,
         trigger: "submit-user-message",
@@ -1225,6 +1228,8 @@ async function drainQueuedCopilotFollowUp(
         workspaceId: request.workspaceId,
       },
       thread,
+      // Queued turns run on the instance the thread is bound to.
+      await resolveThreadEngineInstance(request.userId, thread),
     );
     persist.deleteThreadFollowUp(request.threadId, nextFollowUp.id);
   } catch (error) {
@@ -1313,6 +1318,8 @@ function buildCopilotSessionConfig(input: {
 export async function runCopilotThreadChat(
   request: ThreadChatRequest,
   existingThread: Awaited<ReturnType<typeof persist.loadThread>>,
+  /** The thread's engine instance (the dispatcher resolves it). */
+  instance?: ResolvedEngineInstance | null,
 ) {
   if (request.trigger === "submit-tool-approval") {
     const latestAssistant = request.messages
@@ -1407,6 +1414,7 @@ export async function runCopilotThreadChat(
     threadMode,
     "copilot",
     request.draftRepoState ? { repo: request.draftRepoState } : null,
+    instance?.id,
   );
 
   const workspaceRoot = await getWorkspaceRootPath(
@@ -1423,8 +1431,10 @@ export async function runCopilotThreadChat(
     DRIVER_CATALOG.copilot.capabilities.permissionModes,
   );
   const toolApprovalPolicies = await getToolApprovalPolicies(request.userId);
+  // Null under another instance or home: a fresh session replays history.
   const existingCopilotState = getCopilotThreadState(
     existingThread?.chatEngineState,
+    instance,
   );
   const requestedModelId =
     request.modelId ?? existingCopilotState?.modelId ?? null;
@@ -1483,7 +1493,7 @@ export async function runCopilotThreadChat(
       (requestedReasoningEffort === "xhigh" ||
         requestedReasoningEffort === "max") &&
       requestedModelId
-        ? await getCopilotClientManager().getSupportedReasoningEfforts(
+        ? await getCopilotClientManager(instance).getSupportedReasoningEfforts(
             requestedModelId,
           )
         : null;
@@ -1496,6 +1506,7 @@ export async function runCopilotThreadChat(
       engine: "copilot",
       modelId: requestedModelId,
       mode: threadMode,
+      ...(request.modelOptions ? { modelOptions: request.modelOptions } : {}),
       reasoningEffort: request.reasoningEffort
         ? (toCopilotSdkReasoningEffort(
             request.reasoningEffort,
@@ -1607,8 +1618,8 @@ export async function runCopilotThreadChat(
     });
 
     const session = shouldCreateFreshSession
-      ? await getCopilotClientManager().createSession(sessionConfig)
-      : await getCopilotClientManager().resumeSession(
+      ? await getCopilotClientManager(instance).createSession(sessionConfig)
+      : await getCopilotClientManager(instance).resumeSession(
           existingCopilotState!.sessionId,
           sessionConfig,
         );
@@ -1643,6 +1654,7 @@ export async function runCopilotThreadChat(
           reasoningEffort ?? existingCopilotState?.reasoningEffort,
         sessionId,
       }),
+      instance,
     );
     launchCopilotThreadTitleGeneration({
       eventChannel,

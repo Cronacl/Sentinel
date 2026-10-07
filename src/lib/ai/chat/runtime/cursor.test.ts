@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 
+import { makeFakeInstance } from "@/lib/ai/chat/engines/contract/testing";
+
 const ensureThread = mock(async () => ({ created: true }));
 const clearActiveStream = mock(() => {});
 const loadThread = mock(async () => null);
@@ -218,6 +220,7 @@ describe("runCursorThreadChat", () => {
   });
 
   it("anchors Cursor runs to the resolved workspace and checkpoint lifecycle", async () => {
+    const instance = makeFakeInstance({ driver: "cursor", id: "cursor-work" });
     const prompt = mock(async () => {});
     startCursorAcpSession.mockImplementation(async () => ({
       client: {
@@ -243,10 +246,14 @@ describe("runCursorThreadChat", () => {
         workspaceId: "workspace-1",
       } as any,
       null,
+      instance,
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(response.headers.get("Content-Type")).toBe("text/event-stream");
+    // The new thread binds to the instance, which runs the session and
+    // stamps its state.
+    expect(ensureThread.mock.calls.at(-1)?.at(-1)).toBe("cursor-work");
     expect(getWorkspaceRootPath).toHaveBeenCalledWith(
       "workspace-1",
       "user-1",
@@ -264,13 +271,56 @@ describe("runCursorThreadChat", () => {
     });
     expect(clearThreadRepoCheckpointRun).not.toHaveBeenCalled();
     expect(startCursorAcpSession).toHaveBeenCalledWith(
-      expect.objectContaining({ cwd: "/tmp/workspace" }),
+      expect.objectContaining({ cwd: "/tmp/workspace", instance }),
     );
     expect(updateCursorThreadState).toHaveBeenCalledWith(
       "thread-1",
       expect.objectContaining({ cwd: "/tmp/workspace" }),
+      instance,
     );
   });
+
+  for (const [permissionMode, optionId] of [
+    ["default", "deny"],
+    ["full", "allow"],
+  ] as const) {
+    it(`answers permission requests itself in unattended runs (${permissionMode} mode)`, async () => {
+      getToolPermissionMode.mockImplementation(async () => permissionMode);
+      setThreadStatus.mockClear();
+
+      await runCursorThreadChat(
+        {
+          interactive: false,
+          message: {
+            id: "user-1",
+            metadata: {},
+            parts: [{ text: "Run tests", type: "text" }],
+            role: "user",
+          },
+          modelId: "gpt-5.2",
+          threadId: "thread-1",
+          trigger: "submit-user-message",
+          userId: "user-1",
+          workspaceId: "workspace-1",
+        } as any,
+        null,
+      );
+
+      const result = await latestCursorSessionOptions.onRequestPermission({
+        options: [
+          { kind: "reject_once", optionId: "deny" },
+          { kind: "allow_once", optionId: "allow" },
+        ],
+        toolCall: { kind: "shell", title: "Bash", toolCallId: "tool-1" },
+      });
+
+      expect(result).toEqual({ outcome: { optionId, outcome: "selected" } });
+      expect(setThreadStatus).not.toHaveBeenCalledWith(
+        "thread-1",
+        "awaiting_approval",
+      );
+    });
+  }
 
   it("auto-selects Cursor allow permission option in full mode", async () => {
     getToolPermissionMode.mockImplementation(async () => "full");

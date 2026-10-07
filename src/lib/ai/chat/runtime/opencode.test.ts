@@ -103,7 +103,9 @@ mock.module("@/lib/ai/chat/engines/opencode-sdk", () => ({
   openCodeQuestionId: mock((id: string) => id),
   parseOpenCodeModelSlug: mock(() => "openai/gpt-5.2"),
   startOpenCodeSession,
-  toOpenCodePermissionReply: mock(() => "allow"),
+  toOpenCodePermissionReply: mock((approved: boolean) =>
+    approved ? "allow" : "reject",
+  ),
   toOpenCodeQuestionAnswers: mock(() => []),
 }));
 
@@ -458,6 +460,7 @@ describe("runOpenCodeThreadChat", () => {
     expect(updateOpenCodeThreadState).toHaveBeenCalledWith(
       "thread-checkpoint-1",
       expect.objectContaining({ cwd: "/tmp/workspace" }),
+      undefined,
     );
 
     events.close();
@@ -515,6 +518,60 @@ describe("runOpenCodeThreadChat", () => {
       "thread-permission-1",
       "awaiting_approval",
     );
+  });
+
+  it("declines permission requests in unattended runs without full access", async () => {
+    const events = createEventQueue();
+    const permissionReply = mock(async () => {});
+    getToolPermissionMode.mockImplementation(async () => "default");
+    setThreadStatus.mockClear();
+    startOpenCodeSession.mockImplementation(async () =>
+      createMockOpenCodeSession({
+        stream: events.stream,
+        permissionReply,
+      }),
+    );
+
+    await runOpenCodeThreadChat(
+      {
+        interactive: false,
+        message: {
+          id: "user-unattended-1",
+          metadata: {},
+          parts: [{ text: "Run tests", type: "text" }],
+          role: "user",
+        },
+        modelId: "openai/gpt-5.2",
+        threadId: "thread-unattended-1",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      } as any,
+      null,
+    );
+
+    events.push({
+      properties: {
+        always: [],
+        id: "permission-1",
+        metadata: { command: "bun test" },
+        patterns: ["bun test"],
+        permission: "shell",
+        sessionID: "opencode-session-1",
+      },
+      type: "permission.asked",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(permissionReply).toHaveBeenCalledWith({
+      reply: "reject",
+      requestID: "permission-1",
+    });
+    expect(setThreadStatus).not.toHaveBeenCalledWith(
+      "thread-unattended-1",
+      "awaiting_approval",
+    );
+    events.close();
   });
 
   it("persists streaming text deltas before full part updates arrive", async () => {

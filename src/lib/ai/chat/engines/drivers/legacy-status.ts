@@ -11,6 +11,11 @@ import {
   type EngineOptionDescriptor,
   type EngineProbeResult,
 } from "../contract";
+import {
+  AGENT_OPTION_ID,
+  REASONING_OPTION_ID,
+  VARIANT_OPTION_ID,
+} from "../model-options";
 
 // Adapters from the status objects the engines reported before the platform
 // (get<X>EngineStatus) to the driver contract's probe result. They only
@@ -88,8 +93,6 @@ export type FromLegacyStatusOptions = {
   fallbackModels?: (status: LegacyStatus) => readonly LegacyModelInfo[] | null;
 };
 
-const REASONING_OPTION_ID = "effort";
-
 function toInputModalities(values: readonly string[]) {
   const modalities = values.filter(
     (value): value is EngineModelInputModality =>
@@ -99,7 +102,7 @@ function toInputModalities(values: readonly string[]) {
 }
 
 function toTraitDescriptor(
-  id: "agent" | "variant",
+  id: typeof AGENT_OPTION_ID | typeof VARIANT_OPTION_ID,
   label: string,
   options: readonly LegacyTraitOption[],
 ): EngineOptionDescriptor | null {
@@ -143,8 +146,12 @@ export function toEngineModel(model: LegacyModelInfo): EngineModel {
 
   if (model.openCode) {
     for (const descriptor of [
-      toTraitDescriptor("agent", "Agent", model.openCode.agentOptions),
-      toTraitDescriptor("variant", "Variant", model.openCode.variantOptions),
+      toTraitDescriptor(AGENT_OPTION_ID, "Agent", model.openCode.agentOptions),
+      toTraitDescriptor(
+        VARIANT_OPTION_ID,
+        "Variant",
+        model.openCode.variantOptions,
+      ),
     ]) {
       if (descriptor) {
         options.push(descriptor);

@@ -8,6 +8,7 @@ import type {
 } from "@opencode-ai/sdk/v2";
 
 import { DRIVER_CATALOG } from "@/lib/ai/chat/engines/catalog";
+import type { ResolvedEngineInstance } from "@/lib/ai/chat/engines/contract";
 import { resolveSupportedPermissionMode } from "@/lib/security";
 import {
   buildOpenCodeThreadState,
@@ -35,6 +36,10 @@ import * as persist from "../../persistence";
 import { getThreadCheckpointAnchorMessageId } from "../../repo/checkpoints";
 import { loadThreadSessionSnapshot } from "../../session/server";
 import type { ThreadChatRequest } from "../../types";
+import {
+  getFollowUpModelRequestOptions,
+  resolveThreadEngineInstance,
+} from "../engine-instance";
 import {
   createThreadEventChannel,
   type ThreadEventChannel,
@@ -136,6 +141,11 @@ export type ActiveOpenCodeRunControl = {
   deferredSessionError: DeferredOpenCodeSessionError | null;
   eventChannel: ThreadEventChannel;
   finished: boolean;
+  /**
+   * False in unattended runs (automations): permission requests and
+   * questions are declined unless full access approves them.
+   */
+  interactive?: boolean;
   permissionMode: PermissionMode;
   pendingApprovals: Map<string, PendingOpenCodeApproval>;
   pendingQuestions: Map<string, PendingOpenCodeQuestion>;
@@ -400,6 +410,7 @@ async function drainQueuedOpenCodeFollowUp(
           role: "user",
         },
         modelId: nextFollowUp.modelId,
+        ...getFollowUpModelRequestOptions(nextFollowUp),
         threadId: request.threadId,
         threadMode: nextFollowUp.threadMode,
         trigger: "submit-user-message",
@@ -407,6 +418,8 @@ async function drainQueuedOpenCodeFollowUp(
         workspaceId: request.workspaceId,
       },
       thread,
+      // Queued turns run on the instance the thread is bound to.
+      await resolveThreadEngineInstance(request.userId, thread),
     );
     persist.deleteThreadFollowUp(request.threadId, nextFollowUp.id);
   } catch (error) {
@@ -710,10 +723,12 @@ async function handleOpenCodeEvent(
         toolsEnabled: control.toolsEnabled,
       });
       const shouldAutoDeny = shouldAutoDenyExternalPermission({
+        interactive: control.interactive,
         toolsEnabled: control.toolsEnabled,
       });
       if (shouldAutoApprove || shouldAutoDeny) {
-        const approved = shouldAutoApprove && !shouldAutoDeny;
+        // Full access approves even when nobody could be asked.
+        const approved = shouldAutoApprove;
         upsertOpenCodeTool(control.state, {
           approval: {
             approved,
@@ -802,7 +817,7 @@ async function handleOpenCodeEvent(
     }
     case "question.asked": {
       const request = event.properties as QuestionRequest;
-      if (!control.toolsEnabled) {
+      if (!control.toolsEnabled || control.interactive === false) {
         const firstQuestion = request.questions[0];
         upsertOpenCodeTool(control.state, {
           approval: {
@@ -1138,6 +1153,8 @@ export async function stopOpenCodeThreadRun(
 export async function runOpenCodeThreadChat(
   request: ThreadChatRequest,
   existingThread: Awaited<ReturnType<typeof persist.loadThread>>,
+  /** The thread's engine instance (the dispatcher resolves it). */
+  instance?: ResolvedEngineInstance | null,
 ) {
   const timingStartedAt = Date.now();
 
@@ -1237,6 +1254,7 @@ export async function runOpenCodeThreadChat(
     threadMode,
     "opencode",
     request.draftRepoState ? { repo: request.draftRepoState } : null,
+    instance?.id,
   );
 
   if (request.message) {
@@ -1281,6 +1299,7 @@ export async function runOpenCodeThreadChat(
     engine: "opencode",
     modelId: request.modelId ?? null,
     mode: threadMode,
+    ...(request.modelOptions ? { modelOptions: request.modelOptions } : {}),
     reasoningEffort: null,
   });
   await emitThreadSnapshot(request.threadId, eventChannel, runId);
@@ -1301,6 +1320,7 @@ export async function runOpenCodeThreadChat(
   const toolsEnabled = request.toolsEnabled !== false;
   const existingOpenCodeState = getOpenCodeThreadState(
     existingThread?.chatEngineState,
+    instance,
   );
   const selectedAgent =
     request.openCode?.agent ??
@@ -1322,6 +1342,7 @@ export async function runOpenCodeThreadChat(
     session = await startOpenCodeSession({
       cwd: workspaceRoot,
       fullAccess: permissionMode === "full" && toolsEnabled,
+      instance: instance ?? null,
       title: fallbackTitle,
     });
   } catch (error) {
@@ -1351,6 +1372,7 @@ export async function runOpenCodeThreadChat(
     deferredSessionError: null,
     eventChannel,
     finished: false,
+    interactive: request.interactive !== false,
     permissionMode,
     pendingApprovals: new Map(),
     pendingQuestions: new Map(),
@@ -1373,6 +1395,7 @@ export async function runOpenCodeThreadChat(
       selectedVariant,
       sessionId: session.sessionId,
     }),
+    instance,
   );
 
   watchOpenCodeServerExit(control);

@@ -1065,11 +1065,11 @@ export async function runParsedThreadChat(
     timingStartedAt,
   );
   const existingThread = await persist.loadThread(request.threadId);
-  const engine = resolveThreadEngine(request, existingThread);
+  const engineTarget = resolveThreadEngine(request, existingThread);
 
   if (request.trigger === "stop-stream") {
     const engineStopResponse = await stopThreadEngine(
-      engine,
+      engineTarget,
       request,
       existingThread,
     );
@@ -1092,13 +1092,16 @@ export async function runParsedThreadChat(
   }
 
   const externalEngineResponse = await runExternalThreadEngine(
-    engine,
+    engineTarget,
     request,
     existingThread,
   );
   if (externalEngineResponse) {
     return externalEngineResponse;
   }
+  // Only the built-in engine reaches the orchestrator: every other driver
+  // runs through its thread handlers or is rejected by the dispatcher.
+  const engine = "sentinel" as const;
 
   const allRecords = await persist.loadThreadMessages(request.threadId);
   const checkpointAnchorMessageId =
@@ -1169,6 +1172,7 @@ export async function runParsedThreadChat(
     await persist.updateThreadChatSettings(request.threadId, {
       engine,
       ...(request.modelId ? { modelId: request.modelId } : {}),
+      ...(request.modelOptions ? { modelOptions: request.modelOptions } : {}),
       ...(request.reasoningEffort !== undefined
         ? { reasoningEffort: request.reasoningEffort ?? null }
         : {}),

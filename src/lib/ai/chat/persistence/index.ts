@@ -15,6 +15,7 @@ import type {
   ThreadChatEngineState,
   ThreadStateByDriver,
   ThreadStateDriverKind,
+  ThreadStateInstanceRef,
 } from "@/lib/ai/chat/engines/types";
 import {
   toStoredEngineInstanceId,
@@ -24,6 +25,7 @@ import {
   buildThreadChatEngineState,
   parseThreadChatEngineState,
   patchStoredThreadChatEngineState,
+  stampThreadState,
 } from "@/lib/ai/chat/engines/types";
 import { engineInstanceIdForEngineWrite } from "@/lib/ai/chat/engines/platform/instance-columns";
 
@@ -338,46 +340,61 @@ export function updateDriverThreadState<K extends ThreadStateDriverKind>(
   threadId: string,
   kind: K,
   state: ThreadStateByDriver[K] | null,
+  /**
+   * The instance the state was produced on: stamps it with the instance id
+   * and continuation key, so another instance (or home) never resumes it.
+   */
+  instance?: Pick<ThreadStateInstanceRef, "continuationKey" | "id"> | null,
 ) {
   updateThreadChatEngineState(
     threadId,
-    buildThreadChatEngineState(kind, state),
+    buildThreadChatEngineState(
+      kind,
+      state && instance
+        ? (stampThreadState(state, instance) as ThreadStateByDriver[K])
+        : state,
+    ),
   );
 }
 
 export function updateCodexThreadState(
   threadId: string,
   state: CodexThreadState | null,
+  instance?: Pick<ThreadStateInstanceRef, "continuationKey" | "id"> | null,
 ) {
-  updateDriverThreadState(threadId, "codex", state);
+  updateDriverThreadState(threadId, "codex", state, instance);
 }
 
 export function updateClaudeThreadState(
   threadId: string,
   state: ClaudeThreadState | null,
+  instance?: Pick<ThreadStateInstanceRef, "continuationKey" | "id"> | null,
 ) {
-  updateDriverThreadState(threadId, "claude", state);
+  updateDriverThreadState(threadId, "claude", state, instance);
 }
 
 export function updateCopilotThreadState(
   threadId: string,
   state: CopilotThreadState | null,
+  instance?: Pick<ThreadStateInstanceRef, "continuationKey" | "id"> | null,
 ) {
-  updateDriverThreadState(threadId, "copilot", state);
+  updateDriverThreadState(threadId, "copilot", state, instance);
 }
 
 export function updateCursorThreadState(
   threadId: string,
   state: CursorThreadState | null,
+  instance?: Pick<ThreadStateInstanceRef, "continuationKey" | "id"> | null,
 ) {
-  updateDriverThreadState(threadId, "cursor", state);
+  updateDriverThreadState(threadId, "cursor", state, instance);
 }
 
 export function updateOpenCodeThreadState(
   threadId: string,
   state: OpenCodeThreadState | null,
+  instance?: Pick<ThreadStateInstanceRef, "continuationKey" | "id"> | null,
 ) {
-  updateDriverThreadState(threadId, "opencode", state);
+  updateDriverThreadState(threadId, "opencode", state, instance);
 }
 
 export async function loadThreadMessages(threadId: string) {

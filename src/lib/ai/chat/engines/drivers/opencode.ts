@@ -11,7 +11,7 @@ import {
 
 import { DRIVER_CATALOG } from "../catalog";
 import type { EngineInstallSource, EngineProbeResult } from "../contract";
-import { defineEngineDriver } from "../platform/driver";
+import { defineEngineDriver, legacyThreadHandlers } from "../platform/driver";
 import { buildFallbackOpenCodeModels } from "./fallback-models";
 import {
   carryForwardLegacyProbe,
@@ -84,4 +84,11 @@ export const openCodeDriver = defineEngineDriver({
   fullProbeTtlMs: 10 * 60 * 1_000,
   // Above the 4 s status window plus binary resolution.
   probeTimeoutMs: 15_000,
+  thread: legacyThreadHandlers(async () => {
+    const runtime = await import("@/lib/ai/chat/runtime/opencode");
+    return {
+      run: runtime.runOpenCodeThreadChat,
+      stop: runtime.stopOpenCodeThreadRun,
+    };
+  }),
 });

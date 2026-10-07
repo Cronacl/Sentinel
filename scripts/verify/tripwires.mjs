@@ -421,6 +421,22 @@ export const TRIPWIRES = [
     // Engine tests spawn the fixtures, and their helpers may live next to them.
     exclude: /\.test\.[cm]?[jt]sx?$|(?:^|\/)__(?:fixtures|tests)__\//,
   },
+  {
+    id: "P10-thread-chat-runtime-imports",
+    description:
+      "Thread turns dispatch through the server driver registry (platform/drivers.ts); the orchestrator and queue never import an engine runtime directly",
+    pattern:
+      /\bfrom\s+["'](?:\.\.\/|@\/lib\/ai\/chat\/runtime\/)(?:claude|codex|copilot|cursor|opencode)(?:\/[^"']*)?["']/,
+    include: /^src\/lib\/ai\/chat\/runtime\/thread-chat\/.*\.[cm]?[jt]sx?$/,
+    exclude: /\.test\.[cm]?[jt]sx?$/,
+  },
+  {
+    id: "P10-automation-engine-special-case",
+    description:
+      "Automations run every engine the same way (interactive: false declines what would ask); per-engine switches such as forcing toolsEnabled off for Cursor and OpenCode are gone",
+    pattern: /["'](?:claude|codex|copilot|cursor|opencode)["']/,
+    include: /^src\/lib\/automations\/runner\.ts$/,
+  },
 ];
 
 const DEFAULT_EXCLUDE =

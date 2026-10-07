@@ -14,7 +14,7 @@ import {
 
 import { DRIVER_CATALOG } from "../catalog";
 import type { EngineInstallSource, EngineProbeResult } from "../contract";
-import { defineEngineDriver } from "../platform/driver";
+import { defineEngineDriver, legacyThreadHandlers } from "../platform/driver";
 import { fromLegacyStatus, NO_LEGACY_ACCOUNT } from "./legacy-status";
 
 function toClaudeAccount(account: AccountInfo | null) {
@@ -74,4 +74,11 @@ export const claudeDriver = defineEngineDriver({
   },
   // Above the SDK initialize timeout plus binary verification.
   probeTimeoutMs: 15_000,
+  thread: legacyThreadHandlers(async () => {
+    const runtime = await import("@/lib/ai/chat/runtime/claude");
+    return {
+      run: runtime.runClaudeThreadChat,
+      stop: runtime.stopClaudeThreadRun,
+    };
+  }),
 });

@@ -1210,6 +1210,8 @@ export async function getCursorEngineStatus(options?: {
 
 export async function startCursorAcpSession(input: {
   cwd: string;
+  /** The thread's instance: its binary and environment. */
+  instance?: CursorRuntimeInstance | null;
   onExtRequest?: (request: CursorExtRequest) => Promise<unknown>;
   onExtNotification?: (request: CursorExtRequest) => void;
   onProcessExit?: (error: Error) => void;
@@ -1217,7 +1219,7 @@ export async function startCursorAcpSession(input: {
   onSessionUpdate?: (notification: CursorSessionUpdateNotification) => void;
   resumeSessionId?: string | null;
 }) {
-  const runtime = await resolveCursorRuntime();
+  const runtime = await resolveCursorRuntime({ instance: input.instance });
   if (!runtime.cliDetected || !runtime.cliPath) {
     throw new Error(runtime.error ?? "Cursor Agent is unavailable.");
   }

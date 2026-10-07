@@ -1240,9 +1240,11 @@ export function toOpenCodeQuestionAnswers(
 export async function startOpenCodeSession(input: {
   cwd: string;
   fullAccess: boolean;
+  /** The thread's instance: its binary and environment. */
+  instance?: OpenCodeRuntimeInstance | null;
   title: string;
 }) {
-  const runtime = await resolveOpenCodeRuntime();
+  const runtime = await resolveOpenCodeRuntime({ instance: input.instance });
   if (!runtime.cliDetected || !runtime.cliPath) {
     throw new Error(runtime.error ?? "OpenCode is unavailable.");
   }

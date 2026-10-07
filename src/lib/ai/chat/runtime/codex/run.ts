@@ -3,6 +3,7 @@ import "server-only";
 import { generateId } from "ai";
 
 import { DRIVER_CATALOG } from "@/lib/ai/chat/engines/catalog";
+import type { ResolvedEngineInstance } from "@/lib/ai/chat/engines/contract";
 import { resolveSupportedPermissionMode } from "@/lib/security";
 import { getCodexAppServerManager } from "@/lib/ai/chat/engines/codex-app-server";
 import type {
@@ -47,6 +48,10 @@ import {
 } from "../../repo/checkpoints";
 import { loadThreadSessionSnapshot } from "../../session/server";
 import type { ThreadChatRequest } from "../../types";
+import {
+  getFollowUpModelRequestOptions,
+  resolveThreadEngineInstance,
+} from "../engine-instance";
 import { normalizeThreadChatErrorMessage } from "../../errors";
 import {
   createThreadEventChannel,
@@ -353,6 +358,11 @@ function buildCodexSandboxPolicy(
 }
 
 function buildCodexCollaborationMode(input: {
+  /** The thread instance's app-server (its model/list). */
+  codex: Pick<
+    ReturnType<typeof getCodexAppServerManager>,
+    "getDefaultModel" | "getKnownModel"
+  >;
   interactionMode?: "default" | "plan";
   model?: string | null;
   effort?: string | null;
@@ -371,9 +381,9 @@ function buildCodexCollaborationMode(input: {
   }
   // `settings.model` is required; prefer Codex's own `model/list` default
   // over the static fallback.
-  const knownDefault = getCodexAppServerManager().getDefaultModel();
+  const knownDefault = input.codex.getDefaultModel();
   const model = input.model ?? knownDefault?.id ?? CODEX_DEFAULT_MODEL_ID;
-  const knownModel = getCodexAppServerManager().getKnownModel(model);
+  const knownModel = input.codex.getKnownModel(model);
   return {
     mode: input.interactionMode,
     settings: {
@@ -1593,9 +1603,7 @@ async function drainQueuedCodexFollowUp(
           role: "user",
         },
         modelId: nextFollowUp.modelId,
-        ...(nextFollowUp.reasoningEffort
-          ? { reasoningEffort: nextFollowUp.reasoningEffort }
-          : {}),
+        ...getFollowUpModelRequestOptions(nextFollowUp),
         threadId: request.threadId,
         threadMode: nextFollowUp.threadMode,
         trigger: "submit-user-message",
@@ -1603,6 +1611,8 @@ async function drainQueuedCodexFollowUp(
         workspaceId: request.workspaceId,
       },
       thread,
+      // Queued turns run on the instance the thread is bound to.
+      await resolveThreadEngineInstance(request.userId, thread),
     );
     persist.deleteThreadFollowUp(request.threadId, nextFollowUp.id);
   } catch (error) {
@@ -2081,6 +2091,8 @@ async function buildCodexUserInput(
 export async function stopCodexThreadRun(
   request: ThreadChatRequest,
   existingThread: Awaited<ReturnType<typeof persist.loadThread>>,
+  /** The thread's instance: its app-server owns the turn. */
+  instance?: ResolvedEngineInstance | null,
 ) {
   const codexState = getCodexThreadState(existingThread?.chatEngineState);
   const activeRunId = existingThread?.activeStreamId ?? null;
@@ -2099,7 +2111,10 @@ export async function stopCodexThreadRun(
 
   if (codexThreadId && turnId) {
     try {
-      await getCodexAppServerManager().interruptTurn(codexThreadId, turnId);
+      await getCodexAppServerManager(instance).interruptTurn(
+        codexThreadId,
+        turnId,
+      );
     } catch (error) {
       log.warn("interrupt_failed", {
         codexThreadId,
@@ -2152,6 +2167,8 @@ export async function stopCodexThreadRun(
 export async function runCodexThreadChat(
   request: ThreadChatRequest,
   existingThread: Awaited<ReturnType<typeof persist.loadThread>>,
+  /** The thread's engine instance (the dispatcher resolves it). */
+  instance?: ResolvedEngineInstance | null,
 ) {
   if (request.trigger === "submit-tool-approval") {
     const promptResponse = extractCodexPromptResponse(request.messages);
@@ -2178,15 +2195,14 @@ export async function runCodexThreadChat(
 
     let declinedReason: string | null = null;
     if (promptResponse.kind === "user-input") {
-      await getCodexAppServerManager().respondToUserInput(
+      await getCodexAppServerManager(instance).respondToUserInput(
         promptResponse.requestId,
         promptResponse.response,
       );
     } else {
-      ({ declinedReason } = await getCodexAppServerManager().respondToApproval(
-        promptResponse.approvalId,
-        promptResponse.decision,
-      ));
+      ({ declinedReason } = await getCodexAppServerManager(
+        instance,
+      ).respondToApproval(promptResponse.approvalId, promptResponse.decision));
     }
 
     const activeControl = findActiveCodexRunForThread(request.threadId);
@@ -2256,10 +2272,11 @@ export async function runCodexThreadChat(
       engine: "codex",
       modelId: request.modelId ?? existingCodexState?.modelId ?? null,
       mode: threadMode,
+      ...(request.modelOptions ? { modelOptions: request.modelOptions } : {}),
       reasoningEffort: request.reasoningEffort ?? null,
     });
 
-    await getCodexAppServerManager().steerTurn({
+    await getCodexAppServerManager(instance).steerTurn({
       expectedTurnId: activeControl.codexTurnId,
       input: codexInput,
       threadId: activeControl.codexThreadId,
@@ -2283,6 +2300,7 @@ export async function runCodexThreadChat(
     threadMode,
     "codex",
     request.draftRepoState ? { repo: request.draftRepoState } : null,
+    instance?.id,
   );
   if (
     request.trigger === "submit-user-message" &&
@@ -2309,10 +2327,12 @@ export async function runCodexThreadChat(
   const approvalPolicy = getCodexApprovalPolicy(permissionMode);
   const sandboxMode = getCodexSandboxMode(permissionMode, workspaceRoot);
   const sandboxPolicy = buildCodexSandboxPolicy(sandboxMode, workspaceRoot);
-  const codex = getCodexAppServerManager();
+  const codex = getCodexAppServerManager(instance);
   const codexInput = await buildCodexUserInput(request.message);
+  // Null under another instance or home: a fresh Codex thread starts.
   const existingCodexState = getCodexThreadState(
     existingThread?.chatEngineState,
+    instance,
   );
   const didThreadModeChange =
     existingThread?.mode != null &&
@@ -2351,6 +2371,7 @@ export async function runCodexThreadChat(
       engine: "codex",
       modelId: request.modelId ?? existingCodexState?.modelId ?? null,
       mode: threadMode,
+      ...(request.modelOptions ? { modelOptions: request.modelOptions } : {}),
       reasoningEffort: request.reasoningEffort ?? null,
     });
     void beginThreadRepoCheckpointRun({
@@ -2419,6 +2440,7 @@ export async function runCodexThreadChat(
     );
     const collaborationMode = nativeCollaborationMode
       ? buildCodexCollaborationMode({
+          codex,
           interactionMode: threadMode === "plan" ? "plan" : "default",
           model: request.modelId ?? threadStartResponse.model ?? null,
           effort: codexReasoningEffort,
@@ -2479,6 +2501,7 @@ export async function runCodexThreadChat(
             null,
           sandboxMode,
         }),
+        instance,
       );
     }
 

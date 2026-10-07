@@ -11,7 +11,7 @@ import {
 
 import { DRIVER_CATALOG } from "../catalog";
 import type { EngineInstallSource, EngineProbeResult } from "../contract";
-import { defineEngineDriver } from "../platform/driver";
+import { defineEngineDriver, legacyThreadHandlers } from "../platform/driver";
 import { buildFallbackCursorModels } from "./fallback-models";
 import {
   carryForwardLegacyProbe,
@@ -83,4 +83,11 @@ export const cursorDriver = defineEngineDriver({
   fullProbeTtlMs: 10 * 60 * 1_000,
   // Above the 3 s ACP query timeout plus binary resolution.
   probeTimeoutMs: 15_000,
+  thread: legacyThreadHandlers(async () => {
+    const runtime = await import("@/lib/ai/chat/runtime/cursor");
+    return {
+      run: runtime.runCursorThreadChat,
+      stop: runtime.stopCursorThreadRun,
+    };
+  }),
 });

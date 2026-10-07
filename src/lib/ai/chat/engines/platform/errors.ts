@@ -56,3 +56,21 @@ export class EngineInstanceError extends Error {
     this.name = "EngineInstanceError";
   }
 }
+
+/**
+ * A thread action the driver's runtime does not handle (retry or regenerate
+ * on an external engine, for example). Dispatchers answer it with 409
+ * {code: "engine_trigger_unsupported"}.
+ */
+export class EngineTriggerUnsupportedError extends Error {
+  readonly code = "engine_trigger_unsupported";
+
+  constructor(
+    readonly driver: DriverKind,
+    readonly trigger: string,
+    message = `This engine does not support "${trigger}" yet.`,
+  ) {
+    super(message);
+    this.name = "EngineTriggerUnsupportedError";
+  }
+}

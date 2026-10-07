@@ -66,10 +66,16 @@ export function shouldAutoApproveExternalPermission(input: {
   return input.permissionMode === "full" && input.toolsEnabled;
 }
 
+/**
+ * Declined without asking: tools are off, or nobody can answer (an
+ * unattended run such as an automation). Check auto-approval first: full
+ * access still approves in an unattended run.
+ */
 export function shouldAutoDenyExternalPermission(input: {
+  interactive?: boolean;
   toolsEnabled: boolean;
 }) {
-  return !input.toolsEnabled;
+  return !input.toolsEnabled || input.interactive === false;
 }
 
 export async function beginExternalRuntimeRepoCheckpoint(input: {

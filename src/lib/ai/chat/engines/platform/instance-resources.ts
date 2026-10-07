@@ -7,8 +7,8 @@ import "server-only";
 // processes.
 //
 // A lookup never ends another caller's runtime. Callers that resolved the
-// instance and callers that still pass none (the legacy run paths, until
-// the P10c dispatcher) compute different keys for a customized default
+// instance and callers that pass none (a Codex review from the router, the
+// commit-message helper) compute different keys for a customized default
 // instance; if a lookup replaced the other key's runtime, they would kill
 // each other's processes mid-turn. Runtimes of an older configuration are
 // ended only when the instance change is handled (retire), when the

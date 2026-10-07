@@ -263,8 +263,6 @@ export const DRIVER_CATALOG = {
       ...EXTERNAL_CAPABILITIES,
       // Typed literally so the runtime's mapping is checked when this widens.
       permissionModes: DEFAULT_DRIVER_PERMISSION_MODES,
-      // Automations run Cursor with tools disabled today (runner.ts).
-      supportsUnattendedTools: false,
       supportsUserInput: true,
     },
     config: binaryConfigSchema,
@@ -295,7 +293,6 @@ export const DRIVER_CATALOG = {
       supportsPlanMode: "agent-select",
       // A new OpenCode session is created every turn; history is replayed.
       supportsResume: "replay",
-      supportsUnattendedTools: false,
     },
     config: binaryConfigSchema,
     defaultInstance: true,
