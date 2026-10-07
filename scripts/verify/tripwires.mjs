@@ -123,6 +123,38 @@ export const TRIPWIRES = [
     pattern: /(^|[{,\s])"?eslint"?\s*[:,}]/,
     include: /^next\.config\.(c|m)?(j|t)s$/,
   },
+  {
+    id: "P6-32-bit-arch",
+    description: "Electron 44 publishes no ia32 or armv7l binaries",
+    pattern: /\b(?:armv7l|ia32)\b/,
+    include: /^(?:scripts\/desktop\/|\.github\/|package\.json$)/,
+  },
+  {
+    id: "P6-prebuild-install",
+    description:
+      "better-sqlite3 13 bundles N-API prebuilds; no prebuild-install",
+    pattern: /prebuild-install/,
+    include: /^scripts\//,
+  },
+  {
+    id: "P6-electron-skip-binary-download",
+    description:
+      "Electron 42+ ignores ELECTRON_SKIP_BINARY_DOWNLOAD; the binary comes from electron:install",
+    pattern: /ELECTRON_SKIP_BINARY_DOWNLOAD/,
+  },
+  {
+    id: "P6-unawaited-clipboard-write",
+    description: "Electron 44 clipboard.writeText returns a Promise",
+    pattern: /(?<!await )\bclipboard\.writeText\(/,
+    include: /^desktop\/main\//,
+  },
+  {
+    id: "P6-positional-console-message",
+    description:
+      "console-message listeners read the details object (Electron 35+)",
+    pattern: /\(\s*_?event\s*,\s*level\s*,\s*message\b/,
+    include: /^desktop\//,
+  },
 ];
 
 const DEFAULT_EXCLUDE =

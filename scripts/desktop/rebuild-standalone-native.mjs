@@ -1,25 +1,17 @@
 import { existsSync, readFileSync } from "node:fs";
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import path from "node:path";
+
+import { getElectronExecutablePath } from "./electron-binary.mjs";
 
 const projectRoot = process.cwd();
 const targetRoot = path.join(projectRoot, "desktop", "dist", "server");
 const targetPackagePath = path.join(targetRoot, "package.json");
-const electronGypDir = path.join(projectRoot, ".electron-gyp");
-const nodeGypCliPath = path.join(
-  projectRoot,
-  "node_modules",
-  "node-gyp",
-  "bin",
-  "node-gyp.js",
-);
-const prebuildInstallCliPath = path.join(
-  projectRoot,
-  "node_modules",
-  "prebuild-install",
-  "bin.js",
-);
+// better-sqlite3 13+ is an N-API addon that bundles a prebuilt binary for every
+// supported target, so the packaged copy keeps the target's prebuild and drops
+// the sources instead of being rebuilt against Electron's headers.
+const BETTER_SQLITE3_BUILD_ENTRIES = ["binding.gyp", "build", "deps", "src"];
 
 function getArgValue(flag) {
   const index = process.argv.indexOf(flag);
@@ -42,54 +34,13 @@ function normalizeTargetPlatform(platform) {
   }
 }
 
-function normalizeTargetArch(arch) {
-  if (arch === "arm") {
-    return "armv7l";
-  }
-
-  return arch;
-}
-
-function getElectronExecutablePath() {
-  switch (process.platform) {
-    case "darwin":
-      return path.join(
-        projectRoot,
-        "node_modules",
-        "electron",
-        "dist",
-        "Electron.app",
-        "Contents",
-        "MacOS",
-        "Electron",
-      );
-    case "win32":
-      return path.join(
-        projectRoot,
-        "node_modules",
-        "electron",
-        "dist",
-        "electron.exe",
-      );
-    default:
-      return path.join(
-        projectRoot,
-        "node_modules",
-        "electron",
-        "dist",
-        "electron",
-      );
-  }
-}
-
-const electronBin = getElectronExecutablePath();
-const hostArch = normalizeTargetArch(process.arch);
+const electronBin = getElectronExecutablePath(projectRoot);
 const targetPlatform =
   normalizeTargetPlatform(getArgValue("--platform") ?? process.platform) ??
   process.platform;
-const targetArch = normalizeTargetArch(getArgValue("--arch") ?? hostArch);
+const targetArch = getArgValue("--arch") ?? process.arch;
 const isHostTarget =
-  targetPlatform === process.platform && targetArch === hostArch;
+  targetPlatform === process.platform && targetArch === process.arch;
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -179,78 +130,29 @@ async function syncModuleDirectory(packageName) {
   await cp(sourcePath, targetPath, { recursive: true });
 }
 
-async function runNodeCli(cliPath, args, options = {}) {
-  if (!existsSync(cliPath)) {
-    throw new Error(`Expected CLI entrypoint at ${cliPath}.`);
-  }
-
-  await runWithEnv(process.execPath, [cliPath, ...args], options);
-}
-
-async function rebuildBetterSqlite3(options) {
-  const moduleRoot = path.join(targetRoot, "node_modules", "better-sqlite3");
-  const electronVersion = getInstalledVersion("electron");
-  const sharedEnv = {
-    npm_config_arch: targetArch,
-    npm_config_platform: targetPlatform,
-    npm_config_devdir: electronGypDir,
-    npm_config_disturl: "https://electronjs.org/headers",
-    npm_config_runtime: "electron",
-    npm_config_target: electronVersion,
-    npm_config_target_arch: targetArch,
-    npm_config_target_platform: targetPlatform,
-    npm_config_update_binary: "true",
-  };
-
-  if (!options.isHostTarget) {
-    try {
-      await runNodeCli(prebuildInstallCliPath, [], {
-        cwd: moduleRoot,
-        env: sharedEnv,
-      });
-
-      return;
-    } catch (error) {
-      console.warn(
-        `[desktop] prebuild-install failed for better-sqlite3, falling back to node-gyp: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-  }
-
-  await runNodeCli(nodeGypCliPath, ["rebuild", "--release"], {
-    cwd: moduleRoot,
-    env: {
-      ...sharedEnv,
-      ...(options.isHostTarget ? { npm_config_build_from_source: "true" } : {}),
-    },
-  });
-}
-
 async function pruneBetterSqlite3Runtime() {
   const moduleRoot = path.join(targetRoot, "node_modules", "better-sqlite3");
-  const compiledBinaryPath = path.join(
-    moduleRoot,
-    "build",
-    "Release",
-    "better_sqlite3.node",
-  );
-  const stagedBinaryPath = path.join(targetRoot, "better_sqlite3.node");
+  const prebuildsPath = path.join(moduleRoot, "prebuilds");
+  const targetPrebuild = `${targetPlatform}-${targetArch}.node`;
 
-  if (!existsSync(compiledBinaryPath)) {
+  if (!existsSync(path.join(prebuildsPath, targetPrebuild))) {
     throw new Error(
-      `Expected rebuilt better-sqlite3 binary at ${compiledBinaryPath}.`,
+      `better-sqlite3 ${getInstalledVersion("better-sqlite3")} ships no prebuilt binary for ${targetPlatform}-${targetArch} (expected prebuilds/${targetPrebuild}).`,
     );
   }
 
-  await cp(compiledBinaryPath, stagedBinaryPath);
-  await rm(path.join(moduleRoot, "build"), { force: true, recursive: true });
-  await rm(path.join(moduleRoot, "deps"), { force: true, recursive: true });
-  await rm(path.join(moduleRoot, "src"), { force: true, recursive: true });
-  await mkdir(path.join(moduleRoot, "build", "Release"), { recursive: true });
-  await cp(stagedBinaryPath, compiledBinaryPath);
-  await rm(stagedBinaryPath, { force: true, recursive: true });
+  for (const entry of BETTER_SQLITE3_BUILD_ENTRIES) {
+    await rm(path.join(moduleRoot, entry), { force: true, recursive: true });
+  }
+
+  for (const entry of await readdir(prebuildsPath)) {
+    if (entry !== targetPrebuild) {
+      await rm(path.join(prebuildsPath, entry), {
+        force: true,
+        recursive: true,
+      });
+    }
+  }
 }
 
 const rootPackageJson = JSON.parse(
@@ -273,12 +175,11 @@ const runtimeDependencies = ["better-sqlite3", "sqlite-vec"].reduce(
 
 if (Object.keys(runtimeDependencies).length === 0) {
   console.warn(
-    "[desktop] no standalone native dependencies were found to rebuild.",
+    "[desktop] no standalone native dependencies were found to package.",
   );
   process.exit(0);
 }
 
-await mkdir(electronGypDir, { recursive: true });
 await syncModuleDirectory("better-sqlite3");
 
 const runtimePackageJson = {
@@ -288,9 +189,6 @@ const runtimePackageJson = {
   packageManager: rootPackageJson.packageManager,
   type: rootPackageJson.type ?? "module",
   dependencies: runtimeDependencies,
-  devDependencies: {
-    electron: getInstalledVersion("electron"),
-  },
 };
 
 await writeFile(
@@ -298,14 +196,19 @@ await writeFile(
   `${JSON.stringify(runtimePackageJson, null, 2)}\n`,
 );
 
-await rebuildBetterSqlite3({ isHostTarget });
+await pruneBetterSqlite3Runtime();
 
 if (isHostTarget) {
   await runWithEnv(
     electronBin,
     [
       "-e",
-      "const Database=require('better-sqlite3'); const db=new Database(':memory:'); console.log(db.prepare('select 1 as value').get().value); db.close();",
+      [
+        "const Database=require('better-sqlite3');",
+        "const db=new Database(':memory:');",
+        "console.log('better-sqlite3 select 1 =', db.prepare('select 1 as value').get().value);",
+        "db.close();",
+      ].join(" "),
     ],
     {
       cwd: targetRoot,
@@ -319,5 +222,3 @@ if (isHostTarget) {
     `[desktop] skipping better-sqlite3 runtime verification for cross-target ${targetPlatform}-${targetArch}`,
   );
 }
-
-await pruneBetterSqlite3Runtime();

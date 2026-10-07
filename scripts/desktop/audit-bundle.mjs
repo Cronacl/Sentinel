@@ -2,7 +2,11 @@ import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { access, readdir, stat } from "node:fs/promises";
 import path from "node:path";
-import { findMissingServerRuntimeFiles } from "./audit-bundle-utils.mjs";
+import {
+  findBetterSqlite3RuntimeIssues,
+  findMissingServerRuntimeFiles,
+  inferBundleArch,
+} from "./audit-bundle-utils.mjs";
 import { UNTRACED_SERVER_PACKAGES } from "./untraced-server-packages.mjs";
 
 const require = createRequire(import.meta.url);
@@ -14,6 +18,7 @@ const {
 const projectRoot = process.cwd();
 const distRoot = path.join(projectRoot, "dist");
 const ALLOWED_ASAR_TOP_LEVEL = new Set(["desktop", "package.json", "scripts"]);
+const NODE_PLATFORMS = { linux: "linux", mac: "darwin", win: "win32" };
 const UNPACKED_DENYLIST = [
   "/node_modules/@img/sharp-",
   "/node_modules/@next/swc",
@@ -347,6 +352,23 @@ for (const unpackedAppPath of unpackedAppPaths) {
   if (missingUntracedRuntimeFiles.length > 0) {
     failures.push(
       `${unpackedAppPath}: packaged server is missing untraced runtime packages:\n${missingUntracedRuntimeFiles.join("\n")}`,
+    );
+  }
+
+  const betterSqlite3Issues = findBetterSqlite3RuntimeIssues({
+    arch: inferBundleArch(
+      path.basename(
+        platform === "mac" ? path.dirname(unpackedAppPath) : unpackedAppPath,
+      ),
+    ),
+    platform: NODE_PLATFORMS[platform],
+    serverFiles,
+    serverPath,
+  });
+
+  if (betterSqlite3Issues.length > 0) {
+    failures.push(
+      `${unpackedAppPath}: packaged server better-sqlite3 runtime is wrong:\n${betterSqlite3Issues.join("\n")}`,
     );
   }
 }

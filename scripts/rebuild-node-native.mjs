@@ -5,6 +5,9 @@ import path from "node:path";
 
 const projectRoot = process.cwd();
 const require = createRequire(import.meta.url);
+// better-sqlite3 13+ is an N-API addon with bundled prebuilds (or a source
+// build at install time), so it is only smoke-tested here; node-pty may still
+// need its prebuilds restored or a node-gyp rebuild.
 const NATIVE_MODULES = ["better-sqlite3", "node-pty"];
 const nodeGypCliPath = path.join(
   projectRoot,
@@ -12,12 +15,6 @@ const nodeGypCliPath = path.join(
   "node-gyp",
   "bin",
   "node-gyp.js",
-);
-const prebuildInstallCliPath = path.join(
-  projectRoot,
-  "node_modules",
-  "prebuild-install",
-  "bin.js",
 );
 
 const nativeBuildHelp = {
@@ -56,7 +53,7 @@ function canLoadNativeModule(moduleName) {
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[native] repairing ${moduleName}: ${message}`);
+    console.warn(`[native] ${moduleName} failed to load: ${message}`);
     return false;
   }
 }
@@ -121,32 +118,6 @@ function getModuleRoot(moduleName) {
   return path.join(projectRoot, "node_modules", moduleName);
 }
 
-async function rebuildBetterSqlite3() {
-  const moduleRoot = getModuleRoot("better-sqlite3");
-
-  if (!shouldForceSourceBuild()) {
-    try {
-      await runNodeCli(prebuildInstallCliPath, [], {
-        cwd: moduleRoot,
-        env: getEnvWithoutBuildFromSource(),
-      });
-
-      if (canLoadNativeModule("better-sqlite3")) {
-        return;
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(
-        `[native] no usable prebuilt better-sqlite3 binary was found: ${message}`,
-      );
-    }
-  }
-
-  await runSourceBuild("better-sqlite3", ["rebuild", "--release"], {
-    cwd: moduleRoot,
-  });
-}
-
 async function rebuildNodePty(needsSourceRebuild) {
   const moduleRoot = getModuleRoot("node-pty");
   const usePrebuilds = !needsSourceRebuild && !shouldForceSourceBuild();
@@ -192,8 +163,9 @@ async function rebuildNodePty(needsSourceRebuild) {
 
 async function rebuildNativeModule(moduleName, options = {}) {
   if (moduleName === "better-sqlite3") {
-    await rebuildBetterSqlite3();
-    return;
+    throw new Error(
+      `[native] better-sqlite3 could not be loaded for Node ${process.versions.node} on ${process.platform}-${process.arch}. It ships N-API prebuilds and is not rebuilt here; reinstall dependencies with \`bun install\`.`,
+    );
   }
 
   if (moduleName === "node-pty") {

@@ -21,6 +21,7 @@ import * as nodePty from "node-pty";
 
 import { DESKTOP_CHANNELS } from "../shared/channels.mjs";
 import { createDesktopUpdaterController } from "./updater.mjs";
+import { createDialogDefaultPathTracker } from "./dialog-paths.mjs";
 import {
   configureDesktopPermissionHandlers,
   getDesktopMicrophonePermissionState,
@@ -56,6 +57,7 @@ const WINDOWS_TITLE_BAR_HEIGHT = 32;
 let systemFontFamiliesCache = null;
 let systemFontFamiliesPromise = null;
 let macComputerHelperPromise = null;
+const dialogDefaultPath = createDialogDefaultPathTracker();
 const desktopUpdater = createDesktopUpdaterController({
   appVersion: () => app.getVersion(),
   isPackaged: () => app.isPackaged,
@@ -987,13 +989,13 @@ function createWindow() {
 
   mainWindow.webContents.on(
     "console-message",
-    (_event, level, message, line, sourceId) => {
+    ({ level, lineNumber, message, sourceId }) => {
       if (process.env.NODE_ENV === "production") {
         return;
       }
 
       console.log(
-        `[electron:renderer:${level}] ${message} (${sourceId || "unknown"}:${line})`,
+        `[electron:renderer:${level}] ${message} (${sourceId || "unknown"}:${lineNumber})`,
       );
     },
   );
@@ -1540,7 +1542,7 @@ async function setDesktopComputerClipboard(text) {
     throw new Error("Clipboard text must be a string.");
   }
 
-  clipboard.writeText(text);
+  await clipboard.writeText(text);
   return {
     platform: "darwin",
     supported: true,
@@ -1683,7 +1685,7 @@ function registerIpc() {
         throw new Error("Clipboard text must be a string.");
       }
 
-      clipboard.writeText(text);
+      await clipboard.writeText(text);
     },
   );
   ipcMain.handle(DESKTOP_CHANNELS.COMPUTER_STATUS, async () =>
@@ -1746,8 +1748,10 @@ function registerIpc() {
   });
   ipcMain.handle(DESKTOP_CHANNELS.PICK_DIRECTORY, async () => {
     const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
+      defaultPath: dialogDefaultPath.current(),
       properties: ["openDirectory"],
     });
+    dialogDefaultPath.remember(result);
 
     const selectedPath = result.filePaths[0];
     if (result.canceled || !selectedPath) {
@@ -1762,8 +1766,10 @@ function registerIpc() {
 
   ipcMain.handle(DESKTOP_CHANNELS.PICK_FILES, async () => {
     const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
+      defaultPath: dialogDefaultPath.current(),
       properties: ["multiSelections", "openFile"],
     });
+    dialogDefaultPath.remember(result);
 
     if (result.canceled || result.filePaths.length === 0) {
       return [];

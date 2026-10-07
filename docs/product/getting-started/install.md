@@ -10,9 +10,11 @@ Release builds are published on GitHub Releases:
 
 Current release targets:
 
-- macOS: DMG
-- Windows: NSIS installer
-- Linux: AppImage, DEB, RPM
+- macOS 13 (Ventura) or later: DMG
+- Windows 10 or later, 64-bit: NSIS installer
+- Linux x64 and arm64: AppImage, DEB, RPM
+
+Sentinel runs on Electron 44, which no longer supports macOS 12, 32-bit Windows, or 32-bit ARM Linux.
 
 Linux notes:
 
@@ -42,6 +44,8 @@ bun run dev:desktop
 The app runs at `http://localhost:3232`.
 
 `ENCRYPTION_KEY` can be left empty in `.env`. Sentinel generates one on first desktop launch.
+
+`bun install` does not download the Electron binary. `bun run dev:desktop` and the desktop build commands fetch it on first use, or you can run `bun run electron:install` ahead of time.
 
 ## Build commands
 

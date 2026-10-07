@@ -1,5 +1,5 @@
 name: Setup Desktop Build Environment
-description: Set up Bun, install dependencies, and restore desktop build caches.
+description: Set up Bun, install dependencies, restore desktop build caches, and install the Electron binary.
 
 runs:
   using: composite
@@ -44,3 +44,9 @@ runs:
         key: ${{ runner.os }}-${{ runner.arch }}-desktop-build-${{ hashFiles('bun.lock', 'package.json', 'next.config.*') }}
         restore-keys: |
           ${{ runner.os }}-${{ runner.arch }}-desktop-build-
+
+    # Electron 42+ no longer downloads its binary during install, and
+    # build.electronDist packages node_modules/electron/dist.
+    - name: Install Electron binary
+      shell: bash
+      run: bun run electron:install

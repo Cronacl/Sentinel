@@ -41,9 +41,11 @@ Some parts are solid. Some parts are rough. Things will change.
 Release builds are published on GitHub Releases:
 
 - [Download the latest release](https://github.com/Cronacl/Sentinel/releases)
-- macOS builds are available as DMGs
-- Windows builds are available as NSIS installers
-- Linux builds are available as AppImages, DEBs, and RPMs
+- macOS builds are available as DMGs and need macOS 13 (Ventura) or later
+- Windows builds are available as NSIS installers for 64-bit Windows 10 or later
+- Linux builds are available as AppImages, DEBs, and RPMs for x64 and arm64
+
+Electron 44 dropped support for macOS 12, 32-bit Windows, and 32-bit ARM Linux, so Sentinel no longer ships for them.
 
 If you want the current development version, run it locally from source.
 
@@ -154,6 +156,8 @@ bun run dev:desktop
 The app runs at `http://localhost:3232`.
 
 `ENCRYPTION_KEY` can be left empty in `.env`. Sentinel will generate one on first desktop launch.
+
+Electron no longer downloads its binary during `bun install`. `bun run dev:desktop` and the desktop build commands fetch it on first use; run `bun run electron:install` to download it ahead of time.
 
 Sentinel repairs native Node dependencies at startup. Most machines use prebuilt binaries. If a runtime, OS, or CPU combination has no matching prebuild, the startup script builds the native dependency locally and prints the platform package to install when build tools are missing.
 

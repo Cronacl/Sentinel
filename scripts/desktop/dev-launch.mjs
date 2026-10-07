@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 
+import { ensureElectronBinary } from "./electron-binary.mjs";
+
 const HEALTHCHECK_URL = "http://localhost:3232/api/health";
 const DEFAULT_HEALTHCHECK_TIMEOUT_MS = 300_000;
 const ELECTRON_ENTRY = path.join(
@@ -51,6 +53,8 @@ async function waitForHealthcheck(timeoutMs = getHealthcheckTimeoutMs()) {
   );
 }
 
+// Electron 42+ downloads its binary on demand; fetch it while Next starts.
+ensureElectronBinary();
 await waitForHealthcheck();
 
 const child = spawn(ELECTRON_ENTRY, ["."], {

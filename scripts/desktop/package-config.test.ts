@@ -40,4 +40,29 @@ describe("desktop packaging configuration", () => {
     expect(publishReleaseWorkflow).toContain("dist/*.zip");
     expect(desktopVerifyWorkflow).toContain('echo "dist/*.zip"');
   });
+
+  it("installs the Electron binary that electron-builder packages", async () => {
+    const [packageJson, setupDesktopBuildAction] = await Promise.all([
+      readFile(path.join(process.cwd(), "package.json"), "utf8").then(
+        (contents) =>
+          JSON.parse(contents) as {
+            build: { electronDist: string };
+            scripts: Record<string, string>;
+          },
+      ),
+      readFile(
+        path.join(
+          process.cwd(),
+          ".github/actions/setup-desktop-build/action.yml",
+        ),
+        "utf8",
+      ),
+    ]);
+
+    expect(packageJson.build.electronDist).toBe("node_modules/electron/dist");
+    expect(packageJson.scripts["electron:install"]).toBe(
+      "node ./scripts/desktop/electron-binary.mjs",
+    );
+    expect(setupDesktopBuildAction).toContain("run: bun run electron:install");
+  });
 });

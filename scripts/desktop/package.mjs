@@ -18,13 +18,8 @@ const PLATFORM_CONFIG = {
     nodePlatform: "win32",
   },
 };
-const SUPPORTED_ARCHS = new Set([
-  "arm64",
-  "armv7l",
-  "ia32",
-  "universal",
-  "x64",
-]);
+// Electron 44 publishes 64-bit binaries only (no Windows x86 or Linux ARMv7).
+const SUPPORTED_ARCHS = new Set(["arm64", "universal", "x64"]);
 
 function getArgValue(flag) {
   const index = process.argv.indexOf(flag);
@@ -47,10 +42,6 @@ function getArgValues(flag) {
   }
 
   return values;
-}
-
-function normalizeArch(arch) {
-  return arch === "arm" ? "armv7l" : arch;
 }
 
 function run(command, args, options = {}) {
@@ -102,7 +93,7 @@ const targets = [
       .filter(Boolean),
   ),
 ];
-const archs = [...new Set(getArgValues("--arch").map(normalizeArch))];
+const archs = [...new Set(getArgValues("--arch"))];
 
 const electronBuilderCli = path.join(
   process.cwd(),
@@ -121,14 +112,14 @@ const builderArgs = [
 for (const arch of archs) {
   if (!SUPPORTED_ARCHS.has(arch)) {
     throw new Error(
-      `Unsupported "--arch" value "${arch}". Expected one of: arm64, armv7l, ia32, universal, x64.`,
+      `Unsupported "--arch" value "${arch}". Expected one of: arm64, universal, x64.`,
     );
   }
 
   builderArgs.push(`--${arch}`);
 }
 
-const targetArchs = archs.length > 0 ? archs : [normalizeArch(process.arch)];
+const targetArchs = archs.length > 0 ? archs : [process.arch];
 const concreteTargetArchs = targetArchs.filter((arch) => arch !== "universal");
 
 if (concreteTargetArchs.length !== 1) {
