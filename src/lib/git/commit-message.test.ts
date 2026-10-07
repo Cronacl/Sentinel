@@ -308,13 +308,11 @@ describe("generateCopilotCommitMessage", () => {
       workingDirectory: globalThis.process.cwd(),
     });
     expect(
-      receivedConfig?.onPermissionRequest(
-        { kind: "read" },
+      receivedConfig?.onPermissionRequest?.(
+        { intention: "Read file.ts", kind: "read", path: "file.ts" },
         { sessionId: "copilot-session" },
       ),
-    ).toEqual({
-      kind: "denied-no-approval-rule-and-could-not-request-from-user",
-    });
+    ).toEqual({ kind: "user-not-available" });
     expect(didDisconnect).toBe(true);
     expect(result).toEqual({
       body: "- update commit flow",

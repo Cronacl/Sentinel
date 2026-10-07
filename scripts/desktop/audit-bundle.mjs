@@ -20,6 +20,7 @@ import {
 const require = createRequire(import.meta.url);
 const { listPackage } = require("@electron/asar");
 const {
+  findUnexpectedPackagedCopilotFiles,
   getExpectedPackagedCopilotFiles,
 } = require("./copilot-runtime-packaging.cjs");
 
@@ -335,17 +336,46 @@ for (const unpackedAppPath of unpackedAppPaths) {
     );
   }
 
-  const missingCopilotRuntimeFiles = findMissingServerRuntimeFiles({
-    requiredFiles: getExpectedPackagedCopilotFiles({
-      serverNodeModulesPath: path.join(serverPath, "node_modules"),
-    }),
+  const nativeRuntimeTarget = {
+    arch: inferBundleArch(
+      path.basename(
+        platform === "mac" ? path.dirname(unpackedAppPath) : unpackedAppPath,
+      ),
+    ),
+    platform: NODE_PLATFORMS[platform],
     serverFiles,
     serverPath,
-  });
+  };
 
-  if (missingCopilotRuntimeFiles.length > 0) {
+  try {
+    const missingCopilotRuntimeFiles = findMissingServerRuntimeFiles({
+      requiredFiles: getExpectedPackagedCopilotFiles({
+        arch: nativeRuntimeTarget.arch,
+        platform: nativeRuntimeTarget.platform,
+        serverNodeModulesPath: path.join(serverPath, "node_modules"),
+      }),
+      serverFiles,
+      serverPath,
+    });
+
+    if (missingCopilotRuntimeFiles.length > 0) {
+      failures.push(
+        `${unpackedAppPath}: packaged server is missing Copilot runtime files:\n${missingCopilotRuntimeFiles.join("\n")}`,
+      );
+    }
+
+    const unexpectedCopilotRuntimePackages =
+      findUnexpectedPackagedCopilotFiles(nativeRuntimeTarget);
+
+    if (unexpectedCopilotRuntimePackages.length > 0) {
+      failures.push(
+        `${unpackedAppPath}: packaged server ships Copilot runtime packages for other targets:\n${unexpectedCopilotRuntimePackages.join("\n")}`,
+      );
+    }
+  } catch (error) {
+    // A universal bundle has no single Copilot runtime platform.
     failures.push(
-      `${unpackedAppPath}: packaged server is missing Copilot runtime files:\n${missingCopilotRuntimeFiles.join("\n")}`,
+      `${unpackedAppPath}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
@@ -388,16 +418,6 @@ for (const unpackedAppPath of unpackedAppPaths) {
     );
   }
 
-  const nativeRuntimeTarget = {
-    arch: inferBundleArch(
-      path.basename(
-        platform === "mac" ? path.dirname(unpackedAppPath) : unpackedAppPath,
-      ),
-    ),
-    platform: NODE_PLATFORMS[platform],
-    serverFiles,
-    serverPath,
-  };
   const nativeRuntimeIssues = [
     ...findBetterSqlite3RuntimeIssues(nativeRuntimeTarget),
     ...findSqliteVecRuntimeIssues(nativeRuntimeTarget),

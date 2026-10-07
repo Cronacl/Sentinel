@@ -13,6 +13,7 @@ import {
   getCopilotRuntimeBadgeLabel,
   getCopilotRuntimeCliLabel,
   getCopilotRuntimeFallbackMessage,
+  getCopilotRuntimeSourceLabel,
 } from "./runtime-status";
 
 describe("Claude runtime settings helpers", () => {
@@ -188,5 +189,21 @@ describe("Copilot runtime settings helpers", () => {
         cliPath: "/usr/local/bin/copilot",
       }),
     ).toBe("Path retained");
+  });
+
+  it("names where the Copilot runtime came from", () => {
+    expect(getCopilotRuntimeSourceLabel({ runtimeSource: "bundled" })).toBe(
+      "Bundled with Sentinel",
+    );
+    expect(
+      getCopilotRuntimeSourceLabel({ runtimeSource: "env_override" }),
+    ).toBe("Path override");
+    expect(getCopilotRuntimeSourceLabel({ runtimeSource: "user_cli" })).toBe(
+      "Installed Copilot CLI",
+    );
+    expect(getCopilotRuntimeSourceLabel({ runtimeSource: null })).toBe(
+      "Not detected",
+    );
+    expect(getCopilotRuntimeSourceLabel(undefined)).toBe("Not detected");
   });
 });

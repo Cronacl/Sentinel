@@ -2,6 +2,7 @@ import "server-only";
 
 import { generateId } from "ai";
 import type {
+  AssistantUsageEvent,
   CopilotSession,
   PermissionRequest,
   PermissionRequestResult,
@@ -19,7 +20,6 @@ import {
   mergeThreadMessageMetadata,
   type ThreadUIMessage,
 } from "@/lib/ai/messages/types";
-import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import { serializeComposerContextToText } from "@/lib/composer-context/serialize";
 import { createLogger } from "@/lib/logger";
 import { normalizeThreadMode } from "@/lib/plan";
@@ -37,7 +37,6 @@ import {
 } from "../../repo/checkpoints";
 import { loadThreadSessionSnapshot } from "../../session/server";
 import type { ThreadChatRequest } from "../../types";
-import type { ToolApprovalPolicyMap } from "../../tools/policy";
 import {
   createThreadEventChannel,
   type ThreadEventChannel,
@@ -55,6 +54,17 @@ import {
   type CopilotPromptResponse,
 } from "./event-helpers";
 import { buildPlanModePromptPreamble } from "../plan-mode-instructions";
+import {
+  buildCopilotPermissionToolName,
+  buildCopilotRejectedPermission,
+  COPILOT_AUTO_APPROVED_PERMISSION,
+  COPILOT_USER_APPROVED_PERMISSION,
+  COPILOT_USER_UNAVAILABLE_PERMISSION,
+  describeCopilotPermissionRequest,
+  isCopilotSubAgentEvent,
+  requiresApprovalForCopilotPermission,
+  toCopilotSdkReasoningEffort,
+} from "./permissions";
 import {
   getToolApprovalPolicies,
   getToolPermissionMode,
@@ -117,7 +127,7 @@ type CopilotMirrorState = {
 };
 
 type PendingCopilotApproval = {
-  request: CopilotPermissionRequest;
+  request: PermissionRequest;
   resolve: (result: PermissionRequestResult) => void;
   toolCallId: string;
   toolName: string;
@@ -145,39 +155,6 @@ export type ActiveCopilotRunControl = {
   userId: string;
   workspaceId: string;
 };
-
-type CopilotPermissionRequest = Omit<PermissionRequest, "kind"> & {
-  kind: PermissionRequest["kind"] | "hook" | "memory";
-  fact?: string;
-  fileName?: string;
-  fullCommandText?: string;
-  intention?: string;
-  path?: string;
-  subject?: string;
-  toolCallId?: string;
-  toolDescription?: string;
-  toolName?: string;
-  url?: string;
-};
-
-const COPILOT_READ_TOOL_POLICIES = [
-  "read",
-  "list",
-  "glob",
-  "grep",
-  "diff",
-  "batch_read",
-  "load_document",
-] as const;
-
-const COPILOT_WRITE_TOOL_POLICIES = [
-  "edit",
-  "multiedit",
-  "create_file",
-  "move_file",
-  "delete_file",
-  "apply_patch",
-] as const;
 
 function sanitizeCopilotMirrorTool(tool: CopilotMirrorTool): CopilotMirrorTool {
   const next: CopilotMirrorTool = { ...tool };
@@ -343,29 +320,6 @@ function normalizeCopilotToolName(toolName: string) {
     .replace(/[^a-z0-9]+/g, "_")}`;
 }
 
-function buildCopilotPermissionToolName(request: CopilotPermissionRequest) {
-  switch (request.kind) {
-    case "shell":
-      return "copilot_shell";
-    case "read":
-      return "copilot_read";
-    case "write":
-      return "copilot_write";
-    case "url":
-      return "copilot_url";
-    case "memory":
-      return "copilot_memory";
-    case "mcp":
-      return "copilot_mcp";
-    case "custom-tool":
-      return "copilot_custom_tool";
-    case "hook":
-      return "copilot_hook";
-    default:
-      return "copilot_runtime";
-  }
-}
-
 function buildCopilotUserInputToolInput(request: CopilotUserInputRequest) {
   if (Array.isArray(request.choices) && request.choices.length > 0) {
     return {
@@ -387,35 +341,6 @@ function buildCopilotUserInputToolInput(request: CopilotUserInputRequest) {
   return {
     prompt: request.question,
   };
-}
-
-function describeCopilotPermissionRequest(request: CopilotPermissionRequest) {
-  switch (request.kind) {
-    case "shell":
-      return (
-        request.intention ?? request.fullCommandText ?? "Run shell command"
-      );
-    case "read":
-      return request.intention ?? request.path ?? "Read workspace path";
-    case "write":
-      return request.intention ?? request.fileName ?? "Write workspace file";
-    case "url":
-      return request.intention ?? request.url ?? "Fetch URL";
-    case "memory":
-      return request.subject
-        ? `Save memory: ${request.subject}`
-        : "Save memory";
-    case "mcp":
-      return "This Copilot MCP permission is not supported in Sentinel yet.";
-    case "custom-tool":
-      return request.toolDescription
-        ? `Custom tool: ${request.toolDescription}`
-        : "Custom Copilot tool";
-    case "hook":
-      return "This Copilot hook confirmation is not supported in Sentinel yet.";
-    default:
-      return "Copilot permission request";
-  }
 }
 
 function parseDataUrl(url: string) {
@@ -647,7 +572,7 @@ function buildAssistantParts(state: CopilotMirrorState) {
 
 function updateCopilotUsage(
   state: CopilotMirrorState,
-  event: Extract<SessionEvent, { type: "assistant.usage" }>,
+  event: AssistantUsageEvent,
 ) {
   const inputTokens = event.data.inputTokens;
   const outputTokens = event.data.outputTokens;
@@ -747,62 +672,6 @@ function launchCopilotThreadTitleGeneration(input: {
   void emitThreadSnapshot(input.request.threadId, input.eventChannel);
 }
 
-function requiresApprovalForCopilotPermission(input: {
-  permissionMode: "default" | "full";
-  policies: ToolApprovalPolicyMap;
-  request: CopilotPermissionRequest;
-}) {
-  if (input.permissionMode === "full") {
-    return false;
-  }
-
-  switch (input.request.kind) {
-    case "shell":
-      return input.policies.shell_command ?? true;
-    case "url":
-      return input.policies.webfetch ?? true;
-    case "memory":
-      return input.policies.save_memory ?? true;
-    case "read":
-      return COPILOT_READ_TOOL_POLICIES.some(
-        (toolName) => input.policies[toolName] ?? true,
-      );
-    case "write":
-      return COPILOT_WRITE_TOOL_POLICIES.some(
-        (toolName) => input.policies[toolName] ?? true,
-      );
-    case "mcp":
-    case "custom-tool":
-    case "hook":
-      return true;
-    default:
-      return true;
-  }
-}
-
-function buildDeniedPermissionResult(message: string): PermissionRequestResult {
-  return {
-    interrupt: true,
-    kind: "denied-by-permission-request-hook",
-    message,
-  };
-}
-
-function resolveUnsupportedPermissionMessage(
-  request: CopilotPermissionRequest,
-) {
-  switch (request.kind) {
-    case "mcp":
-      return "Copilot MCP permission requests are not supported in Sentinel yet.";
-    case "custom-tool":
-      return "Copilot custom tool permission requests are not supported in Sentinel yet.";
-    case "hook":
-      return "Copilot hook permission requests are not supported in Sentinel yet.";
-    default:
-      return "This Copilot permission request is not supported in Sentinel yet.";
-  }
-}
-
 async function applyCopilotPromptResponse(
   control: ActiveCopilotRunControl,
   response: CopilotPromptResponse,
@@ -853,11 +722,8 @@ async function applyCopilotPromptResponse(
     });
     pendingApproval.resolve(
       response.approved === false
-        ? {
-            feedback: response.response ?? response.reason,
-            kind: "denied-interactively-by-user",
-          }
-        : { kind: "approved" },
+        ? buildCopilotRejectedPermission(response.response ?? response.reason)
+        : COPILOT_USER_APPROVED_PERMISSION,
     );
   }
 
@@ -898,11 +764,7 @@ async function finishCopilotRun(
   }
 
   for (const [id, pending] of control.pendingApprovals) {
-    pending.resolve(
-      buildDeniedPermissionResult(
-        "Copilot session ended before approval was received.",
-      ),
-    );
+    pending.resolve(COPILOT_USER_UNAVAILABLE_PERMISSION);
     control.pendingApprovals.delete(id);
   }
 
@@ -999,11 +861,30 @@ async function finishCopilotRun(
   }
 }
 
+const COPILOT_MAIN_AGENT_EVENT_TYPES = new Set<SessionEvent["type"]>([
+  "assistant.message",
+  "assistant.message_delta",
+  "assistant.usage",
+  "session.error",
+  "session.idle",
+  "session.model_change",
+]);
+
 async function handleCopilotEvent(
   control: ActiveCopilotRunControl,
   event: SessionEvent,
 ) {
   if (control.finished) {
+    return;
+  }
+
+  // Sub-agent text, usage, model switches and errors belong to the sub-agent's
+  // task tool call, not to the main assistant message or the run's outcome.
+  // Their tool executions still render as tool parts.
+  if (
+    isCopilotSubAgentEvent(event) &&
+    COPILOT_MAIN_AGENT_EVENT_TYPES.has(event.type)
+  ) {
     return;
   }
 
@@ -1303,19 +1184,22 @@ export async function stopCopilotThreadRun(
   return new Response(null, { status: 204 });
 }
 
-function buildSessionConfig(input: {
+function buildCopilotSessionConfig(input: {
   cwd: string;
   modelId: string | null;
   onEvent: (event: SessionEvent) => void;
-  onPermissionRequest: SessionConfig["onPermissionRequest"];
-  onUserInputRequest: SessionConfig["onUserInputRequest"];
-  reasoningEffort: ThreadChatRequest["reasoningEffort"];
+  onPermissionRequest: NonNullable<SessionConfig["onPermissionRequest"]>;
+  onUserInputRequest: NonNullable<SessionConfig["onUserInputRequest"]>;
+  reasoningEffort: ReturnType<typeof toCopilotSdkReasoningEffort>;
 }) {
   return {
     clientName: "sentinel",
+    // Sentinel has no sub-agent stream view yet; non-streaming sub-agent events
+    // and subagent.* lifecycle events still arrive.
+    includeSubAgentStreamingEvents: false,
     ...(input.modelId ? { model: input.modelId } : {}),
-    ...(toCopilotSdkReasoningEffort(input.reasoningEffort)
-      ? { reasoningEffort: toCopilotSdkReasoningEffort(input.reasoningEffort) }
+    ...(input.reasoningEffort
+      ? { reasoningEffort: input.reasoningEffort }
       : {}),
     onEvent: input.onEvent,
     onPermissionRequest: input.onPermissionRequest,
@@ -1323,42 +1207,6 @@ function buildSessionConfig(input: {
     streaming: true,
     workingDirectory: input.cwd,
   } satisfies SessionConfig;
-}
-
-function normalizePersistedCopilotReasoningEffort(
-  reasoningEffort: ThreadChatRequest["reasoningEffort"] | null | undefined,
-): ReasoningEffort | undefined {
-  switch (reasoningEffort) {
-    case "none":
-    case "minimal":
-      return "low";
-    case "low":
-    case "medium":
-    case "high":
-      return reasoningEffort;
-    case "xhigh":
-      return "high";
-    default:
-      return undefined;
-  }
-}
-
-function toCopilotSdkReasoningEffort(
-  reasoningEffort: ThreadChatRequest["reasoningEffort"],
-): NonNullable<SessionConfig["reasoningEffort"]> | undefined {
-  switch (reasoningEffort) {
-    case "low":
-    case "medium":
-    case "high":
-      return reasoningEffort;
-    case "xhigh":
-      return "high";
-    case "none":
-    case "minimal":
-      return "low";
-    default:
-      return undefined;
-  }
 }
 
 export async function runCopilotThreadChat(
@@ -1489,6 +1337,9 @@ export async function runCopilotThreadChat(
       ? buildTranscriptBootstrapPrompt(modelTranscript, threadMode)
       : null;
 
+  const requestedReasoningEffort =
+    request.reasoningEffort ?? existingCopilotState?.reasoningEffort ?? null;
+
   const runId = generateId();
   const assistantId = crypto.randomUUID();
   const eventChannel = await createThreadEventChannel(runId);
@@ -1521,13 +1372,30 @@ export async function runCopilotThreadChat(
     await persist.setActiveMessage(request.threadId, assistantId);
     persist.setActiveStream(request.threadId, runId);
     persist.setThreadStatus(request.threadId, "streaming");
+
+    // Only xhigh depends on the model: send it when the model lists it (or
+    // when its efforts are unknown) and fall back to high otherwise.
+    const supportedReasoningEfforts =
+      requestedReasoningEffort === "xhigh" && requestedModelId
+        ? await getCopilotClientManager().getSupportedReasoningEfforts(
+            requestedModelId,
+          )
+        : null;
+    const reasoningEffort = toCopilotSdkReasoningEffort(
+      requestedReasoningEffort,
+      supportedReasoningEfforts,
+    );
+
     await persist.updateThreadChatSettings(request.threadId, {
       engine: "copilot",
       modelId: requestedModelId,
       mode: threadMode,
-      reasoningEffort:
-        normalizePersistedCopilotReasoningEffort(request.reasoningEffort) ??
-        null,
+      reasoningEffort: request.reasoningEffort
+        ? (toCopilotSdkReasoningEffort(
+            request.reasoningEffort,
+            supportedReasoningEfforts,
+          ) ?? null)
+        : null,
     });
     void beginThreadRepoCheckpointRun({
       projectPath: workspaceRoot,
@@ -1545,37 +1413,15 @@ export async function runCopilotThreadChat(
       threadId: request.threadId,
     });
 
-    const onPermissionRequest: SessionConfig["onPermissionRequest"] = async (
-      requestPermission,
-    ) => {
-      const normalizedRequest = requestPermission as CopilotPermissionRequest;
+    // Every permission kind (shell, file, URL, memory, MCP, custom tool, hook,
+    // extension, workflow) goes through the same Sentinel approval flow.
+    const onPermissionRequest = async (
+      normalizedRequest: PermissionRequest,
+    ): Promise<PermissionRequestResult> => {
       const approvalId = crypto.randomUUID();
       const toolCallId = normalizedRequest.toolCallId ?? approvalId;
       const toolName = buildCopilotPermissionToolName(normalizedRequest);
       const reason = describeCopilotPermissionRequest(normalizedRequest);
-      const unsupported =
-        normalizedRequest.kind === "mcp" ||
-        normalizedRequest.kind === "custom-tool" ||
-        normalizedRequest.kind === "hook";
-
-      if (unsupported) {
-        upsertCopilotTool(mirror, {
-          approval: {
-            approved: false,
-            id: approvalId,
-            reason,
-          },
-          id: toolCallId,
-          input: normalizedRequest,
-          name: toolName,
-          state: "output-denied",
-        });
-        await emitAssistantMessageUpdate(mirror, runId, "streaming");
-        await emitThreadSnapshot(request.threadId, eventChannel);
-        return buildDeniedPermissionResult(
-          resolveUnsupportedPermissionMessage(normalizedRequest),
-        );
-      }
 
       if (
         !requiresApprovalForCopilotPermission({
@@ -1584,7 +1430,7 @@ export async function runCopilotThreadChat(
           request: normalizedRequest,
         })
       ) {
-        return { kind: "approved" };
+        return COPILOT_AUTO_APPROVED_PERMISSION;
       }
 
       upsertCopilotTool(mirror, {
@@ -1597,17 +1443,9 @@ export async function runCopilotThreadChat(
         name: toolName,
         state: "approval-requested",
       });
-      pendingApprovals.set(approvalId, {
-        request: normalizedRequest,
-        resolve: () => {},
-        toolCallId,
-        toolName,
-      });
-      persist.setThreadStatus(request.threadId, "awaiting_approval");
-      await emitAssistantMessageUpdate(mirror, runId, "streaming");
-      await emitThreadSnapshot(request.threadId, eventChannel);
-
-      return await new Promise<PermissionRequestResult>((resolve) => {
+      // Register the resolver before the approval reaches the UI so an
+      // immediate answer cannot land on a placeholder.
+      const decision = new Promise<PermissionRequestResult>((resolve) => {
         pendingApprovals.set(approvalId, {
           request: normalizedRequest,
           resolve,
@@ -1615,9 +1453,14 @@ export async function runCopilotThreadChat(
           toolName,
         });
       });
+      persist.setThreadStatus(request.threadId, "awaiting_approval");
+      await emitAssistantMessageUpdate(mirror, runId, "streaming");
+      await emitThreadSnapshot(request.threadId, eventChannel);
+
+      return await decision;
     };
 
-    const onUserInputRequest: SessionConfig["onUserInputRequest"] = async (
+    const onUserInputRequest: CopilotUserInputHandler = async (
       inputRequest,
     ) => {
       const approvalId = crypto.randomUUID();
@@ -1630,20 +1473,21 @@ export async function runCopilotThreadChat(
         name: "copilot_request_user_input",
         state: "approval-requested",
       });
-      persist.setThreadStatus(request.threadId, "awaiting_approval");
-      await emitAssistantMessageUpdate(mirror, runId, "streaming");
-      await emitThreadSnapshot(request.threadId, eventChannel);
-
-      return await new Promise<CopilotUserInputResponse>((resolve) => {
+      const answer = new Promise<CopilotUserInputResponse>((resolve) => {
         pendingQuestions.set(approvalId, {
           request: inputRequest,
           resolve,
           toolCallId: approvalId,
         });
       });
+      persist.setThreadStatus(request.threadId, "awaiting_approval");
+      await emitAssistantMessageUpdate(mirror, runId, "streaming");
+      await emitThreadSnapshot(request.threadId, eventChannel);
+
+      return await answer;
     };
 
-    const sessionConfig = buildSessionConfig({
+    const sessionConfig = buildCopilotSessionConfig({
       cwd,
       modelId: requestedModelId,
       onEvent: (event) => {
@@ -1653,10 +1497,7 @@ export async function runCopilotThreadChat(
       },
       onPermissionRequest,
       onUserInputRequest,
-      reasoningEffort:
-        request.reasoningEffort ??
-        existingCopilotState?.reasoningEffort ??
-        undefined,
+      reasoningEffort,
     });
 
     const session = shouldCreateFreshSession
@@ -1693,9 +1534,7 @@ export async function runCopilotThreadChat(
         cwd,
         modelId: requestedModelId,
         reasoningEffort:
-          normalizePersistedCopilotReasoningEffort(
-            request.reasoningEffort ?? existingCopilotState?.reasoningEffort,
-          ) ?? existingCopilotState?.reasoningEffort,
+          reasoningEffort ?? existingCopilotState?.reasoningEffort,
         sessionId,
       }),
     );

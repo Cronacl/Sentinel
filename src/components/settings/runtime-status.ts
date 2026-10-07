@@ -200,6 +200,21 @@ export function getCopilotRuntimeCliLabel(
   });
 }
 
+export function getCopilotRuntimeSourceLabel(
+  status: { runtimeSource?: string | null } | null | undefined,
+) {
+  switch (status?.runtimeSource) {
+    case "bundled":
+      return "Bundled with Sentinel";
+    case "env_override":
+      return "Path override";
+    case "user_cli":
+      return "Installed Copilot CLI";
+    default:
+      return "Not detected";
+  }
+}
+
 export function getCopilotRuntimeFallbackMessage(
   status: CopilotRuntimeStatusLike | null | undefined,
   formatter?: (date: Date) => string,

@@ -10,11 +10,15 @@ import {
 } from "./audit-bundle-utils.mjs";
 
 const require = createRequire(import.meta.url);
-const { getExpectedPackagedCopilotFiles } =
+type CopilotTarget = { arch: number | string; platform: string };
+const { findUnexpectedPackagedCopilotFiles, getExpectedPackagedCopilotFiles } =
   require("./copilot-runtime-packaging.cjs") as {
-    getExpectedPackagedCopilotFiles: (options: {
-      serverNodeModulesPath: string;
-    }) => string[];
+    findUnexpectedPackagedCopilotFiles: (
+      options: CopilotTarget & { serverFiles: string[]; serverPath: string },
+    ) => string[];
+    getExpectedPackagedCopilotFiles: (
+      options: CopilotTarget & { serverNodeModulesPath: string },
+    ) => string[];
   };
 
 describe("findMissingServerRuntimeFiles", () => {
@@ -22,6 +26,8 @@ describe("findMissingServerRuntimeFiles", () => {
     const serverPath = "/tmp/Sentinel.app/Contents/Resources/server";
     const serverNodeModulesPath = path.join(serverPath, "node_modules");
     const requiredFiles = getExpectedPackagedCopilotFiles({
+      arch: "arm64",
+      platform: "darwin",
       serverNodeModulesPath,
     });
 
@@ -31,6 +37,11 @@ describe("findMissingServerRuntimeFiles", () => {
       serverPath,
     });
 
+    const runtimeRoot = path.join(
+      serverNodeModulesPath,
+      "@github",
+      "copilot-sdk-darwin-arm64",
+    );
     expect(missingFiles).toEqual([
       path.join(
         serverNodeModulesPath,
@@ -38,22 +49,106 @@ describe("findMissingServerRuntimeFiles", () => {
         "copilot-sdk",
         "package.json",
       ),
+      path.join(runtimeRoot, "package.json"),
+      path.join(runtimeRoot, "prebuilds", "darwin-arm64", "copilot-runtime"),
+      path.join(runtimeRoot, "prebuilds", "darwin-arm64", "runtime.node"),
     ]);
   });
 
   it("returns an empty list when all Copilot runtime files are present", () => {
-    const serverPath = "/tmp/Sentinel.app/Contents/Resources/server";
+    const serverPath = "C:/Sentinel/resources/server";
     const requiredFiles = getExpectedPackagedCopilotFiles({
+      arch: "x64",
+      platform: "win32",
       serverNodeModulesPath: path.join(serverPath, "node_modules"),
     });
 
-    const missingFiles = findMissingServerRuntimeFiles({
-      requiredFiles,
-      serverFiles: requiredFiles,
-      serverPath,
-    });
+    expect(
+      requiredFiles.some((filePath) =>
+        filePath.endsWith(
+          path.join("prebuilds", "win32-x64", "copilot-runtime.exe"),
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      findMissingServerRuntimeFiles({
+        requiredFiles,
+        serverFiles: requiredFiles,
+        serverPath,
+      }),
+    ).toEqual([]);
+  });
+});
 
-    expect(missingFiles).toEqual([]);
+describe("findUnexpectedPackagedCopilotFiles", () => {
+  const serverPath = "/tmp/Sentinel.app/Contents/Resources/server";
+  const nodeModulesPath = path.join(serverPath, "node_modules");
+
+  it("reports other targets' runtimes and koffi once per package", () => {
+    expect(
+      findUnexpectedPackagedCopilotFiles({
+        arch: "arm64",
+        platform: "darwin",
+        serverFiles: [
+          path.join(nodeModulesPath, "@github", "copilot-sdk", "package.json"),
+          path.join(
+            nodeModulesPath,
+            "@github",
+            "copilot-sdk-darwin-arm64",
+            "package.json",
+          ),
+          path.join(
+            nodeModulesPath,
+            "@github",
+            "copilot-sdk-darwin-x64",
+            "package.json",
+          ),
+          path.join(
+            nodeModulesPath,
+            "@github",
+            "copilot-sdk-darwin-x64",
+            "prebuilds",
+            "darwin-x64",
+            "runtime.node",
+          ),
+          path.join(nodeModulesPath, "koffi", "index.js"),
+          path.join(
+            nodeModulesPath,
+            "@koromix",
+            "koffi-darwin-arm64",
+            "package.json",
+          ),
+          path.join(
+            nodeModulesPath,
+            "@github",
+            "copilot-sdk",
+            "node_modules",
+            "zod",
+            "package.json",
+          ),
+        ],
+        serverPath,
+      }),
+    ).toEqual([
+      "node_modules/@github/copilot-sdk-darwin-x64",
+      "node_modules/@koromix/koffi-darwin-arm64",
+      "node_modules/koffi",
+    ]);
+  });
+
+  it("accepts a server that ships only the target runtime", () => {
+    expect(
+      findUnexpectedPackagedCopilotFiles({
+        arch: "x64",
+        platform: "linux",
+        serverFiles: getExpectedPackagedCopilotFiles({
+          arch: "x64",
+          platform: "linux",
+          serverNodeModulesPath: nodeModulesPath,
+        }),
+        serverPath,
+      }),
+    ).toEqual([]);
   });
 });
 

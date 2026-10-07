@@ -33,9 +33,26 @@ const setLocalRuntimeEnvValueMock = mock(
   },
 );
 
+const constructedClientOptions: unknown[] = [];
+const clientStart = mock(async () => {});
+
+class MockCopilotClient {
+  constructor(options: unknown) {
+    constructedClientOptions.push(options);
+  }
+
+  start = clientStart;
+}
+
 mock.module("server-only", () => ({}));
 mock.module("@github/copilot-sdk", () => ({
-  CopilotClient: class {},
+  CopilotClient: MockCopilotClient,
+  RuntimeConnection: {
+    forStdio: (options: Record<string, unknown>) => ({
+      kind: "stdio",
+      ...options,
+    }),
+  },
 }));
 mock.module("@/lib/logger", () => ({
   createLogger: () => ({
@@ -50,13 +67,57 @@ mock.module("@/lib/runtime/local-runtime-env", () => ({
 }));
 
 const {
+  buildCopilotClientOptions,
   buildCopilotThreadState,
+  getCopilotClientManager,
   normalizeCopilotErrorMessage,
   parseCopilotShellLookupOutput,
   resetCopilotRuntimeCache,
   resolveCopilotRuntime,
   // @ts-expect-error Bun test-only cache-busting import for module isolation.
 } = await import("./copilot-sdk.ts?copilot-sdk-test");
+const { getCopilotRuntimePlatform } =
+  await import("./copilot-sdk/bundled-runtime");
+
+// Lays out `@github/copilot-sdk-<host platform>` the way the SDK publishes it.
+async function writeBundledCopilotRuntime(rootPath: string) {
+  const runtimePlatform = getCopilotRuntimePlatform();
+  if (!runtimePlatform) {
+    throw new Error("No Copilot runtime platform for this test host.");
+  }
+
+  const packageRoot = path.join(
+    rootPath,
+    "node_modules",
+    "@github",
+    `copilot-sdk-${runtimePlatform}`,
+  );
+  const prebuildRoot = path.join(packageRoot, "prebuilds", runtimePlatform);
+  const cliPath = path.join(
+    prebuildRoot,
+    runtimePlatform.startsWith("win32")
+      ? "copilot-runtime.exe"
+      : "copilot-runtime",
+  );
+  await mkdir(prebuildRoot, { recursive: true });
+  await writeFile(
+    path.join(packageRoot, "package.json"),
+    JSON.stringify({ name: `@github/copilot-sdk-${runtimePlatform}` }),
+  );
+  await writeFile(cliPath, "#!/bin/sh\nexit 0\n");
+  await writeFile(path.join(prebuildRoot, "runtime.node"), "native");
+  if (process.platform !== "win32") {
+    await chmod(cliPath, 0o755);
+  }
+
+  return cliPath;
+}
+
+function clearCopilotPathOverrides() {
+  delete process.env.SENTINEL_COPILOT_PATH;
+  delete process.env.COPILOT_CLI_PATH;
+  delete process.env.COPILOT_PATH;
+}
 
 async function writeLaunchableCopilotScript(
   rootPath: string,
@@ -130,6 +191,9 @@ afterEach(async () => {
   }
 
   setLocalRuntimeEnvValueMock.mockClear();
+  clientStart.mockReset();
+  clientStart.mockImplementation(async () => {});
+  constructedClientOptions.length = 0;
   resetCopilotRuntimeCache();
 });
 
@@ -194,7 +258,91 @@ describe("resolveCopilotRuntime", () => {
 
     expect(runtime.cliDetected).toBe(true);
     expect(runtime.cliPath).toBe(scriptPath);
+    expect(runtime.source).toBe("env_override");
     expect(process.env.SENTINEL_COPILOT_PATH).toBe(scriptPath);
+  });
+
+  it("prefers an override over the bundled runtime without persisting COPILOT_CLI_PATH", async () => {
+    const tempRoot = await realpath(
+      await mkdtemp(path.join(os.tmpdir(), "copilot-sdk-runtime-cli-path-")),
+    );
+    tempRoots.push(tempRoot);
+    await writeBundledCopilotRuntime(tempRoot);
+    const scriptPath = await writeLaunchableCopilotScript(
+      tempRoot,
+      process.platform === "win32" ? "copilot.cmd" : "copilot",
+    );
+
+    process.chdir(tempRoot);
+    clearCopilotPathOverrides();
+    process.env.COPILOT_CLI_PATH = scriptPath;
+    resetCopilotRuntimeCache();
+
+    const runtime = await resolveCopilotRuntime();
+
+    expect(runtime.cliPath).toBe(scriptPath);
+    expect(runtime.source).toBe("env_override");
+    expect(setLocalRuntimeEnvValueMock).not.toHaveBeenCalled();
+    expect(process.env.SENTINEL_COPILOT_PATH).toBeUndefined();
+  });
+
+  it("uses the SDK's bundled platform runtime when no override is set", async () => {
+    const tempRoot = await realpath(
+      await mkdtemp(path.join(os.tmpdir(), "copilot-sdk-runtime-bundled-")),
+    );
+    tempRoots.push(tempRoot);
+    const bundledCliPath = await writeBundledCopilotRuntime(tempRoot);
+    // A user-installed copilot on PATH loses to the bundled runtime.
+    const binRoot = path.join(tempRoot, "bin");
+    await mkdir(binRoot);
+    await writeLaunchableCopilotScript(
+      binRoot,
+      process.platform === "win32" ? "copilot.cmd" : "copilot",
+    );
+
+    process.chdir(tempRoot);
+    process.env.HOME = tempRoot;
+    process.env.PATH = binRoot;
+    clearCopilotPathOverrides();
+    resetCopilotRuntimeCache();
+
+    const runtime = await resolveCopilotRuntime();
+
+    expect(runtime).toMatchObject({
+      cliDetected: true,
+      cliPath: bundledCliPath,
+      error: null,
+      source: "bundled",
+    });
+    expect(setLocalRuntimeEnvValueMock).not.toHaveBeenCalled();
+    expect(process.env.SENTINEL_COPILOT_PATH).toBeUndefined();
+  });
+
+  it("falls back to a user-installed copilot without persisting its path", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    const tempRoot = await realpath(
+      await mkdtemp(path.join(os.tmpdir(), "copilot-sdk-runtime-user-cli-")),
+    );
+    tempRoots.push(tempRoot);
+    const binRoot = path.join(tempRoot, "bin");
+    await mkdir(binRoot);
+    const scriptPath = await writeLaunchableCopilotScript(binRoot, "copilot");
+
+    process.chdir(tempRoot);
+    process.env.HOME = tempRoot;
+    process.env.PATH = binRoot;
+    clearCopilotPathOverrides();
+    resetCopilotRuntimeCache();
+
+    const runtime = await resolveCopilotRuntime();
+
+    expect(runtime.cliPath).toBe(scriptPath);
+    expect(runtime.source).toBe("user_cli");
+    expect(setLocalRuntimeEnvValueMock).not.toHaveBeenCalled();
+    expect(process.env.SENTINEL_COPILOT_PATH).toBeUndefined();
   });
 
   it("accepts a JS CLI entrypoint when explicitly configured", async () => {
@@ -244,6 +392,65 @@ describe("resolveCopilotRuntime", () => {
     expect(runtime.cliDetected).toBe(true);
     expect(runtime.cliPath).toBe(canonicalScriptPath);
     expect(process.env.SENTINEL_COPILOT_PATH).toBe(canonicalScriptPath);
+  });
+});
+
+describe("buildCopilotClientOptions", () => {
+  it("spawns the resolved runtime over stdio with the SDK 1.x options", () => {
+    const options = buildCopilotClientOptions({
+      env: { DROPPED: undefined, HOME: "/home/user", PATH: "/usr/bin" },
+      runtimePath: "/opt/copilot/copilot-runtime",
+    });
+
+    expect(options).toEqual({
+      clientInfo: { applicationName: "sentinel" },
+      connection: {
+        env: { HOME: "/home/user", PATH: "/usr/bin" },
+        kind: "stdio",
+        path: "/opt/copilot/copilot-runtime",
+      },
+      logLevel: "error",
+      workingDirectory: process.cwd(),
+    });
+    // Nothing else: the SDK 1.x client has no CLI path, cwd or top-level env
+    // (env cannot be set on both the client and the connection).
+    expect(Object.keys(options).sort()).toEqual([
+      "clientInfo",
+      "connection",
+      "logLevel",
+      "workingDirectory",
+    ]);
+  });
+});
+
+describe("getCopilotClientManager", () => {
+  it("reuses one client, starts it on every use and rebuilds it after a failed start", async () => {
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "copilot-sdk-client-manager-"),
+    );
+    tempRoots.push(tempRoot);
+    process.env.SENTINEL_COPILOT_PATH = await writeLaunchableCopilotScript(
+      tempRoot,
+      process.platform === "win32" ? "copilot.cmd" : "copilot",
+    );
+    resetCopilotRuntimeCache();
+
+    const manager = getCopilotClientManager();
+    const first = await manager.getClient();
+    const second = await manager.getClient();
+
+    expect(second).toBe(first);
+    expect(constructedClientOptions).toHaveLength(1);
+    expect(clientStart).toHaveBeenCalledTimes(2);
+
+    clientStart.mockImplementationOnce(async () => {
+      throw new Error("runtime exited");
+    });
+    await expect(manager.getClient()).rejects.toThrow("runtime exited");
+
+    const rebuilt = await manager.getClient();
+    expect(rebuilt).not.toBe(first);
+    expect(constructedClientOptions).toHaveLength(2);
   });
 });
 

@@ -1432,6 +1432,7 @@ describe("resolveRenderer", () => {
     ].map((toolName) => `copilot_${toolName}`);
     const runtimeBridgeToolNames = [
       "copilot_custom_tool",
+      "copilot_extension",
       "copilot_hook",
       "copilot_mcp",
       "copilot_memory",
@@ -1440,6 +1441,7 @@ describe("resolveRenderer", () => {
       "copilot_runtime",
       "copilot_shell",
       "copilot_url",
+      "copilot_workflow",
       "copilot_write",
     ];
 

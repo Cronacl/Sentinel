@@ -211,3 +211,59 @@ describe("P9 Claude Agent SDK tripwires", () => {
     ).toEqual([]);
   });
 });
+
+describe("P9 Copilot SDK 1.x tripwires", () => {
+  const engineFile = "src/lib/ai/chat/engines/copilot-sdk/index.ts";
+
+  it("flags the removed client options in CopilotClient literals", () => {
+    expect(
+      hitIds(
+        engineFile,
+        "return new CopilotClient({\n  autoStart: false,\n  ...(path ? { cliPath: path } : {}),\n  cwd: process.cwd(),\n});",
+      ),
+    ).toEqual(["P9-copilot-client-cli-options:1", "P9-copilot-auto-start:2"]);
+    expect(
+      hitIds(
+        "src/lib/other.ts",
+        "const options: CopilotClientOptions = {\n  logLevel: 'error',\n  cliUrl: 'localhost:3000',\n};",
+      ),
+    ).toEqual(["P9-copilot-client-cli-options:1"]);
+  });
+
+  it("accepts RuntimeConnection-based options and cliPath status fields", () => {
+    expect(
+      hitIds(
+        engineFile,
+        [
+          "function build(): CopilotClientOptions {",
+          "  return {",
+          "    clientInfo: { applicationName: 'sentinel' },",
+          "    connection: RuntimeConnection.forStdio({ path: runtime.cliPath }),",
+          "    workingDirectory: process.cwd(),",
+          "  };",
+          "}",
+          "const client = new CopilotClient(build());",
+          "const status = { cliPath: runtime.cliPath, cliVersion: null };",
+        ].join("\n"),
+      ),
+    ).toEqual([]);
+  });
+
+  it("flags legacy permission results and the CLI package dependency", () => {
+    expect(
+      hitIds(
+        "src/lib/ai/chat/runtime/copilot/run.ts",
+        'resolve({ kind: "approved" });\nreturn { kind: "denied-interactively-by-user", feedback };\nreturn { kind: "approve-once" };',
+      ),
+    ).toEqual([
+      "P9-copilot-legacy-permission-results:1",
+      "P9-copilot-legacy-permission-results:2",
+    ]);
+    expect(
+      hitIds(
+        "package.json",
+        '    "@github/copilot": "^1.0.24",\n    "@github/copilot-sdk": "^1.0.16",',
+      ),
+    ).toEqual(["P9-copilot-cli-package:1"]);
+  });
+});

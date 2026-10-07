@@ -87,7 +87,14 @@ describe("desktop packaging configuration", () => {
 // bun only runs the lifecycle scripts of packages named here. better-sqlite3
 // stays out: it loads bundled N-API prebuilds, and bun would otherwise run a
 // no-op `node-gyp rebuild` that needs Python (and Visual Studio on Windows).
-const INTENTIONALLY_UNTRUSTED = new Set(["better-sqlite3", "tesseract.js"]);
+// koffi (from @github/copilot-sdk) ships its binaries in @koromix/koffi-<os>
+// packages and only backs the SDK's in-process transport, which Sentinel does
+// not use, so its CMake-capable install script never needs to run.
+const INTENTIONALLY_UNTRUSTED = new Set([
+  "better-sqlite3",
+  "koffi",
+  "tesseract.js",
+]);
 
 async function listPackagesWithInstallScripts(nodeModulesPath: string) {
   const packages = new Set<string>();

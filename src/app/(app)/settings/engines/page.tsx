@@ -31,6 +31,7 @@ import {
   getCopilotRuntimeBadgeLabel,
   getCopilotRuntimeCliLabel,
   getCopilotRuntimeFallbackMessage,
+  getCopilotRuntimeSourceLabel,
   getCursorRuntimeBadgeColor,
   getCursorRuntimeBadgeLabel,
   getCursorRuntimeCliLabel,
@@ -542,6 +543,10 @@ export default function EnginesPage() {
                   {
                     label: "CLI",
                     value: getCopilotRuntimeCliLabel(copilotStatus),
+                  },
+                  {
+                    label: "Source",
+                    value: getCopilotRuntimeSourceLabel(copilotStatus),
                   },
                   {
                     label: "Auth",

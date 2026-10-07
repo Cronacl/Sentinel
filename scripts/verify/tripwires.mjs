@@ -247,6 +247,41 @@ export const TRIPWIRES = [
     include: /^src\/lib\/git\//,
     exclude: /\.test\.[cm]?[jt]sx?$/,
   },
+  {
+    id: "P9-copilot-client-cli-options",
+    description:
+      "Copilot SDK 1.x removed cliPath/cliUrl/autoStart/cwd client options (use RuntimeConnection and workingDirectory)",
+    // A CopilotClient options literal: `new CopilotClient({ ... })` up to its
+    // first parenthesis, or a value typed as CopilotClientOptions up to the
+    // end of its statement.
+    pattern:
+      /(?:new\s+CopilotClient\s*\(\s*\{[^)]*?|:\s*CopilotClientOptions\s*(?:=\s*)?\{[^;]*?)\b(?:autoStart|cliPath|cliUrl|cwd)\s*:/,
+    include: /^src\/.*\.[cm]?[jt]sx?$/,
+    multiline: true,
+  },
+  {
+    id: "P9-copilot-auto-start",
+    description:
+      "Copilot SDK 1.x starts the runtime on first use; autoStart is gone",
+    pattern: /\bautoStart\b/,
+    include:
+      /^src\/lib\/(?:ai\/chat\/(?:engines\/copilot-sdk|runtime\/copilot)\b|git\/commit-message\.ts$)/,
+  },
+  {
+    id: "P9-copilot-legacy-permission-results",
+    description:
+      "Copilot SDK 1.x permission handlers answer approve-once/reject/user-not-available; the denied-* and approved kinds are outcomes",
+    pattern: /\bkind:\s*["'](?:approved|denied-[a-z-]+)["']/,
+    include:
+      /^src\/lib\/(?:ai\/chat\/(?:engines\/copilot-sdk|runtime\/copilot)\b|git\/commit-message\.ts$)/,
+  },
+  {
+    id: "P9-copilot-cli-package",
+    description:
+      "Copilot SDK 1.x bundles its runtime in @github/copilot-sdk-<platform>; the @github/copilot CLI package is not a dependency",
+    pattern: /"@github\/copilot"\s*:/,
+    include: /^package\.json$/,
+  },
 ];
 
 const DEFAULT_EXCLUDE =

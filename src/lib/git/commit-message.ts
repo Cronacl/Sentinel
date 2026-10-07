@@ -648,9 +648,8 @@ export async function generateCopilotCommitMessage(
       availableTools: [],
       clientName: "sentinel",
       model: input.modelId,
-      onPermissionRequest: () => ({
-        kind: "denied-no-approval-rule-and-could-not-request-from-user",
-      }),
+      // The session has no tools, so nothing should ask; refuse if it does.
+      onPermissionRequest: () => ({ kind: "user-not-available" }),
       ...(mapCopilotEffort(input.reasoningEffort)
         ? { reasoningEffort: mapCopilotEffort(input.reasoningEffort) }
         : {}),
