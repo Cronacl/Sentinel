@@ -1477,10 +1477,12 @@ export async function runCopilotThreadChat(
     persist.setActiveStream(request.threadId, runId);
     persist.setThreadStatus(request.threadId, "streaming");
 
-    // Only xhigh depends on the model: send it when the model lists it (or
-    // when its efforts are unknown) and fall back to high otherwise.
+    // Only xhigh and max depend on the model: send them when the model
+    // lists them and fall back otherwise (see toCopilotSdkReasoningEffort).
     const supportedReasoningEfforts =
-      requestedReasoningEffort === "xhigh" && requestedModelId
+      (requestedReasoningEffort === "xhigh" ||
+        requestedReasoningEffort === "max") &&
+      requestedModelId
         ? await getCopilotClientManager().getSupportedReasoningEfforts(
             requestedModelId,
           )

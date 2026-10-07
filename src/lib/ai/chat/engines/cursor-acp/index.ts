@@ -727,6 +727,8 @@ function getCursorValueForReasoning(
   effort: ReasoningEffort | null | undefined,
 ) {
   switch (effort) {
+    // Cursor's top level is extra-high.
+    case "max":
     case "xhigh":
       return "extra-high";
     case "none":

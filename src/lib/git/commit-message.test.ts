@@ -139,6 +139,38 @@ describe("generateCodexCommitMessage", () => {
     expect(result.body).toBe("- add migration\n- update tests");
   });
 
+  it("sends max as Codex's xhigh effort", async () => {
+    let receivedArgs: string[] = [];
+    const fakeProcess = createFakeChildProcess();
+
+    await generateCodexCommitMessage(
+      {
+        context: {
+          branch: "feature/codex-commit",
+          patch: "diff --git a/file.ts b/file.ts",
+          repoRoot: globalThis.process.cwd(),
+          summary: "M file.ts",
+        },
+        modelId: "gpt-5.4",
+        reasoningEffort: "max",
+      },
+      {
+        createProcess: async ({ args }) => {
+          receivedArgs = args;
+          const outputPath = args[args.indexOf("--output-last-message") + 1]!;
+          await writeFile(
+            outputPath,
+            JSON.stringify({ body: "", subject: "Tidy up" }),
+            "utf8",
+          );
+          return fakeProcess.child;
+        },
+      },
+    );
+
+    expect(receivedArgs).toContain('model_reasoning_effort="xhigh"');
+  });
+
   it("throws when codex returns invalid structured output", async () => {
     const fakeProcess = createFakeChildProcess();
 
@@ -223,6 +255,36 @@ describe("generateClaudeCommitMessage", () => {
     });
   });
 
+  it("sends max as Claude's high effort", async () => {
+    let receivedArgs: string[] = [];
+    const fakeProcess = createFakeChildProcess({
+      stdout: JSON.stringify({
+        structured_output: { body: "", subject: "Tidy up" },
+      }),
+    });
+
+    await generateClaudeCommitMessage(
+      {
+        context: {
+          branch: "feature/claude-commit",
+          patch: "diff --git a/file.ts b/file.ts",
+          repoRoot: globalThis.process.cwd(),
+          summary: "M file.ts",
+        },
+        modelId: "claude-sonnet-4-5",
+        reasoningEffort: "max",
+      },
+      {
+        spawnProcess: ({ args }) => {
+          receivedArgs = args;
+          return fakeProcess.child;
+        },
+      },
+    );
+
+    expect(receivedArgs[receivedArgs.indexOf("--effort") + 1]).toBe("high");
+  });
+
   it("throws when claude returns invalid json output", async () => {
     const fakeProcess = createFakeChildProcess({
       stdout: "{not json",
@@ -249,6 +311,38 @@ describe("generateClaudeCommitMessage", () => {
 });
 
 describe("generateCopilotCommitMessage", () => {
+  it("sends max as Copilot's high effort", async () => {
+    let receivedEffort: string | undefined;
+
+    await generateCopilotCommitMessage(
+      {
+        context: {
+          branch: "feature/copilot-commit",
+          patch: "diff --git a/file.ts b/file.ts",
+          repoRoot: globalThis.process.cwd(),
+          summary: "M file.ts",
+        },
+        modelId: "gpt-5.1-copilot",
+        reasoningEffort: "max",
+      },
+      {
+        createSession: async (config) => {
+          receivedEffort = config.reasoningEffort;
+          return {
+            disconnect: async () => {},
+            sendAndWait: async () => ({
+              data: {
+                content: JSON.stringify({ body: "", subject: "Tidy up" }),
+              },
+            }),
+          };
+        },
+      },
+    );
+
+    expect(receivedEffort).toBe("high");
+  });
+
   it("creates a tool-free Copilot session, maps reasoning effort, and parses JSON output", async () => {
     let receivedConfig:
       | Pick<

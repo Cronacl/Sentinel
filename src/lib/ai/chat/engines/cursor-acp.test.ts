@@ -37,6 +37,7 @@ mock.module("@/lib/runtime/local-runtime-env", () => ({
 }));
 
 const {
+  applyCursorSessionConfig,
   buildCursorThreadState,
   CursorAcpClient,
   parseCursorShellLookupOutput,
@@ -187,4 +188,41 @@ describe("CursorAcpClient.cancel", () => {
       expect(() => client.cancel("cursor-session-1")).not.toThrow();
     },
   );
+});
+
+describe("applyCursorSessionConfig reasoning", () => {
+  const reasoningOption = {
+    category: "thought_level",
+    currentValue: "medium",
+    id: "reasoning",
+    options: ["low", "medium", "high", "extra-high"].map((value) => ({
+      value,
+    })),
+  };
+
+  for (const [effort, expected] of [
+    ["high", "high"],
+    ["xhigh", "extra-high"],
+    // Sentinel's max is Cursor's top level.
+    ["max", "extra-high"],
+  ] as const) {
+    it(`sends ${expected} for ${effort}`, async () => {
+      const setSessionConfigOption = mock(async () => ({
+        configOptions: [reasoningOption],
+      }));
+
+      await applyCursorSessionConfig({
+        client: { setSessionConfigOption },
+        configOptions: [reasoningOption],
+        reasoningEffort: effort,
+        sessionId: "session-1",
+      });
+
+      expect(setSessionConfigOption).toHaveBeenCalledWith({
+        configId: "reasoning",
+        sessionId: "session-1",
+        value: expected,
+      });
+    });
+  }
 });

@@ -187,7 +187,8 @@ export function isCopilotSubAgentEvent(event: SessionEvent) {
 /**
  * Maps Sentinel's effort to the SDK's. `none`/`minimal` have no Copilot
  * equivalent and become `low`; `xhigh` passes through unless the model's
- * listed efforts are known and lack it.
+ * listed efforts are known and lack it. `max` is sent only to a model that
+ * lists it and otherwise falls back like `xhigh`.
  */
 export function toCopilotSdkReasoningEffort(
   reasoningEffort: ReasoningEffort | null | undefined,
@@ -201,6 +202,13 @@ export function toCopilotSdkReasoningEffort(
     case "medium":
     case "high":
       return reasoningEffort;
+    case "max":
+      if (supportedEfforts?.includes("max")) {
+        return "max";
+      }
+      return supportedEfforts && !supportedEfforts.includes("xhigh")
+        ? "high"
+        : "xhigh";
     case "xhigh":
       return supportedEfforts && !supportedEfforts.includes("xhigh")
         ? "high"

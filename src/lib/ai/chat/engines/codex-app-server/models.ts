@@ -28,6 +28,21 @@ type CodexFallbackModel = {
 // for the family until a live `model/list` reports the real options.
 const CODEX_FALLBACK_EFFORTS = ["low", "medium", "high", "xhigh"] as const;
 
+/**
+ * The effort sent to Codex (`turn/start`, collaboration mode, `codex exec`).
+ * Sentinel's `max` is sent as xhigh, the top level across the Codex family:
+ * only some models take `max`, and Sentinel does not read it from
+ * `model/list` yet, so the composer keeps today's options.
+ */
+export function toCodexReasoningEffort(
+  effort: ReasoningEffort | null | undefined,
+): ReasoningEffort | null {
+  if (effort == null) {
+    return null;
+  }
+  return effort === "max" ? "xhigh" : effort;
+}
+
 function buildFallbackModel(input: {
   description: string;
   displayName: string;

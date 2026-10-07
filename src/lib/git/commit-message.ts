@@ -11,6 +11,7 @@ import {
   getCopilotClientManager,
   normalizeCopilotErrorMessage,
 } from "@/lib/ai/chat/engines/copilot-sdk";
+import { toCodexReasoningEffort } from "@/lib/ai/chat/engines/codex-app-server/models";
 import {
   getReasoningProviderOptions,
   type ReasoningEffort,
@@ -384,6 +385,7 @@ function mapClaudeEffort(effort: ReasoningEffort | null | undefined) {
       return "medium";
     case "high":
     case "xhigh":
+    case "max":
       return "high";
     case "none":
     case "minimal":
@@ -400,6 +402,7 @@ function mapCopilotEffort(effort: ReasoningEffort | null | undefined) {
       return "medium";
     case "high":
     case "xhigh":
+    case "max":
       return "high";
     case "none":
     case "minimal":
@@ -537,7 +540,8 @@ export async function generateCodexCommitMessage(
     await writeFile(outputPath, "", "utf8");
 
     const reasoningEffort =
-      input.reasoningEffort ?? CODEX_DEFAULT_REASONING_EFFORT;
+      toCodexReasoningEffort(input.reasoningEffort) ??
+      CODEX_DEFAULT_REASONING_EFFORT;
     const child = await createProcess({
       args: [
         "exec",

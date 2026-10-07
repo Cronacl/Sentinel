@@ -12,7 +12,10 @@ import type {
   CodexTurn,
   CodexUserInputRequestEvent,
 } from "@/lib/ai/chat/engines/codex-app-server";
-import { CODEX_DEFAULT_MODEL_ID } from "@/lib/ai/chat/engines/codex-app-server/models";
+import {
+  CODEX_DEFAULT_MODEL_ID,
+  toCodexReasoningEffort,
+} from "@/lib/ai/chat/engines/codex-app-server/models";
 import {
   buildCodexUserInputPrompt,
   parseCodexUserInputQuestions,
@@ -2411,11 +2414,14 @@ export async function runCodexThreadChat(
     // reports a version below the protocol baseline gets the plan contract as
     // a prompt preamble instead, in a single `turn/start`.
     const nativeCollaborationMode = codex.supportsCollaborationMode();
+    const codexReasoningEffort = toCodexReasoningEffort(
+      request.reasoningEffort,
+    );
     const collaborationMode = nativeCollaborationMode
       ? buildCodexCollaborationMode({
           interactionMode: threadMode === "plan" ? "plan" : "default",
           model: request.modelId ?? threadStartResponse.model ?? null,
-          effort: request.reasoningEffort ?? null,
+          effort: codexReasoningEffort,
         })
       : undefined;
 
@@ -2431,7 +2437,7 @@ export async function runCodexThreadChat(
       approvalPolicy,
       ...(collaborationMode ? { collaborationMode } : {}),
       cwd: workspaceRoot,
-      effort: request.reasoningEffort ?? null,
+      effort: codexReasoningEffort,
       input:
         !nativeCollaborationMode && threadMode === "plan"
           ? await buildCodexUserInput(request.message, {
