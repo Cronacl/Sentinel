@@ -1746,7 +1746,8 @@ export function resetCodexEngineStatusCache() {
  * The app-server manager for an instance: one process per instance, keyed
  * by its runtime configuration (binary, CODEX_HOME, env), so instances with
  * different homes never share a process and a configuration change starts a
- * fresh one. Without an instance, the default instance's manager.
+ * fresh one. The old one keeps serving whoever holds it until the instance
+ * change retires it. Without an instance, the default instance's manager.
  */
 export function getCodexAppServerManager(instance?: CodexCliInstance | null) {
   return codexAppServerManagers.get(

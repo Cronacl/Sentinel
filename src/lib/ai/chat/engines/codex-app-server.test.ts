@@ -52,6 +52,10 @@ const {
   getCodexAppServerManager,
   // @ts-expect-error Bun test-only cache-busting import for module isolation.
 } = await import("./codex-app-server.ts?codex-app-server-protocol-test");
+const { retireInstanceResources } =
+  await import("./platform/instance-resources");
+const { getInstanceRuntimeKey } =
+  await import("./platform/runtime/resolve-binary");
 
 type Manager = InstanceType<typeof CodexAppServerManager> & {
   call: (method: string, params?: unknown) => Promise<unknown>;
@@ -152,6 +156,10 @@ describe("per-instance app-server managers", () => {
     const replacement = getCodexAppServerManager(moved) as Manager;
     managers.push(replacement);
     expect(replacement).not.toBe(manager);
+    // A lookup leaves the old process to whoever still uses it; handling
+    // the instance change retires it.
+    expect(child.exitCode).toBeNull();
+    await retireInstanceResources(work.id, getInstanceRuntimeKey(moved));
 
     const exited = await new Promise<boolean>((resolve) => {
       if (child.exitCode !== null || child.signalCode !== null) {

@@ -161,6 +161,7 @@ function createService(input: {
 }) {
   const events: unknown[] = [];
   const disposed: string[] = [];
+  const retired: Array<[string, string]> = [];
   const clock = input.clock ?? createClock();
   const { registry, state } = createRegistry(
     input.instances,
@@ -171,12 +172,15 @@ function createService(input: {
     disposeInstance: async (id) => {
       disposed.push(id);
     },
+    retireInstance: async (id, keepKey) => {
+      retired.push([id, keepKey]);
+    },
     drivers: (kind) => input.drivers[kind] ?? null,
     emit: (event) => events.push(event),
     enrichers: input.enrichers,
     registry,
   });
-  return { clock, disposed, events, service, state };
+  return { clock, disposed, events, retired, service, state };
 }
 
 async function flush() {
@@ -787,12 +791,17 @@ describe("instance changes and startup", () => {
   it("re-probes an updated instance and ends the processes of a disabled one", async () => {
     const { driver, probe } = createDriver(async () => readyProbe());
     const work = instance({ id: "codex-work", isDefault: false });
-    const { disposed, events, service, state } = createService({
+    const { disposed, events, retired, service, state } = createService({
       drivers: { codex: driver },
       instances: [work],
     });
     await service.getSnapshot(USER, "codex-work");
 
+    const moved = {
+      ...work,
+      envOverrides: { CODEX_HOME: "/homes/moved" },
+    };
+    state.instances = [moved];
     service.handleInstanceChange({
       driver: "codex",
       instanceId: "codex-work",
@@ -800,8 +809,10 @@ describe("instance changes and startup", () => {
     });
     await waitFor(() => probe.mock.calls.length === 2);
     expect(probe.mock.calls[1]?.[1].reason).toBe("config-change");
+    // Runtimes of the old configuration end; the new one's stays.
+    expect(retired).toEqual([["codex-work", getInstanceRuntimeKey(moved)]]);
 
-    state.instances = [{ ...work, enabled: false }];
+    state.instances = [{ ...moved, enabled: false }];
     service.handleInstanceChange({
       driver: "codex",
       instanceId: "codex-work",

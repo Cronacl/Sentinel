@@ -953,8 +953,9 @@ const copilotClientManagers = getInstanceResources<CopilotClientManager>(
 /**
  * The client manager for an instance: one Copilot runtime per instance,
  * keyed by its runtime configuration (binary, COPILOT_HOME, env), so a
- * configuration change starts a fresh runtime. Without an instance, the
- * default instance's manager.
+ * configuration change starts a fresh runtime. The old one keeps serving
+ * whoever holds it until the instance change retires it. Without an
+ * instance, the default instance's manager.
  */
 export function getCopilotClientManager(
   instance?: CopilotRuntimeInstance | null,

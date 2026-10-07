@@ -6,6 +6,7 @@ const {
   createInstanceResourceMap,
   disposeInstanceResources,
   getInstanceResources,
+  retireInstanceResources,
 } = await import("./instance-resources");
 
 type Resource = { name: string };
@@ -22,17 +23,25 @@ describe("createInstanceResourceMap", () => {
     expect(map.peek("codex")).toBeNull();
   });
 
-  it("replaces and disposes a resource created for an older configuration", async () => {
+  it("never ends another key's resource on lookup, only when it is retired", async () => {
     const dispose = mock(async (_resource: Resource) => {});
     const map = createInstanceResourceMap<Resource>({ dispose });
 
-    const old = map.get("codex-work", "key-1", () => ({ name: "old" }));
-    const fresh = map.get("codex-work", "key-2", () => ({ name: "new" }));
+    // A caller without an instance ("default") and one with the customized
+    // default instance alternate: neither may kill the other's runtime.
+    const legacy = map.get("codex", "default", () => ({ name: "legacy" }));
+    const resolved = map.get("codex", "codex:abc", () => ({ name: "new" }));
+    expect(map.get("codex", "default", () => ({ name: "x" }))).toBe(legacy);
+    expect(map.get("codex", "codex:abc", () => ({ name: "x" }))).toBe(resolved);
     await Promise.resolve();
+    expect(dispose).not.toHaveBeenCalled();
+    expect(map.peek("codex", "default")).toBe(legacy);
+    expect(map.peek("codex")).toBe(resolved);
 
-    expect(fresh).not.toBe(old);
-    expect(dispose.mock.calls).toEqual([[old]]);
-    expect(map.values()).toEqual([fresh]);
+    await map.retire("codex", "codex:abc");
+
+    expect(dispose.mock.calls).toEqual([[legacy]]);
+    expect(map.values()).toEqual([resolved]);
   });
 
   it("disposes one instance or all, reporting errors without throwing", async () => {
@@ -76,10 +85,17 @@ describe("process-wide instance resources", () => {
     copilot.get("work", "k", () => ({ name: "copilot" }));
     copilot.get("other", "k", () => ({ name: "other" }));
 
+    copilot.get("work", "k2", () => ({ name: "copilot-new" }));
+    await retireInstanceResources("work", "k2");
+    expect(disposedCodex.mock.calls).toEqual([[{ name: "codex" }]]);
+    expect(disposedCopilot.mock.calls).toEqual([[{ name: "copilot" }]]);
+
     await disposeInstanceResources("work");
 
-    expect(disposedCodex).toHaveBeenCalledTimes(1);
-    expect(disposedCopilot.mock.calls).toEqual([[{ name: "copilot" }]]);
+    expect(disposedCopilot.mock.calls).toEqual([
+      [{ name: "copilot" }],
+      [{ name: "copilot-new" }],
+    ]);
     expect(copilot.peek("other")).toEqual({ name: "other" });
   });
 });

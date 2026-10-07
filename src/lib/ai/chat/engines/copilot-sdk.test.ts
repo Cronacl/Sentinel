@@ -87,6 +87,10 @@ const {
   resolveCopilotRuntime,
   // @ts-expect-error Bun test-only cache-busting import for module isolation.
 } = await import("./copilot-sdk.ts?copilot-sdk-test");
+const { retireInstanceResources } =
+  await import("./platform/instance-resources");
+const { getInstanceRuntimeKey } =
+  await import("./platform/runtime/resolve-binary");
 const { getCopilotRuntimePlatform } =
   await import("./copilot-sdk/bundled-runtime");
 
@@ -631,6 +635,11 @@ describe("per-instance Copilot clients", () => {
     };
     expect(getCopilotClientManager(moved)).not.toBe(manager);
     await new Promise((resolve) => setTimeout(resolve, 0));
+    // Only handling the instance change ends the old runtime.
+    expect(clientStop).not.toHaveBeenCalled();
+    expect(getCopilotClientManager(work)).toBe(manager);
+
+    await retireInstanceResources(work.id, getInstanceRuntimeKey(moved));
     expect(clientStop).toHaveBeenCalledTimes(1);
   });
 });

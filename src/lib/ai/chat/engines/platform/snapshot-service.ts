@@ -28,7 +28,10 @@ import {
 import { DEFAULT_SNAPSHOT_TTL_MS, type EngineDriver } from "./driver";
 import { getEngineDriver } from "./drivers";
 import { emitEngineEvent, type EngineEventInput } from "./events";
-import { disposeInstanceResources } from "./instance-resources";
+import {
+  disposeInstanceResources,
+  retireInstanceResources,
+} from "./instance-resources";
 import {
   getEngineInstanceRegistry,
   subscribeToEngineInstanceChanges,
@@ -142,6 +145,11 @@ export type EngineSnapshotServiceDeps = {
   disposeInstance?: (instanceId: string) => Promise<void>;
   emit?: (event: EngineEventInput) => void;
   fs?: EngineSnapshotFs;
+  /**
+   * Ends an instance's runtimes for configurations other than `keepKey`
+   * (default: instance resources).
+   */
+  retireInstance?: (instanceId: string, keepKey: string) => Promise<void>;
   onError?: (
     error: unknown,
     context: { instanceId: string; stage: string },
@@ -557,6 +565,7 @@ export function createEngineSnapshotService(
   const enrichers = deps.enrichers ?? DEFAULT_ENGINE_SNAPSHOT_ENRICHERS;
   const emit = deps.emit ?? ((event) => void emitEngineEvent(event));
   const disposeInstance = deps.disposeInstance ?? disposeInstanceResources;
+  const retireInstance = deps.retireInstance ?? retireInstanceResources;
   const enrichTimeoutMs = deps.enrichTimeoutMs ?? DEFAULT_ENRICH_TIMEOUT_MS;
   const entries = new Map<string, Entry>();
 
@@ -1086,6 +1095,8 @@ export function createEngineSnapshotService(
 
         // Re-probe what a client is looking at: the new configuration, or
         // the disabled state (which also ends the instance's processes).
+        // Runtimes started for the old configuration end here, not when a
+        // caller first asks for the new one.
         void (async () => {
           const resolved = await resolveInstance(
             entry.userId,
@@ -1093,6 +1104,11 @@ export function createEngineSnapshotService(
           );
           if (resolved.kind === "ok" && !resolved.instance.enabled) {
             await disposeInstance(entry.instanceId);
+          } else if (resolved.kind === "ok") {
+            await retireInstance(
+              entry.instanceId,
+              getInstanceRuntimeKey(resolved.instance),
+            );
           }
           if (resolved.kind === "ok") {
             const snapshot = await snapshotFor(entry.userId, resolved, {
