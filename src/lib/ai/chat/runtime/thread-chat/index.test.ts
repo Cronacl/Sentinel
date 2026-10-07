@@ -889,18 +889,31 @@ async function flushAsyncWork() {
   await Promise.resolve();
 }
 
+// Deadline-based so the suite does not flake when the machine is busy
+// (fixed iteration counts or sleeps were too short under parallel runs).
+async function waitUntil(
+  condition: () => boolean,
+  description: string,
+  timeoutMs = 2_000,
+) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (!condition()) {
+    if (Date.now() > deadline) {
+      throw new Error(`Timed out waiting for ${description}.`);
+    }
+    await flushAsyncWork();
+  }
+}
+
 async function waitForMockCall(
   fn: { mock: { calls: unknown[] } },
   minCalls = 1,
 ) {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    if (fn.mock.calls.length >= minCalls) {
-      return;
-    }
-    await flushAsyncWork();
-  }
-
-  throw new Error(`Timed out waiting for ${minCalls} mock call(s).`);
+  await waitUntil(
+    () => fn.mock.calls.length >= minCalls,
+    `${minCalls} mock call(s)`,
+  );
 }
 
 function createDeferred() {
@@ -1351,7 +1364,13 @@ describe("runThreadChat bootstrap failure recovery", () => {
     });
 
     const response = await runThreadChat(createSubmitRequest(), "user-1");
-    await flushAsyncWork();
+    await waitUntil(
+      () =>
+        serializeThreadStreamEvent.mock.calls.some(
+          ([event]: [{ type?: string }]) => event?.type === "run.failed",
+        ),
+      "the run.failed event",
+    );
 
     expect(response.status).toBe(202);
     expect(buildPersistedAssistantMessage).toHaveBeenCalledWith(
@@ -1378,7 +1397,7 @@ describe("runThreadChat bootstrap failure recovery", () => {
 
   it("keeps UI stream error text instead of the AI SDK's redacted default", async () => {
     await runThreadChat(createSubmitRequest(), "user-1");
-    await flushAsyncWork();
+    await waitForMockCall(createAgentUIStream);
 
     const [streamOptions] = createUIMessageStream.mock.calls.at(-1) ?? [];
     const [agentStreamOptions] = createAgentUIStream.mock.calls.at(-1) ?? [];
@@ -3576,8 +3595,8 @@ describe("runThreadChat approvals and lifecycle", () => {
     discoverProjectAwareness.mockImplementation(() => projectDiscovery.promise);
 
     const response = await runThreadChat(createSubmitRequest(), "user-1");
-    await new Promise((resolve) => setTimeout(resolve, 40));
-    await flushAsyncWork();
+    await waitForMockCall(createAgentUIStream);
+    await waitForMockCall(getSystemPrompt);
 
     expect(response.status).toBe(202);
     expect(createAgentUIStream).toHaveBeenCalled();
