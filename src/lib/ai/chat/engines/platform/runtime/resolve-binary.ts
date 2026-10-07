@@ -551,7 +551,10 @@ export type RecordResolvedBinaryOptions = {
  * Remembers a resolved binary: in runtime-paths.json for the instance and,
  * for a legacy engine's default instance, as its SENTINEL_<X>_PATH (in
  * desktop.env when the path is stable, else only in this process, as the
- * legacy engines did). Best effort; never throws.
+ * legacy engines did). A binary from the instance's own binaryPath
+ * (source "config") is never written to SENTINEL_<X>_PATH: that variable
+ * is read back as an override, so clearing binaryPath later would not
+ * return to discovery. Best effort; never throws.
  */
 export async function recordResolvedBinary(
   binary: Pick<ResolvedBinary, "path" | "source" | "version">,
@@ -559,7 +562,7 @@ export async function recordResolvedBinary(
 ) {
   const persistable = isPersistableBinaryPath(binary.path);
 
-  if (options.legacyEnvKey) {
+  if (options.legacyEnvKey && binary.source !== "config") {
     try {
       if (persistable) {
         await (options.setLegacyEnvValue ?? setLocalRuntimeEnvValue)(

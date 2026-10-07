@@ -393,6 +393,42 @@ describe("recordResolvedBinary", () => {
     }
   });
 
+  it("never turns a configured binaryPath into the legacy override", async () => {
+    const store = createStore();
+    const original = process.env.SENTINEL_TEST_TOOL_PATH;
+    delete process.env.SENTINEL_TEST_TOOL_PATH;
+
+    try {
+      await recordResolvedBinary(
+        { path: "/opt/tools/codex", source: "config", version: null },
+        { instanceId: "codex", legacyEnvKey: "SENTINEL_TEST_TOOL_PATH", store },
+      );
+
+      expect(setLocalRuntimeEnvValue).not.toHaveBeenCalled();
+      expect(process.env.SENTINEL_TEST_TOOL_PATH).toBeUndefined();
+      // Clearing binaryPath must fall back to discovery, not to this path.
+      expect(
+        getConfiguredBinaryOverride(
+          { config: {}, isDefault: true },
+          process.env,
+          ["SENTINEL_TEST_TOOL_PATH"],
+        ),
+      ).toBeNull();
+      expect(store.entries.get("codex")).toEqual(
+        expect.objectContaining({
+          binaryPath: "/opt/tools/codex",
+          source: "config",
+        }),
+      );
+    } finally {
+      if (original === undefined) {
+        delete process.env.SENTINEL_TEST_TOOL_PATH;
+      } else {
+        process.env.SENTINEL_TEST_TOOL_PATH = original;
+      }
+    }
+  });
+
   it("never throws when the store fails", async () => {
     await expect(
       recordResolvedBinary(
