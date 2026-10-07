@@ -126,6 +126,8 @@ type RunContext = {
   /** 1.x parts / 2.x content blocks of the assistant message. */
   blocks: JsonObject[];
   assistant: JsonObject;
+  /** 2.x: the tool call between `session.tool.called` and its result. */
+  tool?: { callID: string; metadata?: JsonObject };
 };
 
 class StepFailure extends Error {
@@ -179,6 +181,7 @@ const NON_DURABLE = new Set([
   "session.reasoning.delta",
   "session.tool.input.delta",
   "session.tool.progress",
+  "session.usage.updated",
   "session.status",
   "session.idle",
   "permission.asked",
@@ -523,7 +526,8 @@ class FakeOpenCodeServer {
             ...(Array.isArray(input.skills) ? { skills: input.skills } : {}),
             ...(input.metadata ? { metadata: input.metadata } : {}),
           },
-          delivery: input.delivery === "steer" ? "steer" : "queue",
+          // 2.0.18 answers "steer" when the field is left out.
+          delivery: input.delivery === "queue" ? "queue" : "steer",
         };
         this.inboxItems.set(String(userMessage.id), userMessage);
         this.publish("session.inbox.enqueued", {
@@ -1051,15 +1055,20 @@ class FakeOpenCodeServer {
     this.publish("session.idle", { sessionID });
   }
 
+  // Execution lifecycle as recorded from a real 2.0.18 server (t3code
+  // testkit fixtures opencode2_*, MIT): no session.status / session.idle, a
+  // run ends with session.execution.succeeded | failed | interrupted.
   private async runV2(
     session: SessionRecord,
     signal: AbortSignal,
     pending: PendingPrompt,
   ) {
     const sessionID = session.id;
+    const legacyStatus = this.scenario.emitSessionStatus === true;
     this.publish("session.execution.started", { sessionID });
     this.deliverV2(session, pending.userMessage);
-    this.publish("session.status", { sessionID, status: { type: "busy" } });
+    if (legacyStatus)
+      this.publish("session.status", { sessionID, status: { type: "busy" } });
     const ctx: RunContext = {
       session,
       signal,
@@ -1074,6 +1083,29 @@ class FakeOpenCodeServer {
       this.publish("session.execution.succeeded", { sessionID });
     } catch (error) {
       if (signal.aborted) {
+        // An interrupt closes the running tool and step first.
+        const tool = ctx.tool;
+        if (tool) {
+          ctx.tool = undefined;
+          this.publish("session.tool.failed", {
+            sessionID,
+            assistantMessageID: ctx.assistantMessageID,
+            id: tool.callID,
+            error: { type: "aborted", message: "Tool execution interrupted" },
+            ...(tool.metadata ? { metadata: tool.metadata } : {}),
+            executed: false,
+          });
+        }
+        const failure = { type: "aborted", message: "Step interrupted" };
+        Object.assign(ctx.assistant, { error: failure });
+        const usage = this.stepUsage(pending.script);
+        this.publish("session.step.failed", {
+          sessionID,
+          assistantMessageID: ctx.assistantMessageID,
+          error: failure,
+          ...usage,
+        });
+        this.publish("session.usage.updated", { sessionID, ...usage });
         this.publish("session.execution.interrupted", {
           sessionID,
           reason: "user",
@@ -1094,8 +1126,25 @@ class FakeOpenCodeServer {
     }
     session.messages.push(ctx.assistant);
     session.updated = Date.now();
-    this.publish("session.status", { sessionID, status: { type: "idle" } });
-    this.publish("session.idle", { sessionID });
+    if (legacyStatus) {
+      this.publish("session.status", { sessionID, status: { type: "idle" } });
+      this.publish("session.idle", { sessionID });
+    }
+  }
+
+  private stepUsage(script: OpenCodePromptScript) {
+    return {
+      cost: script.cost ?? 0.0012,
+      tokens: {
+        input: script.tokens?.input ?? 120,
+        output: script.tokens?.output ?? 30,
+        reasoning: script.tokens?.reasoning ?? 0,
+        cache: {
+          read: script.tokens?.cacheRead ?? 0,
+          write: script.tokens?.cacheWrite ?? 0,
+        },
+      },
+    };
   }
 
   /** Moves a 2.x prompt out of the inbox into the conversation. */
@@ -1143,25 +1192,21 @@ class FakeOpenCodeServer {
     });
   }
 
+  /** Closes a 2.x step: `step.streamed`, `step.ended`, `usage.updated`. */
   private endStepV2(ctx: RunContext, script: OpenCodePromptScript) {
-    const tokens = {
-      input: script.tokens?.input ?? 120,
-      output: script.tokens?.output ?? 30,
-      reasoning: script.tokens?.reasoning ?? 0,
-      cache: {
-        read: script.tokens?.cacheRead ?? 0,
-        write: script.tokens?.cacheWrite ?? 0,
-      },
-    };
-    const cost = script.cost ?? 0.0012;
+    const { cost, tokens } = this.stepUsage(script);
     const finish = script.finish ?? "stop";
+    const sessionID = ctx.session.id;
+    const assistantMessageID = ctx.assistantMessageID;
+    this.publish("session.step.streamed", { sessionID, assistantMessageID });
     this.publish("session.step.ended", {
-      sessionID: ctx.session.id,
-      assistantMessageID: ctx.assistantMessageID,
+      sessionID,
+      assistantMessageID,
       finish,
       cost,
       tokens,
     });
+    this.publish("session.usage.updated", { sessionID, cost, tokens });
     Object.assign(ctx.assistant, {
       time: {
         created: (ctx.assistant.time as JsonObject).created,
@@ -1378,8 +1423,9 @@ class FakeOpenCodeServer {
           this.publish("session.tool.called", {
             ...base,
             input: step.input,
-            executed: true,
+            executed: false,
           });
+          ctx.tool = { callID };
         }
         let error = step.error;
         if (step.permission) {
@@ -1389,6 +1435,16 @@ class FakeOpenCodeServer {
           if (reply === "aborted") throw new Error("aborted");
           if (reply === "reject")
             error = "The user rejected permission to use this tool";
+        }
+        if (this.generation === 2 && step.metadata && !error) {
+          // Progress (e.g. the shell id) arrives while the tool runs.
+          this.publish("session.tool.progress", {
+            sessionID,
+            assistantMessageID: ctx.assistantMessageID,
+            id: callID,
+            metadata: step.metadata,
+          });
+          ctx.tool = { callID, metadata: step.metadata };
         }
         if (step.durationMs) await sleep(step.durationMs, ctx.signal);
         if (this.generation === 1 && part) {
@@ -1412,11 +1468,7 @@ class FakeOpenCodeServer {
             assistantMessageID: ctx.assistantMessageID,
             id: callID,
           };
-          if (step.metadata)
-            this.publish("session.tool.progress", {
-              ...base,
-              metadata: step.metadata,
-            });
+          ctx.tool = undefined;
           ctx.blocks.push({
             type: "tool",
             id: callID,
@@ -1425,7 +1477,7 @@ class FakeOpenCodeServer {
               ? {
                   status: "error",
                   input: step.input,
-                  error: { type: "tool", message: error },
+                  error: { type: "tool.execution", message: error },
                 }
               : {
                   status: "completed",
@@ -1437,15 +1489,15 @@ class FakeOpenCodeServer {
           if (error) {
             this.publish("session.tool.failed", {
               ...base,
-              error: { type: "tool", message: error },
-              executed: true,
+              error: { type: "tool.execution", message: error },
+              executed: false,
             });
           } else {
             this.publish("session.tool.success", {
               ...base,
               content: [{ type: "text", text: step.output ?? "" }],
               ...(step.metadata ? { metadata: step.metadata } : {}),
-              executed: true,
+              executed: false,
             });
           }
         }

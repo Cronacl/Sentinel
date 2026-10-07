@@ -102,15 +102,24 @@ export type OpenCodeFakeScenario = {
   sessions?: Array<{ id: string; title?: string; directory?: string }>;
   /**
    * Turn scripts, picked by `match` then in order (the last repeats). 2.x
-   * prompts go through the session inbox: `delivery:"queue"` runs as a later
-   * execution, `delivery:"steer"` joins the running execution at its next step
-   * boundary, `resume:false` stays in the inbox.
+   * prompts go through the session inbox: `delivery:"steer"` (the default
+   * when the field is left out, as on 2.0.18) joins the running execution at
+   * its next step boundary or starts one when the session is idle,
+   * `delivery:"queue"` runs as a later execution, `resume:false` stays in
+   * the inbox.
    */
   prompts?: OpenCodePromptScript[];
   /** SSE keep-alive period. 2.x writes a `: heartbeat` comment (default 15 s); 1.x a `server.heartbeat` event (default 10 s). */
   heartbeatMs?: number;
   /** 1.x: emit `session.error` (MessageAbortedError) on abort. Default true. */
   abortEmitsSessionError?: boolean;
+  /**
+   * 2.x: also publish `session.status` busy/idle and `session.idle` around
+   * each execution. Off by default: the 2.0.24 client types still list both
+   * events, but a 2.0.18 server never sent them in t3code's recordings; a
+   * 2.x run ends with `session.execution.succeeded|failed|interrupted`.
+   */
+  emitSessionStatus?: boolean;
 };
 
 /** One request the fake received. */

@@ -212,11 +212,12 @@ describe("OpenCode fake, generation 2", () => {
         `/api/session/${sessionID}/prompt`,
         { text: "hello" },
       );
+      // Without a `delivery` field 2.0.18 answers "steer".
       expect(prompt.data).toMatchObject({
         sessionID,
         type: "user",
         payload: { text: "hello" },
-        delivery: "queue",
+        delivery: "steer",
       });
 
       const asked = data(await api.waitForEvent("permission.asked"));
@@ -255,7 +256,7 @@ describe("OpenCode fake, generation 2", () => {
           )
         ).status,
       ).toBe(204);
-      await api.waitForEvent("session.idle");
+      await api.waitForEvent("session.execution.succeeded");
 
       const events = api.events();
       const types = events.map((event) => String(event.type));
@@ -269,7 +270,7 @@ describe("OpenCode fake, generation 2", () => {
       expect(data(events[2])).toEqual({
         sessionID,
         inboxID: prompt.data.id,
-        item: { type: "user", payload: { text: "hello" }, delivery: "queue" },
+        item: { type: "user", payload: { text: "hello" }, delivery: "steer" },
       });
       expect(types).toEqual(
         expect.arrayContaining([
@@ -290,15 +291,34 @@ describe("OpenCode fake, generation 2", () => {
           "session.text.started",
           "session.text.delta",
           "session.text.ended",
+          "session.step.streamed",
           "session.step.ended",
+          "session.usage.updated",
           "session.execution.succeeded",
         ]),
       );
-      expect(types.slice(-3)).toEqual([
+      // A 2.x execution ends with session.execution.*; 2.0.18 sends no
+      // session.status or session.idle.
+      expect(types.slice(-4)).toEqual([
+        "session.step.streamed",
+        "session.step.ended",
+        "session.usage.updated",
         "session.execution.succeeded",
-        "session.status",
-        "session.idle",
       ]);
+      expect(types).not.toContain("session.idle");
+      expect(types).not.toContain("session.status");
+      expect(
+        data(events.find((event) => event.type === "session.usage.updated")),
+      ).toEqual({
+        sessionID,
+        cost: 0.002,
+        tokens: {
+          input: 10,
+          output: 4,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+      });
       const textDeltas = events.flatMap((event) =>
         event.type === "session.text.delta" ? [data(event).delta] : [],
       );
@@ -330,7 +350,7 @@ describe("OpenCode fake, generation 2", () => {
       ).toMatchObject({
         id: "call_1",
         content: [{ type: "text", text: "a.ts\n" }],
-        executed: true,
+        executed: false,
       });
 
       // Durable session events carry a per-session sequence; deltas do not.
@@ -349,6 +369,9 @@ describe("OpenCode fake, generation 2", () => {
       });
       expect(
         events.find((event) => event.type === "session.text.delta"),
+      ).not.toHaveProperty("durable");
+      expect(
+        events.find((event) => event.type === "session.usage.updated"),
       ).not.toHaveProperty("durable");
       expect(
         (
@@ -414,13 +437,16 @@ describe("OpenCode fake, generation 2", () => {
             ...(delivery ? { delivery } : {}),
           },
         );
-      await prompt("long task");
+      // An idle session starts an execution for a steer (the default).
+      expect((await prompt("long task")).data.delivery).toBe("steer");
       const asked = data(await api.waitForEvent("permission.asked"));
 
-      const steer = (await prompt("steer: use make", "steer")).data;
+      // A prompt without `delivery` steers into the running execution too.
+      const steer = (await prompt("steer: use make")).data;
       expect(steer.delivery).toBe("steer");
-      const queued = (await prompt("queued follow-up")).data;
-      const cancelled = (await prompt("cancel me")).data;
+      const queued = (await prompt("queued follow-up", "queue")).data;
+      expect(queued.delivery).toBe("queue");
+      const cancelled = (await prompt("cancel me", "queue")).data;
       const inbox = await api.json<{ data: JsonObject[] }>(
         "GET",
         `/api/session/${sessionID}/inbox`,
@@ -458,7 +484,7 @@ describe("OpenCode fake, generation 2", () => {
           decision: "once",
         },
       );
-      await api.waitForEvent("session.idle", 1);
+      await api.waitForEvent("session.execution.succeeded", 1);
 
       const events = api.events();
       const lifecycle = events.flatMap((event) => {
@@ -482,17 +508,20 @@ describe("OpenCode fake, generation 2", () => {
         `delivered:${String(data(first).inboxID)}`,
         "session.step.started",
         "text:one",
+        "session.step.streamed",
         "session.step.ended",
         `delivered:${String(steer.id)}`,
         "session.step.started",
         "text:steered",
         "text:two",
+        "session.step.streamed",
         "session.step.ended",
         "session.execution.succeeded",
         "session.execution.started",
         `delivered:${String(queued.id)}`,
         "session.step.started",
         "text:queued run",
+        "session.step.streamed",
         "session.step.ended",
         "session.execution.succeeded",
       ]);
@@ -544,7 +573,23 @@ describe("OpenCode fake, generation 2", () => {
             match: "fail",
             steps: [{ type: "error", message: "Provider exploded" }],
           },
-          { steps: [{ type: "text", text: "working" }, { type: "hang" }] },
+          {
+            match: "idle",
+            steps: [{ type: "text", text: "thinking" }, { type: "hang" }],
+          },
+          {
+            steps: [
+              { type: "text", text: "I'll run that now." },
+              {
+                type: "tool",
+                tool: "shell",
+                callID: "call_sleep",
+                input: { command: "sleep 60 && echo LATE" },
+                metadata: { shellID: "sh_1" },
+                durationMs: 60_000,
+              },
+            ],
+          },
         ],
       });
       const sessionID = String(
@@ -554,7 +599,7 @@ describe("OpenCode fake, generation 2", () => {
       await api.json("POST", `/api/session/${sessionID}/prompt`, {
         text: "go",
       });
-      await api.waitForEvent("session.text.delta");
+      await api.waitForEvent("session.tool.progress");
       expect(
         await api.json("POST", `/api/session/${sessionID}/interrupt`),
       ).toEqual({
@@ -566,6 +611,47 @@ describe("OpenCode fake, generation 2", () => {
         sessionID,
         reason: "user",
       });
+      // Like 2.0.18: the running tool and step close before the execution.
+      const interrupted = api.events();
+      const tail = interrupted.slice(
+        interrupted.findIndex(
+          (event) => event.type === "session.tool.progress",
+        ),
+      );
+      expect(tail.map((event) => event.type)).toEqual([
+        "session.tool.progress",
+        "session.tool.failed",
+        "session.step.failed",
+        "session.usage.updated",
+        "session.execution.interrupted",
+      ]);
+      expect(data(tail[1])).toMatchObject({
+        sessionID,
+        id: "call_sleep",
+        error: { type: "aborted", message: "Tool execution interrupted" },
+        metadata: { shellID: "sh_1" },
+        executed: false,
+      });
+      expect(data(tail[2])).toMatchObject({
+        error: { type: "aborted", message: "Step interrupted" },
+        tokens: { input: 120 },
+      });
+
+      // Without a running tool only the step closes.
+      await api.json("POST", `/api/session/${sessionID}/prompt`, {
+        text: "idle hang",
+      });
+      await api.waitForEvent("session.text.delta", 1);
+      await api.json("POST", `/api/session/${sessionID}/interrupt`);
+      await api.waitForEvent("session.execution.interrupted", 1);
+      const second = api.events().map((event) => event.type);
+      expect(
+        second.slice(second.lastIndexOf("session.text.ended") + 1),
+      ).toEqual([
+        "session.step.failed",
+        "session.usage.updated",
+        "session.execution.interrupted",
+      ]);
       expect(
         await api.json("POST", `/api/session/${sessionID}/interrupt`),
       ).toEqual({
@@ -594,11 +680,12 @@ describe("OpenCode fake, generation 2", () => {
         sessionID,
         error: { type: "provider", message: "Provider exploded" },
       });
-      expect(data(await api.waitForEvent("session.step.failed"))).toMatchObject(
-        {
-          error: { message: "Provider exploded" },
-        },
-      );
+      // Steps 0 and 1 failed on the two interrupts above.
+      expect(
+        data(await api.waitForEvent("session.step.failed", 2)),
+      ).toMatchObject({
+        error: { message: "Provider exploded" },
+      });
 
       const missing = await api.call("GET", "/api/session/ses_missing");
       expect(missing.status).toBe(404);
@@ -614,6 +701,46 @@ describe("OpenCode fake, generation 2", () => {
         },
       );
       expect(noPermission.status).toBe(404);
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    "emits the 2.0.24-typed session.status and session.idle only when asked",
+    async () => {
+      const { api } = await startV2({ emitSessionStatus: true });
+      const sessionID = String(
+        (await api.json<{ data: JsonObject }>("POST", "/api/session", {})).data
+          .id,
+      );
+      await api.json("POST", `/api/session/${sessionID}/prompt`, {
+        text: "hi",
+      });
+      await api.waitForEvent("session.idle");
+      const run = api
+        .events()
+        .filter((event) =>
+          [
+            "session.execution.started",
+            "session.status",
+            "session.execution.succeeded",
+            "session.idle",
+          ].includes(String(event.type)),
+        );
+      expect(
+        run.map((event) =>
+          event.type === "session.status"
+            ? `status:${String((data(event).status as JsonObject).type)}`
+            : event.type,
+        ),
+      ).toEqual([
+        "session.execution.started",
+        "status:busy",
+        "session.execution.succeeded",
+        "status:idle",
+        "session.idle",
+      ]);
+      expect(run[4]).not.toHaveProperty("durable");
     },
     TEST_TIMEOUT,
   );
