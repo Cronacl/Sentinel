@@ -746,18 +746,19 @@ export function resetClaudeEngineStatusCache() {
 }
 
 /**
- * Built-in tools Sentinel always keeps in the session's tool surface. Since
- * Agent SDK 0.3.162 native builds search through Bash `find`/`grep` unless
- * Grep/Glob are named, and since 0.3.233/0.3.268 the Task* tools are off by
- * default on Opus 4.8, Sonnet 5 and newer. Naming them in `allowedTools`
- * keeps them registered on top of the `claude_code` preset (an explicit
- * `tools` list would freeze the surface at today's tool names). All six are
- * read-only or session-local, so pre-approving them adds no new reach: in
- * chat mode the sandboxed Bash fallback already searches without a prompt.
+ * Task* tools are off by default on Opus 4.8, Sonnet 5 and newer since Agent
+ * SDK 0.3.233/0.3.268. Naming them in `allowedTools` keeps them registered on
+ * top of the `claude_code` preset (an explicit `tools` list would freeze the
+ * surface at today's tool names) and pre-approves them, which is safe because
+ * they only touch the session's own task list.
+ *
+ * Grep/Glob are deliberately not named: `allowedTools` approves without
+ * asking, so Claude Code would skip canUseTool for searches outside the
+ * workspace. Native builds search through Bash `find`/`grep` instead (Agent
+ * SDK 0.3.162), which keeps Bash's sandbox and approval rules; Node-script
+ * (cli.js) builds keep Grep/Glob as preset tools that go through canUseTool.
  */
-export const CLAUDE_SDK_ALWAYS_ENABLED_TOOLS = [
-  "Glob",
-  "Grep",
+export const CLAUDE_SDK_TASK_TOOLS = [
   "TaskCreate",
   "TaskGet",
   "TaskList",
@@ -794,10 +795,7 @@ export function buildClaudeSdkBaseOptions(options?: Partial<Options>): Options {
   return {
     ...options,
     allowedTools: [
-      ...new Set([
-        ...CLAUDE_SDK_ALWAYS_ENABLED_TOOLS,
-        ...(options?.allowedTools ?? []),
-      ]),
+      ...new Set([...CLAUDE_SDK_TASK_TOOLS, ...(options?.allowedTools ?? [])]),
     ],
     cwd: options?.cwd ?? process.cwd(),
     env: buildClaudeSdkEnv(options?.env),

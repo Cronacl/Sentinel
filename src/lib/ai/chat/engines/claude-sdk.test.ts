@@ -266,7 +266,7 @@ describe("buildClaudeSdkBaseOptions", () => {
     );
   });
 
-  it("always sets a permission mode and keeps Task, Grep and Glob tools available", () => {
+  it("always sets a permission mode and keeps the Task tools available", () => {
     const options = buildClaudeSdkBaseOptions({
       allowedTools: ["Read"],
     });
@@ -274,8 +274,6 @@ describe("buildClaudeSdkBaseOptions", () => {
     expect(options.permissionMode).toBe("default");
     expect(options.tools).toEqual({ preset: "claude_code", type: "preset" });
     expect(options.allowedTools).toEqual([
-      "Glob",
-      "Grep",
       "TaskCreate",
       "TaskGet",
       "TaskList",
@@ -285,6 +283,22 @@ describe("buildClaudeSdkBaseOptions", () => {
     expect(
       buildClaudeSdkBaseOptions({ permissionMode: "plan" }).permissionMode,
     ).toBe("plan");
+  });
+
+  it("never pre-approves Grep or Glob, so searches outside the workspace still reach canUseTool", () => {
+    // Chat mode: default permissions with the sandbox on.
+    const chatOptions = buildClaudeSdkBaseOptions({
+      permissionMode: "default",
+      sandbox: { enabled: true, failIfUnavailable: false },
+    });
+    const planOptions = buildClaudeSdkBaseOptions({ permissionMode: "plan" });
+
+    for (const options of [chatOptions, planOptions]) {
+      expect(options.allowedTools).not.toContain("Grep");
+      expect(options.allowedTools).not.toContain("Glob");
+      // The preset stays whole: no explicit list that could drop tools.
+      expect(options.tools).toEqual({ preset: "claude_code", type: "preset" });
+    }
   });
 
   it("installs Sentinel's spawner only for Node-script CLIs", async () => {
