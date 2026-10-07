@@ -61,6 +61,7 @@ import type { FileUIPart } from "ai";
 import {
   ChatComposer,
   type ChatComposerOptionSelection,
+  type ChatComposerSelectionChange,
   type ChatComposerStartPlanImplementationHandler,
   type ChatComposerThreadSelection,
 } from "./chat-composer";
@@ -71,7 +72,10 @@ import {
   clearThreadRouteHandoff,
   type ThreadRouteHandoffState,
 } from "./thread-route-handoff";
-import { resolveInitialThreadComposerUiState } from "./thread-screen.helpers";
+import {
+  applyThreadSelectionChange,
+  resolveInitialThreadComposerUiState,
+} from "./thread-screen.helpers";
 import {
   buildRepoDiffPanelInvalidationInputs,
   reapplyUserMessageCheckpoint,
@@ -470,6 +474,7 @@ export function ThreadScreen({
       composerContext,
       files,
       engine,
+      engineInstanceId,
       modelId,
       modelOptions,
       reasoningEffort,
@@ -480,6 +485,7 @@ export function ThreadScreen({
       composerContext?: import("@/lib/composer-context/types").ComposerContext;
       files?: FileUIPart[];
       engine: ChatEngine;
+      engineInstanceId?: string;
       modelId: string;
       modelOptions?: EngineOptionSelection[];
       reasoningEffort?: ReasoningEffort | null;
@@ -488,12 +494,15 @@ export function ThreadScreen({
       toolTags?: import("@/lib/ai/chat/tools/selection/tags").SentinelComposerToolTag[];
     }) => {
       setChatError(null);
-      setThreadSelectionState({
-        engine,
-        modelId,
-        mode: threadMode ?? threadSelectionState.mode,
-        reasoningEffort: reasoningEffort ?? null,
-      });
+      setThreadSelectionState((current: ChatComposerThreadSelection) =>
+        applyThreadSelectionChange(current, {
+          engine,
+          ...(engineInstanceId ? { engineInstanceId } : {}),
+          modelId,
+          mode: threadMode ?? current.mode,
+          reasoningEffort: reasoningEffort ?? null,
+        }),
+      );
       applyThreadSettingsCacheUpdate({
         patch: {
           chatEngine: engine,
@@ -509,6 +518,7 @@ export function ThreadScreen({
       await sendMessage({
         composerContext,
         engine,
+        ...(engineInstanceId ? { engineInstanceId } : {}),
         files,
         modelId,
         ...(modelOptions?.length ? { modelOptions } : {}),
@@ -533,6 +543,7 @@ export function ThreadScreen({
       composerContext,
       files,
       engine,
+      engineInstanceId,
       modelId,
       modelOptions,
       reasoningEffort,
@@ -543,6 +554,7 @@ export function ThreadScreen({
       composerContext?: import("@/lib/composer-context/types").ComposerContext;
       files?: FileUIPart[];
       engine: ChatEngine;
+      engineInstanceId?: string;
       modelId: string;
       modelOptions?: EngineOptionSelection[];
       reasoningEffort?: ReasoningEffort | null;
@@ -554,6 +566,7 @@ export function ThreadScreen({
       await queueFollowUp({
         composerContext,
         engine,
+        ...(engineInstanceId ? { engineInstanceId } : {}),
         files,
         modelId,
         ...(modelOptions?.length ? { modelOptions } : {}),
@@ -575,6 +588,7 @@ export function ThreadScreen({
       composerContext,
       files,
       engine,
+      engineInstanceId,
       modelId,
       modelOptions,
       reasoningEffort,
@@ -585,6 +599,7 @@ export function ThreadScreen({
       composerContext?: import("@/lib/composer-context/types").ComposerContext;
       files?: FileUIPart[];
       engine: ChatEngine;
+      engineInstanceId?: string;
       modelId: string;
       modelOptions?: EngineOptionSelection[];
       reasoningEffort?: ReasoningEffort | null;
@@ -596,6 +611,7 @@ export function ThreadScreen({
       await steerFollowUp({
         composerContext,
         engine,
+        ...(engineInstanceId ? { engineInstanceId } : {}),
         files,
         modelId,
         ...(modelOptions?.length ? { modelOptions } : {}),
@@ -669,27 +685,13 @@ export function ThreadScreen({
     setEditingMessage(null);
   }, []);
 
+  // The selection keeps the thread's engine instance: the composer would
+  // otherwise fall back to the driver's default instance and persist it.
   const handleSelectionChange = useCallback(
-    ({
-      engine,
-      modelId,
-      mode,
-      reasoningEffort,
-    }: {
-      engine?: ChatEngine;
-      modelId?: string | null;
-      mode?: "chat" | "plan";
-      reasoningEffort?: ReasoningEffort | null;
-    }) => {
-      setThreadSelectionState((current: ChatComposerThreadSelection) => ({
-        engine: engine ?? current.engine,
-        modelId: modelId !== undefined ? modelId : current.modelId,
-        mode: mode ?? current.mode,
-        reasoningEffort:
-          reasoningEffort !== undefined
-            ? reasoningEffort
-            : current.reasoningEffort,
-      }));
+    (change: ChatComposerSelectionChange) => {
+      setThreadSelectionState((current: ChatComposerThreadSelection) =>
+        applyThreadSelectionChange(current, change),
+      );
     },
     [],
   );
@@ -1368,12 +1370,7 @@ export function ThreadScreen({
               showBranchSwitcher={!isQuickChat}
               status={status}
               threadId={thread.id}
-              threadSelection={{
-                engine: threadSelectionState.engine,
-                modelId: threadSelectionState.modelId,
-                mode: threadSelectionState.mode,
-                reasoningEffort: threadSelectionState.reasoningEffort,
-              }}
+              threadSelection={threadSelectionState}
             />
           </div>
         </ScrollShadow>

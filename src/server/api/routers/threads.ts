@@ -48,7 +48,11 @@ import {
   getOrCreateQuickChatWorkspace,
   getThreadListSettings,
 } from "./workspace-thread-helpers";
-import { assertEngineInstanceSelection } from "./engines/selection";
+import {
+  assertEngineInstanceSelection,
+  assertThreadEngineKept,
+  isThreadEngineRebind,
+} from "./engines/selection";
 import {
   escapeThreadSearchLikePattern,
   sortThreadSearchResults,
@@ -534,13 +538,27 @@ export const threadsRouter = createTRPCRouter({
   updateChatSettings: protectedProcedure
     .input(threadSettingsSchema)
     .mutation(async ({ ctx, input }) => {
-      await getOwnedThreadOrThrow(ctx, input.threadId);
+      const thread = await getOwnedThreadOrThrow(ctx, input.threadId);
       if (input.engine !== undefined) {
         await assertEngineInstanceSelection(
           ctx.session.user.id,
           input.engine,
           input.engineInstanceId,
         );
+        if (
+          isThreadEngineRebind(thread, input.engine, input.engineInstanceId)
+        ) {
+          const firstMessage = await ctx.db.query.threadMessages.findFirst({
+            columns: { id: true },
+            where: eq(threadMessages.threadId, input.threadId),
+          });
+          assertThreadEngineKept({
+            engine: input.engine,
+            hasMessages: Boolean(firstMessage),
+            instanceId: input.engineInstanceId,
+            thread,
+          });
+        }
       }
 
       const [updated] = ctx.db

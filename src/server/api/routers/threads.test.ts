@@ -452,3 +452,37 @@ describe("threadsRouter.get", () => {
     expect(result.thread.hasCodexThread).toBe(true);
   });
 });
+
+describe("threadsRouter.updateChatSettings", () => {
+  it("keeps a thread with messages on its engine instance", async () => {
+    getOwnedThreadOrThrow.mockResolvedValueOnce({
+      chatEngine: "codex",
+      chatEngineInstanceId: "codex-work",
+      id: "thread-1",
+    });
+    const messageFindFirst = mock(async () => ({ id: "message-1" }));
+    const update = mock(() => {
+      throw new Error("the thread must not be updated");
+    });
+
+    await expect(
+      threadsRouter.updateChatSettings({
+        ctx: {
+          db: {
+            query: { threadMessages: { findFirst: messageFindFirst } },
+            update,
+          },
+          session: { user: { id: "user-1" } },
+        },
+        input: {
+          engine: "codex",
+          engineInstanceId: "codex",
+          modelId: "gpt-5.5",
+          threadId: "thread-1",
+        },
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(messageFindFirst).toHaveBeenCalledTimes(1);
+    expect(update).not.toHaveBeenCalled();
+  });
+});

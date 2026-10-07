@@ -463,6 +463,13 @@ export const TRIPWIRES = [
       /\b(?:shouldHideOpenCode(?:Trait|Agent)Selector|resolveOpenCodeTrait(?:ValueForThreadMode|SelectionValue)|ChatComposerOpenCodeSelection)\b|\bengine\s*===\s*["']opencode["']/,
     include: /^src\/components\/.*\.tsx?$/,
   },
+  {
+    id: "P10-thread-selection-rebuilt",
+    description:
+      "The thread screen hands the composer its whole selection (engine instance included); rebuilding it field by field dropped the instance and rebound the thread to the default instance",
+    pattern: /\bthreadSelection=\{\{/,
+    include: /^src\/components\/chat\/.*\.tsx$/,
+  },
 ];
 
 const DEFAULT_EXCLUDE =

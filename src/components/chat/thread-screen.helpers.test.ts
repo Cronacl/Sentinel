@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
-import { resolveInitialThreadComposerUiState } from "./thread-screen.helpers";
+import {
+  applyThreadSelectionChange,
+  resolveInitialThreadComposerUiState,
+} from "./thread-screen.helpers";
 
 describe("resolveInitialThreadComposerUiState", () => {
   it("restores the options the thread last ran with", () => {
@@ -109,5 +112,53 @@ describe("resolveInitialThreadComposerUiState", () => {
         reasoningEffort: "high",
       },
     });
+  });
+});
+
+describe("applyThreadSelectionChange", () => {
+  const onSecondCodex = {
+    engine: "codex" as const,
+    engineInstanceId: "codex-work",
+    modelId: "gpt-5.4",
+    mode: "chat" as const,
+    reasoningEffort: "medium" as const,
+  };
+
+  it("keeps a thread on its instance when the model or effort changes", () => {
+    // The composer reports model changes with the engine; dropping the
+    // instance here rebound the thread to the default instance.
+    const afterModel = applyThreadSelectionChange(onSecondCodex, {
+      engine: "codex",
+      modelId: "gpt-5.5",
+      reasoningEffort: "high",
+    });
+    expect(afterModel).toEqual({
+      ...onSecondCodex,
+      modelId: "gpt-5.5",
+      reasoningEffort: "high",
+    });
+
+    expect(
+      applyThreadSelectionChange(afterModel, { mode: "plan" }),
+    ).toMatchObject({ engineInstanceId: "codex-work", mode: "plan" });
+  });
+
+  it("takes the instance the composer reports", () => {
+    expect(
+      applyThreadSelectionChange(onSecondCodex, {
+        engine: "codex",
+        engineInstanceId: "codex-work",
+        modelId: "gpt-5.5",
+      }).engineInstanceId,
+    ).toBe("codex-work");
+  });
+
+  it("moves to the new engine's default instance on an engine change", () => {
+    expect(
+      applyThreadSelectionChange(onSecondCodex, {
+        engine: "claude",
+        modelId: "claude-sonnet-5",
+      }),
+    ).toMatchObject({ engine: "claude", engineInstanceId: "claude" });
   });
 });

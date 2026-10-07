@@ -610,3 +610,20 @@ describe("P10 composer option tripwire", () => {
     ).toEqual([]);
   });
 });
+
+describe("P10 thread selection tripwire", () => {
+  it("flags a thread selection rebuilt field by field", () => {
+    expect(
+      hitIds(
+        "src/components/chat/thread-screen.tsx",
+        "threadSelection={{\n  engine: threadSelectionState.engine,",
+      ),
+    ).toEqual(["P10-thread-selection-rebuilt:1"]);
+    expect(
+      hitIds(
+        "src/components/chat/thread-screen.tsx",
+        "threadSelection={threadSelectionState}",
+      ),
+    ).toEqual([]);
+  });
+});
