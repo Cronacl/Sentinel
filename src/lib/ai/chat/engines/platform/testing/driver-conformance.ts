@@ -16,6 +16,7 @@ import {
   getThreadStateBinding,
   stampThreadState,
 } from "../../state/registry";
+import type { ThreadChatRequest } from "../../../types";
 import type { EngineDriver, ProbeOptions } from "../driver";
 import { EngineTriggerUnsupportedError } from "../errors";
 import { createEngineSnapshotService } from "../snapshot-service";
@@ -38,6 +39,26 @@ export type DriverConformanceHarness = {
   ): ResolvedEngineInstance;
   /** Thread states the driver's runtime writes (unstamped). */
   stateSamples?: readonly object[];
+  /**
+   * A fake of the runtime module the driver's thread handlers load, which
+   * records what it receives. With it the suite checks that turns reach
+   * this driver's own runtime, run as run and stop as stop, with the
+   * thread's instance.
+   */
+  threadRuntime?: {
+    calls(): readonly RecordedThreadRuntimeCall[];
+    reset(): void;
+  };
+};
+
+/** One call a faked thread runtime received. */
+export type RecordedThreadRuntimeCall = {
+  action: "run" | "stop";
+  instance: ResolvedEngineInstance | null | undefined;
+  request: ThreadChatRequest;
+  /** The driver kind whose runtime module was called. */
+  runtime: string;
+  thread: unknown;
 };
 
 /** Triggers the platform handles itself, never a driver. */
@@ -280,6 +301,87 @@ export function describeDriverConformance(
         }
         expect(resolved).toBe(0);
       });
+
+      if (harness.threadRuntime) {
+        const runtime = harness.threadRuntime;
+
+        it("runs and stops turns on its own runtime with the thread's instance", async () => {
+          runtime.reset();
+          const instance = await makeInstance({
+            continuationKey: `${driver.kind}:home:/tmp/conformance`,
+            id: `${driver.kind}-conformance`,
+            isDefault: false,
+          });
+          const request: ThreadChatRequest = {
+            threadId: "thread-1",
+            trigger: "submit-user-message",
+            userId: "user-1",
+            workspaceId: "workspace-1",
+          };
+          const thread = { chatEngine: driver.kind, id: "thread-1" };
+
+          await handlers.run({ instance, request, thread: thread as never });
+          await handlers.stop({
+            instance,
+            request: { ...request, trigger: "stop-stream" },
+            thread: thread as never,
+          });
+          // Stopping never depends on the instance still resolving.
+          await handlers.stop({
+            instance: null,
+            request: { ...request, trigger: "stop-stream" },
+            thread: thread as never,
+          });
+
+          const calls = runtime.calls();
+          expect(
+            calls.map((call) => [call.runtime, call.action, call.instance]),
+          ).toEqual([
+            [driver.kind, "run", instance],
+            [driver.kind, "stop", instance],
+            [driver.kind, "stop", null],
+          ]);
+          expect(calls[0]?.request).toBe(request);
+          expect(calls[0]?.thread).toBe(thread);
+        });
+
+        it("reaches its runtime through the dispatcher with the resolved instance", async () => {
+          runtime.reset();
+          const instance = await makeInstance({
+            id: `${driver.kind}-dispatched`,
+            isDefault: false,
+          });
+          const { createEngineDispatcher } =
+            await import("@/lib/ai/chat/runtime/thread-chat/engine-dispatcher");
+          const targets: unknown[] = [];
+          const dispatcher = createEngineDispatcher({
+            drivers: (kind) => (kind === driver.kind ? driver : null),
+            resolveInstance: async (_userId, target) => {
+              targets.push(target);
+              return instance;
+            },
+          });
+          const request: ThreadChatRequest = {
+            threadId: "thread-2",
+            trigger: "submit-user-message",
+            userId: "user-1",
+            workspaceId: "workspace-1",
+          };
+
+          await dispatcher.run(
+            { driver: driver.kind, instanceId: instance.id },
+            request,
+            null,
+          );
+
+          expect(targets).toEqual([
+            { driver: driver.kind, instanceId: instance.id },
+          ]);
+          expect(
+            runtime.calls().map((call) => [call.runtime, call.instance]),
+          ).toEqual([[driver.kind, instance]]);
+        });
+      }
     }
 
     if (harness.stateSamples?.length) {

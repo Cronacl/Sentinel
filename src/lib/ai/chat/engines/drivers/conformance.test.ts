@@ -1,5 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 
+import type { RecordedThreadRuntimeCall } from "../platform/testing/driver-conformance";
+
 // Every registered server driver runs the conformance suite against fakes of
 // its engine module: the mode below switches each fake between an installed
 // runtime, a missing one and a probe that never answers.
@@ -132,6 +134,36 @@ mock.module("@/lib/ai/chat/engines/opencode-sdk", () => ({
   resolveOpenCodeRuntime: async () => runtimeFor("opencode"),
 }));
 
+// Each external runtime module is faked under its own path, so a driver
+// whose handlers loaded another engine's runtime (or swapped run and stop)
+// records the wrong runtime or action.
+const runtimeCalls: RecordedThreadRuntimeCall[] = [];
+const RUNTIME_EXPORTS = {
+  claude: ["runClaudeThreadChat", "stopClaudeThreadRun"],
+  codex: ["runCodexThreadChat", "stopCodexThreadRun"],
+  copilot: ["runCopilotThreadChat", "stopCopilotThreadRun"],
+  cursor: ["runCursorThreadChat", "stopCursorThreadRun"],
+  opencode: ["runOpenCodeThreadChat", "stopOpenCodeThreadRun"],
+} as const;
+for (const [kind, [runName, stopName]] of Object.entries(RUNTIME_EXPORTS)) {
+  const record =
+    (action: "run" | "stop") =>
+    async (request: never, thread: unknown, instance?: unknown) => {
+      runtimeCalls.push({
+        action,
+        instance: instance as RecordedThreadRuntimeCall["instance"],
+        request,
+        runtime: kind,
+        thread,
+      });
+      return new Response(null, { status: 204 });
+    };
+  mock.module(`@/lib/ai/chat/runtime/${kind}`, () => ({
+    [runName]: record("run"),
+    [stopName]: record("stop"),
+  }));
+}
+
 const { AVAILABLE_DRIVER_KINDS } = await import("../catalog");
 const { SERVER_DRIVERS } = await import("../platform/drivers");
 const { describeDriverConformance } =
@@ -169,6 +201,12 @@ for (const driver of SERVER_DRIVERS) {
             modes[driver.kind] = "missing";
           },
           stateSamples: STATE_SAMPLES[driver.kind],
+          threadRuntime: {
+            calls: () => runtimeCalls,
+            reset: () => {
+              runtimeCalls.length = 0;
+            },
+          },
         }
       : {}),
   });
