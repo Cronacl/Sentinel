@@ -136,7 +136,7 @@ This is a desktop app first. A lot of the useful parts depend on running close t
 
 ### Prerequisites
 
-- [Bun](https://bun.sh)
+- [Bun](https://bun.sh) 1.4 or later
 - Node.js 24 LTS (see `.nvmrc`)
 - Platform build tools for native dependencies when prebuilt binaries are not available:
   - macOS: Xcode Command Line Tools
