@@ -50,7 +50,7 @@ describe("run_task", () => {
       JSON.stringify({
         packageManager: "bun@1.3.6",
         scripts: {
-          test: "node -e \"console.log('task-ok')\"",
+          test: "echo task-ok",
         },
       }),
     );

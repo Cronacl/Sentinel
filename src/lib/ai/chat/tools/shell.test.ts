@@ -18,6 +18,9 @@ const {
 } = await import("./shell.ts");
 
 const workspaceRoot = process.cwd();
+// Use the runtime executing the tests (bun) rather than whatever `node` the
+// host PATH resolves, so these tests do not depend on the machine setup.
+const JS_RUNTIME = JSON.stringify(process.execPath);
 const originalHome = process.env.HOME;
 const originalPath = process.env.PATH;
 const originalShell = process.env.SHELL;
@@ -111,7 +114,7 @@ describe("shell session manager", () => {
   it("truncates oversized stdout", async () => {
     const result = await executeShellCommand({
       allowedRoot: workspaceRoot,
-      command: "node -e \"process.stdout.write('a'.repeat(70000))\"",
+      command: `${JS_RUNTIME} -e "process.stdout.write('a'.repeat(70000))"`,
       defaultDirectory: workspaceRoot,
       permissionMode: "full",
       threadId: "thread-shell-truncation",
@@ -234,8 +237,7 @@ describe("shell session manager", () => {
 
     for await (const event of streamShellCommand({
       allowedRoot: workspaceRoot,
-      command:
-        "node -e \"process.stdout.write('a'.repeat(9000)); process.stdout.write('\\n')\"",
+      command: `${JS_RUNTIME} -e "process.stdout.write('a'.repeat(9000)); process.stdout.write('\\n')"`,
       defaultDirectory: workspaceRoot,
       permissionMode: "full",
       threadId: "thread-shell-tail",

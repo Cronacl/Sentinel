@@ -38,5 +38,12 @@
     "**/*.js",
     ".next/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "generated", "desktop/dist", "dist"]
+  "exclude": [
+    "node_modules",
+    "generated",
+    "desktop/dist",
+    "dist",
+    ".claude",
+    "**/.worktrees"
+  ]
 }
