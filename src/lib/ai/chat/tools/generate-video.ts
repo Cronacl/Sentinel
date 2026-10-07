@@ -341,16 +341,17 @@ function assertVideoModelSupportsInput({
   }
 }
 
-function buildVideoProviderOptions(
+// These providers start a job and poll for it. AI SDK 7 runs that polling
+// itself, so the timeout goes in `poll`; the providers ignore (and ByteDance
+// warns about) the old `pollTimeoutMs` provider option.
+function buildVideoPollOptions(
   provider: AIProvider,
-): Parameters<typeof generateVideo>[0]["providerOptions"] {
+): Parameters<typeof generateVideo>[0]["poll"] {
   switch (provider) {
     case "bytedance":
-      return { bytedance: { pollTimeoutMs: 600_000 } };
     case "klingai":
-      return { klingai: { pollTimeoutMs: 600_000 } };
     case "xai":
-      return { xai: { pollTimeoutMs: 600_000 } };
+      return { timeoutMs: 600_000 };
     default:
       return undefined;
   }
@@ -391,7 +392,7 @@ async function executeTarget({
     const model = getVideoModel(providerInstance, entry.modelId) as Parameters<
       typeof generateVideo
     >[0]["model"];
-    const providerOptions = buildVideoProviderOptions(entry.provider);
+    const poll = buildVideoPollOptions(entry.provider);
     const result = await generateVideo({
       abortSignal,
       aspectRatio: input.aspectRatio as `${number}:${number}` | undefined,
@@ -405,7 +406,7 @@ async function executeTarget({
             text: input.prompt.trim(),
           }
         : input.prompt.trim(),
-      ...(providerOptions ? { providerOptions } : {}),
+      ...(poll ? { poll } : {}),
       resolution: input.resolution as `${number}x${number}` | undefined,
       ...(input.seed !== undefined ? { seed: input.seed } : {}),
     });
@@ -541,6 +542,6 @@ export function toGenerateVideoModelOutput(output: GenerateVideoOutput) {
 export const __internal = {
   MAX_VIDEO_GENERATION_TOTAL_VIDEOS,
   VIDEO_ARTIFACT_PATH_PLACEHOLDER,
-  buildVideoProviderOptions,
+  buildVideoPollOptions,
   resolveTargets,
 };
