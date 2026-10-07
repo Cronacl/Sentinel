@@ -95,6 +95,67 @@ describe("mergeThreadSessionStateFromSnapshot", () => {
     expect(result).toBe(current);
   });
 
+  it("applies snapshots that only change a dynamic tool's display fields", () => {
+    const toolMessage = (title: string, kind: string): ThreadUIMessage => ({
+      id: "assistant-1",
+      metadata: { revision: 5 },
+      parts: [
+        {
+          callProviderMetadata: { sentinel: { agentLabel: "Cursor", kind } },
+          input: { path: "src/index.ts" },
+          state: "input-available",
+          title,
+          toolCallId: "tool-1",
+          toolName: "cursor_read",
+          type: "dynamic-tool",
+        },
+      ],
+      role: "assistant",
+    });
+    const current = {
+      activeRunId: "run-1",
+      chatEngine: "cursor" as const,
+      composerState: { pendingActionCount: 0 },
+      connectionState: "connected" as const,
+      errorMessage: null,
+      lastAppliedRevision: 5,
+      lastSyncedAt: 123,
+      messages: [toolMessage("Read file", "read")],
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadTitle: "Thread title",
+      threadStatus: "streaming" as const,
+    };
+
+    for (const next of [
+      toolMessage("Read src/index.ts", "read"),
+      toolMessage("Read file", "edit"),
+    ]) {
+      const result = mergeThreadSessionStateFromSnapshot(
+        current,
+        createSnapshot({
+          activeRunId: "run-1",
+          chatEngine: "cursor",
+          messages: [next],
+          queuedFollowUps: [],
+          threadId: "thread-1",
+          threadStatus: "streaming",
+        }),
+        "connected",
+      );
+
+      expect(result).not.toBe(current);
+      const { callProviderMetadata, title } = next.parts[0] as {
+        callProviderMetadata: unknown;
+        title: string;
+      };
+      expect(result.messages[0]?.parts[0]).toMatchObject({
+        callProviderMetadata,
+        title,
+      });
+    }
+  });
+
   it("preserves newer local messages while applying queue and status updates", () => {
     const current = {
       activeRunId: "run-1",
