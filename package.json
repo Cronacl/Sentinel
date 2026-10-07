@@ -44,6 +44,7 @@
     "typecheck": "node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc --noEmit"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "^1.7.0",
     "@ai-sdk/amazon-bedrock": "^5.0.108",
     "@ai-sdk/anthropic": "^4.0.74",
     "@ai-sdk/azure": "^4.0.94",

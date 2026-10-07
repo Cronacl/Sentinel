@@ -329,6 +329,15 @@ export const TRIPWIRES = [
     include: /^src\/.*\.[cm]?[jt]sx?$/,
     multiline: true,
   },
+  {
+    id: "fixtures-in-app-code",
+    description:
+      "scripts/fixtures protocol fakes are test-only; app code never references them",
+    pattern: /\bscripts\/fixtures\//,
+    include: /^(?:src|desktop)\/.*\.[cm]?[jt]sx?$/,
+    // Engine tests spawn the fixtures, and their helpers may live next to them.
+    exclude: /\.test\.[cm]?[jt]sx?$|(?:^|\/)__(?:fixtures|tests)__\//,
+  },
 ];
 
 const DEFAULT_EXCLUDE =

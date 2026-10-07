@@ -325,3 +325,30 @@ describe("P9 Codex tripwires", () => {
     ).toEqual([]);
   });
 });
+
+describe("protocol fixture tripwire", () => {
+  it("flags app code that references scripts/fixtures", () => {
+    const line =
+      'import { start } from "../../../scripts/fixtures/agents/opencode/fake-server";';
+    expect(
+      hitIds("src/lib/ai/chat/engines/opencode-sdk/index.ts", line),
+    ).toEqual(["fixtures-in-app-code:1"]);
+    expect(hitIds("desktop/main/index.mjs", line)).toEqual([
+      "fixtures-in-app-code:1",
+    ]);
+  });
+
+  it("allows tests, test helpers and the fixtures themselves", () => {
+    const line =
+      'const MOCK = path.resolve("scripts/fixtures/agents/acp/mock-agent.ts");';
+    expect(
+      hitIds("src/lib/ai/chat/engines/acp/transport.test.ts", line),
+    ).toEqual([]);
+    expect(
+      hitIds("src/lib/ai/chat/engines/acp/__fixtures__/spawn.ts", line),
+    ).toEqual([]);
+    expect(hitIds("scripts/fixtures/agents/acp/test-harness.ts", line)).toEqual(
+      [],
+    );
+  });
+});
