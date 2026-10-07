@@ -5,6 +5,12 @@ import { createHash, timingSafeEqual } from "node:crypto";
 // they require the per-launch token Electron main passes to the server as
 // SENTINEL_INTERNAL_TOKEN. Without a configured token (dev server, web
 // mode) internal routes do not exist.
+//
+// At server start (src/instrumentation.ts) the token moves out of
+// process.env into server memory, so no process the server starts inherits
+// it: agents and their tools, the Claude SDK and its Bash tool, the shell
+// tool, git, MCP servers. Agent spawns also strip it (spawn.ts) in case
+// the capture did not run.
 
 export const INTERNAL_TOKEN_ENV_KEY = "SENTINEL_INTERNAL_TOKEN";
 export const INTERNAL_TOKEN_HEADER = "x-sentinel-internal-token";
@@ -18,10 +24,37 @@ function digest(value: string) {
   return createHash("sha256").update(value, "utf8").digest();
 }
 
-export function getConfiguredInternalToken(
+const globalForInternalToken = globalThis as unknown as {
+  __sentinelInternalToken?: string;
+};
+
+/**
+ * Moves the token from `env` (process.env) into server memory, on
+ * globalThis so every route bundle reads the same value. Idempotent.
+ */
+export function captureInternalToken(
   env: Record<string, string | undefined> = process.env,
 ) {
-  const token = env[INTERNAL_TOKEN_ENV_KEY]?.trim();
+  const value = env[INTERNAL_TOKEN_ENV_KEY];
+  if (value === undefined) {
+    return;
+  }
+  globalForInternalToken.__sentinelInternalToken = value;
+  delete env[INTERNAL_TOKEN_ENV_KEY];
+}
+
+/**
+ * The configured token: from `env` when given, else process.env, else the
+ * one captured at server start. Null unless at least 32 characters.
+ */
+export function getConfiguredInternalToken(
+  env?: Record<string, string | undefined>,
+) {
+  const raw = env
+    ? env[INTERNAL_TOKEN_ENV_KEY]
+    : (process.env[INTERNAL_TOKEN_ENV_KEY] ??
+      globalForInternalToken.__sentinelInternalToken);
+  const token = raw?.trim();
   return token && token.length >= MIN_TOKEN_LENGTH ? token : null;
 }
 
