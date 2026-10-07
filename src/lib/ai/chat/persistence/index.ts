@@ -13,6 +13,8 @@ import type {
   OpenCodeThreadState,
   RepoThreadState,
   ThreadChatEngineState,
+  ThreadStateByDriver,
+  ThreadStateDriverKind,
 } from "@/lib/ai/chat/engines/types";
 import {
   buildThreadChatEngineState,
@@ -286,54 +288,54 @@ export function updateThreadRepoState(
   });
 }
 
+/**
+ * Sets (or with null clears) one driver's entry in chat_engine_state,
+ * keeping every other key: repo, permissionModeOverride and other drivers.
+ */
+export function updateDriverThreadState<K extends ThreadStateDriverKind>(
+  threadId: string,
+  kind: K,
+  state: ThreadStateByDriver[K] | null,
+) {
+  updateThreadChatEngineState(
+    threadId,
+    buildThreadChatEngineState(kind, state),
+  );
+}
+
 export function updateCodexThreadState(
   threadId: string,
   state: CodexThreadState | null,
 ) {
-  updateThreadChatEngineState(
-    threadId,
-    buildThreadChatEngineState("codex", state),
-  );
+  updateDriverThreadState(threadId, "codex", state);
 }
 
 export function updateClaudeThreadState(
   threadId: string,
   state: ClaudeThreadState | null,
 ) {
-  updateThreadChatEngineState(
-    threadId,
-    buildThreadChatEngineState("claude", state),
-  );
+  updateDriverThreadState(threadId, "claude", state);
 }
 
 export function updateCopilotThreadState(
   threadId: string,
   state: CopilotThreadState | null,
 ) {
-  updateThreadChatEngineState(
-    threadId,
-    buildThreadChatEngineState("copilot", state),
-  );
+  updateDriverThreadState(threadId, "copilot", state);
 }
 
 export function updateCursorThreadState(
   threadId: string,
   state: CursorThreadState | null,
 ) {
-  updateThreadChatEngineState(
-    threadId,
-    buildThreadChatEngineState("cursor", state),
-  );
+  updateDriverThreadState(threadId, "cursor", state);
 }
 
 export function updateOpenCodeThreadState(
   threadId: string,
   state: OpenCodeThreadState | null,
 ) {
-  updateThreadChatEngineState(
-    threadId,
-    buildThreadChatEngineState("opencode", state),
-  );
+  updateDriverThreadState(threadId, "opencode", state);
 }
 
 export async function loadThreadMessages(threadId: string) {

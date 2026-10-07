@@ -377,3 +377,23 @@ describe("P10 loopback guard tripwires", () => {
     expect(hitIds("src/server/http/loopback-guard.test.ts", line)).toEqual([]);
   });
 });
+
+describe("P10 thread state tripwire", () => {
+  it("flags a hard-coded driver key list in a state merge", () => {
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/types.ts",
+        "if (\n  !next.claude &&\n  !next.copilot &&\n  !next.repo\n) {",
+      ),
+    ).toEqual([
+      "P10-hardcoded-thread-state-keys:2",
+      "P10-hardcoded-thread-state-keys:3",
+    ]);
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/state/registry.ts",
+        "return Object.values(next).some((value) => value != null);",
+      ),
+    ).toEqual([]);
+  });
+});

@@ -221,7 +221,7 @@ describe("mergeThreadChatEngineState", () => {
 });
 
 describe("parseThreadChatEngineState", () => {
-  it("round-trips persisted state and drops unknown keys", () => {
+  it("round-trips persisted state, keeps unknown drivers, drops unknown fields", () => {
     const state = {
       claude: {
         cwd: "/tmp/project",
@@ -259,7 +259,12 @@ describe("parseThreadChatEngineState", () => {
       }),
     );
 
-    expect(parseThreadChatEngineState(stored)).toStrictEqual(state);
+    // A driver this build does not know (newer build, fork, unmerged branch)
+    // is carried through untouched; known drivers still drop unknown fields.
+    expect(parseThreadChatEngineState(stored)).toStrictEqual({
+      ...state,
+      unknownEngine: { sessionId: "x" },
+    });
   });
 
   it("rejects state that is missing a session id", () => {

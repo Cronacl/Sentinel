@@ -345,6 +345,13 @@ export const TRIPWIRES = [
     exclude: /\.test\.[cm]?[jt]sx?$/,
   },
   {
+    id: "P10-hardcoded-thread-state-keys",
+    description:
+      "chat_engine_state merges generically (state/registry.ts); a hard-coded driver key list drops permissionModeOverride and unknown drivers",
+    pattern: /!\s*next\.(?:claude|codex|copilot|cursor|opencode)\b/,
+    include: /^src\/.*\.[cm]?[jt]sx?$/,
+  },
+  {
     id: "fixtures-in-app-code",
     description:
       "scripts/fixtures protocol fakes are test-only; app code never references them",
