@@ -72,8 +72,11 @@ const OPENCODE_SERVER_START_TIMEOUT_MS = 30_000;
 // Status probes answer the UI within OPENCODE_STATUS_QUERY_TIMEOUT_MS either
 // way; the probe itself may outlive that window on purpose so a slow cold start
 // still refreshes the status snapshot in the background (the server is closed
-// when the probe settles).
+// when the probe settles). OPENCODE_STATUS_PROBE_DEADLINE_MS bounds that
+// background work: past it the probe is aborted and its server killed, even
+// when a request to it hangs.
 const OPENCODE_STATUS_PROBE_SERVER_START_TIMEOUT_MS = 10_000;
+const OPENCODE_STATUS_PROBE_DEADLINE_MS = 20_000;
 const OPENCODE_CLI_VERIFY_TIMEOUT_MS = 1_500;
 const OPENCODE_STATUS_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 const LOCAL_STATE_DIRECTORY_MODE = 0o700;
@@ -823,9 +826,18 @@ export async function startOpenCodeServerProcess(input: {
   binaryPath: string;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
+  /** Aborting it before the server is ready kills the server. */
+  signal?: AbortSignal;
   timeoutMs?: number;
 }): Promise<OpenCodeServerProcess> {
+  const cancelled = () => new Error("OpenCode server start was cancelled.");
+  if (input.signal?.aborted) {
+    throw cancelled();
+  }
   const port = await findAvailablePort();
+  if (input.signal?.aborted) {
+    throw cancelled();
+  }
   const baseEnv = input.env ?? process.env;
   // A fresh password per server: the server only accepts Sentinel's requests,
   // and an OPENCODE_SERVER_PASSWORD inherited from the user's shell can no
@@ -872,6 +884,7 @@ export async function startOpenCodeServerProcess(input: {
       settled = true;
       clearTimeout(timeoutId);
       if (pollTimer) clearTimeout(pollTimer);
+      input.signal?.removeEventListener("abort", onAbort);
       return true;
     };
 
@@ -893,6 +906,8 @@ export async function startOpenCodeServerProcess(input: {
       close();
       reject(error);
     };
+    const onAbort = () => fail(cancelled());
+    input.signal?.addEventListener("abort", onAbort, { once: true });
 
     // Readiness is whichever comes first: the stdout line or a JSON answer
     // from /global/health on the port Sentinel picked.
@@ -1006,20 +1021,30 @@ function buildIncompatibleOpenCodeStatus(input: {
   });
 }
 
-async function probeOpenCodeEngineStatus(
+/**
+ * Starts a server, reads its inventory and records the status snapshot.
+ * Aborting `signal` kills the server (a hung request fails with it) and
+ * skips the snapshot write.
+ */
+export async function probeOpenCodeEngineStatus(
   runtime: ResolvedOpenCodeRuntime & { cliPath: string },
   snapshotPath: string,
+  signal?: AbortSignal,
 ) {
   let server: OpenCodeServerProcess | null = null;
   let cliVersion = runtime.cliVersion;
   let compatibilityAdvisory = resolveOpenCodeCompatibility(cliVersion);
+  const closeOnAbort = () => server?.close();
+  signal?.addEventListener("abort", closeOnAbort, { once: true });
 
   try {
     server = await startOpenCodeServerProcess({
       binaryPath: runtime.cliPath,
       env: runtime.env,
+      signal,
       timeoutMs: OPENCODE_STATUS_PROBE_SERVER_START_TIMEOUT_MS,
     });
+    signal?.throwIfAborted();
     // `--version` can time out on a cold start; the server reports it too.
     if (!cliVersion && server.version) {
       cliVersion = server.version;
@@ -1038,6 +1063,8 @@ async function probeOpenCodeEngineStatus(
       directory: process.cwd(),
     });
     const inventory = await loadOpenCodeInventory(client);
+    // A probe given up on must not overwrite a newer snapshot later.
+    signal?.throwIfAborted();
     const models = flattenOpenCodeModels(inventory);
     const recordedAt = new Date().toISOString();
 
@@ -1076,6 +1103,7 @@ async function probeOpenCodeEngineStatus(
       usedCachedStatus: false,
     });
   } finally {
+    signal?.removeEventListener("abort", closeOnAbort);
     server?.close();
   }
 }
@@ -1121,13 +1149,19 @@ export async function getOpenCodeEngineStatus(options?: {
       });
     }
 
-    const status = await withTimeout(
-      probeOpenCodeEngineStatus(
-        { ...runtime, cliPath: runtime.cliPath },
-        snapshotPath,
-      ),
-      OPENCODE_STATUS_QUERY_TIMEOUT_MS,
+    // The probe is bounded (its server killed) at the deadline; the UI only
+    // waits for the shorter query window and the probe may finish later.
+    const cliPath = runtime.cliPath;
+    const probe = withTimeout(
+      (signal) =>
+        probeOpenCodeEngineStatus(
+          { ...runtime, cliPath },
+          snapshotPath,
+          signal,
+        ),
+      OPENCODE_STATUS_PROBE_DEADLINE_MS,
     );
+    const status = await withTimeout(probe, OPENCODE_STATUS_QUERY_TIMEOUT_MS);
     if (status) return status;
 
     const snapshot = await readOpenCodeStatusSnapshot(snapshotPath, {

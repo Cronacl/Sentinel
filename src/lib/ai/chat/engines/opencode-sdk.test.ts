@@ -38,6 +38,7 @@ const {
   OPENCODE_RECOMMENDED_VERSION,
   parseOpenCodeSemver,
   parseOpenCodeServerUrl,
+  probeOpenCodeEngineStatus,
   resetOpenCodeEngineStatusCache,
   resetOpenCodeRuntimeCache,
   resolveOpenCodeCompatibility,
@@ -117,6 +118,10 @@ if (mode === "exit") {
           });
         }
         if (url.pathname === "/provider") {
+          if (options["fake-provider"] === "hang") {
+            log({ hang: "provider" });
+            return await new Promise(() => {});
+          }
           if (options["fake-provider"] === "auth-error") {
             return json(
               {
@@ -194,7 +199,7 @@ let fakeCounter = 0;
 
 async function createFakeOpenCode(input: {
   mode?: FakeMode;
-  provider?: "auth-error" | "ok";
+  provider?: "auth-error" | "hang" | "ok";
   session?: "fail" | "ok";
   version: string;
 }) {
@@ -713,6 +718,75 @@ describe.skipIf(process.platform === "win32")("getOpenCodeEngineStatus", () => {
     expect(await fake.invocations()).toEqual([]);
   });
 });
+
+describe.skipIf(process.platform === "win32")(
+  "probeOpenCodeEngineStatus",
+  () => {
+    it("kills its server and writes no snapshot once aborted, even on a hung request", async () => {
+      const fake = await createFakeOpenCode({
+        provider: "hang",
+        version: "1.18.35",
+      });
+      const snapshotPath = path.join(
+        tempRoot,
+        "probe-abort",
+        "opencode-status.json",
+      );
+      const controller = new AbortController();
+
+      const pending = probeOpenCodeEngineStatus(
+        {
+          cliDetected: true,
+          cliPath: fake.binaryPath,
+          cliVersion: "1.18.35",
+          env: { ...process.env },
+          error: null,
+          source: "config",
+        },
+        snapshotPath,
+        controller.signal,
+      );
+      let invocations: Array<Record<string, any>> = [];
+      for (let attempt = 0; attempt < 200; attempt += 1) {
+        invocations = await fake.invocations();
+        if (invocations.some((entry) => entry.hang === "provider")) break;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      expect(invocations.some((entry) => entry.hang === "provider")).toBe(true);
+
+      controller.abort(new Error("Timed out."));
+      const status = await pending;
+
+      expect(status.state).not.toBe("ready");
+      const pid = invocations.find((entry) => typeof entry.pid === "number")
+        ?.pid as number;
+      expect(await waitFor(() => !isProcessAlive(pid))).toBe(true);
+      expect(existsSync(snapshotPath)).toBe(false);
+    }, 15_000);
+
+    it("never starts a server for an already aborted probe", async () => {
+      const fake = await createFakeOpenCode({ version: "1.18.35" });
+      const controller = new AbortController();
+      controller.abort(new Error("Timed out."));
+
+      const status = await probeOpenCodeEngineStatus(
+        {
+          cliDetected: true,
+          cliPath: fake.binaryPath,
+          cliVersion: "1.18.35",
+          env: { ...process.env },
+          error: null,
+          source: "config",
+        },
+        path.join(tempRoot, "probe-aborted", "opencode-status.json"),
+        controller.signal,
+      );
+
+      expect(status.error).toBe("OpenCode server start was cancelled.");
+      expect(await fake.invocations()).toEqual([]);
+    });
+  },
+);
 
 describe.skipIf(process.platform === "win32")("startOpenCodeSession", () => {
   it("creates the session with the permission ruleset and title", async () => {
