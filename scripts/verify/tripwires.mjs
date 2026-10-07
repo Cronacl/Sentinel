@@ -30,7 +30,10 @@ export const TRIPWIRES = [
   {
     id: "P3-zod-single-arg-record",
     description: "zod 4 z.record() needs an explicit key schema",
-    // One argument: no top-level comma before the closing parenthesis.
+    // One argument: no top-level comma before the closing parenthesis. Lines
+    // are matched one at a time with up to two nested parenthesis levels, so
+    // multi-line or deeper calls slip through; typecheck is the main guard
+    // (zod 4 types record() with a required value schema, checkJs included).
     pattern: /(?:\bz|^\s*)\.record\((?:[^(),]|\((?:[^()]|\([^()]*\))*\))*\)/,
     include: /\.[cm]?[jt]sx?$/,
   },

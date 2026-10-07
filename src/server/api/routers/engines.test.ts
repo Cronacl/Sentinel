@@ -164,20 +164,23 @@ const getOwnedThreadOrThrow = mock(async () => ({
 mock.module("@/server/api/trpc", () => ({
   createTRPCRouter: (routes: Record<string, any>) => routes,
   protectedProcedure: {
-    input: () => ({
-      mutation: (handler: any) => handler,
-      query: (handler: any) => handler,
+    input: (inputSchema: any) => ({
+      mutation: (handler: any) => Object.assign(handler, { inputSchema }),
+      query: (handler: any) => Object.assign(handler, { inputSchema }),
     }),
     mutation: (handler: any) => handler,
     query: (handler: any) => handler,
   },
 }));
 
+const writeConfigValue = mock(async () => ({ config: {} }));
+
 mock.module("@/lib/ai/chat/engines/codex-app-server", () => ({
   getCodexAppServerManager: () => ({
     getStatus,
     reloadRuntime,
     startReview,
+    writeConfigValue,
   }),
   resetCodexEngineStatusCache,
 }));
@@ -493,6 +496,25 @@ describe("enginesRouter.codexReview", () => {
     expect(result).toEqual({
       review: { id: "review-1", text: "ok" },
     });
+  });
+});
+
+describe("enginesRouter.codexWriteConfig", () => {
+  it("accepts a config write without a value, as under zod 3", async () => {
+    const { inputSchema } = enginesRouter.codexWriteConfig;
+
+    expect(inputSchema.safeParse({ key: "model" }).success).toBe(true);
+    expect(inputSchema.safeParse({ key: "model", value: null }).success).toBe(
+      true,
+    );
+    expect(inputSchema.safeParse({ value: "gpt-5" }).success).toBe(false);
+
+    await enginesRouter.codexWriteConfig({
+      ctx: { db: {}, session: { user: { id: "user-1" } } },
+      input: inputSchema.parse({ key: "model" }),
+    });
+
+    expect(writeConfigValue).toHaveBeenCalledWith("model", undefined);
   });
 });
 

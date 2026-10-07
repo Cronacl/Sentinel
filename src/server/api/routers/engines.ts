@@ -747,7 +747,8 @@ export const enginesRouter = createTRPCRouter({
   }),
 
   codexWriteConfig: protectedProcedure
-    .input(z.object({ key: z.string(), value: z.unknown() }))
+    // zod 4 requires the key for z.unknown(); a missing value stays valid.
+    .input(z.object({ key: z.string(), value: z.unknown().optional() }))
     .mutation(async ({ input }) => {
       const codex = getCodexAppServerManager();
       return codex.writeConfigValue(input.key, input.value);

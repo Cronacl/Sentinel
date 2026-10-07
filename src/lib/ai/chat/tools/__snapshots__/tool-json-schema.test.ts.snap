@@ -268,7 +268,7 @@ exports[`tool input JSON schemas converts every built-in chat tool to a valid ob
       "actions": {
         "description": "Ordered desktop actions to perform in one conservative batch.",
         "items": {
-          "oneOf": [
+          "anyOf": [
             {
               "additionalProperties": false,
               "properties": {

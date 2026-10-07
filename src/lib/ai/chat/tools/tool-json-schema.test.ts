@@ -107,6 +107,14 @@ function collectSchemaProblems(
     }
   }
 
+  // The Google provider forwards oneOf/allOf unchanged, but Gemini's function
+  // declaration Schema (an OpenAPI 3.0 subset) only knows anyOf.
+  for (const keyword of ["oneOf", "allOf"] as const) {
+    if (schema[keyword] !== undefined) {
+      problems.push(`${path}: ${keyword} is rejected by Gemini, use anyOf`);
+    }
+  }
+
   const properties = schema.properties as JsonSchemaNode | undefined;
 
   if (schema.type === "object") {
