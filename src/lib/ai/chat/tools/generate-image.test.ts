@@ -86,7 +86,7 @@ const runtime = {
         config: { apiKey: "openai-key" },
         displayName: "OpenAI",
         isCustom: false,
-        modelId: "gpt-image-1",
+        modelId: "gpt-image-1.5",
         provider: "openai" as const,
       },
       google: {
@@ -127,7 +127,7 @@ describe("executeGenerateImage", () => {
     expect(result.successCount).toBe(1);
     expect(result.failureCount).toBe(0);
     expect(result.targets[0]).toMatchObject({
-      modelId: "gpt-image-1",
+      modelId: "gpt-image-1.5",
       provider: "openai",
       status: "success",
     });
@@ -320,10 +320,10 @@ describe("executeGenerateImage", () => {
               mediaType: "image/png",
             },
           ],
-          modelId: "gpt-image-1",
+          modelId: "gpt-image-1.5",
           provider: "openai",
           providerMetadataSummary: null,
-          responseModelId: "gpt-image-1",
+          responseModelId: "gpt-image-1.5",
           status: "success",
           warnings: [],
         },

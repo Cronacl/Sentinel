@@ -120,6 +120,13 @@ export const TRIPWIRES = [
     include: /^src\/.*\.[cm]?[jt]sx?$/,
   },
   {
+    id: "P8-retired-image-catalog-ids",
+    description:
+      "@ai-sdk/google 4 serves only Gemini image models and OpenAI shut DALL-E down; retired ids belong in RETIRED_IMAGE_MODEL_REPLACEMENTS",
+    pattern: /\bid:\s*["'](?:imagen-|dall-e-)/,
+    include: /^src\/.*\.[cm]?[jt]sx?$/,
+  },
+  {
     id: "P5-next-turbo-flag",
     description: "Turbopack is the Next 16 dev default; --turbo is redundant",
     pattern: /--turbo\b/,

@@ -116,4 +116,22 @@ describe("P8 model catalog tripwires", () => {
       ),
     ).toEqual([]);
   });
+
+  it("flags retired image models listed as catalog entries", () => {
+    expect(
+      hitIds(
+        "src/lib/ai/providers/images.ts",
+        [
+          '      id: "imagen-4.0-generate-001",',
+          '      id: "dall-e-3",',
+          '    "dall-e-3": "gpt-image-2",',
+          '          modelId: "imagen-3.0-generate-002",',
+          '      id: "gemini-nano-banana-2.1",',
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "P8-retired-image-catalog-ids:1",
+      "P8-retired-image-catalog-ids:2",
+    ]);
+  });
 });

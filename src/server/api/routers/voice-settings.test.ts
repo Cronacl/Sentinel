@@ -72,7 +72,7 @@ describe("voiceSettingsRouter", () => {
     expect(result.voiceInputEnabled).toBe(true);
     expect(result.voiceInputProvider).toBe("openai");
     expect(result.isAvailable).toBe(true);
-    expect(result.resolvedModelId).toBe("whisper-1");
+    expect(result.resolvedModelId).toBe("gpt-transcribe");
   });
 
   it("updates the stored settings", async () => {
