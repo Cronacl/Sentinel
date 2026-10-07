@@ -101,3 +101,41 @@ export function findBetterSqlite3RuntimeIssues({
 
   return issues;
 }
+
+/**
+ * sqlite-vec resolves `sqlite-vec-<os>-<arch>/vec0.<ext>` at runtime, which
+ * Next's output tracing does not copy on its own.
+ *
+ * @param {{
+ *   arch: string;
+ *   platform: NodeJS.Platform;
+ *   serverFiles: string[];
+ *   serverPath: string;
+ * }} input
+ */
+export function findSqliteVecRuntimeIssues({
+  arch,
+  platform,
+  serverFiles,
+  serverPath,
+}) {
+  const relativeFiles = new Set(
+    serverFiles.map((filePath) =>
+      normalizePathForMatch(path.relative(serverPath, filePath)),
+    ),
+  );
+
+  if (
+    arch === "universal" ||
+    !relativeFiles.has("node_modules/sqlite-vec/package.json")
+  ) {
+    return [];
+  }
+
+  const os = platform === "win32" ? "windows" : platform;
+  const extension =
+    platform === "win32" ? "dll" : platform === "darwin" ? "dylib" : "so";
+  const loadablePath = `node_modules/sqlite-vec-${os}-${arch}/vec0.${extension}`;
+
+  return relativeFiles.has(loadablePath) ? [] : [`missing ${loadablePath}`];
+}

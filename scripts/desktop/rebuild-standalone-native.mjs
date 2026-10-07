@@ -130,6 +130,31 @@ async function syncModuleDirectory(packageName) {
   await cp(sourcePath, targetPath, { recursive: true });
 }
 
+// sqlite-vec 0.1.9 finds its loadable extension through a dynamic
+// require.resolve that Next's output tracing cannot follow, so the target's
+// platform package is copied into the packaged server explicitly.
+function getSqliteVecPlatformPackage() {
+  const os = targetPlatform === "win32" ? "windows" : targetPlatform;
+  return `sqlite-vec-${os}-${targetArch}`;
+}
+
+async function syncSqliteVecPlatformPackage() {
+  const packageName = getSqliteVecPlatformPackage();
+
+  if (existsSync(path.join(projectRoot, "node_modules", packageName))) {
+    await syncModuleDirectory(packageName);
+    return true;
+  }
+
+  const message = `${packageName} is not installed, so the packaged server cannot load sqlite-vec for ${targetPlatform}-${targetArch}.`;
+  if (isHostTarget) {
+    throw new Error(`[desktop] ${message}`);
+  }
+
+  console.warn(`[desktop] ${message}`);
+  return false;
+}
+
 async function pruneBetterSqlite3Runtime() {
   const moduleRoot = path.join(targetRoot, "node_modules", "better-sqlite3");
   const prebuildsPath = path.join(moduleRoot, "prebuilds");
@@ -181,6 +206,9 @@ if (Object.keys(runtimeDependencies).length === 0) {
 }
 
 await syncModuleDirectory("better-sqlite3");
+const hasSqliteVec =
+  Boolean(runtimeDependencies["sqlite-vec"]) &&
+  (await syncSqliteVecPlatformPackage());
 
 const runtimePackageJson = {
   name: `${rootPackageJson.name}-desktop-runtime`,
@@ -207,6 +235,12 @@ if (isHostTarget) {
         "const Database=require('better-sqlite3');",
         "const db=new Database(':memory:');",
         "console.log('better-sqlite3 select 1 =', db.prepare('select 1 as value').get().value);",
+        ...(hasSqliteVec
+          ? [
+              "require('sqlite-vec').load(db);",
+              "console.log('sqlite-vec', db.prepare('select vec_version() as version').get().version);",
+            ]
+          : []),
         "db.close();",
       ].join(" "),
     ],
@@ -219,6 +253,6 @@ if (isHostTarget) {
   );
 } else {
   console.log(
-    `[desktop] skipping better-sqlite3 runtime verification for cross-target ${targetPlatform}-${targetArch}`,
+    `[desktop] skipping better-sqlite3 and sqlite-vec runtime verification for cross-target ${targetPlatform}-${targetArch}`,
   );
 }

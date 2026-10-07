@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import {
   findBetterSqlite3RuntimeIssues,
   findMissingServerRuntimeFiles,
+  findSqliteVecRuntimeIssues,
   inferBundleArch,
 } from "./audit-bundle-utils.mjs";
 
@@ -121,5 +122,54 @@ describe("findBetterSqlite3RuntimeIssues", () => {
       "missing node_modules/better-sqlite3/lib/index.js",
       "missing node_modules/better-sqlite3/prebuilds/win32-x64.node",
     ]);
+  });
+});
+
+describe("findSqliteVecRuntimeIssues", () => {
+  const serverPath = "/tmp/Sentinel.app/Contents/Resources/server";
+  const sqliteVecPackage = path.join(
+    serverPath,
+    "node_modules",
+    "sqlite-vec",
+    "package.json",
+  );
+
+  it("requires the target platform extension next to sqlite-vec", () => {
+    expect(
+      findSqliteVecRuntimeIssues({
+        arch: "arm64",
+        platform: "darwin",
+        serverFiles: [sqliteVecPackage],
+        serverPath,
+      }),
+    ).toEqual(["missing node_modules/sqlite-vec-darwin-arm64/vec0.dylib"]);
+
+    expect(
+      findSqliteVecRuntimeIssues({
+        arch: "x64",
+        platform: "win32",
+        serverFiles: [
+          sqliteVecPackage,
+          path.join(
+            serverPath,
+            "node_modules",
+            "sqlite-vec-windows-x64",
+            "vec0.dll",
+          ),
+        ],
+        serverPath,
+      }),
+    ).toEqual([]);
+  });
+
+  it("ignores servers that do not package sqlite-vec", () => {
+    expect(
+      findSqliteVecRuntimeIssues({
+        arch: "x64",
+        platform: "linux",
+        serverFiles: [],
+        serverPath,
+      }),
+    ).toEqual([]);
   });
 });

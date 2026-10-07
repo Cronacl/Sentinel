@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   findBetterSqlite3RuntimeIssues,
   findMissingServerRuntimeFiles,
+  findSqliteVecRuntimeIssues,
   inferBundleArch,
 } from "./audit-bundle-utils.mjs";
 import { UNTRACED_SERVER_PACKAGES } from "./untraced-server-packages.mjs";
@@ -355,7 +356,7 @@ for (const unpackedAppPath of unpackedAppPaths) {
     );
   }
 
-  const betterSqlite3Issues = findBetterSqlite3RuntimeIssues({
+  const nativeRuntimeTarget = {
     arch: inferBundleArch(
       path.basename(
         platform === "mac" ? path.dirname(unpackedAppPath) : unpackedAppPath,
@@ -364,11 +365,15 @@ for (const unpackedAppPath of unpackedAppPaths) {
     platform: NODE_PLATFORMS[platform],
     serverFiles,
     serverPath,
-  });
+  };
+  const nativeRuntimeIssues = [
+    ...findBetterSqlite3RuntimeIssues(nativeRuntimeTarget),
+    ...findSqliteVecRuntimeIssues(nativeRuntimeTarget),
+  ];
 
-  if (betterSqlite3Issues.length > 0) {
+  if (nativeRuntimeIssues.length > 0) {
     failures.push(
-      `${unpackedAppPath}: packaged server better-sqlite3 runtime is wrong:\n${betterSqlite3Issues.join("\n")}`,
+      `${unpackedAppPath}: packaged server native SQLite runtime is wrong:\n${nativeRuntimeIssues.join("\n")}`,
     );
   }
 }
