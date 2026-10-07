@@ -1,6 +1,7 @@
 import {
   execFile,
   spawn,
+  type ChildProcess,
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
 import { access, readdir } from "node:fs/promises";
@@ -74,27 +75,37 @@ async function persistResolvedCodexCli(
   }
 }
 
+const WINDOWS_SPAWNABLE_EXTENSIONS = new Set([".bat", ".cmd", ".com", ".exe"]);
+
+/**
+ * Candidate file names for `command` (a bare name or a full path).
+ *
+ * On Windows only names with a PATHEXT extension are candidates. Windows
+ * cannot run an extensionless file, and npm's cmd-shim writes an
+ * extensionless `sh` script named `codex` next to `codex.cmd`; picking that
+ * script would make every spawn fail with ENOENT. Script hosts in PATHEXT
+ * (.JS, .VBS, …) are skipped too: only binaries and batch files can be
+ * spawned (see buildCodexCliInvocation).
+ */
 function getExecutableNames(command: string) {
   if (process.platform !== "win32") {
     return [command];
   }
 
-  const pathExt = (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM")
-    .split(";")
-    .map((extension) => extension.trim())
-    .filter(Boolean);
-
-  const names = new Set<string>([command]);
-  const lowerCommand = command.toLowerCase();
-  for (const extension of pathExt) {
-    if (lowerCommand.endsWith(extension.toLowerCase())) {
-      continue;
-    }
-
-    names.add(`${command}${extension}`);
+  if (WINDOWS_SPAWNABLE_EXTENSIONS.has(path.extname(command).toLowerCase())) {
+    return [command];
   }
 
-  return [...names];
+  const pathExt = (process.env.PATHEXT ?? "")
+    .split(";")
+    .map((extension) => extension.trim())
+    .filter((extension) =>
+      WINDOWS_SPAWNABLE_EXTENSIONS.has(extension.toLowerCase()),
+    );
+  const extensions =
+    pathExt.length > 0 ? pathExt : [".EXE", ".CMD", ".BAT", ".COM"];
+
+  return [...new Set(extensions.map((extension) => `${command}${extension}`))];
 }
 
 async function isExecutable(candidatePath: string) {
@@ -107,6 +118,22 @@ async function isExecutable(candidatePath: string) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Returns the runnable file for a known path: the path itself, or on Windows
+ * the PATHEXT sibling of an extensionless path (`%APPDATA%\npm\codex` →
+ * `%APPDATA%\npm\codex.cmd`). `where codex` and a persisted SENTINEL_CODEX_PATH
+ * can both name the extensionless npm shim.
+ */
+async function resolveRunnableCommandPath(candidatePath: string) {
+  for (const executablePath of getExecutableNames(candidatePath)) {
+    if (await isExecutable(executablePath)) {
+      return executablePath;
+    }
+  }
+
+  return null;
 }
 
 async function findExecutableInPath(
@@ -245,9 +272,10 @@ async function resolveCodexCliFromWindowsWhere() {
     .filter(Boolean);
 
   for (const candidatePath of candidates) {
-    if (await isExecutable(candidatePath)) {
+    const command = await resolveRunnableCommandPath(candidatePath);
+    if (command) {
       return {
-        command: candidatePath,
+        command,
         env: process.env,
       } satisfies ResolvedCodexCli;
     }
@@ -327,9 +355,12 @@ export async function resolveCodexCli(options?: { forceRefresh?: boolean }) {
     const preferredPath = await getManagedPathValue(process.env.PATH);
     const overridePath =
       process.env.SENTINEL_CODEX_PATH?.trim() || process.env.CODEX_PATH?.trim();
-    if (overridePath && (await isExecutable(overridePath))) {
+    const overrideCommand = overridePath
+      ? await resolveRunnableCommandPath(overridePath)
+      : null;
+    if (overrideCommand) {
       const resolvedCli = {
-        command: overridePath,
+        command: overrideCommand,
         env: {
           ...process.env,
           PATH: preferredPath,
@@ -494,15 +525,72 @@ export async function spawnCodexCli(
 
   const invocation = buildCodexCliInvocation(resolvedCli.command, args);
 
-  return spawn(invocation.command, invocation.args, {
-    cwd: options?.cwd,
-    env: {
-      ...resolvedCli.env,
-      ...(options?.env ?? {}),
-    },
-    stdio: ["pipe", "pipe", "pipe"],
-    ...(invocation.windowsVerbatimArguments
-      ? { windowsVerbatimArguments: true }
-      : {}),
-  }) as ChildProcessWithoutNullStreams;
+  return installWindowsTreeKill(
+    spawn(invocation.command, invocation.args, {
+      cwd: options?.cwd,
+      env: {
+        ...resolvedCli.env,
+        ...(options?.env ?? {}),
+      },
+      stdio: ["pipe", "pipe", "pipe"],
+      ...(invocation.windowsVerbatimArguments
+        ? { windowsVerbatimArguments: true }
+        : {}),
+    }) as ChildProcessWithoutNullStreams,
+  );
+}
+
+function runWindowsTaskkill(pid: number) {
+  return new Promise<void>((resolve, reject) => {
+    execFile(
+      "taskkill",
+      ["/pid", String(pid), "/T", "/F"],
+      { windowsHide: true },
+      (error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      },
+    );
+  });
+}
+
+/**
+ * On Windows `child.kill()` ends only the direct child: cmd.exe for a
+ * wrapped codex.cmd, or npm's node launcher. The Codex binary underneath
+ * keeps running. Route kill() through `taskkill /T /F` so the whole tree
+ * ends, falling back to the direct kill if taskkill fails. P10's
+ * runtime/process kill-tree helper replaces this.
+ */
+export function installWindowsTreeKill<
+  TChild extends Pick<ChildProcess, "exitCode" | "kill" | "pid" | "signalCode">,
+>(
+  child: TChild,
+  options?: {
+    platform?: NodeJS.Platform;
+    taskkill?: (pid: number) => Promise<void>;
+  },
+) {
+  if ((options?.platform ?? process.platform) !== "win32") {
+    return child;
+  }
+
+  const killDirect = child.kill.bind(child);
+  const taskkill = options?.taskkill ?? runWindowsTaskkill;
+  child.kill = (signal?: NodeJS.Signals | number) => {
+    const pid = child.pid;
+    if (pid == null || child.exitCode !== null || child.signalCode !== null) {
+      return killDirect(signal);
+    }
+
+    void taskkill(pid).catch(() => {
+      killDirect(signal);
+    });
+    return true;
+  };
+
+  return child;
 }

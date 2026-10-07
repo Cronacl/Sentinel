@@ -14,11 +14,47 @@ mock.module("server-only", () => ({}));
 
 const {
   buildCodexCliInvocation,
+  installWindowsTreeKill,
   parseShellLookupOutput,
   resetCodexCliResolutionCache,
   resolveCodexCli,
   // @ts-expect-error Bun test-only cache-busting import for module isolation.
 } = await import("./codex-cli.ts?codex-cli-test");
+
+const originalPlatformDescriptor = Object.getOwnPropertyDescriptor(
+  process,
+  "platform",
+)!;
+const originalPathExt = process.env.PATHEXT;
+
+async function withWin32Platform<T>(run: () => Promise<T>) {
+  Object.defineProperty(process, "platform", {
+    ...originalPlatformDescriptor,
+    value: "win32",
+  });
+  // Lower-case so lookups also match on case-sensitive test filesystems;
+  // Windows itself matches PATHEXT case-insensitively.
+  process.env.PATHEXT = ".com;.exe;.bat;.cmd;.vbs;.js";
+  try {
+    return await run();
+  } finally {
+    Object.defineProperty(process, "platform", originalPlatformDescriptor);
+    if (originalPathExt === undefined) {
+      delete process.env.PATHEXT;
+    } else {
+      process.env.PATHEXT = originalPathExt;
+    }
+  }
+}
+
+// npm's cmd-shim output on Windows: an extensionless sh script, the .cmd
+// batch shim and a PowerShell shim side by side.
+async function writeNpmCodexShims(directory: string) {
+  await mkdir(directory, { recursive: true });
+  await writeFile(path.join(directory, "codex"), "#!/bin/sh\nexit 0\n");
+  await writeFile(path.join(directory, "codex.cmd"), "@ECHO off\r\n");
+  await writeFile(path.join(directory, "codex.ps1"), "#!/usr/bin/env pwsh\n");
+}
 
 const originalPath = process.env.PATH;
 const originalHome = process.env.HOME;
@@ -188,6 +224,116 @@ describe("resolveCodexCli", () => {
     } finally {
       await rm(tempRoot, { force: true, recursive: true });
     }
+  });
+});
+
+describe("resolveCodexCli on Windows", () => {
+  it("picks npm's codex.cmd over the extensionless sh shim and wraps it in cmd.exe", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
+    const npmBin = path.join(tempRoot, "npm");
+
+    try {
+      await writeNpmCodexShims(npmBin);
+      useTempSentinelHome(tempRoot);
+      delete process.env.SENTINEL_CODEX_PATH;
+      process.env.PATH = npmBin;
+
+      const resolved: { command: string } | null = await withWin32Platform(() =>
+        resolveCodexCli({ forceRefresh: true }),
+      );
+
+      expect(resolved?.command).toBe(path.join(npmBin, "codex.cmd"));
+      const invocation = buildCodexCliInvocation(
+        resolved!.command,
+        ["app-server"],
+        { comSpec: "cmd.exe", platform: "win32" },
+      );
+      expect(invocation.command).toBe("cmd.exe");
+      expect(invocation.windowsVerbatimArguments).toBe(true);
+      expect(invocation.args.slice(0, 3)).toEqual(["/d", "/s", "/c"]);
+      expect(invocation.args[3]).toEndWith('\\npm\\codex.cmd ^"app-server^""');
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("maps a persisted extensionless override to its .cmd sibling", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
+    const npmBin = path.join(tempRoot, "npm");
+
+    try {
+      await writeNpmCodexShims(npmBin);
+      useTempSentinelHome(tempRoot);
+      process.env.SENTINEL_CODEX_PATH = path.join(npmBin, "codex");
+      process.env.PATH = path.join(tempRoot, "empty");
+
+      const resolved: { command: string } | null = await withWin32Platform(() =>
+        resolveCodexCli({ forceRefresh: true }),
+      );
+
+      expect(resolved?.command).toBe(path.join(npmBin, "codex.cmd"));
+      expect(process.env.SENTINEL_CODEX_PATH).toBe(
+        path.join(npmBin, "codex.cmd"),
+      );
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("installWindowsTreeKill", () => {
+  function createChild(overrides?: { exitCode?: number | null }) {
+    return {
+      exitCode: overrides?.exitCode ?? null,
+      kill: mock((_signal?: NodeJS.Signals | number) => true),
+      pid: 4242,
+      signalCode: null,
+    };
+  }
+
+  it("ends the whole process tree with taskkill on Windows", async () => {
+    const child = createChild();
+    const directKill = child.kill;
+    const taskkill = mock(async (_pid: number) => {});
+
+    installWindowsTreeKill(child, { platform: "win32", taskkill });
+    expect(child.kill()).toBe(true);
+    await Promise.resolve();
+
+    expect(taskkill).toHaveBeenCalledWith(4242);
+    expect(directKill).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the direct kill when taskkill fails", async () => {
+    const child = createChild();
+    const directKill = child.kill;
+
+    installWindowsTreeKill(child, {
+      platform: "win32",
+      taskkill: async () => {
+        throw new Error("taskkill missing");
+      },
+    });
+    child.kill("SIGTERM");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(directKill).toHaveBeenCalledWith("SIGTERM");
+  });
+
+  it("leaves kill() alone outside Windows and after exit", () => {
+    const posixChild = createChild();
+    const posixKill = posixChild.kill;
+    installWindowsTreeKill(posixChild, { platform: "darwin" });
+    expect(posixChild.kill).toBe(posixKill);
+
+    const exitedChild = createChild({ exitCode: 0 });
+    const exitedKill = exitedChild.kill;
+    const taskkill = mock(async (_pid: number) => {});
+    installWindowsTreeKill(exitedChild, { platform: "win32", taskkill });
+    exitedChild.kill();
+
+    expect(taskkill).not.toHaveBeenCalled();
+    expect(exitedKill).toHaveBeenCalled();
   });
 });
 
