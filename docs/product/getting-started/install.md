@@ -25,7 +25,7 @@ Linux notes:
 
 Sentinel uses Bun.
 
-Source runs also need Node.js. Sentinel repairs native dependencies at startup by using prebuilt binaries when available and falling back to a local source build when a runtime, OS, or CPU combination does not have a matching prebuild.
+Source runs also need Node.js 24 LTS (the version pinned in `.nvmrc`). Sentinel repairs native dependencies at startup by using prebuilt binaries when available and falling back to a local source build when a runtime, OS, or CPU combination does not have a matching prebuild.
 
 Install platform build tools only if the native repair step asks for them:
 

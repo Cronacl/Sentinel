@@ -163,7 +163,7 @@ describe("shell session manager", () => {
       "share",
       "fnm",
       "node-versions",
-      "v21.7.3",
+      "v24.14.1",
       "installation",
       "bin",
     );

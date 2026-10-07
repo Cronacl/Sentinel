@@ -15,7 +15,13 @@ import { readFileSync } from "node:fs";
  */
 
 /** @type {Tripwire[]} */
-export const TRIPWIRES = [];
+export const TRIPWIRES = [
+  {
+    id: "P1-node-21",
+    description: "Node 21.7.3 pin replaced by Node 24 LTS",
+    pattern: /21\.7\.3/,
+  },
+];
 
 const DEFAULT_EXCLUDE =
   /(^|\/)(CHANGELOG\.md|bun\.lock)$|^scripts\/verify\/tripwires\.mjs$/;
