@@ -356,6 +356,35 @@ export function toCodexMcpElicitationResponse(
 }
 
 /**
+ * Why an accepted MCP elicitation was answered with a decline, or null when
+ * the reply carries the user's decision. Sentinel's Allow/Deny card cannot
+ * open URLs, run user verification or fill required form fields.
+ */
+export function getCodexMcpElicitationDeclineReason(
+  paramsValue: unknown,
+  decision: CodexApprovalDecision,
+) {
+  if (decision === "decline" || decision === "cancel") {
+    return null;
+  }
+
+  if (
+    toCodexMcpElicitationResponse(paramsValue, decision).action !== "decline"
+  ) {
+    return null;
+  }
+
+  switch (asRecord(paramsValue)?.mode) {
+    case "url":
+      return "Sentinel cannot open MCP sign-in links yet, so the request was declined.";
+    case "openai/userVerification":
+      return "Sentinel cannot complete MCP user verification yet, so the request was declined.";
+    default:
+      return "Sentinel cannot fill in this MCP form yet, so the request was declined.";
+  }
+}
+
+/**
  * Builds the JSON-RPC `result` for an approval-style server request.
  */
 export function buildCodexApprovalResult(

@@ -360,9 +360,18 @@ describe("CodexAppServerManager server requests", () => {
       },
     ]);
 
-    await manager.respondToApproval("61", "accept");
-    await manager.respondToApproval("62", "accept");
-    await manager.respondToApproval("63", "cancel");
+    expect(await manager.respondToApproval("61", "accept")).toEqual({
+      declinedReason: null,
+    });
+    // An accept on a URL elicitation is sent as a decline; the caller is
+    // told why so the transcript does not show it as approved.
+    expect(await manager.respondToApproval("62", "accept")).toEqual({
+      declinedReason:
+        "Sentinel cannot open MCP sign-in links yet, so the request was declined.",
+    });
+    expect(await manager.respondToApproval("63", "cancel")).toEqual({
+      declinedReason: null,
+    });
 
     const frames = await receivedFrames(manager);
     expect(findReply(frames, 61)?.result).toEqual({
@@ -748,6 +757,63 @@ describe("CodexAppServerManager client requests", () => {
       expect.not.objectContaining({ params: expect.anything() }),
     ]);
     expect(frames.at(-1)?.method).toBe("account/logout");
+  });
+
+  it("writes config with keyPath/mergeStrategy and batch edits", async () => {
+    const writeResponse = {
+      filePath: "/home/u/.codex/config.toml",
+      status: "ok",
+      version: "v2",
+    };
+    const manager = createManager({
+      responses: {
+        "config/batchWrite": { result: writeResponse },
+        "config/value/write": [
+          { result: writeResponse },
+          { result: writeResponse },
+        ],
+      },
+    });
+
+    expect(await manager.writeConfigValue("model", "gpt-6-astra")).toEqual(
+      writeResponse,
+    );
+    // A missing value clears the key (Codex treats null as "remove").
+    await manager.writeConfigValue("model_reasoning_effort", undefined);
+    await manager.batchWriteConfig([
+      { keyPath: "features.web_search", value: true },
+      {
+        keyPath: "mcp_servers.docs",
+        mergeStrategy: "upsert",
+        value: { command: "docs-mcp" },
+      },
+    ]);
+
+    const frames = (await receivedFrames(manager)).filter((frame) =>
+      String(frame.method).startsWith("config/"),
+    );
+    expect(frames.map((frame) => frame.params)).toEqual([
+      { keyPath: "model", mergeStrategy: "replace", value: "gpt-6-astra" },
+      {
+        keyPath: "model_reasoning_effort",
+        mergeStrategy: "replace",
+        value: null,
+      },
+      {
+        edits: [
+          {
+            keyPath: "features.web_search",
+            mergeStrategy: "replace",
+            value: true,
+          },
+          {
+            keyPath: "mcp_servers.docs",
+            mergeStrategy: "upsert",
+            value: { command: "docs-mcp" },
+          },
+        ],
+      },
+    ]);
   });
 
   it("flattens skills/list entries and writes skill config by path", async () => {

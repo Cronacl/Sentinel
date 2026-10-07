@@ -8,6 +8,7 @@ import { ToolLayout } from "../shared/tool-layout";
 
 type UserInputInput = {
   prompt: string;
+  questions?: Array<{ isSecret?: boolean }>;
   requestId: string;
 };
 
@@ -39,6 +40,11 @@ export const CodexUserInputTool = memo(function CodexUserInputTool({
 
   if (!input) return null;
 
+  // Secret answers are masked here and never saved in the transcript.
+  const isSecret =
+    Array.isArray(input.questions) &&
+    input.questions.some((question) => question?.isSecret === true);
+
   const summary = (
     <>
       <Icon
@@ -64,8 +70,14 @@ export const CodexUserInputTool = memo(function CodexUserInputTool({
             {input.prompt}
           </p>
           <textarea
-            className="min-h-[60px] w-full resize-y rounded-md border border-border/50 bg-background px-3 py-2 text-[12px] text-foreground outline-none focus:border-primary/50"
-            placeholder="Type your response..."
+            autoComplete="off"
+            className={`min-h-[60px] w-full resize-y rounded-md border border-border/50 bg-background px-3 py-2 text-[12px] text-foreground outline-none focus:border-primary/50${isSecret ? " [-webkit-text-security:disc]" : ""}`}
+            placeholder={
+              isSecret
+                ? "Type your response (hidden, not saved in the chat)..."
+                : "Type your response..."
+            }
+            spellCheck={!isSecret}
             value={response}
             onChange={(e) => setResponse(e.target.value)}
           />

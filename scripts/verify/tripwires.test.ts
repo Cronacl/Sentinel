@@ -302,3 +302,26 @@ describe("P9 OpenCode tripwires", () => {
     ).toEqual([]);
   });
 });
+
+describe("P9 Codex tripwires", () => {
+  it("flags pre-0.160 config write params across line breaks", () => {
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/codex-app-server/index.ts",
+        'await this.call("config/value/write", {\n  key,\n  value,\n});\nawait this.call("config/batchWrite", { values });',
+      ),
+    ).toEqual([
+      "P9-codex-config-write-params:1",
+      "P9-codex-config-write-params:5",
+    ]);
+  });
+
+  it("accepts the keyPath/mergeStrategy and edits[] shapes", () => {
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/codex-app-server/index.ts",
+        'await this.call("config/value/write", {\n  keyPath,\n  mergeStrategy,\n  value,\n});\nawait this.call("config/batchWrite", {\n  edits: [],\n});',
+      ),
+    ).toEqual([]);
+  });
+});

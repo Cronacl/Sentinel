@@ -319,6 +319,16 @@ export const TRIPWIRES = [
     pattern: /\b(?:call|request)\(\s*["']session\/cancel["']/,
     include: /\.[cm]?[jt]sx?$/,
   },
+  {
+    id: "P9-codex-config-write-params",
+    description:
+      "Codex 0.160 config writes take keyPath/mergeStrategy and edits[], not key or values",
+    pattern:
+      /["']config\/(?:value\/write|batchWrite)["']\s*,\s*\{\s*(?:key|values)\b/,
+    // App code only: the tripwire's own tests quote the old shape.
+    include: /^src\/.*\.[cm]?[jt]sx?$/,
+    multiline: true,
+  },
 ];
 
 const DEFAULT_EXCLUDE =

@@ -59,7 +59,14 @@ const codexManager = {
     } | null => null,
   ),
   getServerVersion: mock(() => "0.160.1"),
-  respondToApproval: mock(async () => {}),
+  respondToApproval: mock(
+    async (
+      _approvalId?: string,
+      _decision?: string,
+    ): Promise<{ declinedReason: string | null }> => ({
+      declinedReason: null,
+    }),
+  ),
   respondToUserInput: mock(async () => {}),
   resumeThread: mock(async (threadId: string) => ({
     cwd: "/tmp/workspace",
@@ -1351,7 +1358,143 @@ describe("runCodexThreadChat 0.160 protocol mapping", () => {
     });
     const elicitation = findPart("codex_mcp_elicitation");
     expect(elicitation?.state).toBe("output-denied");
-    expect(elicitation?.approval).toBeUndefined();
+    // The AI SDK requires {approved:false} on output-denied parts.
+    expect(elicitation?.approval).toEqual({ approved: false, id: "52" });
+  });
+
+  it("shows an MCP form accept that Codex was told to decline as denied", async () => {
+    await startCodexRun("thread-elicitation-form");
+
+    await emitCodexEvent({
+      id: "53",
+      method: "mcpServer/elicitation/request",
+      params: {
+        message: "Confirm the deploy",
+        mode: "form",
+        requestedSchema: {
+          properties: { confirm: { type: "boolean" } },
+          required: ["confirm"],
+          type: "object",
+        },
+        serverName: "deploy",
+        threadId: "codex-thread-1",
+        turnId: "turn-1",
+      },
+      type: "approval-request",
+    });
+
+    const reason =
+      "Sentinel cannot fill in this MCP form yet, so the request was declined.";
+    codexManager.respondToApproval.mockImplementationOnce(async () => ({
+      declinedReason: reason,
+    }));
+
+    await runCodexThreadChat(
+      {
+        messages: [
+          {
+            id: "assistant-z",
+            metadata: {},
+            parts: [
+              {
+                ...findPart("codex_mcp_elicitation"),
+                approval: { approved: true, id: "53" },
+                state: "approval-responded",
+              } as any,
+            ],
+            role: "assistant",
+          },
+        ],
+        threadId: "thread-elicitation-form",
+        trigger: "submit-tool-approval",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      } as any,
+      {
+        chatEngineState: { codex: { codexThreadId: "codex-thread-1" } },
+        mode: "chat",
+        status: "awaiting_approval",
+      } as any,
+    );
+
+    expect(codexManager.respondToApproval).toHaveBeenCalledWith("53", "accept");
+    expect(findPart("codex_mcp_elicitation")).toMatchObject({
+      approval: { approved: false, id: "53", reason },
+      state: "output-denied",
+    });
+
+    // Codex then resolves the request; the part stays denied.
+    await emitCodexEvent({
+      method: "serverRequest/resolved",
+      params: { requestId: 53, threadId: "codex-thread-1" },
+    });
+    expect(findPart("codex_mcp_elicitation")?.state).toBe("output-denied");
+  });
+
+  it("answers secret request_user_input questions without persisting the answer", async () => {
+    await startCodexRun("thread-secret-input");
+
+    await emitCodexEvent({
+      id: "req-9",
+      method: "item/tool/requestUserInput",
+      params: {
+        itemId: "ask-2",
+        questions: [
+          {
+            header: "Token",
+            id: "token",
+            isSecret: true,
+            question: "Paste the deploy token",
+          },
+        ],
+        threadId: "codex-thread-1",
+        turnId: "turn-1",
+      },
+      type: "user-input-request",
+    });
+
+    const part = findPart("codex_user_input");
+    expect(part?.input.questions[0].isSecret).toBe(true);
+    upsertMessage.mockClear();
+
+    await runCodexThreadChat(
+      {
+        messages: [
+          {
+            id: "assistant-secret",
+            metadata: {},
+            parts: [
+              {
+                ...part,
+                approval: { approved: true, id: "req-9", response: "s3cr3t" },
+                state: "approval-responded",
+              } as any,
+            ],
+            role: "assistant",
+          },
+        ],
+        threadId: "thread-secret-input",
+        trigger: "submit-tool-approval",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      } as any,
+      {
+        chatEngineState: { codex: { codexThreadId: "codex-thread-1" } },
+        mode: "chat",
+        status: "awaiting_approval",
+      } as any,
+    );
+
+    expect(codexManager.respondToUserInput).toHaveBeenCalledWith(
+      "req-9",
+      "s3cr3t",
+    );
+    expect(upsertMessage.mock.calls.length).toBeGreaterThan(0);
+    expect(JSON.stringify(upsertMessage.mock.calls)).not.toContain("s3cr3t");
+    expect(findPart("codex_user_input")).toMatchObject({
+      output: { response: null },
+      state: "output-available",
+    });
   });
 
   it("shows a command approval that arrives before item/started", async () => {

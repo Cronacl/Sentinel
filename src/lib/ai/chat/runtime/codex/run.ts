@@ -65,6 +65,7 @@ import {
 import {
   extractCodexPromptResponse,
   getCodexEventThreadId,
+  redactCodexSecretUserInput,
   type CodexPromptResponse,
 } from "./event-helpers";
 import { activeCodexRunControls, findActiveCodexRunForThread } from "./state";
@@ -240,6 +241,7 @@ type CodexMirrorItem =
     }
   | {
       approvalId: string;
+      deniedReason?: string;
       id: string;
       input: Record<string, unknown>;
       method: string;
@@ -903,12 +905,21 @@ function applyUserInputRequest(
 function applyPromptResponseToMirror(
   state: CodexMirrorState,
   response: CodexPromptResponse,
+  options?: { declinedReason?: string | null },
 ) {
   for (const item of state.items.values()) {
     if (response.kind === "approval") {
       if (item.type === "serverApproval") {
         if (item.approvalId !== response.approvalId) {
           continue;
+        }
+
+        // An accept Sentinel could not carry out was sent as a decline;
+        // show what Codex was told, not what the user clicked.
+        if (options?.declinedReason) {
+          item.deniedReason = options.declinedReason;
+          item.state = "output-denied";
+          return;
         }
 
         item.state =
@@ -937,7 +948,10 @@ function applyPromptResponseToMirror(
     }
 
     item.isResolved = true;
-    item.response = response.response;
+    // Answers to secret questions go to Codex only, never the transcript.
+    item.response = item.questions.some((question) => question.isSecret)
+      ? null
+      : response.response;
     return;
   }
 }
@@ -1387,7 +1401,15 @@ function buildMirrorParts(state: CodexMirrorState) {
         parts.push({
           ...(item.state === "approval-requested"
             ? { approval: { id: item.approvalId } }
-            : {}),
+            : item.state === "output-denied"
+              ? {
+                  approval: {
+                    approved: false,
+                    id: item.approvalId,
+                    ...(item.deniedReason ? { reason: item.deniedReason } : {}),
+                  },
+                }
+              : {}),
           input: item.input,
           output: { method: item.method },
           state: item.state,
@@ -2143,24 +2165,30 @@ export async function runCodexThreadChat(
           .find((message) => message.role === "assistant")
       : null;
     if (latestAssistant) {
-      persist.upsertMessage(request.threadId, latestAssistant);
+      persist.upsertMessage(
+        request.threadId,
+        redactCodexSecretUserInput(latestAssistant),
+      );
     }
 
+    let declinedReason: string | null = null;
     if (promptResponse.kind === "user-input") {
       await getCodexAppServerManager().respondToUserInput(
         promptResponse.requestId,
         promptResponse.response,
       );
     } else {
-      await getCodexAppServerManager().respondToApproval(
+      ({ declinedReason } = await getCodexAppServerManager().respondToApproval(
         promptResponse.approvalId,
         promptResponse.decision,
-      );
+      ));
     }
 
     const activeControl = findActiveCodexRunForThread(request.threadId);
     if (activeControl) {
-      applyPromptResponseToMirror(activeControl.mirrorState, promptResponse);
+      applyPromptResponseToMirror(activeControl.mirrorState, promptResponse, {
+        declinedReason,
+      });
       emitAssistantMessageUpdate(
         activeControl.mirrorState,
         activeControl.runId,

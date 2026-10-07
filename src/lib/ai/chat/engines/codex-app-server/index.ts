@@ -26,6 +26,7 @@ import {
   buildCodexUserInputResult,
   CODEX_METHOD_NOT_FOUND_ERROR_CODE,
   CODEX_PROTOCOL_BASELINE_VERSION,
+  getCodexMcpElicitationDeclineReason,
   isCodexAlreadyInitializedError,
   isCodexApprovalRequestMethod,
   isCodexUserInputRequestMethod,
@@ -323,6 +324,25 @@ export type CodexAccountInfo =
       type: "amazonBedrock";
       usesCodexManagedCredentials?: boolean;
     };
+
+export type CodexConfigMergeStrategy = "replace" | "upsert";
+
+export type CodexConfigEdit = {
+  keyPath: string;
+  mergeStrategy?: CodexConfigMergeStrategy;
+  value: unknown;
+};
+
+export type CodexConfigWriteResponse = {
+  filePath: string;
+  overriddenMetadata?: {
+    effectiveValue: unknown;
+    message: string;
+    overridingLayer: unknown;
+  } | null;
+  status: "ok" | "okOverridden";
+  version: string;
+};
 
 export type CodexLoginParams =
   | { apiKey: string; type: "apiKey" }
@@ -876,17 +896,30 @@ export class CodexAppServerManager {
     };
   }
 
-  async writeConfigValue(key: string, value: unknown) {
+  /**
+   * Writes one dotted `keyPath` in the user's config.toml. A null (or
+   * missing) value removes the key.
+   */
+  async writeConfigValue(
+    keyPath: string,
+    value: unknown,
+    mergeStrategy: CodexConfigMergeStrategy = "replace",
+  ) {
     return (await this.call("config/value/write", {
-      key,
-      value,
-    })) as { config: Record<string, unknown> };
+      keyPath,
+      mergeStrategy,
+      value: value ?? null,
+    })) as CodexConfigWriteResponse;
   }
 
-  async batchWriteConfig(values: Record<string, unknown>) {
+  async batchWriteConfig(edits: CodexConfigEdit[]) {
     return (await this.call("config/batchWrite", {
-      values,
-    })) as { config: Record<string, unknown> };
+      edits: edits.map((edit) => ({
+        keyPath: edit.keyPath,
+        mergeStrategy: edit.mergeStrategy ?? "replace",
+        value: edit.value ?? null,
+      })),
+    })) as CodexConfigWriteResponse;
   }
 
   async listSkills(options?: { cwds?: string[] }) {
@@ -1356,7 +1389,15 @@ export class CodexAppServerManager {
     await this.call("thread/unarchive", { threadId });
   }
 
-  async respondToApproval(approvalId: string, decision: CodexApprovalDecision) {
+  /**
+   * Answers an approval-style server request. `declinedReason` is set when
+   * an accept had to be sent as a decline (MCP elicitations Sentinel cannot
+   * complete), so the caller can show the request as denied.
+   */
+  async respondToApproval(
+    approvalId: string,
+    decision: CodexApprovalDecision,
+  ): Promise<{ declinedReason: string | null }> {
     await this.ensureStarted();
 
     const pending = this.pendingServerRequests.get(approvalId);
@@ -1373,6 +1414,13 @@ export class CodexAppServerManager {
         decision,
       ),
     });
+
+    return {
+      declinedReason:
+        pending.method === "mcpServer/elicitation/request"
+          ? getCodexMcpElicitationDeclineReason(pending.params, decision)
+          : null,
+    };
   }
 
   async respondToUserInput(requestId: string, response: string) {

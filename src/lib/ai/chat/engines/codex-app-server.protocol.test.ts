@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import {
   buildCodexUserInputPrompt,
+  getCodexMcpElicitationDeclineReason,
   isCodexVersionAtLeast,
   mapCodexUserInputAnswers,
   parseCodexUserInputQuestions,
@@ -171,6 +172,38 @@ describe("Codex MCP elicitation responses", () => {
     expect(toCodexMcpElicitationResponse(form, "decline")).toEqual({
       action: "decline",
     });
+  });
+
+  it("explains accepts that had to be sent as declines", () => {
+    const requiredConfirm = {
+      ...form,
+      requestedSchema: {
+        properties: { confirm: { type: "boolean" } },
+        required: ["confirm"],
+        type: "object",
+      },
+    };
+
+    expect(getCodexMcpElicitationDeclineReason(form, "accept")).toBeNull();
+    expect(getCodexMcpElicitationDeclineReason(form, "decline")).toBeNull();
+    expect(
+      getCodexMcpElicitationDeclineReason(requiredConfirm, "cancel"),
+    ).toBeNull();
+    expect(
+      getCodexMcpElicitationDeclineReason(requiredConfirm, "accept"),
+    ).toContain("cannot fill in this MCP form");
+    expect(
+      getCodexMcpElicitationDeclineReason(
+        { mode: "url", serverName: "x", url: "https://example.com" },
+        "acceptForSession",
+      ),
+    ).toContain("cannot open MCP sign-in links");
+    expect(
+      getCodexMcpElicitationDeclineReason(
+        { mode: "openai/userVerification", serverName: "x" },
+        "accept",
+      ),
+    ).toContain("cannot complete MCP user verification");
   });
 });
 

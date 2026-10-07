@@ -19,6 +19,7 @@ import { CopilotIcon } from "@/components/icons/copilot-icon";
 import { OpenCodeIcon } from "@/components/icons/open-target-icons";
 import { ProviderIcon } from "@/components/icons/provider-icon";
 import {
+  getCodexAccountDisplay,
   getCodexRuntimeBadgeColor,
   getCodexRuntimeBadgeLabel,
   getCodexRuntimeCliLabel,
@@ -259,19 +260,11 @@ export default function EnginesPage() {
   const openCodeFallbackMessage =
     getOpenCodeRuntimeFallbackMessage(openCodeStatus);
 
-  const codexAccountValue = (() => {
-    const raw =
-      codexStatus?.account?.type === "chatgpt"
-        ? codexStatus.account.email
-        : codexStatus?.account?.type === "apiKey"
-          ? "API key"
-          : null;
-    if (!raw) return "Not authenticated";
-    if (raw === "API key") return raw;
-    return showCodexAccount
-      ? raw
+  const codexAccountDisplay = getCodexAccountDisplay(codexStatus?.account);
+  const codexAccountValue =
+    !codexAccountDisplay.isSensitive || showCodexAccount
+      ? codexAccountDisplay.value
       : "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
-  })();
 
   const claudeAccountValue = (() => {
     const raw = claudeStatus?.account?.email ?? null;
@@ -346,8 +339,7 @@ export default function EnginesPage() {
                     value: (
                       <div className="flex items-center gap-2">
                         <span>{codexAccountValue}</span>
-                        {codexAccountValue !== "Not authenticated" &&
-                        codexAccountValue !== "API key" ? (
+                        {codexAccountDisplay.isSensitive ? (
                           <Button
                             className="h-5 min-w-0 px-1.5 text-[10px]"
                             onPress={() =>

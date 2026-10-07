@@ -361,3 +361,48 @@ export function getCodexComposerUnavailableMessage(
 ) {
   return getRuntimeComposerUnavailableMessage("Codex", status);
 }
+
+type CodexAccountLike = {
+  email?: string | null;
+  planType?: string | null;
+  type: string;
+};
+
+function formatCodexPlanType(planType: string | null | undefined) {
+  const trimmed = planType?.trim();
+  if (!trimmed || trimmed.toLowerCase() === "unknown") {
+    return null;
+  }
+
+  return trimmed[0]!.toUpperCase() + trimmed.slice(1);
+}
+
+/**
+ * The Codex account row on the engines settings page. Only an email is
+ * sensitive (masked until the user reveals it); a ChatGPT login without an
+ * email and an Amazon Bedrock login are authenticated too.
+ */
+export function getCodexAccountDisplay(
+  account: CodexAccountLike | null | undefined,
+): { isSensitive: boolean; value: string } {
+  switch (account?.type) {
+    case "apiKey":
+      return { isSensitive: false, value: "API key" };
+    case "chatgpt": {
+      const email = account.email?.trim();
+      if (email) {
+        return { isSensitive: true, value: email };
+      }
+
+      const plan = formatCodexPlanType(account.planType);
+      return {
+        isSensitive: false,
+        value: plan ? `ChatGPT ${plan}` : "ChatGPT",
+      };
+    }
+    case "amazonBedrock":
+      return { isSensitive: false, value: "Amazon Bedrock" };
+    default:
+      return { isSensitive: false, value: "Not authenticated" };
+  }
+}

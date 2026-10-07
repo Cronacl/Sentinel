@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  getCodexAccountDisplay,
   getCodexRuntimeBadgeColor,
   getCodexRuntimeBadgeLabel,
   getCodexRuntimeCliLabel,
@@ -234,5 +235,45 @@ describe("OpenCode runtime settings helpers", () => {
       }),
     ).toBeNull();
     expect(getOpenCodeRuntimeFallbackMessage(null)).toBeNull();
+  });
+});
+
+describe("getCodexAccountDisplay", () => {
+  it("masks only a ChatGPT email", () => {
+    expect(
+      getCodexAccountDisplay({
+        email: "dev@example.com",
+        planType: "plus",
+        type: "chatgpt",
+      }),
+    ).toEqual({ isSensitive: true, value: "dev@example.com" });
+    expect(getCodexAccountDisplay({ type: "apiKey" })).toEqual({
+      isSensitive: false,
+      value: "API key",
+    });
+  });
+
+  it("shows ChatGPT logins without an email and Bedrock as authenticated", () => {
+    expect(
+      getCodexAccountDisplay({ email: null, planType: "pro", type: "chatgpt" }),
+    ).toEqual({ isSensitive: false, value: "ChatGPT Pro" });
+    expect(
+      getCodexAccountDisplay({
+        email: null,
+        planType: "unknown",
+        type: "chatgpt",
+      }),
+    ).toEqual({ isSensitive: false, value: "ChatGPT" });
+    expect(getCodexAccountDisplay({ type: "amazonBedrock" })).toEqual({
+      isSensitive: false,
+      value: "Amazon Bedrock",
+    });
+  });
+
+  it("reports no account as not authenticated", () => {
+    expect(getCodexAccountDisplay(null)).toEqual({
+      isSensitive: false,
+      value: "Not authenticated",
+    });
   });
 });
