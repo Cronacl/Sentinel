@@ -12,9 +12,12 @@
 
 ## Local development
 
-Sentinel repairs native Node dependencies before local dev, builds, preview, and start commands. It uses prebuilt binaries when available and falls back to a local source build for runtime, OS, or CPU combinations without matching prebuilds.
+Sentinel checks native Node dependencies before local dev, builds, preview, and start commands:
 
-Source builds need platform build tools:
+- `better-sqlite3` loads the N-API prebuild bundled for the current OS and CPU and is never compiled locally. The Linux prebuilds need glibc 2.34 and libstdc++ from GCC 11 or newer. `bun install` skips its lifecycle script (it is left out of `trustedDependencies` in `package.json`), so installs need no Python or C++ toolchain for it.
+- `node-pty` uses its prebuilt binary on macOS and Windows and is compiled by `bun install` on Linux. When its binary does not load, the startup script rebuilds it from source.
+
+`node-pty` source builds need platform build tools:
 
 - macOS: Xcode Command Line Tools
 - Linux: `build-essential`, `python3`, `make`, and `g++`
@@ -31,6 +34,8 @@ bun install
 cp .env.example .env
 bun run dev:desktop
 ```
+
+`bun install` does not download the Electron binary (Electron 42 and later). `bun run dev:desktop` and the desktop build commands fetch it on first use, or you can run `bun run electron:install` ahead of time.
 
 ## Build commands
 

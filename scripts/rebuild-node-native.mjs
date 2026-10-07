@@ -5,9 +5,10 @@ import path from "node:path";
 
 const projectRoot = process.cwd();
 const require = createRequire(import.meta.url);
-// better-sqlite3 13+ is an N-API addon with bundled prebuilds (or a source
-// build at install time), so it is only smoke-tested here; node-pty may still
-// need its prebuilds restored or a node-gyp rebuild.
+// better-sqlite3 13+ is an N-API addon that loads its bundled prebuilds (bun
+// skips its install script, see trustedDependencies), so it is only
+// smoke-tested here; node-pty may still need its prebuilds restored or a
+// node-gyp rebuild.
 const NATIVE_MODULES = ["better-sqlite3", "node-pty"];
 const nodeGypCliPath = path.join(
   projectRoot,
@@ -163,8 +164,12 @@ async function rebuildNodePty(needsSourceRebuild) {
 
 async function rebuildNativeModule(moduleName, options = {}) {
   if (moduleName === "better-sqlite3") {
+    const linuxFloor =
+      process.platform === "linux"
+        ? " Its Linux prebuilds need glibc 2.34 and libstdc++ from GCC 11 or newer."
+        : "";
     throw new Error(
-      `[native] better-sqlite3 could not be loaded for Node ${process.versions.node} on ${process.platform}-${process.arch}. It ships N-API prebuilds and is not rebuilt here; reinstall dependencies with \`bun install\`.`,
+      `[native] better-sqlite3 could not be loaded for Node ${process.versions.node} on ${process.platform}-${process.arch}. It ships N-API prebuilds and is not rebuilt here; reinstall dependencies with \`bun install\`.${linuxFloor}`,
     );
   }
 

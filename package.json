@@ -163,6 +163,13 @@
     "typescript": "~6.0.3",
     "wait-on": "^9.5.1"
   },
+  "trustedDependencies": [
+    "electron-winstaller",
+    "esbuild",
+    "lefthook",
+    "node-pty",
+    "sharp"
+  ],
   "build": {
     "appId": "app.sentinel.desktop",
     "afterPack": "scripts/desktop/after-pack.cjs",

@@ -12,9 +12,9 @@ Current release targets:
 
 - macOS 13 (Ventura) or later: DMG
 - Windows 10 or later, 64-bit: NSIS installer
-- Linux x64 and arm64: AppImage, DEB, RPM
+- Linux x64 and arm64 with glibc 2.34 and libstdc++ from GCC 11 or newer (for example Ubuntu 22.04, Debian 12, Fedora 35, or RHEL 9): AppImage, DEB, RPM
 
-Sentinel runs on Electron 44, which no longer supports macOS 12, 32-bit Windows, or 32-bit ARM Linux.
+Sentinel runs on Electron 44, which no longer supports macOS 12, 32-bit Windows, or 32-bit ARM Linux. Copies already installed on macOS 12 keep working, but the in-app updater no longer offers them new versions.
 
 Linux notes:
 
@@ -27,12 +27,14 @@ Linux notes:
 
 Sentinel uses Bun.
 
-Source runs also need Node.js 24 LTS (the version pinned in `.nvmrc`). Sentinel repairs native dependencies at startup by using prebuilt binaries when available and falling back to a local source build when a runtime, OS, or CPU combination does not have a matching prebuild.
+Source runs also need Node.js 24 LTS (the version pinned in `.nvmrc`). Sentinel checks its native dependencies at startup:
 
-Install platform build tools only if the native repair step asks for them:
+- `better-sqlite3` loads the N-API prebuild bundled for your OS and CPU and is never compiled locally. On Linux that prebuild needs glibc 2.34 and libstdc++ from GCC 11 or newer.
+- `node-pty` uses its prebuilt binary on macOS and Windows. On Linux, `bun install` compiles it. If the binary does not load, the startup script rebuilds it locally.
+
+Linux needs `build-essential`, `python3`, `make`, and `g++` for that `node-pty` build. On macOS and Windows, install build tools only if the native repair step asks for them:
 
 - macOS: Xcode Command Line Tools
-- Linux: `build-essential`, `python3`, `make`, and `g++`
 - Windows: Visual Studio Build Tools with Desktop development with C++
 
 ```bash
