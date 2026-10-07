@@ -1,5 +1,7 @@
 import { afterAll, afterEach, describe, expect, it, mock } from "bun:test";
 import { existsSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import {
   chmod,
   mkdir,
@@ -31,6 +33,7 @@ delete process.env.OPENCODE_CONFIG_CONTENT;
 const {
   createOpenCodeSdkClient,
   getOpenCodeEngineStatus,
+  isOpenCodeAuthError,
   OPENCODE_MINIMUM_VERSION,
   OPENCODE_RECOMMENDED_VERSION,
   parseOpenCodeSemver,
@@ -113,6 +116,15 @@ if (mode === "exit") {
           });
         }
         if (url.pathname === "/provider") {
+          if (options["fake-provider"] === "auth-error") {
+            return json(
+              {
+                data: { message: "Missing credentials", providerID: "openai" },
+                name: "ProviderAuthError",
+              },
+              400,
+            );
+          }
           return json({
             all: [
               {
@@ -181,6 +193,7 @@ let fakeCounter = 0;
 
 async function createFakeOpenCode(input: {
   mode?: FakeMode;
+  provider?: "auth-error" | "ok";
   session?: "fail" | "ok";
   version: string;
 }) {
@@ -195,7 +208,7 @@ async function createFakeOpenCode(input: {
     binaryPath,
     [
       "#!/bin/sh",
-      `exec "${process.execPath}" "${sourcePath}" "--fake-log=${logPath}" "--fake-version=${input.version}" "--fake-mode=${input.mode ?? "normal"}" "--fake-session=${input.session ?? "ok"}" "$@"`,
+      `exec "${process.execPath}" "${sourcePath}" "--fake-log=${logPath}" "--fake-version=${input.version}" "--fake-mode=${input.mode ?? "normal"}" "--fake-provider=${input.provider ?? "ok"}" "--fake-session=${input.session ?? "ok"}" "$@"`,
       "",
     ].join("\n"),
     "utf8",
@@ -309,7 +322,7 @@ describe("OpenCode version compatibility", () => {
   });
 
   it("maps versions onto the documented floors", () => {
-    expect(OPENCODE_MINIMUM_VERSION).toBe("1.2.0");
+    expect(OPENCODE_MINIMUM_VERSION).toBe("1.0.224");
     expect(OPENCODE_RECOMMENDED_VERSION).toBe("1.14.19");
 
     expect(resolveOpenCodeCompatibility("1.18.35")).toEqual({
@@ -327,9 +340,14 @@ describe("OpenCode version compatibility", () => {
       }),
     );
     expect(resolveOpenCodeCompatibility("1.2.0").status).toBe("graceful");
-    expect(resolveOpenCodeCompatibility("1.1.65")).toEqual(
+    // Before message.part.delta (1.2.0) and questions (1.1.7), but already on
+    // the permission.asked protocol: usable, update recommended.
+    expect(resolveOpenCodeCompatibility("1.1.65").status).toBe("graceful");
+    expect(resolveOpenCodeCompatibility("1.1.1").status).toBe("graceful");
+    expect(resolveOpenCodeCompatibility("1.0.224").status).toBe("graceful");
+    expect(resolveOpenCodeCompatibility("1.0.223")).toEqual(
       expect.objectContaining({
-        message: expect.stringContaining("needs 1.2.0 or newer"),
+        message: expect.stringContaining("needs 1.0.224 or newer"),
         status: "broken",
       }),
     );
@@ -340,6 +358,60 @@ describe("OpenCode version compatibility", () => {
       }),
     );
     expect(resolveOpenCodeCompatibility(null).status).toBe("unknown");
+  });
+});
+
+describe("isOpenCodeAuthError", () => {
+  it("ignores auth-like text in the request URL the 1.18 SDK puts in errors", async () => {
+    // An empty-bodied 500 makes the SDK describe the request, URL included.
+    const server = createServer((_request, response) => {
+      response.statusCode = 500;
+      response.end();
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", () => resolve()),
+    );
+    try {
+      const { port } = server.address() as AddressInfo;
+      const client = createOpenCodeSdkClient({
+        baseUrl: `http://127.0.0.1:${port}`,
+        directory: "/Users/someone/oauth-app",
+      });
+      const error = await client.provider.list().then(
+        () => null,
+        (failure: unknown) => failure,
+      );
+
+      // "opencode server GET http://…/provider?directory=%2FUsers%2Fsomeone%2Foauth-app → 500 …"
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("oauth-app");
+      expect(isOpenCodeAuthError(error)).toBe(false);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+
+  it("recognises ProviderAuthError bodies and plain auth messages", () => {
+    expect(
+      isOpenCodeAuthError(
+        new Error("Missing credentials", {
+          cause: {
+            body: {
+              data: { message: "Missing credentials" },
+              name: "ProviderAuthError",
+            },
+            status: 400,
+          },
+        }),
+      ),
+    ).toBe(true);
+    expect(isOpenCodeAuthError(new Error("Unauthorized"))).toBe(true);
+    expect(
+      isOpenCodeAuthError(new Error("Please run opencode auth login")),
+    ).toBe(true);
+    expect(isOpenCodeAuthError(new Error("Session storage is locked"))).toBe(
+      false,
+    );
   });
 });
 
@@ -556,7 +628,7 @@ describe.skipIf(process.platform === "win32")("getOpenCodeEngineStatus", () => {
   });
 
   it("reports a CLI below the protocol minimum without starting a server", async () => {
-    const fake = await createFakeOpenCode({ version: "1.1.65" });
+    const fake = await createFakeOpenCode({ version: "1.0.223" });
     process.env.SENTINEL_OPENCODE_PATH = fake.binaryPath;
 
     const status = await getOpenCodeEngineStatus({ forceRefresh: true });
@@ -565,16 +637,35 @@ describe.skipIf(process.platform === "win32")("getOpenCodeEngineStatus", () => {
       expect.objectContaining({
         authReady: false,
         availableModels: [],
-        cliVersion: "1.1.65",
+        cliVersion: "1.0.223",
         compatibilityAdvisory: expect.objectContaining({ status: "broken" }),
-        error: expect.stringContaining("needs 1.2.0 or newer"),
+        error: expect.stringContaining("needs 1.0.224 or newer"),
         state: "error",
       }),
     );
     expect(await fake.invocations()).toEqual([]);
     await expect(
       startOpenCodeSession({ cwd: tempRoot, fullAccess: false, title: "t" }),
-    ).rejects.toThrow("needs 1.2.0 or newer");
+    ).rejects.toThrow("needs 1.0.224 or newer");
+  });
+
+  it("reports a provider auth failure from the structured SDK error", async () => {
+    const fake = await createFakeOpenCode({
+      provider: "auth-error",
+      version: "1.18.35",
+    });
+    process.env.SENTINEL_OPENCODE_PATH = fake.binaryPath;
+
+    const status = await getOpenCodeEngineStatus({ forceRefresh: true });
+
+    // "Missing credentials" has no auth keyword; the error body's name does.
+    expect(status).toEqual(
+      expect.objectContaining({
+        authReady: false,
+        error: "Missing credentials",
+        state: "auth_unavailable",
+      }),
+    );
   });
 
   it("reports OpenCode 2.x as not supported yet", async () => {

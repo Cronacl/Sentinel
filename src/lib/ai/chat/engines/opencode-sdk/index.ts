@@ -53,10 +53,18 @@ const OPENCODE_SERVER_OUTPUT_MAX_CHARS = 64 * 1024;
 const OPENCODE_RUNTIME_CACHE_TTL_MS = 15_000;
 const OPENCODE_STATUS_CACHE_TTL_MS = 15_000;
 const OPENCODE_STATUS_QUERY_TIMEOUT_MS = 4_000;
-// 1.18 listens before it bootstraps any project instance (serve runs with
-// `instance: false`), and 1.3.17 measured ~1 s here, so 5 s stays a sensible
-// bound for the listen step. Instance bootstrap happens on the first request.
-const OPENCODE_SERVER_START_TIMEOUT_MS = 5_000;
+// Default bound for a turn's server start, matching t3code's
+// DEFAULT_OPENCODE_SERVER_TIMEOUT_MS (opencodeRuntime.ts). A warm start is
+// ~1 s (1.3.17 measured here; 1.18 listens before it bootstraps an instance),
+// but the first launch of a freshly installed ~120 MB binary can sit in
+// Gatekeeper/Defender scanning for several seconds, and failing the user's
+// turn there is worse than waiting.
+const OPENCODE_SERVER_START_TIMEOUT_MS = 30_000;
+// Status probes answer the UI within OPENCODE_STATUS_QUERY_TIMEOUT_MS either
+// way; the probe itself may outlive that window on purpose so a slow cold start
+// still refreshes the status snapshot in the background (the server is closed
+// when the probe settles).
+const OPENCODE_STATUS_PROBE_SERVER_START_TIMEOUT_MS = 10_000;
 const OPENCODE_CLI_VERIFY_TIMEOUT_MS = 1_500;
 const OPENCODE_SHELL_LOOKUP_TIMEOUT_MS = 1_200;
 const OPENCODE_STATUS_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
@@ -69,12 +77,17 @@ const OPENCODE_SHELL_PATH_START_MARKER =
   "__SENTINEL_OPENCODE_SHELL_PATH_START__";
 const OPENCODE_SHELL_PATH_END_MARKER = "__SENTINEL_OPENCODE_SHELL_PATH_END__";
 
-// Oldest `opencode-ai` server that speaks everything this adapter consumes:
-// 1.2.0 added the `message.part.delta` event (see its release notes) and
-// already had the question reply/reject and permission reply routes, the
-// `permission` ruleset on session.create and `variant` on prompt_async.
-// Older servers get state "error" instead of a half-working run.
-export const OPENCODE_MINIMUM_VERSION = "1.2.0";
+// Oldest `opencode-ai` server whose protocol this adapter can drive, from the
+// published @opencode-ai/sdk v2 typings per release: 1.0.224 introduced the
+// `permission.asked` event, POST /permission/{requestID}/reply and the
+// `permission` ruleset on session.create (with prompt_async `agent`/`variant`,
+// /provider, /agent and /global/health already present). Older servers use the
+// `permission.updated` protocol, which Sentinel never answers, so a run would
+// hang on its first approval; they get state "error" instead. Later additions
+// are optional here: questions (1.1.7) are only answered when a server asks,
+// and without `message.part.delta` (1.2.0) text streams through the full-text
+// `message.part.updated` events, just in coarser steps.
+export const OPENCODE_MINIMUM_VERSION = "1.0.224";
 // The floor t3code tests its 1.x driver against (opencodeRuntime.ts:44);
 // 1.14.17/1.14.18 compiled binaries could fail at startup (fixed in 1.14.19).
 // Versions between the two floors keep working with an "update recommended"
@@ -787,6 +800,8 @@ export function flattenOpenCodeModels(input: OpenCodeInventory) {
   );
 }
 
+const URL_TOKEN_PATTERN = /\b[a-z][a-z0-9+.-]*:\/\/\S+/gi;
+
 function isOpenCodeAuthErrorMessage(message: string) {
   const normalized = message.toLowerCase();
   return (
@@ -795,6 +810,26 @@ function isOpenCodeAuthErrorMessage(message: string) {
     normalized.includes("unauth") ||
     normalized.includes("permission denied")
   );
+}
+
+// With throwOnError the 1.18 SDK wraps failures in Errors whose text can be
+// "opencode server GET http://…/provider?directory=<cwd> …" (dist/
+// error-interceptor.js describe()), so a workspace path such as
+// /Users/x/oauth-app must not read as an auth failure. The structured cause
+// ({body, status}) is checked first; URLs are dropped before the text match.
+export function isOpenCodeAuthError(error: unknown) {
+  const cause =
+    error instanceof Error && error.cause && typeof error.cause === "object"
+      ? (error.cause as { body?: unknown })
+      : null;
+  const body =
+    cause?.body && typeof cause.body === "object"
+      ? (cause.body as { name?: unknown })
+      : null;
+  if (body?.name === "ProviderAuthError") return true;
+
+  const message = error instanceof Error ? error.message : String(error);
+  return isOpenCodeAuthErrorMessage(message.replace(URL_TOKEN_PATTERN, ""));
 }
 
 export function resetOpenCodeRuntimeCache() {
@@ -1219,7 +1254,7 @@ async function probeOpenCodeEngineStatus(
     server = await startOpenCodeServerProcess({
       binaryPath: runtime.cliPath,
       env: runtime.env,
-      timeoutMs: OPENCODE_SERVER_START_TIMEOUT_MS,
+      timeoutMs: OPENCODE_STATUS_PROBE_SERVER_START_TIMEOUT_MS,
     });
     // `--version` can time out on a cold start; the server reports it too.
     if (!cliVersion && server.version) {
@@ -1263,8 +1298,9 @@ async function probeOpenCodeEngineStatus(
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const authError = isOpenCodeAuthError(error);
     return buildOpenCodeEngineStatus({
-      authReady: !isOpenCodeAuthErrorMessage(message),
+      authReady: !authError,
       availableModels: [],
       cliDetected: true,
       cliPath: runtime.cliPath,
@@ -1272,7 +1308,7 @@ async function probeOpenCodeEngineStatus(
       compatibilityAdvisory,
       error: message,
       lastSuccessfulProbeAt: null,
-      state: isOpenCodeAuthErrorMessage(message) ? "auth_unavailable" : "error",
+      state: authError ? "auth_unavailable" : "error",
       usedCachedStatus: false,
     });
   } finally {
