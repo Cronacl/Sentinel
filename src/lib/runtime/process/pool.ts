@@ -53,12 +53,15 @@ export interface ProcessPool<R extends PooledResource> {
 }
 
 type Entry<R> = {
+  /** dispose() has run (or is running): never lease it again. */
+  disposed: boolean;
   fingerprint: string;
   idleTimer: unknown;
   lastUsedAt: number;
   pins: number;
   ready: Promise<R>;
   resource: R | null;
+  /** Replaced or disposed: disposed once its last user releases it. */
   retired: boolean;
   users: number;
 };
@@ -78,6 +81,10 @@ const systemClock: PoolClock = {
   },
 };
 
+function disposedWhileStarting(key: string) {
+  return new Error(`Pooled resource "${key}" was disposed while starting.`);
+}
+
 export function createProcessPool<R extends PooledResource>(
   options: ProcessPoolOptions = {},
 ): ProcessPool<R> {
@@ -96,6 +103,10 @@ export function createProcessPool<R extends PooledResource>(
   async function disposeEntry(key: string, entry: Entry<R>) {
     clearIdleTimer(entry);
     entry.retired = true;
+    if (entry.disposed) {
+      return;
+    }
+    entry.disposed = true;
     if (entries.get(key) === entry) {
       entries.delete(key);
     }
@@ -183,12 +194,19 @@ export function createProcessPool<R extends PooledResource>(
         existing.users += 1;
         existing.lastUsedAt = clock.now();
         clearIdleTimer(existing);
+        let resource: R;
         try {
-          return lease(key, existing, await existing.ready);
+          resource = await existing.ready;
         } catch (error) {
           existing.users -= 1;
           throw error;
         }
+        if (existing.disposed) {
+          // Disposed while it was starting: never hand out a dead one.
+          existing.users -= 1;
+          throw disposedWhileStarting(key);
+        }
+        return lease(key, existing, resource);
       }
 
       if (existing) {
@@ -202,6 +220,7 @@ export function createProcessPool<R extends PooledResource>(
       }
 
       const entry: Entry<R> = {
+        disposed: false,
         fingerprint,
         idleTimer: null,
         lastUsedAt: clock.now(),
@@ -217,12 +236,12 @@ export function createProcessPool<R extends PooledResource>(
       try {
         const resource = await entry.ready;
         entry.resource = resource;
-        if (entry.retired) {
-          // Disposed (dispose/disposeAll) while it was starting.
-          await disposeEntry(key, entry);
-          throw new Error(
-            `Pooled resource "${key}" was disposed while starting.`,
-          );
+        if (entry.disposed) {
+          // Disposed (dispose/disposeAll) while it was starting; that
+          // disposal ends the resource. Replaced by a new fingerprint
+          // instead, it is still leased and ends on release.
+          entry.users -= 1;
+          throw disposedWhileStarting(key);
         }
         evictOverflow();
         return lease(key, entry, resource);

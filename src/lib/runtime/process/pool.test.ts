@@ -191,6 +191,85 @@ describe("createProcessPool", () => {
     expect(lease.resource.name).toBe("a");
   });
 
+  it("leases nothing disposed while starting and disposes it once", async () => {
+    const pool = createProcessPool<ReturnType<typeof createResource>>({
+      clock: createFakeClock(),
+    });
+    const resource = createResource("a");
+    let finishStart!: () => void;
+    const create = () =>
+      new Promise<typeof resource>((resolve) => {
+        finishStart = () => resolve(resource);
+      });
+
+    const first = pool.acquire("k", "fp", create);
+    const second = pool.acquire("k", "fp", create);
+    const disposed = pool.dispose("k");
+    finishStart();
+
+    const results = await Promise.allSettled([first, second]);
+    await disposed;
+
+    expect(results.map((result) => result.status)).toEqual([
+      "rejected",
+      "rejected",
+    ]);
+    expect(
+      results.map((result) =>
+        result.status === "rejected" ? String(result.reason) : "",
+      ),
+    ).toEqual([
+      'Error: Pooled resource "k" was disposed while starting.',
+      'Error: Pooled resource "k" was disposed while starting.',
+    ]);
+    expect(resource.dispose).toHaveBeenCalledTimes(1);
+    expect(pool.keys()).toEqual([]);
+  });
+
+  it("disposes a busy resource once, also when its lease is released later", async () => {
+    const pool = createProcessPool<ReturnType<typeof createResource>>({
+      clock: createFakeClock(),
+    });
+    const lease = await pool.acquire("k", "fp", async () =>
+      createResource("a"),
+    );
+
+    await pool.dispose("k");
+    lease.release();
+    await flush();
+
+    expect(lease.resource.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("still leases a starting resource that a new fingerprint replaced", async () => {
+    const pool = createProcessPool<ReturnType<typeof createResource>>({
+      clock: createFakeClock(),
+    });
+    const old = createResource("old");
+    let finishStart!: () => void;
+    const starting = pool.acquire(
+      "k",
+      "fp-1",
+      () =>
+        new Promise<typeof old>((resolve) => {
+          finishStart = () => resolve(old);
+        }),
+    );
+    const fresh = await pool.acquire("k", "fp-2", async () =>
+      createResource("new"),
+    );
+    finishStart();
+
+    const lease = await starting;
+    expect(lease.resource).toBe(old);
+    expect(old.dispose).not.toHaveBeenCalled();
+
+    lease.release();
+    await flush();
+    expect(old.dispose).toHaveBeenCalledTimes(1);
+    expect(pool.peek("k")).toBe(fresh.resource);
+  });
+
   it("disposes everything and reports dispose errors without rejecting", async () => {
     const errors: string[] = [];
     const pool = createProcessPool<{ dispose(): Promise<void> }>({
