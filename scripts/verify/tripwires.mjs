@@ -232,6 +232,21 @@ export const TRIPWIRES = [
     pattern: /\b(?:exec|execFile|spawn)\(\s*["']claude["']/,
     include: /^src\//,
   },
+  {
+    id: "P9-claude-preapproved-search-tools",
+    description:
+      "Claude SDK base options must not name Grep/Glob: allowedTools pre-approves them, skipping canUseTool for searches outside the workspace",
+    pattern: /["'](?:Grep|Glob)["']/,
+    include: /^src\/lib\/ai\/chat\/engines\/claude-sdk\//,
+  },
+  {
+    id: "P9-claude-commit-skip-permissions",
+    description:
+      'Commit-message generation runs Claude Code with no tools (--tools "", dontAsk), never --dangerously-skip-permissions',
+    pattern: /--dangerously-skip-permissions/,
+    include: /^src\/lib\/git\//,
+    exclude: /\.test\.[cm]?[jt]sx?$/,
+  },
 ];
 
 const DEFAULT_EXCLUDE =

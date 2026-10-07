@@ -82,6 +82,9 @@ describe("generateClaudeCommitMessage with the resolved Claude CLI", () => {
         "medium",
       ]),
     );
+    // The empty --tools value survives the launcher as its own argument.
+    expect(recorded.args[recorded.args.indexOf("--tools") + 1]).toBe("");
+    expect(recorded.args).not.toContain("--dangerously-skip-permissions");
     expect(recorded.clientApp).toBe("sentinel");
     expect(recorded.path).toBe("/managed/bin");
     expect(result.subject).toBe("Use the resolved Claude CLI");

@@ -142,6 +142,20 @@ const CLAUDE_TIMEOUT_MS = 180_000;
 const COPILOT_TIMEOUT_MS = 180_000;
 const CODEX_DEFAULT_REASONING_EFFORT = "low";
 
+// `--tools ""` removes every built-in tool (the --json-schema
+// StructuredOutput tool stays), `--strict-mcp-config` without --mcp-config
+// loads no MCP servers, and `dontAsk` denies instead of prompting.
+const CLAUDE_COMMIT_MESSAGE_LOCKDOWN_ARGS = [
+  "--settings",
+  JSON.stringify({ disableAllHooks: true }),
+  "--tools",
+  "",
+  "--disable-slash-commands",
+  "--strict-mcp-config",
+  "--permission-mode",
+  "dontAsk",
+];
+
 const COMMIT_MESSAGE_OUTPUT_SCHEMA = z.object({
   body: z.string(),
   subject: z.string(),
@@ -577,7 +591,11 @@ export async function generateClaudeCommitMessage(
       "--model",
       input.modelId,
       ...(mappedEffort ? ["--effort", mappedEffort] : []),
-      "--dangerously-skip-permissions",
+      // The prompt carries the repository diff, which is untrusted text, so
+      // the one-shot runs with no tools, MCP servers, skills or hooks, and
+      // denies anything that would need approval; the structured output
+      // needs none of them. Flags follow t3code's ClaudeTextGeneration (MIT).
+      ...CLAUDE_COMMIT_MESSAGE_LOCKDOWN_ARGS,
     ],
     cwd: input.context.repoRoot,
     env: {

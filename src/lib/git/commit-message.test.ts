@@ -202,6 +202,18 @@ describe("generateClaudeCommitMessage", () => {
     expect(receivedArgs).toContain("--json-schema");
     expect(receivedArgs).toContain("--effort");
     expect(receivedArgs).toContain("high");
+    // The diff in the prompt is untrusted: no tools, MCP servers, skills or
+    // hooks, and nothing approved without asking.
+    expect(receivedArgs).not.toContain("--dangerously-skip-permissions");
+    expect(receivedArgs[receivedArgs.indexOf("--tools") + 1]).toBe("");
+    expect(receivedArgs[receivedArgs.indexOf("--permission-mode") + 1]).toBe(
+      "dontAsk",
+    );
+    expect(receivedArgs).toContain("--strict-mcp-config");
+    expect(receivedArgs).toContain("--disable-slash-commands");
+    expect(
+      JSON.parse(receivedArgs[receivedArgs.indexOf("--settings") + 1]!),
+    ).toEqual({ disableAllHooks: true });
     expect(receivedEnv?.CLAUDE_AGENT_SDK_CLIENT_APP).toBe("sentinel");
     expect(fakeProcess.getInput()).toContain("Branch: feature/claude-commit");
     expect(result).toEqual({
