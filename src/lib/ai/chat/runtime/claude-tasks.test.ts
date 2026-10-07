@@ -158,62 +158,157 @@ describe("Claude Task tool accumulation", () => {
     expect(tasks.size).toBe(0);
   });
 
-  it("stores the list beside the tool's own output", () => {
+  it("stores the list and its session beside the tool's own output", () => {
     const tasks = [{ id: "1", status: "pending" as const, subject: "A" }];
 
     expect(
       buildClaudeTaskToolOutput({
         output: { task: { id: "1", subject: "A" } },
+        sessionId: "session-1",
         tasks,
       }),
-    ).toEqual({ task: { id: "1", subject: "A" }, tasks });
-    expect(
-      buildClaudeTaskToolOutput({ output: "Task #1 created", tasks }),
     ).toEqual({
+      claudeSessionId: "session-1",
+      task: { id: "1", subject: "A" },
+      tasks,
+    });
+    expect(
+      buildClaudeTaskToolOutput({
+        output: "Task #1 created",
+        sessionId: "session-1",
+        tasks,
+      }),
+    ).toEqual({
+      claudeSessionId: "session-1",
       stdout: "Task #1 created",
       tasks,
     });
   });
 
-  it("seeds from the latest stored list and replays calls persisted without one", () => {
-    const tasks = seedClaudeTasksFromMessages([
-      {
-        id: "assistant-1",
-        metadata: {},
-        parts: [
-          {
-            input: { subject: "Old" },
-            output: {
-              tasks: [{ id: "1", status: "pending", subject: "Old" }],
+  it("seeds from the session's latest stored list and replays calls persisted without one", () => {
+    const tasks = seedClaudeTasksFromMessages(
+      [
+        {
+          id: "assistant-1",
+          metadata: {},
+          parts: [
+            {
+              input: { subject: "Old" },
+              output: {
+                claudeSessionId: "session-1",
+                tasks: [{ id: "1", status: "pending", subject: "Old" }],
+              },
+              state: "output-available",
+              toolCallId: "tool-1",
+              toolName: "claude_taskcreate",
+              type: "dynamic-tool",
             },
-            state: "output-available",
-            toolCallId: "tool-1",
-            toolName: "claude_taskcreate",
-            type: "dynamic-tool",
-          },
-          {
-            input: { status: "completed", taskId: "1" },
-            output: { stdout: "Updated task #1 status" },
-            state: "output-available",
-            toolCallId: "tool-2",
-            toolName: "claude_taskupdate",
-            type: "dynamic-tool",
-          },
-          {
-            input: { subject: "Ignored" },
-            state: "output-error",
-            errorText: "failed",
-            toolCallId: "tool-3",
-            toolName: "claude_taskcreate",
-            type: "dynamic-tool",
-          },
-        ],
-        role: "assistant",
-      },
-    ] as any);
+            {
+              input: { status: "completed", taskId: "1" },
+              output: { stdout: "Updated task #1 status" },
+              state: "output-available",
+              toolCallId: "tool-2",
+              toolName: "claude_taskupdate",
+              type: "dynamic-tool",
+            },
+            {
+              input: { subject: "Ignored" },
+              state: "output-error",
+              errorText: "failed",
+              toolCallId: "tool-3",
+              toolName: "claude_taskcreate",
+              type: "dynamic-tool",
+            },
+          ],
+          role: "assistant",
+        },
+      ] as any,
+      "session-1",
+    );
 
     expect(listClaudeTasks(tasks)).toEqual([
       { id: "1", status: "completed", subject: "Old" },
     ]);
+  });
+
+  it("ignores lists stored by an earlier Claude session of the thread", () => {
+    const taskPart = (input: {
+      output: unknown;
+      taskInput: Record<string, unknown>;
+      toolCallId: string;
+      toolName: string;
+    }) => ({
+      input: input.taskInput,
+      output: input.output,
+      state: "output-available",
+      toolCallId: input.toolCallId,
+      toolName: input.toolName,
+      type: "dynamic-tool",
+    });
+    const messages = [
+      {
+        id: "assistant-1",
+        metadata: {},
+        parts: [
+          // Session 1 (before a thread mode change) built tasks 1-3.
+          taskPart({
+            output: {
+              claudeSessionId: "session-1",
+              tasks: [
+                { id: "1", status: "completed", subject: "Old 1" },
+                { id: "2", status: "pending", subject: "Old 2" },
+                { id: "3", status: "pending", subject: "Old 3" },
+              ],
+            },
+            taskInput: { subject: "Old 3" },
+            toolCallId: "tool-1",
+            toolName: "claude_taskcreate",
+          }),
+        ],
+        role: "assistant",
+      },
+      {
+        id: "assistant-2",
+        metadata: {},
+        parts: [
+          // Session 2's first turn: a call cut off before its result, which
+          // cannot be attributed to a session.
+          taskPart({
+            output: undefined,
+            taskInput: { status: "completed", taskId: "2" },
+            toolCallId: "tool-2",
+            toolName: "claude_taskupdate",
+          }),
+        ],
+        role: "assistant",
+      },
+    ] as any;
+
+    expect(
+      listClaudeTasks(seedClaudeTasksFromMessages(messages, "session-2")),
+    ).toEqual([]);
+
+    // Once session 2 stores its own list, that list is the seed.
+    messages.push({
+      id: "assistant-3",
+      metadata: {},
+      parts: [
+        taskPart({
+          output: {
+            claudeSessionId: "session-2",
+            task: { id: "1", subject: "New 1" },
+            tasks: [{ id: "1", status: "pending", subject: "New 1" }],
+          },
+          taskInput: { subject: "New 1" },
+          toolCallId: "tool-3",
+          toolName: "claude_taskcreate",
+        }),
+      ],
+      role: "assistant",
+    });
+
+    expect(
+      listClaudeTasks(seedClaudeTasksFromMessages(messages, "session-2")),
+    ).toEqual([{ id: "1", status: "pending", subject: "New 1" }]);
   });
 });

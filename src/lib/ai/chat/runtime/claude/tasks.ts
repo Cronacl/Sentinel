@@ -218,16 +218,20 @@ export function listClaudeTasks(tasks: Map<string, ClaudeTaskSnapshot>) {
   return [...tasks.values()].map((task) => ({ ...task }));
 }
 
-/** The output Sentinel stores on a completed Task* tool part. */
+/**
+ * The output Sentinel stores on a completed Task* tool part: the list as it
+ * stands after the call, tagged with the Claude session that owns its ids.
+ */
 export function buildClaudeTaskToolOutput(input: {
   output: unknown;
+  sessionId: string;
   tasks: ClaudeTaskSnapshot[];
 }) {
   const base = isRecord(input.output)
     ? input.output
     : { stdout: readOutputText(input.output) ?? "" };
 
-  return { ...base, tasks: input.tasks };
+  return { ...base, claudeSessionId: input.sessionId, tasks: input.tasks };
 }
 
 function readTaskSnapshot(output: unknown) {
@@ -241,12 +245,24 @@ function readTaskSnapshot(output: unknown) {
   });
 }
 
+function readTaskSessionId(output: unknown) {
+  return isRecord(output) ? readString(output.claudeSessionId) : undefined;
+}
+
 /**
- * Rebuilds the accumulated tasks from a resumed session's transcript: the
- * latest stored list wins, and calls persisted without one are replayed.
+ * Rebuilds the accumulated tasks of the Claude session being resumed from the
+ * thread transcript. Task ids restart at 1 in every session and a thread
+ * starts a new session when its mode changes, so only lists stored for
+ * `sessionId` count; the latest wins. Calls stored without a list (e.g. still
+ * running when a run ended) are replayed only after that session's own list,
+ * since before it they could belong to an earlier session.
  */
-export function seedClaudeTasksFromMessages(messages: ThreadUIMessage[]) {
+export function seedClaudeTasksFromMessages(
+  messages: ThreadUIMessage[],
+  sessionId: string,
+) {
   const tasks = new Map<string, ClaudeTaskSnapshot>();
+  let seenSessionList = false;
 
   for (const message of messages) {
     for (const part of message.parts) {
@@ -258,12 +274,22 @@ export function seedClaudeTasksFromMessages(messages: ThreadUIMessage[]) {
         continue;
       }
 
-      const snapshot = readTaskSnapshot(part.output);
+      const partSessionId = readTaskSessionId(part.output);
+      if (partSessionId !== undefined && partSessionId !== sessionId) {
+        continue;
+      }
+
+      const snapshot = partSessionId ? readTaskSnapshot(part.output) : null;
       if (snapshot) {
         tasks.clear();
         for (const task of snapshot) {
           tasks.set(task.id, task);
         }
+        seenSessionList = true;
+        continue;
+      }
+
+      if (!seenSessionList) {
         continue;
       }
 

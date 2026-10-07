@@ -1248,6 +1248,7 @@ describe("runClaudeThreadChat approvals", () => {
     expect(createPart).toEqual(
       expect.objectContaining({
         output: {
+          claudeSessionId: capturedClaudeQueryInput?.options?.sessionId,
           task: { id: "1", subject: "Run tests" },
           tasks: [{ ...runTests, status: "pending", subject: "Run tests" }],
         },
@@ -1277,6 +1278,7 @@ describe("runClaudeThreadChat approvals", () => {
           {
             input: { subject: "Write docs" },
             output: {
+              claudeSessionId: "session-1",
               task: { id: "7", subject: "Write docs" },
               tasks: [{ id: "7", status: "pending", subject: "Write docs" }],
             },
@@ -1356,5 +1358,106 @@ describe("runClaudeThreadChat approvals", () => {
     expect((updatePart?.output as { tasks?: unknown })?.tasks).toEqual([
       { id: "7", status: "completed", subject: "Write docs" },
     ]);
+  });
+
+  it("does not continue a task list stored by an earlier Claude session", async () => {
+    // Session 1 built tasks 1 and 2; a thread mode change then started
+    // session 2, which numbers its own tasks from 1 again.
+    loadThreadMessages.mockResolvedValueOnce([
+      {
+        createdAt: new Date(1),
+        id: "db-assistant-1",
+        messageId: "assistant-1",
+        metadata: {},
+        parts: [
+          {
+            input: { subject: "Old 2" },
+            output: {
+              claudeSessionId: "session-1",
+              task: { id: "2", subject: "Old 2" },
+              tasks: [
+                { id: "1", status: "pending", subject: "Old 1" },
+                { id: "2", status: "pending", subject: "Old 2" },
+              ],
+            },
+            state: "output-available",
+            toolCallId: "tool-old",
+            toolName: "claude_taskcreate",
+            type: "dynamic-tool",
+          },
+        ],
+        role: "assistant",
+        updatedAt: new Date(1),
+      },
+    ]);
+    queryMessages = [
+      {
+        message: {
+          content: [
+            {
+              id: "tool-create",
+              input: { subject: "New 1" },
+              name: "TaskCreate",
+              type: "tool_use",
+            },
+          ],
+        },
+        parent_tool_use_id: null,
+        session_id: "session-2",
+        type: "assistant",
+        uuid: "assistant-2",
+      },
+      {
+        message: {
+          content: [
+            {
+              content: "Task #1 created successfully: New 1",
+              tool_use_id: "tool-create",
+              type: "tool_result",
+            },
+          ],
+          role: "user",
+        },
+        parent_tool_use_id: null,
+        session_id: "session-2",
+        tool_use_result: { task: { id: "1", subject: "New 1" } },
+        type: "user",
+      },
+      createSuccessResult(),
+    ];
+
+    await runClaudeThreadChat(
+      {
+        message: createUserMessage("Keep going"),
+        threadId: "thread-new-session-tasks",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      {
+        chatEngineState: {
+          claude: {
+            cwd: "/tmp/workspace",
+            modelId: null,
+            permissionMode: "default",
+            sessionId: "session-2",
+          },
+        },
+        mode: "chat",
+        status: "idle",
+      } as any,
+    );
+    await flushClaudeRun();
+
+    expect(capturedClaudeQueryInput?.options?.resume).toBe("session-2");
+    const createPart = (getLatestMirroredAssistant()?.parts ?? []).find(
+      (part) => part.toolCallId === "tool-create",
+    );
+    expect(createPart?.output).toEqual(
+      expect.objectContaining({
+        claudeSessionId: "session-2",
+        tasks: [{ id: "1", status: "pending", subject: "New 1" }],
+      }),
+    );
   });
 });

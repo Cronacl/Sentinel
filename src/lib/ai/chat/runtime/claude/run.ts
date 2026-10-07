@@ -1245,6 +1245,7 @@ function updateClaudeMirrorFromToolResult(
       });
       output = buildClaudeTaskToolOutput({
         output: taskOutput,
+        sessionId: state.sessionId,
         tasks: listClaudeTasks(state.tasks),
       });
     }
@@ -1729,9 +1730,9 @@ export async function runClaudeThreadChat(
     responseModelId: requestedModelId,
     sessionId,
     // Task ids belong to the Claude session, so only a resumed session
-    // continues the thread's task list.
+    // continues a task list, and only the one stored for that session.
     tasks: shouldResumeExistingSession
-      ? seedClaudeTasksFromMessages(transcript)
+      ? seedClaudeTasksFromMessages(transcript, sessionId)
       : undefined,
     threadId: request.threadId,
   });
