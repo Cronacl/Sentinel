@@ -5,10 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { createLogger } from "@/lib/logger";
-import {
-  applyPrivateFsMode,
-  getSentinelStateRoot,
-} from "@/lib/runtime/local-state";
+import { applyPrivateFsMode } from "@/lib/runtime/local-state";
 import { withTimeout } from "@/lib/runtime/process/with-timeout";
 import type {
   CodexApprovalPolicy,
@@ -19,8 +16,16 @@ import {
   readCodexCliVersion,
   resolveCodexCli,
   spawnCodexCli,
+  type CodexCliInstance,
   type ResolvedCodexCli,
 } from "../codex-cli";
+import { getInstanceResources } from "../platform/instance-resources";
+import { getLegacyEngineStatusFilePath } from "../platform/paths";
+import {
+  getConfiguredBinaryOverride,
+  getInstanceProcessEnv,
+  getInstanceRuntimeKey,
+} from "../platform/runtime/resolve-binary";
 import {
   buildCodexApprovalResult,
   buildCodexInitializeParams,
@@ -167,17 +172,17 @@ function toCodexModelInfo(model: CodexWireModel): CodexModelInfo {
   };
 }
 
-function getLocalStateDirectory() {
-  return getSentinelStateRoot();
+function getCodexStatusSnapshotPath(
+  instance: CodexCliInstance | null | undefined,
+) {
+  return getLegacyEngineStatusFilePath(CODEX_STATUS_SNAPSHOT_FILE, instance);
 }
 
-function getCodexStatusSnapshotPath() {
-  return path.join(getLocalStateDirectory(), CODEX_STATUS_SNAPSHOT_FILE);
-}
-
-async function writeCodexStatusSnapshot(snapshot: CodexStatusSnapshot) {
-  const snapshotPath = getCodexStatusSnapshotPath();
-  const localStateDirectory = getLocalStateDirectory();
+async function writeCodexStatusSnapshot(
+  snapshotPath: string,
+  snapshot: CodexStatusSnapshot,
+) {
+  const localStateDirectory = path.dirname(snapshotPath);
 
   await mkdir(localStateDirectory, {
     mode: LOCAL_STATE_DIRECTORY_MODE,
@@ -191,9 +196,12 @@ async function writeCodexStatusSnapshot(snapshot: CodexStatusSnapshot) {
   await applyPrivateFsMode(snapshotPath, LOCAL_STATE_FILE_MODE);
 }
 
-async function readCodexStatusSnapshot(options: { cliPath: string }) {
+async function readCodexStatusSnapshot(
+  snapshotPath: string,
+  options: { cliPath: string },
+) {
   try {
-    const rawSnapshot = await readFile(getCodexStatusSnapshotPath(), "utf8");
+    const rawSnapshot = await readFile(snapshotPath, "utf8");
     const parsed = JSON.parse(rawSnapshot) as Partial<CodexStatusSnapshot>;
 
     if (
@@ -670,13 +678,24 @@ function toCodexError(message: string, error?: unknown) {
   return new Error(message);
 }
 
-let cachedStatus: {
-  expiresAt: number;
-  promise: Promise<CodexEngineStatus>;
-} | null = null;
+export type CodexAppServerManagerOptions = {
+  /** The engine instance this app-server runs for (default: the default). */
+  instance?: CodexCliInstance | null;
+};
 
 export class CodexAppServerManager {
   private backgroundStatusRefresh: Promise<void> | null = null;
+
+  private cachedStatus: {
+    expiresAt: number;
+    promise: Promise<CodexEngineStatus>;
+  } | null = null;
+
+  private readonly instance: CodexCliInstance | null;
+
+  constructor(options: CodexAppServerManagerOptions = {}) {
+    this.instance = options.instance ?? null;
+  }
 
   private buffer = "";
 
@@ -967,8 +986,18 @@ export class CodexAppServerManager {
     }
   }
 
+  /** Forgets the cached status; the next getStatus() probes again. */
+  resetStatusCache() {
+    this.cachedStatus = null;
+  }
+
+  /** Ends the app-server process; the manager restarts it on next use. */
+  async dispose() {
+    await this.reloadRuntime();
+  }
+
   private cacheStatus(status: CodexEngineStatus) {
-    cachedStatus = {
+    this.cachedStatus = {
       expiresAt: Date.now() + CODEX_STATUS_CACHE_TTL_MS,
       promise: Promise.resolve(status),
     };
@@ -1047,14 +1076,17 @@ export class CodexAppServerManager {
       }
 
       const recordedAt = new Date().toISOString();
-      await writeCodexStatusSnapshot({
-        account: statusPayload.account,
-        availableModels: statusPayload.availableModels,
-        cliPath: input.resolvedCli.command,
-        cliVersion: input.cliVersion,
-        recordedAt,
-        requiresOpenaiAuth: statusPayload.requiresOpenaiAuth,
-      });
+      await writeCodexStatusSnapshot(
+        getCodexStatusSnapshotPath(this.instance),
+        {
+          account: statusPayload.account,
+          availableModels: statusPayload.availableModels,
+          cliPath: input.resolvedCli.command,
+          cliVersion: input.cliVersion,
+          recordedAt,
+          requiresOpenaiAuth: statusPayload.requiresOpenaiAuth,
+        },
+      );
 
       return buildCodexEngineStatus({
         account: statusPayload.account,
@@ -1132,14 +1164,27 @@ export class CodexAppServerManager {
     const forceRefresh = options?.forceRefresh ?? false;
     const now = Date.now();
 
-    if (!forceRefresh && cachedStatus && cachedStatus.expiresAt > now) {
-      return await cachedStatus.promise;
+    if (
+      !forceRefresh &&
+      this.cachedStatus &&
+      this.cachedStatus.expiresAt > now
+    ) {
+      return await this.cachedStatus.promise;
     }
 
+    const snapshotPath = getCodexStatusSnapshotPath(this.instance);
     const pending = (async () => {
-      const resolvedCli = await resolveCodexCli({ forceRefresh });
+      const resolvedCli = await resolveCodexCli({
+        forceRefresh,
+        instance: this.instance,
+      });
       if (!resolvedCli) {
-        const retainedPath = process.env.SENTINEL_CODEX_PATH?.trim() || null;
+        const retainedPath =
+          getConfiguredBinaryOverride(
+            this.instance,
+            getInstanceProcessEnv(this.instance),
+            ["SENTINEL_CODEX_PATH"],
+          )?.path ?? null;
         return buildCodexEngineStatus({
           account: null,
           authReady: false,
@@ -1161,7 +1206,7 @@ export class CodexAppServerManager {
 
       const cliVersion = await readCodexCliVersion(resolvedCli);
 
-      const snapshot = await readCodexStatusSnapshot({
+      const snapshot = await readCodexStatusSnapshot(snapshotPath, {
         cliPath: resolvedCli.command,
       });
 
@@ -1186,7 +1231,7 @@ export class CodexAppServerManager {
       });
     })();
 
-    cachedStatus = {
+    this.cachedStatus = {
       expiresAt: now + CODEX_STATUS_CACHE_TTL_MS,
       promise: pending,
     };
@@ -1408,7 +1453,9 @@ export class CodexAppServerManager {
   }
 
   private async startProcess() {
-    const child = await spawnCodexCli(["app-server"]);
+    const child = await spawnCodexCli(["app-server"], {
+      instance: this.instance,
+    });
     this.child = child;
     this.buffer = "";
     this.initialized = false;
@@ -1470,7 +1517,7 @@ export class CodexAppServerManager {
   }
 
   private resetProcess(error: Error) {
-    cachedStatus = null;
+    this.cachedStatus = null;
 
     if (this.child) {
       this.child.removeAllListeners();
@@ -1675,16 +1722,31 @@ export class CodexAppServerManager {
   }
 }
 
-let codexAppServerManager: CodexAppServerManager | null = null;
+const codexAppServerManagers = getInstanceResources<CodexAppServerManager>(
+  "codex-app-server",
+  {
+    dispose: (manager) => manager.dispose(),
+    onDisposeError: (error, instanceId) =>
+      log.warn("dispose_failed", { error, instanceId }),
+  },
+);
 
 export function resetCodexEngineStatusCache() {
-  cachedStatus = null;
+  for (const manager of codexAppServerManagers.values()) {
+    manager.resetStatusCache();
+  }
 }
 
-export function getCodexAppServerManager() {
-  if (!codexAppServerManager) {
-    codexAppServerManager = new CodexAppServerManager();
-  }
-
-  return codexAppServerManager;
+/**
+ * The app-server manager for an instance: one process per instance, keyed
+ * by its runtime configuration (binary, CODEX_HOME, env), so instances with
+ * different homes never share a process and a configuration change starts a
+ * fresh one. Without an instance, the default instance's manager.
+ */
+export function getCodexAppServerManager(instance?: CodexCliInstance | null) {
+  return codexAppServerManagers.get(
+    instance?.id ?? "codex",
+    getInstanceRuntimeKey(instance),
+    () => new CodexAppServerManager({ instance }),
+  );
 }

@@ -42,12 +42,16 @@ const readLocalRuntimeEnvValueMock = mock(
 const constructedClientOptions: unknown[] = [];
 const clientStart = mock(async () => {});
 
+const clientStop = mock(async (): Promise<Error[]> => []);
+
 class MockCopilotClient {
   constructor(options: unknown) {
     constructedClientOptions.push(options);
   }
 
+  forceStop = mock(async () => {});
   start = clientStart;
+  stop = clientStop;
 }
 
 mock.module("server-only", () => ({}));
@@ -582,6 +586,52 @@ describe("getCopilotClientManager", () => {
     const rebuilt = await manager.getClient();
     expect(rebuilt).not.toBe(first);
     expect(constructedClientOptions).toHaveLength(2);
+  });
+});
+
+describe("per-instance Copilot clients", () => {
+  it("gives an instance its own client, home and runtime, and stops replaced ones", async () => {
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "copilot-sdk-instance-client-"),
+    );
+    tempRoots.push(tempRoot);
+    const binaryPath = await writeLaunchableCopilotScript(
+      tempRoot,
+      process.platform === "win32" ? "copilot.cmd" : "copilot",
+    );
+    const work = {
+      config: { binaryPath },
+      envOverrides: { COPILOT_HOME: path.join(tempRoot, "home-work") },
+      envUnset: [],
+      id: "copilot-work",
+      isDefault: false,
+    };
+
+    const manager = getCopilotClientManager(work);
+    expect(getCopilotClientManager(work)).toBe(manager);
+    expect(manager).not.toBe(getCopilotClientManager());
+
+    await manager.getClient();
+    expect(constructedClientOptions.at(-1)).toEqual(
+      expect.objectContaining({
+        baseDirectory: path.join(tempRoot, "home-work"),
+        connection: expect.objectContaining({
+          env: expect.objectContaining({
+            COPILOT_HOME: path.join(tempRoot, "home-work"),
+          }),
+          path: binaryPath,
+        }),
+      }),
+    );
+
+    clientStop.mockClear();
+    const moved = {
+      ...work,
+      envOverrides: { COPILOT_HOME: path.join(tempRoot, "home-moved") },
+    };
+    expect(getCopilotClientManager(moved)).not.toBe(manager);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(clientStop).toHaveBeenCalledTimes(1);
   });
 });
 

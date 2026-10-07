@@ -47,3 +47,22 @@ export function getRuntimePathsFilePath(options: EnginePathOptions = {}) {
     "runtime-paths.json",
   );
 }
+
+/**
+ * Where a legacy engine keeps its last-known-good status for an instance:
+ * <state root>/<file> for the default instance (where it always was), else
+ * <state root>/engines/<instanceId>/<file>.
+ */
+export function getLegacyEngineStatusFilePath(
+  fileName: string,
+  instance: { id: string; isDefault: boolean } | null | undefined,
+  options: EnginePathOptions = {},
+) {
+  const pathModule = options.pathModule ?? path;
+  return !instance || instance.isDefault
+    ? pathModule.join(options.stateRoot ?? getSentinelStateRoot(), fileName)
+    : pathModule.join(
+        getEngineInstanceStateDirectory(instance.id, options),
+        fileName,
+      );
+}

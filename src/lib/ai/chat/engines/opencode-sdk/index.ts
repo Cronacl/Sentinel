@@ -18,6 +18,7 @@ import {
 } from "@opencode-ai/sdk/v2";
 
 import type { EngineInstallSource } from "@/lib/ai/chat/engines/contract";
+import { getLegacyEngineStatusFilePath } from "@/lib/ai/chat/engines/platform/paths";
 import {
   getLoginShellCandidates,
   getLoginShellMarkers,
@@ -27,15 +28,13 @@ import {
   findExecutableInPath,
   getConfiguredBinaryOverride,
   getInstanceProcessEnv,
+  getInstanceRuntimeKey,
   recordResolvedBinary,
   type EngineBinaryInstance,
 } from "@/lib/ai/chat/engines/platform/runtime/resolve-binary";
 import { probeBinaryVersion } from "@/lib/ai/chat/engines/platform/runtime/version-probe";
 import type { OpenCodeThreadState } from "@/lib/ai/chat/engines/types";
-import {
-  applyPrivateFsMode,
-  getSentinelStateRoot,
-} from "@/lib/runtime/local-state";
+import { applyPrivateFsMode } from "@/lib/runtime/local-state";
 import {
   buildManagedExecutablePathValue,
   buildPreferredExecutablePathValue,
@@ -214,17 +213,16 @@ const cachedRuntimes = new Map<
   { expiresAt: number; promise: Promise<ResolvedOpenCodeRuntime> }
 >();
 
-let cachedStatus: {
-  expiresAt: number;
-  promise: Promise<OpenCodeEngineStatus>;
-} | null = null;
+// One cached status per instance (and per configuration of it).
+const cachedStatuses = new Map<
+  string,
+  { expiresAt: number; promise: Promise<OpenCodeEngineStatus> }
+>();
 
-function getLocalStateDirectory() {
-  return getSentinelStateRoot();
-}
-
-function getOpenCodeStatusSnapshotPath() {
-  return path.join(getLocalStateDirectory(), OPENCODE_STATUS_SNAPSHOT_FILE);
+function getOpenCodeStatusSnapshotPath(
+  instance: OpenCodeRuntimeInstance | null | undefined,
+) {
+  return getLegacyEngineStatusFilePath(OPENCODE_STATUS_SNAPSHOT_FILE, instance);
 }
 
 const OPENCODE_NAME_OPTIONS = { strategy: "pathext-or-bare" } as const;
@@ -333,9 +331,11 @@ export function isOpenCodeCompatibilityUsable(
   return advisory?.status !== "broken" && advisory?.status !== "unsupported";
 }
 
-async function writeOpenCodeStatusSnapshot(snapshot: OpenCodeStatusSnapshot) {
-  const snapshotPath = getOpenCodeStatusSnapshotPath();
-  const localStateDirectory = getLocalStateDirectory();
+async function writeOpenCodeStatusSnapshot(
+  snapshotPath: string,
+  snapshot: OpenCodeStatusSnapshot,
+) {
+  const localStateDirectory = path.dirname(snapshotPath);
 
   await mkdir(localStateDirectory, {
     mode: LOCAL_STATE_DIRECTORY_MODE,
@@ -349,9 +349,12 @@ async function writeOpenCodeStatusSnapshot(snapshot: OpenCodeStatusSnapshot) {
   await applyPrivateFsMode(snapshotPath, LOCAL_STATE_FILE_MODE);
 }
 
-async function readOpenCodeStatusSnapshot(options: { cliPath: string }) {
+async function readOpenCodeStatusSnapshot(
+  snapshotPath: string,
+  options: { cliPath: string },
+) {
   try {
-    const rawSnapshot = await readFile(getOpenCodeStatusSnapshotPath(), "utf8");
+    const rawSnapshot = await readFile(snapshotPath, "utf8");
     const parsed = JSON.parse(rawSnapshot) as Partial<OpenCodeStatusSnapshot>;
 
     if (
@@ -573,7 +576,7 @@ export function resetOpenCodeRuntimeCache() {
 }
 
 export function resetOpenCodeEngineStatusCache() {
-  cachedStatus = null;
+  cachedStatuses.clear();
 }
 
 export function isOpenCodeEngineAvailable(status: OpenCodeEngineStatus) {
@@ -597,20 +600,6 @@ export function buildOpenCodeThreadState(input: {
 }
 
 export type OpenCodeRuntimeInstance = EngineBinaryInstance;
-
-function getRuntimeCacheKey(
-  instance: OpenCodeRuntimeInstance | null | undefined,
-) {
-  if (!instance) {
-    return "default";
-  }
-
-  return `${instance.id}:${JSON.stringify([
-    instance.config.binaryPath ?? null,
-    instance.envOverrides,
-    instance.envUnset,
-  ])}`;
-}
 
 /**
  * Resolution order: the instance's binaryPath, else (default instance)
@@ -717,7 +706,7 @@ export async function resolveOpenCodeRuntime(options?: {
   forceRefresh?: boolean;
   instance?: OpenCodeRuntimeInstance | null;
 }): Promise<ResolvedOpenCodeRuntime> {
-  const key = getRuntimeCacheKey(options?.instance);
+  const key = getInstanceRuntimeKey(options?.instance);
   const cached = cachedRuntimes.get(key);
   if (!options?.forceRefresh && cached && cached.expiresAt > Date.now()) {
     return cached.promise;
@@ -1019,6 +1008,7 @@ function buildIncompatibleOpenCodeStatus(input: {
 
 async function probeOpenCodeEngineStatus(
   runtime: ResolvedOpenCodeRuntime & { cliPath: string },
+  snapshotPath: string,
 ) {
   let server: OpenCodeServerProcess | null = null;
   let cliVersion = runtime.cliVersion;
@@ -1051,7 +1041,7 @@ async function probeOpenCodeEngineStatus(
     const models = flattenOpenCodeModels(inventory);
     const recordedAt = new Date().toISOString();
 
-    await writeOpenCodeStatusSnapshot({
+    await writeOpenCodeStatusSnapshot(snapshotPath, {
       availableModels: models,
       cliPath: runtime.cliPath,
       cliVersion,
@@ -1092,15 +1082,15 @@ async function probeOpenCodeEngineStatus(
 
 export async function getOpenCodeEngineStatus(options?: {
   forceRefresh?: boolean;
+  instance?: OpenCodeRuntimeInstance | null;
 }): Promise<OpenCodeEngineStatus> {
-  if (
-    !options?.forceRefresh &&
-    cachedStatus &&
-    cachedStatus.expiresAt > Date.now()
-  ) {
-    return cachedStatus.promise;
+  const key = getInstanceRuntimeKey(options?.instance);
+  const cached = cachedStatuses.get(key);
+  if (!options?.forceRefresh && cached && cached.expiresAt > Date.now()) {
+    return cached.promise;
   }
 
+  const snapshotPath = getOpenCodeStatusSnapshotPath(options?.instance);
   const promise = (async () => {
     const runtime = await resolveOpenCodeRuntime(options);
     if (!runtime.cliDetected || !runtime.cliPath) {
@@ -1132,12 +1122,15 @@ export async function getOpenCodeEngineStatus(options?: {
     }
 
     const status = await withTimeout(
-      probeOpenCodeEngineStatus({ ...runtime, cliPath: runtime.cliPath }),
+      probeOpenCodeEngineStatus(
+        { ...runtime, cliPath: runtime.cliPath },
+        snapshotPath,
+      ),
       OPENCODE_STATUS_QUERY_TIMEOUT_MS,
     );
     if (status) return status;
 
-    const snapshot = await readOpenCodeStatusSnapshot({
+    const snapshot = await readOpenCodeStatusSnapshot(snapshotPath, {
       cliPath: runtime.cliPath,
     });
     if (snapshot) {
@@ -1158,10 +1151,10 @@ export async function getOpenCodeEngineStatus(options?: {
     });
   })();
 
-  cachedStatus = {
+  cachedStatuses.set(key, {
     expiresAt: Date.now() + OPENCODE_STATUS_CACHE_TTL_MS,
     promise,
-  };
+  });
 
   return promise;
 }

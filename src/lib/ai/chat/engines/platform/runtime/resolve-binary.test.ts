@@ -25,6 +25,7 @@ const {
   getConfiguredBinaryOverride,
   getExecutableNames,
   getInstanceProcessEnv,
+  getInstanceRuntimeKey,
   isPersistableBinaryPath,
   readEnvOverride,
   recordResolvedBinary,
@@ -409,5 +410,40 @@ describe("recordResolvedBinary", () => {
         },
       ),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("getInstanceRuntimeKey", () => {
+  const base = {
+    config: {},
+    envOverrides: {},
+    envUnset: [] as string[],
+    id: "codex",
+    isDefault: true,
+  };
+
+  it("shares the default key between no instance and a plain default instance", () => {
+    expect(getInstanceRuntimeKey(null)).toBe("default");
+    expect(getInstanceRuntimeKey(base)).toBe("default");
+  });
+
+  it("keys customized and non-default instances by id and configuration", () => {
+    const work = { ...base, id: "codex-work", isDefault: false };
+    const key = getInstanceRuntimeKey(work);
+
+    expect(key).toStartWith("codex-work:");
+    expect(getInstanceRuntimeKey({ ...work })).toBe(key);
+    expect(
+      getInstanceRuntimeKey({ ...work, envOverrides: { CODEX_HOME: "/h" } }),
+    ).not.toBe(key);
+    expect(
+      getInstanceRuntimeKey({ ...base, config: { binaryPath: "/bin/codex" } }),
+    ).toStartWith("codex:");
+    // Order of variables does not matter.
+    expect(
+      getInstanceRuntimeKey({ ...work, envOverrides: { A: "1", B: "2" } }),
+    ).toBe(
+      getInstanceRuntimeKey({ ...work, envOverrides: { B: "2", A: "1" } }),
+    );
   });
 });

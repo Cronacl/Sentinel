@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { EngineInstallSource } from "@/lib/ai/chat/engines/contract";
+import { getLegacyEngineStatusFilePath } from "@/lib/ai/chat/engines/platform/paths";
 import {
   getLoginShellCandidates,
   getLoginShellMarkers,
@@ -15,6 +16,7 @@ import {
   findExecutableInPath,
   getConfiguredBinaryOverride,
   getInstanceProcessEnv,
+  getInstanceRuntimeKey,
   isExecutableFile,
   normalizeCandidatePath,
   recordResolvedBinary,
@@ -27,10 +29,7 @@ import {
 import type { CursorThreadState } from "@/lib/ai/chat/engines/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import { spawnManagedProcess } from "@/lib/runtime/process/spawn";
-import {
-  applyPrivateFsMode,
-  getSentinelStateRoot,
-} from "@/lib/runtime/local-state";
+import { applyPrivateFsMode } from "@/lib/runtime/local-state";
 import {
   buildManagedExecutablePathValue,
   buildPreferredExecutablePathValue,
@@ -197,12 +196,10 @@ type PendingRpc = {
   resolve: (value: unknown) => void;
 };
 
-function getLocalStateDirectory() {
-  return getSentinelStateRoot();
-}
-
-function getCursorStatusSnapshotPath() {
-  return path.join(getLocalStateDirectory(), CURSOR_STATUS_SNAPSHOT_FILE);
+function getCursorStatusSnapshotPath(
+  instance: CursorRuntimeInstance | null | undefined,
+) {
+  return getLegacyEngineStatusFilePath(CURSOR_STATUS_SNAPSHOT_FILE, instance);
 }
 
 const CURSOR_NAME_OPTIONS = { strategy: "pathext-or-bare" } as const;
@@ -238,9 +235,11 @@ async function verifyCursorCli(candidatePath: string, env: NodeJS.ProcessEnv) {
   };
 }
 
-async function writeCursorStatusSnapshot(snapshot: CursorStatusSnapshot) {
-  const snapshotPath = getCursorStatusSnapshotPath();
-  const localStateDirectory = getLocalStateDirectory();
+async function writeCursorStatusSnapshot(
+  snapshotPath: string,
+  snapshot: CursorStatusSnapshot,
+) {
+  const localStateDirectory = path.dirname(snapshotPath);
 
   await mkdir(localStateDirectory, {
     mode: LOCAL_STATE_DIRECTORY_MODE,
@@ -254,9 +253,12 @@ async function writeCursorStatusSnapshot(snapshot: CursorStatusSnapshot) {
   await applyPrivateFsMode(snapshotPath, LOCAL_STATE_FILE_MODE);
 }
 
-async function readCursorStatusSnapshot(options: { cliPath: string }) {
+async function readCursorStatusSnapshot(
+  snapshotPath: string,
+  options: { cliPath: string },
+) {
   try {
-    const rawSnapshot = await readFile(getCursorStatusSnapshotPath(), "utf8");
+    const rawSnapshot = await readFile(snapshotPath, "utf8");
     const parsed = JSON.parse(rawSnapshot) as Partial<CursorStatusSnapshot>;
 
     if (
@@ -474,17 +476,18 @@ const cachedRuntimes = new Map<
   string,
   { expiresAt: number; promise: Promise<ResolvedCursorRuntime> }
 >();
-let cachedStatus: {
-  expiresAt: number;
-  promise: Promise<CursorEngineStatus>;
-} | null = null;
+// One cached status per instance (and per configuration of it).
+const cachedStatuses = new Map<
+  string,
+  { expiresAt: number; promise: Promise<CursorEngineStatus> }
+>();
 
 export function resetCursorRuntimeCache() {
   cachedRuntimes.clear();
 }
 
 export function resetCursorEngineStatusCache() {
-  cachedStatus = null;
+  cachedStatuses.clear();
 }
 
 export function isCursorEngineAvailable(status: CursorEngineStatus) {
@@ -511,20 +514,6 @@ export function buildCursorThreadState(input: {
 }
 
 export type CursorRuntimeInstance = EngineBinaryInstance;
-
-function getRuntimeCacheKey(
-  instance: CursorRuntimeInstance | null | undefined,
-) {
-  if (!instance) {
-    return "default";
-  }
-
-  return `${instance.id}:${JSON.stringify([
-    instance.config.binaryPath ?? null,
-    instance.envOverrides,
-    instance.envUnset,
-  ])}`;
-}
 
 /**
  * Resolution order: the instance's binaryPath, else (default instance)
@@ -629,7 +618,7 @@ export async function resolveCursorRuntime(options?: {
   forceRefresh?: boolean;
   instance?: CursorRuntimeInstance | null;
 }): Promise<ResolvedCursorRuntime> {
-  const key = getRuntimeCacheKey(options?.instance);
+  const key = getInstanceRuntimeKey(options?.instance);
   const cached = cachedRuntimes.get(key);
   if (!options?.forceRefresh && cached && cached.expiresAt > Date.now()) {
     return cached.promise;
@@ -1048,6 +1037,7 @@ async function discoverCursorModels(
 
 async function probeCursorEngineStatus(
   runtime: ResolvedCursorRuntime,
+  snapshotPath: string,
   signal?: AbortSignal,
 ) {
   if (!runtime.cliDetected || !runtime.cliPath) {
@@ -1088,7 +1078,7 @@ async function probeCursorEngineStatus(
     );
     const recordedAt = new Date().toISOString();
 
-    await writeCursorStatusSnapshot({
+    await writeCursorStatusSnapshot(snapshotPath, {
       availableModels: models,
       cliPath: runtime.cliPath,
       cliVersion: runtime.cliVersion,
@@ -1147,15 +1137,15 @@ async function probeCursorEngineStatus(
 
 export async function getCursorEngineStatus(options?: {
   forceRefresh?: boolean;
+  instance?: CursorRuntimeInstance | null;
 }): Promise<CursorEngineStatus> {
-  if (
-    !options?.forceRefresh &&
-    cachedStatus &&
-    cachedStatus.expiresAt > Date.now()
-  ) {
-    return cachedStatus.promise;
+  const key = getInstanceRuntimeKey(options?.instance);
+  const cached = cachedStatuses.get(key);
+  if (!options?.forceRefresh && cached && cached.expiresAt > Date.now()) {
+    return cached.promise;
   }
 
+  const snapshotPath = getCursorStatusSnapshotPath(options?.instance);
   const promise = (async () => {
     const runtime = await resolveCursorRuntime(options);
     if (!runtime.cliDetected || !runtime.cliPath) {
@@ -1176,7 +1166,7 @@ export async function getCursorEngineStatus(options?: {
     // On timeout the probe's signal closes its ACP client, which kills the
     // `agent acp` child instead of leaving it running in the background.
     const status = await withTimeout(
-      (signal) => probeCursorEngineStatus(runtime, signal),
+      (signal) => probeCursorEngineStatus(runtime, snapshotPath, signal),
       CURSOR_STATUS_QUERY_TIMEOUT_MS,
       { nullOnError: true },
     );
@@ -1185,7 +1175,7 @@ export async function getCursorEngineStatus(options?: {
       return status;
     }
 
-    const snapshot = await readCursorStatusSnapshot({
+    const snapshot = await readCursorStatusSnapshot(snapshotPath, {
       cliPath: runtime.cliPath,
     });
     if (snapshot) {
@@ -1210,10 +1200,10 @@ export async function getCursorEngineStatus(options?: {
     });
   })();
 
-  cachedStatus = {
+  cachedStatuses.set(key, {
     expiresAt: Date.now() + CURSOR_STATUS_CACHE_TTL_MS,
     promise,
-  };
+  });
 
   return promise;
 }

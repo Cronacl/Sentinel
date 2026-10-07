@@ -7,6 +7,7 @@ mock.module("server-only", () => ({}));
 const {
   getEngineInstanceStateDirectory,
   getEnginesStateDirectory,
+  getLegacyEngineStatusFilePath,
   getRuntimePathsFilePath,
 } = await import("./paths");
 
@@ -40,5 +41,29 @@ describe("engine state paths", () => {
         getEngineInstanceStateDirectory(id, { stateRoot: "/tmp/s" }),
       ).toThrow();
     }
+  });
+});
+
+describe("legacy engine status files", () => {
+  it("stay at the state root for the default instance and move under the instance otherwise", () => {
+    const options = { stateRoot: "/Users/me/.sentinel" };
+
+    expect(
+      getLegacyEngineStatusFilePath("codex-status.json", null, options),
+    ).toBe("/Users/me/.sentinel/codex-status.json");
+    expect(
+      getLegacyEngineStatusFilePath(
+        "codex-status.json",
+        { id: "codex", isDefault: true },
+        options,
+      ),
+    ).toBe("/Users/me/.sentinel/codex-status.json");
+    expect(
+      getLegacyEngineStatusFilePath(
+        "codex-status.json",
+        { id: "codex-work", isDefault: false },
+        options,
+      ),
+    ).toBe("/Users/me/.sentinel/engines/codex-work/codex-status.json");
   });
 });

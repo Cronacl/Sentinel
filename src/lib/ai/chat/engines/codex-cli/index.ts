@@ -1,10 +1,10 @@
 import { type ChildProcessWithoutNullStreams } from "node:child_process";
-import { createHash } from "node:crypto";
 
 import {
   findExecutableInPath,
   getConfiguredBinaryOverride,
   getInstanceProcessEnv,
+  getInstanceRuntimeKey,
   listWindowsWhereCandidates,
   recordResolvedBinary,
   resolveFromLoginShellLookup,
@@ -49,24 +49,6 @@ const cachedResolutions = new Map<
   string,
   { expiresAt: number; promise: Promise<ResolvedCodexCli | null> }
 >();
-
-function getResolutionCacheKey(instance: CodexCliInstance | null | undefined) {
-  if (!instance) {
-    return "default";
-  }
-
-  const fingerprint = createHash("sha256")
-    .update(
-      JSON.stringify([
-        instance.config.binaryPath ?? null,
-        instance.envOverrides,
-        instance.envUnset,
-      ]),
-    )
-    .digest("hex")
-    .slice(0, 16);
-  return `${instance.id}:${fingerprint}`;
-}
 
 /** The Windows candidates for `codex` are only names Node can spawn. */
 const CODEX_NAME_OPTIONS = { strategy: "spawnable" } as const;
@@ -177,7 +159,7 @@ export async function resolveCodexCli(options?: {
   forceRefresh?: boolean;
   instance?: CodexCliInstance | null;
 }) {
-  const key = getResolutionCacheKey(options?.instance);
+  const key = getInstanceRuntimeKey(options?.instance);
   const now = Date.now();
   const cached = cachedResolutions.get(key);
 

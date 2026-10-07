@@ -10,16 +10,14 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 
 import { createLogger } from "@/lib/logger";
-import {
-  applyPrivateFsMode,
-  getSentinelStateRoot,
-} from "@/lib/runtime/local-state";
+import { applyPrivateFsMode } from "@/lib/runtime/local-state";
 import {
   buildManagedExecutablePathValue,
   getPlatformHomeDirectory,
 } from "@/lib/runtime/platform-paths";
 import { withTimeout } from "@/lib/runtime/process/with-timeout";
 import type { EngineInstallSource } from "@/lib/ai/chat/engines/contract";
+import { getLegacyEngineStatusFilePath } from "@/lib/ai/chat/engines/platform/paths";
 import {
   getLoginShellMarkers,
   lookupInLoginShell,
@@ -30,6 +28,7 @@ import {
   getConfiguredBinaryOverride,
   getExecutableNames,
   getInstanceProcessEnv,
+  getInstanceRuntimeKey,
   isExecutableFile,
   isReadableFile,
   listWindowsWhereCandidates,
@@ -124,29 +123,44 @@ type ClaudeStatusSnapshot = {
   recordedAt: string;
 };
 
-let cachedStatus: {
-  expiresAt: number;
-  promise: Promise<ClaudeEngineStatus>;
-} | null = null;
+// Status caches per instance (and per configuration of it). `generation`
+// invalidates a background refresh that a reset overtook.
+type ClaudeStatusState = {
+  backgroundRefresh: Promise<void> | null;
+  cachedStatus: {
+    expiresAt: number;
+    promise: Promise<ClaudeEngineStatus>;
+  } | null;
+  generation: number;
+};
+const statusStates = new Map<string, ClaudeStatusState>();
+
 // One cached resolution per instance (and per configuration of it).
 const cachedRuntimes = new Map<
   string,
   { expiresAt: number; promise: Promise<ResolvedClaudeCodeRuntime> }
 >();
-let backgroundStatusRefresh: Promise<void> | null = null;
-let backgroundStatusRefreshGeneration = 0;
 
-function getLocalStateDirectory() {
-  return getSentinelStateRoot();
+function getStatusState(key: string) {
+  let state = statusStates.get(key);
+  if (!state) {
+    state = { backgroundRefresh: null, cachedStatus: null, generation: 0 };
+    statusStates.set(key, state);
+  }
+  return state;
 }
 
-function getClaudeStatusSnapshotPath() {
-  return path.join(getLocalStateDirectory(), CLAUDE_STATUS_SNAPSHOT_FILE);
+function getClaudeStatusSnapshotPath(
+  instance: ClaudeRuntimeInstance | null | undefined,
+) {
+  return getLegacyEngineStatusFilePath(CLAUDE_STATUS_SNAPSHOT_FILE, instance);
 }
 
-async function writeClaudeStatusSnapshot(snapshot: ClaudeStatusSnapshot) {
-  const snapshotPath = getClaudeStatusSnapshotPath();
-  const localStateDirectory = getLocalStateDirectory();
+async function writeClaudeStatusSnapshot(
+  snapshotPath: string,
+  snapshot: ClaudeStatusSnapshot,
+) {
+  const localStateDirectory = path.dirname(snapshotPath);
 
   await mkdir(localStateDirectory, {
     mode: LOCAL_STATE_DIRECTORY_MODE,
@@ -160,9 +174,12 @@ async function writeClaudeStatusSnapshot(snapshot: ClaudeStatusSnapshot) {
   await applyPrivateFsMode(snapshotPath, LOCAL_STATE_FILE_MODE);
 }
 
-async function readClaudeStatusSnapshot(options: { binaryPath: string }) {
+async function readClaudeStatusSnapshot(
+  snapshotPath: string,
+  options: { binaryPath: string },
+) {
   try {
-    const rawSnapshot = await readFile(getClaudeStatusSnapshotPath(), "utf8");
+    const rawSnapshot = await readFile(snapshotPath, "utf8");
     const parsed = JSON.parse(rawSnapshot) as Partial<ClaudeStatusSnapshot>;
 
     if (
@@ -321,20 +338,6 @@ export function parseClaudeShellLookupOutput(
 
 export type ClaudeRuntimeInstance = EngineBinaryInstance;
 
-function getRuntimeCacheKey(
-  instance: ClaudeRuntimeInstance | null | undefined,
-) {
-  if (!instance) {
-    return "default";
-  }
-
-  return `${instance.id}:${JSON.stringify([
-    instance.config.binaryPath ?? null,
-    instance.envOverrides,
-    instance.envUnset,
-  ])}`;
-}
-
 /**
  * Resolution order: the instance's binaryPath, else (default instance)
  * SENTINEL_CLAUDE_PATH or CLAUDE_PATH; then the managed PATH, `where` on
@@ -468,7 +471,7 @@ export async function resolveClaudeCodeRuntime(options?: {
   forceRefresh?: boolean;
   instance?: ClaudeRuntimeInstance | null;
 }) {
-  const key = getRuntimeCacheKey(options?.instance);
+  const key = getInstanceRuntimeKey(options?.instance);
   const now = Date.now();
   const cached = cachedRuntimes.get(key);
 
@@ -490,9 +493,11 @@ export function resetClaudeCodeRuntimeCache() {
 }
 
 export function resetClaudeEngineStatusCache() {
-  cachedStatus = null;
-  backgroundStatusRefresh = null;
-  backgroundStatusRefreshGeneration += 1;
+  for (const state of statusStates.values()) {
+    state.cachedStatus = null;
+    state.backgroundRefresh = null;
+    state.generation += 1;
+  }
 }
 
 /**
@@ -594,25 +599,34 @@ function createIdleClaudePrompt(
  */
 export async function getCachedClaudeModels(
   executablePath: string | null | undefined,
+  instance?: ClaudeRuntimeInstance | null,
 ) {
   if (!executablePath) {
     return null;
   }
 
-  const snapshot = await readClaudeStatusSnapshot({
-    binaryPath: executablePath,
-  });
+  const snapshot = await readClaudeStatusSnapshot(
+    getClaudeStatusSnapshotPath(instance),
+    { binaryPath: executablePath },
+  );
   return snapshot?.availableModels ?? null;
 }
 
-async function readClaudeStatus(options?: {
+async function readClaudeStatus(options: {
   forceRefreshRuntime?: boolean;
+  instance?: ClaudeRuntimeInstance | null;
+  state: ClaudeStatusState;
 }): Promise<ClaudeEngineStatus> {
+  const { instance, state } = options;
   const runtime = await resolveClaudeCodeRuntime({
-    forceRefresh: options?.forceRefreshRuntime,
+    forceRefresh: options.forceRefreshRuntime,
+    instance,
   });
   if (!runtime.binaryDetected || !runtime.executablePath) {
-    const retainedPath = process.env.SENTINEL_CLAUDE_PATH?.trim() || null;
+    const retainedPath =
+      getConfiguredBinaryOverride(instance, getInstanceProcessEnv(instance), [
+        "SENTINEL_CLAUDE_PATH",
+      ])?.path ?? null;
     return buildClaudeEngineStatus({
       account: null,
       authReady: false,
@@ -629,24 +643,26 @@ async function readClaudeStatus(options?: {
     });
   }
 
-  const snapshot = await readClaudeStatusSnapshot({
+  const snapshotPath = getClaudeStatusSnapshotPath(instance);
+  const snapshot = await readClaudeStatusSnapshot(snapshotPath, {
     binaryPath: runtime.executablePath,
   });
 
-  if (!options?.forceRefreshRuntime && snapshot) {
-    if (!backgroundStatusRefresh) {
-      const refreshGeneration = backgroundStatusRefreshGeneration;
+  if (!options.forceRefreshRuntime && snapshot) {
+    if (!state.backgroundRefresh) {
+      const refreshGeneration = state.generation;
       const refreshPromise = probeClaudeStatus({
         fallbackSnapshot: snapshot,
         runtime,
+        snapshotPath,
       })
         .then((status) => {
           if (
-            refreshGeneration === backgroundStatusRefreshGeneration &&
+            refreshGeneration === state.generation &&
             !status.usedCachedStatus &&
             status.state === "ready"
           ) {
-            cachedStatus = {
+            state.cachedStatus = {
               expiresAt: Date.now() + CLAUDE_STATUS_CACHE_TTL_MS,
               promise: Promise.resolve(status),
             };
@@ -654,13 +670,13 @@ async function readClaudeStatus(options?: {
         })
         .finally(() => {
           if (
-            refreshGeneration === backgroundStatusRefreshGeneration &&
-            backgroundStatusRefresh === refreshPromise
+            refreshGeneration === state.generation &&
+            state.backgroundRefresh === refreshPromise
           ) {
-            backgroundStatusRefresh = null;
+            state.backgroundRefresh = null;
           }
         });
-      backgroundStatusRefresh = refreshPromise;
+      state.backgroundRefresh = refreshPromise;
     }
 
     return buildCachedClaudeStatus({
@@ -673,12 +689,14 @@ async function readClaudeStatus(options?: {
   return await probeClaudeStatus({
     fallbackSnapshot: snapshot,
     runtime,
+    snapshotPath,
   });
 }
 
 async function probeClaudeStatus(input: {
   fallbackSnapshot: ClaudeStatusSnapshot | null;
   runtime: ResolvedClaudeCodeRuntime;
+  snapshotPath: string;
 }): Promise<ClaudeEngineStatus> {
   let claudeQuery: ReturnType<typeof query> | null = null;
   // Ends the idle prompt stream once the probe is done.
@@ -767,7 +785,7 @@ async function probeClaudeStatus(input: {
 
     const availableModels = models.map(toClaudeModelInfo);
     const recordedAt = new Date().toISOString();
-    await writeClaudeStatusSnapshot({
+    await writeClaudeStatusSnapshot(input.snapshotPath, {
       account,
       availableModels,
       binaryPath: input.runtime.executablePath!,
@@ -822,12 +840,18 @@ async function probeClaudeStatus(input: {
 
 export async function getClaudeEngineStatus(options?: {
   forceRefresh?: boolean;
+  instance?: ClaudeRuntimeInstance | null;
 }) {
   const forceRefresh = options?.forceRefresh ?? false;
   const now = Date.now();
+  const state = getStatusState(getInstanceRuntimeKey(options?.instance));
 
-  if (!forceRefresh && cachedStatus && cachedStatus.expiresAt > now) {
-    return await cachedStatus.promise;
+  if (
+    !forceRefresh &&
+    state.cachedStatus &&
+    state.cachedStatus.expiresAt > now
+  ) {
+    return await state.cachedStatus.promise;
   }
 
   if (forceRefresh) {
@@ -836,8 +860,10 @@ export async function getClaudeEngineStatus(options?: {
 
   const pending = readClaudeStatus({
     forceRefreshRuntime: forceRefresh,
+    instance: options?.instance,
+    state,
   });
-  cachedStatus = {
+  state.cachedStatus = {
     expiresAt: now + CLAUDE_STATUS_CACHE_TTL_MS,
     promise: pending,
   };

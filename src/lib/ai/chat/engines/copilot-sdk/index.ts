@@ -22,6 +22,7 @@ import {
 import {
   findExecutableInPath,
   getInstanceProcessEnv,
+  getInstanceRuntimeKey,
   isExecutableFile,
   isReadableFile,
   listWindowsWhereCandidates,
@@ -30,14 +31,13 @@ import {
   type EngineBinaryInstance,
 } from "@/lib/ai/chat/engines/platform/runtime/resolve-binary";
 import { runCommandProbe } from "@/lib/ai/chat/engines/platform/runtime/version-probe";
+import { getInstanceResources } from "@/lib/ai/chat/engines/platform/instance-resources";
+import { getLegacyEngineStatusFilePath } from "@/lib/ai/chat/engines/platform/paths";
 import type { CopilotThreadState } from "@/lib/ai/chat/engines/types";
 import { createLogger } from "@/lib/logger";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import { readLocalRuntimeEnvValue } from "@/lib/runtime/local-runtime-env";
-import {
-  applyPrivateFsMode,
-  getSentinelStateRoot,
-} from "@/lib/runtime/local-state";
+import { applyPrivateFsMode } from "@/lib/runtime/local-state";
 import { buildManagedExecutablePathValue } from "@/lib/runtime/platform-paths";
 import { SENTINEL_PRIVATE_ENV_KEYS } from "@/lib/runtime/process/spawn";
 import { withTimeout } from "@/lib/runtime/process/with-timeout";
@@ -132,17 +132,17 @@ type CopilotShellLookupResult = {
   pathValue: string | null;
 };
 
-function getLocalStateDirectory() {
-  return getSentinelStateRoot();
+function getCopilotStatusSnapshotPath(
+  instance: CopilotRuntimeInstance | null | undefined,
+) {
+  return getLegacyEngineStatusFilePath(COPILOT_STATUS_SNAPSHOT_FILE, instance);
 }
 
-function getCopilotStatusSnapshotPath() {
-  return path.join(getLocalStateDirectory(), COPILOT_STATUS_SNAPSHOT_FILE);
-}
-
-async function writeCopilotStatusSnapshot(snapshot: CopilotStatusSnapshot) {
-  const snapshotPath = getCopilotStatusSnapshotPath();
-  const localStateDirectory = getLocalStateDirectory();
+async function writeCopilotStatusSnapshot(
+  snapshotPath: string,
+  snapshot: CopilotStatusSnapshot,
+) {
+  const localStateDirectory = path.dirname(snapshotPath);
 
   await mkdir(localStateDirectory, {
     mode: LOCAL_STATE_DIRECTORY_MODE,
@@ -156,9 +156,12 @@ async function writeCopilotStatusSnapshot(snapshot: CopilotStatusSnapshot) {
   await applyPrivateFsMode(snapshotPath, LOCAL_STATE_FILE_MODE);
 }
 
-async function readCopilotStatusSnapshot(options: { cliPath: string }) {
+async function readCopilotStatusSnapshot(
+  snapshotPath: string,
+  options: { cliPath: string },
+) {
   try {
-    const rawSnapshot = await readFile(getCopilotStatusSnapshotPath(), "utf8");
+    const rawSnapshot = await readFile(snapshotPath, "utf8");
     const parsed = JSON.parse(rawSnapshot) as Partial<CopilotStatusSnapshot>;
 
     if (
@@ -538,20 +541,6 @@ const cachedRuntimes = new Map<
 
 export type CopilotRuntimeInstance = EngineBinaryInstance;
 
-function getRuntimeCacheKey(
-  instance: CopilotRuntimeInstance | null | undefined,
-) {
-  if (!instance) {
-    return "default";
-  }
-
-  return `${instance.id}:${JSON.stringify([
-    instance.config.binaryPath ?? null,
-    instance.envOverrides,
-    instance.envUnset,
-  ])}`;
-}
-
 const COPILOT_PATH_OVERRIDE_VARIABLES = [
   "SENTINEL_COPILOT_PATH",
   "COPILOT_CLI_PATH",
@@ -796,7 +785,7 @@ async function rememberCopilotRuntime(
 export async function resolveCopilotRuntime(options?: {
   instance?: CopilotRuntimeInstance | null;
 }) {
-  const key = getRuntimeCacheKey(options?.instance);
+  const key = getInstanceRuntimeKey(options?.instance);
   const cached = cachedRuntimes.get(key);
   if (cached && cached.expiresAt > Date.now()) {
     return await cached.promise;
@@ -841,14 +830,17 @@ function toCopilotRuntimeEnv(env: NodeJS.ProcessEnv) {
  * Client options for SDK 1.x, which dropped the CLI path, auto-start and cwd
  * client options: the resolved runtime is spawned over stdio and starts on
  * first use. Auth stays on the SDK default (the logged-in user, or
- * GH_TOKEN/GITHUB_TOKEN from the environment) and COPILOT_HOME stays at
- * ~/.copilot, so sessions and logins are shared with the user's Copilot CLI.
+ * GH_TOKEN/GITHUB_TOKEN from the environment). COPILOT_HOME stays at
+ * ~/.copilot, so sessions and logins are shared with the user's Copilot CLI,
+ * unless an instance has a home of its own (`baseDirectory`).
  */
 export function buildCopilotClientOptions(runtime: {
+  baseDirectory?: string | null;
   env: NodeJS.ProcessEnv;
   runtimePath: string;
 }): CopilotClientOptions {
   return {
+    ...(runtime.baseDirectory ? { baseDirectory: runtime.baseDirectory } : {}),
     clientInfo: { applicationName: "sentinel" },
     connection: RuntimeConnection.forStdio({
       env: toCopilotRuntimeEnv(runtime.env),
@@ -859,11 +851,36 @@ export function buildCopilotClientOptions(runtime: {
   };
 }
 
-class CopilotClientManager {
+export type CopilotClientManagerOptions = {
+  /** The engine instance this client runs for (default: the default). */
+  instance?: CopilotRuntimeInstance | null;
+};
+
+export class CopilotClientManager {
   private client: CopilotClient | null = null;
 
+  private readonly instance: CopilotRuntimeInstance | null;
+
+  constructor(options: CopilotClientManagerOptions = {}) {
+    this.instance = options.instance ?? null;
+  }
+
+  /** Stops the client and its runtime; the next use starts them again. */
+  async dispose() {
+    const client = this.client;
+    this.client = null;
+    if (!client) {
+      return;
+    }
+
+    const errors = await client.stop().catch((error: unknown) => [error]);
+    if (errors.length > 0) {
+      await client.forceStop().catch(() => undefined);
+    }
+  }
+
   async getClient() {
-    const runtime = await resolveCopilotRuntime();
+    const runtime = await resolveCopilotRuntime({ instance: this.instance });
     if (!runtime.cliDetected || !runtime.cliPath) {
       throw new Error(
         runtime.error ??
@@ -873,6 +890,9 @@ class CopilotClientManager {
 
     const client = (this.client ??= new CopilotClient(
       buildCopilotClientOptions({
+        // An instance home (config.homePath or COPILOT_HOME in its env)
+        // isolates sessions, config and logins from ~/.copilot.
+        baseDirectory: this.instance?.envOverrides.COPILOT_HOME ?? null,
         env: runtime.env,
         runtimePath: runtime.cliPath,
       }),
@@ -921,20 +941,42 @@ class CopilotClientManager {
   }
 }
 
-let globalCopilotClientManager: CopilotClientManager | null = null;
+const copilotClientManagers = getInstanceResources<CopilotClientManager>(
+  "copilot-client",
+  {
+    dispose: (manager) => manager.dispose(),
+    onDisposeError: (error, instanceId) =>
+      log.warn("dispose_failed", { error, instanceId }),
+  },
+);
 
-export function getCopilotClientManager() {
-  globalCopilotClientManager ??= new CopilotClientManager();
-  return globalCopilotClientManager;
+/**
+ * The client manager for an instance: one Copilot runtime per instance,
+ * keyed by its runtime configuration (binary, COPILOT_HOME, env), so a
+ * configuration change starts a fresh runtime. Without an instance, the
+ * default instance's manager.
+ */
+export function getCopilotClientManager(
+  instance?: CopilotRuntimeInstance | null,
+) {
+  return copilotClientManagers.get(
+    instance?.id ?? "copilot",
+    getInstanceRuntimeKey(instance),
+    () => new CopilotClientManager({ instance }),
+  );
 }
 
-let cachedStatus: {
-  expiresAt: number;
-  promise: Promise<CopilotEngineStatus>;
-} | null = null;
+// One cached status per instance (and per configuration of it).
+const cachedStatuses = new Map<
+  string,
+  { expiresAt: number; promise: Promise<CopilotEngineStatus> }
+>();
 
-async function probeCopilotEngineStatus(): Promise<CopilotEngineStatus> {
-  const runtime = await resolveCopilotRuntime();
+async function probeCopilotEngineStatus(
+  instance: CopilotRuntimeInstance | null | undefined,
+): Promise<CopilotEngineStatus> {
+  const runtime = await resolveCopilotRuntime({ instance });
+  const snapshotPath = getCopilotStatusSnapshotPath(instance);
 
   if (!runtime.cliDetected || !runtime.cliPath) {
     return buildCopilotEngineStatus({
@@ -952,13 +994,13 @@ async function probeCopilotEngineStatus(): Promise<CopilotEngineStatus> {
     });
   }
 
-  const cachedSnapshot = await readCopilotStatusSnapshot({
+  const cachedSnapshot = await readCopilotStatusSnapshot(snapshotPath, {
     cliPath: runtime.cliPath,
   });
 
   try {
     const client = await withTimeout(
-      getCopilotClientManager().getClient(),
+      getCopilotClientManager(instance).getClient(),
       COPILOT_STARTUP_TIMEOUT_MS,
     );
 
@@ -1067,7 +1109,7 @@ async function probeCopilotEngineStatus(): Promise<CopilotEngineStatus> {
     );
     const recordedAt = new Date().toISOString();
 
-    await writeCopilotStatusSnapshot({
+    await writeCopilotStatusSnapshot(snapshotPath, {
       account,
       availableModels,
       cliPath: runtime.cliPath,
@@ -1109,33 +1151,31 @@ async function probeCopilotEngineStatus(): Promise<CopilotEngineStatus> {
 
 export async function getCopilotEngineStatus(options?: {
   forceRefresh?: boolean;
+  instance?: CopilotRuntimeInstance | null;
 }) {
-  if (
-    !options?.forceRefresh &&
-    cachedStatus &&
-    cachedStatus.expiresAt > Date.now()
-  ) {
-    return await cachedStatus.promise;
+  const key = getInstanceRuntimeKey(options?.instance);
+  const cached = cachedStatuses.get(key);
+  if (!options?.forceRefresh && cached && cached.expiresAt > Date.now()) {
+    return await cached.promise;
   }
 
-  const promise = probeCopilotEngineStatus().catch((error) => {
-    const current = cachedStatus;
-    if (current?.promise === promise) {
-      cachedStatus = null;
+  const promise = probeCopilotEngineStatus(options?.instance).catch((error) => {
+    if (cachedStatuses.get(key)?.promise === promise) {
+      cachedStatuses.delete(key);
     }
     throw error;
   });
 
-  cachedStatus = {
+  cachedStatuses.set(key, {
     expiresAt: Date.now() + COPILOT_STATUS_CACHE_TTL_MS,
     promise,
-  };
+  });
 
   return await promise;
 }
 
 export function resetCopilotEngineStatusCache() {
-  cachedStatus = null;
+  cachedStatuses.clear();
 }
 
 export function isCopilotEngineAvailable(status: CopilotEngineStatus) {

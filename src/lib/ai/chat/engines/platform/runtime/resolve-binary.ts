@@ -1,6 +1,7 @@
 import "server-only";
 
 import { execFile as nodeExecFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
 import {
   access as nodeAccess,
@@ -289,6 +290,50 @@ export function getInstanceProcessEnv(
     delete env[name];
   }
   return Object.assign(env, instance.envOverrides);
+}
+
+/**
+ * Cache and resource key for an instance's runtime: "default" for no
+ * instance or a default instance without its own binary or variables (both
+ * resolve exactly like the engine did before instances), else the instance
+ * id with a digest of what shapes its runtime, so a configuration change gets
+ * a fresh runtime.
+ */
+export function getInstanceRuntimeKey(
+  instance:
+    | Pick<
+        EngineBinaryInstance,
+        "config" | "envOverrides" | "envUnset" | "id" | "isDefault"
+      >
+    | null
+    | undefined,
+) {
+  if (!instance) {
+    return "default";
+  }
+
+  const binaryPath = instance.config.binaryPath?.trim() || null;
+  const customized =
+    binaryPath !== null ||
+    Object.keys(instance.envOverrides).length > 0 ||
+    instance.envUnset.length > 0;
+  if (instance.isDefault && !customized) {
+    return "default";
+  }
+
+  const digest = createHash("sha256")
+    .update(
+      JSON.stringify([
+        binaryPath,
+        Object.entries(instance.envOverrides).sort(([left], [right]) =>
+          left.localeCompare(right),
+        ),
+        [...instance.envUnset].sort(),
+      ]),
+    )
+    .digest("hex")
+    .slice(0, 16);
+  return `${instance.id}:${digest}`;
 }
 
 /** First non-empty value among `keys`, as the legacy engines read it. */

@@ -49,6 +49,7 @@ mock.module("./codex-cli", () => ({
 
 const {
   CodexAppServerManager,
+  getCodexAppServerManager,
   // @ts-expect-error Bun test-only cache-busting import for module isolation.
 } = await import("./codex-app-server.ts?codex-app-server-protocol-test");
 
@@ -102,6 +103,69 @@ afterEach(async () => {
     await manager.reloadRuntime();
   }
   debugLogs.length = 0;
+});
+
+describe("per-instance app-server managers", () => {
+  function instance(overrides: Record<string, unknown> = {}) {
+    return {
+      config: {},
+      envOverrides: {},
+      envUnset: [],
+      id: "codex",
+      isDefault: true,
+      ...overrides,
+    };
+  }
+
+  it("keeps one manager per instance and shares the default's", () => {
+    const work = instance({
+      envOverrides: { CODEX_HOME: "/homes/work" },
+      id: "codex-work",
+      isDefault: false,
+    });
+
+    expect(getCodexAppServerManager(instance())).toBe(
+      getCodexAppServerManager(),
+    );
+    expect(getCodexAppServerManager(work)).toBe(getCodexAppServerManager(work));
+    expect(getCodexAppServerManager(work)).not.toBe(getCodexAppServerManager());
+  });
+
+  it("starts the instance's app-server and replaces it when its configuration changes", async () => {
+    spawnCodexCliMock.mockClear();
+    const work = instance({
+      envOverrides: { CODEX_HOME: "/homes/work-2" },
+      id: "codex-work-2",
+      isDefault: false,
+    });
+    const manager = getCodexAppServerManager(work) as Manager;
+    managers.push(manager);
+
+    await manager.ensureStarted();
+    expect(spawnCodexCliMock.mock.calls.at(-1)).toEqual([
+      ["app-server"],
+      { instance: work },
+    ]);
+    const child = await spawnCodexCliMock.mock.results.at(-1)!.value;
+
+    const moved = { ...work, envOverrides: { CODEX_HOME: "/homes/moved" } };
+    const replacement = getCodexAppServerManager(moved) as Manager;
+    managers.push(replacement);
+    expect(replacement).not.toBe(manager);
+
+    const exited = await new Promise<boolean>((resolve) => {
+      if (child.exitCode !== null || child.signalCode !== null) {
+        resolve(true);
+        return;
+      }
+      const timer = setTimeout(() => resolve(false), 3_000);
+      child.once("exit", () => {
+        clearTimeout(timer);
+        resolve(true);
+      });
+    });
+    expect(exited).toBe(true);
+  });
 });
 
 describe("CodexAppServerManager handshake", () => {
