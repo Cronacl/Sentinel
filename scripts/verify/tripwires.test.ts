@@ -266,4 +266,19 @@ describe("P9 Copilot SDK 1.x tripwires", () => {
       ),
     ).toEqual(["P9-copilot-cli-package:1"]);
   });
+
+  it("flags a written SENTINEL_COPILOT_PATH and overwritten assistant text", () => {
+    expect(
+      hitIds(
+        engineFile,
+        'await setLocalRuntimeEnvValue(\n  "SENTINEL_COPILOT_PATH",\n  command,\n);\nawait setLocalRuntimeEnvValue("SENTINEL_CODEX_PATH", command);\nconst saved = await readLocalRuntimeEnvValue("SENTINEL_COPILOT_PATH");',
+      ),
+    ).toEqual(["P9-copilot-persisted-cli-path:1"]);
+    expect(
+      hitIds(
+        "src/lib/ai/chat/runtime/copilot/run.ts",
+        "control.state.text = event.data.content ?? control.state.text;\napplyCopilotAssistantMessage(control.state, event.data);",
+      ),
+    ).toEqual(["P9-copilot-message-overwrite:1"]);
+  });
 });

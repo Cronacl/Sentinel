@@ -694,4 +694,114 @@ describe("Copilot SDK 1.x session wiring", () => {
       status: "completed",
     });
   });
+
+  it("keeps every chunk of a response the runtime split at reasoning boundaries", async () => {
+    const { config, control } = await startCopilotRun("thread-chunks");
+
+    emitCopilotEvents(config, [
+      {
+        data: { deltaContent: "First ", messageId: "chunk-0" },
+        type: "assistant.message_delta",
+      },
+      {
+        data: { deltaContent: "part.", messageId: "chunk-0" },
+        type: "assistant.message_delta",
+      },
+      {
+        data: {
+          apiCallId: "call-1",
+          chunkCount: 2,
+          chunkIndex: 0,
+          content: "First part.",
+          messageId: "chunk-0",
+          reasoningText: "Reasoning A",
+        },
+        type: "assistant.message",
+      },
+      {
+        data: { deltaContent: "Second part.", messageId: "chunk-1" },
+        type: "assistant.message_delta",
+      },
+    ]);
+    await drainCopilotEvents(control);
+
+    // The streamed text already shows the chunks as separate paragraphs.
+    expect(control.state.text).toBe("First part.\n\nSecond part.");
+
+    emitCopilotEvents(config, [
+      {
+        data: {
+          apiCallId: "call-1",
+          chunkCount: 2,
+          chunkIndex: 1,
+          content: "Second part.",
+          messageId: "chunk-1",
+          reasoningText: "Reasoning B",
+        },
+        type: "assistant.message",
+      },
+      { data: {}, type: "session.idle" },
+    ]);
+    await drainCopilotEvents(control);
+
+    expect(control.finished).toBe(true);
+    expect(control.state.text).toBe("First part.\n\nSecond part.");
+    expect(control.state.reasoningText).toBe("Reasoning A\n\nReasoning B");
+    const lastMessage = (upsertMessage.mock.calls as unknown[][]).at(
+      -1,
+    )?.[1] as {
+      metadata: { status: string };
+      parts: Array<{ text?: string; type: string }>;
+    };
+    expect(lastMessage.metadata.status).toBe("completed");
+    expect(lastMessage.parts).toEqual([
+      { text: "Reasoning A\n\nReasoning B", type: "reasoning" },
+      { text: "First part.\n\nSecond part.", type: "text" },
+    ]);
+  });
+
+  it("still lets the message of a later model call replace the main text", async () => {
+    const { config, control } = await startCopilotRun("thread-model-calls");
+
+    emitCopilotEvents(config, [
+      {
+        data: { deltaContent: "Let me look.", messageId: "message-1" },
+        type: "assistant.message_delta",
+      },
+      {
+        data: {
+          apiCallId: "call-1",
+          content: "Let me look.",
+          messageId: "message-1",
+          reasoningText: "Plan the lookup",
+        },
+        type: "assistant.message",
+      },
+      {
+        data: { deltaContent: "Found it.", messageId: "message-2" },
+        type: "assistant.message_delta",
+      },
+    ]);
+    await drainCopilotEvents(control);
+
+    expect(control.state.text).toBe("Let me look.\n\nFound it.");
+
+    // chunkIndex 0 starts a new model call even when it is split.
+    emitCopilotEvents(config, [
+      {
+        data: {
+          apiCallId: "call-2",
+          chunkCount: 2,
+          chunkIndex: 0,
+          content: "Found it.",
+          messageId: "message-2",
+        },
+        type: "assistant.message",
+      },
+    ]);
+    await drainCopilotEvents(control);
+
+    expect(control.state.text).toBe("Found it.");
+    expect(control.state.reasoningText).toBe("Plan the lookup");
+  });
 });

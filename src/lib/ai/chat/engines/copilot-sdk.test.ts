@@ -33,6 +33,12 @@ const setLocalRuntimeEnvValueMock = mock(
   },
 );
 
+// desktop.env as an older Sentinel left it.
+let savedDesktopEnv: Record<string, string> = {};
+const readLocalRuntimeEnvValueMock = mock(
+  async (key: string) => savedDesktopEnv[key] ?? null,
+);
+
 const constructedClientOptions: unknown[] = [];
 const clientStart = mock(async () => {});
 
@@ -63,6 +69,7 @@ mock.module("@/lib/logger", () => ({
   }),
 }));
 mock.module("@/lib/runtime/local-runtime-env", () => ({
+  readLocalRuntimeEnvValue: readLocalRuntimeEnvValueMock,
   setLocalRuntimeEnvValue: setLocalRuntimeEnvValueMock,
 }));
 
@@ -191,6 +198,7 @@ afterEach(async () => {
   }
 
   setLocalRuntimeEnvValueMock.mockClear();
+  savedDesktopEnv = {};
   clientStart.mockReset();
   clientStart.mockImplementation(async () => {});
   constructedClientOptions.length = 0;
@@ -260,6 +268,75 @@ describe("resolveCopilotRuntime", () => {
     expect(runtime.cliPath).toBe(scriptPath);
     expect(runtime.source).toBe("env_override");
     expect(process.env.SENTINEL_COPILOT_PATH).toBe(scriptPath);
+    expect(setLocalRuntimeEnvValueMock).not.toHaveBeenCalled();
+  });
+
+  it("ranks a SENTINEL_COPILOT_PATH saved in desktop.env after the bundled runtime", async () => {
+    const tempRoot = await realpath(
+      await mkdtemp(path.join(os.tmpdir(), "copilot-sdk-runtime-saved-")),
+    );
+    tempRoots.push(tempRoot);
+    const bundledCliPath = await writeBundledCopilotRuntime(tempRoot);
+    const binRoot = path.join(tempRoot, "bin");
+    await mkdir(binRoot);
+    const scriptPath = await writeLaunchableCopilotScript(
+      binRoot,
+      process.platform === "win32" ? "copilot.cmd" : "copilot",
+    );
+
+    process.chdir(tempRoot);
+    clearCopilotPathOverrides();
+    // An older Sentinel saved the CLI it found; desktop.env loads it back.
+    savedDesktopEnv = { SENTINEL_COPILOT_PATH: scriptPath };
+    process.env.SENTINEL_COPILOT_PATH = scriptPath;
+    resetCopilotRuntimeCache();
+
+    expect(await resolveCopilotRuntime()).toMatchObject({
+      cliDetected: true,
+      cliPath: bundledCliPath,
+      source: "bundled",
+    });
+
+    // Without a bundled runtime the saved CLI is still used.
+    await rm(path.join(tempRoot, "node_modules"), {
+      force: true,
+      recursive: true,
+    });
+    process.env.HOME = tempRoot;
+    process.env.PATH = process.platform === "win32" ? "" : "/usr/bin:/bin";
+    resetCopilotRuntimeCache();
+
+    expect(await resolveCopilotRuntime()).toMatchObject({
+      cliDetected: true,
+      cliPath: scriptPath,
+      source: "user_cli",
+    });
+    expect(setLocalRuntimeEnvValueMock).not.toHaveBeenCalled();
+  });
+
+  it("treats a SENTINEL_COPILOT_PATH other than the saved one as an override", async () => {
+    const tempRoot = await realpath(
+      await mkdtemp(path.join(os.tmpdir(), "copilot-sdk-runtime-explicit-")),
+    );
+    tempRoots.push(tempRoot);
+    await writeBundledCopilotRuntime(tempRoot);
+    const scriptPath = await writeLaunchableCopilotScript(
+      tempRoot,
+      process.platform === "win32" ? "copilot.cmd" : "copilot",
+    );
+
+    process.chdir(tempRoot);
+    clearCopilotPathOverrides();
+    savedDesktopEnv = {
+      SENTINEL_COPILOT_PATH: path.join(tempRoot, "old", "copilot"),
+    };
+    process.env.SENTINEL_COPILOT_PATH = scriptPath;
+    resetCopilotRuntimeCache();
+
+    expect(await resolveCopilotRuntime()).toMatchObject({
+      cliPath: scriptPath,
+      source: "env_override",
+    });
   });
 
   it("prefers an override over the bundled runtime without persisting COPILOT_CLI_PATH", async () => {
@@ -391,20 +468,28 @@ describe("resolveCopilotRuntime", () => {
 
     expect(runtime.cliDetected).toBe(true);
     expect(runtime.cliPath).toBe(canonicalScriptPath);
-    expect(process.env.SENTINEL_COPILOT_PATH).toBe(canonicalScriptPath);
+    // The override is used as given; nothing is written back.
+    expect(process.env.SENTINEL_COPILOT_PATH).toBe(relativePath);
+    expect(setLocalRuntimeEnvValueMock).not.toHaveBeenCalled();
   });
 });
 
 describe("buildCopilotClientOptions", () => {
   it("spawns the resolved runtime over stdio with the SDK 1.x options", () => {
     const options = buildCopilotClientOptions({
-      env: { DROPPED: undefined, HOME: "/home/user", PATH: "/usr/bin" },
+      env: {
+        DROPPED: undefined,
+        ENCRYPTION_KEY: "a".repeat(64),
+        HOME: "/home/user",
+        PATH: "/usr/bin",
+      },
       runtimePath: "/opt/copilot/copilot-runtime",
     });
 
     expect(options).toEqual({
       clientInfo: { applicationName: "sentinel" },
       connection: {
+        // Unset values and Sentinel's ENCRYPTION_KEY are left out.
         env: { HOME: "/home/user", PATH: "/usr/bin" },
         kind: "stdio",
         path: "/opt/copilot/copilot-runtime",

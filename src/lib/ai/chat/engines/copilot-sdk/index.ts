@@ -18,7 +18,7 @@ import {
 import type { CopilotThreadState } from "@/lib/ai/chat/engines/types";
 import { createLogger } from "@/lib/logger";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
-import { setLocalRuntimeEnvValue } from "@/lib/runtime/local-runtime-env";
+import { readLocalRuntimeEnvValue } from "@/lib/runtime/local-runtime-env";
 import {
   applyPrivateFsMode,
   getSentinelStateRoot,
@@ -79,8 +79,9 @@ export type CopilotModelInfo = {
 
 /**
  * Where the Copilot runtime came from: an explicit path override
- * (SENTINEL_COPILOT_PATH, COPILOT_CLI_PATH or COPILOT_PATH), the runtime the
- * SDK ships in `@github/copilot-sdk-<platform>`, or a user-installed `copilot`.
+ * (COPILOT_CLI_PATH, COPILOT_PATH, or a SENTINEL_COPILOT_PATH that is not just
+ * the value saved in desktop.env), the runtime the SDK ships in
+ * `@github/copilot-sdk-<platform>`, or a user-installed `copilot`.
  */
 export type CopilotRuntimeSource = "bundled" | "env_override" | "user_cli";
 
@@ -386,39 +387,6 @@ function isCopilotNodeVersionMessage(message: string) {
     (normalizedMessage.includes("node") &&
       normalizedMessage.includes("version"))
   );
-}
-
-function setProcessCopilotPath(command: string | null) {
-  if (command?.trim()) {
-    process.env.SENTINEL_COPILOT_PATH = command;
-    return;
-  }
-
-  delete process.env.SENTINEL_COPILOT_PATH;
-}
-
-function isPersistableCopilotPath(command: string) {
-  const normalized = command.replaceAll("\\", "/");
-  return !normalized.includes("/fnm_multishells/");
-}
-
-// Only an explicit SENTINEL_COPILOT_PATH is written back (normalized to an
-// absolute path). Discovered paths are not persisted: a persisted path is read
-// back as an override on the next launch and would shadow the bundled runtime.
-async function persistResolvedCopilotCli(
-  command: string,
-  options: { persist: boolean },
-) {
-  try {
-    if (options.persist) {
-      await setLocalRuntimeEnvValue("SENTINEL_COPILOT_PATH", command);
-      return;
-    }
-
-    setProcessCopilotPath(command);
-  } catch {
-    setProcessCopilotPath(command);
-  }
 }
 
 function getExecutableNames(command: string) {
@@ -811,15 +779,44 @@ const COPILOT_PATH_OVERRIDE_VARIABLES = [
   "COPILOT_PATH",
 ] as const;
 
-function getCopilotPathOverride() {
+type CopilotPathOverride = {
+  path: string;
+  variable: (typeof COPILOT_PATH_OVERRIDE_VARIABLES)[number];
+};
+
+/**
+ * Older Sentinel builds wrote every Copilot CLI they discovered to desktop.env
+ * as SENTINEL_COPILOT_PATH, and desktop.env is loaded into the server
+ * environment, so a SENTINEL_COPILOT_PATH equal to the saved value is a
+ * remembered CLI location rather than a choice: it ranks after the bundled
+ * runtime (`savedPath`). Any other SENTINEL_COPILOT_PATH, COPILOT_CLI_PATH or
+ * COPILOT_PATH is an explicit override. Sentinel no longer writes the value.
+ */
+async function getCopilotPathSettings(): Promise<{
+  override: CopilotPathOverride | null;
+  savedPath: string | null;
+}> {
+  const savedSentinelPath =
+    (
+      await readLocalRuntimeEnvValue("SENTINEL_COPILOT_PATH").catch(() => null)
+    )?.trim() || null;
+  let savedPath: string | null = null;
+
   for (const variable of COPILOT_PATH_OVERRIDE_VARIABLES) {
     const value = process.env[variable]?.trim();
-    if (value) {
-      return { path: value, variable };
+    if (!value) {
+      continue;
     }
+
+    if (variable === "SENTINEL_COPILOT_PATH" && value === savedSentinelPath) {
+      savedPath = value;
+      continue;
+    }
+
+    return { override: { path: value, variable }, savedPath };
   }
 
-  return null;
+  return { override: null, savedPath };
 }
 
 const COPILOT_RUNTIME_NOT_FOUND_ERROR =
@@ -827,8 +824,9 @@ const COPILOT_RUNTIME_NOT_FOUND_ERROR =
 
 /**
  * Resolution order: an explicit path override, then the runtime bundled with
- * @github/copilot-sdk, then a user-installed `copilot` (managed PATH, `where`
- * on Windows, login shell).
+ * @github/copilot-sdk, then a user-installed `copilot` (the CLI location an
+ * older Sentinel saved in desktop.env, managed PATH, `where` on Windows, login
+ * shell).
  */
 async function resolveCopilotRuntimeUncached(): Promise<ResolvedCopilotRuntime> {
   const managedPath = await getManagedPathValue(process.env.PATH);
@@ -836,7 +834,7 @@ async function resolveCopilotRuntimeUncached(): Promise<ResolvedCopilotRuntime> 
     ...process.env,
     PATH: managedPath,
   };
-  const override = getCopilotPathOverride();
+  const { override, savedPath } = await getCopilotPathSettings();
 
   if (override) {
     const verifiedOverride = await verifyCopilotExecutable(
@@ -845,11 +843,6 @@ async function resolveCopilotRuntimeUncached(): Promise<ResolvedCopilotRuntime> 
     );
 
     if (verifiedOverride) {
-      if (override.variable === "SENTINEL_COPILOT_PATH") {
-        await persistResolvedCopilotCli(verifiedOverride, {
-          persist: isPersistableCopilotPath(verifiedOverride),
-        });
-      }
       log.info("copilot_cli_resolved", {
         cliPath: verifiedOverride,
         source: "env_override",
@@ -864,8 +857,6 @@ async function resolveCopilotRuntimeUncached(): Promise<ResolvedCopilotRuntime> 
       };
     }
 
-    // Keep the override in place: a transient launch or filesystem failure
-    // should not erase the user's last-known runtime path.
     log.warn("copilot_cli_override_invalid", {
       overridePath: override.path,
       variable: override.variable,
@@ -885,6 +876,23 @@ async function resolveCopilotRuntimeUncached(): Promise<ResolvedCopilotRuntime> 
       cliPath: bundledRuntime.cliPath,
       env: runtimeEnv,
       source: "bundled",
+    };
+  }
+
+  const verifiedSavedPath = savedPath
+    ? await verifyCopilotExecutable(savedPath, runtimeEnv)
+    : null;
+  if (verifiedSavedPath) {
+    log.info("copilot_cli_resolved", {
+      cliPath: verifiedSavedPath,
+      source: "saved_path",
+    });
+    return {
+      cliDetected: true,
+      error: null,
+      cliPath: verifiedSavedPath,
+      env: runtimeEnv,
+      source: "user_cli",
     };
   }
 
@@ -942,6 +950,7 @@ async function resolveCopilotRuntimeUncached(): Promise<ResolvedCopilotRuntime> 
     checkedPaths: {
       envOverride: override?.path ?? null,
       managedPathHit: directCommand,
+      savedPath,
       shellResolvedPath,
       windowsWherePath,
     },
@@ -949,10 +958,9 @@ async function resolveCopilotRuntimeUncached(): Promise<ResolvedCopilotRuntime> 
 
   return {
     cliDetected: false,
-    error:
-      override?.variable === "SENTINEL_COPILOT_PATH"
-        ? "GitHub Copilot CLI path is retained but is not currently launchable."
-        : COPILOT_RUNTIME_NOT_FOUND_ERROR,
+    error: override
+      ? `GitHub Copilot runtime path from ${override.variable} is not launchable, and no bundled or installed runtime was found.`
+      : COPILOT_RUNTIME_NOT_FOUND_ERROR,
     cliPath: override?.path ?? null,
     env: process.env,
     source: null,
@@ -984,10 +992,18 @@ export function resetCopilotRuntimeCache() {
   cachedRuntime = null;
 }
 
+// Sentinel's own secrets stay out of the runtime and of the shell commands,
+// MCP servers and extensions it starts (an extension can be granted env access
+// without a prompt in full access mode). ENCRYPTION_KEY decrypts the provider
+// credentials Sentinel stores.
+const SENTINEL_PRIVATE_ENV_KEYS = new Set(["ENCRYPTION_KEY"]);
+
 function toCopilotRuntimeEnv(env: NodeJS.ProcessEnv) {
   return Object.fromEntries(
     Object.entries(env).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string",
+      (entry): entry is [string, string] =>
+        typeof entry[1] === "string" &&
+        !SENTINEL_PRIVATE_ENV_KEYS.has(entry[0]),
     ),
   );
 }

@@ -2,6 +2,7 @@ import "server-only";
 
 import { generateId } from "ai";
 import type {
+  AssistantMessageData,
   AssistantUsageEvent,
   CopilotSession,
   PermissionRequest,
@@ -107,13 +108,29 @@ type CopilotMirrorTool = {
   state: CopilotMirrorToolState;
 };
 
+/**
+ * The assistant.message chunks of the current model call, keyed by messageId.
+ * SDK 1.x can split one model response into several assistant.message events,
+ * one per reasoning boundary (chunkIndex/chunkCount, shared apiCallId).
+ */
+type CopilotMessageCall = {
+  apiCallId: string | null;
+  chunks: Map<
+    string,
+    { chunkIndex: number; content: string; reasoningText: string | null }
+  >;
+};
+
 type CopilotMirrorState = {
   assistantId: string;
+  messageCall: CopilotMessageCall | null;
   nextOrder: number;
   requestedModelId: string | null;
   responseModelId: string | null;
   reasoningText: string;
   sessionId: string;
+  /** The messageId of the latest text delta, to separate streamed chunks. */
+  streamingMessageId: string | null;
   text: string;
   textOrder: number;
   threadId: string;
@@ -285,17 +302,101 @@ function createCopilotMirrorState(input: {
 }): CopilotMirrorState {
   return {
     assistantId: input.assistantId,
+    messageCall: null,
     nextOrder: 0,
     requestedModelId: input.requestedModelId,
     responseModelId: input.responseModelId,
     reasoningText: "",
     sessionId: input.sessionId,
+    streamingMessageId: null,
     text: "",
     textOrder: -1,
     threadId: input.threadId,
     tools: new Map(),
     usage: null,
   };
+}
+
+const COPILOT_MESSAGE_CHUNK_SEPARATOR = "\n\n";
+
+function joinCopilotMessageChunks(values: Array<string | null>) {
+  return values
+    .map((value) => value?.trim() ?? "")
+    .filter(Boolean)
+    .join(COPILOT_MESSAGE_CHUNK_SEPARATOR);
+}
+
+function isCopilotMessageChunkContinuation(
+  call: CopilotMessageCall | null,
+  data: AssistantMessageData,
+) {
+  if (!call || typeof data.chunkIndex !== "number" || data.chunkIndex <= 0) {
+    return false;
+  }
+
+  return (
+    !data.apiCallId || !call.apiCallId || data.apiCallId === call.apiCallId
+  );
+}
+
+/**
+ * Mirrors an assistant.message. A message from a new model call still replaces
+ * the main text, and keeps the previous reasoning when it carries none. The
+ * chunks of one split response are joined instead, in chunkIndex order, so the
+ * saved answer keeps every chunk and each chunk's reasoning.
+ */
+function applyCopilotAssistantMessage(
+  state: Pick<
+    CopilotMirrorState,
+    "messageCall" | "reasoningText" | "streamingMessageId" | "text"
+  >,
+  data: AssistantMessageData,
+) {
+  if (!isCopilotMessageChunkContinuation(state.messageCall, data)) {
+    state.messageCall = {
+      apiCallId: data.apiCallId ?? null,
+      chunks: new Map(),
+    };
+  }
+
+  const call = state.messageCall!;
+  call.chunks.set(data.messageId, {
+    chunkIndex: data.chunkIndex ?? 0,
+    content: data.content ?? "",
+    reasoningText: data.reasoningText ?? null,
+  });
+
+  const chunks = [...call.chunks.values()].sort(
+    (left, right) => left.chunkIndex - right.chunkIndex,
+  );
+  state.text = joinCopilotMessageChunks(chunks.map((chunk) => chunk.content));
+  const reasoningText = joinCopilotMessageChunks(
+    chunks.map((chunk) => chunk.reasoningText),
+  );
+  if (reasoningText) {
+    state.reasoningText = reasoningText;
+  }
+  state.streamingMessageId = data.messageId;
+}
+
+/**
+ * Appends a streamed text delta. A delta for a new message starts a new
+ * paragraph, matching how applyCopilotAssistantMessage joins chunks.
+ */
+function appendCopilotMessageDelta(
+  state: Pick<CopilotMirrorState, "streamingMessageId" | "text">,
+  data: { deltaContent: string; messageId: string },
+) {
+  if (
+    state.streamingMessageId !== null &&
+    state.streamingMessageId !== data.messageId &&
+    state.text.trim()
+  ) {
+    state.text = `${state.text.trimEnd()}${COPILOT_MESSAGE_CHUNK_SEPARATOR}`;
+  }
+
+  state.streamingMessageId = data.messageId;
+  state.text += data.deltaContent;
 }
 
 function getNextOrder(state: CopilotMirrorState) {
@@ -893,7 +994,7 @@ async function handleCopilotEvent(
       if (control.state.textOrder < 0) {
         control.state.textOrder = getNextOrder(control.state);
       }
-      control.state.text += event.data.deltaContent;
+      appendCopilotMessageDelta(control.state, event.data);
       await emitAssistantMessageUpdate(
         control.state,
         control.runId,
@@ -902,12 +1003,10 @@ async function handleCopilotEvent(
       await emitThreadSnapshot(control.threadId, control.eventChannel);
       return;
     case "assistant.message":
-      control.state.text = event.data.content ?? control.state.text;
+      applyCopilotAssistantMessage(control.state, event.data);
       if (control.state.textOrder < 0 && control.state.text.trim()) {
         control.state.textOrder = getNextOrder(control.state);
       }
-      control.state.reasoningText =
-        event.data.reasoningText ?? control.state.reasoningText;
 
       for (const toolRequest of event.data.toolRequests ?? []) {
         upsertCopilotTool(control.state, {

@@ -38,14 +38,44 @@ export type BundledCopilotRuntime = {
   runtimePlatform: CopilotRuntimePlatform;
 };
 
+let cachedMuslLinux: boolean | undefined;
+
+function detectMuslFromProcessReport() {
+  // `excludeNetwork` (Node 22+) skips the report's network lookups, as
+  // detect-libc does; @types/node does not declare it yet.
+  const report = process.report as
+    (NodeJS.ProcessReport & { excludeNetwork?: boolean }) | undefined;
+  if (!report) {
+    return false;
+  }
+
+  const excludeNetwork = report.excludeNetwork;
+  try {
+    report.excludeNetwork = true;
+    const { header } = report.getReport() as {
+      header?: { glibcVersionRuntime?: string };
+    };
+    return header !== undefined && header.glibcVersionRuntime === undefined;
+  } catch {
+    return false;
+  } finally {
+    report.excludeNetwork = excludeNetwork;
+  }
+}
+
+/**
+ * Only a report header without a glibc version means musl, as in the SDK
+ * client's own isMusl (dist/client.js): a missing report or header counts as
+ * glibc, the only Linux libc Electron (which runs the packaged server) ships
+ * for. Cached, since the report is costly to build.
+ */
 function isMuslLinux() {
   if (process.platform !== "linux") {
     return false;
   }
 
-  const report = process.report?.getReport() as
-    { header?: { glibcVersionRuntime?: string } } | undefined;
-  return report?.header?.glibcVersionRuntime === undefined;
+  cachedMuslLinux ??= detectMuslFromProcessReport();
+  return cachedMuslLinux;
 }
 
 export function getCopilotRuntimePlatform(
@@ -66,6 +96,28 @@ export function getCopilotRuntimePlatform(
   }
 
   return null;
+}
+
+/**
+ * The runtime platforms to look for, preferred first. On Linux the other libc
+ * build follows, so a misdetected libc still finds the one runtime installed
+ * (packaged builds ship only the glibc runtime).
+ */
+function getCopilotRuntimePlatformCandidates(
+  platform: NodeJS.Platform = process.platform,
+  arch: string = process.arch,
+  musl: boolean = isMuslLinux(),
+): CopilotRuntimePlatform[] {
+  const preferred = getCopilotRuntimePlatform(platform, arch, musl);
+  if (!preferred) {
+    return [];
+  }
+
+  const alternate =
+    platform === "linux"
+      ? getCopilotRuntimePlatform(platform, arch, !musl)
+      : null;
+  return alternate ? [preferred, alternate] : [preferred];
 }
 
 export function getCopilotRuntimePackageName(
@@ -115,8 +167,9 @@ async function ensureExecutable(filePath: string) {
 
 /**
  * Finds the SDK's platform runtime under `<root>/node_modules` for each search
- * root, in order. Returns null when no root has a complete runtime (wrapper and
- * runtime.node present and non-empty, wrapper executable).
+ * root, in order, trying the preferred runtime platform in every root before
+ * the other Linux libc build. Returns null when no root has a complete runtime
+ * (wrapper and runtime.node present and non-empty, wrapper executable).
  */
 export async function resolveBundledCopilotRuntime(options?: {
   arch?: string;
@@ -124,16 +177,6 @@ export async function resolveBundledCopilotRuntime(options?: {
   platform?: NodeJS.Platform;
   searchRoots?: string[];
 }): Promise<BundledCopilotRuntime | null> {
-  const runtimePlatform = getCopilotRuntimePlatform(
-    options?.platform,
-    options?.arch,
-    options?.musl,
-  );
-  if (!runtimePlatform) {
-    return null;
-  }
-
-  const packageName = getCopilotRuntimePackageName(runtimePlatform);
   const searchRoots = [
     ...new Set(
       (options?.searchRoots ?? [process.cwd()]).map((root) =>
@@ -141,6 +184,29 @@ export async function resolveBundledCopilotRuntime(options?: {
       ),
     ),
   ];
+
+  for (const runtimePlatform of getCopilotRuntimePlatformCandidates(
+    options?.platform,
+    options?.arch,
+    options?.musl,
+  )) {
+    const runtime = await findBundledCopilotRuntime(
+      runtimePlatform,
+      searchRoots,
+    );
+    if (runtime) {
+      return runtime;
+    }
+  }
+
+  return null;
+}
+
+async function findBundledCopilotRuntime(
+  runtimePlatform: CopilotRuntimePlatform,
+  searchRoots: string[],
+): Promise<BundledCopilotRuntime | null> {
+  const packageName = getCopilotRuntimePackageName(runtimePlatform);
 
   for (const root of searchRoots) {
     const packageRoot = path.join(

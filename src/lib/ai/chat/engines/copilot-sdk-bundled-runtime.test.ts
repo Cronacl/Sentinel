@@ -127,6 +127,54 @@ describe("resolveBundledCopilotRuntime", () => {
     ).toBeNull();
   });
 
+  it("falls back to the other Linux libc build, preferring the detected one in every root", async () => {
+    const glibcRoot = await makeTempRoot();
+    const muslRoot = await makeTempRoot();
+    const { wrapperPath: glibcWrapperPath } = await writeRuntimePackage(
+      glibcRoot,
+      "linux-x64",
+    );
+
+    // A musl misdetection still finds the glibc runtime packaged builds ship.
+    expect(
+      (
+        await resolveBundledCopilotRuntime({
+          arch: "x64",
+          musl: true,
+          platform: "linux",
+          searchRoots: [glibcRoot, muslRoot],
+        })
+      )?.cliPath,
+    ).toBe(glibcWrapperPath);
+
+    const { wrapperPath: muslWrapperPath } = await writeRuntimePackage(
+      muslRoot,
+      "linuxmusl-x64",
+    );
+    expect(
+      await resolveBundledCopilotRuntime({
+        arch: "x64",
+        musl: true,
+        platform: "linux",
+        searchRoots: [glibcRoot, muslRoot],
+      }),
+    ).toMatchObject({
+      cliPath: muslWrapperPath,
+      packageName: "@github/copilot-sdk-linuxmusl-x64",
+      runtimePlatform: "linuxmusl-x64",
+    });
+    expect(
+      (
+        await resolveBundledCopilotRuntime({
+          arch: "x64",
+          musl: false,
+          platform: "linux",
+          searchRoots: [muslRoot, glibcRoot],
+        })
+      )?.cliPath,
+    ).toBe(glibcWrapperPath);
+  });
+
   it("restores the wrapper's execute bit like the SDK", async () => {
     if (process.platform === "win32") {
       return;

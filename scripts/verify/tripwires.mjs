@@ -282,6 +282,21 @@ export const TRIPWIRES = [
     pattern: /"@github\/copilot"\s*:/,
     include: /^package\.json$/,
   },
+  {
+    id: "P9-copilot-persisted-cli-path",
+    description:
+      "SENTINEL_COPILOT_PATH saved in desktop.env ranks after the bundled Copilot runtime; Sentinel must not write it (a saved path would demote an explicit override)",
+    pattern: /setLocalRuntimeEnvValue\(\s*["']SENTINEL_COPILOT_PATH["']/,
+    include: /^src\/.*\.[cm]?[jt]sx?$/,
+    multiline: true,
+  },
+  {
+    id: "P9-copilot-message-overwrite",
+    description:
+      "Copilot SDK 1.x splits one response into several assistant.message chunks; mirror them with applyCopilotAssistantMessage instead of overwriting the text",
+    pattern: /state\.text\s*=\s*event\.data\.content\b/,
+    include: /^src\/lib\/ai\/chat\/runtime\/copilot\//,
+  },
 ];
 
 const DEFAULT_EXCLUDE =
