@@ -1648,6 +1648,45 @@ describe("runThreadChat startup latency", () => {
     expect(aiTestState.prepared?.tools).toHaveProperty("github_search");
   });
 
+  it("passes the persisted plan task statuses to the agent", async () => {
+    const task = {
+      createdAt: new Date(),
+      description: null,
+      title: "Task",
+      updatedAt: new Date(),
+    };
+    getThreadPlanState.mockImplementation(async () => ({
+      pendingQuestionSet: null,
+      plan: {
+        audience: "technical",
+        createdAt: new Date(),
+        document: "# Plan",
+        goal: "Ship the feature",
+        id: "plan-1",
+        summary: "Current implementation plan",
+        tasks: [
+          { ...task, id: "task-1", status: "completed" },
+          { ...task, id: "task-2", status: "pending" },
+        ],
+        threadId: "thread-1",
+        title: "Plan",
+        updatedAt: new Date(),
+      },
+    }));
+
+    await runThreadChat(createSubmitRequest(), "user-1");
+    await waitForMockCall(createAgentUIStream);
+
+    // Task tracking in the agent loop starts from these, so a continuation
+    // run does not treat the tasks it has not touched as resolved.
+    expect(
+      createAgentUIStream.mock.calls.at(-1)?.[0].options.planTasks,
+    ).toEqual([
+      { id: "task-1", status: "completed" },
+      { id: "task-2", status: "pending" },
+    ]);
+  });
+
   it("keeps optional preflight fallback behavior non-fatal", async () => {
     getMemoryRuntimeState.mockImplementation(async () => ({
       available: true,

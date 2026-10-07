@@ -796,6 +796,12 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
               mcpTools: mcpRuntime.tools,
               memoryRuntime,
               permissionMode,
+              planTasks: (planState.plan?.tasks ?? []).map(
+                ({ id, status }) => ({
+                  id,
+                  status,
+                }),
+              ),
               promptContext,
               preferredProjectRoot: projectAwareness.preferredProjectRoot,
               resolvedModelId: resolvedModel.responseModelId,

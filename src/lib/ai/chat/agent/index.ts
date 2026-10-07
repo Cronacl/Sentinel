@@ -31,6 +31,8 @@ import { buildThreadAgentInstructions } from "../context/instructions";
 // Call options schema
 // ---------------------------------------------------------------------------
 
+type TaskSnapshot = { id: string; status: string };
+
 const threadAgentCallOptionsSchema = z.object({
   agentRole: z.enum(["primary", "subagent"]).optional(),
   defaultDirectory: z.string().optional(),
@@ -40,6 +42,9 @@ const threadAgentCallOptionsSchema = z.object({
   memoryRuntime: z.custom<MemoryRuntimeState>(),
   mcpTools: z.custom<ToolSet>().optional(),
   permissionMode: z.custom<PermissionMode>(),
+  // Task statuses of the thread plan when the run started, so task tracking
+  // sees tasks created by earlier runs.
+  planTasks: z.array(z.custom<TaskSnapshot>()).optional(),
   preferredProjectRoot: z.string().nullable().optional(),
   promptContext: z.custom<ThreadPromptContext>(),
   resolvedModelId: z.string().optional(),
@@ -69,10 +74,17 @@ export type ThreadAgentCallOptions = z.infer<
 // Custom stop condition: all tasks resolved
 // ---------------------------------------------------------------------------
 
-type TaskSnapshot = { id: string; status: string };
+type TaskSteps = Array<{ toolResults?: unknown[] }>;
 
-function extractTaskState(steps: Array<{ toolResults?: unknown[] }>) {
-  const tasks = new Map<string, string>();
+// Applies this run's manage_task results on top of the plan's task statuses
+// from when the run started. `touched` stays false until this run changes a
+// task, so tasks left over from earlier runs never end or steer a run alone.
+function extractTaskState(
+  steps: TaskSteps,
+  initialTasks: ReadonlyMap<string, string>,
+) {
+  const tasks = new Map(initialTasks);
+  let touched = false;
   for (const step of steps) {
     for (const result of (step.toolResults ?? []) as Array<{
       toolName?: string;
@@ -81,6 +93,7 @@ function extractTaskState(steps: Array<{ toolResults?: unknown[] }>) {
       if (result.toolName !== "manage_task") continue;
       const task = result.output?.task;
       if (!task?.id) continue;
+      touched = true;
       if (result.output?.action === "delete") {
         tasks.delete(task.id);
       } else {
@@ -88,19 +101,33 @@ function extractTaskState(steps: Array<{ toolResults?: unknown[] }>) {
       }
     }
   }
-  return tasks;
+  return { tasks, touched };
 }
 
 const TERMINAL_TASK_STATUSES = new Set(["completed", "blocked"]);
 
-const allTasksResolved: StopCondition<ToolSet> = ({ steps }) => {
-  const tasks = extractTaskState(steps);
-  if (tasks.size === 0) return false;
+function areTasksResolved({
+  tasks,
+  touched,
+}: ReturnType<typeof extractTaskState>) {
+  if (!touched || tasks.size === 0) return false;
   for (const status of tasks.values()) {
     if (!TERMINAL_TASK_STATUSES.has(status)) return false;
   }
   return true;
-};
+}
+
+// Stops the step after the one that resolved the last open task: that step
+// lets the model report back, but it cannot keep working past it. A step
+// that opens new tasks keeps the run going.
+function createAllTasksResolvedCondition(
+  getInitialTasks: () => ReadonlyMap<string, string>,
+): StopCondition<ToolSet> {
+  return ({ steps }) =>
+    steps.length > 1 &&
+    areTasksResolved(extractTaskState(steps.slice(0, -1), getInitialTasks())) &&
+    areTasksResolved(extractTaskState(steps, getInitialTasks()));
+}
 
 // ---------------------------------------------------------------------------
 // prepareStep helpers
@@ -132,12 +159,14 @@ const VALIDATION_ADDON = [
   "Do not mark a task as completed until the changes are validated.",
 ].join("\n");
 
+// No step number here: the text only changes with the task counts, so it does
+// not break prompt-prefix caching on every step.
 function buildStepProgressAddon(
-  steps: Array<{ toolResults?: unknown[] }>,
-  stepNumber: number,
+  steps: TaskSteps,
+  initialTasks: ReadonlyMap<string, string>,
 ) {
-  const tasks = extractTaskState(steps);
-  if (tasks.size === 0) return "";
+  const { tasks, touched } = extractTaskState(steps, initialTasks);
+  if (!touched || tasks.size === 0) return "";
 
   const completed = [...tasks.values()].filter((s) => s === "completed").length;
   const blocked = [...tasks.values()].filter((s) => s === "blocked").length;
@@ -147,7 +176,7 @@ function buildStepProgressAddon(
 
   return [
     "",
-    `## Step Progress (step ${stepNumber})`,
+    "## Step Progress",
     `Tasks: ${completed}/${tasks.size} completed${blocked > 0 ? `, ${blocked} blocked` : ""}, ${remaining} remaining.`,
     "Keep working through remaining tasks. Do not stop until all tasks are completed or blocked.",
   ].join("\n");
@@ -195,6 +224,7 @@ export function createThreadAgent({
   let cachedAllToolNames: string[] = [];
   let cachedPromptContext: ThreadPromptContext | null = null;
   let cachedInitialActiveTools: string[] = [];
+  let cachedPlanTasks: ReadonlyMap<string, string> = new Map();
   let cachedResolvedProviderId: AIProvider | undefined;
   let cachedRoutingAudit: unknown = null;
   let cachedRoutingEvidenceSignature: string | null = null;
@@ -219,7 +249,7 @@ export function createThreadAgent({
     stopWhen: [
       isStepCount(MAX_AGENT_STEPS),
       hasToolCall("ask_question"),
-      allTasksResolved,
+      createAllTasksResolvedCondition(() => cachedPlanTasks),
     ],
     repairToolCall: async ({ toolCall, inputSchema, error }) => {
       if (isNoSuchToolError(error)) {
@@ -290,6 +320,9 @@ export function createThreadAgent({
       cachedAllToolNames = allToolNames;
       cachedPromptContext = promptContext;
       cachedInitialActiveTools = initialActiveTools;
+      cachedPlanTasks = new Map(
+        (options.planTasks ?? []).map((task) => [task.id, task.status]),
+      );
       cachedResolvedProviderId = options.resolvedProviderId;
       cachedRoutingAudit = initialRouting.audit;
       cachedRoutingEvidenceSignature = null;
@@ -383,7 +416,7 @@ export function createThreadAgent({
         MUTATION_TOOLS.has(c.toolName),
       );
 
-      const progressAddon = buildStepProgressAddon(steps, stepNumber);
+      const progressAddon = buildStepProgressAddon(steps, cachedPlanTasks);
       const stepSettings = {
         activeTools: activeToolNames as never[],
         runtimeContext: mergeToolRoutingContext(

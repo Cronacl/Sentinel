@@ -886,7 +886,8 @@ describe("createThreadAgent", () => {
       stepNumber: 1,
       steps: inProgressSteps,
     });
-    expect(progressStep.instructions).toContain("## Step Progress (step 1)");
+    // No step number, so the instructions stay the same while counts do.
+    expect(progressStep.instructions).toContain("## Step Progress\n");
     expect(progressStep.instructions).toContain(
       "Tasks: 1/2 completed, 1 remaining.",
     );
@@ -898,22 +899,89 @@ describe("createThreadAgent", () => {
         toolResults: [manageTaskResult("task-2", "blocked")],
       },
     ];
-    expect(allTasksResolved({ steps: resolvedSteps })).toBe(true);
-
-    // The AI SDK 4 `result` shape is not a tool result in AI SDK 5 and later.
+    // The step after the last task resolves is left for the model to report.
+    expect(allTasksResolved({ steps: resolvedSteps })).toBe(false);
+    expect(
+      allTasksResolved({
+        steps: [...resolvedSteps, { toolCalls: [{ toolName: "read" }] }],
+      }),
+    ).toBe(true);
+    // Opening a new task in that step keeps the run going.
     expect(
       allTasksResolved({
         steps: [
+          ...resolvedSteps,
           {
-            toolResults: [
-              {
-                result: manageTaskResult("task-3", "completed").output,
-                toolName: "manage_task",
-              },
-            ],
+            toolCalls: [{ toolName: "manage_task" }],
+            toolResults: [manageTaskResult("task-3", "pending")],
           },
         ],
       }),
     ).toBe(false);
+
+    // The AI SDK 4 `result` shape is not a tool result in AI SDK 5 and later.
+    const legacyStep = {
+      toolResults: [
+        {
+          result: manageTaskResult("task-3", "completed").output,
+          toolName: "manage_task",
+        },
+      ],
+    };
+    expect(allTasksResolved({ steps: [legacyStep, legacyStep] })).toBe(false);
+  });
+
+  it("counts plan tasks from earlier runs before stopping", async () => {
+    await prepareWith({
+      ...chatAgentOptions("task-tracking-continuation"),
+      planTasks: [
+        { id: "task-1", status: "in_progress" },
+        { id: "task-2", status: "pending" },
+        { id: "task-3", status: "completed" },
+      ],
+    });
+    const { prepareStep, stopWhen } = aiTestState.agentConfig;
+    const allTasksResolved = stopWhen.find(
+      (condition) => typeof condition === "function",
+    );
+
+    // Tasks this run has not touched neither stop nor steer it.
+    const firstStep = await prepareStep({
+      runtimeContext: undefined,
+      stepNumber: 0,
+      steps: [],
+    });
+    expect(firstStep.instructions).not.toContain("## Step Progress");
+    const readSteps = [{ toolCalls: [{ toolName: "read" }], toolResults: [] }];
+    expect(allTasksResolved({ steps: [...readSteps, ...readSteps] })).toBe(
+      false,
+    );
+
+    const updateSteps = [
+      {
+        toolCalls: [{ toolName: "manage_task" }],
+        toolResults: [manageTaskResult("task-1", "completed")],
+      },
+      { toolCalls: [{ toolName: "read" }], toolResults: [] },
+    ];
+    expect(allTasksResolved({ steps: updateSteps })).toBe(false);
+    const progressStep = await prepareStep({
+      runtimeContext: undefined,
+      stepNumber: 1,
+      steps: updateSteps.slice(0, 1),
+    });
+    expect(progressStep.instructions).toContain(
+      "Tasks: 2/3 completed, 1 remaining.",
+    );
+
+    const finishedSteps = [
+      ...updateSteps,
+      {
+        toolCalls: [{ toolName: "manage_task" }],
+        toolResults: [manageTaskResult("task-2", "completed")],
+      },
+      { toolCalls: [{ toolName: "read" }], toolResults: [] },
+    ];
+    expect(allTasksResolved({ steps: finishedSteps })).toBe(true);
   });
 });
