@@ -15,6 +15,15 @@ if (!process.env.SKIP_ENV_VALIDATION) {
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Next clones the body of every request the /api proxy (src/proxy.ts) sees
+ * and hands the route handler only the first `proxyClientMaxBodySize` bytes
+ * (10 MB by default), silently cut off. The proxy only reads headers, and
+ * chat requests inline attachments as data URLs, so the cap is lifted: route
+ * handlers own their body limits, as they did before the proxy existed.
+ */
+const PROXY_CLIENT_MAX_BODY_SIZE = Number.MAX_SAFE_INTEGER;
+
 /** @type {import("next").NextConfig} */
 const config = {
   // Next 16 `next dev` writes a managed AGENTS.md into the repo when it detects
@@ -23,6 +32,9 @@ const config = {
   // Loopback desktop app: gzip buys nothing and Next's compression buffers
   // streamed responses (SSE chat resumes, tRPC subscriptions).
   compress: false,
+  experimental: {
+    proxyClientMaxBodySize: PROXY_CLIENT_MAX_BODY_SIZE,
+  },
   output: "standalone",
   outputFileTracingRoot: projectRoot,
   outputFileTracingIncludes: {

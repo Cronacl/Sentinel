@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import type { IncomingMessage } from "node:http";
+import { Readable } from "node:stream";
+import { getCloneableBody } from "next/dist/server/body-streams";
 import { NextRequest } from "next/server";
 // Next 16.4 still exports the matcher helper under its middleware name.
 import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
@@ -94,6 +97,19 @@ describe("proxy", () => {
     expect(response.headers.get("x-middleware-next")).toBe("1");
   });
 
+  it("accepts a non-loopback SENTINEL_APP_URL as Host and Origin", () => {
+    process.env.SENTINEL_APP_URL = "https://sentinel.devbox.example";
+
+    const response = proxy(
+      request("/api/chat", {
+        host: "sentinel.devbox.example",
+        origin: "https://sentinel.devbox.example",
+      }),
+    );
+
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+  });
+
   it("lets OAuth redirects reach the callback routes", () => {
     const response = proxy(
       request(
@@ -108,5 +124,56 @@ describe("proxy", () => {
     );
 
     expect(response.headers.get("x-middleware-next")).toBe("1");
+  });
+});
+
+// Next clones the body of every request the proxy handles and gives the
+// route handler only the first `proxyClientMaxBodySize` bytes (10 MB unless
+// configured). Chat requests inline attachments, so next.config.js lifts the
+// cap; this runs Next's own cloning with the configured value.
+describe("proxied request bodies", () => {
+  async function bodyAfterProxy(body: Buffer, sizeLimit?: number) {
+    const chunkSize = 1024 * 1024;
+    const chunks: Buffer[] = [];
+    for (let offset = 0; offset < body.length; offset += chunkSize) {
+      chunks.push(body.subarray(offset, offset + chunkSize));
+    }
+    const incoming = Readable.from(chunks) as unknown as IncomingMessage;
+
+    const cloneable = getCloneableBody(incoming, sizeLimit);
+    cloneable.cloneBodyStream().resume();
+    await cloneable.finalize();
+
+    const received: Buffer[] = [];
+    for await (const chunk of incoming as unknown as Readable) {
+      received.push(Buffer.from(chunk as Uint8Array));
+    }
+    return Buffer.concat(received);
+  }
+
+  it("hands route handlers bodies larger than Next's default cap intact", async () => {
+    process.env.SKIP_ENV_VALIDATION = "1";
+    const { default: nextConfig } = await import("../next.config.js");
+    const sizeLimit = nextConfig.experimental?.proxyClientMaxBodySize;
+
+    expect(typeof sizeLimit).toBe("number");
+    expect(sizeLimit as number).toBeGreaterThanOrEqual(2 ** 32);
+
+    const body = Buffer.alloc(12 * 1024 * 1024, 7);
+    body[body.length - 1] = 1;
+    const received = await bodyAfterProxy(body, sizeLimit as number);
+    expect(received.length).toBe(body.length);
+    expect(received.equals(body)).toBe(true);
+  });
+
+  it("documents the default: Next cuts the body off at 10 MB", async () => {
+    const originalWarn = console.warn;
+    console.warn = () => {};
+    try {
+      const received = await bodyAfterProxy(Buffer.alloc(12 * 1024 * 1024, 7));
+      expect(received.length).toBeLessThanOrEqual(10 * 1024 * 1024);
+    } finally {
+      console.warn = originalWarn;
+    }
   });
 });

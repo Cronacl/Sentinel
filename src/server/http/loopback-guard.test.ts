@@ -203,6 +203,47 @@ describe("evaluateLoopbackRequest", () => {
     ).toEqual({ allowed: true });
   });
 
+  it("accepts a trusted origin's host:port as Host", () => {
+    const trustedOrigins = ["https://sentinel.devbox.example"];
+
+    expect(
+      evaluate(
+        {
+          host: "sentinel.devbox.example",
+          origin: "https://sentinel.devbox.example",
+        },
+        { trustedOrigins },
+      ),
+    ).toEqual({ allowed: true });
+    expect(
+      evaluate(
+        { host: "SENTINEL.devbox.example:443" },
+        { method: "GET", trustedOrigins },
+      ),
+    ).toEqual({ allowed: true });
+
+    // Same name, another port or an untrusted Origin: still refused.
+    expect(
+      evaluate({ host: "sentinel.devbox.example:3232" }, { trustedOrigins }),
+    ).toMatchObject({ allowed: false, reason: "host" });
+    expect(
+      evaluate(
+        {
+          host: "sentinel.devbox.example",
+          origin: "https://attacker.example",
+        },
+        { trustedOrigins },
+      ),
+    ).toMatchObject({ allowed: false, reason: "origin" });
+    // Malformed or non-http trusted values trust nothing.
+    expect(
+      evaluate(
+        { host: "attacker.example" },
+        { trustedOrigins: ["not a url", "file:///etc", "attacker.example"] },
+      ),
+    ).toMatchObject({ allowed: false, reason: "host" });
+  });
+
   it("lets OAuth providers redirect back to the callback routes", () => {
     for (const pathname of EXTERNAL_REDIRECT_API_ROUTES) {
       expect(

@@ -13,6 +13,13 @@
 //   different port) sending fetch/form requests to 127.0.0.1:3232. Browsers
 //   attach Origin to those (and Sec-Fetch-Site to all requests), so a foreign
 //   Origin or a cross-site fetch-metadata value is refused.
+//
+// The Host port is not compared with the server's: a browser always sends
+// the host:port it connected to, so a page cannot present another loopback
+// port to this server; only a local client or proxy can, and those are
+// trusted like any loopback client. The configured app URL (SENTINEL_APP_URL,
+// passed as a trusted origin) is accepted as both Host and Origin, so a
+// desktop shell pointed at it (a dev server, a reverse proxy) keeps working.
 
 /**
  * Routes that legitimately receive a cross-site top-level navigation: OAuth
@@ -28,7 +35,10 @@ export type LoopbackGuardRequest = {
   method: string;
   pathname: string;
   headers: Pick<Headers, "get">;
-  /** Extra origins to accept (for example SENTINEL_APP_URL). */
+  /**
+   * Extra origins to accept (SENTINEL_APP_URL): requests may carry them as
+   * Origin, and their host:port as Host.
+   */
   trustedOrigins?: readonly string[];
 };
 
@@ -140,13 +150,30 @@ function isOwnOrigin(
   return originPort === hostPort;
 }
 
-function isTrustedOrigin(origin: URL, trustedOrigins: readonly string[]) {
-  return trustedOrigins.some((candidate) => {
+function parseTrustedOrigins(trustedOrigins: readonly string[]) {
+  return trustedOrigins.flatMap((candidate) => {
     try {
-      return new URL(candidate).origin === origin.origin;
+      const url = new URL(candidate.trim());
+      return url.protocol === "http:" || url.protocol === "https:" ? [url] : [];
     } catch {
-      return false;
+      return [];
     }
+  });
+}
+
+function isTrustedOrigin(origin: URL, trustedOrigins: readonly URL[]) {
+  return trustedOrigins.some((trusted) => trusted.origin === origin.origin);
+}
+
+/** The Host a browser sends when it loads one of the trusted origins. */
+function isTrustedHost(
+  host: NonNullable<ReturnType<typeof parseHostHeader>>,
+  trustedOrigins: readonly URL[],
+) {
+  return trustedOrigins.some((trusted) => {
+    const trustedPort = trusted.port || defaultPort(trusted.protocol);
+    const hostPort = host.port || defaultPort(trusted.protocol);
+    return trusted.hostname === host.hostname && trustedPort === hostPort;
   });
 }
 
@@ -164,8 +191,12 @@ export function evaluateLoopbackRequest(
   request: LoopbackGuardRequest,
 ): LoopbackGuardDecision {
   const host = parseHostHeader(request.headers.get("host"));
+  const trustedOrigins = parseTrustedOrigins(request.trustedOrigins ?? []);
 
-  if (!host || !isLoopbackHostname(host.hostname)) {
+  if (
+    !host ||
+    !(isLoopbackHostname(host.hostname) || isTrustedHost(host, trustedOrigins))
+  ) {
     return {
       allowed: false,
       message: "Sentinel only answers requests addressed to a loopback host.",
@@ -187,8 +218,7 @@ export function evaluateLoopbackRequest(
     const origin = parseOrigin(originHeader.trim());
     const trusted =
       origin !== null &&
-      (isOwnOrigin(origin, host) ||
-        isTrustedOrigin(origin, request.trustedOrigins ?? []));
+      (isOwnOrigin(origin, host) || isTrustedOrigin(origin, trustedOrigins));
 
     if (!trusted) {
       return {
