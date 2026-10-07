@@ -40,6 +40,12 @@ export const TRIPWIRES = [
     pattern: /\bZodTypeAny\b/,
     include: /\.[cm]?[jt]sx?$/,
   },
+  {
+    id: "P4-tsconfig-baseUrl",
+    description: "baseUrl is deprecated in TypeScript 6 (paths are relative)",
+    pattern: /"baseUrl"/,
+    include: /(^|\/)tsconfig[^/]*\.json$/,
+  },
 ];
 
 const DEFAULT_EXCLUDE =

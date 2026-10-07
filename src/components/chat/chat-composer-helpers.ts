@@ -120,10 +120,9 @@ export function resolveOpenCodeTraitValueForThreadMode(
     return null;
   }
 
-  const currentOption =
-    (currentValue
-      ? (options.find((option) => option.value === currentValue) ?? null)
-      : null) ?? null;
+  const currentOption = currentValue
+    ? (options.find((option) => option.value === currentValue) ?? null)
+    : null;
   const fallbackOption =
     options.find((option) => option.isDefault) ?? options[0] ?? null;
 
