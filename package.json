@@ -138,6 +138,7 @@
     "sqlite-vec": "^0.1.9",
     "superjson": "^2.2.6",
     "turndown": "^7.2.4",
+    "undici": "^7.30.0",
     "word-extractor": "^1.0.4",
     "zod": "^4.6.5"
   },

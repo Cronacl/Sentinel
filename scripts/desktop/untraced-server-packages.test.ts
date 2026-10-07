@@ -2,7 +2,10 @@ import { describe, expect, it } from "bun:test";
 import { glob, readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { UNTRACED_SERVER_PACKAGES } from "./untraced-server-packages.mjs";
+import {
+  UNTRACED_SERVER_PACKAGE_LOADERS,
+  UNTRACED_SERVER_PACKAGES,
+} from "./untraced-server-packages.mjs";
 
 // The repo declares bun modules by hand (src/types), not Bun's globals.
 declare const Bun: {
@@ -13,6 +16,7 @@ const projectRoot = process.cwd();
 
 type PackageJson = {
   dependencies?: Record<string, string>;
+  name?: string;
   optionalDependencies?: Record<string, string>;
   version: string;
 };
@@ -31,13 +35,17 @@ const INSTALLED_PACKAGE_GLOBS = [
   "node_modules/@*/*/node_modules/@*/*/package.json",
 ];
 
-async function findInstalledDependents(packageName: string) {
+async function findInstalledDependents(
+  packageName: string,
+  loaderNames: readonly string[],
+) {
   const dependents: Array<{ path: string; range: string }> = [];
 
   for await (const file of glob(INSTALLED_PACKAGE_GLOBS, {
     cwd: projectRoot,
   })) {
     const packageJson = await readPackageJson(path.join(projectRoot, file));
+    if (!packageJson.name || !loaderNames.includes(packageJson.name)) continue;
     const range =
       packageJson.dependencies?.[packageName] ??
       packageJson.optionalDependencies?.[packageName];
@@ -62,13 +70,20 @@ describe("untraced server packages", () => {
 
   // Bundled server chunks resolve these packages from the top-level
   // node_modules, not from next to the package that requires them, so the
-  // top-level copy has to satisfy every installed dependent.
-  it("ships a top-level copy that satisfies every dependent", async () => {
+  // top-level copy has to satisfy every installed copy of each runtime loader.
+  it("ships a top-level copy that satisfies every runtime loader", async () => {
     for (const packageName of UNTRACED_SERVER_PACKAGES) {
       const { version } = await readPackageJson(
         path.join(projectRoot, "node_modules", packageName, "package.json"),
       );
-      const dependents = await findInstalledDependents(packageName);
+      const loaderNames =
+        UNTRACED_SERVER_PACKAGE_LOADERS[
+          packageName as keyof typeof UNTRACED_SERVER_PACKAGE_LOADERS
+        ] ?? [];
+      const dependents = await findInstalledDependents(
+        packageName,
+        loaderNames,
+      );
 
       expect(dependents.length).toBeGreaterThan(0);
       expect(
