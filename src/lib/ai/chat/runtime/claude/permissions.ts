@@ -76,6 +76,25 @@ function readClaudeQuestionTexts(questions: unknown) {
   );
 }
 
+function findClaudeQuestionOfferingLabel(questions: unknown, label: string) {
+  if (!Array.isArray(questions)) {
+    return null;
+  }
+
+  const owners = questions.flatMap((question) =>
+    isClaudePermissionRecord(question) &&
+    typeof question.question === "string" &&
+    Array.isArray(question.options) &&
+    question.options.some(
+      (option) => isClaudePermissionRecord(option) && option.label === label,
+    )
+      ? [question.question]
+      : [],
+  );
+
+  return owners.length === 1 ? owners[0]! : null;
+}
+
 function parseSerializedClaudeAnswers(
   questionTexts: string[],
   serialized: string,
@@ -143,6 +162,13 @@ export function buildClaudeAskUserQuestionAnswers(input: {
   // user's own "Other" text.
   if (questionTexts.length === 1) {
     return { answers: { [questionTexts[0]!]: response } };
+  }
+
+  // The card sends a bare label when only one of several questions got a
+  // single answer; give it to the one question that offers that label.
+  const labelOwner = findClaudeQuestionOfferingLabel(input.questions, response);
+  if (labelOwner) {
+    return { answers: { [labelOwner]: response } };
   }
 
   // Free text that answers no specific question goes back as a general reply.

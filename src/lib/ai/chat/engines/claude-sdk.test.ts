@@ -60,6 +60,7 @@ mock.module("@/lib/runtime/local-runtime-env", () => ({
 
 const {
   buildClaudeSdkBaseOptions,
+  getClaudeExecutableNames,
   parseClaudeShellLookupOutput,
   resetClaudeCodeRuntimeCache,
   resolveClaudeCodeRuntime,
@@ -225,6 +226,26 @@ describe("resolveClaudeCodeRuntime", () => {
     } finally {
       await rm(tempRoot, { force: true, recursive: true });
     }
+  });
+});
+
+describe("getClaudeExecutableNames", () => {
+  it("only looks for PATHEXT names on Windows, so npm's sh script is skipped", () => {
+    expect(
+      getClaudeExecutableNames("claude", {
+        pathExt: ".COM;.EXE;.BAT;.CMD",
+        platform: "win32",
+      }),
+    ).toEqual(["claude.COM", "claude.EXE", "claude.BAT", "claude.CMD"]);
+    expect(
+      getClaudeExecutableNames("claude.cmd", {
+        pathExt: ".EXE;.CMD",
+        platform: "win32",
+      }),
+    ).toEqual(["claude.cmd"]);
+    expect(getClaudeExecutableNames("claude", { platform: "darwin" })).toEqual([
+      "claude",
+    ]);
   });
 });
 

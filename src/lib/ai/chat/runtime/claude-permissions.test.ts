@@ -158,6 +158,27 @@ describe("Claude AskUserQuestion answers", () => {
     });
   });
 
+  it("gives a bare label to the one question among several that offers it", () => {
+    expect(
+      buildClaudeAskUserQuestionAnswers({
+        questions: [formatQuestion, sectionsQuestion],
+        response: "Conclusion",
+      }),
+    ).toEqual({
+      answers: { "Which sections should I include?": "Conclusion" },
+    });
+    // Ambiguous when several questions offer the same label.
+    expect(
+      buildClaudeAskUserQuestionAnswers({
+        questions: [
+          formatQuestion,
+          { ...formatQuestion, question: "How should I format the PR body?" },
+        ],
+        response: "Summary",
+      }),
+    ).toEqual({ answers: {}, response: "Summary" });
+  });
+
   it("returns unmatched free text across several questions as a general reply", () => {
     expect(
       buildClaudeAskUserQuestionAnswers({

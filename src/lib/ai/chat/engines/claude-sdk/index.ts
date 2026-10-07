@@ -251,27 +251,37 @@ async function readClaudeStatusSnapshot(options: { binaryPath: string }) {
   }
 }
 
-function getExecutableNames(command: string) {
-  if (process.platform !== "win32") {
+/**
+ * File names to look for when resolving `command` in a PATH directory. On
+ * Windows only PATHEXT names can run: npm also writes an extension-less sh
+ * script named `claude` next to `claude.cmd`, and picking it first would hide
+ * the runnable shim (the .cmd is then followed to the package entry).
+ */
+export function getClaudeExecutableNames(
+  command: string,
+  options?: { pathExt?: string; platform?: NodeJS.Platform },
+) {
+  if ((options?.platform ?? process.platform) !== "win32") {
     return [command];
   }
 
-  const pathExt = (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM")
+  const pathExt = (
+    options?.pathExt ??
+    process.env.PATHEXT ??
+    ".EXE;.CMD;.BAT;.COM"
+  )
     .split(";")
     .map((extension) => extension.trim())
     .filter(Boolean);
 
-  const names = new Set<string>([command]);
   const lowerCommand = command.toLowerCase();
-  for (const extension of pathExt) {
-    if (lowerCommand.endsWith(extension.toLowerCase())) {
-      continue;
-    }
-
-    names.add(`${command}${extension}`);
+  if (
+    pathExt.some((extension) => lowerCommand.endsWith(extension.toLowerCase()))
+  ) {
+    return [command];
   }
 
-  return [...names];
+  return pathExt.map((extension) => `${command}${extension}`);
 }
 
 async function isExecutable(candidatePath: string) {
@@ -300,7 +310,7 @@ async function findExecutableInPath(
     .filter(Boolean);
 
   for (const directory of searchPaths) {
-    for (const executableName of getExecutableNames(command)) {
+    for (const executableName of getClaudeExecutableNames(command)) {
       const candidatePath = path.join(directory, executableName);
       if (await isExecutable(candidatePath)) {
         return candidatePath;
