@@ -14,7 +14,7 @@ function getService(context: IntegrationContext): MongoDBService {
   return new MongoDBService(config);
 }
 
-const jsonObject = z.record(z.unknown()).describe("A JSON object.");
+const jsonObject = z.record(z.string(), z.unknown()).describe("A JSON object.");
 
 export function buildMongoDBTools(
   context: IntegrationContext,
@@ -78,7 +78,7 @@ export function buildMongoDBTools(
           .describe("Target database. Uses the configured default if omitted."),
       }),
       outputSchema: z.object({
-        documents: z.array(z.record(z.unknown())),
+        documents: z.array(z.record(z.string(), z.unknown())),
         count: z.number(),
       }),
       needsApproval: () => approvalFn("mongo_find"),
@@ -112,7 +112,7 @@ export function buildMongoDBTools(
           .describe("Target database. Uses the configured default if omitted."),
       }),
       outputSchema: z.object({
-        document: z.record(z.unknown()).nullable(),
+        document: z.record(z.string(), z.unknown()).nullable(),
       }),
       needsApproval: () => approvalFn("mongo_find_one"),
       execute: async ({ collection, query, database }) => {
@@ -235,7 +235,7 @@ export function buildMongoDBTools(
           .describe("Target database. Uses the configured default if omitted."),
       }),
       outputSchema: z.object({
-        documents: z.array(z.record(z.unknown())),
+        documents: z.array(z.record(z.string(), z.unknown())),
       }),
       needsApproval: () => approvalFn("mongo_aggregate"),
       execute: async ({ collection, pipeline, database }) => {

@@ -101,7 +101,7 @@ const automationFieldsSchema = {
   scheduleCron: z.string().trim().min(1).nullable().optional(),
   modelId: z.string().trim().min(1).nullable().optional(),
   reasoningEffort: z.enum(AUTOMATION_REASONING_EFFORTS).nullable().optional(),
-} satisfies Record<string, z.ZodTypeAny>;
+} satisfies Record<string, z.ZodType>;
 
 function addModelValidationIssues(
   data: {

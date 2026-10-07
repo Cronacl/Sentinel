@@ -24,7 +24,7 @@ const jsonValueSchema: z.ZodType<
     z.boolean(),
     z.null(),
     z.array(jsonValueSchema),
-    z.record(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
   ]),
 );
 
@@ -104,7 +104,7 @@ export const threadCreateSchema = z.object({
   engine: chatEngineSchema.optional().default("sentinel"),
   mode: z.enum(THREAD_MODES).optional().default("chat"),
   summary: optionalText(500).optional().default(""),
-  threadId: z.string().uuid().optional(),
+  threadId: z.guid().optional(),
   title: z.string().trim().min(1, "Thread title is required.").max(200),
   workspaceId: z.string().min(1).optional(),
 });

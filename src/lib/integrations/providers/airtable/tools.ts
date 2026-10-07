@@ -21,7 +21,7 @@ const fieldSchema = z.object({
   name: z.string(),
   type: z.string(),
   description: z.string().optional(),
-  options: z.record(z.unknown()).optional(),
+  options: z.record(z.string(), z.unknown()).optional(),
 });
 
 const viewSchema = z.object({
@@ -42,7 +42,7 @@ const tableSchema = z.object({
 const recordSchema = z.object({
   id: z.string(),
   createdTime: z.string(),
-  fields: z.record(z.unknown()),
+  fields: z.record(z.string(), z.unknown()),
 });
 
 const commentSchema = z.object({
@@ -134,7 +134,7 @@ export function buildAirtableTools(
                   "Field type (e.g. singleLineText, number, singleSelect)",
                 ),
               description: z.string().optional(),
-              options: z.record(z.unknown()).optional(),
+              options: z.record(z.string(), z.unknown()).optional(),
             }),
           )
           .min(1)
@@ -166,7 +166,7 @@ export function buildAirtableTools(
           ),
         description: z.string().optional().describe("Optional description"),
         options: z
-          .record(z.unknown())
+          .record(z.string(), z.unknown())
           .optional()
           .describe(
             'REQUIRED for singleSelect/multipleSelects: { choices: [{ name: "Value" }] }. For number: { precision: 0 }. For currency: { precision: 2, symbol: "$" }',
@@ -279,7 +279,7 @@ export function buildAirtableTools(
           .array(
             z.object({
               fields: z
-                .record(z.unknown())
+                .record(z.string(), z.unknown())
                 .describe("Field values for the record"),
             }),
           )
@@ -308,7 +308,9 @@ export function buildAirtableTools(
           .array(
             z.object({
               id: z.string().min(1).describe("The record ID to update"),
-              fields: z.record(z.unknown()).describe("Field values to update"),
+              fields: z
+                .record(z.string(), z.unknown())
+                .describe("Field values to update"),
             }),
           )
           .min(1)

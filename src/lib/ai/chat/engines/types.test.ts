@@ -219,3 +219,50 @@ describe("mergeThreadChatEngineState", () => {
     });
   });
 });
+
+describe("parseThreadChatEngineState", () => {
+  it("round-trips persisted state and drops unknown keys", () => {
+    const state = {
+      claude: {
+        cwd: "/tmp/project",
+        modelId: null,
+        permissionMode: "acceptEdits",
+        sessionId: "claude-session-1",
+      },
+      codex: {
+        approvalPolicy: "on-request",
+        codexThreadId: "codex-thread-1",
+        pendingTurnId: null,
+        sandboxMode: "workspace-write",
+      },
+      copilot: null,
+      permissionModeOverride: "full",
+      repo: {
+        lastPullRequest: {
+          base: "main",
+          createdAt: "2026-03-28T10:00:00.000Z",
+          draft: false,
+          head: "feature/test",
+          kind: "compare",
+          repoFullName: "openai/sentinel",
+          url: "https://github.com/openai/sentinel/compare/main...feature/test",
+        },
+        projectMode: "worktree",
+        worktreePath: "/tmp/worktree",
+      },
+    };
+    const stored = JSON.parse(
+      JSON.stringify({
+        ...state,
+        claude: { ...state.claude, legacyField: true },
+        unknownEngine: { sessionId: "x" },
+      }),
+    );
+
+    expect(parseThreadChatEngineState(stored)).toStrictEqual(state);
+  });
+
+  it("rejects state that is missing a session id", () => {
+    expect(parseThreadChatEngineState({ claude: { cwd: "/tmp" } })).toBeNull();
+  });
+});

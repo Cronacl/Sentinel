@@ -21,6 +21,25 @@ export const TRIPWIRES = [
     description: "Node 21.7.3 pin replaced by Node 24 LTS",
     pattern: /21\.7\.3/,
   },
+  {
+    id: "P3-zod-v3-error-params",
+    description: "zod 4 replaced invalid_type_error/required_error with error",
+    pattern: /\b(?:invalid_type_error|required_error)\b/,
+    include: /\.[cm]?[jt]sx?$/,
+  },
+  {
+    id: "P3-zod-single-arg-record",
+    description: "zod 4 z.record() needs an explicit key schema",
+    // One argument: no top-level comma before the closing parenthesis.
+    pattern: /(?:\bz|^\s*)\.record\((?:[^(),]|\((?:[^()]|\([^()]*\))*\))*\)/,
+    include: /\.[cm]?[jt]sx?$/,
+  },
+  {
+    id: "P3-zod-type-any",
+    description: "zod 4 removed ZodTypeAny (use z.ZodType)",
+    pattern: /\bZodTypeAny\b/,
+    include: /\.[cm]?[jt]sx?$/,
+  },
 ];
 
 const DEFAULT_EXCLUDE =

@@ -88,7 +88,7 @@ export const providersRouter = createTRPCRouter({
     .input(
       z.object({
         provider: aiProviderEnum,
-        config: z.record(z.unknown()),
+        config: z.record(z.string(), z.unknown()),
       }),
     )
     .mutation(async ({ ctx, input }) => {

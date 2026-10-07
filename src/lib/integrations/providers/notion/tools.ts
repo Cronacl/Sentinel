@@ -22,7 +22,7 @@ const pageSchema = z.object({
   parentType: z.string(),
   parentId: z.string().nullable(),
   archived: z.boolean(),
-  properties: z.record(z.string()),
+  properties: z.record(z.string(), z.string()),
   createdTime: z.string(),
   lastEditedTime: z.string(),
   createdBy: z.string(),
@@ -147,7 +147,7 @@ export function buildNotionTools(
       inputSchema: z.object({
         pageId: z.string().describe("The page ID to update"),
         properties: z
-          .record(z.unknown())
+          .record(z.string(), z.unknown())
           .optional()
           .describe("Properties to update (Notion property format)"),
         icon: z.string().optional().describe("Emoji icon for the page"),
@@ -196,7 +196,7 @@ export function buildNotionTools(
       inputSchema: z.object({
         databaseId: z.string().describe("The database ID to query"),
         filter: z
-          .record(z.unknown())
+          .record(z.string(), z.unknown())
           .optional()
           .describe("Notion filter object"),
         sorts: z
@@ -226,7 +226,7 @@ export function buildNotionTools(
       inputSchema: z.object({
         databaseId: z.string().describe("The database ID"),
         properties: z
-          .record(z.unknown())
+          .record(z.string(), z.unknown())
           .describe("Properties for the new entry (Notion property format)"),
         children: z
           .array(
@@ -250,7 +250,9 @@ export function buildNotionTools(
       description: "Update an existing database entry's properties.",
       inputSchema: z.object({
         pageId: z.string().describe("The entry (page) ID to update"),
-        properties: z.record(z.unknown()).describe("Properties to update"),
+        properties: z
+          .record(z.string(), z.unknown())
+          .describe("Properties to update"),
       }),
       outputSchema: pageSchema,
       needsApproval: () => approvalFn("notion_update_database_entry"),
