@@ -1,6 +1,8 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { EXCLUDED_SERVER_PACKAGE_GLOBS } from "./scripts/desktop/excluded-server-packages.mjs";
+import { SERVER_EXTERNAL_PACKAGES } from "./scripts/desktop/server-external-packages.mjs";
 import { UNTRACED_SERVER_PACKAGES } from "./scripts/desktop/untraced-server-packages.mjs";
 
 /**
@@ -28,7 +30,12 @@ const config = {
       (packageName) => `./node_modules/${packageName}/**/*`,
     ),
   },
-  serverExternalPackages: ["better-sqlite3", "sqlite-vec"],
+  outputFileTracingExcludes: {
+    "/**": EXCLUDED_SERVER_PACKAGE_GLOBS.map(
+      (packageGlob) => `./node_modules/${packageGlob}/**/*`,
+    ),
+  },
+  serverExternalPackages: SERVER_EXTERNAL_PACKAGES,
   turbopack: {
     root: projectRoot,
   },

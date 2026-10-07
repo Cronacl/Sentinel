@@ -8,6 +8,8 @@ import {
   findSqliteVecRuntimeIssues,
   inferBundleArch,
 } from "./audit-bundle-utils.mjs";
+import { findExcludedServerPackages } from "./excluded-server-packages.mjs";
+import { SERVER_EXTERNAL_PACKAGES } from "./server-external-packages.mjs";
 import { UNTRACED_SERVER_PACKAGES } from "./untraced-server-packages.mjs";
 import {
   findMacUpdateFeedIssues,
@@ -358,6 +360,31 @@ for (const unpackedAppPath of unpackedAppPaths) {
   if (missingUntracedRuntimeFiles.length > 0) {
     failures.push(
       `${unpackedAppPath}: packaged server is missing untraced runtime packages:\n${missingUntracedRuntimeFiles.join("\n")}`,
+    );
+  }
+
+  const missingExternalRuntimeFiles = findMissingServerRuntimeFiles({
+    requiredFiles: SERVER_EXTERNAL_PACKAGES.map((packageName) =>
+      path.join(serverPath, "node_modules", packageName, "package.json"),
+    ),
+    serverFiles,
+    serverPath,
+  });
+
+  if (missingExternalRuntimeFiles.length > 0) {
+    failures.push(
+      `${unpackedAppPath}: packaged server is missing serverExternalPackages:\n${missingExternalRuntimeFiles.join("\n")}`,
+    );
+  }
+
+  const excludedServerPackages = findExcludedServerPackages({
+    serverFiles,
+    serverPath,
+  });
+
+  if (excludedServerPackages.length > 0) {
+    failures.push(
+      `${unpackedAppPath}: packaged server ships packages that must stay out of the bundle (Claude Agent SDK native CLIs; Sentinel uses the user's claude):\n${excludedServerPackages.join("\n")}`,
     );
   }
 
