@@ -1,0 +1,99 @@
+import { describe, expect, it } from "bun:test";
+
+import { findTripwireHitsInContent } from "./tripwires.mjs";
+
+function hitIds(file: string, content: string) {
+  return findTripwireHitsInContent(file, content).map(
+    (hit: { id: string; line: number }) => `${hit.id}:${hit.line}`,
+  );
+}
+
+describe("P6 Electron 44 tripwires", () => {
+  it("flags clipboard calls that drop the Promise or use removed methods", () => {
+    const content = [
+      "clipboard.writeText(text);",
+      "const value = clipboard.readText();",
+      "if (clipboard.has('text/plain')) {}",
+      "clipboard.writeHTML(html);",
+      "const image = clipboard.readImage();",
+      "clipboard.availableFormats();",
+    ].join("\n");
+
+    expect(hitIds("desktop/main/index.mjs", content)).toEqual([
+      "P6-unawaited-clipboard:1",
+      "P6-unawaited-clipboard:2",
+      "P6-unawaited-clipboard:3",
+      "P6-removed-clipboard-api:4",
+      "P6-removed-clipboard-api:5",
+      "P6-removed-clipboard-api:6",
+    ]);
+  });
+
+  it("accepts awaited or returned clipboard Promises", () => {
+    const content = [
+      "await clipboard.writeText(text);",
+      "const value = await clipboard.readText();",
+      "return clipboard.read();",
+    ].join("\n");
+
+    expect(hitIds("desktop/main/index.mjs", content)).toEqual([]);
+    // The renderer's navigator.clipboard is out of scope.
+    expect(
+      hitIds(
+        "src/components/copy-button.tsx",
+        "navigator.clipboard.writeText(text);",
+      ),
+    ).toEqual([]);
+  });
+
+  it("flags Electron clipboard imports in the preload", () => {
+    expect(
+      hitIds(
+        "desktop/preload/index.mjs",
+        'import {\n  clipboard,\n  contextBridge,\n} from "electron";',
+      ),
+    ).toEqual(["P6-renderer-clipboard:1"]);
+    expect(
+      hitIds(
+        "desktop/preload/index.mjs",
+        'const text = require("electron").clipboard.readText();',
+      ),
+    ).toEqual(["P6-renderer-clipboard:1"]);
+    expect(
+      hitIds(
+        "desktop/preload/index.mjs",
+        'import { contextBridge, ipcRenderer } from "electron";\nconst api = {\n  clipboard: {\n    writeText: (text) => ipcRenderer.invoke("copy", text),\n  },\n};',
+      ),
+    ).toEqual([]);
+  });
+
+  it("flags positional console-message listeners across line breaks", () => {
+    expect(
+      hitIds(
+        "desktop/main/index.mjs",
+        'win.webContents.on(\n  "console-message",\n  (e, lvl, msg, line, source) => {},\n);',
+      ),
+    ).toEqual(["P6-positional-console-message:2"]);
+    expect(
+      hitIds(
+        "desktop/main/index.mjs",
+        'contents.on("console-message", function (_event, level) {});',
+      ),
+    ).toEqual(["P6-positional-console-message:1"]);
+    expect(
+      hitIds(
+        "desktop/main/index.mjs",
+        "function onConsoleMessage(_event, level, message) {}",
+      ),
+    ).toEqual(["P6-positional-console-message:1"]);
+  });
+
+  it("accepts the details-object console-message form", () => {
+    expect(
+      hitIds(
+        "desktop/main/index.mjs",
+        'win.webContents.on(\n  "console-message",\n  ({ level, lineNumber, message, sourceId }) => {},\n);\ncontents.on("console-message", (event) => log(event.message));',
+      ),
+    ).toEqual([]);
+  });
+});

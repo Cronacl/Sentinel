@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
  *   pattern: RegExp;
  *   include?: RegExp;
  *   exclude?: RegExp;
+ *   multiline?: boolean;
  * }} Tripwire
  */
 
@@ -143,17 +144,38 @@ export const TRIPWIRES = [
     pattern: /ELECTRON_SKIP_BINARY_DOWNLOAD/,
   },
   {
-    id: "P6-unawaited-clipboard-write",
-    description: "Electron 44 clipboard.writeText returns a Promise",
-    pattern: /(?<!await )\bclipboard\.writeText\(/,
+    id: "P6-unawaited-clipboard",
+    description:
+      "Electron 44 clipboard read/write/has calls return Promises; await them",
+    pattern:
+      /(?<!\b(?:await|return)\s+)\bclipboard\.(?:has|read|readText|write|writeText)\(/,
     include: /^desktop\/main\//,
+  },
+  {
+    id: "P6-removed-clipboard-api",
+    description:
+      "Electron 44 removed the HTML, image, RTF, bookmark, buffer and find-text clipboard methods",
+    pattern:
+      /\bclipboard\.(?:availableFormats|(?:read|write)(?:Bookmark|Buffer|FindText|HTML|Image|RTF))\b/,
+    include: /^desktop\//,
+  },
+  {
+    id: "P6-renderer-clipboard",
+    description:
+      "Electron 44 removed clipboard from renderers; the preload goes through IPC",
+    pattern:
+      /\{[^}]*\bclipboard\b[^}]*\}\s*(?:=\s*require\(\s*["']electron["']\s*\)|from\s*["']electron["'])|require\(\s*["']electron["']\s*\)\.clipboard\b/,
+    include: /^desktop\/preload\//,
+    multiline: true,
   },
   {
     id: "P6-positional-console-message",
     description:
       "console-message listeners read the details object (Electron 35+)",
-    pattern: /\(\s*_?event\s*,\s*level\s*,\s*message\b/,
+    pattern:
+      /["']console-message["']\s*,\s*(?:async\s+)?(?:function\b[^(]*)?\(\s*[\w$]+\s*,|\(\s*_?(?:e|evt|event)\s*,\s*(?:level|lvl)\s*,\s*(?:message|msg)\b/,
     include: /^desktop\//,
+    multiline: true,
   },
 ];
 
@@ -166,6 +188,55 @@ function listTrackedFiles() {
   })
     .split("\n")
     .filter(Boolean);
+}
+
+/**
+ * @param {string} file
+ * @param {string} content
+ * @param {Tripwire[]} [tripwires]
+ */
+export function findTripwireHitsInContent(
+  file,
+  content,
+  tripwires = TRIPWIRES,
+) {
+  const hits = [];
+  const lines = content.split("\n");
+
+  for (const tripwire of tripwires) {
+    if (tripwire.include && !tripwire.include.test(file)) continue;
+    if (tripwire.exclude?.test(file)) continue;
+
+    if (tripwire.multiline) {
+      // Multiline patterns span line breaks; report the line a match starts on.
+      const flags = tripwire.pattern.flags.replace("g", "");
+      for (const match of content.matchAll(
+        new RegExp(tripwire.pattern.source, `${flags}g`),
+      )) {
+        const line = content.slice(0, match.index).split("\n").length;
+        hits.push({
+          file,
+          id: tripwire.id,
+          line,
+          text: (lines[line - 1] ?? "").trim(),
+        });
+      }
+      continue;
+    }
+
+    lines.forEach((line, index) => {
+      if (tripwire.pattern.test(line)) {
+        hits.push({
+          file,
+          id: tripwire.id,
+          line: index + 1,
+          text: line.trim(),
+        });
+      }
+    });
+  }
+
+  return hits;
 }
 
 export function findTripwireHits(tripwires = TRIPWIRES) {
@@ -181,21 +252,7 @@ export function findTripwireHits(tripwires = TRIPWIRES) {
       continue;
     }
 
-    for (const tripwire of tripwires) {
-      if (tripwire.include && !tripwire.include.test(file)) continue;
-      if (tripwire.exclude?.test(file)) continue;
-      const lines = content.split("\n");
-      lines.forEach((line, index) => {
-        if (tripwire.pattern.test(line)) {
-          hits.push({
-            file,
-            id: tripwire.id,
-            line: index + 1,
-            text: line.trim(),
-          });
-        }
-      });
-    }
+    hits.push(...findTripwireHitsInContent(file, content, tripwires));
   }
 
   return hits;
