@@ -456,9 +456,11 @@ export default function ModelsPage() {
                                       )
                                     }
                                   >
-                                    <Switch.Control>
-                                      <Switch.Thumb />
-                                    </Switch.Control>
+                                    <Switch.Content>
+                                      <Switch.Control>
+                                        <Switch.Thumb />
+                                      </Switch.Control>
+                                    </Switch.Content>
                                   </Switch.Root>
                                 </div>
                               </div>

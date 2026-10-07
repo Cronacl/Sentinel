@@ -856,7 +856,7 @@ const WorkspaceHeader = memo(function WorkspaceHeader({
     <div className="group relative">
       {hasLinkedFolder ? (
         <Tooltip.Root delay={1200}>
-          <Tooltip.Trigger>{workspaceRow}</Tooltip.Trigger>
+          <Tooltip.Trigger className="block">{workspaceRow}</Tooltip.Trigger>
           <Tooltip.Content
             className={WORKSPACE_TOOLTIP_CLASSNAME}
             offset={12}

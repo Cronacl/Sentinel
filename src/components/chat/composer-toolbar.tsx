@@ -215,11 +215,13 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                       isSelected={planMode}
                       size="sm"
                     >
-                      <Switch.Control>
-                        <Switch.Thumb>
-                          <Switch.Icon />
-                        </Switch.Thumb>
-                      </Switch.Control>
+                      <Switch.Content>
+                        <Switch.Control>
+                          <Switch.Thumb>
+                            <Switch.Icon />
+                          </Switch.Thumb>
+                        </Switch.Control>
+                      </Switch.Content>
                     </Switch>
                   </div>
                 </ListBox.Item>
@@ -269,11 +271,13 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                           <span className="flex-1">{item.label}</span>
                           <div className="pointer-events-none">
                             <Switch isSelected={selected} size="sm">
-                              <Switch.Control>
-                                <Switch.Thumb>
-                                  <Switch.Icon />
-                                </Switch.Thumb>
-                              </Switch.Control>
+                              <Switch.Content>
+                                <Switch.Control>
+                                  <Switch.Thumb>
+                                    <Switch.Icon />
+                                  </Switch.Thumb>
+                                </Switch.Control>
+                              </Switch.Content>
                             </Switch>
                           </div>
                         </ListBox.Item>

@@ -213,9 +213,11 @@ export default function GeneralSettingsPage() {
                     onBlur={field.onBlur}
                     onChange={field.onChange}
                   >
-                    <Switch.Control>
-                      <Switch.Thumb />
-                    </Switch.Control>
+                    <Switch.Content>
+                      <Switch.Control>
+                        <Switch.Thumb />
+                      </Switch.Control>
+                    </Switch.Content>
                   </Switch>
                 )}
               />
@@ -247,9 +249,11 @@ export default function GeneralSettingsPage() {
                       onBlur={field.onBlur}
                       onChange={field.onChange}
                     >
-                      <Switch.Control>
-                        <Switch.Thumb />
-                      </Switch.Control>
+                      <Switch.Content>
+                        <Switch.Control>
+                          <Switch.Thumb />
+                        </Switch.Control>
+                      </Switch.Content>
                     </Switch>
                   )}
                 />
@@ -328,9 +332,11 @@ export default function GeneralSettingsPage() {
                     onBlur={field.onBlur}
                     onChange={field.onChange}
                   >
-                    <Switch.Control>
-                      <Switch.Thumb />
-                    </Switch.Control>
+                    <Switch.Content>
+                      <Switch.Control>
+                        <Switch.Thumb />
+                      </Switch.Control>
+                    </Switch.Content>
                   </Switch>
                 )}
               />

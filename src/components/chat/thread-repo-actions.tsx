@@ -1317,11 +1317,13 @@ export function ThreadRepoActions({
                     onChange={() => setIncludeUnstaged((prev) => !prev)}
                     size="sm"
                   >
-                    <Switch.Control>
-                      <Switch.Thumb>
-                        <Switch.Icon />
-                      </Switch.Thumb>
-                    </Switch.Control>
+                    <Switch.Content>
+                      <Switch.Control>
+                        <Switch.Thumb>
+                          <Switch.Icon />
+                        </Switch.Thumb>
+                      </Switch.Control>
+                    </Switch.Content>
                   </Switch>
                   <span className="text-sm text-foreground">
                     Include unstaged
@@ -1450,11 +1452,13 @@ export function ThreadRepoActions({
                         onChange={() => setIsDraft((prev) => !prev)}
                         size="sm"
                       >
-                        <Switch.Control>
-                          <Switch.Thumb>
-                            <Switch.Icon />
-                          </Switch.Thumb>
-                        </Switch.Control>
+                        <Switch.Content>
+                          <Switch.Control>
+                            <Switch.Thumb>
+                              <Switch.Icon />
+                            </Switch.Thumb>
+                          </Switch.Control>
+                        </Switch.Content>
                       </Switch>
                       <span className="text-sm text-muted">Draft</span>
                     </div>

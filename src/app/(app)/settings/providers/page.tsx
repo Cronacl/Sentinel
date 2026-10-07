@@ -168,9 +168,11 @@ export default function ProvidersPage() {
                           })
                         }
                       >
-                        <Switch.Control>
-                          <Switch.Thumb />
-                        </Switch.Control>
+                        <Switch.Content>
+                          <Switch.Control>
+                            <Switch.Thumb />
+                          </Switch.Control>
+                        </Switch.Content>
                       </Switch>
                       <Button
                         onPress={() =>

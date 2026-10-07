@@ -306,10 +306,10 @@ export function ControlledSwitchField<
             onBlur={field.onBlur}
             onChange={field.onChange}
           >
-            <Switch.Control>
-              <Switch.Thumb />
-            </Switch.Control>
-            <Switch.Content>
+            <Switch.Content className="font-normal">
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
               <div className="space-y-1">
                 <p className="text-sm font-medium">{label}</p>
                 {description ? (
@@ -361,10 +361,10 @@ export function ControlledCheckboxField<
             onBlur={field.onBlur}
             onChange={field.onChange}
           >
-            <Checkbox.Control>
-              <Checkbox.Indicator />
-            </Checkbox.Control>
-            <Checkbox.Content>
+            <Checkbox.Content className="font-normal">
+              <Checkbox.Control>
+                <Checkbox.Indicator />
+              </Checkbox.Control>
               <div className="space-y-1">
                 <p className="text-sm font-medium">{label}</p>
                 {description ? (
