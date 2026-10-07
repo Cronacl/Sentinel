@@ -397,3 +397,41 @@ describe("P10 thread state tripwire", () => {
     ).toEqual([]);
   });
 });
+
+describe("P10 runtime path tripwires", () => {
+  it("freezes the runtime path keys in src/env.js", () => {
+    const legacy = [
+      "const LOCAL_RUNTIME_PATH_KEYS = [",
+      '  "SENTINEL_CODEX_PATH",',
+      '  "SENTINEL_OPENCODE_PATH",',
+      "];",
+      "SENTINEL_DB_PATH: z.string().optional(),",
+    ].join("\n");
+    expect(hitIds("src/env.js", legacy)).toEqual([]);
+    expect(hitIds("src/env.js", '  "SENTINEL_GROK_PATH",')).toEqual([
+      "P10-env-runtime-path-keys-frozen:1",
+    ]);
+    expect(hitIds("src/lib/other.ts", '"SENTINEL_GROK_PATH"')).toEqual([]);
+  });
+
+  it("flags new desktop.env binary path writes", () => {
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/claude-sdk/index.ts",
+        'await setLocalRuntimeEnvValue("SENTINEL_CLAUDE_PATH", executablePath);',
+      ),
+    ).toEqual([]);
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/grok/index.ts",
+        "await setLocalRuntimeEnvValue(\n  'SENTINEL_GROK_PATH',\n  binary,\n);",
+      ),
+    ).toEqual(["P10-runtime-env-binary-path-write:1"]);
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/grok/index.test.ts",
+        'setLocalRuntimeEnvValue("SENTINEL_GROK_PATH", x);',
+      ),
+    ).toEqual([]);
+  });
+});

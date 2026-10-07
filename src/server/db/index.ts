@@ -76,6 +76,7 @@ export function ensureTables(
     "accent_color" integer,
     "sidebar_glass_enabled" integer,
     "default_chat_engine" text,
+    "default_chat_engine_instance_id" text,
     "default_chat_model_id" text,
     "default_chat_mode" text,
     "default_chat_reasoning_effort" text,
@@ -127,6 +128,7 @@ export function ensureTables(
       name: "thread_list_sort_by",
       definition: "text DEFAULT 'updated' NOT NULL",
     },
+    { name: "default_chat_engine_instance_id", definition: "text" },
   ]);
 
   db.run(sql`CREATE TABLE IF NOT EXISTS "workspace" (
@@ -181,8 +183,10 @@ export function ensureTables(
     "source_virtual_thread_id" text,
     "mode" text DEFAULT 'chat' NOT NULL,
     "chat_engine" text DEFAULT 'sentinel' NOT NULL,
+    "chat_engine_instance_id" text,
     "chat_engine_state" text,
     "chat_model_id" text,
+    "chat_model_options" text,
     "chat_reasoning_effort" text,
     "created_at" integer NOT NULL,
     "updated_at" integer NOT NULL,
@@ -210,9 +214,16 @@ export function ensureTables(
     { name: "virtual_key", definition: "text" },
     { name: "delegation_id", definition: "text" },
     { name: "source_virtual_thread_id", definition: "text" },
+    // Engine instances: NULL means the driver's default instance, whose id
+    // is the driver kind, so existing threads need no backfill.
+    { name: "chat_engine_instance_id", definition: "text" },
+    { name: "chat_model_options", definition: "text" },
   ]);
   db.run(
     sql`CREATE INDEX IF NOT EXISTS "thread_parent_thread_id_idx" ON "thread" ("parent_thread_id")`,
+  );
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "thread_engine_instance_idx" ON "thread" ("chat_engine_instance_id")`,
   );
   db.run(
     sql`CREATE INDEX IF NOT EXISTS "thread_visibility_parent_idx" ON "thread" ("visibility", "parent_thread_id")`,
@@ -536,12 +547,16 @@ export function ensureTables(
     "thread_id" text NOT NULL,
     "parts" text NOT NULL,
     "model_id" text NOT NULL,
+    "model_options" text,
     "reasoning_effort" text,
     "thread_mode" text NOT NULL,
     "status" text DEFAULT 'queued' NOT NULL,
     "created_at" integer NOT NULL,
     "updated_at" integer NOT NULL
   )`);
+  ensureTableColumns(sqlite, "thread_follow_up", [
+    { name: "model_options", definition: "text" },
+  ]);
   db.run(
     sql`CREATE INDEX IF NOT EXISTS "thread_follow_up_thread_created_idx" ON "thread_follow_up" ("thread_id", "created_at")`,
   );
@@ -841,7 +856,9 @@ export function ensureTables(
     "schedule_time" text,
     "schedule_cron" text,
     "model_id" text,
+    "model_options" text,
     "reasoning_effort" text,
+    "chat_engine_instance_id" text,
     "last_ran_at" integer,
     "next_run_at" integer,
     "created_at" integer NOT NULL,
@@ -861,7 +878,37 @@ export function ensureTables(
       name: "chat_engine",
       definition: "text DEFAULT 'sentinel' NOT NULL",
     },
+    { name: "chat_engine_instance_id", definition: "text" },
+    { name: "model_options", definition: "text" },
   ]);
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "automation_engine_instance_idx" ON "automation" ("chat_engine_instance_id")`,
+  );
+
+  // One row per configured engine instance. Default instances (id = driver
+  // kind) are synthesized when they have no row, so ids are unique per user.
+  // Sensitive environment values are stored encrypted
+  // (lib/ai/providers/encrypt.ts).
+  db.run(sql`CREATE TABLE IF NOT EXISTS "engine_instance" (
+    "id" text NOT NULL,
+    "user_id" text NOT NULL,
+    "driver" text NOT NULL,
+    "label" text,
+    "accent_color" text,
+    "enabled" integer DEFAULT true NOT NULL,
+    "environment" text,
+    "binary_path" text,
+    "home_path" text,
+    "config" text,
+    "custom_models" text,
+    "sort_order" integer DEFAULT 0 NOT NULL,
+    "created_at" integer NOT NULL,
+    "updated_at" integer NOT NULL,
+    PRIMARY KEY ("user_id", "id")
+  )`);
+  db.run(
+    sql`CREATE INDEX IF NOT EXISTS "engine_instance_user_driver_idx" ON "engine_instance" ("user_id", "driver")`,
+  );
 
   db.run(sql`CREATE TABLE IF NOT EXISTS "automation_run" (
     "id" text PRIMARY KEY NOT NULL,

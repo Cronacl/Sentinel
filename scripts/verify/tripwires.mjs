@@ -352,6 +352,25 @@ export const TRIPWIRES = [
     include: /^src\/.*\.[cm]?[jt]sx?$/,
   },
   {
+    id: "P10-env-runtime-path-keys-frozen",
+    description:
+      "src/env.js runtime path keys are frozen to the legacy engines; new drivers persist resolved binaries in <state root>/engines/runtime-paths.json (platform/runtime/paths-cache.ts)",
+    pattern:
+      /\bSENTINEL_(?!(?:CODEX|CLAUDE|COPILOT|CURSOR|OPENCODE|DB|STATE|MEDIA)_PATH\b)[A-Z0-9_]+_PATH\b/,
+    include: /^src\/env\.js$/,
+  },
+  {
+    id: "P10-runtime-env-binary-path-write",
+    description:
+      "Only the legacy engines write SENTINEL_<X>_PATH to desktop.env; new code records resolved binaries per instance in runtime-paths.json",
+    pattern:
+      // SENTINEL_COPILOT_PATH has its own P9 tripwire.
+      /\bsetLocalRuntimeEnvValue\(\s*["'`]SENTINEL_(?!(?:CODEX|CLAUDE|COPILOT|CURSOR|OPENCODE)_PATH["'`])[A-Z0-9_]+_PATH["'`]/,
+    include: /^src\/.*\.[cm]?[jt]sx?$/,
+    exclude: /\.test\.[cm]?[jt]sx?$/,
+    multiline: true,
+  },
+  {
     id: "fixtures-in-app-code",
     description:
       "scripts/fixtures protocol fakes are test-only; app code never references them",

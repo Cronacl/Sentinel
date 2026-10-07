@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lt, sql } from "drizzle-orm";
 
 import { db } from "@/server/db";
 import { threadFollowUps, threadMessages, threads } from "@/server/db/schema";
@@ -16,6 +16,10 @@ import type {
   ThreadStateByDriver,
   ThreadStateDriverKind,
 } from "@/lib/ai/chat/engines/types";
+import {
+  toStoredEngineInstanceId,
+  type EngineOptionSelection,
+} from "@/lib/ai/chat/engines/contract";
 import {
   buildThreadChatEngineState,
   mergeThreadChatEngineState,
@@ -41,6 +45,8 @@ export type PersistedThreadFollowUpRecord = {
   createdAt: Date;
   id: string;
   modelId: string;
+  /** Engine option selections queued with the message (NULL before G7). */
+  modelOptions: EngineOptionSelection[] | null;
   parts: ThreadUIMessage["parts"];
   reasoningEffort: ReasoningEffort | null;
   status: "queued" | "processing";
@@ -67,6 +73,8 @@ export async function ensureThread(
   mode: ThreadMode = "chat",
   engine: ChatEngine = "sentinel",
   chatEngineState?: ThreadChatEngineState | null,
+  /** The engine instance a new thread binds to; omit for the default. */
+  engineInstanceId?: string | null,
 ) {
   const existing = await db.query.threads.findFirst({
     where: eq(threads.id, threadId),
@@ -77,6 +85,10 @@ export async function ensureThread(
     db.insert(threads)
       .values({
         chatEngine: engine,
+        chatEngineInstanceId: toStoredEngineInstanceId(
+          engine,
+          engineInstanceId,
+        ),
         ...(chatEngineState ? { chatEngineState } : {}),
         id: threadId,
         mode,
@@ -97,6 +109,8 @@ export async function ensureVirtualThread(input: {
   chatEngineState?: ThreadChatEngineState | null;
   delegationId?: string | null;
   engine?: ChatEngine;
+  /** The engine instance a new virtual thread binds to; omit for the default. */
+  engineInstanceId?: string | null;
   mode?: ThreadMode;
   parentThreadId: string;
   title: string;
@@ -125,6 +139,10 @@ export async function ensureVirtualThread(input: {
     db.insert(threads)
       .values({
         chatEngine: input.engine ?? "sentinel",
+        chatEngineInstanceId: toStoredEngineInstanceId(
+          input.engine ?? "sentinel",
+          input.engineInstanceId,
+        ),
         ...(input.chatEngineState
           ? { chatEngineState: input.chatEngineState }
           : {}),
@@ -151,6 +169,7 @@ export async function loadThread(threadId: string) {
       activeStreamId: true,
       archivedAt: true,
       chatEngine: true,
+      chatEngineInstanceId: true,
       chatEngineState: true,
       delegationId: true,
       id: true,
@@ -201,8 +220,15 @@ export function updateThreadChatSettings(
   threadId: string,
   settings: {
     engine?: ChatEngine | null;
+    /**
+     * Rebinds the thread's instance; only applied together with `engine`.
+     * Omitted, the stored instance is kept while `engine` stays the same
+     * driver and cleared (default instance) when `engine` changes it.
+     */
+    engineInstanceId?: string | null;
     mode?: ThreadMode | null;
     modelId?: string | null;
+    modelOptions?: EngineOptionSelection[] | null;
     reasoningEffort?: string | null;
   },
 ) {
@@ -211,6 +237,22 @@ export function updateThreadChatSettings(
       ...(settings.engine === undefined
         ? {}
         : { chatEngine: settings.engine ?? "sentinel" }),
+      ...(settings.engine === undefined
+        ? {}
+        : {
+            chatEngineInstanceId:
+              settings.engineInstanceId === undefined
+                ? // An instance belongs to one driver: never keep it across
+                  // a driver change. SET expressions see the old row.
+                  sql`CASE WHEN ${threads.chatEngine} = ${settings.engine ?? "sentinel"} THEN ${threads.chatEngineInstanceId} ELSE NULL END`
+                : toStoredEngineInstanceId(
+                    settings.engine ?? "sentinel",
+                    settings.engineInstanceId,
+                  ),
+          }),
+      ...(settings.modelOptions === undefined
+        ? {}
+        : { chatModelOptions: settings.modelOptions ?? null }),
       ...(settings.modelId === undefined
         ? {}
         : { chatModelId: settings.modelId ?? null }),
@@ -409,6 +451,7 @@ function getJsonParts(parts: ThreadUIMessage["parts"]) {
 export function enqueueThreadFollowUp(input: {
   id: string;
   modelId: string;
+  modelOptions?: EngineOptionSelection[] | null;
   parts: ThreadUIMessage["parts"];
   reasoningEffort?: ReasoningEffort | null;
   threadId: string;
@@ -418,6 +461,7 @@ export function enqueueThreadFollowUp(input: {
     .values({
       id: input.id,
       modelId: input.modelId,
+      modelOptions: input.modelOptions ?? null,
       parts: getJsonParts(input.parts),
       reasoningEffort: input.reasoningEffort ?? null,
       threadId: input.threadId,
@@ -434,6 +478,7 @@ export function enqueueThreadFollowUp(input: {
 export function enqueueThreadFollowUpAtFront(input: {
   id: string;
   modelId: string;
+  modelOptions?: EngineOptionSelection[] | null;
   parts: ThreadUIMessage["parts"];
   reasoningEffort?: ReasoningEffort | null;
   threadId: string;
@@ -455,6 +500,7 @@ export function enqueueThreadFollowUpAtFront(input: {
       createdAt,
       id: input.id,
       modelId: input.modelId,
+      modelOptions: input.modelOptions ?? null,
       parts: getJsonParts(input.parts),
       reasoningEffort: input.reasoningEffort ?? null,
       threadId: input.threadId,

@@ -7,6 +7,7 @@ import { z } from "zod";
 import {
   ENGINE_MODEL_ID_PATTERN,
   computeEngineSnapshotUsable,
+  createEngineInstanceInputSchema,
   customEngineModelSchema,
   defaultInstanceIdForDriver,
   driverKindSchema,
@@ -16,8 +17,11 @@ import {
   engineOptionDescriptorSchema,
   engineProbeResultSchema,
   engineSnapshotSchema,
+  fromStoredEngineInstanceId,
   mergeEngineUsageWindows,
   parseEngineSnapshot,
+  toStoredEngineInstanceId,
+  updateEngineInstanceInputSchema,
 } from ".";
 import { makeFakeInstance, makeFakeModel, makeFakeSnapshot } from "./testing";
 
@@ -30,6 +34,22 @@ describe("ids", () => {
       expect(driverKindSchema.safeParse(kind).success).toBe(false);
     }
     expect(defaultInstanceIdForDriver("claude")).toBe("claude");
+  });
+
+  it("stores NULL for the default instance and reads NULL back as it", () => {
+    expect(toStoredEngineInstanceId("codex", undefined)).toBeNull();
+    expect(toStoredEngineInstanceId("codex", null)).toBeNull();
+    expect(toStoredEngineInstanceId("codex", "codex")).toBeNull();
+    expect(toStoredEngineInstanceId("codex", "codex-work")).toBe("codex-work");
+
+    expect(fromStoredEngineInstanceId("codex", null)).toEqual({
+      driver: "codex",
+      instanceId: "codex",
+    });
+    expect(fromStoredEngineInstanceId("gemini", "gemini-cli")).toEqual({
+      driver: "gemini",
+      instanceId: "gemini-cli",
+    });
   });
 });
 
@@ -210,6 +230,42 @@ describe("instances", () => {
     expect(engineInstanceSummarySchema.parse(summary)).toEqual(
       summary as never,
     );
+  });
+
+  it("validates create and update inputs", () => {
+    expect(
+      createEngineInstanceInputSchema.parse({
+        config: { homePath: "~/.codex-work" },
+        driver: "codex",
+        environment: [{ name: "OPENAI_API_KEY", sensitive: true, value: "x" }],
+        label: "Work",
+      }),
+    ).toMatchObject({
+      driver: "codex",
+      environment: [{ name: "OPENAI_API_KEY", sensitive: true, value: "x" }],
+    });
+
+    for (const input of [
+      { driver: "Codex" },
+      { driver: "codex", id: "codex:work" },
+      { accentColor: "orange", driver: "codex" },
+      { driver: "codex", label: "" },
+      { config: "binary", driver: "codex" },
+    ]) {
+      expect(createEngineInstanceInputSchema.safeParse(input).success).toBe(
+        false,
+      );
+    }
+
+    expect(
+      updateEngineInstanceInputSchema.parse({
+        accentColor: null,
+        sortOrder: 2,
+      }),
+    ).toEqual({ accentColor: null, sortOrder: 2 });
+    expect(
+      updateEngineInstanceInputSchema.safeParse({ sortOrder: -1 }).success,
+    ).toBe(false);
   });
 });
 

@@ -59,3 +59,27 @@ export function defaultInstanceIdForDriver(
 ): EngineInstanceId {
   return driver;
 }
+
+/**
+ * The value stored in chat_engine_instance_id columns: NULL for the
+ * driver's default instance, so rows keep following the default.
+ */
+export function toStoredEngineInstanceId(
+  driver: DriverKind,
+  instanceId: EngineInstanceId | null | undefined,
+): EngineInstanceId | null {
+  return instanceId == null || instanceId === defaultInstanceIdForDriver(driver)
+    ? null
+    : instanceId;
+}
+
+/** The instance a stored (driver, instance id) pair points at. */
+export function fromStoredEngineInstanceId(
+  driver: DriverKind,
+  instanceId: EngineInstanceId | null | undefined,
+): EngineTarget {
+  return {
+    driver,
+    instanceId: instanceId ?? defaultInstanceIdForDriver(driver),
+  };
+}

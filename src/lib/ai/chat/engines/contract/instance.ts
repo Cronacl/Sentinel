@@ -85,6 +85,53 @@ export const engineInstanceSummarySchema = z.object({
   unavailableReason: z.enum(ENGINE_INSTANCE_UNAVAILABLE_REASONS).nullable(),
 });
 
+const engineInstanceConfigInputSchema = z.record(z.string(), z.unknown());
+
+/**
+ * Settings → Engines "add instance" input. Shapes only: the server registry
+ * also validates `config` with the driver's schema and allocates the id.
+ */
+export const createEngineInstanceInputSchema = z.object({
+  accentColor: engineAccentColorSchema.nullish(),
+  config: engineInstanceConfigInputSchema.optional(),
+  customModels: z
+    .array(customEngineModelSchema)
+    .max(MAX_ENGINE_CUSTOM_MODELS)
+    .optional(),
+  driver: driverKindSchema,
+  enabled: z.boolean().optional(),
+  environment: z
+    .array(engineEnvVarInputSchema)
+    .max(MAX_ENGINE_ENV_VARS)
+    .optional(),
+  /** Omit to derive `${driver}-${slug(label)}`. */
+  id: engineInstanceIdSchema.optional(),
+  label: engineInstanceLabelSchema.optional(),
+});
+
+/** A partial update; `config` and `environment` replace the stored values. */
+export const updateEngineInstanceInputSchema = z.object({
+  accentColor: engineAccentColorSchema.nullish(),
+  config: engineInstanceConfigInputSchema.optional(),
+  customModels: z
+    .array(customEngineModelSchema)
+    .max(MAX_ENGINE_CUSTOM_MODELS)
+    .optional(),
+  enabled: z.boolean().optional(),
+  environment: z
+    .array(engineEnvVarInputSchema)
+    .max(MAX_ENGINE_ENV_VARS)
+    .optional(),
+  label: engineInstanceLabelSchema.optional(),
+  sortOrder: z.number().int().min(0).max(100_000).optional(),
+});
+
+export type CreateEngineInstanceInput = z.input<
+  typeof createEngineInstanceInputSchema
+>;
+export type UpdateEngineInstanceInput = z.input<
+  typeof updateEngineInstanceInputSchema
+>;
 export type EngineEnvVarInput = z.input<typeof engineEnvVarInputSchema>;
 export type StoredEngineEnvVar = z.infer<typeof storedEngineEnvVarSchema>;
 export type RedactedEngineEnvVar = z.infer<typeof redactedEngineEnvVarSchema>;
