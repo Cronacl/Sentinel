@@ -17,7 +17,11 @@ import { createMoonshotAI } from "@ai-sdk/moonshotai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createReplicate } from "@ai-sdk/replicate";
 import { createXai } from "@ai-sdk/xai";
-import { createGateway } from "ai";
+import {
+  createGateway,
+  defaultSettingsMiddleware,
+  wrapLanguageModel,
+} from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 
 import type { AIProvider } from "@/server/db/enums";
@@ -77,7 +81,24 @@ export function createProviderLanguageModel(
     return createOllamaProvider(config as OllamaConfig).chat(modelId);
   }
 
-  return createProviderInstance(provider, config).languageModel(modelId);
+  const languageModel = createProviderInstance(provider, config).languageModel(
+    modelId,
+  );
+
+  // @ai-sdk/xai 5 only has the Responses API, which stores prompts and
+  // responses on xAI's servers for later retrieval unless `store` is false
+  // (and errors for Zero Data Retention teams). The Chat Completions path
+  // Sentinel used before stored nothing, and Sentinel never reads them back.
+  if (provider === "xai") {
+    return wrapLanguageModel({
+      middleware: defaultSettingsMiddleware({
+        settings: { providerOptions: { xai: { store: false } } },
+      }),
+      model: languageModel,
+    });
+  }
+
+  return languageModel;
 }
 
 export function createProviderInstance(

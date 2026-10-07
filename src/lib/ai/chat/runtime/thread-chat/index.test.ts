@@ -49,6 +49,9 @@ const createGateway = mock((_options = {}) => ({
     modelId,
   })),
 }));
+// The provider factory wraps xAI models in a default-settings middleware.
+const defaultSettingsMiddleware = mock((options) => options);
+const wrapLanguageModel = mock(({ model }) => model);
 const createUIMessageStream = mock(({ execute, onEnd }) => {
   const writer = {
     merge: mock(() => {}),
@@ -429,6 +432,7 @@ mock.module("ai", () => ({
   createGateway,
   createUIMessageStream,
   createUIMessageStreamResponse,
+  defaultSettingsMiddleware,
   experimental_generateVideo,
   generateImage,
   generateText,
@@ -440,6 +444,7 @@ mock.module("ai", () => ({
   tool,
   ToolLoopAgent: MockToolLoopAgent,
   validateUIMessages,
+  wrapLanguageModel,
 }));
 
 mock.module("server-only", () => ({}));
