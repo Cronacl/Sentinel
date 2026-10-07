@@ -7,7 +7,10 @@
 //
 // Every frame the mock receives (requests, notifications and responses to its
 // own requests) is appended raw to SENTINEL_ACP_MOCK_LOG as JSONL.
+import http from "node:http";
+
 import * as acp from "@agentclientprotocol/sdk";
+import * as acpV2 from "@agentclientprotocol/sdk/experimental/v2";
 
 import {
   applyTemplate,
@@ -31,6 +34,7 @@ import {
   STANDARD_PERMISSION_OPTIONS,
   type AcpLegacyModelState,
   type AcpMockBranches,
+  type AcpMockBrowserLogin,
   type AcpMockError,
   type AcpMockPromptScript,
   type AcpMockScenario,
@@ -73,6 +77,7 @@ let inboundSeq = 0;
 let sessionCounter = 0;
 let unmatchedPrompts = 0;
 let elicitationCounter = 0;
+let v2MessageCounter = 0;
 let authenticated = !scenario.auth?.requireAuth;
 
 function isObject(value: unknown): value is JsonObject {
@@ -176,6 +181,67 @@ function requireAuthenticated() {
   );
 }
 
+/**
+ * Prints the sign-in lines and, by default, waits for the OAuth redirect on
+ * a loopback listener, the way Antigravity's `agy_acp_server` signs in.
+ */
+async function browserLogin(login: AcpMockBrowserLogin, methodId: string) {
+  const callback = login.callback !== false;
+  let server: http.Server | undefined;
+  let outcome: Promise<URLSearchParams> | undefined;
+  let callbackUrl = "";
+  if (callback) {
+    const listener = http.createServer();
+    server = listener;
+    outcome = new Promise((resolve) => {
+      listener.on("request", (request, response) => {
+        const query = new URL(request.url ?? "/", "http://127.0.0.1")
+          .searchParams;
+        if (!query.has("code") && !query.has("error")) {
+          response.writeHead(404).end();
+          return;
+        }
+        response
+          .writeHead(200, { "content-type": "text/plain" })
+          .end("Authentication complete. You can close this window.\n");
+        resolve(query);
+      });
+    });
+    await new Promise<void>((resolve) =>
+      listener.listen(0, "127.0.0.1", resolve),
+    );
+    const address = listener.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    callbackUrl = `http://127.0.0.1:${port}/`;
+  }
+  const vars = {
+    callbackUrl,
+    callbackUrlEncoded: encodeURIComponent(callbackUrl),
+    methodId,
+  };
+  for (const line of login.stdoutLines ?? [])
+    await stdout.write(`${applyTemplate(line, vars)}\n`);
+  if (!outcome || !server) return;
+  try {
+    const timeout =
+      login.timeoutMs === undefined
+        ? undefined
+        : sleep(login.timeoutMs).then(() => "timeout" as const);
+    const query = await (timeout ? Promise.race([outcome, timeout]) : outcome);
+    if (query === "timeout") {
+      throw new acp.RequestError(-32000, "Authentication timed out");
+    }
+    const error = query.get("error");
+    if (error !== null) {
+      throw new acp.RequestError(-32000, `Authentication failed: ${error}`, {
+        error,
+      });
+    }
+  } finally {
+    server.close();
+  }
+}
+
 function nextSessionId(): string {
   const configured = scenario.session?.ids?.[sessionCounter];
   sessionCounter += 1;
@@ -226,27 +292,51 @@ async function sendUpdate(
   client: acp.AgentContext,
   sessionId: string,
   update: JsonObject,
-  meta?: JsonObject,
+  meta?: { meta?: JsonObject; notificationMeta?: JsonObject },
 ) {
   const method: string = acp.methods.client.session.update;
   await client.notify(method, {
     sessionId,
-    update: meta ? { ...update, _meta: meta } : update,
+    update: meta?.meta ? { ...update, _meta: meta.meta } : update,
+    ...(meta?.notificationMeta ? { _meta: meta.notificationMeta } : {}),
   });
 }
 
-/** Sends updates once the current response has been queued. */
+// ---------------------------------------------------------------------------
+// Outbound tap: tells handlers when their response has been written.
+// ---------------------------------------------------------------------------
+
+const responseWaiters = new Map<acp.JsonRpcId, () => void>();
+
+/** Resolves once the response to `requestId` has gone out. */
+function responseSent(requestId: acp.JsonRpcId): Promise<void> {
+  return new Promise((resolve) => responseWaiters.set(requestId, resolve));
+}
+
+function recordOutbound(message: unknown) {
+  if (Array.isArray(message)) {
+    for (const item of message) recordOutbound(item);
+    return;
+  }
+  if (!isObject(message) || "method" in message || !("id" in message)) return;
+  const id = message.id as acp.JsonRpcId;
+  const waiter = responseWaiters.get(id);
+  if (!waiter) return;
+  responseWaiters.delete(id);
+  waiter();
+}
+
+/** Sends updates once the response to `requestId` has gone out. */
 function sendAfterResponse(
   client: acp.AgentContext,
   sessionId: string,
   updates: JsonObject[],
+  requestId: acp.JsonRpcId,
 ) {
   if (updates.length === 0) return;
-  setTimeout(() => {
-    void (async () => {
-      for (const update of updates) await sendUpdate(client, sessionId, update);
-    })();
-  }, 10);
+  void responseSent(requestId).then(async () => {
+    for (const update of updates) await sendUpdate(client, sessionId, update);
+  });
 }
 
 function flatSelectValues(option: JsonObject): string[] {
@@ -322,12 +412,7 @@ async function runStep(
 
   switch (step.type) {
     case "update":
-      await sendUpdate(
-        client,
-        step.sessionId ?? sessionId,
-        step.update,
-        step.meta,
-      );
+      await sendUpdate(client, step.sessionId ?? sessionId, step.update, step);
       return undefined;
     case "text":
     case "thought":
@@ -342,7 +427,7 @@ async function runStep(
           content: { type: "text", text: step.text },
           ...(step.messageId ? { messageId: step.messageId } : {}),
         },
-        step.meta,
+        step,
       );
       return undefined;
     case "image":
@@ -358,12 +443,12 @@ async function runStep(
             ...(step.uri ? { uri: step.uri } : {}),
           },
         },
-        step.meta,
+        step,
       );
       return undefined;
     case "toolCall":
     case "toolCallUpdate": {
-      const { type, meta, ...fields } = step;
+      const { type, meta, notificationMeta, ...fields } = step;
       await sendUpdate(
         client,
         sessionId,
@@ -371,15 +456,17 @@ async function runStep(
           sessionUpdate: type === "toolCall" ? "tool_call" : "tool_call_update",
           ...fields,
         },
-        meta,
+        { meta, notificationMeta },
       );
       return undefined;
     }
     case "plan":
-      await sendUpdate(client, sessionId, {
-        sessionUpdate: "plan",
-        entries: step.entries,
-      });
+      await sendUpdate(
+        client,
+        sessionId,
+        { sessionUpdate: "plan", entries: step.entries },
+        step,
+      );
       return undefined;
     case "requestPermission": {
       const response: unknown = await client.request(
@@ -606,6 +693,19 @@ async function finishCancelled(turn: TurnContext): Promise<acp.PromptResponse> {
   return { stopReason: cancel.stopReason ?? "cancelled" };
 }
 
+/** Runs a script's `afterResponse` steps outside the turn (no cancel). */
+async function runAfterResponse(steps: AcpMockStep[], turn: TurnContext) {
+  try {
+    await runSteps(steps, { ...turn, signal: new AbortController().signal });
+  } catch (error) {
+    log({
+      kind: "lifecycle",
+      event: "after-response-failed",
+      detail: errorToJson(error),
+    });
+  }
+}
+
 async function runPrompt(
   params: acp.PromptRequest,
   client: acp.AgentContext,
@@ -636,9 +736,14 @@ async function runPrompt(
     ...sessionVars(session),
     promptText: text,
     promptId: rawMeta?.promptId ?? rawMeta?.requestId,
+    requestId: rawMeta?.requestId ?? rawMeta?.promptId,
     promptMeta: rawMeta ?? null,
   };
   const turn: TurnContext = { client, session, signal: controller.signal };
+  if (script.afterResponse?.length) {
+    const steps = applyTemplate(script.afterResponse, vars);
+    void responseSent(requestId).then(() => runAfterResponse(steps, turn));
+  }
 
   try {
     const outcome = await runSteps(applyTemplate(script.steps, vars), turn);
@@ -713,6 +818,13 @@ const app = acp
           },
         );
       }
+      const browser = auth.browserLogin;
+      if (
+        browser &&
+        (!browser.methodIds || browser.methodIds.includes(params.methodId))
+      ) {
+        await browserLogin(browser, params.methodId);
+      }
       authenticated = true;
       return {};
     }),
@@ -726,13 +838,14 @@ const app = acp
   )
   .onRequest(
     "session/new",
-    guard("session/new", ({ params, client }) => {
+    guard("session/new", ({ params, client, requestId }) => {
       requireAuthenticated();
       const state = createSession(nextSessionId(), params.cwd);
       sendAfterResponse(
         client,
         state.sessionId,
         applyTemplate(scenario.session?.afterNew ?? [], sessionVars(state)),
+        requestId,
       );
       return {
         sessionId: state.sessionId,
@@ -838,7 +951,7 @@ const app = acp
   )
   .onRequest(
     "session/set_mode",
-    guard("session/set_mode", ({ params, client }) => {
+    guard("session/set_mode", ({ params, client, requestId }) => {
       const state = requireSession(params.sessionId);
       if (
         state.modes &&
@@ -851,19 +964,24 @@ const app = acp
       }
       if (state.modes) state.modes.currentModeId = params.modeId;
       if (scenario.session?.emitCurrentModeUpdate) {
-        sendAfterResponse(client, state.sessionId, [
-          {
-            sessionUpdate: "current_mode_update",
-            currentModeId: params.modeId,
-          },
-        ]);
+        sendAfterResponse(
+          client,
+          state.sessionId,
+          [
+            {
+              sessionUpdate: "current_mode_update",
+              currentModeId: params.modeId,
+            },
+          ],
+          requestId,
+        );
       }
       return {};
     }),
   )
   .onRequest(
     "session/set_config_option",
-    guard("session/set_config_option", ({ params, client }) => {
+    guard("session/set_config_option", ({ params, client, requestId }) => {
       const state = requireSession(params.sessionId);
       const option = state.configOptions?.find(
         (entry) => entry.id === params.configId,
@@ -892,12 +1010,17 @@ const app = acp
       if (replacement)
         state.configOptions = deepClone(replacement as JsonObject[]);
       if (scenario.session?.emitConfigOptionUpdate) {
-        sendAfterResponse(client, state.sessionId, [
-          {
-            sessionUpdate: "config_option_update",
-            configOptions: state.configOptions,
-          },
-        ]);
+        sendAfterResponse(
+          client,
+          state.sessionId,
+          [
+            {
+              sessionUpdate: "config_option_update",
+              configOptions: state.configOptions,
+            },
+          ],
+          requestId,
+        );
       }
       return {
         configOptions: state.configOptions,
@@ -941,6 +1064,90 @@ const app = acp
   });
 
 // ---------------------------------------------------------------------------
+// Draft ACP v2 agent (only when initialize.versions includes 2)
+// ---------------------------------------------------------------------------
+
+/**
+ * A minimal draft-v2 agent, shaped like the SDK's
+ * `dist/examples/dual-version-agent.js`: the prompt answers `{messageId}`
+ * first and reports the turn through `state_update`.
+ */
+function v2Agent() {
+  const config = scenario.initialize?.v2 ?? {};
+  const turns = new Map<string, AbortController>();
+  return acpV2
+    .agent({ name: `${scenario.agentName ?? "sentinel-acp-mock"}-v2` })
+    .onRequest(
+      "initialize",
+      guard("initialize", () => ({
+        protocolVersion: acpV2.PROTOCOL_VERSION,
+        info: config.info ?? DEFAULT_AGENT_INFO,
+        capabilities: (config.capabilities ?? {
+          session: {},
+        }) as acpV2.AgentCapabilities,
+        ...(config.meta ? { _meta: config.meta } : {}),
+      })),
+    )
+    .onRequest(
+      "session/new",
+      guard("session/new", ({ params }) => {
+        const state = createSession(nextSessionId(), params.cwd);
+        return { sessionId: state.sessionId };
+      }),
+    )
+    .onRequest(
+      "session/prompt",
+      guard("session/prompt", ({ params, client }) => {
+        const session = requireSession(params.sessionId);
+        const text = params.prompt
+          .flatMap((block) => (block.type === "text" ? [block.text] : []))
+          .join("\n");
+        const reply = (selectScript(text).steps ?? [])
+          .flatMap((step) => (step.type === "text" ? [step.text] : []))
+          .join("");
+        const messageId = `mock-message-${++v2MessageCounter}`;
+        const controller = new AbortController();
+        turns.get(session.sessionId)?.abort();
+        turns.set(session.sessionId, controller);
+        const notify = (update: JsonObject) =>
+          client.notify(acpV2.methods.client.session.update, {
+            sessionId: session.sessionId,
+            update,
+          } as acpV2.UpdateSessionNotification);
+        // The response goes out first: the turn starts on the next task.
+        setTimeout(() => {
+          void (async () => {
+            await notify({
+              sessionUpdate: "user_message",
+              messageId,
+              content: params.prompt,
+            });
+            await notify({ sessionUpdate: "state_update", state: "running" });
+            if (!controller.signal.aborted) {
+              await notify({
+                sessionUpdate: "agent_message",
+                messageId: `mock-message-${++v2MessageCounter}`,
+                content: [{ type: "text", text: reply || "Mock agent reply." }],
+              });
+            }
+            await notify({
+              sessionUpdate: "state_update",
+              state: "idle",
+              stopReason: controller.signal.aborted ? "cancelled" : "end_turn",
+            });
+            if (turns.get(session.sessionId) === controller)
+              turns.delete(session.sessionId);
+          })();
+        }, 0);
+        return { messageId };
+      }),
+    )
+    .onNotification("session/cancel", ({ params }) => {
+      turns.get(params.sessionId)?.abort();
+    });
+}
+
+// ---------------------------------------------------------------------------
 // Startup
 // ---------------------------------------------------------------------------
 
@@ -965,10 +1172,31 @@ async function main() {
       controller.enqueue(message);
     },
   });
-  const connection = app.connect({
-    readable: wire.readable.pipeThrough(tap),
-    writable: wire.writable,
+  // A write resolves only once the frame reached the stdout queue, so steps
+  // that write raw stdout or exit right after a frame keep their order.
+  const wireWriter = wire.writable.getWriter();
+  const outbound = new WritableStream<acp.AnyMessage>({
+    async write(message) {
+      await wireWriter.write(message);
+      recordOutbound(message);
+    },
+    close: () => wireWriter.close(),
+    abort: (reason) => wireWriter.abort(reason),
   });
+  const stream = {
+    readable: wire.readable.pipeThrough(tap),
+    writable: outbound,
+  };
+  const versions = scenario.initialize?.versions ?? [1];
+  let connection: { closed: Promise<void> };
+  if (versions.includes(2)) {
+    // Version negotiation by the SDK's own router, as dual-version-agent.js.
+    const router = acpV2.agentProtocolRouter().withV2(v2Agent());
+    if (versions.includes(1)) router.withV1(app);
+    connection = router.connect(stream);
+  } else {
+    connection = app.connect(stream);
+  }
 
   await connection.closed;
   if (faults.exitOnStdinClose === false) {

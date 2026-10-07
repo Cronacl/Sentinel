@@ -33,7 +33,7 @@ const harness = startAcpHarness(scenario, {
     outcome: { outcome: "selected", optionId: "allow-once" },
   }),
   extRequests: { "cursor/ask_question": () => ({ answers: {} }) },
-  extNotifications: ["x.ai/session/prompt_complete"],
+  extNotifications: ["_x.ai/session/prompt_complete"],
 });
 await harness.initialize();
 const { sessionId } = await harness.newSession();
@@ -45,7 +45,7 @@ harness.log(); // every frame the mock received
 await harness.dispose();
 ```
 
-[`profiles.ts`](./profiles.ts) has starting scenarios that reproduce the recorded wire traits of Cursor, Grok Build, Antigravity and Devin.
+[`profiles.ts`](./profiles.ts) has starting scenarios that reproduce the recorded wire traits of Cursor, Grok Build, Antigravity and Devin. The Grok profile follows t3code's recordings of the released 1.0.41 CLI: `_x.ai/*` method names (`grokProfile({methodPrefix: ""})` for the canonical `x.ai/*` names), `_meta.modelState` with object-shaped `reasoningEfforts`, wrapped `{method, params}` question requests, `params._meta.promptId` on every turn frame, and `task-completed-*` background wake turns after the response.
 
 ## `initialize`
 
@@ -95,6 +95,7 @@ await harness.dispose();
 ```
 
 - `protocolVersion` defaults to the SDK's `PROTOCOL_VERSION` (1). Antigravity answers 2 with a v1-shaped body.
+- `versions` (default `[1]`) lists the protocol versions served. With 2 in it, the connection goes through the SDK's `agentProtocolRouter()`, as `dist/examples/dual-version-agent.js` does: the router picks the highest listed version that does not exceed the client's request, rewrites the initialize params for it and turns away clients below every listed version (`-32600`). v1 clients reach this mock; draft-v2 clients reach a small v2 agent (`v2: {info, capabilities, meta}`) with `session/new`, a `session/prompt` that answers `{messageId}` and then streams `user_message`, `state_update` running, one `agent_message` (the selected script's `text` steps joined) and `state_update` idle, and `session/cancel`. Auth and the other sections apply to the v1 side only.
 - `agentInfo` defaults to `sentinel-acp-mock`; `null` sends `agentInfo: null`.
 - `agentCapabilities` replaces the defaults as a whole (`DEFAULT_AGENT_CAPABILITIES`).
 - `authMethods` are passed through untouched. The stable 1.7 schema knows `agent` (untyped or `type:"agent"`) and `terminal`; `env_var` (`vars`, `link`) is the registry shape agents still send.
@@ -108,12 +109,22 @@ await harness.dispose();
   "auth": {
     "requireAuth": true,
     "acceptMethodIds": ["cursor_login"],
-    "delayMs": 0
+    "delayMs": 0,
+    "browserLogin": {
+      "methodIds": ["oauth-personal"],
+      "stdoutLines": [
+        "Open the following link to authenticate the ACP server: https://accounts.google.com/o/oauth2/v2/auth?redirect_uri={{callbackUrlEncoded}}&state=s"
+      ],
+      "callback": true,
+      "timeoutMs": 60000
+    }
   }
 }
 ```
 
-With `requireAuth`, `session/new|load|resume|fork` fail with the ACP auth-required error (`-32000`, `RequestError.authRequired`, optional `message` and `errorData`) until `authenticate` succeeds. `authenticate` with an id outside `acceptMethodIds` fails with `rejectError` (default `-32602`). `logout` drops the auth again. `delayMs` delays the `authenticate` response (browser login stand-in).
+With `requireAuth`, `session/new|load|resume|fork` fail with the ACP auth-required error (`-32000`, `RequestError.authRequired`, optional `message` and `errorData`) until `authenticate` succeeds. `authenticate` with an id outside `acceptMethodIds` fails with `rejectError` (default `-32602`). `logout` drops the auth again. `delayMs` delays the `authenticate` response.
+
+`browserLogin` is the Antigravity sign-in: for the listed methods (default all), `authenticate` starts a loopback HTTP listener on `127.0.0.1` and a free port, writes `stdoutLines` raw to stdout (`{{callbackUrl}}` is `http://127.0.0.1:<port>/`, `{{callbackUrlEncoded}}` the same URL-encoded, `{{methodId}}` the method), and answers only when the OAuth redirect arrives: a `GET` with `code` succeeds, one with `error` fails with `-32000`, and with `timeoutMs` a missing callback fails too. Other paths get 404. `callback: false` prints the lines and answers at once.
 
 ## Sessions
 
@@ -179,7 +190,7 @@ With `requireAuth`, `session/new|load|resume|fork` fail with the ACP auth-requir
 ```
 
 - `session/new` and `session/fork` hand out `ids` in order, then `mock-session-<n>`. Responses carry `modes`, `configOptions`, the legacy unstable `models` state and `meta` (as `_meta`).
-- `afterNew` updates are sent right after the `session/new` response.
+- `afterNew` updates are sent right after the `session/new` response has been written (the mock taps its own outgoing frames, so they can never overtake it).
 - `session/load` replays `load.replay` through `session/update` **before** it responds (`replayDelayMs` between updates). `knownSessionIds` makes other ids fail with `unknownSessionError` (default `-32002`); `error` fails every load. `resume` works the same without a replay.
 - `session/list` returns `list` or the sessions this process created; `session/close` cancels a running turn; `session/delete` forgets the session.
 - `session/set_mode` validates the mode id; `session/set_config_option` validates select values (grouped options are flattened) and returns the new options. `configOptionsAfterSet["<configId>=<value>"]` replaces the whole list (Cursor's per-model effort list). The `emit*` flags send the matching update after the response.
@@ -213,11 +224,13 @@ Strings in replay and `afterNew` updates can use `{{sessionId}}` and `{{cwd}}`.
 
 A prompt whose text contains a script's `match` runs that script. Other prompts take the unmatched scripts in order, repeating the last one. A script ends with `stopReason` (default `end_turn`; `end_turn`, `max_tokens`, `max_turn_requests`, `refusal`, `cancelled`; `null` answers `{}` without one), optional `usage` and `meta` (`_meta`), or fails with `error` after its steps.
 
-Strings in steps can use `{{sessionId}}`, `{{cwd}}`, `{{promptText}}`, `{{promptId}}` (`_meta.promptId` or `_meta.requestId` of the prompt) and `{{promptMeta}}`. A string that is exactly one placeholder takes the raw value.
+`afterResponse` is a step list run once the prompt response has been written: agent-initiated traffic after the turn, such as Grok's background-task wake turns. `session/cancel` does not stop it.
+
+Strings in steps (and in `meta` and `afterResponse`) can use `{{sessionId}}`, `{{cwd}}`, `{{promptText}}`, `{{promptId}}` (`_meta.promptId`, else `_meta.requestId` of the prompt), `{{requestId}}` (the other way round) and `{{promptMeta}}`. A string that is exactly one placeholder takes the raw value.
 
 ### Steps
 
-Every step except the control steps can carry `meta`, which becomes `_meta` on the update or request.
+Every step except the control steps can carry `meta`, which becomes `_meta` on the update or request. Update steps (`text`, `thought`, `image`, `toolCall`, `toolCallUpdate`, `plan`, `update`) can also carry `notificationMeta`, which becomes `_meta` on the `session/update` params, next to `sessionId` and `update`. Grok puts `promptId` there (`task-completed-*` on background wake turns), so engines must read it from `params._meta`, not `update._meta`.
 
 | Step                                                                                                                                                                                                                      | Wire effect                                                                                                                                                                                                                                                                                              |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -229,8 +242,8 @@ Every step except the control steps can carry `meta`, which becomes `_meta` on t
 | `{"type":"plan","entries":[{"content":"Read","priority":"high","status":"completed"}]}`                                                                                                                                   | `plan`                                                                                                                                                                                                                                                                                                   |
 | `{"type":"update","update":{…},"sessionId?":"other"}`                                                                                                                                                                     | any raw `session/update` payload, including `available_commands_update`, `current_mode_update`, `config_option_update`, `usage_update`, `session_info_update`, `plan_update`, `notice` and kinds outside the 1.7 union (Grok `subagent_finished`); `sessionId` targets another session (Devin subagents) |
 | `{"type":"requestPermission","toolCall":{…},"options?":[…],"branches":{"allow-once":[…],"cancelled":[…],"*":[…]}}`                                                                                                        | `session/request_permission`, then the branch keyed by the selected `optionId` (or `cancelled`). Default options: `allow-once`, `allow-always`, `reject-once`, `reject-always` (one per kind); add custom ids freely                                                                                     |
-| `{"type":"extRequest","method":"x.ai/ask_user_question","params":{},"branches":{"accepted":[…],"error":[…]},"echo":true}`                                                                                                 | a vendor request; branch on `result.outcome`, else `ok`, or `error` when the client fails it (unregistered methods get `-32601`). `echo` writes the result as a text chunk                                                                                                                               |
-| `{"type":"extNotification","method":"x.ai/session/prompt_complete","params":{}}`                                                                                                                                          | a vendor notification (`cursor/update_todos`, `_session/retrying`, …)                                                                                                                                                                                                                                    |
+| `{"type":"extRequest","method":"_x.ai/ask_user_question","params":{},"branches":{"accepted":[…],"error":[…]},"echo":true}`                                                                                                | a vendor request, method name sent verbatim (SDK 1.7 adds no `_` prefix); branch on `result.outcome`, else `ok`, or `error` when the client fails it (unregistered methods get `-32601`). `echo` writes the result as a text chunk                                                                       |
+| `{"type":"extNotification","method":"_x.ai/session/prompt_complete","params":{}}`                                                                                                                                         | a vendor notification (`cursor/update_todos`, `_session/retrying`, …)                                                                                                                                                                                                                                    |
 | `{"type":"clientFs","op":"read","path":"/a.md","line":2,"limit":1,"echo":true}`                                                                                                                                           | `fs/read_text_file`; `echo` reports the result or error                                                                                                                                                                                                                                                  |
 | `{"type":"clientFs","op":"write","path":"/a.md","content":"…"}`                                                                                                                                                           | `fs/write_text_file`                                                                                                                                                                                                                                                                                     |
 | `{"type":"clientTerminal","command":"npm","args":["test"],"env":[{"name":"CI","value":"1"}],"cwd":"{{cwd}}","outputByteLimit":1024,"toolCallId":"c2","kill":false,"noWait":false,"release":true,"echo":true}`             | `terminal/create`, an optional `tool_call_update` with terminal content, optional `terminal/kill`, `terminal/wait_for_exit`, `terminal/output`, `terminal/release`                                                                                                                                       |
@@ -274,9 +287,7 @@ Branches are step lists keyed by outcome, with `"*"` as the fallback; a branch c
 ```json
 {
   "faults": {
-    "startupStdout": [
-      "Open the following link to authenticate the ACP server: https://accounts.google.com/o/oauth2/v2/auth?…"
-    ],
+    "startupStdout": ["not json: a banner before the first frame"],
     "startupStderr": "warming up",
     "stderrFloodBytes": 262144,
     "splitFramesBytes": 7,

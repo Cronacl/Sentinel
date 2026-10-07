@@ -40,7 +40,36 @@ export type AcpLegacyModelState = {
   }>;
 };
 
+/**
+ * The draft ACP v2 side of a dual-version mock (`initialize.versions`
+ * includes 2). It is deliberately small, like the SDK's
+ * `dist/examples/dual-version-agent.js`: `session/new`, a `session/prompt`
+ * that answers `{messageId}` and then streams `user_message`,
+ * `state_update` running, one `agent_message` (the selected script's `text`
+ * steps joined) and `state_update` idle, and `session/cancel`.
+ */
+export type AcpMockV2Agent = {
+  /** `info` on the v2 initialize response. Default {@link DEFAULT_AGENT_INFO}. */
+  info?: acp.Implementation;
+  /** `capabilities` on the v2 initialize response. Default `{session:{}}`. */
+  capabilities?: JsonObject;
+  /** `_meta` on the v2 initialize response. */
+  meta?: JsonObject;
+};
+
 export type AcpMockInitialize = {
+  /**
+   * Protocol versions this agent serves. Default `[1]`: the v1 handler
+   * answers every client. With 2 in the list, the connection goes through
+   * the SDK's `agentProtocolRouter()` (as `dual-version-agent.js` does): it
+   * picks the highest listed version that does not exceed the client's
+   * request, rewrites the initialize params for it and rejects clients below
+   * every listed version. v1 clients then reach the v1 mock, v2 clients the
+   * small v2 agent described by {@link AcpMockV2Agent}.
+   */
+  versions?: Array<1 | 2>;
+  /** The v2 agent used when `versions` includes 2. */
+  v2?: AcpMockV2Agent;
   /** Defaults to the SDK's `PROTOCOL_VERSION` (1). */
   protocolVersion?: number;
   /** Defaults to {@link DEFAULT_AGENT_INFO}; `null` sends `agentInfo: null`. */
@@ -73,6 +102,34 @@ export type AcpMockAuth = {
   errorData?: unknown;
   /** Delay before `authenticate` responds (browser login stand-in). */
   delayMs?: number;
+  /** Browser sign-in while `authenticate` is pending (Antigravity). */
+  browserLogin?: AcpMockBrowserLogin;
+};
+
+/**
+ * Browser sign-in as `agy_acp_server` does it: once `authenticate` arrives,
+ * the agent prints the sign-in URL on stdout and waits for the OAuth
+ * redirect on its own loopback listener; only then does `authenticate`
+ * answer.
+ */
+export type AcpMockBrowserLogin = {
+  /** Methods that sign in through the browser. Default: every accepted method. */
+  methodIds?: string[];
+  /**
+   * Raw stdout lines written when `authenticate` arrives. `{{callbackUrl}}`
+   * is the listener's `http://127.0.0.1:<port>/`, `{{callbackUrlEncoded}}`
+   * the same URL-encoded (for a `redirect_uri` query parameter), and
+   * `{{methodId}}` the requested method.
+   */
+  stdoutLines?: string[];
+  /**
+   * Default true: start a 127.0.0.1 HTTP listener on a free port.
+   * `authenticate` succeeds on a GET carrying `code` and fails (-32000) on
+   * one carrying `error`. False answers right after printing the lines.
+   */
+  callback?: boolean;
+  /** Fail `authenticate` (-32000) when no callback arrived in time. */
+  timeoutMs?: number;
 };
 
 export type AcpMockSessionConfig = {
@@ -129,19 +186,39 @@ export type AcpMockPromptScript = {
   meta?: JsonObject;
   /** Fail the prompt request with this error (after the steps ran). */
   error?: AcpMockError;
+  /**
+   * Steps run once the prompt response has gone out: agent-initiated
+   * traffic after the turn, such as Grok's background-task wake turns. A
+   * `session/cancel` does not stop them.
+   */
+  afterResponse?: AcpMockStep[];
 };
 
 /** Step lists keyed by outcome; `"*"` is the fallback. */
 export type AcpMockBranches = Record<string, AcpMockStep[]>;
 
+/** `_meta` on the request the step sends. */
 type StepMeta = { meta?: JsonObject };
+
+/**
+ * Metadata on a `session/update` step. `meta` becomes `update._meta`;
+ * `notificationMeta` becomes `params._meta`, next to `sessionId` and
+ * `update` (where Grok puts `promptId`, e.g. `task-completed-*` on
+ * background wake turns).
+ */
+type UpdateMeta = { meta?: JsonObject; notificationMeta?: JsonObject };
 
 export type AcpMockStep =
   /** Any `session/update` payload, sent as-is (unknown kinds included). */
-  | ({ type: "update"; update: JsonObject; sessionId?: string } & StepMeta)
-  | ({ type: "text"; text: string; messageId?: string } & StepMeta)
-  | ({ type: "thought"; text: string; messageId?: string } & StepMeta)
-  | ({ type: "image"; data: string; mimeType: string; uri?: string } & StepMeta)
+  | ({ type: "update"; update: JsonObject; sessionId?: string } & UpdateMeta)
+  | ({ type: "text"; text: string; messageId?: string } & UpdateMeta)
+  | ({ type: "thought"; text: string; messageId?: string } & UpdateMeta)
+  | ({
+      type: "image";
+      data: string;
+      mimeType: string;
+      uri?: string;
+    } & UpdateMeta)
   | ({
       type: "toolCall";
       toolCallId: string;
@@ -152,7 +229,7 @@ export type AcpMockStep =
       rawOutput?: unknown;
       locations?: acp.ToolCallLocation[];
       content?: Array<acp.ToolCallContent | JsonObject>;
-    } & StepMeta)
+    } & UpdateMeta)
   /** Only the fields present are sent: a partial update, status optional. */
   | ({
       type: "toolCallUpdate";
@@ -164,8 +241,8 @@ export type AcpMockStep =
       rawOutput?: unknown;
       locations?: acp.ToolCallLocation[] | null;
       content?: Array<acp.ToolCallContent | JsonObject> | null;
-    } & StepMeta)
-  | { type: "plan"; entries: acp.PlanEntry[] }
+    } & UpdateMeta)
+  | ({ type: "plan"; entries: acp.PlanEntry[] } & UpdateMeta)
   | ({
       type: "requestPermission";
       toolCall: JsonObject;

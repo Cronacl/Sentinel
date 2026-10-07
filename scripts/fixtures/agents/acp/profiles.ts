@@ -1,11 +1,14 @@
 // Starting scenarios for the ACP agents P12/P13 integrate. They reproduce the
 // wire traits recorded in the design and recon notes (t3code drivers, current
-// Sentinel Cursor code); they are not recordings of the real agents, so engine
-// tests should still assert on behaviour, not on these exact values.
+// Sentinel Cursor code) and, for Grok, t3code's recordings of the real CLI.
+// They are still scripts, not replays, so engine tests should assert on
+// behaviour, not on these exact values.
 import {
   STANDARD_PERMISSION_OPTIONS,
   selectConfigOption,
+  type AcpLegacyModelState,
   type AcpMockScenario,
+  type AcpMockStep,
 } from "./scenario";
 
 const cursorModes = {
@@ -225,52 +228,246 @@ export function cursorProfile(): AcpMockScenario {
   };
 }
 
+const grokEfforts = [
+  {
+    id: "xhigh",
+    value: "xhigh",
+    label: "Extra High",
+    description: "Maximum reasoning for the hardest tasks.",
+    default: false,
+  },
+  {
+    id: "high",
+    value: "high",
+    label: "High",
+    description: "Thorough reasoning and quality. Recommended.",
+    default: true,
+  },
+  {
+    id: "medium",
+    value: "medium",
+    label: "Medium",
+    description: "Strong quality with a faster turnaround.",
+    default: false,
+  },
+  {
+    id: "low",
+    value: "low",
+    label: "Low",
+    description: "Fastest responses. Best for simple tasks.",
+    default: false,
+  },
+];
+
+function grokModel(
+  modelId: string,
+  name: string,
+  efforts: typeof grokEfforts,
+  description?: string,
+): AcpLegacyModelState["availableModels"][number] {
+  return {
+    modelId,
+    name,
+    ...(description ? { description } : {}),
+    _meta: {
+      totalContextTokens: 500000,
+      agentType: "grok-build-plan",
+      supportsReasoningEffort: true,
+      reasoningEffort: "high",
+      reasoningEfforts: efforts,
+    },
+  };
+}
+
+const grokModelState: AcpLegacyModelState = {
+  currentModelId: "grok-4.7",
+  availableModels: [
+    grokModel(
+      "grok-4.7",
+      "Grok 4.7",
+      grokEfforts,
+      "SpaceXAI's latest frontier model",
+    ),
+    grokModel(
+      "grok-4.7-build-fast",
+      "Grok 4.7 Fast",
+      grokEfforts,
+      "Fast variant. 2x the price.",
+    ),
+    // The recording lists three efforts for the older model.
+    grokModel("grok-4.5", "Grok 4.5", grokEfforts.slice(1)),
+  ],
+};
+
 /**
- * Grok Build (`grok agent stdio`, ≥1.0.13): `xai.api_key` / `cached_token`
- * auth, legacy `models` with reasoning efforts in `_meta`, images accepted
- * despite `image:false`, and a turn that settles through
- * `x.ai/session/prompt_complete` while the prompt request never answers.
- * Prompts containing "rate" fail with the -32003 usage limit; "plan" runs
- * `x.ai/exit_plan_mode`; "ask" runs `x.ai/ask_user_question`.
+ * Grok Build (`grok agent stdio`), modelled on t3code's recordings of the
+ * released 1.0.41 CLI (apps/server/src/orchestration-v2/testkit/fixtures/
+ * {simple,plan_questions,grok_background_bash}/grok_transcript.ndjson, MIT).
+ *
+ * - Extension methods carry the leading underscore (`_x.ai/...`). Pass
+ *   `{methodPrefix: ""}` for the canonical `x.ai/...` names that unreleased
+ *   source builds send; t3code accepts both.
+ * - `initialize` has no `agentInfo`; the model picker state is in
+ *   `_meta.modelState`, with `reasoningEfforts` as objects.
+ * - `session/new` answers legacy `models` plus `model` / `reasoning_effort`
+ *   config options.
+ * - Every turn frame carries params-level `_meta.promptId` (the client's
+ *   `_meta.promptId`). The turn ends with `_x.ai/session_notification`
+ *   `turn_completed`, `_x.ai/session/prompt_complete`, then the prompt
+ *   response.
+ *
+ * Prompts containing "rate" fail with the -32003 usage limit, "plan" runs
+ * `_x.ai/exit_plan_mode`, "ask" runs `_x.ai/ask_user_question`,
+ * "background" ends the turn and then runs a background-task wake turn
+ * tagged `task-completed-*`, and "race" settles through `prompt_complete`
+ * while the prompt request never answers (the race t3code guards against).
  */
-export function grokProfile(): AcpMockScenario {
+export function grokProfile(
+  options: { methodPrefix?: "_" | "" } = {},
+): AcpMockScenario {
+  const prefix = options.methodPrefix ?? "_";
+  const x = (name: string) => `${prefix}x.ai/${name}`;
+  const turnMeta = (updateType: string) => ({
+    promptId: "{{promptId}}",
+    updateType,
+  });
+  const turnEnd = (promptId: string): AcpMockStep[] => [
+    {
+      type: "extNotification",
+      method: x("session_notification"),
+      params: {
+        sessionId: "{{sessionId}}",
+        update: {
+          sessionUpdate: "turn_completed",
+          prompt_id: promptId,
+          stop_reason: "end_turn",
+        },
+      },
+    },
+    {
+      type: "extNotification",
+      method: x("queue/changed"),
+      params: { sessionId: "{{sessionId}}", entries: [] },
+    },
+  ];
+  const promptComplete: AcpMockStep = {
+    type: "extNotification",
+    method: x("session/prompt_complete"),
+    params: {
+      sessionId: "{{sessionId}}",
+      promptId: "{{promptId}}",
+      stopReason: "end_turn",
+      agentResult: null,
+    },
+  };
+  const responseMeta = {
+    sessionId: "{{sessionId}}",
+    requestId: "{{requestId}}",
+    promptId: "{{promptId}}",
+    modelId: "grok-4.7",
+  };
+  const working: AcpMockStep[] = [
+    {
+      type: "extNotification",
+      method: x("queue/changed"),
+      params: {
+        sessionId: "{{sessionId}}",
+        entries: [],
+        runningPromptId: "{{promptId}}",
+        runningKind: "prompt",
+      },
+    },
+    {
+      type: "thought",
+      text: "The user wants a short answer.",
+      notificationMeta: turnMeta("AgentThoughtChunk"),
+    },
+    {
+      type: "text",
+      text: "Working on it.",
+      notificationMeta: turnMeta("AgentMessageChunk"),
+    },
+  ];
+  const wakeId = "task-completed-00000000-0000-4000-8000-000000000002";
+  const wakeMeta = (updateType: string) => ({
+    promptId: wakeId,
+    updateType,
+  });
+
   return {
     initialize: {
-      agentInfo: { name: "grok", version: "1.0.50" },
-      agentCapabilities: {
-        loadSession: true,
-        promptCapabilities: {
-          image: false,
-          audio: false,
-          embeddedContext: true,
+      response: {
+        protocolVersion: 1,
+        agentCapabilities: {
+          loadSession: true,
+          promptCapabilities: {
+            image: false,
+            audio: false,
+            embeddedContext: true,
+          },
+          mcpCapabilities: { http: true, sse: true },
+          sessionCapabilities: { list: {}, resume: {}, close: {} },
+          auth: {},
         },
-        sessionCapabilities: { resume: {} },
+        authMethods: [
+          {
+            id: "cached_token",
+            name: "cached_token",
+            description: "Cached token from ~/.grok/auth.json",
+          },
+          { id: "grok.com", name: "Grok", description: "Sign in with Grok" },
+        ],
+        _meta: {
+          defaultAuthMethodId: "cached_token",
+          agentVersion: "1.0.41",
+          modelState: grokModelState,
+        },
       },
-      authMethods: [
-        {
-          id: "xai.api_key",
-          name: "xAI API key",
-          type: "env_var",
-          vars: [{ name: "XAI_API_KEY", label: "API key" }],
-        },
-        { id: "cached_token", name: "Cached login" },
-      ],
     },
     session: {
-      models: {
-        currentModelId: "grok-build",
-        availableModels: [
-          { modelId: "grok-build", name: "Grok Build" },
-          {
-            modelId: "grok-4.5",
-            name: "Grok 4.5",
-            _meta: {
-              reasoningEfforts: ["low", "medium", "high"],
-              reasoningEffort: "medium",
+      models: grokModelState,
+      configOptions: [
+        selectConfigOption({
+          id: "model",
+          name: "Model",
+          category: "model",
+          currentValue: "grok-4.7",
+          values: grokModelState.availableModels.map((model) => ({
+            value: model.modelId,
+            name: model.name,
+          })),
+        }),
+        selectConfigOption({
+          id: "reasoning_effort",
+          name: "Reasoning Effort",
+          category: "thought_level",
+          currentValue: "high",
+          values: grokEfforts.map((effort) => ({
+            value: effort.value,
+            name: effort.label,
+            description: effort.description,
+          })),
+        }),
+      ],
+      afterNew: [
+        {
+          sessionUpdate: "available_commands_update",
+          availableCommands: [
+            {
+              name: "compact",
+              description:
+                "Compress conversation history to save context window",
+              input: { hint: "optional context about what to preserve" },
             },
-          },
-        ],
-      },
+            {
+              name: "always-approve",
+              description:
+                "Toggle always-approve mode (skip all permission prompts)",
+              input: { hint: "on|off" },
+            },
+          ],
+        },
+      ],
     },
     prompts: [
       {
@@ -287,70 +484,114 @@ export function grokProfile(): AcpMockScenario {
         ],
       },
       {
+        // No recording has exit_plan_mode on the wire; the wrapped params
+        // follow the recorded ask_user_question frame and t3code's schema.
         match: "plan",
         steps: [
           {
             type: "extRequest",
-            method: "x.ai/exit_plan_mode",
+            method: x("exit_plan_mode"),
             params: {
-              sessionId: "{{sessionId}}",
-              toolCallId: "grok-plan-1",
-              planContent: "# Plan\n\n- step",
+              method: "x.ai/exit_plan_mode",
+              params: {
+                sessionId: "{{sessionId}}",
+                toolCallId: "exit-plan-mode-tool-call-1",
+                planContent: "# Plan\n\n- step",
+              },
             },
           },
+          ...turnEnd("{{promptId}}"),
+          promptComplete,
         ],
+        meta: responseMeta,
       },
       {
         match: "ask",
         steps: [
           {
             type: "extRequest",
-            method: "x.ai/ask_user_question",
+            method: x("ask_user_question"),
             params: {
-              sessionId: "{{sessionId}}",
-              mode: "default",
-              questions: [
-                {
-                  id: "q1",
-                  question: "Which approach?",
-                  options: [
-                    { label: "Fast" },
-                    { label: "Safe", description: "More tests" },
-                  ],
-                  multiSelect: false,
-                },
-              ],
+              method: "x.ai/ask_user_question",
+              params: {
+                sessionId: "{{sessionId}}",
+                toolCallId: "ask-user-question-tool-call-1",
+                questions: [
+                  {
+                    id: "approach",
+                    question: "Which approach?",
+                    multiSelect: null,
+                    options: [
+                      { label: "Fast", description: "Ship it today." },
+                      { label: "Safe", description: "More tests." },
+                    ],
+                  },
+                ],
+                mode: "plan",
+              },
             },
             branches: {
-              accepted: [{ type: "text", text: "Going with the answer." }],
+              accepted: [
+                {
+                  type: "text",
+                  text: "Going with the answer.",
+                  notificationMeta: turnMeta("AgentMessageChunk"),
+                },
+              ],
               cancelled: [{ type: "stop", stopReason: "cancelled" }],
             },
           },
+          ...turnEnd("{{promptId}}"),
+          promptComplete,
+        ],
+        meta: responseMeta,
+      },
+      {
+        match: "background",
+        steps: [...working, ...turnEnd("{{promptId}}"), promptComplete],
+        meta: responseMeta,
+        // The wake turn arrives after the user turn ended; it never sends
+        // prompt_complete.
+        afterResponse: [
+          {
+            type: "extNotification",
+            method: x("task_completed"),
+            params: {
+              sessionId: "{{sessionId}}",
+              update: {
+                sessionUpdate: "task_completed",
+                task_snapshot: {
+                  task_id: "00000000-0000-4000-8000-000000000002",
+                  command: "for i in 1 2 3; do sleep 8; echo tock $i; done",
+                },
+              },
+            },
+          },
+          {
+            type: "thought",
+            text: "The background task finished.",
+            notificationMeta: wakeMeta("AgentThoughtChunk"),
+          },
+          {
+            type: "text",
+            text: "tock 3",
+            notificationMeta: wakeMeta("AgentMessageChunk"),
+          },
+          ...turnEnd(wakeId),
         ],
       },
       {
+        match: "race",
         steps: [
-          { type: "text", text: "Working on it." },
-          {
-            type: "update",
-            update: {
-              sessionUpdate: "agent_message_chunk",
-              content: { type: "text", text: "background task finished" },
-              _meta: { promptId: "task-completed-1" },
-            },
-          },
-          {
-            type: "extNotification",
-            method: "x.ai/session/prompt_complete",
-            params: {
-              sessionId: "{{sessionId}}",
-              promptId: "{{promptId}}",
-              stopReason: "end_turn",
-            },
-          },
-          // The real race: the prompt response may never come.
+          ...working,
+          ...turnEnd("{{promptId}}"),
+          promptComplete,
           { type: "hang" },
         ],
+      },
+      {
+        steps: [...working, ...turnEnd("{{promptId}}"), promptComplete],
+        meta: responseMeta,
       },
     ],
     cancel: { stopReason: "cancelled" },
@@ -359,7 +600,8 @@ export function grokProfile(): AcpMockScenario {
 
 /**
  * Google Antigravity (`agy_acp_server`): protocol version 2 with the v1-shaped
- * body, eager `oauth-personal` auth, the sign-in URL printed on stdout,
+ * body, eager `oauth-personal` auth that prints the Google sign-in URL on
+ * stdout and waits for the OAuth redirect on its loopback listener,
  * `session/resume`, permission modes as session modes, the thinking level in
  * the model id, `interaction_` permission requests that are questions, and
  * client fs reads.
@@ -382,11 +624,14 @@ export function antigravityProfile(): AcpMockScenario {
         { id: "agent-platform", name: "Vertex AI" },
       ],
     },
-    auth: { requireAuth: true },
-    faults: {
-      startupStdout: [
-        "Open the following link to authenticate the ACP server: https://accounts.google.com/o/oauth2/v2/auth?client_id=mock&redirect_uri=http%3A%2F%2F127.0.0.1%3A45123%2F&state=mock-state",
-      ],
+    auth: {
+      requireAuth: true,
+      browserLogin: {
+        methodIds: ["oauth-personal", "oauth-business"],
+        stdoutLines: [
+          "Open the following link to authenticate the ACP server: https://accounts.google.com/o/oauth2/v2/auth?client_id=mock&redirect_uri={{callbackUrlEncoded}}&response_type=code&scope=openid&state=mock-state",
+        ],
+      },
     },
     session: {
       modes: {

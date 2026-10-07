@@ -1,14 +1,24 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
 import * as acp from "@agentclientprotocol/sdk";
+import * as acpV2 from "@agentclientprotocol/sdk/experimental/v2";
 
-import { killAllFixtures, waitFor, withTimeout } from "../shared/test-support";
 import {
+  killAllFixtures,
+  nodeReadableToWeb,
+  nodeWritableToWeb,
+  spawnFixture,
+  waitFor,
+  withTimeout,
+} from "../shared/test-support";
+import {
+  ACP_MOCK_SCENARIO_ENV,
   STANDARD_PERMISSION_OPTIONS,
   selectConfigOption,
   type AcpMockScenario,
 } from "./scenario";
 import {
+  MOCK_AGENT_PATH,
   startAcpHarness,
   type AcpClientHandlers,
   type AcpHarness,
@@ -149,6 +159,109 @@ describe("ACP mock agent: initialize", () => {
 });
 
 describe("ACP mock agent: auth and sessions", () => {
+  it(
+    "signs in through the browser: stdout URL, loopback callback, error and timeout",
+    async () => {
+      let stdout = "";
+      const harness = startAcpHarness(
+        {
+          auth: {
+            requireAuth: true,
+            browserLogin: {
+              methodIds: ["browser"],
+              stdoutLines: [
+                "Open {{callbackUrl}} for {{methodId}} (redirect_uri={{callbackUrlEncoded}})",
+              ],
+            },
+          },
+        },
+        {},
+        { stdoutTap: (chunk) => (stdout += chunk) },
+      );
+      harnesses.push(harness);
+      await harness.initialize();
+      const lineFor = (attempt: number) =>
+        waitFor(
+          () =>
+            [
+              ...stdout.matchAll(
+                /^Open (\S+) for browser \(redirect_uri=(\S+)\)$/gm,
+              ),
+            ][attempt],
+          `sign-in line ${attempt}`,
+        );
+
+      // A denied consent fails authenticate.
+      const denied = harness.agent
+        .request("authenticate", { methodId: "browser" })
+        .catch((error: unknown) => error);
+      const [, first, encoded] = await lineFor(0);
+      expect(decodeURIComponent(encoded ?? "")).toBe(first);
+      expect((await fetch(`${first}favicon.ico`)).status).toBe(404);
+      expect((await fetch(`${first}?error=access_denied`)).status).toBe(200);
+      const error = (await denied) as acp.RequestError;
+      expect(error.code).toBe(-32000);
+      expect(error.message).toContain("access_denied");
+      expect(
+        (
+          (await harness
+            .newSession()
+            .catch((e: unknown) => e)) as acp.RequestError
+        ).code,
+      ).toBe(-32000);
+
+      // A code completes it; the listener is gone afterwards.
+      const accepted = harness.agent.request("authenticate", {
+        methodId: "browser",
+      });
+      const [, second] = await lineFor(1);
+      expect(second).not.toBe(first);
+      expect((await fetch(`${second}?code=abc&state=s`)).status).toBe(200);
+      expect(await withTimeout(accepted, 5_000, "authenticate")).toEqual({});
+      expect(await fetch(`${second}?code=again`).catch(() => "closed")).toBe(
+        "closed",
+      );
+      await harness.newSession();
+
+      // Other methods skip the browser.
+      await harness.agent.request("authenticate", { methodId: "api-key" });
+      expect([...stdout.matchAll(/^Open /gm)]).toHaveLength(2);
+
+      // Without a callback the lines print and authenticate answers at once;
+      // with timeoutMs a missing callback fails it.
+      let printed = "";
+      const quick = startAcpHarness(
+        {
+          auth: {
+            browserLogin: {
+              stdoutLines: ["visit https://example.com/device"],
+              callback: false,
+            },
+          },
+        },
+        {},
+        { stdoutTap: (chunk) => (printed += chunk) },
+      );
+      harnesses.push(quick);
+      await quick.initialize();
+      expect(
+        await quick.agent.request("authenticate", { methodId: "device" }),
+      ).toEqual({});
+      expect(printed).toContain("visit https://example.com/device\n");
+
+      const slow = start({
+        auth: { browserLogin: { timeoutMs: 100 } },
+      });
+      await slow.initialize();
+      const timedOut = (await slow.agent
+        .request("authenticate", { methodId: "any" })
+        .catch((e: unknown) => e)) as acp.RequestError;
+      expect(timedOut.code).toBe(-32000);
+      expect(timedOut.message).toContain("timed out");
+    },
+    TEST_TIMEOUT,
+  );
+
   it(
     "rejects session/new with -32000 until authenticate succeeds",
     async () => {
@@ -547,6 +660,102 @@ describe("ACP mock agent: prompt scripts", () => {
       expect(updates[14]?._meta).toEqual({
         "cognition.ai/streamingMessageId": "stream-1",
       });
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    "puts notificationMeta on params._meta and runs afterResponse steps after the response",
+    async () => {
+      const harness = start(
+        {
+          session: {
+            afterNew: [
+              {
+                sessionUpdate: "available_commands_update",
+                availableCommands: [],
+              },
+            ],
+          },
+          prompts: [
+            {
+              steps: [
+                {
+                  type: "text",
+                  text: "in turn",
+                  meta: { onUpdate: true },
+                  notificationMeta: { promptId: "{{promptId}}" },
+                },
+                {
+                  type: "toolCall",
+                  toolCallId: "t-1",
+                  title: "Run",
+                  notificationMeta: { promptId: "{{requestId}}" },
+                },
+                {
+                  type: "plan",
+                  entries: [],
+                  notificationMeta: { promptId: "{{promptId}}" },
+                },
+              ],
+              afterResponse: [
+                { type: "delay", ms: 20 },
+                {
+                  type: "text",
+                  text: "woke up",
+                  notificationMeta: { promptId: "task-completed-1" },
+                },
+                {
+                  type: "extNotification",
+                  method: "_vendor/after",
+                  params: {},
+                },
+              ],
+            },
+          ],
+        },
+        { extNotifications: ["_vendor/after"] },
+      );
+      await harness.initialize();
+      const { sessionId } = await harness.newSession();
+      // afterNew goes out right behind the session/new response.
+      await waitFor(
+        () =>
+          harness.updates.find(
+            (n) => n.update.sessionUpdate === "available_commands_update",
+          ),
+        "afterNew",
+      );
+      expect(
+        await harness.prompt(sessionId, "go", {
+          promptId: "p-1",
+          requestId: "r-1",
+        }),
+      ).toEqual({ stopReason: "end_turn" });
+      await waitFor(
+        () => harness.calls.find((call) => call.method === "_vendor/after"),
+        "after-response notification",
+      );
+      await harness.settle();
+      const turn = harness.updates.filter(
+        (n) => n.update.sessionUpdate !== "available_commands_update",
+      );
+      expect(turn.map((n) => [n.update.sessionUpdate, n._meta])).toEqual([
+        ["agent_message_chunk", { promptId: "p-1" }],
+        ["tool_call", { promptId: "r-1" }],
+        ["plan", { promptId: "p-1" }],
+        ["agent_message_chunk", { promptId: "task-completed-1" }],
+      ]);
+      expect(turn[0]?.update._meta).toEqual({ onUpdate: true });
+      expect(turn[1]?.update).not.toHaveProperty("_meta");
+
+      // On the wire, after-response traffic follows the prompt response.
+      const log = harness.log();
+      expect(log.some((entry) => entry.kind === "lifecycle")).toBe(false);
+      const raw = harness.fixture.stdoutText();
+      expect(raw.indexOf('"stopReason":"end_turn"')).toBeLessThan(
+        raw.indexOf("woke up"),
+      );
     },
     TEST_TIMEOUT,
   );
@@ -1432,6 +1641,110 @@ describe("ACP mock agent: faults", () => {
         code: 0,
         signal: null,
       });
+    },
+    TEST_TIMEOUT,
+  );
+});
+
+describe("ACP mock agent: protocol versions", () => {
+  it(
+    "negotiates v1 or draft v2 through the SDK's agentProtocolRouter",
+    async () => {
+      const scenario: AcpMockScenario = {
+        initialize: {
+          versions: [1, 2],
+          v2: { info: { name: "dual-mock", version: "2.0.0" } },
+        },
+        prompts: [
+          {
+            steps: [
+              { type: "text", text: "Hello " },
+              { type: "text", text: "v2" },
+            ],
+          },
+        ],
+      };
+
+      // A v1 client reaches the v1 mock.
+      const v1 = start(scenario);
+      const init1 = await v1.initialize();
+      expect(init1.protocolVersion).toBe(1);
+      expect(init1.agentInfo?.name).toBe("sentinel-acp-mock");
+      const s1 = await v1.newSession();
+      expect(await v1.prompt(s1.sessionId, "hi")).toEqual({
+        stopReason: "end_turn",
+      });
+
+      // A draft-v2 client gets the v2 agent: messageId first, then
+      // state_update running → agent_message → state_update idle.
+      const fixture = spawnFixture(MOCK_AGENT_PATH, {
+        env: { [ACP_MOCK_SCENARIO_ENV]: JSON.stringify(scenario) },
+      });
+      const updates: acpV2.UpdateSessionNotification[] = [];
+      const connection = acpV2
+        .client({ name: "sentinel-fixture-test-v2" })
+        .onNotification("session/update", ({ params }) => {
+          updates.push(params);
+        })
+        .connect(
+          acpV2.ndJsonStream(
+            nodeWritableToWeb(fixture.child.stdin),
+            nodeReadableToWeb(fixture.child.stdout),
+          ),
+        );
+      try {
+        const init2 = await connection.agent.request("initialize", {
+          protocolVersion: 2,
+          info: { name: "sentinel-fixture-test-v2", version: "0.0.0" },
+        });
+        expect(init2).toEqual({
+          protocolVersion: 2,
+          info: { name: "dual-mock", version: "2.0.0" },
+          capabilities: { session: {} },
+        });
+        const { sessionId } = await connection.agent.request("session/new", {
+          cwd: "/work",
+        });
+        const { messageId } = await connection.agent.request("session/prompt", {
+          sessionId,
+          prompt: [{ type: "text", text: "hi" }],
+        });
+        await waitFor(
+          () =>
+            updates.find(
+              (n) =>
+                n.update.sessionUpdate === "state_update" &&
+                n.update.state === "idle",
+            ),
+          "v2 idle",
+        );
+        expect(updates.map((n) => n.update.sessionUpdate)).toEqual([
+          "user_message",
+          "state_update",
+          "agent_message",
+          "state_update",
+        ]);
+        expect(updates[0]?.update).toMatchObject({ messageId });
+        expect(updates[2]?.update).toMatchObject({
+          content: [{ type: "text", text: "Hello v2" }],
+        });
+        expect(updates[3]?.update).toMatchObject({
+          state: "idle",
+          stopReason: "end_turn",
+        });
+      } finally {
+        connection.close();
+      }
+
+      // Without v1 in the list, a v1 client is turned away.
+      const v2Only = start({ initialize: { versions: [2] } });
+      const refused = (await v2Only
+        .initialize()
+        .catch((error: unknown) => error)) as acp.RequestError;
+      expect(refused.code).toBe(-32600);
+      expect(refused.data).toBe(
+        "unsupported ACP protocol version 1; this endpoint supports ACP protocol version 2",
+      );
     },
     TEST_TIMEOUT,
   );
