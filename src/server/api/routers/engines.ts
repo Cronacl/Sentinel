@@ -36,7 +36,12 @@ import {
   getCodexAppServerManager,
   resetCodexEngineStatusCache,
 } from "@/lib/ai/chat/engines/codex-app-server";
-import { CODEX_FALLBACK_MODELS } from "@/lib/ai/chat/engines/codex-app-server/models";
+import {
+  buildFallbackCodexModels,
+  buildFallbackCopilotModels,
+  buildFallbackCursorModels,
+  buildFallbackOpenCodeModels,
+} from "@/lib/ai/chat/engines/drivers/fallback-models";
 import { resetCodexCliResolutionCache } from "@/lib/ai/chat/engines/codex-cli";
 import { getCodexThreadState } from "@/lib/ai/chat/engines/types";
 import {
@@ -73,17 +78,6 @@ function canUseCodexFallbackModels(status: CodexEngineStatus) {
     status.availableModels.length === 0 &&
     status.cliDetected
   );
-}
-
-// Shown only while the Codex runtime has not reported its own model list.
-function buildFallbackCodexModels() {
-  return CODEX_FALLBACK_MODELS.map((model) => ({
-    ...model,
-    inputModalities: [...model.inputModalities],
-    supportedReasoningEfforts: model.supportedReasoningEfforts.map(
-      (option) => ({ ...option }),
-    ),
-  }));
 }
 
 function canUseClaudeFallbackModels(status: ClaudeEngineStatus) {
@@ -124,70 +118,6 @@ function shouldExposeRuntimeModels(options: {
   isAvailable: boolean;
 }) {
   return options.isAvailable || options.availableModelsCount > 0;
-}
-
-function buildFallbackCopilotModels() {
-  return [
-    {
-      contextWindow: undefined,
-      defaultReasoningEffort: "medium" as const,
-      description: "Default GitHub Copilot coding model.",
-      displayName: "GPT-4.1",
-      id: "gpt-4.1-preview",
-      inputModalities: ["text"] as string[],
-      isDefault: true,
-      model: "gpt-4.1-preview",
-      supportedReasoningEfforts: (["low", "medium", "high"] as const).map(
-        (effort) => ({
-          description: `GPT-4.1 supports ${effort} reasoning effort.`,
-          effort,
-          label: effort[0]!.toUpperCase() + effort.slice(1),
-        }),
-      ),
-    },
-  ] satisfies CopilotEngineStatus["availableModels"];
-}
-
-function buildFallbackCursorModels() {
-  return [
-    {
-      contextWindow: undefined,
-      defaultReasoningEffort: "medium" as const,
-      description: "Default Cursor Agent model.",
-      displayName: "Auto",
-      id: "default",
-      inputModalities: ["text"] as string[],
-      isDefault: true,
-      model: "default",
-      supportedReasoningEfforts: (["low", "medium", "high"] as const).map(
-        (effort) => ({
-          description: `Cursor Auto supports ${effort} reasoning effort.`,
-          effort,
-          label: effort[0]!.toUpperCase() + effort.slice(1),
-        }),
-      ),
-    },
-  ] satisfies CursorEngineStatus["availableModels"];
-}
-
-function buildFallbackOpenCodeModels() {
-  return [
-    {
-      contextWindow: undefined,
-      defaultReasoningEffort: null,
-      description: "Default OpenCode model selection.",
-      displayName: "OpenCode Auto",
-      id: "opencode/default",
-      inputModalities: ["text"] as string[],
-      isDefault: true,
-      model: "opencode/default",
-      openCode: {
-        agentOptions: [],
-        variantOptions: [],
-      },
-      supportedReasoningEfforts: [],
-    },
-  ] satisfies OpenCodeEngineStatus["availableModels"];
 }
 
 type EngineModelResult = {

@@ -496,3 +496,21 @@ describe("P10 binary discovery tripwire", () => {
     ).toEqual([]);
   });
 });
+
+describe("P10 snapshot tripwire", () => {
+  it("keeps per-engine status files to the legacy engines", () => {
+    const line = 'const SNAPSHOT_FILE = "grok-status.json";';
+    expect(hitIds("src/lib/ai/chat/engines/grok/index.ts", line)).toEqual([
+      "P10-engine-private-status-cache:1",
+    ]);
+    expect(
+      hitIds("src/lib/ai/chat/engines/codex-app-server/index.ts", line),
+    ).toEqual([]);
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/platform/snapshot-service.ts",
+        'const SNAPSHOT_FILE = "status.json";',
+      ),
+    ).toEqual([]);
+  });
+});

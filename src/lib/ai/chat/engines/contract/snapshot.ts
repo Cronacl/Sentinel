@@ -95,6 +95,11 @@ export const engineSnapshotSchema = z.object({
 export const engineProbeResultSchema = z.object({
   auth: engineAuthSummarySchema,
   capabilityOverrides: engineCapabilitiesSchema.partial().optional(),
+  /**
+   * What the runtime itself reports about its version (OpenCode's protocol
+   * floor). The manifest enricher may refine it.
+   */
+  compatibilityAdvisory: engineCompatibilityAdvisorySchema.optional(),
   defaultModelId: z.string().nullable().optional(),
   iconUrl: z.string().optional(),
   install: engineInstallSchema,
@@ -103,6 +108,8 @@ export const engineProbeResultSchema = z.object({
   models: z.array(engineModelSchema),
   skills: z.array(engineSkillSchema).optional(),
   slashCommands: z.array(engineSlashCommandSchema).optional(),
+  /** The driver answered from its own cache after a timeout. */
+  stale: z.boolean().optional(),
   status: z.enum(["ready", "warning", "error"]),
   usageLimits: engineUsageLimitsSchema.optional(),
 });

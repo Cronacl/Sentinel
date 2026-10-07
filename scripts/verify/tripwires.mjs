@@ -404,6 +404,15 @@ export const TRIPWIRES = [
       /^src\/lib\/ai\/chat\/engines\/platform\/runtime\/|\.test\.[cm]?[jt]sx?$/,
   },
   {
+    id: "P10-engine-private-status-cache",
+    description:
+      "Drivers return probe results; the snapshot service caches, times out and persists them (<state root>/engines/<id>/status.json). Only the legacy engines keep their own <x>-status.json",
+    pattern: /["'`][a-z0-9-]+-status\.json["'`]/,
+    include: /^src\/lib\/ai\/chat\/engines\/.*\.[cm]?[jt]sx?$/,
+    exclude:
+      /^src\/lib\/ai\/chat\/engines\/(?:claude-sdk|codex-app-server|copilot-sdk|cursor-acp|opencode-sdk)\/|\.test\.[cm]?[jt]sx?$/,
+  },
+  {
     id: "fixtures-in-app-code",
     description:
       "scripts/fixtures protocol fakes are test-only; app code never references them",
