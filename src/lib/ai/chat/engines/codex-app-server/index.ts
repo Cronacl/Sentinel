@@ -395,8 +395,7 @@ export type CodexNotificationEvent = {
 export type CodexApprovalRequestEvent = {
   id: string;
   method:
-    | "item/commandExecution/requestApproval"
-    | "item/fileChange/requestApproval";
+    "item/commandExecution/requestApproval" | "item/fileChange/requestApproval";
   params: unknown;
   type: "approval-request";
 };
@@ -416,8 +415,7 @@ export type CodexServerEvent =
 type CodexPendingApproval = {
   id: string;
   method:
-    | CodexApprovalRequestEvent["method"]
-    | CodexUserInputRequestEvent["method"];
+    CodexApprovalRequestEvent["method"] | CodexUserInputRequestEvent["method"];
   params: unknown;
 };
 

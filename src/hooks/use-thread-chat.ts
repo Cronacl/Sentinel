@@ -74,11 +74,7 @@ type AnswerPlanQuestionsInput = {
 type ToolApprovalResponseInput = ThreadToolApprovalResponse;
 
 type ThreadConnectionState =
-  | "connected"
-  | "connecting"
-  | "disconnected"
-  | "error"
-  | "idle";
+  "connected" | "connecting" | "disconnected" | "error" | "idle";
 
 type ClientTimingPhase =
   | "first_meaningful_assistant_update"

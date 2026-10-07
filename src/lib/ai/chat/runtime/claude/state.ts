@@ -3,8 +3,7 @@ import type { ActiveClaudeRunControl } from "./run";
 declare global {
   // eslint-disable-next-line no-var
   var __sentinelActiveClaudeRunControls:
-    | Map<string, ActiveClaudeRunControl>
-    | undefined;
+    Map<string, ActiveClaudeRunControl> | undefined;
 }
 
 // Keep this on globalThis so Bun's module isolation in tests and hot reloads

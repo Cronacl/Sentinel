@@ -3,8 +3,7 @@ import type { ActiveCursorRunControl } from "./run";
 declare global {
   // eslint-disable-next-line no-var
   var __sentinelActiveCursorRunControls:
-    | Map<string, ActiveCursorRunControl>
-    | undefined;
+    Map<string, ActiveCursorRunControl> | undefined;
 }
 
 // Cursor ACP requests can ask for approval/input while the prompt is running;

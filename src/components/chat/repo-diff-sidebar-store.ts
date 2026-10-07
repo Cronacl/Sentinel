@@ -209,10 +209,7 @@ export function useRepoDiffSidebarState() {
 // that are handled by ThreadRepoActions which owns the modals/mutations.
 
 export type DiffSidebarGitAction =
-  | "commit"
-  | "push"
-  | "pull-request"
-  | "branch";
+  "commit" | "push" | "pull-request" | "branch";
 
 type GitActionCallback = (action: DiffSidebarGitAction) => void;
 

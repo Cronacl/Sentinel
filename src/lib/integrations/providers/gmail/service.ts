@@ -404,12 +404,7 @@ export class GmailService {
   async bulkModify(
     messageIds: string[],
     action:
-      | "archive"
-      | "trash"
-      | "star"
-      | "unstar"
-      | "mark_read"
-      | "mark_unread",
+      "archive" | "trash" | "star" | "unstar" | "mark_read" | "mark_unread",
   ): Promise<{ modifiedCount: number }> {
     const perform = (id: string): Promise<void> => {
       switch (action) {

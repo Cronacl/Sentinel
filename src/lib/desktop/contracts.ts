@@ -23,10 +23,7 @@ export type DesktopArchitecture = string;
 export type DesktopPlatform = "darwin" | "linux" | "win32";
 export type DesktopPermissionName = "microphone";
 export type DesktopPermissionState =
-  | "denied"
-  | "granted"
-  | "prompt"
-  | "unsupported";
+  "denied" | "granted" | "prompt" | "unsupported";
 export type DesktopUpdateStatus =
   | "idle"
   | "checking"
@@ -91,12 +88,7 @@ export type SentinelDesktopApi = {
     >;
     axAction: (input: {
       action:
-        | "decrement"
-        | "focus"
-        | "increment"
-        | "press"
-        | "setValue"
-        | "showMenu";
+        "decrement" | "focus" | "increment" | "press" | "setValue" | "showMenu";
       appName?: string;
       axPath?: string;
       bundleId?: string;

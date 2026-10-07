@@ -2,10 +2,7 @@ import type { AIProvider } from "@/server/db/enums";
 import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
 
 export type ModelCapability =
-  | "vision"
-  | "reasoning"
-  | "tool_use"
-  | "object_generation";
+  "vision" | "reasoning" | "tool_use" | "object_generation";
 
 export type ModelAttachmentCapabilities = {
   supportsImages: boolean;

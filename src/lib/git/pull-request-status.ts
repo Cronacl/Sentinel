@@ -1,20 +1,11 @@
 export type RepoIntegrationStatus =
-  | "connected"
-  | "local_only"
-  | "needs_github"
-  | "unsupported_remote";
+  "connected" | "local_only" | "needs_github" | "unsupported_remote";
 
 export type RepoPullRequestReviewDecision =
-  | "APPROVED"
-  | "CHANGES_REQUESTED"
-  | "REVIEW_REQUIRED"
-  | null;
+  "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null;
 
 export type RepoPullRequestCheckState =
-  | "failure"
-  | "pending"
-  | "success"
-  | "unknown";
+  "failure" | "pending" | "success" | "unknown";
 
 export type RepoPullRequestMergeStatus =
   | "awaiting_review"

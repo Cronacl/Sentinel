@@ -34,8 +34,7 @@ type ComputerAutomationUserState = {
 declare global {
   // eslint-disable-next-line no-var
   var __sentinelComputerAutomationClients:
-    | Map<string, ComputerAutomationUserState>
-    | undefined;
+    Map<string, ComputerAutomationUserState> | undefined;
 }
 
 const clients =
@@ -71,8 +70,7 @@ function deliverCommand(
   command: ComputerAutomationCommandEnvelope,
 ) {
   const waiter = state.pollWaiters.values().next().value as
-    | ((command: ComputerAutomationCommandEnvelope | null) => void)
-    | undefined;
+    ((command: ComputerAutomationCommandEnvelope | null) => void) | undefined;
 
   if (waiter) {
     state.pollWaiters.delete(waiter);

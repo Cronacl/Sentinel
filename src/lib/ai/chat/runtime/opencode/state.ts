@@ -3,8 +3,7 @@ import type { ActiveOpenCodeRunControl } from "./run";
 declare global {
   // eslint-disable-next-line no-var
   var __sentinelActiveOpenCodeRunControls:
-    | Map<string, ActiveOpenCodeRunControl>
-    | undefined;
+    Map<string, ActiveOpenCodeRunControl> | undefined;
 }
 
 // OpenCode emits permission/question events from its SDK stream; this map keeps

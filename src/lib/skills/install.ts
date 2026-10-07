@@ -8,12 +8,7 @@ const SKILL_FILENAME = "SKILL.md";
 const SENTINEL_INSTALL_METADATA_FILENAME = ".sentinel-install.json";
 const SKILL_DIRECTORY_NAME_PATTERN = /^[a-z0-9][a-z0-9-_]*$/i;
 export type SkillInstallTarget =
-  | "sentinel"
-  | "codex"
-  | "claude"
-  | "copilot"
-  | "cursor"
-  | "opencode";
+  "sentinel" | "codex" | "claude" | "copilot" | "cursor" | "opencode";
 export type SkillInstallResult = {
   alreadyInstalled?: boolean;
   directory: string;

@@ -87,8 +87,7 @@ function matchesOpenCodeBuildTrait(option: { label: string; value: string }) {
 
 export function shouldHideOpenCodeTraitSelector(
   options:
-    | Array<{ isDefault?: boolean; label: string; value: string }>
-    | undefined,
+    Array<{ isDefault?: boolean; label: string; value: string }> | undefined,
 ) {
   if (!options || options.length < 2) {
     return false;
@@ -106,16 +105,14 @@ export function shouldHideOpenCodeTraitSelector(
 
 export function shouldHideOpenCodeAgentSelector(
   options:
-    | Array<{ isDefault?: boolean; label: string; value: string }>
-    | undefined,
+    Array<{ isDefault?: boolean; label: string; value: string }> | undefined,
 ) {
   return shouldHideOpenCodeTraitSelector(options);
 }
 
 export function resolveOpenCodeTraitValueForThreadMode(
   options:
-    | Array<{ isDefault?: boolean; label: string; value: string }>
-    | undefined,
+    Array<{ isDefault?: boolean; label: string; value: string }> | undefined,
   currentValue: string | null | undefined,
   threadMode: "chat" | "plan",
 ) {

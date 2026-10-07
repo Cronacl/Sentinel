@@ -110,8 +110,7 @@ export async function parseRequest(
   );
   const openCode = parseOpenCodeOptions(input.openCode);
   const reasoningEffort = str(input.reasoningEffort) as
-    | ThreadChatRequest["reasoningEffort"]
-    | undefined;
+    ThreadChatRequest["reasoningEffort"] | undefined;
   const threadMode =
     input.threadMode === "plan" || input.threadMode === "chat"
       ? (input.threadMode as "plan" | "chat")

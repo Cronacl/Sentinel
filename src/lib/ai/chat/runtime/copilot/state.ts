@@ -3,8 +3,7 @@ import type { ActiveCopilotRunControl } from "./run";
 declare global {
   // eslint-disable-next-line no-var
   var __sentinelActiveCopilotRunControls:
-    | Map<string, ActiveCopilotRunControl>
-    | undefined;
+    Map<string, ActiveCopilotRunControl> | undefined;
 }
 
 // Copilot callbacks arrive outside the original request stack, so live controls

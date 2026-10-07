@@ -12,12 +12,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 
 type TaskStatusIconStatus =
-  | "blocked"
-  | "canceled"
-  | "completed"
-  | "in_progress"
-  | "pending"
-  | "skipped";
+  "blocked" | "canceled" | "completed" | "in_progress" | "pending" | "skipped";
 
 const TASK_STATUS_ICONS: Record<TaskStatusIconStatus, IconSvgElement> = {
   blocked: CancelCircleIcon,

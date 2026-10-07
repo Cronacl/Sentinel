@@ -45,8 +45,7 @@ function normalizePlanDocumentPayload({
   goal: unknown;
   summary: unknown;
   tasks:
-    | Array<{ description?: string | null; title: string }>
-    | ThreadPlanTask[];
+    Array<{ description?: string | null; title: string }> | ThreadPlanTask[];
   title: unknown;
 }) {
   const normalizedTitle = trimToString(title) || "Plan";

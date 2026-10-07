@@ -63,8 +63,7 @@ export async function resolveThreadChatModel(
   const reasoningEffort =
     ((request.reasoningEffort ??
       (usableThreadModelId ? thread?.chatReasoningEffort : undefined)) as
-      | ReasoningEffort
-      | undefined) ?? undefined;
+      ReasoningEffort | undefined) ?? undefined;
 
   return {
     contextWindow: findModel(parsedModel.provider, parsedModel.model)

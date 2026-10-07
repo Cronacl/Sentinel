@@ -32,16 +32,10 @@ const SOURCE_PRECEDENCE = [
 
 export type SkillScope = (typeof SOURCE_PRECEDENCE)[number]["scope"];
 export type SkillSourceKind =
-  | (typeof SOURCE_PRECEDENCE)[number]["sourceKind"]
-  | typeof CODEX_SOURCE_KIND;
+  (typeof SOURCE_PRECEDENCE)[number]["sourceKind"] | typeof CODEX_SOURCE_KIND;
 export type SkillInstallOrigin = "external" | "sentinel";
 export type SkillTarget =
-  | "claude"
-  | "codex"
-  | "copilot"
-  | "cursor"
-  | "opencode"
-  | "sentinel";
+  "claude" | "codex" | "copilot" | "cursor" | "opencode" | "sentinel";
 
 export type SkillMetadata = {
   description: string;
@@ -77,12 +71,7 @@ export type SkillSnapshot = {
 };
 
 type SkillLookupTarget =
-  | "sentinel"
-  | "codex"
-  | "claude"
-  | "copilot"
-  | "cursor"
-  | "opencode";
+  "sentinel" | "codex" | "claude" | "copilot" | "cursor" | "opencode";
 
 type ConventionalSkillRoot = {
   containerDirectory: string;

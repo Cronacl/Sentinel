@@ -59,12 +59,7 @@ import { api, type RouterOutputs } from "@/trpc/react";
 type SkillListItem = RouterOutputs["skills"]["list"]["skills"][number];
 type RegistryItem = RouterOutputs["skills"]["registry"][number];
 type SkillInstallTarget =
-  | "claude"
-  | "codex"
-  | "copilot"
-  | "cursor"
-  | "opencode"
-  | "sentinel";
+  "claude" | "codex" | "copilot" | "cursor" | "opencode" | "sentinel";
 type InstalledSkillAction = Pick<SkillListItem, "name" | "scope" | "target">;
 
 type UnifiedSkill = {

@@ -58,8 +58,7 @@ type ComposerWorkspaceBarProps = {
 };
 
 type ComposerRepoContextSnapshot =
-  | (ComposerWorkspaceBarRepoContext & RepoThreadUiContext)
-  | null;
+  (ComposerWorkspaceBarRepoContext & RepoThreadUiContext) | null;
 
 function getPermissionModeLabel(value: PermissionMode) {
   return (
