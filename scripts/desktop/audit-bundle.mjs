@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { access, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { findMissingServerRuntimeFiles } from "./audit-bundle-utils.mjs";
+import { UNTRACED_SERVER_PACKAGES } from "./untraced-server-packages.mjs";
 
 const require = createRequire(import.meta.url);
 const { listPackage } = require("@electron/asar");
@@ -332,6 +333,20 @@ for (const unpackedAppPath of unpackedAppPaths) {
   if (missingCopilotRuntimeFiles.length > 0) {
     failures.push(
       `${unpackedAppPath}: packaged server is missing Copilot runtime files:\n${missingCopilotRuntimeFiles.join("\n")}`,
+    );
+  }
+
+  const missingUntracedRuntimeFiles = findMissingServerRuntimeFiles({
+    requiredFiles: UNTRACED_SERVER_PACKAGES.map((packageName) =>
+      path.join(serverPath, "node_modules", packageName, "package.json"),
+    ),
+    serverFiles,
+    serverPath,
+  });
+
+  if (missingUntracedRuntimeFiles.length > 0) {
+    failures.push(
+      `${unpackedAppPath}: packaged server is missing untraced runtime packages:\n${missingUntracedRuntimeFiles.join("\n")}`,
     );
   }
 }
