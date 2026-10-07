@@ -330,6 +330,21 @@ export const TRIPWIRES = [
     multiline: true,
   },
   {
+    id: "P10-next-middleware-file",
+    description:
+      "Next 16 renamed middleware to proxy; the /api loopback guard lives in src/proxy.ts and a middleware file would be ignored or conflict",
+    pattern: /[\s\S]/,
+    include: /^(?:src\/)?middleware\.[cm]?[jt]s$/,
+  },
+  {
+    id: "P10-loopback-guard-forwarded-host",
+    description:
+      "The loopback guard trusts only the Host header; pages can set X-Forwarded-Host freely",
+    pattern: /x-forwarded-host/i,
+    include: /^src\/(?:proxy\.ts|server\/http\/)/,
+    exclude: /\.test\.[cm]?[jt]sx?$/,
+  },
+  {
     id: "fixtures-in-app-code",
     description:
       "scripts/fixtures protocol fakes are test-only; app code never references them",

@@ -352,3 +352,28 @@ describe("protocol fixture tripwire", () => {
     );
   });
 });
+
+describe("P10 loopback guard tripwires", () => {
+  it("flags a Next middleware file next to src/proxy.ts", () => {
+    const content = 'export { proxy as middleware } from "./proxy";';
+    expect(hitIds("src/middleware.ts", content)).toEqual([
+      "P10-next-middleware-file:1",
+    ]);
+    expect(hitIds("middleware.js", content)).toEqual([
+      "P10-next-middleware-file:1",
+    ]);
+    expect(hitIds("src/proxy.ts", content)).toEqual([]);
+    expect(hitIds("src/lib/middleware.ts", content)).toEqual([]);
+  });
+
+  it("flags the guard reading X-Forwarded-Host", () => {
+    const line = 'const host = headers.get("X-Forwarded-Host");';
+    expect(hitIds("src/server/http/loopback-guard.ts", line)).toEqual([
+      "P10-loopback-guard-forwarded-host:1",
+    ]);
+    expect(hitIds("src/proxy.ts", line)).toEqual([
+      "P10-loopback-guard-forwarded-host:1",
+    ]);
+    expect(hitIds("src/server/http/loopback-guard.test.ts", line)).toEqual([]);
+  });
+});
