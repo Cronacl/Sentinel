@@ -474,6 +474,52 @@ describe("resolveCopilotRuntime", () => {
   });
 });
 
+describe("resolveCopilotRuntime for an instance", () => {
+  it("prefers a non-default instance's binaryPath over the bundled runtime and ignores legacy overrides", async () => {
+    const tempRoot = await realpath(
+      await mkdtemp(path.join(os.tmpdir(), "copilot-sdk-runtime-instance-")),
+    );
+    tempRoots.push(tempRoot);
+    await writeBundledCopilotRuntime(tempRoot);
+    const workBin = path.join(tempRoot, "work");
+    await mkdir(workBin);
+    const configured = await writeLaunchableCopilotScript(
+      workBin,
+      process.platform === "win32" ? "copilot.cmd" : "copilot",
+    );
+
+    process.chdir(tempRoot);
+    clearCopilotPathOverrides();
+    process.env.COPILOT_CLI_PATH = path.join(tempRoot, "legacy", "copilot");
+    resetCopilotRuntimeCache();
+
+    const instance = {
+      config: { binaryPath: configured },
+      envOverrides: { COPILOT_HOME: path.join(tempRoot, "home") },
+      envUnset: [],
+      id: "copilot-work",
+      isDefault: false,
+    };
+    expect(await resolveCopilotRuntime({ instance })).toMatchObject({
+      cliDetected: true,
+      cliPath: configured,
+      env: expect.objectContaining({
+        COPILOT_HOME: path.join(tempRoot, "home"),
+      }),
+      installSource: "config",
+      source: "env_override",
+    });
+
+    // Without a binaryPath the instance skips the legacy variables.
+    expect(
+      await resolveCopilotRuntime({
+        instance: { ...instance, config: {}, id: "copilot-other" },
+      }),
+    ).toMatchObject({ installSource: "sdk-bundled", source: "bundled" });
+    expect(setLocalRuntimeEnvValueMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("buildCopilotClientOptions", () => {
   it("spawns the resolved runtime over stdio with the SDK 1.x options", () => {
     const options = buildCopilotClientOptions({

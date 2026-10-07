@@ -394,6 +394,16 @@ export const TRIPWIRES = [
     exclude: /\.test\.[cm]?[jt]sx?$/,
   },
   {
+    id: "P10-engine-local-binary-discovery",
+    description:
+      "Engines discover binaries through platform/runtime (resolve-binary.ts, login-shell.ts, version-probe.ts); per-engine copies of PATH search and login-shell lookup drifted apart",
+    pattern:
+      /^\s*(?:export\s+)?(?:async\s+)?function\s+(?:findExecutableInPath|getExecutableNames|buildPosixShellLookupScript|buildFishShellLookupScript|buildLoginShellLookupArgs|getManagedPathValue|isPersistable[A-Za-z]*Path)\b/,
+    include: /^src\/lib\/ai\/chat\/engines\/.*\.[cm]?[jt]sx?$/,
+    exclude:
+      /^src\/lib\/ai\/chat\/engines\/platform\/runtime\/|\.test\.[cm]?[jt]sx?$/,
+  },
+  {
     id: "fixtures-in-app-code",
     description:
       "scripts/fixtures protocol fakes are test-only; app code never references them",

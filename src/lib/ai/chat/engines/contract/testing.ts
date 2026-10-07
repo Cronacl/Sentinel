@@ -106,6 +106,8 @@ export function makeFakeInstance<
     driver,
     enabled: true,
     env: {},
+    envOverrides: {},
+    envUnset: [],
     id,
     isDefault: id === defaultInstanceIdForDriver(driver),
     label: getDriverMeta(driver)?.label ?? driver,

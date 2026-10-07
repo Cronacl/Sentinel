@@ -1,9 +1,8 @@
 import "server-only";
 
-import { execFile, type ChildProcessByStdio } from "node:child_process";
+import { type ChildProcessByStdio } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { constants as fsConstants } from "node:fs";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
 import type { Readable } from "node:stream";
@@ -18,12 +17,25 @@ import {
   type QuestionRequest,
 } from "@opencode-ai/sdk/v2";
 
+import type { EngineInstallSource } from "@/lib/ai/chat/engines/contract";
+import {
+  getLoginShellCandidates,
+  getLoginShellMarkers,
+  lookupInLoginShell,
+} from "@/lib/ai/chat/engines/platform/runtime/login-shell";
+import {
+  findExecutableInPath,
+  getConfiguredBinaryOverride,
+  getInstanceProcessEnv,
+  recordResolvedBinary,
+  type EngineBinaryInstance,
+} from "@/lib/ai/chat/engines/platform/runtime/resolve-binary";
+import { probeBinaryVersion } from "@/lib/ai/chat/engines/platform/runtime/version-probe";
 import type { OpenCodeThreadState } from "@/lib/ai/chat/engines/types";
 import {
   applyPrivateFsMode,
   getSentinelStateRoot,
 } from "@/lib/runtime/local-state";
-import { setLocalRuntimeEnvValue } from "@/lib/runtime/local-runtime-env";
 import {
   buildManagedExecutablePathValue,
   buildPreferredExecutablePathValue,
@@ -64,16 +76,10 @@ const OPENCODE_SERVER_START_TIMEOUT_MS = 30_000;
 // when the probe settles).
 const OPENCODE_STATUS_PROBE_SERVER_START_TIMEOUT_MS = 10_000;
 const OPENCODE_CLI_VERIFY_TIMEOUT_MS = 1_500;
-const OPENCODE_SHELL_LOOKUP_TIMEOUT_MS = 1_200;
 const OPENCODE_STATUS_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 const LOCAL_STATE_DIRECTORY_MODE = 0o700;
 const LOCAL_STATE_FILE_MODE = 0o600;
 const OPENCODE_STATUS_SNAPSHOT_FILE = "opencode-status.json";
-const OPENCODE_PATH_START_MARKER = "__SENTINEL_OPENCODE_PATH_START__";
-const OPENCODE_PATH_END_MARKER = "__SENTINEL_OPENCODE_PATH_END__";
-const OPENCODE_SHELL_PATH_START_MARKER =
-  "__SENTINEL_OPENCODE_SHELL_PATH_START__";
-const OPENCODE_SHELL_PATH_END_MARKER = "__SENTINEL_OPENCODE_SHELL_PATH_END__";
 
 // Oldest `opencode-ai` server whose protocol this adapter can drive, from the
 // published @opencode-ai/sdk v2 typings per release: 1.0.224 introduced the
@@ -167,6 +173,8 @@ export type ResolvedOpenCodeRuntime = {
   cliVersion: string | null;
   env: NodeJS.ProcessEnv;
   error: string | null;
+  /** How the binary was found; null when it was not. */
+  source: EngineInstallSource | null;
 };
 
 export type OpenCodeServerExit = {
@@ -200,21 +208,11 @@ type OpenCodeStatusSnapshot = {
   recordedAt: string;
 };
 
-type OpenCodeCommandResult = {
-  code: number;
-  stderr: string;
-  stdout: string;
-};
-
-type OpenCodeShellLookupResult = {
-  openCodePath: string | null;
-  pathValue: string | null;
-};
-
-let cachedRuntime: {
-  expiresAt: number;
-  promise: Promise<ResolvedOpenCodeRuntime>;
-} | null = null;
+// One cached resolution per instance (and per configuration of it).
+const cachedRuntimes = new Map<
+  string,
+  { expiresAt: number; promise: Promise<ResolvedOpenCodeRuntime> }
+>();
 
 let cachedStatus: {
   expiresAt: number;
@@ -229,235 +227,31 @@ function getOpenCodeStatusSnapshotPath() {
   return path.join(getLocalStateDirectory(), OPENCODE_STATUS_SNAPSHOT_FILE);
 }
 
-function normalizeCandidatePath(candidatePath: string) {
-  const trimmedPath = candidatePath.trim();
-  if (!trimmedPath) return null;
-  return path.isAbsolute(trimmedPath)
-    ? path.normalize(trimmedPath)
-    : path.resolve(process.cwd(), trimmedPath);
-}
+const OPENCODE_NAME_OPTIONS = { strategy: "pathext-or-bare" } as const;
+const OPENCODE_LOGIN_SHELL_MARKERS = getLoginShellMarkers("opencode");
+// Tried in order until one reports opencode or at least its PATH.
+const OPENCODE_FALLBACK_SHELLS = [
+  "/bin/zsh",
+  "/bin/bash",
+  "/bin/sh",
+  "/opt/homebrew/bin/fish",
+  "/usr/local/bin/fish",
+];
 
-async function isExecutable(candidatePath: string) {
-  const normalizedPath = normalizeCandidatePath(candidatePath);
-  if (!normalizedPath) return false;
-
-  try {
-    await access(
-      normalizedPath,
-      process.platform === "win32" ? fsConstants.F_OK : fsConstants.X_OK,
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function getExecutableNames(command: string) {
-  if (process.platform !== "win32") return [command];
-
-  const pathExt = (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM")
-    .split(";")
-    .map((extension) => extension.trim())
-    .filter(Boolean);
-
-  const names = new Set<string>([command]);
-  const lowerCommand = command.toLowerCase();
-  for (const extension of pathExt) {
-    if (!lowerCommand.endsWith(extension.toLowerCase())) {
-      names.add(`${command}${extension}`);
-    }
-  }
-
-  return [...names];
-}
-
-async function findExecutableInPath(
-  command: string,
-  pathValue?: string | null,
-) {
-  if (!pathValue) return null;
-
-  const searchPaths = pathValue
-    .split(path.delimiter)
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-
-  for (const directory of searchPaths) {
-    for (const executableName of getExecutableNames(command)) {
-      const candidatePath = path.join(directory, executableName);
-      if (await isExecutable(candidatePath)) {
-        return candidatePath;
-      }
-    }
-  }
-
-  return null;
-}
-
-function buildLoginShellLookupArgs(script: string) {
-  return ["-l", "-c", script];
-}
-
-function buildPosixShellLookupScript() {
-  return [
-    "if command -v opencode >/dev/null 2>&1; then",
-    `  printf '%s\\n' '${OPENCODE_PATH_START_MARKER}'`,
-    "  command -v opencode",
-    `  printf '%s\\n' '${OPENCODE_PATH_END_MARKER}'`,
-    "fi",
-    `printf '%s\\n' '${OPENCODE_SHELL_PATH_START_MARKER}'`,
-    `printf '%s\\n' "$PATH"`,
-    `printf '%s\\n' '${OPENCODE_SHELL_PATH_END_MARKER}'`,
-  ].join("\n");
-}
-
-function buildFishShellLookupScript() {
-  return [
-    "if command -v opencode >/dev/null 2>/dev/null",
-    `  printf '%s\\n' '${OPENCODE_PATH_START_MARKER}'`,
-    "  command -v opencode",
-    `  printf '%s\\n' '${OPENCODE_PATH_END_MARKER}'`,
-    "end",
-    `printf '%s\\n' '${OPENCODE_SHELL_PATH_START_MARKER}'`,
-    "printf '%s\\n' (string join : -- $PATH)",
-    `printf '%s\\n' '${OPENCODE_SHELL_PATH_END_MARKER}'`,
-  ].join("\n");
-}
-
-function extractMarkerValue(
-  output: string,
-  startMarker: string,
-  endMarker: string,
-) {
-  const startIndex = output.indexOf(startMarker);
-  const endIndex = output.indexOf(endMarker);
-  if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
-    return null;
-  }
-
-  return (
-    output
-      .slice(startIndex + startMarker.length, endIndex)
-      .trim()
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find(Boolean) ?? null
-  );
-}
-
-function parseShellLookupOutput(stdout: string): OpenCodeShellLookupResult {
-  return {
-    openCodePath: extractMarkerValue(
-      stdout,
-      OPENCODE_PATH_START_MARKER,
-      OPENCODE_PATH_END_MARKER,
-    ),
-    pathValue: extractMarkerValue(
-      stdout,
-      OPENCODE_SHELL_PATH_START_MARKER,
-      OPENCODE_SHELL_PATH_END_MARKER,
-    ),
-  };
-}
-
-async function execShellLookup(
-  shellPath: string,
-  script: string,
-): Promise<OpenCodeShellLookupResult | null> {
-  return await new Promise((resolve) => {
-    const child = execFile(
-      shellPath,
-      buildLoginShellLookupArgs(script),
-      {
-        timeout: OPENCODE_SHELL_LOOKUP_TIMEOUT_MS,
-        windowsHide: true,
-      },
-      (_error, stdout) => {
-        resolve(parseShellLookupOutput(stdout));
-      },
-    );
-    child.on("error", () => resolve(null));
-  });
-}
-
-async function resolveOpenCodeCliFromShell() {
-  if (process.platform === "win32") return null;
-
-  const shellCandidates = [
-    process.env.SHELL,
-    "/bin/zsh",
-    "/bin/bash",
-    "/bin/sh",
-    "/opt/homebrew/bin/fish",
-    "/usr/local/bin/fish",
-  ].filter((candidate): candidate is string => Boolean(candidate));
-
-  for (const shellPath of [...new Set(shellCandidates)]) {
-    const isFish = path.basename(shellPath).includes("fish");
-    const result = await execShellLookup(
-      shellPath,
-      isFish ? buildFishShellLookupScript() : buildPosixShellLookupScript(),
-    );
-    if (result?.openCodePath || result?.pathValue) {
-      return result;
-    }
-  }
-
-  return null;
-}
-
-async function runOpenCodeCommand(input: {
-  args: string[];
-  binaryPath: string;
-  cwd?: string;
-  env?: NodeJS.ProcessEnv;
-  timeoutMs?: number;
-}): Promise<OpenCodeCommandResult> {
-  return await new Promise((resolve, reject) => {
-    execFile(
-      input.binaryPath,
-      input.args,
-      {
-        cwd: input.cwd,
-        env: input.env,
-        timeout: input.timeoutMs ?? OPENCODE_CLI_VERIFY_TIMEOUT_MS,
-        windowsHide: true,
-      },
-      (error, stdout, stderr) => {
-        const code = error ? 1 : 0;
-        if (error && code === 1 && !stdout && !stderr) {
-          reject(error);
-          return;
-        }
-        resolve({ code, stderr, stdout });
-      },
-    ).on("error", reject);
-  });
-}
-
+/** Launchable when `--version` succeeds or at least prints something. */
 async function verifyOpenCodeCli(
   candidatePath: string,
   env: NodeJS.ProcessEnv,
 ) {
-  try {
-    const result = await runOpenCodeCommand({
-      args: ["--version"],
-      binaryPath: candidatePath,
-      env,
-    });
-    return {
-      cliPath: candidatePath,
-      cliVersion: parseOpenCodeVersion(result.stdout || result.stderr),
-    };
-  } catch {
-    return null;
-  }
-}
-
-function parseOpenCodeVersion(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  return trimmed.split(/\r?\n/)[0]?.trim() ?? null;
+  const result = await probeBinaryVersion({
+    acceptFailureOutput: true,
+    command: candidatePath,
+    env,
+    timeoutMs: OPENCODE_CLI_VERIFY_TIMEOUT_MS,
+  });
+  return result.launchable
+    ? { cliPath: candidatePath, cliVersion: result.version }
+    : null;
 }
 
 type OpenCodeSemver = readonly [major: number, minor: number, patch: number];
@@ -537,34 +331,6 @@ export function isOpenCodeCompatibilityUsable(
   advisory: OpenCodeCompatibilityAdvisory | null,
 ) {
   return advisory?.status !== "broken" && advisory?.status !== "unsupported";
-}
-
-function isPersistableOpenCodePath(executablePath: string) {
-  const normalized = executablePath.replaceAll("\\", "/");
-  return !normalized.includes("/fnm_multishells/");
-}
-
-async function persistResolvedOpenCodeCli(
-  executablePath: string | null,
-  options?: { persist?: boolean },
-) {
-  if (!executablePath?.trim()) {
-    return;
-  }
-
-  const persist = options?.persist ?? true;
-
-  try {
-    if (persist) {
-      await setLocalRuntimeEnvValue("SENTINEL_OPENCODE_PATH", executablePath);
-      return;
-    }
-
-    process.env.SENTINEL_OPENCODE_PATH = executablePath;
-  } catch {
-    process.env.SENTINEL_OPENCODE_PATH = executablePath;
-    // Best effort only; runtime discovery still works without the persisted hint.
-  }
 }
 
 async function writeOpenCodeStatusSnapshot(snapshot: OpenCodeStatusSnapshot) {
@@ -803,7 +569,7 @@ export function isOpenCodeAuthError(error: unknown) {
 }
 
 export function resetOpenCodeRuntimeCache() {
-  cachedRuntime = null;
+  cachedRuntimes.clear();
 }
 
 export function resetOpenCodeEngineStatusCache() {
@@ -830,85 +596,138 @@ export function buildOpenCodeThreadState(input: {
   };
 }
 
-export async function resolveOpenCodeRuntime(options?: {
-  forceRefresh?: boolean;
-}): Promise<ResolvedOpenCodeRuntime> {
-  if (
-    !options?.forceRefresh &&
-    cachedRuntime &&
-    cachedRuntime.expiresAt > Date.now()
-  ) {
-    return cachedRuntime.promise;
+export type OpenCodeRuntimeInstance = EngineBinaryInstance;
+
+function getRuntimeCacheKey(
+  instance: OpenCodeRuntimeInstance | null | undefined,
+) {
+  if (!instance) {
+    return "default";
   }
 
-  const promise = (async () => {
-    const explicitPath = process.env.SENTINEL_OPENCODE_PATH?.trim();
-    const preferredPathValue = buildPreferredExecutablePathValue(
-      process.env.PATH,
+  return `${instance.id}:${JSON.stringify([
+    instance.config.binaryPath ?? null,
+    instance.envOverrides,
+    instance.envUnset,
+  ])}`;
+}
+
+/**
+ * Resolution order: the instance's binaryPath, else (default instance)
+ * SENTINEL_OPENCODE_PATH; then `opencode` in a login shell's PATH (falling
+ * back to the managed PATH) or where the shell reports it. Without an
+ * instance this is the default instance on process.env.
+ */
+async function resolveOpenCodeRuntimeUncached(
+  instance: OpenCodeRuntimeInstance | null | undefined,
+): Promise<ResolvedOpenCodeRuntime> {
+  const baseEnv = getInstanceProcessEnv(instance);
+  const preferredPathValue = buildPreferredExecutablePathValue(baseEnv.PATH, {
+    env: baseEnv,
+  });
+  const managedPathValue = await buildManagedExecutablePathValue(
+    preferredPathValue,
+    { env: baseEnv },
+  );
+  const env = {
+    ...baseEnv,
+    PATH: managedPathValue,
+  };
+  const isDefault = !instance || instance.isDefault;
+  const remember = async (
+    cliPath: string,
+    cliVersion: string | null,
+    source: EngineInstallSource,
+  ) => {
+    await recordResolvedBinary(
+      { path: cliPath, source, version: cliVersion },
+      {
+        instanceId: instance?.id ?? "opencode",
+        legacyEnvKey: isDefault ? "SENTINEL_OPENCODE_PATH" : null,
+      },
     );
-    const managedPathValue =
-      await buildManagedExecutablePathValue(preferredPathValue);
-    const env = {
-      ...process.env,
-      PATH: managedPathValue,
-    };
+  };
 
-    const explicitCandidate = explicitPath
-      ? await verifyOpenCodeCli(explicitPath, env)
-      : null;
+  const override = getConfiguredBinaryOverride(instance, baseEnv, [
+    "SENTINEL_OPENCODE_PATH",
+  ]);
+  const explicitCandidate = override
+    ? await verifyOpenCodeCli(override.path, env)
+    : null;
 
-    if (explicitCandidate?.cliPath) {
-      await persistResolvedOpenCodeCli(explicitCandidate.cliPath, {
-        persist: isPersistableOpenCodePath(explicitCandidate.cliPath),
-      });
-      return {
-        cliDetected: true,
-        cliPath: explicitCandidate.cliPath,
-        cliVersion: explicitCandidate.cliVersion,
-        env,
-        error: null,
-      } satisfies ResolvedOpenCodeRuntime;
-    }
-
-    const shellLookup = await resolveOpenCodeCliFromShell();
-    const candidatePath =
-      (await findExecutableInPath(
-        "opencode",
-        shellLookup?.pathValue ?? managedPathValue,
-      )) ??
-      shellLookup?.openCodePath ??
-      null;
-
-    if (!candidatePath) {
-      return {
-        cliDetected: false,
-        cliPath: explicitPath ?? null,
-        cliVersion: null,
-        env,
-        error: explicitPath
-          ? "OpenCode CLI path is retained but is not currently launchable."
-          : "OpenCode CLI (`opencode`) was not found in PATH.",
-      } satisfies ResolvedOpenCodeRuntime;
-    }
-
-    const verified = await verifyOpenCodeCli(candidatePath, env);
-    await persistResolvedOpenCodeCli(candidatePath, {
-      persist: isPersistableOpenCodePath(candidatePath),
-    });
-
+  if (override && explicitCandidate?.cliPath) {
+    await remember(
+      explicitCandidate.cliPath,
+      explicitCandidate.cliVersion,
+      override.source,
+    );
     return {
       cliDetected: true,
-      cliPath: candidatePath,
-      cliVersion: verified?.cliVersion ?? null,
+      cliPath: explicitCandidate.cliPath,
+      cliVersion: explicitCandidate.cliVersion,
       env,
       error: null,
+      source: override.source,
     } satisfies ResolvedOpenCodeRuntime;
-  })();
+  }
 
-  cachedRuntime = {
+  const shellLookup = await lookupInLoginShell({
+    command: "opencode",
+    env: baseEnv,
+    markers: OPENCODE_LOGIN_SHELL_MARKERS,
+    shells: getLoginShellCandidates(baseEnv, OPENCODE_FALLBACK_SHELLS),
+    stopWhen: "command-or-path",
+  });
+  const fromPath = await findExecutableInPath(
+    "opencode",
+    shellLookup?.pathValue ?? managedPathValue,
+    OPENCODE_NAME_OPTIONS,
+  );
+  const candidatePath = fromPath ?? shellLookup?.commandPath ?? null;
+
+  if (!candidatePath) {
+    return {
+      cliDetected: false,
+      cliPath: override?.path ?? null,
+      cliVersion: null,
+      env,
+      error: override
+        ? "OpenCode CLI path is retained but is not currently launchable."
+        : "OpenCode CLI (`opencode`) was not found in PATH.",
+      source: null,
+    } satisfies ResolvedOpenCodeRuntime;
+  }
+
+  const source: EngineInstallSource =
+    fromPath && !shellLookup?.pathValue ? "managed-path" : "login-shell";
+  const verified = await verifyOpenCodeCli(candidatePath, env);
+  await remember(candidatePath, verified?.cliVersion ?? null, source);
+
+  return {
+    cliDetected: true,
+    cliPath: candidatePath,
+    cliVersion: verified?.cliVersion ?? null,
+    env,
+    error: null,
+    source,
+  } satisfies ResolvedOpenCodeRuntime;
+}
+
+export async function resolveOpenCodeRuntime(options?: {
+  forceRefresh?: boolean;
+  instance?: OpenCodeRuntimeInstance | null;
+}): Promise<ResolvedOpenCodeRuntime> {
+  const key = getRuntimeCacheKey(options?.instance);
+  const cached = cachedRuntimes.get(key);
+  if (!options?.forceRefresh && cached && cached.expiresAt > Date.now()) {
+    return cached.promise;
+  }
+
+  const promise = resolveOpenCodeRuntimeUncached(options?.instance);
+  cachedRuntimes.set(key, {
     expiresAt: Date.now() + OPENCODE_RUNTIME_CACHE_TTL_MS,
     promise,
-  };
+  });
 
   return promise;
 }

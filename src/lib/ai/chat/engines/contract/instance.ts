@@ -159,6 +159,14 @@ export type ResolvedEngineInstance<
   enabled: boolean;
   /** process.env → managed PATH → home env → instance env (wins). */
   env: Record<string, string | undefined>;
+  /**
+   * What the instance sets over the server environment: its home variable
+   * and its own variables (decrypted). Already applied to `env`; the legacy
+   * engines layer it over process.env themselves.
+   */
+  envOverrides: Record<string, string>;
+  /** Variables the instance sets but cannot decrypt: unset for its processes. */
+  envUnset: string[];
   id: EngineInstanceId;
   isDefault: boolean;
   label: string;

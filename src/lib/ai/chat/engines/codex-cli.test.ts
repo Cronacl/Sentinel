@@ -226,6 +226,98 @@ describe("resolveCodexCli", () => {
   });
 });
 
+describe("resolveCodexCli for an instance", () => {
+  function instance(overrides: Record<string, unknown> = {}) {
+    return {
+      config: {},
+      envOverrides: {},
+      envUnset: [],
+      id: "codex-work",
+      isDefault: false,
+      ...overrides,
+    };
+  }
+
+  it("runs a non-default instance's binaryPath and records it per instance", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
+    const configured = path.join(tempRoot, "work", "codex");
+    const legacy = path.join(tempRoot, "legacy", "codex");
+
+    try {
+      for (const filePath of [configured, legacy]) {
+        await mkdir(path.dirname(filePath), { recursive: true });
+        await writeFile(filePath, "#!/bin/sh\nexit 0\n", "utf8");
+        await chmod(filePath, 0o755);
+      }
+      useTempSentinelHome(tempRoot);
+      process.env.SENTINEL_CODEX_PATH = legacy;
+
+      const resolved = await resolveCodexCli({
+        forceRefresh: true,
+        instance: instance({
+          config: { binaryPath: configured },
+          envOverrides: { CODEX_HOME: "/homes/work" },
+        }),
+      });
+
+      expect(resolved?.command).toBe(configured);
+      expect(resolved?.source).toBe("config");
+      expect(resolved?.env.CODEX_HOME).toBe("/homes/work");
+      // The default instance's hint is left alone.
+      expect(process.env.SENTINEL_CODEX_PATH).toBe(legacy);
+      expect(
+        await readFile(
+          path.join(tempRoot, ".sentinel", "desktop.env"),
+          "utf8",
+        ).catch(() => ""),
+      ).not.toContain("SENTINEL_CODEX_PATH");
+      const runtimePaths = JSON.parse(
+        await readFile(
+          path.join(tempRoot, ".sentinel", "engines", "runtime-paths.json"),
+          "utf8",
+        ),
+      );
+      expect(runtimePaths.instances["codex-work"]).toEqual(
+        expect.objectContaining({ binaryPath: configured, source: "config" }),
+      );
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("ignores SENTINEL_CODEX_PATH for instances other than the default", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
+    const legacy = path.join(tempRoot, "legacy", "codex");
+    const onPath = path.join(tempRoot, "bin", "codex");
+
+    try {
+      for (const filePath of [legacy, onPath]) {
+        await mkdir(path.dirname(filePath), { recursive: true });
+        await writeFile(filePath, "#!/bin/sh\nexit 0\n", "utf8");
+        await chmod(filePath, 0o755);
+      }
+      useTempSentinelHome(tempRoot);
+      process.env.SENTINEL_CODEX_PATH = legacy;
+      process.env.PATH = path.join(tempRoot, "bin");
+
+      expect(
+        (await resolveCodexCli({ forceRefresh: true, instance: instance() }))
+          ?.command,
+      ).toBe(onPath);
+      expect(
+        (
+          await resolveCodexCli({
+            forceRefresh: true,
+            instance: instance({ id: "codex", isDefault: true }),
+          })
+        )?.command,
+      ).toBe(legacy);
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+});
+
 describe("resolveCodexCli on Windows", () => {
   it("picks npm's codex.cmd over the extensionless sh shim and wraps it in cmd.exe", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));

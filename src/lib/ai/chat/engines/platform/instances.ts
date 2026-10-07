@@ -465,10 +465,12 @@ export function createEngineInstanceRegistry(
     });
 
     const configuredHome = config.homePath ? expandHome(config.homePath) : null;
+    const envOverrides: Record<string, string> = {};
     if (meta.homeEnvVar && configuredHome) {
-      env[meta.homeEnvVar] = configuredHome;
+      envOverrides[meta.homeEnvVar] = configuredHome;
     }
-    Object.assign(env, instanceEnv);
+    Object.assign(envOverrides, instanceEnv);
+    Object.assign(env, envOverrides);
 
     const effectiveHome = meta.homeEnvVar
       ? (instanceEnv[meta.homeEnvVar] ?? configuredHome)
@@ -494,6 +496,8 @@ export function createEngineInstanceRegistry(
       driver: record.driver,
       enabled: record.enabled,
       env,
+      envOverrides,
+      envUnset: unreadable,
       id: record.id,
       isDefault: isDefaultInstanceId(record.id, record.driver),
       label: record.label ?? meta.label,

@@ -1,16 +1,31 @@
 import "server-only";
 
-import {
-  execFile,
-  type ChildProcessWithoutNullStreams,
-} from "node:child_process";
-import { constants as fsConstants } from "node:fs";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { type ChildProcessWithoutNullStreams } from "node:child_process";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import type { EngineInstallSource } from "@/lib/ai/chat/engines/contract";
+import {
+  getLoginShellCandidates,
+  getLoginShellMarkers,
+  lookupInLoginShell,
+  parseLoginShellLookupOutput,
+} from "@/lib/ai/chat/engines/platform/runtime/login-shell";
+import {
+  findExecutableInPath,
+  getConfiguredBinaryOverride,
+  getInstanceProcessEnv,
+  isExecutableFile,
+  normalizeCandidatePath,
+  recordResolvedBinary,
+  type EngineBinaryInstance,
+} from "@/lib/ai/chat/engines/platform/runtime/resolve-binary";
+import {
+  readFirstOutputLine,
+  runCommandProbe,
+} from "@/lib/ai/chat/engines/platform/runtime/version-probe";
 import type { CursorThreadState } from "@/lib/ai/chat/engines/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
-import { setLocalRuntimeEnvValue } from "@/lib/runtime/local-runtime-env";
 import { spawnManagedProcess } from "@/lib/runtime/process/spawn";
 import {
   applyPrivateFsMode,
@@ -26,15 +41,10 @@ const CURSOR_RUNTIME_CACHE_TTL_MS = 15_000;
 const CURSOR_STATUS_CACHE_TTL_MS = 15_000;
 const CURSOR_STATUS_QUERY_TIMEOUT_MS = 3_000;
 const CURSOR_CLI_VERIFY_TIMEOUT_MS = 1_500;
-const CURSOR_SHELL_LOOKUP_TIMEOUT_MS = 1_200;
 const CURSOR_STATUS_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 const LOCAL_STATE_DIRECTORY_MODE = 0o700;
 const LOCAL_STATE_FILE_MODE = 0o600;
 const CURSOR_STATUS_SNAPSHOT_FILE = "cursor-status.json";
-const CURSOR_PATH_START_MARKER = "__SENTINEL_CURSOR_PATH_START__";
-const CURSOR_PATH_END_MARKER = "__SENTINEL_CURSOR_PATH_END__";
-const CURSOR_SHELL_PATH_START_MARKER = "__SENTINEL_CURSOR_SHELL_PATH_START__";
-const CURSOR_SHELL_PATH_END_MARKER = "__SENTINEL_CURSOR_SHELL_PATH_END__";
 
 export type CursorEngineState =
   | "auth_unavailable"
@@ -88,6 +98,8 @@ type ResolvedCursorRuntime = {
   cliVersion: string | null;
   env: NodeJS.ProcessEnv;
   error: string | null;
+  /** How the binary was found; null when it was not. */
+  source: EngineInstallSource | null;
 };
 
 type CursorShellLookupResult = {
@@ -193,286 +205,37 @@ function getCursorStatusSnapshotPath() {
   return path.join(getLocalStateDirectory(), CURSOR_STATUS_SNAPSHOT_FILE);
 }
 
-function normalizeCandidatePath(candidatePath: string) {
-  const trimmedPath = candidatePath.trim();
-  if (!trimmedPath) {
-    return null;
-  }
-
-  return path.isAbsolute(trimmedPath)
-    ? path.normalize(trimmedPath)
-    : path.resolve(process.cwd(), trimmedPath);
-}
-
-async function isExecutable(candidatePath: string) {
-  const normalizedPath = normalizeCandidatePath(candidatePath);
-  if (!normalizedPath) {
-    return false;
-  }
-
-  try {
-    await access(
-      normalizedPath,
-      process.platform === "win32" ? fsConstants.F_OK : fsConstants.X_OK,
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function getExecutableNames(command: string) {
-  if (process.platform !== "win32") {
-    return [command];
-  }
-
-  const pathExt = (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM")
-    .split(";")
-    .map((extension) => extension.trim())
-    .filter(Boolean);
-
-  const names = new Set<string>([command]);
-  const lowerCommand = command.toLowerCase();
-  for (const extension of pathExt) {
-    if (lowerCommand.endsWith(extension.toLowerCase())) {
-      continue;
-    }
-
-    names.add(`${command}${extension}`);
-  }
-
-  return [...names];
-}
-
-async function findExecutableInPath(
-  command: string,
-  pathValue?: string | null,
-) {
-  if (!pathValue) {
-    return null;
-  }
-
-  const searchPaths = pathValue
-    .split(path.delimiter)
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-
-  for (const directory of searchPaths) {
-    for (const executableName of getExecutableNames(command)) {
-      const candidatePath = path.join(directory, executableName);
-      if (await isExecutable(candidatePath)) {
-        return candidatePath;
-      }
-    }
-  }
-
-  return null;
-}
-
-function getPreferredPathValue(pathValue?: string | null) {
-  return buildPreferredExecutablePathValue(pathValue);
-}
-
-async function getManagedPathValue(pathValue?: string | null) {
-  return buildManagedExecutablePathValue(pathValue);
-}
-
-function buildLoginShellLookupArgs(script: string) {
-  return ["-l", "-c", script];
-}
-
-function buildPosixShellLookupScript() {
-  return [
-    "if command -v agent >/dev/null 2>&1; then",
-    `  printf '%s\\n' '${CURSOR_PATH_START_MARKER}'`,
-    "  command -v agent",
-    `  printf '%s\\n' '${CURSOR_PATH_END_MARKER}'`,
-    "fi",
-    `printf '%s\\n' '${CURSOR_SHELL_PATH_START_MARKER}'`,
-    `printf '%s\\n' \"$PATH\"`,
-    `printf '%s\\n' '${CURSOR_SHELL_PATH_END_MARKER}'`,
-  ].join("\n");
-}
-
-function buildFishShellLookupScript() {
-  return [
-    "if command -v agent >/dev/null 2>/dev/null",
-    `  printf '%s\\n' '${CURSOR_PATH_START_MARKER}'`,
-    "  command -v agent",
-    `  printf '%s\\n' '${CURSOR_PATH_END_MARKER}'`,
-    "end",
-    `printf '%s\\n' '${CURSOR_SHELL_PATH_START_MARKER}'`,
-    "printf '%s\\n' (string join : -- $PATH)",
-    `printf '%s\\n' '${CURSOR_SHELL_PATH_END_MARKER}'`,
-  ].join("\n");
-}
+const CURSOR_NAME_OPTIONS = { strategy: "pathext-or-bare" } as const;
+const CURSOR_LOGIN_SHELL_MARKERS = getLoginShellMarkers("cursor");
+// A broken $SHELL falls back to the common shells.
+const CURSOR_FALLBACK_SHELLS = ["/bin/zsh", "/bin/bash", "/usr/bin/fish"];
 
 export function parseCursorShellLookupOutput(
   stdout: string,
 ): CursorShellLookupResult {
-  const lines = stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const readBlock = (startMarker: string, endMarker: string) => {
-    const startIndex = lines.indexOf(startMarker);
-    const endIndex = lines.indexOf(endMarker);
-
-    if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
-      return [];
-    }
-
-    return lines.slice(startIndex + 1, endIndex);
-  };
-
-  const cursorPathBlock = readBlock(
-    CURSOR_PATH_START_MARKER,
-    CURSOR_PATH_END_MARKER,
-  );
-  const pathBlock = readBlock(
-    CURSOR_SHELL_PATH_START_MARKER,
-    CURSOR_SHELL_PATH_END_MARKER,
-  );
-
-  return {
-    cursorPath: cursorPathBlock.find(Boolean) ?? null,
-    pathValue: pathBlock.find(Boolean) ?? null,
-  };
+  const { commandPath, pathValue } = parseLoginShellLookupOutput(stdout, {
+    markers: CURSOR_LOGIN_SHELL_MARKERS,
+  });
+  return { cursorPath: commandPath, pathValue };
 }
 
-async function resolveCursorCliFromShell() {
-  if (process.platform === "win32") {
-    return null;
-  }
-
-  const shells = [process.env.SHELL, "/bin/zsh", "/bin/bash", "/usr/bin/fish"]
-    .map((candidate) => candidate?.trim())
-    .filter(Boolean) as string[];
-
-  const seen = new Set<string>();
-  for (const shellPath of shells) {
-    if (seen.has(shellPath)) {
-      continue;
-    }
-    seen.add(shellPath);
-
-    const shellName = path.basename(shellPath);
-    const script =
-      shellName === "fish"
-        ? buildFishShellLookupScript()
-        : buildPosixShellLookupScript();
-
-    const stdout = await new Promise<string | null>((resolve) => {
-      execFile(
-        shellPath,
-        buildLoginShellLookupArgs(script),
-        {
-          env: process.env,
-          timeout: CURSOR_SHELL_LOOKUP_TIMEOUT_MS,
-          windowsHide: true,
-        },
-        (error, output) => resolve(error ? null : output),
-      );
-    });
-
-    if (!stdout) {
-      continue;
-    }
-
-    const { cursorPath, pathValue } = parseCursorShellLookupOutput(stdout);
-    if (!cursorPath) {
-      continue;
-    }
-
-    return {
-      cliPath: cursorPath,
-      env: {
-        ...process.env,
-        PATH: pathValue ? getPreferredPathValue(pathValue) : process.env.PATH,
-      },
-    };
-  }
-
-  return null;
-}
-
+/** Executable, with the version it prints (even when it exits non-zero). */
 async function verifyCursorCli(candidatePath: string, env: NodeJS.ProcessEnv) {
-  if (!(await isExecutable(candidatePath))) {
+  const normalizedPath = normalizeCandidatePath(candidatePath);
+  if (!normalizedPath || !(await isExecutableFile(normalizedPath))) {
     return null;
   }
 
-  const output = await new Promise<{ stderr: string; stdout: string } | null>(
-    (resolve) => {
-      execFile(
-        candidatePath,
-        ["--version"],
-        {
-          env,
-          timeout: CURSOR_CLI_VERIFY_TIMEOUT_MS,
-          windowsHide: true,
-        },
-        (error, stdout, stderr) => {
-          if (error) {
-            resolve({
-              stderr,
-              stdout,
-            });
-            return;
-          }
-
-          resolve({ stderr, stdout });
-        },
-      );
-    },
-  );
-
-  const version =
-    `${output?.stdout ?? ""}\n${output?.stderr ?? ""}`
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find(Boolean) ?? null;
+  const output = await runCommandProbe({
+    command: candidatePath,
+    env,
+    timeoutMs: CURSOR_CLI_VERIFY_TIMEOUT_MS,
+  });
 
   return {
     cliPath: candidatePath,
-    cliVersion: version,
+    cliVersion: readFirstOutputLine(output.stdout, output.stderr),
   };
-}
-
-function setProcessCursorPath(command: string | null) {
-  if (command?.trim()) {
-    process.env.SENTINEL_CURSOR_PATH = command;
-    return;
-  }
-
-  delete process.env.SENTINEL_CURSOR_PATH;
-}
-
-function isPersistableCursorPath(command: string) {
-  const normalized = command.replaceAll("\\", "/");
-  return !normalized.includes("/fnm_multishells/");
-}
-
-async function persistResolvedCursorCli(
-  command: string | null,
-  options?: { persist?: boolean },
-) {
-  const persist = options?.persist ?? Boolean(command?.trim());
-
-  try {
-    if (persist) {
-      await setLocalRuntimeEnvValue("SENTINEL_CURSOR_PATH", command);
-      return;
-    }
-
-    if (command) {
-      setProcessCursorPath(command);
-    }
-  } catch {
-    if (command) {
-      setProcessCursorPath(command);
-    }
-  }
 }
 
 async function writeCursorStatusSnapshot(snapshot: CursorStatusSnapshot) {
@@ -706,17 +469,18 @@ function getCursorValueForReasoning(
   }
 }
 
-let cachedRuntime: {
-  expiresAt: number;
-  promise: Promise<ResolvedCursorRuntime>;
-} | null = null;
+// One cached resolution per instance (and per configuration of it).
+const cachedRuntimes = new Map<
+  string,
+  { expiresAt: number; promise: Promise<ResolvedCursorRuntime> }
+>();
 let cachedStatus: {
   expiresAt: number;
   promise: Promise<CursorEngineStatus>;
 } | null = null;
 
 export function resetCursorRuntimeCache() {
-  cachedRuntime = null;
+  cachedRuntimes.clear();
 }
 
 export function resetCursorEngineStatusCache() {
@@ -746,85 +510,136 @@ export function buildCursorThreadState(input: {
   };
 }
 
-export async function resolveCursorRuntime(options?: {
-  forceRefresh?: boolean;
-}): Promise<ResolvedCursorRuntime> {
-  if (
-    !options?.forceRefresh &&
-    cachedRuntime &&
-    cachedRuntime.expiresAt > Date.now()
-  ) {
-    return cachedRuntime.promise;
+export type CursorRuntimeInstance = EngineBinaryInstance;
+
+function getRuntimeCacheKey(
+  instance: CursorRuntimeInstance | null | undefined,
+) {
+  if (!instance) {
+    return "default";
   }
 
-  const promise = (async () => {
-    const explicitPath = process.env.SENTINEL_CURSOR_PATH?.trim();
-    const preferredPathValue = getPreferredPathValue(process.env.PATH);
-    const managedPathValue = await getManagedPathValue(preferredPathValue);
+  return `${instance.id}:${JSON.stringify([
+    instance.config.binaryPath ?? null,
+    instance.envOverrides,
+    instance.envUnset,
+  ])}`;
+}
 
-    const explicitCandidate = explicitPath
-      ? await verifyCursorCli(explicitPath, process.env)
-      : null;
+/**
+ * Resolution order: the instance's binaryPath, else (default instance)
+ * SENTINEL_CURSOR_PATH; then `agent` on the managed PATH and in a login
+ * shell. Without an instance this is the default instance on process.env.
+ */
+async function resolveCursorRuntimeUncached(
+  instance: CursorRuntimeInstance | null | undefined,
+): Promise<ResolvedCursorRuntime> {
+  const baseEnv = getInstanceProcessEnv(instance);
+  const preferredPathValue = buildPreferredExecutablePathValue(baseEnv.PATH, {
+    env: baseEnv,
+  });
+  const managedPathValue = await buildManagedExecutablePathValue(
+    preferredPathValue,
+    { env: baseEnv },
+  );
+  const runtimeEnv = { ...baseEnv, PATH: managedPathValue };
+  const isDefault = !instance || instance.isDefault;
+  const remember = async (
+    cliPath: string,
+    cliVersion: string | null,
+    source: EngineInstallSource,
+  ) => {
+    await recordResolvedBinary(
+      { path: cliPath, source, version: cliVersion },
+      {
+        instanceId: instance?.id ?? "cursor",
+        legacyEnvKey: isDefault ? "SENTINEL_CURSOR_PATH" : null,
+      },
+    );
+  };
 
-    if (explicitCandidate?.cliPath) {
-      await persistResolvedCursorCli(explicitCandidate.cliPath, {
-        persist: isPersistableCursorPath(explicitCandidate.cliPath),
-      });
-      return {
-        cliDetected: true,
-        cliPath: explicitCandidate.cliPath,
-        cliVersion: explicitCandidate.cliVersion,
-        env: {
-          ...process.env,
-          PATH: managedPathValue,
-        },
-        error: null,
-      } satisfies ResolvedCursorRuntime;
-    }
+  const override = getConfiguredBinaryOverride(instance, baseEnv, [
+    "SENTINEL_CURSOR_PATH",
+  ]);
+  const explicitCandidate = override
+    ? await verifyCursorCli(override.path, baseEnv)
+    : null;
 
-    const candidatePath =
-      (await findExecutableInPath("agent", managedPathValue)) ??
-      (await resolveCursorCliFromShell())?.cliPath;
-
-    if (!candidatePath) {
-      return {
-        cliDetected: false,
-        cliPath: explicitPath ?? null,
-        cliVersion: null,
-        env: {
-          ...process.env,
-          PATH: managedPathValue,
-        },
-        error: explicitPath
-          ? "Cursor Agent path is retained but is not currently launchable."
-          : "Cursor Agent was not found in PATH.",
-      } satisfies ResolvedCursorRuntime;
-    }
-
-    const verified = await verifyCursorCli(candidatePath, {
-      ...process.env,
-      PATH: managedPathValue,
-    });
-    await persistResolvedCursorCli(candidatePath, {
-      persist: isPersistableCursorPath(candidatePath),
-    });
-
+  if (override && explicitCandidate?.cliPath) {
+    await remember(
+      explicitCandidate.cliPath,
+      explicitCandidate.cliVersion,
+      override.source,
+    );
     return {
       cliDetected: true,
-      cliPath: candidatePath,
-      cliVersion: verified?.cliVersion ?? null,
-      env: {
-        ...process.env,
-        PATH: managedPathValue,
-      },
+      cliPath: explicitCandidate.cliPath,
+      cliVersion: explicitCandidate.cliVersion,
+      env: runtimeEnv,
       error: null,
+      source: override.source,
     } satisfies ResolvedCursorRuntime;
-  })();
+  }
 
-  cachedRuntime = {
+  const fromPath = await findExecutableInPath(
+    "agent",
+    managedPathValue,
+    CURSOR_NAME_OPTIONS,
+  );
+  const candidatePath =
+    fromPath ??
+    (
+      await lookupInLoginShell({
+        command: "agent",
+        env: baseEnv,
+        markers: CURSOR_LOGIN_SHELL_MARKERS,
+        shells: getLoginShellCandidates(baseEnv, CURSOR_FALLBACK_SHELLS),
+        stopWhen: "command",
+      })
+    )?.commandPath;
+
+  if (!candidatePath) {
+    return {
+      cliDetected: false,
+      cliPath: override?.path ?? null,
+      cliVersion: null,
+      env: runtimeEnv,
+      error: override
+        ? "Cursor Agent path is retained but is not currently launchable."
+        : "Cursor Agent was not found in PATH.",
+      source: null,
+    } satisfies ResolvedCursorRuntime;
+  }
+
+  const source: EngineInstallSource = fromPath ? "managed-path" : "login-shell";
+  const verified = await verifyCursorCli(candidatePath, runtimeEnv);
+  await remember(candidatePath, verified?.cliVersion ?? null, source);
+
+  return {
+    cliDetected: true,
+    cliPath: candidatePath,
+    cliVersion: verified?.cliVersion ?? null,
+    env: runtimeEnv,
+    error: null,
+    source,
+  } satisfies ResolvedCursorRuntime;
+}
+
+export async function resolveCursorRuntime(options?: {
+  forceRefresh?: boolean;
+  instance?: CursorRuntimeInstance | null;
+}): Promise<ResolvedCursorRuntime> {
+  const key = getRuntimeCacheKey(options?.instance);
+  const cached = cachedRuntimes.get(key);
+  if (!options?.forceRefresh && cached && cached.expiresAt > Date.now()) {
+    return cached.promise;
+  }
+
+  const promise = resolveCursorRuntimeUncached(options?.instance);
+  cachedRuntimes.set(key, {
     expiresAt: Date.now() + CURSOR_RUNTIME_CACHE_TTL_MS,
     promise,
-  };
+  });
 
   return promise;
 }

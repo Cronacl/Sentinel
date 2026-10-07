@@ -348,6 +348,9 @@ describe("environment secrets", () => {
     });
     expect(resolved.env.OPENAI_API_KEY).toBeUndefined();
     expect(Object.hasOwn(resolved.env, "OPENAI_API_KEY")).toBe(false);
+    // Engines that start from process.env unset it too.
+    expect(resolved.envUnset).toEqual(["OPENAI_API_KEY"]);
+    expect(resolved.envOverrides).toEqual({});
 
     const summary = (await registry.listSummaries(USER_ID)).find(
       (candidate) => candidate.id === "codex-old",
@@ -449,6 +452,10 @@ describe("resolve", () => {
       instanceId: created.id,
     });
     expect(resolved.env.CODEX_HOME).toBe("/Users/me/.codex-work");
+    expect(resolved.envOverrides).toEqual({
+      CODEX_HOME: "/Users/me/.codex-work",
+    });
+    expect(resolved.envUnset).toEqual([]);
     expect(resolved.config).toMatchObject({
       binaryPath: "/Users/me/bin/codex",
       homePath: "/Users/me/.codex-work",

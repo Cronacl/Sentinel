@@ -473,3 +473,26 @@ describe("P10 process utility tripwires", () => {
     ).toEqual(["P10-engine-windows-shell-spawn:1"]);
   });
 });
+
+describe("P10 binary discovery tripwire", () => {
+  it("flags per-engine copies of the shared discovery helpers", () => {
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/grok/index.ts",
+        "async function findExecutableInPath(\n  command: string,",
+      ),
+    ).toEqual(["P10-engine-local-binary-discovery:1"]);
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/cursor-acp/index.ts",
+        "function isPersistableCursorPath(command: string) {",
+      ),
+    ).toEqual(["P10-engine-local-binary-discovery:1"]);
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/platform/runtime/resolve-binary.ts",
+        "export async function findExecutableInPath(",
+      ),
+    ).toEqual([]);
+  });
+});

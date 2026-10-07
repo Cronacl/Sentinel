@@ -149,6 +149,42 @@ describe("resolveCursorRuntime", () => {
   });
 });
 
+describe("resolveCursorRuntime for an instance", () => {
+  it("uses a non-default instance's binaryPath and leaves SENTINEL_CURSOR_PATH alone", async () => {
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "cursor-acp-runtime-instance-"),
+    );
+    tempRoots.push(tempRoot);
+    const scriptPath = await writeLaunchableCursorScript(
+      tempRoot,
+      process.platform === "win32" ? "agent.cmd" : "agent",
+    );
+    process.env.SENTINEL_CURSOR_PATH = "/elsewhere/agent";
+
+    const runtime = await resolveCursorRuntime({
+      instance: {
+        config: { binaryPath: scriptPath },
+        envOverrides: { CURSOR_API_KEY: "key-for-work" },
+        envUnset: [],
+        id: "cursor-work",
+        isDefault: false,
+      },
+    });
+
+    expect(runtime).toEqual(
+      expect.objectContaining({
+        cliDetected: true,
+        cliPath: scriptPath,
+        cliVersion: "agent 1.0.0",
+        source: "config",
+      }),
+    );
+    expect(runtime.env.CURSOR_API_KEY).toBe("key-for-work");
+    expect(process.env.SENTINEL_CURSOR_PATH).toBe("/elsewhere/agent");
+    expect(setLocalRuntimeEnvValueMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("getCursorEngineStatus timeout", () => {
   it.skipIf(process.platform === "win32")(
     "kills the probe's agent process when the probe times out",

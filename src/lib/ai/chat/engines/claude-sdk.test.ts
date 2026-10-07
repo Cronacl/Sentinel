@@ -229,6 +229,51 @@ describe("resolveClaudeCodeRuntime", () => {
   });
 });
 
+describe("resolveClaudeCodeRuntime for an instance", () => {
+  it("verifies a non-default instance's binaryPath under the instance env", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
+    const configured = path.join(tempRoot, "work", "claude");
+
+    try {
+      await mkdir(path.dirname(configured), { recursive: true });
+      await writeFile(
+        configured,
+        '#!/bin/sh\necho "2.1.300 (Claude Code) $CLAUDE_CONFIG_DIR"\n',
+        "utf8",
+      );
+      await chmod(configured, 0o755);
+      process.env.HOME = tempRoot;
+      process.env.SENTINEL_CLAUDE_PATH = "/somewhere/else/claude";
+      delete process.env.SENTINEL_STATE_PATH;
+
+      const resolved = await resolveClaudeCodeRuntime({
+        forceRefresh: true,
+        instance: {
+          config: { binaryPath: configured },
+          envOverrides: { CLAUDE_CONFIG_DIR: "/homes/claude-work" },
+          envUnset: [],
+          id: "claude-work",
+          isDefault: false,
+        },
+      });
+
+      expect(resolved).toEqual(
+        expect.objectContaining({
+          binaryDetected: true,
+          binaryVersion: "2.1.300 (Claude Code) /homes/claude-work",
+          executablePath: configured,
+          source: "config",
+        }),
+      );
+      expect(resolved.env.CLAUDE_CONFIG_DIR).toBe("/homes/claude-work");
+      expect(setLocalRuntimeEnvValueMock).not.toHaveBeenCalled();
+      expect(process.env.SENTINEL_CLAUDE_PATH).toBe("/somewhere/else/claude");
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+});
+
 describe("getClaudeExecutableNames", () => {
   it("only looks for PATHEXT names on Windows, so npm's sh script is skipped", () => {
     expect(

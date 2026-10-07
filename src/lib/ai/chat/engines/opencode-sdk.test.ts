@@ -41,6 +41,7 @@ const {
   resetOpenCodeEngineStatusCache,
   resetOpenCodeRuntimeCache,
   resolveOpenCodeCompatibility,
+  resolveOpenCodeRuntime,
   startOpenCodeServerProcess,
   startOpenCodeSession,
 } = await import("./opencode-sdk");
@@ -562,6 +563,39 @@ describe.skipIf(process.platform === "win32")(
       server.close();
       const exit = await server.exited;
       expect(exit.code === 0 || exit.signal === "SIGTERM").toBe(true);
+    });
+  },
+);
+
+describe.skipIf(process.platform === "win32")(
+  "resolveOpenCodeRuntime for an instance",
+  () => {
+    it("runs a non-default instance's binaryPath without touching the default's hint", async () => {
+      const fake = await createFakeOpenCode({ version: "1.18.35" });
+      process.env.SENTINEL_OPENCODE_PATH = "/elsewhere/opencode";
+
+      const runtime = await resolveOpenCodeRuntime({
+        instance: {
+          config: { binaryPath: fake.binaryPath },
+          envOverrides: { XDG_CONFIG_HOME: path.join(tempRoot, "work-config") },
+          envUnset: [],
+          id: "opencode-work",
+          isDefault: false,
+        },
+      });
+
+      expect(runtime).toEqual(
+        expect.objectContaining({
+          cliDetected: true,
+          cliPath: fake.binaryPath,
+          cliVersion: "1.18.35",
+          source: "config",
+        }),
+      );
+      expect(runtime.env.XDG_CONFIG_HOME).toBe(
+        path.join(tempRoot, "work-config"),
+      );
+      expect(process.env.SENTINEL_OPENCODE_PATH).toBe("/elsewhere/opencode");
     });
   },
 );
