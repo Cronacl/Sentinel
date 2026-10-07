@@ -8,7 +8,7 @@ import { modelPreferences, providerCredentials } from "@/server/db/schema";
 
 import { createCredentialDecryptionError, decrypt } from "./encrypt";
 import { getModelsForProvider, isKnownModel } from "./models";
-import { createProviderInstance } from "./factory";
+import { createProviderLanguageModel } from "./factory";
 
 const VALID_PROVIDERS = new Set<string>([
   "openai",
@@ -181,8 +181,7 @@ export async function getLanguageModel(userId: string, compositeId: string) {
     async () => {
       const { provider, model } = parseModelId(compositeId);
       const config = await getProviderConfig(userId, provider);
-      const providerInstance = createProviderInstance(provider, config);
-      return providerInstance.languageModel(model);
+      return createProviderLanguageModel(provider, config, model);
     },
   );
 }

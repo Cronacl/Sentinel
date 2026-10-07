@@ -57,7 +57,7 @@ export async function generateThreadTitle({
   const result = await generateText({
     model: model.languageModel as Parameters<typeof generateText>[0]["model"],
     prompt: buildTitlePrompt(firstUserText),
-    system: TITLE_SYSTEM_PROMPT,
+    instructions: TITLE_SYSTEM_PROMPT,
     temperature: 0.2,
     ...(model.providerOptions
       ? { providerOptions: model.providerOptions }

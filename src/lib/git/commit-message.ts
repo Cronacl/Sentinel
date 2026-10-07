@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { z } from "zod";
 import type { SessionConfig } from "@github/copilot-sdk";
 
@@ -444,17 +444,16 @@ export async function generateSentinelCommitMessage(
     throw new Error("No enabled model is available for commit generation.");
   }
 
-  const result = await generateObject({
-    model: model.languageModel as Parameters<typeof generateObject>[0]["model"],
-    output: "object",
+  const result = await generateText({
+    model: model.languageModel as Parameters<typeof generateText>[0]["model"],
+    output: Output.object({ schema: COMMIT_MESSAGE_OUTPUT_SCHEMA }),
     prompt: buildCommitMessagePrompt(input.context),
-    schema: COMMIT_MESSAGE_OUTPUT_SCHEMA,
     ...(model.providerOptions
       ? { providerOptions: model.providerOptions }
       : {}),
   });
 
-  return normalizeCommitResult(result.object);
+  return normalizeCommitResult(result.output);
 }
 
 export async function generateCodexCommitMessage(

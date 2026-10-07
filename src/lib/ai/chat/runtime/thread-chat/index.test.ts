@@ -26,7 +26,7 @@ const createAgentUIStream = mock(async (args) => {
     });
   }
   if (aiState.latestInputTokens != null) {
-    await args.onStepFinish?.({
+    await args.onStepEnd?.({
       usage: { inputTokens: aiState.latestInputTokens },
     });
   }
@@ -44,12 +44,12 @@ const createGateway = mock((_options = {}) => ({
     kind: "gateway-language-model",
     modelId,
   })),
-  textEmbeddingModel: mock((modelId: string) => ({
+  embeddingModel: mock((modelId: string) => ({
     kind: "gateway-embedding-model",
     modelId,
   })),
 }));
-const createUIMessageStream = mock(({ execute, onFinish }) => {
+const createUIMessageStream = mock(({ execute, onEnd }) => {
   const writer = {
     merge: mock(() => {}),
     write: mock((chunk) => {
@@ -59,7 +59,7 @@ const createUIMessageStream = mock(({ execute, onFinish }) => {
 
   const done = (async () => {
     await execute({ writer });
-    await onFinish?.({ responseMessage: aiState.assistantResponseMessage });
+    await onEnd?.({ responseMessage: aiState.assistantResponseMessage });
   })();
 
   return { done, writer };
@@ -89,7 +89,7 @@ const readUIMessageStream = mock(async function* () {
   yield aiState.assistantResponseMessage;
 });
 const smoothStream = mock(() => undefined);
-const stepCountIs = mock(() => ({ kind: "stop-when" }));
+const isStepCount = mock(() => ({ kind: "stop-when" }));
 const tool = mock((config) => config);
 
 class MockToolLoopAgent {
@@ -426,7 +426,6 @@ const validateUIMessages = mock(async ({ messages }) => messages);
 
 mock.module("ai", () => ({
   Output,
-  createAgentUIStream,
   createGateway,
   createUIMessageStream,
   createUIMessageStreamResponse,
@@ -435,15 +434,19 @@ mock.module("ai", () => ({
   generateText,
   generateId,
   hasToolCall,
+  isStepCount,
   readUIMessageStream,
   smoothStream,
-  stepCountIs,
   tool,
   ToolLoopAgent: MockToolLoopAgent,
   validateUIMessages,
 }));
 
 mock.module("server-only", () => ({}));
+
+mock.module("../../agent/ui-stream", () => ({
+  createThreadAgentUIStream: createAgentUIStream,
+}));
 
 mock.module("../attachments", () => ({
   createAttachmentDownloadHandler,
@@ -1366,6 +1369,18 @@ describe("runThreadChat bootstrap failure recovery", () => {
         type: "run.finished",
       }),
     );
+  });
+
+  it("keeps UI stream error text instead of the AI SDK's redacted default", async () => {
+    await runThreadChat(createSubmitRequest(), "user-1");
+    await flushAsyncWork();
+
+    const [streamOptions] = createUIMessageStream.mock.calls.at(-1) ?? [];
+    const [agentStreamOptions] = createAgentUIStream.mock.calls.at(-1) ?? [];
+    const error = { error: { message: "Provider request failed." } };
+
+    expect(streamOptions.onError(error)).toBe("Provider request failed.");
+    expect(agentStreamOptions.onError(error)).toBe("Provider request failed.");
   });
 
   it("persists an inline assistant error when bootstrap fails after the user turn is committed", async () => {

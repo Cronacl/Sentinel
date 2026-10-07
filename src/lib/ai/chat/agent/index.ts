@@ -1,13 +1,13 @@
 import {
   generateText,
   hasToolCall,
-  stepCountIs,
+  isStepCount,
   ToolLoopAgent,
   type StopCondition,
   type ToolSet,
   type Experimental_DownloadFunction,
 } from "ai";
-import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
+import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import type { ImageGenerationRuntime } from "@/lib/ai/providers/images";
 import type { VideoGenerationRuntime } from "@/lib/ai/providers/videos";
 import type { PermissionMode } from "@/lib/security";
@@ -154,25 +154,17 @@ function buildStepProgressAddon(
 }
 
 function mergeToolRoutingContext(
-  experimentalContext: unknown,
+  runtimeContext: Record<string, unknown> | undefined,
   toolRouting: unknown,
-) {
+): Record<string, unknown> | undefined {
   if (!toolRouting) {
-    return experimentalContext;
+    return runtimeContext;
   }
 
-  if (
-    experimentalContext &&
-    typeof experimentalContext === "object" &&
-    !Array.isArray(experimentalContext)
-  ) {
-    return {
-      ...experimentalContext,
-      toolRouting,
-    };
-  }
-
-  return { toolRouting };
+  return {
+    ...runtimeContext,
+    toolRouting,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +188,7 @@ export function createThreadAgent({
 }: {
   attachmentDownload?: Experimental_DownloadFunction;
   languageModel: unknown;
-  providerOptions?: SharedV3ProviderOptions;
+  providerOptions?: ProviderOptions;
 }) {
   let cachedInstructions: string | undefined;
   let cachedActiveToolNames: string[] = [];
@@ -219,13 +211,17 @@ export function createThreadAgent({
       : {}),
     model,
     ...(providerOptions ? { providerOptions } : {}),
+    // Context compaction feeds its summary back as a synthetic system message
+    // built server-side (runtime/context-compaction.ts); AI SDK 7 rejects
+    // system messages in the prompt unless this is set.
+    allowSystemInMessages: true,
     callOptionsSchema: threadAgentCallOptionsSchema,
     stopWhen: [
-      stepCountIs(MAX_AGENT_STEPS),
+      isStepCount(MAX_AGENT_STEPS),
       hasToolCall("ask_question"),
       allTasksResolved,
     ],
-    experimental_repairToolCall: async ({ toolCall, inputSchema, error }) => {
+    repairToolCall: async ({ toolCall, inputSchema, error }) => {
       if (isNoSuchToolError(error)) {
         return null;
       }
@@ -234,7 +230,7 @@ export function createThreadAgent({
       const result = await generateText({
         model,
         ...(providerOptions ? { providerOptions } : {}),
-        system: [
+        instructions: [
           "You are a tool call repair agent.",
           "The user will provide a malformed tool call and the JSON Schema for that tool.",
           "Return ONLY a valid JSON object that conforms to the schema. Do not wrap in markdown.",
@@ -302,14 +298,18 @@ export function createThreadAgent({
       return {
         ...settings,
         activeTools: initialActiveTools as never[],
-        experimental_context: {
+        instructions,
+        runtimeContext: {
+          ...settings.runtimeContext,
           toolRouting: initialRouting.audit,
         },
-        instructions,
         tools,
       };
     },
-    prepareStep: async ({ experimental_context, stepNumber, steps }) => {
+    // AI SDK 7 carries instructions returned here forward to later steps, so
+    // every branch returns the full instructions for this step; otherwise a
+    // step directive would stick to every step after it.
+    prepareStep: async ({ runtimeContext, stepNumber, steps }) => {
       const promptContext = cachedPromptContext;
       let activeToolNames = cachedActiveToolNames;
 
@@ -384,45 +384,30 @@ export function createThreadAgent({
       );
 
       const progressAddon = buildStepProgressAddon(steps, stepNumber);
+      const stepSettings = {
+        activeTools: activeToolNames as never[],
+        runtimeContext: mergeToolRoutingContext(
+          runtimeContext,
+          cachedRoutingAudit,
+        ),
+      };
       if (stepNumber >= 3 && !hasCreatedTasks) {
         return {
-          activeTools: activeToolNames as never[],
-          experimental_context: mergeToolRoutingContext(
-            experimental_context,
-            cachedRoutingAudit,
-          ),
-          system: baseSystem + TASK_ENFORCEMENT_ADDON + progressAddon,
+          ...stepSettings,
+          instructions: baseSystem + TASK_ENFORCEMENT_ADDON + progressAddon,
         };
       }
 
       if (lastStepHadMutations) {
         return {
-          activeTools: activeToolNames as never[],
-          experimental_context: mergeToolRoutingContext(
-            experimental_context,
-            cachedRoutingAudit,
-          ),
-          system: baseSystem + VALIDATION_ADDON + progressAddon,
-        };
-      }
-
-      if (progressAddon) {
-        return {
-          activeTools: activeToolNames as never[],
-          experimental_context: mergeToolRoutingContext(
-            experimental_context,
-            cachedRoutingAudit,
-          ),
-          system: baseSystem + progressAddon,
+          ...stepSettings,
+          instructions: baseSystem + VALIDATION_ADDON + progressAddon,
         };
       }
 
       return {
-        activeTools: activeToolNames as never[],
-        experimental_context: mergeToolRoutingContext(
-          experimental_context,
-          cachedRoutingAudit,
-        ),
+        ...stepSettings,
+        instructions: baseSystem + progressAddon,
       };
     },
   });

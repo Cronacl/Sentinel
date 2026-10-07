@@ -1,5 +1,5 @@
 import type { AIProvider } from "@/server/db/enums";
-import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
+import type { ProviderOptions } from "@ai-sdk/provider-utils";
 
 export type ModelCapability =
   "vision" | "reasoning" | "tool_use" | "object_generation";
@@ -34,9 +34,7 @@ export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 type ReasoningConfig = {
   defaultEffort: ReasoningEffort;
   forceReasoning?: boolean;
-  providerOptionsMap?: Partial<
-    Record<ReasoningEffort, SharedV3ProviderOptions>
-  >;
+  providerOptionsMap?: Partial<Record<ReasoningEffort, ProviderOptions>>;
   providerValueMap?: Partial<Record<ReasoningEffort, string>>;
   reasoningSummary?: "auto" | "concise" | "detailed";
   strategy:
@@ -1233,7 +1231,7 @@ function getProviderOptionsKey(provider: AIProvider) {
     case "ollama":
       return "openai";
     case "openrouter":
-      return "openai";
+      return "openrouter";
     case "deepseek":
       return "deepseek";
   }
@@ -1302,7 +1300,7 @@ export function getReasoningProviderOptions(
   provider: AIProvider,
   modelId: string,
   reasoningEffort?: ReasoningEffort | null,
-): SharedV3ProviderOptions | undefined {
+): ProviderOptions | undefined {
   const config = getReasoningConfig(provider, modelId);
 
   if (!reasoningEffort || !config) {

@@ -1,5 +1,4 @@
 import {
-  createAgentUIStream,
   createUIMessageStream,
   generateId,
   readUIMessageStream,
@@ -21,6 +20,7 @@ import * as persist from "../../persistence";
 import { createReasoningMetadataTracker } from "../reasoning";
 import { getSystemPrompt } from "../system-prompt";
 import { createThreadAgent } from "../../agent";
+import { createThreadAgentUIStream } from "../../agent/ui-stream";
 import {
   buildThreadPromptContext,
   createMcpPromptNamespace,
@@ -605,6 +605,8 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
     const normalizedModelTranscript = await normalizedModelTranscriptPromise;
 
     const stream = createUIMessageStream({
+      // AI SDK 7 redacts errors to "An error occurred." unless onError is set.
+      onError: (error) => getErrorMessage(error, "Unknown error"),
       originalMessages: normalizedModelTranscript,
       execute: async ({ writer }) => {
         try {
@@ -771,12 +773,12 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
               : baseSystemPrompt;
           const agentMessages = compactionResult.transcript;
 
-          const result = await createAgentUIStream({
+          const result = await createThreadAgentUIStream({
             agent,
             abortSignal: abortController.signal,
             experimental_transform: smoothStream(),
             generateMessageId: () => assistantId,
-            onStepFinish: async ({ usage }) => {
+            onStepEnd: async ({ usage }) => {
               latestInputTokens = usage.inputTokens;
             },
             messageMetadata: ({ part }) => tracker.getMessageMetadata(part),
@@ -831,7 +833,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           throw error;
         }
       },
-      onFinish: async ({ responseMessage }) => {
+      onEnd: async ({ responseMessage }) => {
         await closeMcpTools();
         if (!(await streamStillOwnsThread(run.request.threadId, run.runId))) {
           await clearThreadRepoCheckpointRun(run.runId);

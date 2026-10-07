@@ -1,4 +1,4 @@
-import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
+import type { ProviderOptions } from "@ai-sdk/provider-utils";
 
 import type { AIProvider } from "@/server/db/enums";
 
@@ -29,7 +29,7 @@ export type MemoryEmbeddingProfile = {
   id: MemoryEmbeddingProfileId;
   model: string;
   provider: AIProvider;
-  providerOptions?: SharedV3ProviderOptions;
+  providerOptions?: ProviderOptions;
 };
 
 export const MEMORY_EMBEDDING_PROFILES = [

@@ -18,7 +18,7 @@ const hasToolCall = mock((toolName) => ({ kind: "has-tool-call", toolName }));
 const Output = {
   object: mock((config) => config),
 };
-const stepCountIs = mock(() => ({ kind: "stop-when" }));
+const isStepCount = mock(() => ({ kind: "stop-when" }));
 const getEnabledModelsMock = mock(async () => [
   {
     compositeId: "openai:gpt-5-mini",
@@ -106,7 +106,7 @@ mock.module("ai", () => ({
   generateImage,
   generateText,
   hasToolCall,
-  stepCountIs,
+  isStepCount,
   tool,
   ToolLoopAgent: MockToolLoopAgent,
   validateUIMessages,
@@ -770,7 +770,7 @@ describe("createThreadAgent", () => {
     });
 
     const nextStep = await aiTestState.agentConfig.prepareStep({
-      experimental_context: null,
+      runtimeContext: undefined,
       stepNumber: 2,
       steps: [
         {
@@ -782,5 +782,70 @@ describe("createThreadAgent", () => {
 
     expect(nextStep.activeTools).toContain("edit");
     expect(nextStep.activeTools).toContain("apply_patch");
+  });
+
+  function chatAgentOptions(sourceMessageId: string) {
+    return {
+      defaultDirectory: "/tmp/workspace",
+      latestUserText: "Implement the fix in the workspace.",
+      memoryRuntime: defaultMemoryRuntime,
+      permissionMode: "default",
+      searchProviders: {},
+      searchSettings: {
+        defaultProvider: "exa",
+        defaultResultCount: 5,
+        maxResultCount: 10,
+      },
+      sourceMessageId,
+      systemPrompt: "System prompt",
+      threadId: `thread-${sourceMessageId}`,
+      threadMode: "chat",
+      userId: "user-1",
+      toolApprovalPolicies: getDefaultToolApprovalPolicies(),
+      toolsEnabled: true,
+      webFetchSettings: { batchEnabled: false, batchLimit: 10 },
+      workspaceId: "workspace-1",
+    };
+  }
+
+  it("returns the full instructions on every step so directives do not carry forward", async () => {
+    const prepared = await prepareWith(chatAgentOptions("instructions-reset"));
+    const { allowSystemInMessages, prepareStep } = aiTestState.agentConfig;
+
+    // Context compaction feeds its summary as a synthetic system message.
+    expect(allowSystemInMessages).toBe(true);
+    expect(prepared.runtimeContext).toHaveProperty("toolRouting");
+
+    const firstStep = await prepareStep({
+      runtimeContext: prepared.runtimeContext,
+      stepNumber: 0,
+      steps: [],
+    });
+    expect(firstStep.instructions).toBe(prepared.instructions);
+    expect(firstStep.runtimeContext).toHaveProperty("toolRouting");
+
+    const mutationStep = { toolCalls: [{ toolName: "edit" }], toolResults: [] };
+    const validationStep = await prepareStep({
+      runtimeContext: firstStep.runtimeContext,
+      stepNumber: 1,
+      steps: [mutationStep],
+    });
+    expect(validationStep.instructions).toBe(
+      `${prepared.instructions}\n## Step Directive: Validate Your Changes\n` +
+        "You just made file changes. Before proceeding to the next task:\n" +
+        "1. Read the modified files to verify correctness.\n" +
+        "2. Run relevant checks via diagnostics or run_task (lint, typecheck, test) when available.\n" +
+        "3. Update the corresponding task status with manage_task.\n" +
+        "Do not mark a task as completed until the changes are validated.",
+    );
+
+    // AI SDK 7 keeps returned instructions for later steps, so the step after
+    // the directive must hand back the plain instructions explicitly.
+    const followUpStep = await prepareStep({
+      runtimeContext: validationStep.runtimeContext,
+      stepNumber: 2,
+      steps: [mutationStep, { toolCalls: [], toolResults: [] }],
+    });
+    expect(followUpStep.instructions).toBe(prepared.instructions);
   });
 });

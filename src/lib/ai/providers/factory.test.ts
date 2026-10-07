@@ -2,7 +2,8 @@ import { describe, expect, it, mock } from "bun:test";
 
 mock.module("server-only", () => ({}));
 
-const { createProviderInstance } = await import("./factory");
+const { createProviderInstance, createProviderLanguageModel } =
+  await import("./factory");
 
 describe("createProviderInstance", () => {
   it("creates native Black Forest Labs, Fal, and Replicate providers", () => {
@@ -75,5 +76,34 @@ describe("createProviderInstance", () => {
     };
 
     expect(typeof deepseek.languageModel).toBe("function");
+  });
+});
+
+describe("createProviderLanguageModel", () => {
+  it("uses the Chat Completions API for Ollama", () => {
+    const model = createProviderLanguageModel(
+      "ollama",
+      { baseURL: "http://localhost:11434/v1" },
+      "llama3.2",
+    ) as { modelId: string; provider: string };
+
+    expect(model.provider).toBe("openai.chat");
+    expect(model.modelId).toBe("llama3.2");
+  });
+
+  it("keeps the Responses API for OpenAI and xAI", () => {
+    const openai = createProviderLanguageModel(
+      "openai",
+      { apiKey: "openai-key" },
+      "gpt-5.2",
+    ) as { provider: string };
+    const xai = createProviderLanguageModel(
+      "xai",
+      { apiKey: "xai-key" },
+      "grok-4",
+    ) as { provider: string };
+
+    expect(openai.provider).toBe("openai.responses");
+    expect(xai.provider).toBe("xai.responses");
   });
 });

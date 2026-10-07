@@ -1,5 +1,5 @@
 import { Output, generateText, type StepResult, type ToolSet } from "ai";
-import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
+import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import { z } from "zod";
 
 import type { AIProvider } from "@/server/db/enums";
@@ -120,7 +120,7 @@ type RouteToolExposureInput = {
   evidence?: ToolRoutingEvidence;
   initialActiveTools?: string[];
   mainLanguageModel: unknown;
-  mainProviderOptions?: SharedV3ProviderOptions;
+  mainProviderOptions?: ProviderOptions;
   promptContext: ThreadPromptContext;
   resolvedProviderId?: AIProvider | null;
   stage: "initial" | "step";
@@ -759,7 +759,7 @@ export async function routeToolExposure(
       output: Output.object({ schema: toolRoutingDecisionSchema }),
       ...(providerOptions ? { providerOptions } : {}),
       prompt: buildToolRouterPrompt(manifest),
-      system: buildToolRouterSystemPrompt(),
+      instructions: buildToolRouterSystemPrompt(),
     });
 
     return validateToolRoutingDecision({
@@ -785,7 +785,7 @@ export async function routeToolExposure(
             ? { providerOptions: input.mainProviderOptions }
             : {}),
           prompt: buildToolRouterPrompt(manifest),
-          system: buildToolRouterSystemPrompt(),
+          instructions: buildToolRouterSystemPrompt(),
         });
 
         return validateToolRoutingDecision({

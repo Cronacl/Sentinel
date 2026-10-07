@@ -49,6 +49,59 @@ export const TRIPWIRES = [
     pattern: /"baseUrl"/,
     include: /(^|\/)tsconfig[^/]*\.json$/,
   },
+  {
+    id: "P7-ai-step-count-is",
+    description: "AI SDK 7 renamed stepCountIs to isStepCount",
+    pattern: /\bstepCountIs\b/,
+    include: /\.[cm]?[jt]sx?$/,
+  },
+  {
+    id: "P7-ai-experimental-context",
+    description:
+      "AI SDK 7 removed experimental_context (use runtimeContext or toolsContext)",
+    pattern: /\bexperimental_context\b/,
+    include: /\.[cm]?[jt]sx?$/,
+  },
+  {
+    id: "P7-ai-experimental-repair-tool-call",
+    description:
+      "AI SDK 7 renamed experimental_repairToolCall to repairToolCall",
+    pattern: /\bexperimental_repairToolCall\b/,
+    include: /\.[cm]?[jt]sx?$/,
+  },
+  {
+    id: "P7-ai-shared-v3-provider-options",
+    description:
+      "SharedV3ProviderOptions is tied to provider spec V3 (use ProviderOptions)",
+    pattern: /\bSharedV3ProviderOptions\b/,
+    include: /\.[cm]?[jt]sx?$/,
+  },
+  {
+    id: "P7-ai-generate-object",
+    description:
+      "AI SDK 7 deprecated generateObject (use generateText with Output.object)",
+    pattern: /\bgenerateObject\b/,
+    include: /\.[cm]?[jt]sx?$/,
+  },
+  {
+    id: "P7-ai-experimental-transcribe",
+    description: "AI SDK 7 renamed experimental_transcribe to transcribe",
+    pattern: /\bexperimental_transcribe\b/,
+    include: /\.[cm]?[jt]sx?$/,
+  },
+  {
+    id: "P7-ai-on-step-finish",
+    description: "AI SDK 7 renamed onStepFinish to onStepEnd",
+    pattern: /\bonStepFinish\b/,
+    include: /\.[cm]?[jt]sx?$/,
+  },
+  {
+    id: "P7-ai-create-google-generative-ai",
+    description:
+      "@ai-sdk/google 4 renamed createGoogleGenerativeAI to createGoogle",
+    pattern: /\bcreateGoogleGenerativeAI\b/,
+    include: /\.[cm]?[jt]sx?$/,
+  },
 ];
 
 const DEFAULT_EXCLUDE =

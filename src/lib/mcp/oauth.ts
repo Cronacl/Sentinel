@@ -105,6 +105,12 @@ export function createMcpOAuthProvider(
         };
       });
     },
+    // Client information only ever comes from dynamic registration (see
+    // saveClientInformation). @ai-sdk/mcp 2 needs this to drop and re-register
+    // a rejected client after invalid_client errors, as 1.x always did.
+    isClientInformationDynamicallyRegistered() {
+      return true;
+    },
     redirectToAuthorization(authorizationUrl) {
       if (!args.onRedirect) {
         throw new Error(

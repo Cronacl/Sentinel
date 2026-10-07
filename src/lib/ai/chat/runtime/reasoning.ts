@@ -18,7 +18,6 @@ type ReasoningStreamPart = {
       reasoningTokens?: number;
     };
     outputTokens?: number;
-    reasoningTokens?: number;
     totalTokens?: number;
   };
   type: string;
@@ -194,8 +193,7 @@ export function createReasoningMetadataTracker({
             inputTokens: part.totalUsage.inputTokens,
             outputTokens: part.totalUsage.outputTokens,
             reasoningTokens:
-              part.totalUsage.outputTokenDetails?.reasoningTokens ??
-              part.totalUsage.reasoningTokens,
+              part.totalUsage.outputTokenDetails?.reasoningTokens,
             totalTokens: part.totalUsage.totalTokens,
           },
         };

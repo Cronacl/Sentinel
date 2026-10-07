@@ -253,12 +253,19 @@ async function createCachedServerTools(
             }
           : {}),
         headers: resolveHttpHeaders(entry),
+        // @ai-sdk/mcp 2 rejects redirects by default; user-configured servers
+        // were followed through redirects before.
+        redirect: "follow",
         type: "http",
         url: entry.config.url,
       },
+      // Keep the initialize-first handshake that legacy servers expect;
+      // @ai-sdk/mcp 2 otherwise probes with server/discover first.
+      protocolVersionDiscovery: false,
     });
   } else {
     client = await createMCPClient({
+      protocolVersionDiscovery: false,
       transport: new Experimental_StdioMCPTransport({
         args: entry.config.args,
         command: entry.config.command,

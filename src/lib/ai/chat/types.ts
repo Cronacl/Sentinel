@@ -1,6 +1,6 @@
 import type { AIProvider } from "@/server/db/enums";
 import type { ChatEngine } from "@/server/db/enums";
-import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
+import type { ProviderOptions } from "@ai-sdk/provider-utils";
 
 import type { ReasoningEffort } from "../providers/models";
 import type { ThreadUIMessage } from "../messages/types";
@@ -57,7 +57,7 @@ type ResolvedThreadModel = {
   contextWindow?: number;
   languageModel: unknown;
   providerId: AIProvider;
-  providerOptions?: SharedV3ProviderOptions;
+  providerOptions?: ProviderOptions;
   requestedModelId: string;
   responseModelId: string;
 };
