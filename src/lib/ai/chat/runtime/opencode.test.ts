@@ -585,7 +585,7 @@ describe("runOpenCodeThreadChat", () => {
     );
   });
 
-  it("replays a recorded 1.18 event sequence into assistant text and tool parts", async () => {
+  it("replays a 1.18-shaped event sequence into reasoning, text and tool parts", async () => {
     const events = createEventQueue();
     startOpenCodeSession.mockImplementation(async () =>
       createMockOpenCodeSession({ stream: events.stream }),
@@ -596,8 +596,11 @@ describe("runOpenCodeThreadChat", () => {
       null,
     );
 
-    // Shapes from @opencode-ai/sdk 1.18.35 types.gen.d.ts: every event now
-    // carries an `id`, and heartbeats/status events have no handler.
+    // Hand-built (no live turn is ever run): shapes from @opencode-ai/sdk
+    // 1.18.35 types.gen.d.ts, order from opencode 1.18.35
+    // session/processor.ts (reasoning-start publishes the reasoning part, then
+    // its deltas use field "text" like answer text). Every event now carries
+    // an `id`; heartbeats/status events have no handler.
     for (const event of [
       { id: "evt-1", properties: {}, type: "server.connected" },
       {
@@ -634,6 +637,60 @@ describe("runOpenCodeThreadChat", () => {
           sessionID: SESSION_ID,
         },
         type: "message.updated",
+      },
+      {
+        id: "evt-4a",
+        properties: {
+          part: {
+            id: "part-reasoning",
+            messageID: "msg-assistant",
+            sessionID: SESSION_ID,
+            text: "",
+            time: { start: 1 },
+            type: "reasoning",
+          },
+          sessionID: SESSION_ID,
+          time: 1,
+        },
+        type: "message.part.updated",
+      },
+      {
+        id: "evt-4b",
+        properties: {
+          delta: "The user wants ",
+          field: "text",
+          messageID: "msg-assistant",
+          partID: "part-reasoning",
+          sessionID: SESSION_ID,
+        },
+        type: "message.part.delta",
+      },
+      {
+        id: "evt-4c",
+        properties: {
+          delta: "the test suite run.",
+          field: "text",
+          messageID: "msg-assistant",
+          partID: "part-reasoning",
+          sessionID: SESSION_ID,
+        },
+        type: "message.part.delta",
+      },
+      {
+        id: "evt-4d",
+        properties: {
+          part: {
+            id: "part-text",
+            messageID: "msg-assistant",
+            sessionID: SESSION_ID,
+            text: "",
+            time: { start: 2 },
+            type: "text",
+          },
+          sessionID: SESSION_ID,
+          time: 2,
+        },
+        type: "message.part.updated",
       },
       {
         id: "evt-5",
@@ -720,6 +777,7 @@ describe("runOpenCodeThreadChat", () => {
 
     const completed = findLastAssistantUpsert("completed");
     expect(completed?.parts).toEqual([
+      { text: "The user wants the test suite run.", type: "reasoning" },
       {
         input: { command: "bun test" },
         output: "1 pass",
@@ -817,6 +875,277 @@ describe("runOpenCodeThreadChat", () => {
 
     expect(findLastAssistantUpsert("cancelled")).toBeDefined();
     expect(findLastAssistantUpsert("error")).toBeUndefined();
+  });
+
+  it("keeps the run and server alive while OpenCode compacts after a context overflow", async () => {
+    const events = createEventQueue();
+    const session = createMockOpenCodeSession({ stream: events.stream });
+    startOpenCodeSession.mockImplementation(async () => session);
+
+    await runOpenCodeThreadChat(
+      buildRunRequest("thread-overflow-1", "Summarise the thread"),
+      null,
+    );
+
+    // opencode 1.18.35 processor.ts `halt` with compaction.auto (the default):
+    // session.error(ContextOverflowError), then a compaction summary message,
+    // then a fresh assistant message continues the turn.
+    for (const event of [
+      {
+        properties: {
+          info: { id: "msg-a1", role: "assistant", sessionID: SESSION_ID },
+          sessionID: SESSION_ID,
+        },
+        type: "message.updated",
+      },
+      {
+        properties: {
+          error: {
+            data: { message: "prompt is too long: 210000 tokens > 200000" },
+            name: "ContextOverflowError",
+          },
+          sessionID: SESSION_ID,
+        },
+        type: "session.error",
+      },
+      {
+        properties: {
+          info: {
+            id: "msg-summary",
+            mode: "compaction",
+            role: "assistant",
+            sessionID: SESSION_ID,
+            summary: true,
+          },
+          sessionID: SESSION_ID,
+        },
+        type: "message.updated",
+      },
+      {
+        properties: {
+          delta: "## Goal\nInternal compaction summary",
+          field: "text",
+          messageID: "msg-summary",
+          partID: "part-summary",
+          sessionID: SESSION_ID,
+        },
+        type: "message.part.delta",
+      },
+    ]) {
+      events.push(event);
+    }
+    await flushEvents();
+
+    expect(session.server.close).not.toHaveBeenCalled();
+    expect(findLastAssistantUpsert("error")).toBeUndefined();
+
+    for (const event of [
+      {
+        properties: {
+          info: { id: "msg-a2", role: "assistant", sessionID: SESSION_ID },
+          sessionID: SESSION_ID,
+        },
+        type: "message.updated",
+      },
+      {
+        properties: {
+          delta: "Here is the summary.",
+          field: "text",
+          messageID: "msg-a2",
+          partID: "part-a2",
+          sessionID: SESSION_ID,
+        },
+        type: "message.part.delta",
+      },
+      { properties: { sessionID: SESSION_ID }, type: "session.idle" },
+    ]) {
+      events.push(event);
+    }
+    await flushEvents();
+
+    const completed = findLastAssistantUpsert("completed");
+    expect(completed?.parts).toEqual([
+      { text: "Here is the summary.", type: "text" },
+    ]);
+    expect(findLastAssistantUpsert("error")).toBeUndefined();
+    expect(session.server.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails with the overflow message when OpenCode goes idle without recovering", async () => {
+    const events = createEventQueue();
+    startOpenCodeSession.mockImplementation(async () =>
+      createMockOpenCodeSession({ stream: events.stream }),
+    );
+
+    await runOpenCodeThreadChat(
+      buildRunRequest("thread-overflow-2", "Summarise the thread"),
+      null,
+    );
+    // compaction.auto=false: the error is followed straight by idle.
+    for (const event of [
+      {
+        properties: {
+          info: { id: "msg-a1", role: "assistant", sessionID: SESSION_ID },
+          sessionID: SESSION_ID,
+        },
+        type: "message.updated",
+      },
+      {
+        properties: {
+          delta: "Partial answer",
+          field: "text",
+          messageID: "msg-a1",
+          partID: "part-a1",
+          sessionID: SESSION_ID,
+        },
+        type: "message.part.delta",
+      },
+      {
+        properties: {
+          error: {
+            data: { message: "prompt is too long" },
+            name: "ContextOverflowError",
+          },
+          sessionID: SESSION_ID,
+        },
+        type: "session.error",
+      },
+      // A late update to the overflowing message is not a recovery.
+      {
+        properties: {
+          info: { id: "msg-a1", role: "assistant", sessionID: SESSION_ID },
+          sessionID: SESSION_ID,
+        },
+        type: "message.updated",
+      },
+      { properties: { sessionID: SESSION_ID }, type: "session.idle" },
+    ]) {
+      events.push(event);
+    }
+    await flushEvents();
+
+    expect(findLastAssistantUpsert("completed")).toBeUndefined();
+    expect(findLastAssistantUpsert("error")?.metadata).toEqual(
+      expect.objectContaining({ errorMessage: "prompt is too long" }),
+    );
+    expect(setThreadStatus).toHaveBeenLastCalledWith(
+      "thread-overflow-2",
+      "idle",
+    );
+  });
+
+  it("answers permission requests from subagent sessions and ignores their other events", async () => {
+    const events = createEventQueue();
+    const session = createMockOpenCodeSession({ stream: events.stream });
+    startOpenCodeSession.mockImplementation(async () => session);
+
+    await runOpenCodeThreadChat(
+      buildRunRequest("thread-subagent-1", "Explore the repo"),
+      null,
+    );
+    for (const event of [
+      // 1.18 task tool: child session with parentID, then a grandchild.
+      {
+        properties: {
+          info: { id: "ses_child", parentID: SESSION_ID, title: "explore" },
+          sessionID: "ses_child",
+        },
+        type: "session.created",
+      },
+      {
+        properties: {
+          info: { id: "ses_grandchild", parentID: "ses_child", title: "deep" },
+          sessionID: "ses_grandchild",
+        },
+        type: "session.created",
+      },
+      // An unrelated session in the same instance stays ignored.
+      {
+        properties: {
+          info: { id: "ses_other", parentID: "ses_elsewhere", title: "x" },
+          sessionID: "ses_other",
+        },
+        type: "session.created",
+      },
+      {
+        properties: {
+          info: { id: "msg-child", role: "assistant", sessionID: "ses_child" },
+          sessionID: "ses_child",
+        },
+        type: "message.updated",
+      },
+      {
+        properties: {
+          delta: "subagent chatter",
+          field: "text",
+          messageID: "msg-child",
+          partID: "part-child",
+          sessionID: "ses_child",
+        },
+        type: "message.part.delta",
+      },
+      { properties: { sessionID: "ses_child" }, type: "session.idle" },
+      {
+        properties: {
+          always: [],
+          id: "permission-other",
+          metadata: {},
+          patterns: ["/etc/hosts"],
+          permission: "external_directory",
+          sessionID: "ses_other",
+        },
+        type: "permission.asked",
+      },
+      {
+        properties: {
+          always: [],
+          id: "permission-child",
+          metadata: { filepath: "/etc/hosts" },
+          patterns: ["/etc/*"],
+          permission: "external_directory",
+          sessionID: "ses_grandchild",
+        },
+        type: "permission.asked",
+      },
+    ]) {
+      events.push(event);
+    }
+    await flushEvents();
+
+    expect(findLastAssistantUpsert("completed")).toBeUndefined();
+    expect(setThreadStatus).toHaveBeenLastCalledWith(
+      "thread-subagent-1",
+      "awaiting_approval",
+    );
+    const streaming = findLastAssistantUpsert("streaming");
+    expect(streaming?.parts).toEqual([
+      expect.objectContaining({
+        approval: { id: "permission-child", reason: "/etc/*" },
+        state: "approval-requested",
+        toolCallId: "permission-child",
+        toolName: "opencode_external_directory",
+      }),
+    ]);
+
+    // The reply goes through the shared /permission/{requestID}/reply route.
+    await runOpenCodeThreadChat(
+      {
+        threadId: "thread-subagent-1",
+        toolApprovalResponse: { approved: true, id: "permission-child" },
+        trigger: "submit-tool-approval",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      } as any,
+      {
+        activeStreamId: setActiveStream.mock.calls.at(-1)?.[1],
+        status: "awaiting_approval",
+      } as any,
+    );
+    expect(session.client.permission.reply).toHaveBeenCalledWith({
+      reply: "allow",
+      requestID: "permission-child",
+    });
+    expect(session.client.permission.reply).toHaveBeenCalledTimes(1);
   });
 
   it("fails the run when the event stream ends before session.idle", async () => {
@@ -917,26 +1246,52 @@ describe("resolveOpenCodeSessionError", () => {
         },
         sessionID: "ses_1",
       }),
-    ).toEqual({ aborted: false, message: "Invalid API key" });
+    ).toEqual({
+      aborted: false,
+      contextOverflow: false,
+      message: "Invalid API key",
+    });
     expect(
       resolveOpenCodeSessionError({
         error: { data: {}, name: "MessageOutputLengthError" },
       }),
-    ).toEqual({ aborted: false, message: "MessageOutputLengthError" });
+    ).toEqual({
+      aborted: false,
+      contextOverflow: false,
+      message: "MessageOutputLengthError",
+    });
     expect(
       resolveOpenCodeSessionError({
         error: { data: { message: "Aborted" }, name: "MessageAbortedError" },
       }),
-    ).toEqual({ aborted: true, message: "Aborted" });
+    ).toEqual({ aborted: true, contextOverflow: false, message: "Aborted" });
+  });
+
+  it("flags ContextOverflowError as possibly recoverable", () => {
+    expect(
+      resolveOpenCodeSessionError({
+        error: {
+          data: { message: "prompt is too long", responseBody: "{}" },
+          name: "ContextOverflowError",
+        },
+        sessionID: "ses_1",
+      }),
+    ).toEqual({
+      aborted: false,
+      contextOverflow: true,
+      message: "prompt is too long",
+    });
   });
 
   it("falls back to a generic message when there is no error payload", () => {
     expect(resolveOpenCodeSessionError({ sessionID: "ses_1" })).toEqual({
       aborted: false,
+      contextOverflow: false,
       message: "OpenCode run failed.",
     });
     expect(resolveOpenCodeSessionError(undefined)).toEqual({
       aborted: false,
+      contextOverflow: false,
       message: "OpenCode run failed.",
     });
   });

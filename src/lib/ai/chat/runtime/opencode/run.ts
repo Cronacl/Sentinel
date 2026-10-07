@@ -91,11 +91,16 @@ type OpenCodeMirrorTool = {
   state: OpenCodeMirrorToolState;
 };
 
+// "summary" marks a compaction summary message (assistant, `summary: true`):
+// internal context for OpenCode, never part of the visible answer.
+type OpenCodeMessageRole = "assistant" | "summary" | "user";
+
 type OpenCodeMirrorState = {
   assistantId: string;
-  messageRoleById: Map<string, "assistant" | "user">;
+  messageRoleById: Map<string, OpenCodeMessageRole>;
   nextOrder: number;
   partById: Map<string, Part>;
+  reasoningText: string;
   requestedModelId: string | null;
   responseModelId: string | null;
   sessionId: string;
@@ -113,9 +118,20 @@ type PendingOpenCodeQuestion = {
   request: QuestionRequest;
 };
 
+// A ContextOverflowError held back until OpenCode shows whether it recovered
+// by compacting (a new assistant message appears) or gave up (session.idle).
+type DeferredOpenCodeSessionError = {
+  knownMessageIds: ReadonlySet<string>;
+  message: string;
+};
+
 export type ActiveOpenCodeRunControl = {
   abortController: AbortController;
   assistantId: string;
+  // Subagent (task tool) sessions spawned under this run's session; their
+  // permission and question requests must be answered too or the run hangs.
+  childSessionIds: Set<string>;
+  deferredSessionError: DeferredOpenCodeSessionError | null;
   eventChannel: ThreadEventChannel;
   finished: boolean;
   permissionMode: PermissionMode;
@@ -183,6 +199,7 @@ function createOpenCodeMirrorState(input: {
     messageRoleById: new Map(),
     nextOrder: 0,
     partById: new Map(),
+    reasoningText: "",
     requestedModelId: input.requestedModelId ?? null,
     responseModelId: input.requestedModelId ?? null,
     sessionId: input.sessionId,
@@ -195,6 +212,22 @@ function createOpenCodeMirrorState(input: {
 
 function messageRoleForPart(state: OpenCodeMirrorState, part: Part) {
   return state.messageRoleById.get(part.messageID) ?? null;
+}
+
+function resolveOpenCodeMessageRole(info: {
+  role?: unknown;
+  summary?: unknown;
+}): OpenCodeMessageRole {
+  if (info.role !== "assistant") return "user";
+  return info.summary === true ? "summary" : "assistant";
+}
+
+// Reasoning is kept apart from the answer text (it streams through the same
+// `message.part.delta` field "text"), like the Claude and Copilot mirrors.
+function getMirrorTextField(part: Part): "reasoningText" | "text" | null {
+  if (part.type === "text") return "text";
+  if (part.type === "reasoning") return "reasoningText";
+  return null;
 }
 
 function textFromPart(part: Part) {
@@ -225,6 +258,14 @@ function upsertOpenCodeTool(
 
 function buildAssistantParts(state: OpenCodeMirrorState) {
   const parts: ThreadUIMessage["parts"] = [];
+
+  if (state.reasoningText.trim()) {
+    parts.push({
+      text: state.reasoningText.trim(),
+      type: "reasoning",
+    });
+  }
+
   const orderedTools = [...state.tools.values()].sort(
     (left, right) => left.order - right.order,
   );
@@ -498,26 +539,79 @@ function updateToolFromPart(
   });
 }
 
+// Only requests are taken from subagent sessions: their messages, idle and
+// errors belong to the task tool call the parent session is already showing.
+const OPENCODE_CHILD_SESSION_EVENT_TYPES = new Set([
+  "permission.asked",
+  "permission.replied",
+  "question.asked",
+  "question.rejected",
+  "question.replied",
+]);
+
+// The task tool creates subagent sessions with `parentID` set (opencode
+// 1.18.35 tool/task.ts). Adapted from t3code OpenCodeAdapterV2.ts
+// (relatedSessionOwners, MIT), which routes their requests to the parent.
+function trackOpenCodeChildSession(
+  control: ActiveOpenCodeRunControl,
+  event: any,
+) {
+  const info = event?.properties?.info;
+  if (typeof info?.id !== "string" || typeof info.parentID !== "string") {
+    return;
+  }
+  if (
+    info.parentID === control.session.sessionId ||
+    control.childSessionIds.has(info.parentID)
+  ) {
+    control.childSessionIds.add(info.id);
+  }
+}
+
+function isOpenCodeEventForRun(control: ActiveOpenCodeRunControl, event: any) {
+  const sessionId = getEventSessionId(event);
+  if (sessionId === control.session.sessionId) return true;
+  return (
+    sessionId !== null &&
+    control.childSessionIds.has(sessionId) &&
+    OPENCODE_CHILD_SESSION_EVENT_TYPES.has(event?.type)
+  );
+}
+
 async function handleOpenCodeEvent(
   control: ActiveOpenCodeRunControl,
   event: any,
 ) {
-  if (getEventSessionId(event) !== control.session.sessionId) {
+  if (event?.type === "session.created" || event?.type === "session.updated") {
+    trackOpenCodeChildSession(control, event);
+    return;
+  }
+
+  if (!isOpenCodeEventForRun(control, event)) {
     return;
   }
 
   switch (event.type) {
     case "message.updated": {
-      control.state.messageRoleById.set(
-        event.properties.info.id,
-        event.properties.info.role,
-      );
-      if (event.properties.info.role !== "assistant") break;
+      const role = resolveOpenCodeMessageRole(event.properties.info);
+      control.state.messageRoleById.set(event.properties.info.id, role);
+      if (role !== "assistant") break;
+      // A new assistant message after a ContextOverflowError means OpenCode
+      // compacted the session and carried on, so the error was not final.
+      if (
+        control.deferredSessionError &&
+        !control.deferredSessionError.knownMessageIds.has(
+          event.properties.info.id,
+        )
+      ) {
+        control.deferredSessionError = null;
+      }
       for (const part of control.state.partById.values()) {
         if (part.messageID === event.properties.info.id) {
+          const field = getMirrorTextField(part);
           const text = textFromPart(part);
-          if (text) {
-            control.state.text = text;
+          if (field && text) {
+            control.state[field] = text;
             await emitAssistantMessageUpdate(
               control.state,
               control.runId,
@@ -547,11 +641,11 @@ async function handleOpenCodeEvent(
       ) {
         break;
       }
-      if (
-        existingPart &&
-        existingPart.type !== "text" &&
-        existingPart.type !== "reasoning"
-      ) {
+      // A delta for a part we have not seen is assumed to be answer text;
+      // OpenCode announces reasoning parts (reasoning-start) before their
+      // deltas, so those are known by the time the deltas arrive.
+      const field = existingPart ? getMirrorTextField(existingPart) : "text";
+      if (!field) {
         break;
       }
       if (
@@ -563,7 +657,7 @@ async function handleOpenCodeEvent(
       }
       const delta = String(event.properties.delta ?? "");
       if (!delta) break;
-      control.state.text += delta;
+      control.state[field] += delta;
       if (!existingPart) {
         control.state.partById.set(event.properties.partID, {
           id: event.properties.partID,
@@ -587,10 +681,11 @@ async function handleOpenCodeEvent(
       const part = event.properties.part as Part;
       control.state.partById.set(part.id, part);
       const role = messageRoleForPart(control.state, part);
-      if (role === "assistant") {
+      const field = getMirrorTextField(part);
+      if (role === "assistant" && field) {
         const text = textFromPart(part);
-        if (text && text.length >= control.state.text.length) {
-          control.state.text = text;
+        if (text && text.length >= control.state[field].length) {
+          control.state[field] = text;
         }
       }
       if (part.type === "tool") {
@@ -724,8 +819,9 @@ async function handleOpenCodeEvent(
           name: "opencode_ask_question",
           state: "output-denied",
         });
-        // POST /question/{requestID}/reject exists on every supported server
-        // (>= 1.2.0), so the old reply-with-no-answers fallback is gone.
+        // POST /question/{requestID}/reject shipped with question.asked
+        // (1.1.7), so any server that asks also takes the rejection; the old
+        // reply-with-no-answers fallback is gone.
         await control.session.client.question.reject({
           requestID: request.id,
         });
@@ -824,16 +920,36 @@ async function handleOpenCodeEvent(
         control.pendingApprovals.size === 0 &&
         control.pendingQuestions.size === 0
       ) {
-        await finishOpenCodeRun(control, {
-          finishReason: "stop",
-          status: "completed",
-          threadStatus: "idle",
-        });
+        const deferredError = control.deferredSessionError;
+        await finishOpenCodeRun(
+          control,
+          deferredError
+            ? {
+                errorMessage: deferredError.message,
+                finishReason: null,
+                status: "error",
+                threadStatus: "idle",
+              }
+            : {
+                finishReason: "stop",
+                status: "completed",
+                threadStatus: "idle",
+              },
+        );
       }
       break;
     }
     case "session.error": {
       const sessionError = resolveOpenCodeSessionError(event.properties);
+      if (sessionError.contextOverflow) {
+        // Keep the server alive: closing it here would kill the compaction
+        // OpenCode has just started. session.idle settles the outcome.
+        control.deferredSessionError = {
+          knownMessageIds: new Set(control.state.messageRoleById.keys()),
+          message: sessionError.message,
+        };
+        break;
+      }
       await finishOpenCodeRun(
         control,
         sessionError.aborted
@@ -1226,6 +1342,8 @@ export async function runOpenCodeThreadChat(
   const control: ActiveOpenCodeRunControl = {
     abortController,
     assistantId,
+    childSessionIds: new Set(),
+    deferredSessionError: null,
     eventChannel,
     finished: false,
     permissionMode,

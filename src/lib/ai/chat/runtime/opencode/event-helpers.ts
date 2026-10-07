@@ -191,6 +191,11 @@ export function resolveOpenCodePromptResponse(input: {
 
 export type OpenCodeSessionErrorOutcome = {
   aborted: boolean;
+  // Not terminal on its own: with the default `compaction.auto` the server
+  // publishes this error, compacts the session and keeps going; only with
+  // auto-compaction off does session.idle follow without a new assistant
+  // message (opencode 1.18.35 session/processor.ts `halt`).
+  contextOverflow: boolean;
   message: string;
 };
 
@@ -220,6 +225,7 @@ export function resolveOpenCodeSessionError(
 
   return {
     aborted: name === "MessageAbortedError",
+    contextOverflow: name === "ContextOverflowError",
     message: message ?? "OpenCode run failed.",
   };
 }
