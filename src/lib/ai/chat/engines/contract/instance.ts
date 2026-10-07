@@ -46,6 +46,12 @@ export const storedEngineEnvVarSchema = z.object({
 /** What leaves the server: sensitive values are never sent back. */
 export const redactedEngineEnvVarSchema = z.object({
   name: z.string(),
+  /**
+   * The stored value no longer decrypts (another key: restored backup,
+   * reset desktop.env). The variable stays unset for the instance, rather
+   * than falling back to the global value, until it is entered again.
+   */
+  needsReentry: z.boolean(),
   sensitive: z.boolean(),
   value: z.string(),
   valueRedacted: z.boolean(),

@@ -214,6 +214,7 @@ describe("instances", () => {
       environment: [
         {
           name: "OPENAI_API_KEY",
+          needsReentry: false,
           sensitive: true,
           value: "",
           valueRedacted: true,

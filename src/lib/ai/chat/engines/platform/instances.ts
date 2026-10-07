@@ -390,41 +390,57 @@ export function createEngineInstanceRegistry(
     };
   }
 
+  function tryDecrypt(value: string) {
+    try {
+      return deps.decrypt(value);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Plain values by name, plus the names whose encrypted value no longer
+   * decrypts (encrypted with another key: restored backup, reset
+   * desktop.env). Those need re-entry in Settings → Engines.
+   */
   function decryptEnvironment(environment: StoredEngineEnvVar[]) {
     const values: Record<string, string> = {};
+    const unreadable: string[] = [];
     for (const variable of environment) {
-      if (!variable.encrypted) {
-        values[variable.name] = variable.value;
-        continue;
-      }
-      try {
-        values[variable.name] = deps.decrypt(variable.value);
-      } catch {
-        // Encrypted with another key (restored backup, reset desktop.env):
-        // leave it out; the settings UI shows it redacted for re-entry.
+      const value = variable.encrypted
+        ? tryDecrypt(variable.value)
+        : variable.value;
+      if (value === null) {
+        unreadable.push(variable.name);
+      } else {
+        values[variable.name] = value;
       }
     }
-    return values;
+    return { unreadable, values };
   }
 
   function redactEnvironment(
     environment: StoredEngineEnvVar[],
   ): RedactedEngineEnvVar[] {
-    return environment.map((variable) =>
-      variable.sensitive
+    return environment.map((variable) => {
+      const needsReentry =
+        variable.encrypted && tryDecrypt(variable.value) === null;
+      return variable.sensitive
         ? {
             name: variable.name,
+            needsReentry,
             sensitive: true,
             value: "",
             valueRedacted: true,
           }
         : {
             name: variable.name,
+            needsReentry,
             sensitive: false,
             value: variable.encrypted ? "" : variable.value,
             valueRedacted: variable.encrypted,
-          },
-    );
+          };
+    });
   }
 
   function toResolved(
@@ -433,8 +449,16 @@ export function createEngineInstanceRegistry(
   ): ResolvedEngineInstance {
     const { config, meta } = decoded;
     const baseEnv = getEnv();
-    const instanceEnv = decryptEnvironment(record.environment);
+    const { unreadable, values: instanceEnv } = decryptEnvironment(
+      record.environment,
+    );
     const env: Record<string, string | undefined> = { ...baseEnv };
+    // A variable the instance sets but cannot decrypt must not fall back to
+    // the global value: an instance meant for a second account would run on
+    // the default one. It stays unset until re-entered.
+    for (const name of unreadable) {
+      delete env[name];
+    }
     env.PATH = buildPreferredExecutablePathValue(baseEnv.PATH, {
       env: baseEnv,
       platform,
@@ -686,6 +710,14 @@ export function createEngineInstanceRegistry(
       if (variable.valueRedacted && !variable.value && stored) {
         if (stored.encrypted && variable.sensitive) {
           return { ...stored, sensitive: true };
+        }
+        // Unticking "sensitive" must not reveal a stored secret: turning it
+        // into a plain variable takes a freshly entered value.
+        if ((stored.sensitive || stored.encrypted) && !variable.sensitive) {
+          throw new EngineInstanceError(
+            "invalid",
+            `Enter a new value for ${variable.name} to store it as a plain variable.`,
+          );
         }
         try {
           plaintext = stored.encrypted

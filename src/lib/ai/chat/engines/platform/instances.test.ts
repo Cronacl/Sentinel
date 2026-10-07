@@ -273,12 +273,14 @@ describe("environment secrets", () => {
     expect(created.environment).toEqual([
       {
         name: "ANTHROPIC_API_KEY",
+        needsReentry: false,
         sensitive: true,
         value: "",
         valueRedacted: true,
       },
       {
         name: "CLAUDE_CODE_DEBUG",
+        needsReentry: false,
         sensitive: false,
         value: "1",
         valueRedacted: false,
@@ -320,8 +322,20 @@ describe("environment secrets", () => {
     expect(String(rawRow(created.id)?.environment)).not.toContain("now-secret");
   });
 
-  it("drops values it cannot decrypt instead of failing", async () => {
-    const registry = createRegistry();
+  it("leaves values it cannot decrypt unset and flags them for re-entry", async () => {
+    const registry = createEngineInstanceRegistry({
+      db: drizzle(sqlite, { schema }) as never,
+      decrypt: fakeDecrypt,
+      encrypt: fakeEncrypt,
+      // The global environment has the default account's key.
+      env: () => ({
+        HOME: "/Users/me",
+        OPENAI_API_KEY: "sk-global",
+        PATH: "/usr/bin",
+      }),
+      platform: "darwin",
+      stateRoot: () => "/Users/me/.sentinel",
+    });
     sqlite.exec(`
       INSERT INTO "engine_instance" ("id", "user_id", "driver", "environment", "created_at", "updated_at")
         VALUES ('codex-old', '${USER_ID}', 'codex',
@@ -333,6 +347,71 @@ describe("environment secrets", () => {
       instanceId: "codex-old",
     });
     expect(resolved.env.OPENAI_API_KEY).toBeUndefined();
+    expect(Object.hasOwn(resolved.env, "OPENAI_API_KEY")).toBe(false);
+
+    const summary = (await registry.listSummaries(USER_ID)).find(
+      (candidate) => candidate.id === "codex-old",
+    );
+    expect(summary?.environment).toEqual([
+      {
+        name: "OPENAI_API_KEY",
+        needsReentry: true,
+        sensitive: true,
+        value: "",
+        valueRedacted: true,
+      },
+    ]);
+
+    // Re-entering the value clears the flag.
+    const updated = await registry.update(USER_ID, "codex-old", {
+      environment: [
+        { name: "OPENAI_API_KEY", sensitive: true, value: "sk-second" },
+      ],
+    });
+    expect(updated.environment[0]?.needsReentry).toBe(false);
+    expect(
+      (
+        await registry.resolve(USER_ID, {
+          driver: "codex",
+          instanceId: "codex-old",
+        })
+      ).env.OPENAI_API_KEY,
+    ).toBe("sk-second");
+  });
+
+  it("refuses to turn a stored secret into a plain variable without a new value", async () => {
+    const registry = createRegistry();
+    const created = await registry.create(USER_ID, {
+      driver: "claude",
+      environment: [{ name: "TOKEN", sensitive: true, value: "secret" }],
+      label: "Work",
+    });
+
+    await expect(
+      registry.update(USER_ID, created.id, {
+        environment: [
+          { name: "TOKEN", sensitive: false, value: "", valueRedacted: true },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: "invalid" });
+    expect(String(rawRow(created.id)?.environment)).not.toContain("secret");
+    expect(JSON.stringify(await registry.listSummaries(USER_ID))).not.toContain(
+      "secret",
+    );
+
+    // A freshly entered value may be stored in the clear.
+    const updated = await registry.update(USER_ID, created.id, {
+      environment: [{ name: "TOKEN", sensitive: false, value: "now-plain" }],
+    });
+    expect(updated.environment).toEqual([
+      {
+        name: "TOKEN",
+        needsReentry: false,
+        sensitive: false,
+        value: "now-plain",
+        valueRedacted: false,
+      },
+    ]);
   });
 });
 
