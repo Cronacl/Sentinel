@@ -2,8 +2,13 @@ import { afterEach, describe, expect, it, mock } from "bun:test";
 
 const shutdownAgentProcesses = mock(async () => ({ forced: 1, signalled: 3 }));
 
+const disposeAllInstanceResources = mock(async () => {});
+
 mock.module("@/lib/runtime/process/shutdown", () => ({
   shutdownAgentProcesses,
+}));
+mock.module("@/lib/ai/chat/engines/platform/instance-resources", () => ({
+  disposeAllInstanceResources,
 }));
 
 const { POST } = await import("./route");
@@ -13,6 +18,7 @@ const originalToken = process.env.SENTINEL_INTERNAL_TOKEN;
 
 afterEach(() => {
   shutdownAgentProcesses.mockClear();
+  disposeAllInstanceResources.mockClear();
   if (originalToken === undefined) {
     delete process.env.SENTINEL_INTERNAL_TOKEN;
   } else {
@@ -40,6 +46,19 @@ describe("POST /api/internal/shutdown-agents", () => {
       signalled: 3,
     });
     expect(shutdownAgentProcesses).toHaveBeenCalledTimes(1);
+    expect(disposeAllInstanceResources).toHaveBeenCalledTimes(1);
+  });
+
+  it("still ends registered agents when a runtime does not stop in time", async () => {
+    process.env.SENTINEL_INTERNAL_TOKEN = TOKEN;
+    disposeAllInstanceResources.mockImplementationOnce(
+      () => new Promise<void>(() => {}),
+    );
+
+    const response = await POST(request(TOKEN));
+
+    expect(response.status).toBe(200);
+    expect(shutdownAgentProcesses).toHaveBeenCalledTimes(1);
   });
 
   it("refuses a missing or wrong token", async () => {
@@ -48,6 +67,7 @@ describe("POST /api/internal/shutdown-agents", () => {
     expect((await POST(request())).status).toBe(403);
     expect((await POST(request("e".repeat(64)))).status).toBe(403);
     expect(shutdownAgentProcesses).not.toHaveBeenCalled();
+    expect(disposeAllInstanceResources).not.toHaveBeenCalled();
   });
 
   it("does not exist without a configured token", async () => {

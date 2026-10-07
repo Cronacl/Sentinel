@@ -66,6 +66,7 @@ import {
   getRuntimePathsStore,
   type RuntimePathsStore,
 } from "./runtime/paths-cache";
+import { getConfiguredBinaryOverride } from "./runtime/resolve-binary";
 
 export type {
   CreateEngineInstanceInput,
@@ -1290,17 +1291,10 @@ export function getConfiguredEngineBinary(
     "config" | "driver" | "env" | "isDefault"
   >,
 ): { path: string; source: "config" | "env" } | null {
-  if (instance.config.binaryPath?.trim()) {
-    return { path: instance.config.binaryPath.trim(), source: "config" };
-  }
-  if (!instance.isDefault) {
-    return null;
-  }
-  for (const key of getDriverMeta(instance.driver)?.legacyEnvPathKeys ?? []) {
-    const value = instance.env[key]?.trim();
-    if (value) {
-      return { path: value, source: "env" };
-    }
-  }
-  return null;
+  const override = getConfiguredBinaryOverride(
+    instance,
+    instance.env,
+    getDriverMeta(instance.driver)?.legacyEnvPathKeys ?? [],
+  );
+  return override ? { path: override.path, source: override.source } : null;
 }

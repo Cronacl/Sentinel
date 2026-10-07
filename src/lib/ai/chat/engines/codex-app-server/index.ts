@@ -6,6 +6,7 @@ import path from "node:path";
 
 import { createLogger } from "@/lib/logger";
 import { applyPrivateFsMode } from "@/lib/runtime/local-state";
+import { createLineSplitter } from "@/lib/runtime/process/line-splitter";
 import { withTimeout } from "@/lib/runtime/process/with-timeout";
 import type {
   CodexApprovalPolicy,
@@ -697,7 +698,9 @@ export class CodexAppServerManager {
     this.instance = options.instance ?? null;
   }
 
-  private buffer = "";
+  // NDJSON framing of the app-server's stdout (LF-delimited; a fresh one
+  // per process so a partial line never leaks into the next process).
+  private stdoutLines = this.createStdoutSplitter();
 
   private child: ChildProcessWithoutNullStreams | null = null;
 
@@ -1457,7 +1460,7 @@ export class CodexAppServerManager {
       instance: this.instance,
     });
     this.child = child;
-    this.buffer = "";
+    this.stdoutLines = this.createStdoutSplitter();
     this.initialized = false;
     this.initializeResult = null;
 
@@ -1526,7 +1529,7 @@ export class CodexAppServerManager {
     }
 
     this.child = null;
-    this.buffer = "";
+    this.stdoutLines = this.createStdoutSplitter();
     this.initialized = false;
     this.pendingServerRequests.clear();
 
@@ -1536,31 +1539,33 @@ export class CodexAppServerManager {
     this.pendingRequests.clear();
   }
 
+  private createStdoutSplitter() {
+    return createLineSplitter(
+      (rawLine) => {
+        const line = rawLine.trim();
+        if (!line) {
+          return;
+        }
+
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(line) as unknown;
+        } catch (error) {
+          log.error("invalid_json", { error, line });
+          return;
+        }
+
+        this.handleMessage(parsed);
+      },
+      {
+        onOverflow: (bufferedChars) =>
+          log.error("stdout_line_too_long", { bufferedChars }),
+      },
+    );
+  }
+
   private handleStdout(chunk: string) {
-    this.buffer += chunk;
-
-    while (true) {
-      const newlineIndex = this.buffer.indexOf("\n");
-      if (newlineIndex === -1) {
-        break;
-      }
-
-      const line = this.buffer.slice(0, newlineIndex).trim();
-      this.buffer = this.buffer.slice(newlineIndex + 1);
-      if (!line) {
-        continue;
-      }
-
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(line) as unknown;
-      } catch (error) {
-        log.error("invalid_json", { error, line });
-        continue;
-      }
-
-      this.handleMessage(parsed);
-    }
+    this.stdoutLines.push(chunk);
   }
 
   private handleMessage(message: unknown) {
