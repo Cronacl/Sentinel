@@ -60,7 +60,9 @@ export const CodexUserInputTool = memo(function CodexUserInputTool({
     >
       {isWaiting && (
         <div className="flex flex-col gap-2">
-          <p className="text-[12px] text-foreground/70">{input.prompt}</p>
+          <p className="text-[12px] whitespace-pre-wrap text-foreground/70">
+            {input.prompt}
+          </p>
           <textarea
             className="min-h-[60px] w-full resize-y rounded-md border border-border/50 bg-background px-3 py-2 text-[12px] text-foreground outline-none focus:border-primary/50"
             placeholder="Type your response..."

@@ -98,3 +98,25 @@ describe("getCodexEventThreadId", () => {
     ).toBe("codex-thread-2");
   });
 });
+
+describe("getCodexEventThreadId (0.160)", () => {
+  it("reads conversationId from deprecated v1 approval requests", () => {
+    expect(
+      getCodexEventThreadId({
+        method: "execCommandApproval",
+        params: { callId: "c", command: ["ls"], conversationId: "thr-legacy" },
+        type: "approval-request",
+      }),
+    ).toBe("thr-legacy");
+  });
+
+  it("prefers threadId when both are present", () => {
+    expect(
+      getCodexEventThreadId({
+        method: "item/permissions/requestApproval",
+        params: { conversationId: "other", threadId: "thr" },
+        type: "approval-request",
+      }),
+    ).toBe("thr");
+  });
+});

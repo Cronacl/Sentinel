@@ -419,6 +419,30 @@ describe("resolveRenderer", () => {
     expect(renderer).toBe(CodexRuntimeTool);
   });
 
+  it("renders Codex 0.160 approvals and new item types with the generic Codex card", () => {
+    for (const toolName of [
+      "codex_apply_patch_approval",
+      "codex_dynamic_tool_call",
+      "codex_exec_command_approval",
+      "codex_image_generation",
+      "codex_mcp_elicitation",
+      "codex_permissions_request",
+      "codex_sleep",
+      "codex_sub_agent_activity",
+    ]) {
+      const renderer = resolveRenderer({
+        approval: { id: "approval-1" },
+        input: { reason: "Needs access" },
+        state: "approval-requested",
+        toolCallId: `tool-call-${toolName}`,
+        toolName,
+        type: "dynamic-tool",
+      } as any);
+
+      expect(renderer).toBe(CodexRuntimeTool);
+    }
+  });
+
   it("uses the ClaudeShellTool renderer for claude_bash", () => {
     const renderer = resolveRenderer({
       input: { command: "ls -la" },

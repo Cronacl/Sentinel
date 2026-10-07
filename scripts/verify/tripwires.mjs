@@ -306,6 +306,13 @@ export const TRIPWIRES = [
     include: /^src\/.*\.[cm]?[jt]sx?$/,
   },
   {
+    id: "P9-codex-thread-rollback",
+    description:
+      "Codex 0.156+ removed thread/rollback (use thread/turns/list + thread/revert)",
+    pattern: /["']thread\/rollback["']/,
+    include: /\.[cm]?[jt]sx?$/,
+  },
+  {
     id: "P9-acp-session-cancel-request",
     description:
       "ACP session/cancel is a notification; never send it as a request",

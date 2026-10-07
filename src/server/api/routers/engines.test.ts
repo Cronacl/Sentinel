@@ -6,6 +6,17 @@ const startReview = mock(async () => ({
   review: { id: "review-1", text: "ok" },
 }));
 const reloadRuntime = mock(async () => undefined);
+const revertThreadTurns = mock(async () => ({
+  beforeTurnId: "turn-9",
+  response: { thread: { id: "codex-thread-1" } },
+  reverted: true,
+}));
+const startLogin = mock(async () => ({
+  authUrl: "https://auth.openai.com/authorize",
+  loginId: "login-1",
+  type: "chatgpt",
+}));
+const cancelLogin = mock(async () => ({ status: "canceled" }));
 const getStatus = mock(async () => ({
   authReady: true,
   availableModels: [
@@ -177,8 +188,11 @@ const writeConfigValue = mock(async () => ({ config: {} }));
 
 mock.module("@/lib/ai/chat/engines/codex-app-server", () => ({
   getCodexAppServerManager: () => ({
+    cancelLogin,
     getStatus,
     reloadRuntime,
+    revertThreadTurns,
+    startLogin,
     startReview,
     writeConfigValue,
   }),
@@ -500,6 +514,54 @@ describe("enginesRouter.codexReview", () => {
     expect(result).toEqual({
       review: { id: "review-1", text: "ok" },
     });
+  });
+});
+
+describe("enginesRouter.codexRollback", () => {
+  it("reverts the backing Codex thread by turn count instead of thread/rollback", async () => {
+    const ctx = {
+      db: {},
+      session: { user: { id: "user-1" } },
+    };
+
+    const result = await enginesRouter.codexRollback({
+      ctx,
+      input: { count: 1, threadId: "thread-1" },
+    });
+
+    expect(getOwnedThreadOrThrow).toHaveBeenCalledWith(ctx, "thread-1");
+    expect(revertThreadTurns).toHaveBeenCalledWith("codex-thread-1", 1);
+    expect(result).toMatchObject({ beforeTurnId: "turn-9", reverted: true });
+  });
+});
+
+describe("enginesRouter.codexLogin", () => {
+  it("sends the 0.160 account/login/start shapes", async () => {
+    const { inputSchema } = enginesRouter.codexLogin;
+    const ctx = { db: {}, session: { user: { id: "user-1" } } };
+
+    expect(inputSchema.safeParse({ method: "apiKey" }).success).toBe(false);
+    expect(inputSchema.safeParse({ method: "external" }).success).toBe(false);
+
+    await enginesRouter.codexLogin({
+      ctx,
+      input: inputSchema.parse({ method: "chatgpt" }),
+    });
+    await enginesRouter.codexLogin({
+      ctx,
+      input: inputSchema.parse({ apiKey: "sk-test", method: "apiKey" }),
+    });
+    await enginesRouter.codexCancelLogin({
+      ctx,
+      input: { loginId: "login-1" },
+    });
+
+    expect(startLogin).toHaveBeenNthCalledWith(1, { type: "chatgpt" });
+    expect(startLogin).toHaveBeenNthCalledWith(2, {
+      apiKey: "sk-test",
+      type: "apiKey",
+    });
+    expect(cancelLogin).toHaveBeenCalledWith("login-1");
   });
 });
 
@@ -976,12 +1038,19 @@ describe("enginesRouter.models", () => {
       input: { engine: "codex" },
     });
 
-    expect(result).toEqual([
-      expect.objectContaining({
-        displayName: "GPT-6 Astra",
-        isConnected: true,
-        modelId: "gpt-6-astra",
-      }),
+    expect(result).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          displayName: "GPT-6 Astra",
+          isConnected: true,
+          modelId: "gpt-6-astra",
+        }),
+      ]),
+    );
+    expect(result.map((model: { modelId: string }) => model.modelId)).toEqual([
+      "gpt-6-astra",
+      "gpt-6.1-sol",
+      "gpt-6-luna",
     ]);
   });
 

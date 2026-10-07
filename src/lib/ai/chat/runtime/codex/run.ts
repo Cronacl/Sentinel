@@ -4,11 +4,18 @@ import { generateId } from "ai";
 
 import { getCodexAppServerManager } from "@/lib/ai/chat/engines/codex-app-server";
 import type {
+  CodexApprovalRequestEvent,
   CodexServerEvent,
   CodexThreadItem,
   CodexTurn,
   CodexUserInputRequestEvent,
 } from "@/lib/ai/chat/engines/codex-app-server";
+import { CODEX_DEFAULT_MODEL_ID } from "@/lib/ai/chat/engines/codex-app-server/models";
+import {
+  buildCodexUserInputPrompt,
+  parseCodexUserInputQuestions,
+  type CodexUserInputQuestion,
+} from "@/lib/ai/chat/engines/codex-app-server/protocol";
 import {
   getCodexThreadState,
   type CodexApprovalPolicy,
@@ -61,6 +68,12 @@ import {
   type CodexPromptResponse,
 } from "./event-helpers";
 import { activeCodexRunControls, findActiveCodexRunForThread } from "./state";
+import {
+  applyCodexTokenUsageUpdate,
+  createCodexTokenUsageTracker,
+  type CodexMessageUsage,
+  type CodexTokenUsageTracker,
+} from "./token-usage";
 import { serializeComposerContextToText } from "@/lib/composer-context/serialize";
 import { getToolPermissionMode, getWorkspaceRootPath } from "../workspace";
 
@@ -191,10 +204,56 @@ type CodexMirrorItem =
       type: "contextCompaction";
     }
   | {
+      arguments: unknown;
+      contentItems: unknown[] | null;
+      durationMs: number | null;
+      id: string;
+      namespace: string | null;
+      order: number;
+      status: string;
+      success: boolean | null;
+      tool: string;
+      type: "dynamicToolCall";
+    }
+  | {
+      failure: unknown | null;
+      id: string;
+      order: number;
+      revisedPrompt: string | null;
+      savedPath: string | null;
+      status: string;
+      type: "imageGeneration";
+    }
+  | {
+      agentPath: string;
+      agentThreadId: string;
+      id: string;
+      kind: string;
+      order: number;
+      type: "subAgentActivity";
+    }
+  | {
+      durationMs: number | null;
+      id: string;
+      order: number;
+      type: "sleep";
+    }
+  | {
+      approvalId: string;
+      id: string;
+      input: Record<string, unknown>;
+      method: string;
+      order: number;
+      state: CodexMirrorToolState;
+      toolName: string;
+      type: "serverApproval";
+    }
+  | {
       id: string;
       isResolved: boolean;
       order: number;
       prompt: string;
+      questions: CodexUserInputQuestion[];
       requestId: string;
       response: string | null;
       type: "userInputRequest";
@@ -226,13 +285,8 @@ type CodexMirrorState = {
   requestedModelId: string | null;
   responseModelId: string | null;
   threadId: string;
-  turnDiff: string | null;
-  usage: {
-    inputTokens?: number;
-    outputTokens?: number;
-    reasoningTokens?: number;
-    totalTokens?: number;
-  } | null;
+  tokenUsage: CodexTokenUsageTracker;
+  usage: CodexMessageUsage | null;
 };
 
 const PROPOSED_PLAN_OPEN_TAG = "<proposed_plan>";
@@ -308,30 +362,23 @@ function buildCodexCollaborationMode(input: {
   if (input.interactionMode === undefined) {
     return undefined;
   }
-  const model = input.model ?? "gpt-5.3-codex";
+  // `settings.model` is required; prefer Codex's own `model/list` default
+  // over the static fallback.
+  const knownDefault = getCodexAppServerManager().getDefaultModel();
+  const model = input.model ?? knownDefault?.id ?? CODEX_DEFAULT_MODEL_ID;
+  const knownModel = getCodexAppServerManager().getKnownModel(model);
   return {
     mode: input.interactionMode,
     settings: {
       model,
-      reasoning_effort: input.effort ?? "medium",
+      reasoning_effort:
+        input.effort ?? knownModel?.defaultReasoningEffort ?? "medium",
       developer_instructions:
         input.interactionMode === "plan"
           ? PLAN_MODE_DEVELOPER_INSTRUCTIONS
           : DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
     },
   };
-}
-
-function isUnsupportedCodexCollaborationModeError(error: unknown) {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const message = error.message.toLowerCase();
-  return (
-    message.includes("turn/start.collaborationmode") &&
-    message.includes("experimentalapi capability")
-  );
 }
 
 function buildInitialCodexThreadState(input: {
@@ -422,7 +469,7 @@ function createCodexMirrorState(input: {
     requestedModelId: input.requestedModelId,
     responseModelId: input.responseModelId,
     threadId: input.threadId,
-    turnDiff: null,
+    tokenUsage: createCodexTokenUsageTracker(),
     usage: null,
   };
 }
@@ -464,18 +511,47 @@ function extractErrorText(data: Record<string, unknown>): string {
   return "Tool execution failed";
 }
 
+// Hook-injected prompts and raw tool outputs are history bookkeeping; like
+// `userMessage` they are never rendered in the assistant message.
+const CODEX_UNRENDERED_ITEM_TYPES = new Set([
+  "functionCallOutput",
+  "hookPrompt",
+]);
+
+function getMcpToolCallErrorMessage(error: unknown) {
+  if (typeof error === "string" && error) {
+    return error;
+  }
+
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    return typeof message === "string" && message ? message : null;
+  }
+
+  return null;
+}
+
 function upsertMirrorItemFromCodexItem(
   state: CodexMirrorState,
   item: CodexThreadItem,
 ) {
+  if (!item || typeof item !== "object" || typeof item.id !== "string") {
+    return;
+  }
+
+  if (CODEX_UNRENDERED_ITEM_TYPES.has(item.type)) {
+    return;
+  }
+
   const order = getItemOrder(state, item.id);
+  const existing = state.items.get(item.id);
 
   switch (item.type) {
     case "agentMessage":
       state.items.set(item.id, {
         id: item.id,
         order,
-        text: item.text,
+        text: item.text ?? "",
         type: "agentMessage",
       });
       return;
@@ -484,68 +560,119 @@ function upsertMirrorItemFromCodexItem(
         id: item.id,
         isCompleted: true,
         order,
-        text: item.text,
+        text: item.text ?? "",
         type: "plan",
       });
       return;
-    case "reasoning":
+    case "reasoning": {
+      // Completed items can omit what was streamed; keep the streamed text.
+      const previous = existing?.type === "reasoning" ? existing : null;
+      const content = Array.isArray(item.content) ? [...item.content] : [];
+      const summary = Array.isArray(item.summary) ? [...item.summary] : [];
       state.items.set(item.id, {
-        content: [...item.content],
+        content:
+          content.some(Boolean) || !previous ? content : previous.content,
         id: item.id,
         order,
-        summary: Array.isArray(item.summary) ? [...item.summary] : [],
+        summary:
+          summary.some(Boolean) || !previous ? summary : previous.summary,
         type: "reasoning",
       });
       return;
-    case "commandExecution":
+    }
+    case "commandExecution": {
+      const previous = existing?.type === "commandExecution" ? existing : null;
       state.items.set(item.id, {
-        command: item.command,
-        commandActions: item.commandActions,
-        cwd: item.cwd,
-        durationMs: item.durationMs,
-        exitCode: item.exitCode,
+        ...(previous?.approval && item.status === "inProgress"
+          ? { approval: previous.approval }
+          : {}),
+        command: item.command ?? previous?.command ?? "",
+        commandActions: Array.isArray(item.commandActions)
+          ? item.commandActions
+          : (previous?.commandActions ?? []),
+        cwd: item.cwd ?? previous?.cwd ?? "",
+        durationMs: item.durationMs ?? null,
+        exitCode: item.exitCode ?? null,
         id: item.id,
         order,
-        output: item.aggregatedOutput ?? "",
-        processId: item.processId,
-        state: mirrorToolStateFromStatus(item.status),
-        status: item.status,
+        output: item.aggregatedOutput ?? previous?.output ?? "",
+        processId: item.processId ?? null,
+        state:
+          previous?.state === "approval-requested" &&
+          item.status === "inProgress"
+            ? previous.state
+            : mirrorToolStateFromStatus(item.status),
+        status:
+          previous?.state === "approval-requested" &&
+          item.status === "inProgress"
+            ? previous.status
+            : item.status,
         type: "commandExecution",
       });
       return;
-    case "fileChange":
+    }
+    case "fileChange": {
+      const previous = existing?.type === "fileChange" ? existing : null;
       state.items.set(item.id, {
-        changes: item.changes,
+        ...(previous?.approval && item.status === "inProgress"
+          ? { approval: previous.approval }
+          : {}),
+        changes: Array.isArray(item.changes)
+          ? item.changes
+          : (previous?.changes ?? []),
         id: item.id,
         order,
-        output: "",
-        state: mirrorToolStateFromStatus(item.status),
-        status: item.status,
+        output: previous?.output ?? "",
+        state:
+          previous?.state === "approval-requested" &&
+          item.status === "inProgress"
+            ? previous.state
+            : mirrorToolStateFromStatus(item.status),
+        status:
+          previous?.state === "approval-requested" &&
+          item.status === "inProgress"
+            ? previous.status
+            : item.status,
         type: "fileChange",
       });
       return;
+    }
     case "webSearch":
       state.items.set(item.id, {
-        action: item.action,
+        action: item.action ?? null,
         id: item.id,
         isCompleted: true,
         order,
-        query: item.query,
+        query: item.query ?? "",
         type: "webSearch",
       });
       return;
     case "mcpToolCall":
       state.items.set(item.id, {
         arguments: item.arguments,
-        durationMs: item.durationMs,
-        error: item.error,
+        durationMs: item.durationMs ?? null,
+        error: item.error ?? null,
         id: item.id,
         order,
-        result: item.result,
+        result: item.result ?? null,
         server: item.server,
         status: item.status,
         tool: item.tool,
         type: "mcpToolCall",
+      });
+      return;
+    case "dynamicToolCall":
+      state.items.set(item.id, {
+        arguments: item.arguments,
+        contentItems: item.contentItems ?? null,
+        durationMs: item.durationMs ?? null,
+        id: item.id,
+        namespace: item.namespace ?? null,
+        order,
+        status: item.status,
+        success: item.success ?? null,
+        tool: item.tool,
+        type: "dynamicToolCall",
       });
       return;
     case "imageView":
@@ -554,6 +681,17 @@ function upsertMirrorItemFromCodexItem(
         order,
         path: item.path,
         type: "imageView",
+      });
+      return;
+    case "imageGeneration":
+      state.items.set(item.id, {
+        failure: item.failure ?? null,
+        id: item.id,
+        order,
+        revisedPrompt: item.revisedPrompt ?? null,
+        savedPath: item.savedPath ?? null,
+        status: item.status,
+        type: "imageGeneration",
       });
       return;
     case "enteredReviewMode":
@@ -568,15 +706,34 @@ function upsertMirrorItemFromCodexItem(
       return;
     case "collabAgentToolCall":
       state.items.set(item.id, {
-        agentsStates: item.agentsStates,
+        agentsStates: item.agentsStates ?? {},
         id: item.id,
         order,
-        prompt: item.prompt,
-        receiverThreadIds: item.receiverThreadIds,
+        prompt: item.prompt ?? null,
+        receiverThreadIds: item.receiverThreadIds ?? [],
         senderThreadId: item.senderThreadId,
         status: item.status,
         tool: item.tool,
         type: "collabAgentToolCall",
+      });
+      return;
+    case "subAgentActivity":
+      state.items.set(item.id, {
+        agentPath: item.agentPath,
+        agentThreadId: item.agentThreadId,
+        id: item.id,
+        kind: item.kind,
+        order,
+        type: "subAgentActivity",
+      });
+      return;
+    case "sleep":
+      state.items.set(item.id, {
+        durationMs:
+          typeof item.durationMs === "number" ? item.durationMs : null,
+        id: item.id,
+        order,
+        type: "sleep",
       });
       return;
     case "contextCompaction":
@@ -589,12 +746,17 @@ function upsertMirrorItemFromCodexItem(
       return;
     case "userMessage":
       state.items.set(item.id, {
-        content: item.content,
+        content: Array.isArray(item.content) ? item.content : [],
         id: item.id,
         order,
         type: "userMessage",
       });
       return;
+    default:
+      log.debug("unhandled_item_type", {
+        itemType: (item as { type?: unknown }).type,
+        runThreadId: state.threadId,
+      });
   }
 }
 
@@ -662,30 +824,41 @@ function applyReasoningDelta(
   });
 }
 
+function ensureReasoningItem(state: CodexMirrorState, itemId: string) {
+  const existing = state.items.get(itemId);
+  if (existing?.type === "reasoning") {
+    return existing;
+  }
+
+  const created: Extract<CodexMirrorItem, { type: "reasoning" }> = {
+    content: [],
+    id: itemId,
+    order: getItemOrder(state, itemId),
+    summary: [],
+    type: "reasoning",
+  };
+  state.items.set(itemId, created);
+  return created;
+}
+
 function applyReasoningSummaryDelta(
   state: CodexMirrorState,
   itemId: string,
-  contentIndex: number,
+  summaryIndex: number,
   delta: string,
 ) {
-  const existing = state.items.get(itemId);
-  if (existing?.type === "reasoning") {
-    if (!existing.summary[contentIndex]) {
-      existing.summary[contentIndex] = "";
-    }
-    existing.summary[contentIndex] += delta;
-    return;
-  }
+  const item = ensureReasoningItem(state, itemId);
+  item.summary[summaryIndex] = `${item.summary[summaryIndex] ?? ""}${delta}`;
 }
 
 function applyReasoningSummaryPartAdded(
   state: CodexMirrorState,
   itemId: string,
+  summaryIndex: number | null,
 ) {
-  const existing = state.items.get(itemId);
-  if (existing?.type === "reasoning") {
-    existing.summary.push("");
-  }
+  const item = ensureReasoningItem(state, itemId);
+  const index = summaryIndex ?? item.summary.length;
+  item.summary[index] ??= "";
 }
 
 function applyCommandOutputDelta(
@@ -714,17 +887,13 @@ function applyUserInputRequest(
   state: CodexMirrorState,
   event: CodexUserInputRequestEvent,
 ) {
-  const params = event.params as Record<string, unknown> | null;
-  const prompt =
-    params && typeof params.prompt === "string"
-      ? params.prompt
-      : "Codex is requesting input";
   const itemId = `user-input-${event.id}`;
   state.items.set(itemId, {
     id: itemId,
     isResolved: false,
     order: getItemOrder(state, itemId),
-    prompt,
+    prompt: buildCodexUserInputPrompt(event.params),
+    questions: parseCodexUserInputQuestions(event.params),
     requestId: event.id,
     response: null,
     type: "userInputRequest",
@@ -737,6 +906,18 @@ function applyPromptResponseToMirror(
 ) {
   for (const item of state.items.values()) {
     if (response.kind === "approval") {
+      if (item.type === "serverApproval") {
+        if (item.approvalId !== response.approvalId) {
+          continue;
+        }
+
+        item.state =
+          response.decision === "decline" || response.decision === "cancel"
+            ? "output-denied"
+            : "approval-responded";
+        return;
+      }
+
       if (item.type !== "commandExecution" && item.type !== "fileChange") {
         continue;
       }
@@ -761,40 +942,179 @@ function applyPromptResponseToMirror(
   }
 }
 
+function getRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function getString(record: Record<string, unknown> | null, key: string) {
+  const value = record?.[key];
+  return typeof value === "string" ? value : null;
+}
+
+const CODEX_SERVER_APPROVAL_TOOL_NAMES: Partial<
+  Record<CodexApprovalRequestEvent["method"], string>
+> = {
+  applyPatchApproval: "codex_apply_patch_approval",
+  execCommandApproval: "codex_exec_command_approval",
+  "item/permissions/requestApproval": "codex_permissions_request",
+  "mcpServer/elicitation/request": "codex_mcp_elicitation",
+};
+
+/**
+ * Inputs for approval requests that are not tied to a command or file-change
+ * item. They render through the generic Codex tool card (Allow/Deny).
+ */
+function buildServerApprovalInput(
+  method: CodexApprovalRequestEvent["method"],
+  params: Record<string, unknown> | null,
+): Record<string, unknown> {
+  switch (method) {
+    case "item/permissions/requestApproval":
+      return {
+        cwd: getString(params, "cwd"),
+        permissions: params?.permissions ?? null,
+        reason: getString(params, "reason"),
+      };
+    case "mcpServer/elicitation/request":
+      return {
+        message: getString(params, "message"),
+        mode: getString(params, "mode"),
+        requestedSchema: params?.requestedSchema ?? null,
+        serverName: getString(params, "serverName"),
+        url: getString(params, "url"),
+      };
+    case "execCommandApproval":
+      return {
+        command: Array.isArray(params?.command)
+          ? (params.command as unknown[]).join(" ")
+          : getString(params, "command"),
+        cwd: getString(params, "cwd"),
+        reason: getString(params, "reason"),
+      };
+    case "applyPatchApproval":
+      return {
+        changes: params?.fileChanges ?? null,
+        grantRoot: getString(params, "grantRoot"),
+        reason: getString(params, "reason"),
+      };
+    default:
+      return { ...(params ?? {}) };
+  }
+}
+
 function applyApprovalRequest(
   state: CodexMirrorState,
-  method: CodexServerEvent["method"],
+  method: CodexApprovalRequestEvent["method"],
   approvalId: string,
-  params: unknown,
+  paramsValue: unknown,
 ) {
-  if (!params || typeof params !== "object") {
+  const params = getRecord(paramsValue);
+  const reason = getString(params, "reason");
+
+  if (
+    method === "item/commandExecution/requestApproval" ||
+    method === "item/fileChange/requestApproval"
+  ) {
+    const itemId = getString(params, "itemId");
+    if (!itemId) {
+      return;
+    }
+
+    let existing = state.items.get(itemId);
+    // The approval can arrive before `item/started`; create the item from the
+    // request so the prompt is visible instead of silently blocking the turn.
+    if (!existing && method === "item/commandExecution/requestApproval") {
+      existing = {
+        command: getString(params, "command") ?? "",
+        commandActions: Array.isArray(params?.commandActions)
+          ? (params.commandActions as unknown[])
+          : [],
+        cwd: getString(params, "cwd") ?? "",
+        durationMs: null,
+        exitCode: null,
+        id: itemId,
+        order: getItemOrder(state, itemId),
+        output: "",
+        processId: null,
+        state: "input-available",
+        status: "inProgress",
+        type: "commandExecution",
+      };
+      state.items.set(itemId, existing);
+    } else if (!existing) {
+      existing = {
+        changes: [],
+        id: itemId,
+        order: getItemOrder(state, itemId),
+        output: "",
+        state: "input-available",
+        status: "inProgress",
+        type: "fileChange",
+      };
+      state.items.set(itemId, existing);
+    }
+
+    if (
+      existing.type === "commandExecution" ||
+      existing.type === "fileChange"
+    ) {
+      existing.approval = { id: approvalId, reason };
+      existing.state = "approval-requested";
+      existing.status = "approval-requested";
+    }
     return;
   }
 
-  const itemId =
-    "itemId" in params && typeof params.itemId === "string"
-      ? params.itemId
-      : null;
-  if (!itemId) {
-    return;
+  const itemId = `server-approval-${approvalId}`;
+  state.items.set(itemId, {
+    approvalId,
+    id: itemId,
+    input: buildServerApprovalInput(method, params),
+    method,
+    order: getItemOrder(state, itemId),
+    state: "approval-requested",
+    toolName: CODEX_SERVER_APPROVAL_TOOL_NAMES[method] ?? "codex_approval",
+    type: "serverApproval",
+  });
+}
+
+function applyServerRequestResolved(
+  state: CodexMirrorState,
+  requestId: string,
+) {
+  for (const item of state.items.values()) {
+    if (
+      (item.type === "commandExecution" || item.type === "fileChange") &&
+      item.approval?.id === requestId
+    ) {
+      item.approval = undefined;
+      if (item.state === "approval-requested") {
+        item.state = "approval-responded";
+        item.status = "inProgress";
+      }
+      return true;
+    }
+
+    if (item.type === "serverApproval" && item.approvalId === requestId) {
+      if (item.state === "approval-requested") {
+        // Codex resolved it without an answer from Sentinel (interrupt,
+        // auto-review, timeout).
+        item.state = "output-denied";
+      } else if (item.state === "approval-responded") {
+        item.state = "output-available";
+      }
+      return true;
+    }
+
+    if (item.type === "userInputRequest" && item.requestId === requestId) {
+      item.isResolved = true;
+      return true;
+    }
   }
 
-  const existing = state.items.get(itemId);
-  if (!existing) {
-    return;
-  }
-
-  if (existing.type === "commandExecution" || existing.type === "fileChange") {
-    existing.approval = {
-      id: approvalId,
-      reason:
-        "reason" in params && typeof params.reason === "string"
-          ? params.reason
-          : null,
-    };
-    existing.state = "approval-requested";
-    existing.status = "approval-requested";
-  }
+  return false;
 }
 
 function parseCodexAgentMessageSegments(
@@ -882,7 +1202,10 @@ function buildMirrorParts(state: CodexMirrorState) {
         }
         break;
       case "reasoning": {
-        const text = item.content.filter(Boolean).join("");
+        // Most models only expose summaries; raw reasoning wins when present.
+        const text =
+          item.content.filter(Boolean).join("") ||
+          item.summary.filter(Boolean).join("\n\n");
         if (text) {
           parts.push({ text, type: "reasoning" });
         }
@@ -973,7 +1296,11 @@ function buildMirrorParts(state: CodexMirrorState) {
         parts.push({
           input: mcpInput,
           ...(mcpState === "output-error"
-            ? { errorText: item.error ?? extractErrorText(mcpOutput) }
+            ? {
+                errorText:
+                  getMcpToolCallErrorMessage(item.error) ??
+                  extractErrorText(mcpOutput),
+              }
             : { output: mcpOutput }),
           state: mcpState,
           toolCallId: item.id,
@@ -982,6 +1309,93 @@ function buildMirrorParts(state: CodexMirrorState) {
         } as ThreadUIMessage["parts"][number]);
         break;
       }
+      case "dynamicToolCall": {
+        const dynamicState = mirrorToolStateFromStatus(item.status);
+        const dynamicOutput = {
+          contentItems: item.contentItems,
+          durationMs: item.durationMs,
+          status: item.status,
+          success: item.success,
+        };
+        parts.push({
+          input: {
+            arguments: item.arguments,
+            namespace: item.namespace,
+            tool: item.tool,
+          },
+          ...(dynamicState === "output-error"
+            ? { errorText: extractErrorText(dynamicOutput) }
+            : { output: dynamicOutput }),
+          state: dynamicState,
+          toolCallId: item.id,
+          toolName: "codex_dynamic_tool_call",
+          type: "dynamic-tool",
+        } as ThreadUIMessage["parts"][number]);
+        break;
+      }
+      case "imageGeneration": {
+        const generationState =
+          item.status === "completed"
+            ? "output-available"
+            : item.status === "failed" || item.failure
+              ? "output-error"
+              : "input-available";
+        const generationOutput = {
+          revisedPrompt: item.revisedPrompt,
+          savedPath: item.savedPath,
+          status: item.status,
+        };
+        parts.push({
+          input: { revisedPrompt: item.revisedPrompt },
+          ...(generationState === "output-error"
+            ? { errorText: extractErrorText(generationOutput) }
+            : { output: generationOutput }),
+          state: generationState,
+          toolCallId: item.id,
+          toolName: "codex_image_generation",
+          type: "dynamic-tool",
+        } as ThreadUIMessage["parts"][number]);
+        break;
+      }
+      case "subAgentActivity":
+        parts.push({
+          input: {
+            agentPath: item.agentPath,
+            agentThreadId: item.agentThreadId,
+          },
+          output: { kind: item.kind },
+          state:
+            item.kind === "started" || item.kind === "interacted"
+              ? "input-available"
+              : "output-available",
+          toolCallId: item.id,
+          toolName: "codex_sub_agent_activity",
+          type: "dynamic-tool",
+        } as ThreadUIMessage["parts"][number]);
+        break;
+      case "sleep":
+        parts.push({
+          input: { durationMs: item.durationMs },
+          output: { durationMs: item.durationMs },
+          state: "output-available",
+          toolCallId: item.id,
+          toolName: "codex_sleep",
+          type: "dynamic-tool",
+        } as ThreadUIMessage["parts"][number]);
+        break;
+      case "serverApproval":
+        parts.push({
+          ...(item.state === "approval-requested"
+            ? { approval: { id: item.approvalId } }
+            : {}),
+          input: item.input,
+          output: { method: item.method },
+          state: item.state,
+          toolCallId: item.id,
+          toolName: item.toolName,
+          type: "dynamic-tool",
+        } as ThreadUIMessage["parts"][number]);
+        break;
       case "imageView":
         parts.push({
           input: { path: item.path },
@@ -1045,7 +1459,11 @@ function buildMirrorParts(state: CodexMirrorState) {
       case "userInputRequest":
         parts.push({
           ...(item.requestId ? { approval: { id: item.requestId } } : {}),
-          input: { prompt: item.prompt, requestId: item.requestId },
+          input: {
+            prompt: item.prompt,
+            ...(item.questions.length > 0 ? { questions: item.questions } : {}),
+            requestId: item.requestId,
+          },
           output: { response: item.response },
           state: item.isResolved ? "output-available" : "approval-requested",
           toolCallId: item.id,
@@ -1272,6 +1690,37 @@ async function finalizeCodexRun(input: {
   }
 }
 
+// Notifications that carry nothing the assistant mirror shows. They are
+// dropped quietly; anything else unknown is logged at debug level.
+const CODEX_IGNORED_NOTIFICATIONS = new Set([
+  "account/login/completed",
+  "account/rateLimits/updated",
+  "account/updated",
+  "configWarning",
+  "deprecationNotice",
+  "hook/completed",
+  "hook/started",
+  "item/autoApprovalReview/completed",
+  "item/autoApprovalReview/started",
+  "item/commandExecution/terminalInteraction",
+  "item/mcpToolCall/progress",
+  "mcpServer/startupStatus/updated",
+  "model/safetyBuffering/updated",
+  "model/verification",
+  "skills/changed",
+  "thread/compacted",
+  "thread/settings/updated",
+  "thread/started",
+  "thread/status/changed",
+  "turn/diff/updated",
+  "warning",
+]);
+
+function getNumber(record: Record<string, unknown> | null, key: string) {
+  const value = record?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 async function handleCodexServerEvent(
   event: CodexServerEvent,
   runId: string,
@@ -1303,10 +1752,7 @@ async function handleCodexServerEvent(
     return;
   }
 
-  const params =
-    event.params && typeof event.params === "object"
-      ? (event.params as Record<string, unknown>)
-      : null;
+  const params = getRecord(event.params);
 
   if (eventThreadId && eventThreadId !== state.codexThreadId) {
     return;
@@ -1315,27 +1761,22 @@ async function handleCodexServerEvent(
   switch (event.method) {
     case "thread/name/updated": {
       const title =
-        typeof params?.name === "string"
-          ? params.name
-          : typeof params?.title === "string"
-            ? params.title
-            : null;
+        getString(params, "threadName") ??
+        getString(params, "name") ??
+        getString(params, "title");
       if (title?.trim()) {
         persist.updateThreadTitle(state.threadId, title.trim());
         await emitLatestSnapshot(runId, state.threadId);
       }
       return;
     }
-    case "turn/started":
-      if (
-        params?.turn &&
-        typeof params.turn === "object" &&
-        "id" in params.turn &&
-        typeof (params.turn as { id?: unknown }).id === "string"
-      ) {
-        state.codexTurnId = (params.turn as { id: string }).id;
+    case "turn/started": {
+      const turnId = getString(getRecord(params?.turn), "id");
+      if (turnId) {
+        state.codexTurnId = turnId;
       }
       return;
+    }
     case "item/started":
     case "item/completed":
       if (params?.item && typeof params.item === "object") {
@@ -1361,19 +1802,44 @@ async function handleCodexServerEvent(
         emitAssistantMessageUpdate(state, runId, "streaming");
       }
       return;
-    case "item/reasoning/textDelta":
+    case "item/reasoning/textDelta": {
+      const contentIndex = getNumber(params, "contentIndex");
       if (
         typeof params?.itemId === "string" &&
         typeof params?.delta === "string" &&
-        typeof params?.contentIndex === "number"
+        contentIndex != null
       ) {
-        applyReasoningDelta(
+        applyReasoningDelta(state, params.itemId, contentIndex, params.delta);
+        emitAssistantMessageUpdate(state, runId, "streaming");
+      }
+      return;
+    }
+    case "item/reasoning/summaryTextDelta": {
+      // 0.160 sends `summaryIndex`; `contentIndex` is the pre-v2 name.
+      const summaryIndex =
+        getNumber(params, "summaryIndex") ?? getNumber(params, "contentIndex");
+      if (
+        typeof params?.itemId === "string" &&
+        typeof params?.delta === "string" &&
+        summaryIndex != null
+      ) {
+        applyReasoningSummaryDelta(
           state,
           params.itemId,
-          params.contentIndex,
+          summaryIndex,
           params.delta,
         );
         emitAssistantMessageUpdate(state, runId, "streaming");
+      }
+      return;
+    }
+    case "item/reasoning/summaryPartAdded":
+      if (typeof params?.itemId === "string") {
+        applyReasoningSummaryPartAdded(
+          state,
+          params.itemId,
+          getNumber(params, "summaryIndex"),
+        );
       }
       return;
     case "item/commandExecution/outputDelta":
@@ -1394,35 +1860,26 @@ async function handleCodexServerEvent(
         emitAssistantMessageUpdate(state, runId, "streaming");
       }
       return;
-    case "item/reasoning/summaryTextDelta":
-      if (
-        typeof params?.itemId === "string" &&
-        typeof params?.delta === "string" &&
-        typeof params?.contentIndex === "number"
-      ) {
-        applyReasoningSummaryDelta(
-          state,
-          params.itemId,
-          params.contentIndex,
-          params.delta,
-        );
+    case "item/fileChange/patchUpdated": {
+      const existing =
+        typeof params?.itemId === "string"
+          ? state.items.get(params.itemId)
+          : null;
+      if (existing?.type === "fileChange" && Array.isArray(params?.changes)) {
+        existing.changes = params.changes as unknown[];
         emitAssistantMessageUpdate(state, runId, "streaming");
       }
       return;
-    case "item/reasoning/summaryPartAdded":
-      if (typeof params?.itemId === "string") {
-        applyReasoningSummaryPartAdded(state, params.itemId);
-      }
-      return;
-    case "turn/diff/updated":
-      if (typeof params?.diff === "string") {
-        state.turnDiff = params.diff;
-        emitAssistantMessageUpdate(state, runId, "streaming");
-      }
-      return;
-    case "turn/plan/updated":
-      if (Array.isArray(params?.steps)) {
-        state.planSteps = (params.steps as Array<Record<string, unknown>>).map(
+    }
+    case "turn/plan/updated": {
+      // 0.160 sends `plan: [{step, status}]`; `steps` is the pre-v2 name.
+      const steps = Array.isArray(params?.plan)
+        ? params.plan
+        : Array.isArray(params?.steps)
+          ? params.steps
+          : null;
+      if (steps) {
+        state.planSteps = (steps as Array<Record<string, unknown>>).map(
           (s) => ({
             status:
               s.status === "completed" || s.status === "inProgress"
@@ -1434,49 +1891,46 @@ async function handleCodexServerEvent(
         emitAssistantMessageUpdate(state, runId, "streaming");
       }
       return;
-    case "serverRequest/resolved":
-      if (typeof params?.itemId === "string") {
-        const existing = state.items.get(params.itemId);
-        if (
-          existing &&
-          (existing.type === "commandExecution" ||
-            existing.type === "fileChange")
-        ) {
-          if (existing.approval) {
-            existing.approval = undefined;
-          }
-        }
+    }
+    case "serverRequest/resolved": {
+      const requestId = params?.requestId;
+      if (
+        (typeof requestId === "string" || typeof requestId === "number") &&
+        applyServerRequestResolved(state, String(requestId))
+      ) {
         emitAssistantMessageUpdate(state, runId, "streaming");
       }
       return;
-    case "thread/tokenUsage/updated":
-      if (params?.tokenUsage && typeof params.tokenUsage === "object") {
-        const usage = params.tokenUsage as Record<string, unknown>;
-        state.usage = {
-          inputTokens:
-            typeof usage.inputTokens === "number"
-              ? usage.inputTokens
-              : undefined,
-          outputTokens:
-            typeof usage.outputTokens === "number"
-              ? usage.outputTokens
-              : undefined,
-          reasoningTokens:
-            typeof usage.reasoningTokens === "number"
-              ? usage.reasoningTokens
-              : undefined,
-          totalTokens:
-            typeof usage.totalTokens === "number"
-              ? usage.totalTokens
-              : undefined,
-        };
+    }
+    case "thread/tokenUsage/updated": {
+      const usage = applyCodexTokenUsageUpdate(state.tokenUsage, params);
+      if (usage) {
+        state.usage = usage;
         emitAssistantMessageUpdate(state, runId, "streaming");
       }
       return;
+    }
+    case "model/rerouted": {
+      const toModel = getString(params, "toModel");
+      if (toModel) {
+        state.responseModelId = toModel;
+        emitAssistantMessageUpdate(state, runId, "streaming");
+      }
+      return;
+    }
+    case "error": {
+      const error = getRecord(params?.error);
+      log.warn("codex_turn_error", {
+        message: getString(error, "message"),
+        runId,
+        willRetry: params?.willRetry === true,
+      });
+      return;
+    }
     case "turn/completed":
       if (params?.turn && typeof params.turn === "object") {
         const turn = params.turn as CodexTurn;
-        for (const item of turn.items) {
+        for (const item of turn.items ?? []) {
           upsertMirrorItemFromCodexItem(state, item);
         }
 
@@ -1499,6 +1953,9 @@ async function handleCodexServerEvent(
       }
       return;
     default:
+      if (!CODEX_IGNORED_NOTIFICATIONS.has(event.method)) {
+        log.debug("unhandled_notification", { method: event.method, runId });
+      }
       return;
   }
 }
@@ -1770,9 +2227,9 @@ export async function runCodexThreadChat(
     });
 
     await getCodexAppServerManager().steerTurn({
+      expectedTurnId: activeControl.codexTurnId,
       input: codexInput,
       threadId: activeControl.codexThreadId,
-      turnId: activeControl.codexTurnId,
     });
 
     return new Response(null, { status: 204 });
@@ -1916,55 +2373,44 @@ export async function runCodexThreadChat(
     });
     eventChannel.emit({ runId, type: "run.started" });
 
-    const collaborationMode = buildCodexCollaborationMode({
-      interactionMode: threadMode === "plan" ? "plan" : "default",
-      model: request.modelId ?? threadStartResponse.model ?? null,
-      effort: request.reasoningEffort ?? null,
-    });
+    // `turn/start.collaborationMode` needs the `experimentalApi` capability,
+    // which every supported app-server accepts at initialize. A CLI that
+    // reports a version below the protocol baseline gets the plan contract as
+    // a prompt preamble instead, in a single `turn/start`.
+    const nativeCollaborationMode = codex.supportsCollaborationMode();
+    const collaborationMode = nativeCollaborationMode
+      ? buildCodexCollaborationMode({
+          interactionMode: threadMode === "plan" ? "plan" : "default",
+          model: request.modelId ?? threadStartResponse.model ?? null,
+          effort: request.reasoningEffort ?? null,
+        })
+      : undefined;
 
-    const startTurnParams: Parameters<typeof codex.startTurn>[0] = {
+    if (!nativeCollaborationMode) {
+      log.warn("start_turn_collaboration_mode_unsupported", {
+        codexThreadId: threadStartResponse.thread.id,
+        serverVersion: codex.getServerVersion(),
+        threadId: request.threadId,
+      });
+    }
+
+    const turnResponse = await codex.startTurn({
       approvalPolicy,
+      ...(collaborationMode ? { collaborationMode } : {}),
       cwd: workspaceRoot,
       effort: request.reasoningEffort ?? null,
-      input: codexInput,
+      input:
+        !nativeCollaborationMode && threadMode === "plan"
+          ? await buildCodexUserInput(request.message, {
+              promptPrefix: buildPlanModePromptPreamble(
+                "Native Codex collaboration mode is unavailable in this Codex CLI version. Apply the full Plan Mode contract below for this turn instead.",
+              ),
+            })
+          : codexInput,
       model: request.modelId ?? null,
       sandboxPolicy,
       threadId: threadStartResponse.thread.id,
-    };
-
-    let turnResponse: Awaited<ReturnType<typeof codex.startTurn>>;
-    try {
-      turnResponse = await codex.startTurn(
-        collaborationMode
-          ? { ...startTurnParams, collaborationMode }
-          : startTurnParams,
-      );
-    } catch (error) {
-      if (
-        !collaborationMode ||
-        !isUnsupportedCodexCollaborationModeError(error)
-      ) {
-        throw error;
-      }
-
-      log.warn("start_turn_collaboration_mode_unsupported", {
-        codexThreadId: threadStartResponse.thread.id,
-        error,
-        threadId: request.threadId,
-      });
-      const fallbackStartTurnParams =
-        threadMode === "plan"
-          ? {
-              ...startTurnParams,
-              input: await buildCodexUserInput(request.message, {
-                promptPrefix: buildPlanModePromptPreamble(
-                  "Native Codex collaboration mode could not be enabled. Apply the full Plan Mode contract below for this turn instead.",
-                ),
-              }),
-            }
-          : startTurnParams;
-      turnResponse = await codex.startTurn(fallbackStartTurnParams);
-    }
+    });
 
     mirror.codexTurnId = turnResponse.turn.id;
     const control = activeCodexRunControls.get(runId);
@@ -1997,7 +2443,7 @@ export async function runCodexThreadChat(
       );
     }
 
-    for (const item of turnResponse.turn.items) {
+    for (const item of turnResponse.turn.items ?? []) {
       upsertMirrorItemFromCodexItem(mirror, item);
     }
     emitAssistantMessageUpdate(mirror, runId, "streaming");

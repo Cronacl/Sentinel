@@ -393,6 +393,58 @@ export function resetCodexCliResolutionCache() {
   cachedResolution = null;
 }
 
+// cmd.exe metacharacters. The quoting below is ported from cross-spawn (MIT),
+// lib/util/escape.js, which follows https://qntm.org/cmd.
+const WINDOWS_CMD_META_CHARS = /([()\][%!^"`<>&|;, *?])/g;
+
+function escapeWindowsCmdCommand(command: string) {
+  return command.replace(WINDOWS_CMD_META_CHARS, "^$1");
+}
+
+function escapeWindowsCmdArgument(argument: string) {
+  let escaped = `${argument}`;
+  // Backslashes before a quote are doubled and the quote is escaped.
+  escaped = escaped.replace(/(?=(\\+?)?)\1"/g, '$1$1\\"');
+  // Trailing backslashes are doubled (they precede the closing quote).
+  escaped = escaped.replace(/(?=(\\+?)?)\1$/, "$1$1");
+  escaped = `"${escaped}"`;
+  return escaped.replace(WINDOWS_CMD_META_CHARS, "^$1");
+}
+
+export type CodexCliInvocation = {
+  args: string[];
+  command: string;
+  windowsVerbatimArguments?: boolean;
+};
+
+/**
+ * npm installs Codex on Windows as a `codex.cmd` shim. Node refuses to spawn
+ * `.cmd`/`.bat` files without a shell (CVE-2024-27980), and `shell: true`
+ * would pass the arguments unescaped, so batch files run through
+ * `cmd.exe /d /s /c` with every argument quoted for cmd.
+ */
+export function buildCodexCliInvocation(
+  command: string,
+  args: string[],
+  options?: { comSpec?: string; platform?: NodeJS.Platform },
+): CodexCliInvocation {
+  const platform = options?.platform ?? process.platform;
+  if (platform !== "win32" || !/\.(?:cmd|bat)$/i.test(command)) {
+    return { args, command };
+  }
+
+  const commandLine = [
+    escapeWindowsCmdCommand(path.win32.normalize(command)),
+    ...args.map(escapeWindowsCmdArgument),
+  ].join(" ");
+
+  return {
+    args: ["/d", "/s", "/c", `"${commandLine}"`],
+    command: options?.comSpec ?? (process.env.ComSpec?.trim() || "cmd.exe"),
+    windowsVerbatimArguments: true,
+  };
+}
+
 export async function readCodexCliVersion(
   resolvedCliInput?: ResolvedCodexCli | null,
 ) {
@@ -401,11 +453,21 @@ export async function readCodexCliVersion(
     return null;
   }
 
+  const invocation = buildCodexCliInvocation(resolvedCli.command, [
+    "--version",
+  ]);
+
   return await new Promise<string>((resolve, reject) => {
     execFile(
-      resolvedCli.command,
-      ["--version"],
-      { env: resolvedCli.env, timeout: CLI_VERSION_TIMEOUT_MS },
+      invocation.command,
+      invocation.args,
+      {
+        env: resolvedCli.env,
+        timeout: CLI_VERSION_TIMEOUT_MS,
+        ...(invocation.windowsVerbatimArguments
+          ? { windowsVerbatimArguments: true }
+          : {}),
+      },
       (error, stdout) => {
         if (error) {
           reject(error);
@@ -430,12 +492,17 @@ export async function spawnCodexCli(
     throw new Error("Codex CLI is not installed or not available on PATH.");
   }
 
-  return spawn(resolvedCli.command, args, {
+  const invocation = buildCodexCliInvocation(resolvedCli.command, args);
+
+  return spawn(invocation.command, invocation.args, {
     cwd: options?.cwd,
     env: {
       ...resolvedCli.env,
       ...(options?.env ?? {}),
     },
     stdio: ["pipe", "pipe", "pipe"],
+    ...(invocation.windowsVerbatimArguments
+      ? { windowsVerbatimArguments: true }
+      : {}),
   }) as ChildProcessWithoutNullStreams;
 }

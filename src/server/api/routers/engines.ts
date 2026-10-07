@@ -36,6 +36,7 @@ import {
   getCodexAppServerManager,
   resetCodexEngineStatusCache,
 } from "@/lib/ai/chat/engines/codex-app-server";
+import { CODEX_FALLBACK_MODELS } from "@/lib/ai/chat/engines/codex-app-server/models";
 import { resetCodexCliResolutionCache } from "@/lib/ai/chat/engines/codex-cli";
 import { getCodexThreadState } from "@/lib/ai/chat/engines/types";
 import {
@@ -75,38 +76,14 @@ function canUseCodexFallbackModels(status: CodexEngineStatus) {
 }
 
 // Shown only while the Codex runtime has not reported its own model list.
-// OpenAI shut the gpt-5(.1)-codex and codex-mini models down in 2026.
-const FALLBACK_CODEX_DEFAULT_MODEL_ID = "gpt-6-astra";
-
 function buildFallbackCodexModels() {
-  const allowedIds = new Set([
-    FALLBACK_CODEX_DEFAULT_MODEL_ID,
-    "gpt-6.1-sol",
-    "gpt-6-luna",
-  ]);
-
-  return getModelsForProvider("openai")
-    .filter((model) => allowedIds.has(model.id))
-    .map((model) => ({
-      defaultReasoningEffort: getDefaultReasoningEffort("openai", model.id),
-      description: model.description,
-      displayName: model.displayName,
-      id: model.id,
-      inputModalities: model.capabilities.includes("vision")
-        ? ["text", "image"]
-        : ["text"],
-      isDefault: model.id === FALLBACK_CODEX_DEFAULT_MODEL_ID,
-      model: model.id,
-      supportedReasoningEfforts: getSupportedReasoningEfforts(
-        "openai",
-        model.id,
-      ).map((effort) => ({
-        description: `${model.displayName} supports ${effort} reasoning effort.`,
-        effort,
-        label: effort[0]!.toUpperCase() + effort.slice(1),
-      })),
-      supportsPersonality: false,
-    }));
+  return CODEX_FALLBACK_MODELS.map((model) => ({
+    ...model,
+    inputModalities: [...model.inputModalities],
+    supportedReasoningEfforts: model.supportedReasoningEfforts.map(
+      (option) => ({ ...option }),
+    ),
+  }));
 }
 
 function canUseClaudeFallbackModels(status: ClaudeEngineStatus) {
@@ -652,12 +629,14 @@ export const enginesRouter = createTRPCRouter({
       return codex.startReview(codexThreadId);
     }),
 
+  // Codex 0.156+ removed count-based rollback; this pages the turn history
+  // and reverts before the `count`-th newest turn.
   codexRollback: protectedProcedure
     .input(z.object({ count: z.number().int().min(1), threadId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const codexThreadId = await resolveCodexThreadId(ctx, input.threadId);
       const codex = getCodexAppServerManager();
-      return codex.rollbackThread(codexThreadId, input.count);
+      return codex.revertThreadTurns(codexThreadId, input.count);
     }),
 
   codexCompact: protectedProcedure
@@ -694,24 +673,27 @@ export const enginesRouter = createTRPCRouter({
 
   codexLogin: protectedProcedure
     .input(
-      z.object({
-        apiKey: z.string().optional(),
-        method: z.enum(["apiKey", "chatgpt", "external"]),
-        token: z.string().optional(),
-      }),
+      z.discriminatedUnion("method", [
+        z.object({ apiKey: z.string().min(1), method: z.literal("apiKey") }),
+        z.object({ method: z.literal("chatgpt") }),
+        z.object({ method: z.literal("chatgptDeviceCode") }),
+      ]),
     )
     .mutation(async ({ input }) => {
       const codex = getCodexAppServerManager();
-      return codex.startLogin(input.method, {
-        apiKey: input.apiKey,
-        token: input.token,
-      });
+      return codex.startLogin(
+        input.method === "apiKey"
+          ? { apiKey: input.apiKey, type: "apiKey" }
+          : { type: input.method },
+      );
     }),
 
-  codexCancelLogin: protectedProcedure.mutation(async () => {
-    const codex = getCodexAppServerManager();
-    await codex.cancelLogin();
-  }),
+  codexCancelLogin: protectedProcedure
+    .input(z.object({ loginId: z.string().min(1) }))
+    .mutation(async ({ input }) => {
+      const codex = getCodexAppServerManager();
+      return codex.cancelLogin(input.loginId);
+    }),
 
   codexLogout: protectedProcedure.mutation(async () => {
     const codex = getCodexAppServerManager();
@@ -753,11 +735,13 @@ export const enginesRouter = createTRPCRouter({
     return codex.listMcpServerStatus();
   }),
 
+  // `config/mcpServer/reload` reloads every MCP server; `serverName` is kept
+  // so existing callers stay valid.
   codexReloadMcpServer: protectedProcedure
     .input(z.object({ serverName: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async () => {
       const codex = getCodexAppServerManager();
-      await codex.reloadMcpServer(input.serverName);
+      await codex.reloadMcpServers();
     }),
 
   codexExperimentalFeatures: protectedProcedure.query(async () => {

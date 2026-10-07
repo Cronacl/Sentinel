@@ -111,6 +111,12 @@ export function getCodexEventThreadId(
     return params.threadId;
   }
 
+  // Deprecated v1 approvals (`execCommandApproval`, `applyPatchApproval`)
+  // name the thread `conversationId`.
+  if (params?.conversationId && typeof params.conversationId === "string") {
+    return params.conversationId;
+  }
+
   if (
     event.method === "thread/started" &&
     params?.thread &&

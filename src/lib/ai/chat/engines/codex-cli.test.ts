@@ -13,6 +13,7 @@ import path from "node:path";
 mock.module("server-only", () => ({}));
 
 const {
+  buildCodexCliInvocation,
   parseShellLookupOutput,
   resetCodexCliResolutionCache,
   resolveCodexCli,
@@ -187,5 +188,66 @@ describe("resolveCodexCli", () => {
     } finally {
       await rm(tempRoot, { force: true, recursive: true });
     }
+  });
+});
+
+describe("buildCodexCliInvocation", () => {
+  it("spawns the resolved binary directly outside Windows batch shims", () => {
+    expect(
+      buildCodexCliInvocation("/usr/local/bin/codex", ["app-server"], {
+        platform: "darwin",
+      }),
+    ).toEqual({ args: ["app-server"], command: "/usr/local/bin/codex" });
+    expect(
+      buildCodexCliInvocation(
+        "C:\\Program Files\\Codex\\codex.exe",
+        ["app-server"],
+        { platform: "win32" },
+      ),
+    ).toEqual({
+      args: ["app-server"],
+      command: "C:\\Program Files\\Codex\\codex.exe",
+    });
+  });
+
+  it("runs a Windows codex.cmd shim through cmd.exe with escaped arguments", () => {
+    const invocation = buildCodexCliInvocation(
+      "C:\\Users\\Jo Doe\\AppData\\Roaming\\npm\\codex.cmd",
+      [
+        "exec",
+        "--config",
+        'model_reasoning_effort="high"',
+        "--output-schema",
+        "C:\\Temp\\a&b\\schema.json",
+      ],
+      { comSpec: "C:\\Windows\\system32\\cmd.exe", platform: "win32" },
+    );
+
+    expect(invocation.command).toBe("C:\\Windows\\system32\\cmd.exe");
+    expect(invocation.windowsVerbatimArguments).toBe(true);
+    expect(invocation.args.slice(0, 3)).toEqual(["/d", "/s", "/c"]);
+    expect(invocation.args[3]).toBe(
+      [
+        '"C:\\Users\\Jo^ Doe\\AppData\\Roaming\\npm\\codex.cmd',
+        '^"exec^"',
+        '^"--config^"',
+        '^"model_reasoning_effort=\\^"high\\^"^"',
+        '^"--output-schema^"',
+        '^"C:\\Temp\\a^&b\\schema.json^""',
+      ].join(" "),
+    );
+  });
+
+  it("treats .bat shims like .cmd shims", () => {
+    expect(
+      buildCodexCliInvocation("D:\\tools\\codex.BAT", ["--version"], {
+        comSpec: "cmd.exe",
+        platform: "win32",
+      }),
+    ).toEqual({
+      args: ["/d", "/s", "/c", '"D:\\tools\\codex.BAT ^"--version^""'],
+      command: "cmd.exe",
+      windowsVerbatimArguments: true,
+    });
   });
 });
