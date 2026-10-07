@@ -72,6 +72,7 @@ State the commands read and change:
     "tokensBefore": 1000,
     "estimatedTokensAfter": 200
   },
+  "systemMessage": true,
   "bash": { "ls": { "output": "a.ts\n", "exitCode": 0 } },
   "cancelled": {
     "new_session": false,
@@ -86,6 +87,8 @@ State the commands read and change:
 - Available thinking levels follow Pi's ladder (`off` … `max`) filtered by the model's `reasoning` flag and `thinkingLevelMap` (`xhigh` and `max` only when mapped), unless `thinkingLevels` is set.
 - `switch_session {sessionPath}` loads `sessions[sessionPath]` (unknown paths fail). `fork {entryId}` keeps the entries before that user entry and returns its text. `cancelled` makes these operations report `{cancelled:true}` like an extension veto.
 - `set_thinking_level` emits `thinking_level_changed`; `set_session_name` emits `session_info_changed`; `compact` emits `compaction_start` / `compaction_end` with `reason:"manual"`; `bash` emits `bash_execution_update` with the command id.
+- `compactFailure` makes `compact` fail like Pi 1.0 with nothing to compact (t3code's `pi_compaction` recording): `compaction_start`, `compaction_end` with `errorMessage: "Compaction failed: <compactFailure>"` and no `result`, then `success:false` with `error: <compactFailure>`, e.g. `"Nothing to compact (session too small)"`. (`commandErrors.compact` fails without the events.)
+- `systemMessage` opens a session's first run with its leading system message, as Pi 1.0 does: `message_start` / `message_end` with `role:"system"` (`content`, `sections`, `toolsAdded`, `timestamp`) between `turn_start` and the user message. `true` sends a default; an object is merged over `{role:"system", content:""}`. It joins the session's messages, so later runs (and sessions that already hold one) get none; `new_session` starts over.
 
 ## Prompt scripts
 

@@ -182,6 +182,21 @@ export type PiMockScenario = {
   sessionStats?: JsonObject;
   /** `compact` result. */
   compaction?: JsonObject;
+  /**
+   * Make `compact` fail like Pi 1.0 with nothing to compact:
+   * `compaction_start`, `compaction_end` with `errorMessage: "Compaction
+   * failed: <this>"` and no result, then `success:false` with this error
+   * (e.g. `"Nothing to compact (session too small)"`).
+   */
+  compactFailure?: string;
+  /**
+   * Open a session's first run with its leading system message
+   * (`message_start`/`message_end`, role `system`) after `turn_start`, as
+   * Pi 1.0 does. `true` sends a default one; an object is merged over
+   * `{role:"system", content:""}`. Sessions whose messages already hold a
+   * system message get none.
+   */
+  systemMessage?: boolean | JsonObject;
   /** Output per `bash` command; default echoes the command. */
   bash?: Record<string, { output: string; exitCode?: number }>;
   /** Extension-cancelled session operations. */

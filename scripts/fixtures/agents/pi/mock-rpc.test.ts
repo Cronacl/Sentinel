@@ -657,6 +657,85 @@ describe("Pi RPC mock: runs", () => {
   );
 
   it(
+    "opens a session's first run with its system message and fails an empty compaction",
+    async () => {
+      const driver = start({
+        systemMessage: { sections: { preamble: "You are Pi." } },
+        compactFailure: "Nothing to compact (session too small)",
+      });
+      const compact = await driver.request("compact", {});
+      expect(compact).toEqual({
+        id: compact.id,
+        type: "response",
+        command: "compact",
+        success: false,
+        error: "Nothing to compact (session too small)",
+      });
+      expect(driver.events()).toEqual([
+        { type: "compaction_start", reason: "manual" },
+        {
+          type: "compaction_end",
+          reason: "manual",
+          aborted: false,
+          willRetry: false,
+          errorMessage:
+            "Compaction failed: Nothing to compact (session too small)",
+        },
+      ]);
+
+      await driver.request("prompt", { message: "first" });
+      await settled(driver);
+      await driver.request("prompt", { message: "second" });
+      await settled(driver, 2);
+      const types = eventTypes(driver);
+      const firstRun = types.slice(types.indexOf("agent_start"));
+      expect(firstRun.slice(0, 6)).toEqual([
+        "agent_start",
+        "turn_start",
+        "message_start:system",
+        "message_end:system",
+        "message_start:user",
+        "message_end:user",
+      ]);
+      expect(
+        types.filter((type) => type === "message_start:system"),
+      ).toHaveLength(1);
+      const system = driver
+        .events()
+        .find(
+          (event) =>
+            event.type === "message_end" &&
+            (event.message as JsonObject).role === "system",
+        )?.message;
+      expect(system).toMatchObject({
+        role: "system",
+        content: "",
+        sections: { preamble: "You are Pi." },
+        timestamp: expect.any(Number),
+      });
+      const messages = (await driver.request("get_messages")).data as {
+        messages: JsonObject[];
+      };
+      expect(messages.messages.map((message) => message.role)).toEqual([
+        "system",
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+      ]);
+
+      // A new session starts over with a fresh system message.
+      await driver.request("new_session", {});
+      await driver.request("prompt", { message: "third" });
+      await settled(driver, 3);
+      expect(
+        eventTypes(driver).filter((type) => type === "message_start:system"),
+      ).toHaveLength(2);
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
     "emits compaction, retry and extension error events, and compacts on command",
     async () => {
       const driver = start({

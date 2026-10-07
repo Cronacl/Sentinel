@@ -259,6 +259,41 @@ async function deliverUserMessage(current: Run, input: QueuedInput) {
   recordMessage(message);
 }
 
+/**
+ * Pi 1.0 opens a session's first run with its leading system message (the
+ * prompt sections and tools) between `turn_start` and the user message.
+ */
+async function emitSystemMessage(current: Run) {
+  const configured = scenario.systemMessage;
+  if (!configured) return;
+  if (state.messages.some((message) => message.role === "system")) return;
+  await openTurn(current);
+  const message: JsonObject = {
+    role: "system",
+    content: "",
+    timestamp: Date.now(),
+    ...(configured === true
+      ? {
+          sections: {
+            preamble: "You are an expert coding assistant.",
+            cwd: process.cwd(),
+          },
+          toolsAdded: [
+            {
+              name: "read",
+              description: "Read the contents of a file.",
+              parameters: {},
+            },
+          ],
+        }
+      : configured),
+  };
+  await output({ type: "message_start", message });
+  await output({ type: "message_end", message });
+  current.messages.push(message);
+  recordMessage(message);
+}
+
 async function ensureAssistant(current: Run): Promise<JsonObject> {
   await openTurn(current);
   if (current.assistant) return current.assistant;
@@ -661,6 +696,7 @@ function startRun(input: QueuedInput, script: PiPromptScript): Run {
   current.done = (async () => {
     await output({ type: "agent_start" });
     try {
+      await emitSystemMessage(current);
       await deliverUserMessage(current, input);
       await runScript(current, script);
       for (;;) {
@@ -855,6 +891,18 @@ async function handleCommand(
     case "abort_bash":
       return success(id, type);
     case "compact": {
+      if (typeof scenario.compactFailure === "string") {
+        // Pi 1.0 with nothing to compact (t3code pi_compaction recording).
+        await output({ type: "compaction_start", reason: "manual" });
+        await output({
+          type: "compaction_end",
+          reason: "manual",
+          aborted: false,
+          willRetry: false,
+          errorMessage: `Compaction failed: ${scenario.compactFailure}`,
+        });
+        return failure(id, "compact", scenario.compactFailure);
+      }
       const result = compactionResult();
       await output({ type: "compaction_start", reason: "manual" });
       await output({
