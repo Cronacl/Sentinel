@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { findMacAppBundles, stampMacUpdateFeeds } from "./update-feed.mjs";
 
 const PLATFORM_CONFIG = {
   linux: {
@@ -155,6 +156,16 @@ await run(process.execPath, [
 ]);
 
 await run(process.execPath, [electronBuilderCli, ...builderArgs]);
+
+if (platform === "mac") {
+  // Builds run with --publish never; the release workflow uploads the stamped
+  // feed afterwards.
+  const distRoot = path.join(process.cwd(), "dist");
+  await stampMacUpdateFeeds({
+    appPaths: await findMacAppBundles(distRoot),
+    distRoot,
+  });
+}
 
 await run(process.execPath, [
   "./scripts/desktop/audit-bundle.mjs",

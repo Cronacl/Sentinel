@@ -9,6 +9,11 @@ import {
   inferBundleArch,
 } from "./audit-bundle-utils.mjs";
 import { UNTRACED_SERVER_PACKAGES } from "./untraced-server-packages.mjs";
+import {
+  findMacUpdateFeedIssues,
+  readAppMinimumSystemVersion,
+  readMacUpdateFeeds,
+} from "./update-feed.mjs";
 
 const require = createRequire(import.meta.url);
 const { listPackage } = require("@electron/asar");
@@ -375,6 +380,21 @@ for (const unpackedAppPath of unpackedAppPaths) {
     failures.push(
       `${unpackedAppPath}: packaged server native SQLite runtime is wrong:\n${nativeRuntimeIssues.join("\n")}`,
     );
+  }
+
+  if (platform === "mac") {
+    const macosVersion = await readAppMinimumSystemVersion(unpackedAppPath);
+    const updateFeedIssues = findMacUpdateFeedIssues({
+      feeds: await readMacUpdateFeeds(distRoot),
+      macosVersion,
+    });
+    console.log(`  ${"minimum macOS".padEnd(18)} ${macosVersion}`);
+
+    if (updateFeedIssues.length > 0) {
+      failures.push(
+        `${unpackedAppPath}: update feed would offer this build below its macOS floor:\n${updateFeedIssues.join("\n")}`,
+      );
+    }
   }
 }
 
