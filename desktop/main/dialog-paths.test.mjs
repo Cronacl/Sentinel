@@ -1,42 +1,120 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
-import { createDialogDefaultPathTracker } from "./dialog-paths.mjs";
+import { createDialogDefaultPaths } from "./dialog-paths.mjs";
 
-describe("dialog default path tracker", () => {
-  it("leaves the first dialog on the platform default", () => {
-    expect(createDialogDefaultPathTracker().current()).toBeUndefined();
+const tempRoots = [];
+
+async function createFixture() {
+  const root = await mkdtemp(path.join(os.tmpdir(), "dialog-paths-"));
+  tempRoots.push(root);
+  const homePath = path.join(root, "home");
+  const codePath = path.join(homePath, "code");
+  const notesPath = path.join(homePath, "notes");
+  await mkdir(codePath, { recursive: true });
+  await mkdir(notesPath, { recursive: true });
+
+  return {
+    codePath,
+    filePath: path.join(root, "userData", "dialog-paths.json"),
+    homePath,
+    notesPath,
+  };
+}
+
+afterEach(async () => {
+  await Promise.all(
+    tempRoots
+      .splice(0)
+      .map((root) => rm(root, { force: true, recursive: true })),
+  );
+});
+
+describe("dialog default paths", () => {
+  it("starts in the fallback folder before the first pick", async () => {
+    const { filePath, homePath } = await createFixture();
+    const dialogPaths = createDialogDefaultPaths({
+      fallbackPath: homePath,
+      filePath,
+    });
+
+    expect(await dialogPaths.current("directory")).toBe(homePath);
+    expect(await dialogPaths.current("files")).toBe(homePath);
   });
 
-  it("reopens dialogs in the folder of the last selection", () => {
-    const tracker = createDialogDefaultPathTracker();
-    const projectPath = path.join(path.sep, "Users", "dev", "code", "sentinel");
-
-    tracker.remember({ canceled: false, filePaths: [projectPath] });
-    expect(tracker.current()).toBe(path.join(path.sep, "Users", "dev", "code"));
-
-    tracker.remember({
-      canceled: false,
-      filePaths: [
-        path.join(path.sep, "tmp", "notes", "a.md"),
-        path.join(path.sep, "tmp", "notes", "b.md"),
-      ],
+  it("keeps a separate last folder per dialog kind", async () => {
+    const { codePath, filePath, homePath, notesPath } = await createFixture();
+    const dialogPaths = createDialogDefaultPaths({
+      fallbackPath: homePath,
+      filePath,
     });
-    expect(tracker.current()).toBe(path.join(path.sep, "tmp", "notes"));
+
+    await dialogPaths.remember("directory", {
+      canceled: false,
+      filePaths: [path.join(codePath, "sentinel")],
+    });
+    await dialogPaths.remember("files", {
+      canceled: false,
+      filePaths: [path.join(notesPath, "a.md"), path.join(notesPath, "b.md")],
+    });
+
+    expect(await dialogPaths.current("directory")).toBe(codePath);
+    expect(await dialogPaths.current("files")).toBe(notesPath);
   });
 
-  it("keeps the last folder when a dialog is cancelled", () => {
-    const tracker = createDialogDefaultPathTracker();
-    tracker.remember({
+  it("restores the last folders after a restart", async () => {
+    const { codePath, filePath, homePath } = await createFixture();
+    await createDialogDefaultPaths({
+      fallbackPath: homePath,
+      filePath,
+    }).remember("directory", {
       canceled: false,
-      filePaths: [path.join(path.sep, "work", "repo")],
+      filePaths: [path.join(codePath, "sentinel")],
     });
 
-    tracker.remember({ canceled: true, filePaths: [] });
-    tracker.remember({
+    const restarted = createDialogDefaultPaths({
+      fallbackPath: homePath,
+      filePath,
+    });
+    expect(await restarted.current("directory")).toBe(codePath);
+    expect(JSON.parse(await readFile(filePath, "utf8"))).toEqual({
+      directory: codePath,
+    });
+  });
+
+  it("ignores cancelled dialogs, deleted folders and unreadable state", async () => {
+    const { codePath, filePath, homePath } = await createFixture();
+    const dialogPaths = createDialogDefaultPaths({
+      fallbackPath: homePath,
+      filePath,
+    });
+
+    await dialogPaths.remember("directory", {
       canceled: true,
-      filePaths: [path.join(path.sep, "other", "repo")],
+      filePaths: [path.join(codePath, "sentinel")],
     });
-    expect(tracker.current()).toBe(path.join(path.sep, "work"));
+    expect(await dialogPaths.current("directory")).toBe(homePath);
+
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(
+      filePath,
+      JSON.stringify({ directory: path.join(homePath, "gone") }),
+    );
+    expect(
+      await createDialogDefaultPaths({
+        fallbackPath: homePath,
+        filePath,
+      }).current("directory"),
+    ).toBe(homePath);
+
+    await writeFile(filePath, "{not json");
+    expect(
+      await createDialogDefaultPaths({
+        fallbackPath: homePath,
+        filePath,
+      }).current("files"),
+    ).toBe(homePath);
   });
 });

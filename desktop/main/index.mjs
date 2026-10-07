@@ -21,7 +21,7 @@ import * as nodePty from "node-pty";
 
 import { DESKTOP_CHANNELS } from "../shared/channels.mjs";
 import { createDesktopUpdaterController } from "./updater.mjs";
-import { createDialogDefaultPathTracker } from "./dialog-paths.mjs";
+import { createDialogDefaultPaths } from "./dialog-paths.mjs";
 import {
   configureDesktopPermissionHandlers,
   getDesktopMicrophonePermissionState,
@@ -57,7 +57,6 @@ const WINDOWS_TITLE_BAR_HEIGHT = 32;
 let systemFontFamiliesCache = null;
 let systemFontFamiliesPromise = null;
 let macComputerHelperPromise = null;
-const dialogDefaultPath = createDialogDefaultPathTracker();
 const desktopUpdater = createDesktopUpdaterController({
   appVersion: () => app.getVersion(),
   isPackaged: () => app.isPackaged,
@@ -1675,6 +1674,11 @@ async function runDesktopComputerActions(input) {
 }
 
 function registerIpc() {
+  const dialogDefaultPaths = createDialogDefaultPaths({
+    fallbackPath: app.getPath("home"),
+    filePath: path.join(app.getPath("userData"), "dialog-paths.json"),
+  });
+
   ipcMain.handle(DESKTOP_CHANNELS.APP_LIST_SYSTEM_FONTS, async () =>
     listSystemFontFamilies(),
   );
@@ -1748,10 +1752,10 @@ function registerIpc() {
   });
   ipcMain.handle(DESKTOP_CHANNELS.PICK_DIRECTORY, async () => {
     const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
-      defaultPath: dialogDefaultPath.current(),
+      defaultPath: await dialogDefaultPaths.current("directory"),
       properties: ["openDirectory"],
     });
-    dialogDefaultPath.remember(result);
+    await dialogDefaultPaths.remember("directory", result);
 
     const selectedPath = result.filePaths[0];
     if (result.canceled || !selectedPath) {
@@ -1766,10 +1770,10 @@ function registerIpc() {
 
   ipcMain.handle(DESKTOP_CHANNELS.PICK_FILES, async () => {
     const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
-      defaultPath: dialogDefaultPath.current(),
+      defaultPath: await dialogDefaultPaths.current("files"),
       properties: ["multiSelections", "openFile"],
     });
-    dialogDefaultPath.remember(result);
+    await dialogDefaultPaths.remember("files", result);
 
     if (result.canceled || result.filePaths.length === 0) {
       return [];
