@@ -5,7 +5,7 @@ import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ComposerContext } from "@/lib/composer-context/types";
 import type { RepoThreadState } from "@/lib/ai/chat/engines/types";
 import type { SentinelComposerToolTag } from "@/lib/ai/chat/tools/selection/tags";
-import type { ChatEngine } from "@/server/db/enums";
+import type { ChatEngine, PermissionMode } from "@/server/db/enums";
 import type { DraftProjectMode } from "../draft-thread-project-mode";
 
 export type { QueuedFollowUpSummary } from "@/lib/ai/chat/session/types";
@@ -45,7 +45,7 @@ export type ChatComposerProps = {
     id: string;
     kind?: "project" | "quick_chat";
     name: string;
-    permissionModeOverride?: "default" | "full" | null;
+    permissionModeOverride?: PermissionMode | null;
     rootPath?: string | null;
   } | null;
   draftPreparedWorktree?: {

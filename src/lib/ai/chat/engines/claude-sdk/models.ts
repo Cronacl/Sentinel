@@ -60,8 +60,9 @@ const CLAUDE_MODEL_PROFILES: Record<string, ClaudeModelProfile> = {
   "claude-3-5-haiku-20241022": { contextWindow: 200_000 },
 };
 
-// Claude effort levels Sentinel can carry in its ReasoningEffort enum. `max`
-// is not representable until the enum is widened, so it is not offered.
+// Claude effort levels Sentinel offers. ReasoningEffort carries `max` since
+// the engine platform widened it, but Claude keeps today's options until the
+// composer moves to per-model option descriptors.
 const CLAUDE_SENTINEL_EFFORTS = ["low", "medium", "high", "xhigh"] as const;
 type ClaudeSentinelEffort = (typeof CLAUDE_SENTINEL_EFFORTS)[number];
 

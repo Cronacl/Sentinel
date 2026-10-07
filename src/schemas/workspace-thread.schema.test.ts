@@ -1,9 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
+import { securitySettingsFormSchema } from "./security.schema";
 import {
   threadCreateSchema,
+  threadSettingsSchema,
   threadUIMessageSchema,
   workspaceCreateSchema,
+  workspacePermissionOverrideSchema,
 } from "./workspace-thread.schema";
 
 describe("threadCreateSchema", () => {
@@ -90,5 +93,33 @@ describe("threadUIMessageSchema", () => {
     };
 
     expect(threadUIMessageSchema.parse(message)).toEqual(message);
+  });
+});
+
+describe("widened permission modes and efforts", () => {
+  it("accepts every stored permission mode for overrides and the default", () => {
+    for (const mode of ["default", "accept_edits", "auto", "full"]) {
+      expect(
+        workspacePermissionOverrideSchema.safeParse({
+          permissionModeOverride: mode,
+          workspaceId: "workspace-1",
+        }).success,
+      ).toBe(true);
+      expect(
+        securitySettingsFormSchema.safeParse({ permissionMode: mode }).success,
+      ).toBe(true);
+    }
+    expect(
+      securitySettingsFormSchema.safeParse({ permissionMode: "yolo" }).success,
+    ).toBe(false);
+  });
+
+  it("accepts the max reasoning effort on thread settings", () => {
+    expect(
+      threadSettingsSchema.safeParse({
+        reasoningEffort: "max",
+        threadId: "thread-1",
+      }).success,
+    ).toBe(true);
   });
 });

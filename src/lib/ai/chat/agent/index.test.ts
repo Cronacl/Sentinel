@@ -131,7 +131,15 @@ mock.module("@/lib/ai/providers/models", async () => {
 
   return {
     ...actual,
-    REASONING_EFFORTS: ["none", "minimal", "low", "medium", "high", "xhigh"],
+    REASONING_EFFORTS: [
+      "none",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ],
     getReasoningProviderOptions: getReasoningProviderOptionsMock,
     toCompositeModelId: (provider: string, model: string) =>
       `${provider}:${model}`,

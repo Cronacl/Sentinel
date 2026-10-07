@@ -2,6 +2,8 @@ import "server-only";
 
 import { generateId } from "ai";
 
+import { DRIVER_CATALOG } from "@/lib/ai/chat/engines/catalog";
+import { resolveSupportedPermissionMode } from "@/lib/security";
 import { getCodexAppServerManager } from "@/lib/ai/chat/engines/codex-app-server";
 import type {
   CodexApprovalRequestEvent,
@@ -2293,10 +2295,13 @@ export async function runCodexThreadChat(
     request.userId,
     request.threadId,
   );
-  const permissionMode = await getToolPermissionMode(
-    request.userId,
-    request.workspaceId,
-    request.threadId,
+  const permissionMode = resolveSupportedPermissionMode(
+    await getToolPermissionMode(
+      request.userId,
+      request.workspaceId,
+      request.threadId,
+    ),
+    DRIVER_CATALOG.codex.capabilities.permissionModes,
   );
   const approvalPolicy = getCodexApprovalPolicy(permissionMode);
   const sandboxMode = getCodexSandboxMode(permissionMode, workspaceRoot);

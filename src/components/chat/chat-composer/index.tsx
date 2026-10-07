@@ -11,6 +11,7 @@ import {
   type DragEvent as ReactDragEvent,
 } from "react";
 import { Button } from "@heroui/react";
+import { getDriverPermissionModes } from "@/lib/ai/chat/engines/catalog";
 import { DEFAULT_FOLLOW_UP_BEHAVIOR } from "@/schemas/general-settings.schema";
 import type { SentinelComposerToolTag } from "@/lib/ai/chat/tools/selection/tags";
 import {
@@ -866,6 +867,7 @@ export function ChatComposer({
               onDraftPreparedWorktreeChange={onDraftPreparedWorktreeChange}
               onDraftProjectModeChange={onDraftProjectModeChange}
               onSetupPendingChange={setIsRepoSetupPending}
+              permissionModes={getDriverPermissionModes(selectedEngine)}
               repoThreadId={repoThreadId}
               showBranchSwitcher={showBranchSwitcher}
             />

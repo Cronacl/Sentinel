@@ -167,6 +167,8 @@ export const DRIVER_CATALOG = {
   codex: {
     capabilities: {
       ...EXTERNAL_CAPABILITIES,
+      // Typed literally so the runtime's mapping is checked when this widens.
+      permissionModes: DEFAULT_DRIVER_PERMISSION_MODES,
       reportsContextWindow: true,
       reportsNativeSkills: true,
       reportsSlashCommands: true,
@@ -195,6 +197,8 @@ export const DRIVER_CATALOG = {
   claude: {
     capabilities: {
       ...EXTERNAL_CAPABILITIES,
+      // Typed literally so the runtime's mapping is checked when this widens.
+      permissionModes: DEFAULT_DRIVER_PERMISSION_MODES,
       planModeChangeRequiresNewSession: true,
       reportsContextWindow: true,
       supportsImages: true,
@@ -225,6 +229,8 @@ export const DRIVER_CATALOG = {
   copilot: {
     capabilities: {
       ...EXTERNAL_CAPABILITIES,
+      // Typed literally so the runtime's mapping is checked when this widens.
+      permissionModes: DEFAULT_DRIVER_PERMISSION_MODES,
       supportsTextGeneration: true,
       supportsUserInput: true,
     },
@@ -255,6 +261,8 @@ export const DRIVER_CATALOG = {
   cursor: {
     capabilities: {
       ...EXTERNAL_CAPABILITIES,
+      // Typed literally so the runtime's mapping is checked when this widens.
+      permissionModes: DEFAULT_DRIVER_PERMISSION_MODES,
       // Automations run Cursor with tools disabled today (runner.ts).
       supportsUnattendedTools: false,
       supportsUserInput: true,
@@ -282,6 +290,8 @@ export const DRIVER_CATALOG = {
   opencode: {
     capabilities: {
       ...EXTERNAL_CAPABILITIES,
+      // Typed literally so the runtime's mapping is checked when this widens.
+      permissionModes: DEFAULT_DRIVER_PERMISSION_MODES,
       supportsPlanMode: "agent-select",
       // A new OpenCode session is created every turn; history is replayed.
       supportsResume: "replay",

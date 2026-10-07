@@ -27,6 +27,7 @@ export const REASONING_EFFORTS = [
   "medium",
   "high",
   "xhigh",
+  "max",
 ] as const;
 
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
@@ -68,11 +69,11 @@ type ReasoningConfig = {
   supportedEfforts: readonly ReasoningEffort[];
 };
 
-// REASONING_EFFORTS stops at `xhigh`; the `max` level that GPT-5.6/GPT-6,
-// Claude Opus 4.6+, DeepSeek V4 and Kimi K3 accept is not exposed yet
-// (widening the effort scale belongs to the engine platform phase). Where a
-// model has no `xhigh` but does have `max`, `xhigh` maps to `max`, the same
-// mapping the AI SDK applies to its top-level `reasoning: "xhigh"`.
+// REASONING_EFFORTS includes `max` so threads, follow-ups and automations
+// can carry it, but no catalog model lists it in supportedEfforts yet, so the
+// composer does not offer it. Where a model has no `xhigh` but does have
+// `max`, `xhigh` maps to `max`, the same mapping the AI SDK applies to its
+// top-level `reasoning: "xhigh"`.
 
 // GPT-5 (Aug 2025): `minimal` is its lowest level; `none` arrived with 5.1.
 const OPENAI_LEGACY_GPT_5_REASONING_CONFIG: ReasoningConfig = {

@@ -44,7 +44,7 @@ import {
   useShortcutLabel,
   useShortcutScope,
 } from "@/lib/shortcuts/provider";
-import type { ChatEngine } from "@/server/db/enums";
+import type { ChatEngine, PermissionMode } from "@/server/db/enums";
 import {
   applyThreadSnapshotCacheUpdate,
   applyThreadSettingsCacheUpdate,
@@ -98,7 +98,7 @@ type ThreadScreenProps = {
     id: string;
     kind: "project" | "quick_chat";
     name: string;
-    permissionModeOverride: "default" | "full" | null;
+    permissionModeOverride: PermissionMode | null;
     rootPath: string | null;
     updatedAt: Date;
   };

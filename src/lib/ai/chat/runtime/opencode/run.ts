@@ -7,6 +7,8 @@ import type {
   QuestionRequest,
 } from "@opencode-ai/sdk/v2";
 
+import { DRIVER_CATALOG } from "@/lib/ai/chat/engines/catalog";
+import { resolveSupportedPermissionMode } from "@/lib/security";
 import {
   buildOpenCodeThreadState,
   openCodeQuestionId,
@@ -1309,10 +1311,13 @@ export async function runOpenCodeThreadChat(
   let permissionMode: PermissionMode;
   let session: OpenCodeSession;
   try {
-    permissionMode = await getToolPermissionMode(
-      request.userId,
-      request.workspaceId,
-      request.threadId,
+    permissionMode = resolveSupportedPermissionMode(
+      await getToolPermissionMode(
+        request.userId,
+        request.workspaceId,
+        request.threadId,
+      ),
+      DRIVER_CATALOG.opencode.capabilities.permissionModes,
     );
     session = await startOpenCodeSession({
       cwd: workspaceRoot,

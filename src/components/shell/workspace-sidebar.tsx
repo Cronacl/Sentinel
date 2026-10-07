@@ -77,6 +77,7 @@ import {
   type ThemePreference,
 } from "@/lib/appearance";
 import type { RepoLastPullRequest } from "@/lib/ai/chat/engines/types";
+import type { PermissionMode } from "@/lib/security";
 import {
   useShortcutAction,
   useShortcutLabel,
@@ -142,7 +143,7 @@ function toCurrentWorkspace(
         isExpanded?: boolean;
         kind?: "project" | "quick_chat";
         name: string;
-        permissionModeOverride?: "default" | "full" | null;
+        permissionModeOverride?: PermissionMode | null;
         rootPath: string | null;
         sortOrder?: number;
         updatedAt: Date;

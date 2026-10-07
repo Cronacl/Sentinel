@@ -2,6 +2,8 @@ import "server-only";
 
 import { generateId } from "ai";
 
+import { DRIVER_CATALOG } from "@/lib/ai/chat/engines/catalog";
+import { resolveSupportedPermissionMode } from "@/lib/security";
 import {
   applyCursorSessionConfig,
   buildCursorThreadState,
@@ -1128,10 +1130,13 @@ export async function runCursorThreadChat(
   let permissionMode: PermissionMode;
   let session: Awaited<ReturnType<typeof startCursorAcpSession>>;
   try {
-    permissionMode = await getToolPermissionMode(
-      request.userId,
-      request.workspaceId,
-      request.threadId,
+    permissionMode = resolveSupportedPermissionMode(
+      await getToolPermissionMode(
+        request.userId,
+        request.workspaceId,
+        request.threadId,
+      ),
+      DRIVER_CATALOG.cursor.capabilities.permissionModes,
     );
     const resumeSessionId = getCursorThreadState(
       existingThread?.chatEngineState,

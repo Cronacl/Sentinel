@@ -11,6 +11,8 @@ import type {
   SessionEvent,
 } from "@github/copilot-sdk";
 
+import { DRIVER_CATALOG } from "@/lib/ai/chat/engines/catalog";
+import { resolveSupportedPermissionMode } from "@/lib/security";
 import {
   buildCopilotThreadState,
   getCopilotClientManager,
@@ -1412,10 +1414,13 @@ export async function runCopilotThreadChat(
     request.userId,
     request.threadId,
   );
-  const workspacePermissionMode = await getToolPermissionMode(
-    request.userId,
-    request.workspaceId,
-    request.threadId,
+  const workspacePermissionMode = resolveSupportedPermissionMode(
+    await getToolPermissionMode(
+      request.userId,
+      request.workspaceId,
+      request.threadId,
+    ),
+    DRIVER_CATALOG.copilot.capabilities.permissionModes,
   );
   const toolApprovalPolicies = await getToolApprovalPolicies(request.userId);
   const existingCopilotState = getCopilotThreadState(

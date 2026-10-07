@@ -93,5 +93,12 @@ describe("createAutomationSchema", () => {
         reasoningEffort: "xhigh",
       }).success,
     ).toBe(true);
+
+    expect(
+      createAutomationSchema.safeParse({
+        ...validAutomation,
+        reasoningEffort: "max",
+      }).success,
+    ).toBe(true);
   });
 });

@@ -12,6 +12,8 @@ import {
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 
+import { DRIVER_CATALOG } from "@/lib/ai/chat/engines/catalog";
+import { resolveSupportedPermissionMode } from "@/lib/security";
 import {
   buildClaudeSdkBaseOptions,
   buildClaudeThreadState,
@@ -1684,10 +1686,13 @@ export async function runClaudeThreadChat(
     request.userId,
     request.threadId,
   );
-  const workspacePermissionMode = await getToolPermissionMode(
-    request.userId,
-    request.workspaceId,
-    request.threadId,
+  const workspacePermissionMode = resolveSupportedPermissionMode(
+    await getToolPermissionMode(
+      request.userId,
+      request.workspaceId,
+      request.threadId,
+    ),
+    DRIVER_CATALOG.claude.capabilities.permissionModes,
   );
   const existingClaudeState = getClaudeThreadState(
     existingThread?.chatEngineState,
