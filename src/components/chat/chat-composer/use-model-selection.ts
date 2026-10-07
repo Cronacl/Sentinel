@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { getDriverMeta } from "@/lib/ai/chat/engines/catalog";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ChatEngine } from "@/server/db/enums";
 import { api } from "@/trpc/react";
-import type { ChatComposerOpenCodeSelection } from "./types";
+import type {
+  ChatComposerOpenCodeSelection,
+  ChatComposerSelectionChange,
+  ChatComposerThreadSelection,
+} from "./types";
 
 import {
   FALLBACK_CHAT_ENGINE_OPTIONS,
@@ -14,6 +19,7 @@ import {
   resolveReasoningEffort,
   resolveStableSelectableModels,
   type ChatComposerEngineOption,
+  type ChatComposerModel,
 } from "../chat-composer-helpers";
 import {
   findPreferredModel,
@@ -23,15 +29,42 @@ import {
 import type { usePersistSelection } from "./use-persist-selection";
 
 type PersistSelectionReturn = ReturnType<typeof usePersistSelection>;
-const MODEL_SELECTION_ENGINES = [
-  "claude",
-  "codex",
-  "copilot",
-  "cursor",
-  "opencode",
-  "sentinel",
-] as const;
+type ModelsByInstance = Record<string, ChatComposerModel[]>;
 
+const EMPTY_MODELS: ChatComposerModel[] = [];
+
+/**
+ * The built-in engine lists the provider catalog: when every live model is
+ * inactive (no provider connected), it shows none rather than a stale
+ * cached list.
+ */
+function isBuiltinEngine(engine: string) {
+  return getDriverMeta(engine)?.runtime === "builtin";
+}
+
+/** The instance a stored selection points at (NULL/absent: the default). */
+function preferredInstanceOf(
+  selection: { engine?: string | null; engineInstanceId?: string | null },
+  fallbackEngine: string,
+) {
+  const engine = selection.engine ?? fallbackEngine;
+  return selection.engineInstanceId ?? engine;
+}
+
+function filterSelectableModelsByInstance(models: ModelsByInstance) {
+  return Object.fromEntries(
+    Object.entries(models).map(([instanceId, list]) => [
+      instanceId,
+      filterSelectableModels(list),
+    ]),
+  ) as ModelsByInstance;
+}
+
+/**
+ * The composer's engine and model selection. Engines are picked per
+ * instance (engines.composerCatalog lists every enabled instance with its
+ * models in one query); the driver kind travels alongside as `engine`.
+ */
 export function useModelSelection({
   globalSelectionQuery,
   openCodeSelection,
@@ -47,142 +80,57 @@ export function useModelSelection({
   onOpenCodeSelectionChange?: (
     selection: ChatComposerOpenCodeSelection,
   ) => void;
-  onSelectionChange?: (input: {
-    engine?: ChatEngine;
-    modelId?: string | null;
-    mode?: "chat" | "plan";
-    reasoningEffort?: ReasoningEffort | null;
-  }) => void;
+  onSelectionChange?: (input: ChatComposerSelectionChange) => void;
   persistEngineSelection: PersistSelectionReturn["persistEngineSelection"];
   persistSelection: PersistSelectionReturn["persistSelection"];
   selectionScopeKey: string;
-  threadSelection?: {
-    engine?: ChatEngine;
-    modelId: string | null;
-    mode?: "chat" | "plan";
-    reasoningEffort?: ReasoningEffort | null;
-  } | null;
+  threadSelection?: ChatComposerThreadSelection | null;
 }) {
   const utils = api.useUtils();
-  const cachedEngines = utils.engines.list.getData() ?? [];
-  const cachedEngineData = cachedEngines.map((engine) => ({
-    engine: engine.engine,
-    error: engine.error,
-    isAvailable: engine.isAvailable,
-    label: engine.label,
-  }));
-  const cachedSentinelModels =
-    utils.engines.models.getData({ engine: "sentinel" }) ?? [];
-  const cachedCodexModels =
-    utils.engines.models.getData({ engine: "codex" }) ?? [];
-  const cachedClaudeModels =
-    utils.engines.models.getData({ engine: "claude" }) ?? [];
-  const cachedCopilotModels =
-    utils.engines.models.getData({ engine: "copilot" }) ?? [];
-  const cachedCursorModels =
-    utils.engines.models.getData({ engine: "cursor" }) ?? [];
-  const cachedOpenCodeModels =
-    utils.engines.models.getData({ engine: "opencode" }) ?? [];
+  const cachedCatalog = utils.engines.composerCatalog.getData();
 
-  const enginesQuery = api.engines.list.useQuery(undefined, {
-    initialData: cachedEngines.length > 0 ? cachedEngines : undefined,
+  const catalogQuery = api.engines.composerCatalog.useQuery(undefined, {
+    initialData:
+      cachedCatalog && cachedCatalog.options.length > 0
+        ? cachedCatalog
+        : undefined,
     staleTime: 60_000,
   });
-  const sentinelModelsQuery = api.engines.models.useQuery(
-    {
-      engine: "sentinel",
-    },
-    {
-      initialData:
-        cachedSentinelModels.length > 0 ? cachedSentinelModels : undefined,
-      staleTime: 60_000,
-    },
-  );
-  const codexModelsQuery = api.engines.models.useQuery(
-    {
-      engine: "codex",
-    },
-    {
-      initialData: cachedCodexModels.length > 0 ? cachedCodexModels : undefined,
-      staleTime: 60_000,
-    },
-  );
-  const claudeModelsQuery = api.engines.models.useQuery(
-    {
-      engine: "claude",
-    },
-    {
-      initialData:
-        cachedClaudeModels.length > 0 ? cachedClaudeModels : undefined,
-      staleTime: 60_000,
-    },
-  );
-  const copilotModelsQuery = api.engines.models.useQuery(
-    {
-      engine: "copilot",
-    },
-    {
-      initialData:
-        cachedCopilotModels.length > 0 ? cachedCopilotModels : undefined,
-      staleTime: 60_000,
-    },
-  );
-  const cursorModelsQuery = api.engines.models.useQuery(
-    {
-      engine: "cursor",
-    },
-    {
-      initialData:
-        cachedCursorModels.length > 0 ? cachedCursorModels : undefined,
-      staleTime: 60_000,
-    },
-  );
-  const openCodeModelsQuery = api.engines.models.useQuery(
-    {
-      engine: "opencode",
-    },
-    {
-      initialData:
-        cachedOpenCodeModels.length > 0 ? cachedOpenCodeModels : undefined,
-      staleTime: 60_000,
-    },
-  );
   const [cachedEngineOptions, setCachedEngineOptions] = useState<
     ChatComposerEngineOption[]
   >(() =>
-    cachedEngineData.length > 0
-      ? cachedEngineData
+    cachedCatalog && cachedCatalog.options.length > 0
+      ? cachedCatalog.options
       : [...FALLBACK_CHAT_ENGINE_OPTIONS],
   );
-  const [cachedAvailableModelsByEngine, setCachedAvailableModelsByEngine] =
-    useState<Record<ChatEngine, ReturnType<typeof filterSelectableModels>>>(
-      () => ({
-        claude: filterSelectableModels(cachedClaudeModels),
-        codex: filterSelectableModels(cachedCodexModels),
-        copilot: filterSelectableModels(cachedCopilotModels),
-        cursor: filterSelectableModels(cachedCursorModels),
-        opencode: filterSelectableModels(cachedOpenCodeModels),
-        sentinel: filterSelectableModels(cachedSentinelModels),
-      }),
+  const [cachedAvailableModelsByInstance, setCachedAvailableModelsByInstance] =
+    useState<ModelsByInstance>(() =>
+      filterSelectableModelsByInstance(cachedCatalog?.modelsByInstance ?? {}),
     );
   const initializedSelectionScopeRef = useRef<string | null>(null);
   const threadPersistenceReadyRef = useRef(false);
-  const manualEngineSelectionRef = useRef<ChatEngine | null>(null);
+  const manualInstanceSelectionRef = useRef<string | null>(null);
 
-  const preferredEngine =
-    threadSelection?.engine ?? globalSelectionQuery.data?.engine ?? "sentinel";
+  const globalSelection = globalSelectionQuery.data;
+  const preferredEngine: ChatEngine =
+    threadSelection?.engine ?? globalSelection?.engine ?? "sentinel";
+  const preferredInstanceId = threadSelection?.engine
+    ? preferredInstanceOf(threadSelection, preferredEngine)
+    : preferredInstanceOf(globalSelection ?? {}, preferredEngine);
   const hasThreadSelection = Boolean(threadSelection?.modelId);
   const preferredModelId = hasThreadSelection
     ? (threadSelection?.modelId ?? null)
-    : (globalSelectionQuery.data?.modelId ?? null);
+    : (globalSelection?.modelId ?? null);
   const preferredReasoningEffort = hasThreadSelection
     ? (threadSelection?.reasoningEffort ?? null)
-    : ((globalSelectionQuery.data?.reasoningEffort as ReasoningEffort | null) ??
-      null);
+    : ((globalSelection?.reasoningEffort as ReasoningEffort | null) ?? null);
   const preferredOpenCodeAgent = openCodeSelection?.agent ?? null;
   const preferredOpenCodeVariant = openCodeSelection?.variant ?? null;
   const [selectedEngine, setSelectedEngine] = useState<ChatEngine>(
     () => preferredEngine,
+  );
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string>(
+    () => preferredInstanceId,
   );
   const [selectedModelKey, setSelectedModelKey] = useState<string | null>(
     () => preferredModelId,
@@ -201,107 +149,52 @@ export function useModelSelection({
     !globalSelectionQuery.isLoading;
 
   const liveEngineOptions = useMemo(
-    () =>
-      (enginesQuery.data ?? []).map((engine) => ({
-        engine: engine.engine,
-        error: engine.error,
-        isAvailable: engine.isAvailable,
-        label: engine.label,
-      })),
-    [enginesQuery.data],
+    () => catalogQuery.data?.options ?? [],
+    [catalogQuery.data?.options],
   );
   const engineOptions = useMemo(
     () => resolveStableEngineOptions(liveEngineOptions, cachedEngineOptions),
     [cachedEngineOptions, liveEngineOptions],
   );
   const selectedEngineStatus =
-    engineOptions.find((engine) => engine.engine === selectedEngine) ?? null;
-  const modelsByEngine = {
-    claude: claudeModelsQuery.data ?? [],
-    codex: codexModelsQuery.data ?? [],
-    copilot: copilotModelsQuery.data ?? [],
-    cursor: cursorModelsQuery.data ?? [],
-    opencode: openCodeModelsQuery.data ?? [],
-    sentinel: sentinelModelsQuery.data ?? [],
-  };
-  const modelsQueryByEngine = {
-    claude: claudeModelsQuery,
-    codex: codexModelsQuery,
-    copilot: copilotModelsQuery,
-    cursor: cursorModelsQuery,
-    opencode: openCodeModelsQuery,
-    sentinel: sentinelModelsQuery,
-  };
-  const selectedEngineModels = modelsByEngine[selectedEngine];
-  const modelsQuery = modelsQueryByEngine[selectedEngine];
-  const liveAvailableModelsByEngine = useMemo(
-    () => ({
-      claude: filterSelectableModels(modelsByEngine.claude),
-      codex: filterSelectableModels(modelsByEngine.codex),
-      copilot: filterSelectableModels(modelsByEngine.copilot),
-      cursor: filterSelectableModels(modelsByEngine.cursor),
-      opencode: filterSelectableModels(modelsByEngine.opencode),
-      sentinel: filterSelectableModels(modelsByEngine.sentinel),
-    }),
-    [
-      modelsByEngine.claude,
-      modelsByEngine.codex,
-      modelsByEngine.copilot,
-      modelsByEngine.cursor,
-      modelsByEngine.opencode,
-      modelsByEngine.sentinel,
-    ],
+    engineOptions.find((option) => option.instanceId === selectedInstanceId) ??
+    null;
+  const modelsByInstance = catalogQuery.data?.modelsByInstance;
+  const selectedEngineModels =
+    modelsByInstance?.[selectedInstanceId] ?? EMPTY_MODELS;
+  const liveAvailableModelsByInstance = useMemo(
+    () => filterSelectableModelsByInstance(modelsByInstance ?? {}),
+    [modelsByInstance],
   );
-  const availableModelsByEngine = useMemo(
-    () => ({
-      claude: resolveStableSelectableModels(
-        modelsByEngine.claude,
-        cachedAvailableModelsByEngine.claude,
-      ),
-      codex: resolveStableSelectableModels(
-        modelsByEngine.codex,
-        cachedAvailableModelsByEngine.codex,
-      ),
-      copilot: resolveStableSelectableModels(
-        modelsByEngine.copilot,
-        cachedAvailableModelsByEngine.copilot,
-      ),
-      cursor: resolveStableSelectableModels(
-        modelsByEngine.cursor,
-        cachedAvailableModelsByEngine.cursor,
-      ),
-      opencode: resolveStableSelectableModels(
-        modelsByEngine.opencode,
-        cachedAvailableModelsByEngine.opencode,
-      ),
-      sentinel: resolveStableSelectableModels(
-        modelsByEngine.sentinel,
-        cachedAvailableModelsByEngine.sentinel,
-        { reuseCacheWhenLiveHasOnlyInactiveModels: false },
-      ),
-    }),
-    [
-      cachedAvailableModelsByEngine.claude,
-      cachedAvailableModelsByEngine.codex,
-      cachedAvailableModelsByEngine.copilot,
-      cachedAvailableModelsByEngine.cursor,
-      cachedAvailableModelsByEngine.opencode,
-      cachedAvailableModelsByEngine.sentinel,
-      modelsByEngine.claude,
-      modelsByEngine.codex,
-      modelsByEngine.copilot,
-      modelsByEngine.cursor,
-      modelsByEngine.opencode,
-      modelsByEngine.sentinel,
-    ],
-  );
-  const availableModels = availableModelsByEngine[selectedEngine];
-  const displayModels =
-    selectedEngine === "sentinel"
-      ? availableModels
-      : selectedEngineModels.length > 0
-        ? selectedEngineModels
-        : availableModels;
+  const availableModelsByInstance = useMemo(() => {
+    const instanceIds = new Set([
+      ...Object.keys(modelsByInstance ?? {}),
+      ...Object.keys(cachedAvailableModelsByInstance),
+    ]);
+    const result: ModelsByInstance = {};
+    for (const instanceId of instanceIds) {
+      const live = modelsByInstance?.[instanceId] ?? EMPTY_MODELS;
+      const engine =
+        live[0]?.engine ??
+        cachedAvailableModelsByInstance[instanceId]?.[0]?.engine ??
+        instanceId;
+      result[instanceId] = resolveStableSelectableModels(
+        live,
+        cachedAvailableModelsByInstance[instanceId] ?? EMPTY_MODELS,
+        isBuiltinEngine(engine)
+          ? { reuseCacheWhenLiveHasOnlyInactiveModels: false }
+          : {},
+      );
+    }
+    return result;
+  }, [cachedAvailableModelsByInstance, modelsByInstance]);
+  const availableModels =
+    availableModelsByInstance[selectedInstanceId] ?? EMPTY_MODELS;
+  const displayModels = isBuiltinEngine(selectedEngine)
+    ? availableModels
+    : selectedEngineModels.length > 0
+      ? selectedEngineModels
+      : availableModels;
 
   const selectedModel =
     displayModels.find((model) => model.modelId === selectedModelKey) ?? null;
@@ -310,7 +203,7 @@ export function useModelSelection({
     selectedModel?.supportedReasoningEfforts ?? [];
 
   useEffect(() => {
-    if (selectedModel?.engine !== "opencode") {
+    if (!selectedModel?.openCode) {
       if (selectedOpenCodeAgent !== null) {
         setSelectedOpenCodeAgent(null);
       }
@@ -320,15 +213,13 @@ export function useModelSelection({
       return;
     }
 
-    const agentOptions = selectedModel.openCode?.agentOptions ?? [];
-    const variantOptions = selectedModel.openCode?.variantOptions ?? [];
     const nextAgent = resolveOpenCodeTraitSelectionValue(
-      agentOptions,
+      selectedModel.openCode.agentOptions,
       selectedOpenCodeAgent,
       preferredOpenCodeAgent,
     );
     const nextVariant = resolveOpenCodeTraitSelectionValue(
-      variantOptions,
+      selectedModel.openCode.variantOptions,
       selectedOpenCodeVariant,
       preferredOpenCodeVariant,
     );
@@ -371,27 +262,30 @@ export function useModelSelection({
   }, [liveEngineOptions]);
 
   useEffect(() => {
-    setCachedAvailableModelsByEngine((currentCache) => {
+    setCachedAvailableModelsByInstance((currentCache) => {
       let changed = false;
       const nextCache = { ...currentCache };
 
-      for (const engine of MODEL_SELECTION_ENGINES) {
-        const nextModels = liveAvailableModelsByEngine[engine];
-
+      for (const [instanceId, nextModels] of Object.entries(
+        liveAvailableModelsByInstance,
+      )) {
         if (
           nextModels.length === 0 ||
-          haveSameSelectableModelSet(currentCache[engine], nextModels)
+          haveSameSelectableModelSet(
+            currentCache[instanceId] ?? EMPTY_MODELS,
+            nextModels,
+          )
         ) {
           continue;
         }
 
-        nextCache[engine] = nextModels;
+        nextCache[instanceId] = nextModels;
         changed = true;
       }
 
       return changed ? nextCache : currentCache;
     });
-  }, [liveAvailableModelsByEngine]);
+  }, [liveAvailableModelsByInstance]);
 
   useEffect(() => {
     if (!preferencesReady) {
@@ -400,8 +294,14 @@ export function useModelSelection({
 
     if (initializedSelectionScopeRef.current !== selectionScopeKey) {
       setSelectedEngine(preferredEngine);
+      setSelectedInstanceId(preferredInstanceId);
     }
-  }, [preferredEngine, preferencesReady, selectionScopeKey]);
+  }, [
+    preferredEngine,
+    preferredInstanceId,
+    preferencesReady,
+    selectionScopeKey,
+  ]);
 
   useEffect(() => {
     if (
@@ -410,15 +310,16 @@ export function useModelSelection({
     ) {
       return;
     }
-    if (manualEngineSelectionRef.current) {
-      if (manualEngineSelectionRef.current === preferredEngine) {
-        manualEngineSelectionRef.current = null;
+    if (manualInstanceSelectionRef.current) {
+      if (manualInstanceSelectionRef.current === preferredInstanceId) {
+        manualInstanceSelectionRef.current = null;
       }
       return;
     }
     setSelectedEngine(preferredEngine);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync only when preferredEngine changes, not selectedEngine
-  }, [preferredEngine]);
+    setSelectedInstanceId(preferredInstanceId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync only when the preferred instance changes, not the selection
+  }, [preferredEngine, preferredInstanceId]);
 
   useEffect(() => {
     if (!preferencesReady) {
@@ -429,11 +330,11 @@ export function useModelSelection({
       return;
     }
 
-    if (selectedEngine !== preferredEngine) {
+    if (selectedInstanceId !== preferredInstanceId) {
       return;
     }
 
-    if (modelsQuery.isLoading && availableModels.length === 0) {
+    if (catalogQuery.isLoading && availableModels.length === 0) {
       return;
     }
 
@@ -477,23 +378,27 @@ export function useModelSelection({
     ) {
       onSelectionChange?.({
         engine: selectedEngine,
+        engineInstanceId: selectedInstanceId,
         modelId: nextModel.modelId,
         reasoningEffort: nextReasoningEffort,
       });
       persistSelection(nextModel.modelId, nextReasoningEffort, {
         engine: selectedEngine,
+        engineInstanceId: selectedInstanceId,
       });
     }
   }, [
     availableModels,
+    catalogQuery.isLoading,
     onSelectionChange,
     persistSelection,
     preferredEngine,
+    preferredInstanceId,
     preferredModelId,
     preferredReasoningEffort,
     preferencesReady,
-    modelsQuery.isLoading,
     selectedEngine,
+    selectedInstanceId,
     selectionScopeKey,
   ]);
 
@@ -525,11 +430,13 @@ export function useModelSelection({
     setSelectedReasoningEffort(nextReasoningEffort);
     onSelectionChange?.({
       engine: selectedEngine,
+      engineInstanceId: selectedInstanceId,
       modelId: nextModel.modelId,
       reasoningEffort: nextReasoningEffort,
     });
     persistSelection(nextModel.modelId, nextReasoningEffort, {
       engine: selectedEngine,
+      engineInstanceId: selectedInstanceId,
     });
   }, [
     availableModels,
@@ -538,6 +445,7 @@ export function useModelSelection({
     preferredModelId,
     preferredReasoningEffort,
     selectedEngine,
+    selectedInstanceId,
     selectedModelKey,
     selectionScopeKey,
   ]);
@@ -555,7 +463,7 @@ export function useModelSelection({
     }
 
     if (availableModels.length === 0) {
-      if (selectedEngine === "sentinel" && selectedEngineModels.length > 0) {
+      if (isBuiltinEngine(selectedEngine) && selectedEngineModels.length > 0) {
         setSelectedModelKey(null);
         setSelectedReasoningEffort(null);
       }
@@ -574,11 +482,13 @@ export function useModelSelection({
     setSelectedReasoningEffort(fallbackEffort);
     onSelectionChange?.({
       engine: selectedEngine,
+      engineInstanceId: selectedInstanceId,
       modelId: fallbackModel.modelId,
       reasoningEffort: fallbackEffort,
     });
     persistSelection(fallbackModel.modelId, fallbackEffort, {
       engine: selectedEngine,
+      engineInstanceId: selectedInstanceId,
     });
   }, [
     availableModels,
@@ -586,6 +496,7 @@ export function useModelSelection({
     persistSelection,
     selectedEngine,
     selectedEngineModels.length,
+    selectedInstanceId,
     selectedModelKey,
   ]);
 
@@ -607,13 +518,20 @@ export function useModelSelection({
     }
   }, [selectedModel, selectedReasoningEffort]);
 
+  /** Selects an engine instance (by instance id; a driver kind is its default). */
   const handleSelectEngine = useCallback(
-    (engine: ChatEngine) => {
-      manualEngineSelectionRef.current = engine;
+    (instanceId: string) => {
+      const option =
+        engineOptions.find(
+          (candidate) => candidate.instanceId === instanceId,
+        ) ?? null;
+      const engine = (option?.engine ?? instanceId) as ChatEngine;
+      manualInstanceSelectionRef.current = instanceId;
       setSelectedEngine(engine);
+      setSelectedInstanceId(instanceId);
       initializedSelectionScopeRef.current = null;
 
-      const nextModel = availableModelsByEngine[engine][0];
+      const nextModel = availableModelsByInstance[instanceId]?.[0];
       const nextMode = undefined;
 
       if (!nextModel) {
@@ -621,14 +539,15 @@ export function useModelSelection({
         setSelectedReasoningEffort(null);
         onSelectionChange?.({
           engine,
+          engineInstanceId: instanceId,
           modelId: null,
           mode: nextMode,
           reasoningEffort: null,
         });
-        persistEngineSelection(
-          engine,
-          nextMode ? { mode: nextMode } : undefined,
-        );
+        persistEngineSelection(engine, {
+          engineInstanceId: instanceId,
+          ...(nextMode ? { mode: nextMode } : {}),
+        });
         return;
       }
 
@@ -637,17 +556,20 @@ export function useModelSelection({
       setSelectedReasoningEffort(nextReasoningEffort);
       onSelectionChange?.({
         engine,
+        engineInstanceId: instanceId,
         modelId: nextModel.modelId,
         mode: nextMode,
         reasoningEffort: nextReasoningEffort,
       });
       persistSelection(nextModel.modelId, nextReasoningEffort, {
         engine,
+        engineInstanceId: instanceId,
         ...(nextMode ? { mode: nextMode } : {}),
       });
     },
     [
-      availableModelsByEngine,
+      availableModelsByInstance,
+      engineOptions,
       onSelectionChange,
       persistEngineSelection,
       persistSelection,
@@ -672,11 +594,13 @@ export function useModelSelection({
       setSelectedReasoningEffort(nextReasoningEffort);
       onSelectionChange?.({
         engine: selectedEngine,
+        engineInstanceId: selectedInstanceId,
         modelId: modelKey,
         reasoningEffort: nextReasoningEffort,
       });
       persistSelection(modelKey, nextReasoningEffort, {
         engine: selectedEngine,
+        engineInstanceId: selectedInstanceId,
       });
     },
     [
@@ -684,6 +608,7 @@ export function useModelSelection({
       onSelectionChange,
       persistSelection,
       selectedEngine,
+      selectedInstanceId,
       selectedReasoningEffort,
     ],
   );
@@ -697,14 +622,22 @@ export function useModelSelection({
       setSelectedReasoningEffort(effort);
       onSelectionChange?.({
         engine: selectedEngine,
+        engineInstanceId: selectedInstanceId,
         modelId: selectedModelKey,
         reasoningEffort: effort,
       });
       persistSelection(selectedModelKey, effort, {
         engine: selectedEngine,
+        engineInstanceId: selectedInstanceId,
       });
     },
-    [onSelectionChange, persistSelection, selectedEngine, selectedModelKey],
+    [
+      onSelectionChange,
+      persistSelection,
+      selectedEngine,
+      selectedInstanceId,
+      selectedModelKey,
+    ],
   );
 
   const handleSelectOpenCodeAgent = useCallback((agent: string | null) => {
@@ -715,22 +648,20 @@ export function useModelSelection({
     setSelectedOpenCodeVariant(variant);
   }, []);
 
-  const effectiveSelectedOpenCodeAgent =
-    selectedModel?.engine === "opencode"
-      ? resolveOpenCodeTraitSelectionValue(
-          selectedModel.openCode?.agentOptions,
-          selectedOpenCodeAgent,
-          preferredOpenCodeAgent,
-        )
-      : null;
-  const effectiveSelectedOpenCodeVariant =
-    selectedModel?.engine === "opencode"
-      ? resolveOpenCodeTraitSelectionValue(
-          selectedModel.openCode?.variantOptions,
-          selectedOpenCodeVariant,
-          preferredOpenCodeVariant,
-        )
-      : null;
+  const effectiveSelectedOpenCodeAgent = selectedModel?.openCode
+    ? resolveOpenCodeTraitSelectionValue(
+        selectedModel.openCode.agentOptions,
+        selectedOpenCodeAgent,
+        preferredOpenCodeAgent,
+      )
+    : null;
+  const effectiveSelectedOpenCodeVariant = selectedModel?.openCode
+    ? resolveOpenCodeTraitSelectionValue(
+        selectedModel.openCode.variantOptions,
+        selectedOpenCodeVariant,
+        preferredOpenCodeVariant,
+      )
+    : null;
 
   useEffect(() => {
     onOpenCodeSelectionChange?.({
@@ -746,15 +677,16 @@ export function useModelSelection({
   return {
     availableModels,
     engineOptions,
-    enginesQuery,
+    enginesQuery: catalogQuery,
     handleSelectEngine,
     handleSelectModel,
     handleSelectOpenCodeAgent,
     handleSelectOpenCodeVariant,
     handleSelectReasoningEffort,
-    modelsQuery,
+    modelsQuery: catalogQuery,
     selectedEngine,
     selectedEngineStatus,
+    selectedInstanceId,
     selectedOpenCodeAgent: effectiveSelectedOpenCodeAgent,
     selectedOpenCodeVariant: effectiveSelectedOpenCodeVariant,
     selectedModel,

@@ -1,34 +1,36 @@
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
-import type { ChatEngine } from "@/server/db/enums";
-import type { RouterOutputs } from "@/trpc/react";
+import { getDriverLabel, getDriverMeta } from "@/lib/ai/chat/engines/catalog";
+import type { PermissionMode } from "@/server/db/enums";
 
 import {
+  getEngineStabilityNotice,
   getReasoningEffortLabel,
-  isUnstableChatEngine,
   resolveReasoningEffort,
-  UNSTABLE_CHAT_ENGINE_DESCRIPTION,
+  type ChatComposerEngineOption,
   type ChatComposerModel,
 } from "@/components/chat/chat-composer-helpers";
 import type { SelectOption } from "@/components/forms/controlled-fields";
 
-type EngineStatus = RouterOutputs["engines"]["list"][number];
+export type AutomationEngineModel = ChatComposerModel;
 
-export type AutomationEngineModel = ChatComposerModel &
-  RouterOutputs["engines"]["models"][number];
-
+/**
+ * One option per engine instance (engines.composerCatalog). The value is the
+ * instance id; the driver kind comes from the option itself.
+ */
 export function getAutomationEngineOptions(
-  engines: EngineStatus[],
+  engines: readonly ChatComposerEngineOption[],
 ): SelectOption[] {
   return engines.map((engine) => {
+    const stability = getEngineStabilityNotice(engine);
     const descriptionSuffix = engine.description.endsWith(".") ? " " : ". ";
 
     return {
-      description: isUnstableChatEngine(engine.engine)
-        ? `${engine.description}${descriptionSuffix}${UNSTABLE_CHAT_ENGINE_DESCRIPTION}`
+      description: stability
+        ? `${engine.description}${descriptionSuffix}${stability.description}`
         : engine.description,
       isDisabled: !engine.isAvailable,
       label: engine.label,
-      value: engine.engine,
+      value: engine.instanceId,
     };
   });
 }
@@ -39,12 +41,26 @@ export function getAvailableAutomationModels(
   return (models ?? []).filter((model) => model.isConnected && model.isEnabled);
 }
 
-export function getAutomationModelsForEngine(
-  engine: ChatEngine | null | undefined,
-  queries: Partial<Record<ChatEngine, AutomationEngineModel[] | undefined>>,
+/** The models of one instance (by instance id). */
+export function getAutomationModelsForInstance(
+  instanceId: string | null | undefined,
+  modelsByInstance: Readonly<
+    Record<string, AutomationEngineModel[] | undefined>
+  >,
 ) {
-  if (!engine) return [];
-  return queries[engine] ?? [];
+  if (!instanceId) return [];
+  return modelsByInstance[instanceId] ?? [];
+}
+
+/**
+ * The instance a stored automation (or the user default) points at: its
+ * instance id, else the driver's default instance (whose id is the driver).
+ */
+export function resolveAutomationInstanceId(selection: {
+  chatEngine?: string | null;
+  chatEngineInstanceId?: string | null;
+}) {
+  return selection.chatEngineInstanceId ?? selection.chatEngine ?? "sentinel";
 }
 
 export function getAutomationModelOptions(
@@ -80,21 +96,31 @@ export function getAutomationModelOptions(
   return options;
 }
 
-function getEngineModelDescription(engine: ChatEngine) {
-  switch (engine) {
-    case "sentinel":
-      return "Built-in model";
-    case "codex":
-      return "Codex runtime";
-    case "claude":
-      return "Claude runtime";
-    case "copilot":
-      return "Copilot runtime";
-    case "cursor":
-      return "Cursor runtime";
-    case "opencode":
-      return "OpenCode runtime";
+function getEngineModelDescription(engine: string) {
+  return getDriverMeta(engine)?.runtime === "builtin"
+    ? "Built-in model"
+    : `${getDriverLabel(engine)} runtime`;
+}
+
+/**
+ * Automations run unattended (interactive: false). Below full access, an
+ * action that needs approval is either declined (engines that settle
+ * approvals themselves) or waits in the automation's thread. The form says
+ * which, from the engine's capabilities.
+ */
+export function getAutomationUnattendedNotice(
+  permissionMode: PermissionMode | null | undefined,
+  engine:
+    | Pick<ChatComposerEngineOption, "settlesUnattendedApprovals">
+    | null
+    | undefined,
+) {
+  if (permissionMode === "full" || !engine) {
+    return null;
   }
+  return engine.settlesUnattendedApprovals
+    ? "Automations run unattended: actions that need approval are declined unless the workspace allows full access."
+    : "Actions that need approval wait in the automation's thread until you answer, unless the workspace allows full access.";
 }
 
 export function getAutomationReasoningOptions(

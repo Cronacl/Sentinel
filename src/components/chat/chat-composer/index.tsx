@@ -45,8 +45,10 @@ import { resolveThreadSelectionSyncInput } from "./thread-selection-sync";
 export type {
   ChatComposerOpenCodeSelection,
   ChatComposerProps,
+  ChatComposerSelectionChange,
   ChatComposerStartPlanImplementationHandler,
   ChatComposerThreadSelection,
+  ComposerSendInput,
 } from "./types";
 
 let hasComposerBootstrappedThisSession = false;
@@ -101,9 +103,9 @@ export function ChatComposer({
 
   const generalSettingsQuery = api.generalSettings.get.useQuery();
   const voiceSettingsQuery = api.voiceSettings.get.useQuery();
-  const codexReview = api.engines.codexReview.useMutation();
-  const codexRollback = api.engines.codexRollback.useMutation();
-  const codexCompact = api.engines.codexCompact.useMutation();
+  const codexReview = api.engines.codex.review.useMutation();
+  const codexRollback = api.engines.codex.rollback.useMutation();
+  const codexCompact = api.engines.codex.compact.useMutation();
   const followUpBehavior =
     generalSettingsQuery.data?.followUpBehavior ?? DEFAULT_FOLLOW_UP_BEHAVIOR;
 
@@ -144,6 +146,7 @@ export function ChatComposer({
     handleSelectReasoningEffort,
     modelsQuery,
     selectedEngine,
+    selectedInstanceId,
     selectedModel,
     selectedModelKey,
     selectedOpenCodeAgent,
@@ -334,6 +337,7 @@ export function ChatComposer({
       planMode,
       planModeReady,
       selectedEngine,
+      selectedInstanceId,
       selectedModelKey,
       selectedReasoningEffort,
       threadPersistenceReady: threadPersistenceReadyRef.current,
@@ -348,6 +352,7 @@ export function ChatComposer({
 
     persistSelection(syncInput.modelId, syncInput.reasoningEffort, {
       engine: syncInput.engine,
+      engineInstanceId: syncInput.engineInstanceId,
       mode: syncInput.mode,
       skipGlobal: true,
     });
@@ -357,6 +362,7 @@ export function ChatComposer({
     planModeReady,
     persistSelection,
     selectedEngine,
+    selectedInstanceId,
     selectedModelKey,
     selectedReasoningEffort,
     threadPersistenceReadyRef,
@@ -435,6 +441,7 @@ export function ChatComposer({
         ...(hasComposerContext(composerContext) ? { composerContext } : {}),
         ...(draftRepoState ? { draftRepoState } : {}),
         engine: selectedEngine,
+        engineInstanceId: selectedInstanceId,
         ...(files.length > 0 ? { files } : {}),
         modelId: selectedModelKey,
         ...(selectedEngine === "opencode"
@@ -492,6 +499,7 @@ export function ChatComposer({
     planMode,
     canSend,
     selectedEngine,
+    selectedInstanceId,
     selectedModelKey,
     effectiveSelectedOpenCodeAgent,
     effectiveSelectedOpenCodeVariant,
@@ -515,6 +523,7 @@ export function ChatComposer({
     await sendPlanImplementation({
       ...(draftRepoState ? { draftRepoState } : {}),
       engine: selectedEngine,
+      engineInstanceId: selectedInstanceId,
       modelId: selectedModelKey,
       ...(selectedEngine === "opencode"
         ? {
@@ -542,6 +551,7 @@ export function ChatComposer({
     onSend,
     onStartPlanImplementationSend,
     selectedEngine,
+    selectedInstanceId,
     selectedModelKey,
     selectedModel?.openCode?.agentOptions,
     selectedModel?.openCode?.variantOptions,
@@ -847,6 +857,7 @@ export function ChatComposer({
               planMode={planMode}
               planModeAvailable={planModeAvailable}
               selectedEngine={selectedEngine}
+              selectedInstanceId={selectedInstanceId}
               selectedModelKey={selectedModelKey}
               showEngineSelector={showEngineSelector}
               showVoiceInput={showVoiceInput}

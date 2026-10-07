@@ -3,6 +3,26 @@ import { describe, expect, it } from "bun:test";
 import { resolveInitialThreadComposerUiState } from "./thread-screen.helpers";
 
 describe("resolveInitialThreadComposerUiState", () => {
+  it("keeps the thread's engine instance in its selection", () => {
+    expect(
+      resolveInitialThreadComposerUiState({
+        thread: {
+          chatEngine: "codex",
+          chatEngineInstanceId: "codex-work",
+          chatModelId: "gpt-5.4",
+          chatReasoningEffort: null,
+          mode: "chat",
+        },
+      }).threadSelection,
+    ).toEqual({
+      engine: "codex",
+      engineInstanceId: "codex-work",
+      modelId: "gpt-5.4",
+      mode: "chat",
+      reasoningEffort: null,
+    });
+  });
+
   it("falls back to persisted thread settings when no handoff exists", () => {
     expect(
       resolveInitialThreadComposerUiState({

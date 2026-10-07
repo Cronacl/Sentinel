@@ -42,17 +42,15 @@ import {
 import { SidebarToggle, useShell } from "@/components/shell";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
-import {
-  AUTOMATION_SCHEDULE_TYPES,
-  CHAT_ENGINES,
-  type ChatEngine,
-} from "@/server/db/enums";
+import { AUTOMATION_SCHEDULE_TYPES, type ChatEngine } from "@/server/db/enums";
 import {
   getAvailableAutomationModels,
   getAutomationEngineOptions,
   getAutomationModelOptions,
-  getAutomationModelsForEngine,
+  getAutomationModelsForInstance,
   getAutomationReasoningOptions,
+  getAutomationUnattendedNotice,
+  resolveAutomationInstanceId,
   resolveAutomationSelection,
 } from "@/components/automations/automation-form-helpers";
 import { isLikelyCronExpression } from "@/schemas/automation.schema";
@@ -125,7 +123,8 @@ const editFormSchema = z
     scheduleDayOfWeek: z.string(),
     scheduleTime: z.string(),
     scheduleCron: z.string(),
-    chatEngine: z.enum(CHAT_ENGINES),
+    /** The engine instance; its driver kind is sent as chatEngine. */
+    engineInstanceId: z.string().trim().min(1, "Engine is required."),
     modelId: z.string().trim().min(1, "Model is required."),
     reasoningEffort: z.string(),
   })
@@ -254,68 +253,36 @@ export function AutomationDetailScreen({
   const updateMutation = api.automations.update.useMutation();
 
   const workspacesQuery = api.workspaces.list.useQuery();
-  const enginesQuery = api.engines.list.useQuery();
-  const sentinelModelsQuery = api.engines.models.useQuery({
-    engine: "sentinel",
-  });
-  const codexModelsQuery = api.engines.models.useQuery({
-    engine: "codex",
-  });
-  const claudeModelsQuery = api.engines.models.useQuery({
-    engine: "claude",
-  });
-  const copilotModelsQuery = api.engines.models.useQuery({
-    engine: "copilot",
-  });
-  const cursorModelsQuery = api.engines.models.useQuery({
-    engine: "cursor",
-  });
-  const openCodeModelsQuery = api.engines.models.useQuery({
-    engine: "opencode",
-  });
+  const catalogQuery = api.engines.composerCatalog.useQuery();
+  const securityQuery = api.security.get.useQuery();
 
   const automation = automationQuery.data ?? null;
   const statusTone = automation?.status === "active" ? "success" : "warning";
 
   const [submitError, setSubmitError] = useState("");
 
-  const availableSentinelModels = useMemo(
-    () => getAvailableAutomationModels(sentinelModelsQuery.data ?? []),
-    [sentinelModelsQuery.data],
+  const catalogOptions = useMemo(
+    () => catalogQuery.data?.options ?? [],
+    [catalogQuery.data?.options],
   );
-  const availableCodexModels = useMemo(
-    () => getAvailableAutomationModels(codexModelsQuery.data ?? []),
-    [codexModelsQuery.data],
-  );
-  const availableClaudeModels = useMemo(
-    () => getAvailableAutomationModels(claudeModelsQuery.data ?? []),
-    [claudeModelsQuery.data],
-  );
-  const availableCopilotModels = useMemo(
-    () => getAvailableAutomationModels(copilotModelsQuery.data ?? []),
-    [copilotModelsQuery.data],
-  );
-  const availableCursorModels = useMemo(
-    () => getAvailableAutomationModels(cursorModelsQuery.data ?? []),
-    [cursorModelsQuery.data],
-  );
-  const availableOpenCodeModels = useMemo(
-    () => getAvailableAutomationModels(openCodeModelsQuery.data ?? []),
-    [openCodeModelsQuery.data],
+  const availableModelsByInstance = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(catalogQuery.data?.modelsByInstance ?? {}).map(
+          ([instanceId, models]) => [
+            instanceId,
+            getAvailableAutomationModels(models),
+          ],
+        ),
+      ),
+    [catalogQuery.data?.modelsByInstance],
   );
 
   const formDefaults = useMemo<EditFormValues | null>(() => {
     if (!automation) return null;
-    const engine = (automation.chatEngine ?? "sentinel") as ChatEngine;
+    const instanceId = resolveAutomationInstanceId(automation);
     const selection = resolveAutomationSelection(
-      getAutomationModelsForEngine(engine, {
-        claude: availableClaudeModels,
-        copilot: availableCopilotModels,
-        codex: availableCodexModels,
-        cursor: availableCursorModels,
-        opencode: availableOpenCodeModels,
-        sentinel: availableSentinelModels,
-      }),
+      getAutomationModelsForInstance(instanceId, availableModelsByInstance),
       automation.modelId ?? null,
       (automation.reasoningEffort as ReasoningEffort | null) ?? null,
     );
@@ -323,7 +290,7 @@ export function AutomationDetailScreen({
     return {
       title: automation.title,
       prompt: automation.prompt,
-      chatEngine: engine,
+      engineInstanceId: instanceId,
       workspaceId: automation.workspaceId ?? "__current__",
       scheduleType: automation.scheduleType,
       scheduleDayOfWeek: String(automation.scheduleDayOfWeek ?? 1),
@@ -335,15 +302,7 @@ export function AutomationDetailScreen({
         selection.reasoningEffort ??
         "",
     };
-  }, [
-    automation,
-    availableClaudeModels,
-    availableCopilotModels,
-    availableCodexModels,
-    availableCursorModels,
-    availableOpenCodeModels,
-    availableSentinelModels,
-  ]);
+  }, [automation, availableModelsByInstance]);
 
   const form = useForm<EditFormValues>({
     defaultValues: formDefaults ?? undefined,
@@ -371,7 +330,8 @@ export function AutomationDetailScreen({
   }, [automation, form, formDefaults, form.formState.isDirty]);
 
   const scheduleType = form.watch("scheduleType");
-  const selectedEngine = form.watch("chatEngine");
+  const selectedInstanceId = form.watch("engineInstanceId");
+  const selectedWorkspaceId = form.watch("workspaceId");
   const selectedModelKey = form.watch("modelId");
 
   const workspaceOptions = useMemo(() => {
@@ -391,29 +351,36 @@ export function AutomationDetailScreen({
   }, [workspacesQuery.data]);
 
   const engineOptions = useMemo(
-    () => getAutomationEngineOptions(enginesQuery.data ?? []),
-    [enginesQuery.data],
+    () => getAutomationEngineOptions(catalogOptions),
+    [catalogOptions],
   );
   const availableModels = useMemo(
     () =>
-      getAutomationModelsForEngine(selectedEngine, {
-        claude: availableClaudeModels,
-        copilot: availableCopilotModels,
-        codex: availableCodexModels,
-        cursor: availableCursorModels,
-        opencode: availableOpenCodeModels,
-        sentinel: availableSentinelModels,
-      }),
-    [
-      availableClaudeModels,
-      availableCopilotModels,
-      availableCodexModels,
-      availableCursorModels,
-      availableOpenCodeModels,
-      availableSentinelModels,
-      selectedEngine,
-    ],
+      getAutomationModelsForInstance(
+        selectedInstanceId,
+        availableModelsByInstance,
+      ),
+    [availableModelsByInstance, selectedInstanceId],
   );
+  const unattendedNotice = useMemo(() => {
+    const workspaces = workspacesQuery.data ?? [];
+    const workspace =
+      selectedWorkspaceId === "__current__"
+        ? workspaces.find((candidate) => candidate.isSelected)
+        : workspaces.find((candidate) => candidate.id === selectedWorkspaceId);
+    return getAutomationUnattendedNotice(
+      workspace?.permissionModeOverride ??
+        securityQuery.data?.permissionMode ??
+        null,
+      catalogOptions.find((option) => option.instanceId === selectedInstanceId),
+    );
+  }, [
+    catalogOptions,
+    securityQuery.data?.permissionMode,
+    selectedInstanceId,
+    selectedWorkspaceId,
+    workspacesQuery.data,
+  ]);
   const modelOptions = useMemo(() => {
     return getAutomationModelOptions(availableModels, selectedModelKey);
   }, [availableModels, selectedModelKey]);
@@ -512,7 +479,10 @@ export function AutomationDetailScreen({
           id: automation.id,
           title: values.title,
           prompt: values.prompt,
-          chatEngine: values.chatEngine,
+          chatEngine: (catalogOptions.find(
+            (option) => option.instanceId === values.engineInstanceId,
+          )?.engine ?? values.engineInstanceId) as ChatEngine,
+          chatEngineInstanceId: values.engineInstanceId,
           workspaceId:
             values.workspaceId === "__current__" ? null : values.workspaceId,
           scheduleType: values.scheduleType,
@@ -538,7 +508,7 @@ export function AutomationDetailScreen({
         );
       }
     },
-    [automation, updateMutation, automationQuery, utils, form],
+    [automation, catalogOptions, updateMutation, automationQuery, utils, form],
   );
 
   const handleRunNow = async () => {
@@ -1012,13 +982,18 @@ export function AutomationDetailScreen({
                   options={workspaceOptions}
                 />
 
-                <ControlledSelectField
-                  control={form.control}
-                  description="Choose which engine and runtime this automation should use."
-                  label="Engine"
-                  name="chatEngine"
-                  options={engineOptions}
-                />
+                <div className="flex flex-col gap-1.5">
+                  <ControlledSelectField
+                    control={form.control}
+                    description="Choose which engine and runtime this automation should use."
+                    label="Engine"
+                    name="engineInstanceId"
+                    options={engineOptions}
+                  />
+                  {unattendedNotice ? (
+                    <p className="text-muted text-xs">{unattendedNotice}</p>
+                  ) : null}
+                </div>
 
                 <ControlledSelectField
                   control={form.control}

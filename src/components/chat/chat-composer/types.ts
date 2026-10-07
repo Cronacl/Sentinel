@@ -17,7 +17,18 @@ export type ChatComposerOpenCodeSelection = {
 
 export type ChatComposerThreadSelection = {
   engine?: ChatEngine;
+  /** The instance of `engine` (its id is `engine` for the default). */
+  engineInstanceId?: string | null;
   modelId: string | null;
+  mode?: "chat" | "plan";
+  reasoningEffort?: ReasoningEffort | null;
+};
+
+/** What the composer reports when the engine, model or effort changes. */
+export type ChatComposerSelectionChange = {
+  engine?: ChatEngine;
+  engineInstanceId?: string;
+  modelId?: string | null;
   mode?: "chat" | "plan";
   reasoningEffort?: ReasoningEffort | null;
 };
@@ -26,6 +37,8 @@ export type ComposerSendInput = {
   composerContext?: ComposerContext;
   draftRepoState?: Partial<RepoThreadState>;
   engine: ChatEngine;
+  /** The selected instance of `engine` (its id is `engine` for the default). */
+  engineInstanceId?: string;
   files?: FileUIPart[];
   modelId: string;
   openCode?: {
@@ -64,12 +77,7 @@ export type ChatComposerProps = {
   onOpenCodeSelectionChange?: (
     selection: ChatComposerOpenCodeSelection,
   ) => void;
-  onSelectionChange?: (input: {
-    engine?: ChatEngine;
-    modelId?: string | null;
-    mode?: "chat" | "plan";
-    reasoningEffort?: ReasoningEffort | null;
-  }) => void;
+  onSelectionChange?: (input: ChatComposerSelectionChange) => void;
   onStop?: () => void;
   onSend?: (input: ComposerSendInput) => Promise<unknown> | unknown;
   onSteerFollowUp?: (input: ComposerSendInput) => Promise<void> | void;

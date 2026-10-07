@@ -26,6 +26,13 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
 };
 
 const t = initTRPC.context<typeof createTRPCContext>().create({
+  // Subscriptions (engines.onEvents) stream over SSE on the same route. The
+  // ping keeps idle connections open; the client reconnects (and replays
+  // the current state) when a connection goes quiet.
+  sse: {
+    client: { reconnectAfterInactivityMs: 30_000 },
+    ping: { enabled: true, intervalMs: 15_000 },
+  },
   transformer: superjson,
   errorFormatter({ shape, error }) {
     return {

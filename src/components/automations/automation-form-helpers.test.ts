@@ -1,10 +1,14 @@
 import { describe, expect, it } from "bun:test";
 
+import { FALLBACK_CHAT_ENGINE_OPTIONS } from "@/components/chat/chat-composer-helpers";
+
 import type { AutomationEngineModel } from "./automation-form-helpers";
 import {
   getAutomationEngineOptions,
   getAutomationModelOptions,
-  getAutomationModelsForEngine,
+  getAutomationModelsForInstance,
+  getAutomationUnattendedNotice,
+  resolveAutomationInstanceId,
   resolveAutomationSelection,
 } from "./automation-form-helpers";
 
@@ -15,79 +19,60 @@ const sentinelModel: AutomationEngineModel = {
   displayName: "Sentinel Default",
   engine: "sentinel",
   inputModalities: [],
+  instanceId: "sentinel",
   isConnected: true,
   isEnabled: true,
   modelId: "sentinel-default",
+  options: [],
   provider: "openai",
   rawModelId: "sentinel-default",
   supportedReasoningEfforts: [],
 };
 
-describe("automation form helpers", () => {
-  it("keeps Copilot visible in generic engine option labels and descriptions", () => {
-    expect(
-      getAutomationEngineOptions([
-        {
-          description: "Copilot runtime",
-          engine: "copilot",
-          isAvailable: true,
-          isCurrent: false,
-          label: "Copilot",
-        },
-      ] as any),
-    ).toEqual([
-      {
-        description: "Copilot runtime",
-        isDisabled: false,
-        label: "Copilot",
-        value: "copilot",
-      },
-    ]);
-  });
+const cursorOption = FALLBACK_CHAT_ENGINE_OPTIONS.find(
+  (option) => option.engine === "cursor",
+)!;
 
-  it("keeps Cursor visible in generic engine option labels and descriptions", () => {
+describe("automation form helpers", () => {
+  it("lists one option per engine instance, keyed by instance id", () => {
     expect(
       getAutomationEngineOptions([
+        cursorOption,
         {
-          description: "Cursor runtime",
-          engine: "cursor",
-          isAvailable: true,
-          isCurrent: false,
-          label: "Cursor",
+          ...cursorOption,
+          instanceId: "cursor-work",
+          isAvailable: false,
+          isDefaultInstance: false,
+          label: "Cursor (work)",
         },
-      ] as any),
+      ]),
     ).toEqual([
       {
-        description: "Cursor runtime",
+        description: "Use the locally configured Cursor Agent runtime.",
         isDisabled: false,
         label: "Cursor",
         value: "cursor",
       },
-    ]);
-  });
-
-  it("keeps OpenCode visible in generic engine option labels and descriptions", () => {
-    expect(
-      getAutomationEngineOptions([
-        {
-          description: "OpenCode runtime",
-          engine: "opencode",
-          isAvailable: true,
-          isCurrent: false,
-          label: "OpenCode",
-        },
-      ] as any),
-    ).toEqual([
       {
-        description: "OpenCode runtime",
-        isDisabled: false,
-        label: "OpenCode",
-        value: "opencode",
+        description: "Use the locally configured Cursor Agent runtime.",
+        isDisabled: true,
+        label: "Cursor (work)",
+        value: "cursor-work",
       },
     ]);
   });
 
-  it("describes OpenCode models as runtime-backed", () => {
+  it("appends the stability notice of engines that are not stable yet", () => {
+    expect(
+      getAutomationEngineOptions([
+        { ...cursorOption, stability: "experimental" },
+      ])[0]?.description,
+    ).toBe(
+      "Use the locally configured Cursor Agent runtime. Experimental integration; behavior may change or fail unexpectedly.",
+    );
+  });
+
+  it("describes runtime-backed models by their engine", () => {
     expect(
       getAutomationModelOptions([
         {
@@ -95,6 +80,7 @@ describe("automation form helpers", () => {
           description: "OpenCode Auto",
           displayName: "OpenCode Auto",
           engine: "opencode",
+          instanceId: "opencode",
           modelId: "opencode/default",
           provider: null,
           rawModelId: "opencode/default",
@@ -107,12 +93,55 @@ describe("automation form helpers", () => {
     });
   });
 
-  it("returns an empty model list when the engine is not selected yet", () => {
+  it("finds an instance's models, or none before an engine is picked", () => {
     expect(
-      getAutomationModelsForEngine(undefined, {
+      getAutomationModelsForInstance(undefined, {
         sentinel: [sentinelModel],
       }),
     ).toEqual([]);
+    expect(
+      getAutomationModelsForInstance("sentinel", {
+        sentinel: [sentinelModel],
+      }),
+    ).toEqual([sentinelModel]);
+  });
+
+  it("resolves a stored automation to its instance, NULL meaning the default", () => {
+    expect(
+      resolveAutomationInstanceId({
+        chatEngine: "codex",
+        chatEngineInstanceId: "codex-work",
+      }),
+    ).toBe("codex-work");
+    expect(
+      resolveAutomationInstanceId({
+        chatEngine: "codex",
+        chatEngineInstanceId: null,
+      }),
+    ).toBe("codex");
+    expect(resolveAutomationInstanceId({})).toBe("sentinel");
+  });
+
+  it("explains what happens to approvals in unattended runs", () => {
+    expect(
+      getAutomationUnattendedNotice("full", {
+        settlesUnattendedApprovals: true,
+      }),
+    ).toBeNull();
+    expect(
+      getAutomationUnattendedNotice("default", {
+        settlesUnattendedApprovals: true,
+      }),
+    ).toBe(
+      "Automations run unattended: actions that need approval are declined unless the workspace allows full access.",
+    );
+    expect(
+      getAutomationUnattendedNotice("default", {
+        settlesUnattendedApprovals: false,
+      }),
+    ).toBe(
+      "Actions that need approval wait in the automation's thread until you answer, unless the workspace allows full access.",
+    );
   });
 
   it("keeps model options safe when models are unavailable", () => {

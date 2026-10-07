@@ -9,6 +9,8 @@ import type { ThreadRouteHandoffState } from "./thread-route-handoff";
 
 type ThreadScreenThreadState = {
   chatEngine: ChatEngine;
+  /** The thread's instance (threads.get reports the default as the engine). */
+  chatEngineInstanceId?: string | null;
   chatModelId: string | null;
   chatReasoningEffort: string | null;
   mode: "chat" | "plan";
@@ -38,6 +40,9 @@ export function resolveInitialThreadComposerUiState(input: {
     },
     threadSelection: input.initialComposerUiState?.threadSelection ?? {
       engine: input.thread.chatEngine,
+      ...(input.thread.chatEngineInstanceId
+        ? { engineInstanceId: input.thread.chatEngineInstanceId }
+        : {}),
       modelId: input.thread.chatModelId,
       mode: input.thread.mode,
       reasoningEffort:

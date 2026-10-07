@@ -103,6 +103,7 @@ export default function ProvidersPage() {
       void Promise.all([
         utils.models.list.invalidate(),
         utils.engines.models.invalidate(SENTINEL_MODELS_QUERY_INPUT),
+        utils.engines.composerCatalog.invalidate(),
       ]);
     },
   });

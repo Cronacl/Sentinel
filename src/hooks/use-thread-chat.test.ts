@@ -6,6 +6,7 @@ import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import {
   ThreadActionError,
   applyRunFailedEventToMessages,
+  buildThreadEngineRequestFields,
   didSnapshotCommitMessage,
   fetchThreadSessionSnapshot,
   formatClientTimingLog,
@@ -856,5 +857,40 @@ describe("hasActiveThreadRun", () => {
     expect(hasActiveThreadRun("run-1", "awaiting_approval")).toBe(true);
     expect(hasActiveThreadRun("run-1", "idle")).toBe(false);
     expect(hasActiveThreadRun(null, "streaming")).toBe(false);
+  });
+});
+
+describe("buildThreadEngineRequestFields", () => {
+  it("keeps default-instance requests exactly as before", () => {
+    expect(
+      buildThreadEngineRequestFields({
+        engine: "codex",
+        engineInstanceId: "codex",
+        modelId: "gpt-5.4",
+        reasoningEffort: "high",
+      }),
+    ).toEqual({ engine: "codex", modelId: "gpt-5.4", reasoningEffort: "high" });
+    expect(
+      buildThreadEngineRequestFields({ engine: "sentinel", modelId: "m" }),
+    ).toEqual({ engine: "sentinel", modelId: "m" });
+  });
+
+  it("carries another instance and the model's option selections", () => {
+    expect(
+      buildThreadEngineRequestFields({
+        engine: "opencode",
+        engineInstanceId: "opencode-work",
+        modelId: "openai/gpt-5",
+        modelOptions: [{ id: "agent", value: "plan" }],
+        openCode: { agent: "plan", variant: null },
+        reasoningEffort: null,
+      }),
+    ).toEqual({
+      engine: "opencode",
+      engineInstanceId: "opencode-work",
+      modelId: "openai/gpt-5",
+      modelOptions: [{ id: "agent", value: "plan" }],
+      openCode: { agent: "plan", variant: null },
+    });
   });
 });

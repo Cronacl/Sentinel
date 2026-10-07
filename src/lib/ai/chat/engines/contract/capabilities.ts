@@ -44,6 +44,11 @@ export const engineCapabilitiesSchema = z.object({
   supportsResume: engineResumeSupportSchema,
   supportsSteer: z.boolean(),
   supportsTextGeneration: z.boolean(),
+  /**
+   * Unattended runs (automations, interactive: false) settle approval
+   * requests by themselves: declined, or approved under full access.
+   * Without it a request waits in the run's thread until the user answers.
+   */
   supportsUnattendedTools: z.boolean(),
   supportsUserInput: z.boolean(),
 });

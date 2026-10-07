@@ -82,6 +82,8 @@ type ThreadScreenProps = {
   thread: {
     activeRunId: string | null;
     chatEngine: ChatEngine;
+    /** The thread's engine instance (the engine itself for the default). */
+    chatEngineInstanceId?: string | null;
     chatModelId: string | null;
     chatReasoningEffort: string | null;
     hasCodexThread: boolean;
@@ -847,9 +849,9 @@ export function ThreadScreen({
     scopeId: threadScope.id,
   });
 
-  const codexReview = api.engines.codexReview.useMutation();
-  const codexRollback = api.engines.codexRollback.useMutation();
-  const codexCompact = api.engines.codexCompact.useMutation();
+  const codexReview = api.engines.codex.review.useMutation();
+  const codexRollback = api.engines.codex.rollback.useMutation();
+  const codexCompact = api.engines.codex.compact.useMutation();
   const canRunCodexAppCommands =
     chatEngine === "codex" && thread.hasCodexThread;
 

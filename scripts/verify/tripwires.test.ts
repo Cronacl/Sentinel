@@ -549,3 +549,41 @@ describe("P10 dispatch tripwires", () => {
     ).toEqual([]);
   });
 });
+
+describe("P10 snapshot consumer tripwires", () => {
+  it("flags per-engine model queries and the removed engine list", () => {
+    expect(
+      hitIds(
+        "src/components/chat/chat-composer/use-model-selection.ts",
+        'const codexModels = api.engines.models.useQuery({\n  engine: "codex",\n});',
+      ),
+    ).toEqual(["P10-per-engine-model-queries:1"]);
+    expect(
+      hitIds(
+        "src/components/shell/app-warmup.tsx",
+        "void utils.engines.list.prefetch();",
+      ),
+    ).toEqual(["P10-per-engine-model-queries:1"]);
+    expect(
+      hitIds(
+        "src/app/(app)/settings/models/page.tsx",
+        'utils.engines.models.invalidate(SENTINEL_MODELS_QUERY_INPUT);\nvoid utils.engines.models.prefetch({ engine: "sentinel" });',
+      ),
+    ).toEqual([]);
+  });
+
+  it("flags the removed engine status stubs", () => {
+    expect(
+      hitIds(
+        "src/components/chat/composer-toolbar.tsx",
+        "isUnstableChatEngine(engine.engine)",
+      ),
+    ).toEqual(["P10-engine-status-stubs:1"]);
+    expect(
+      hitIds(
+        "src/app/(app)/settings/engines/page.tsx",
+        "getCursorRuntimeBadgeLabel(status, true)",
+      ),
+    ).toEqual(["P10-engine-status-stubs:1"]);
+  });
+});

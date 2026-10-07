@@ -19,9 +19,10 @@ import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
 import type { ChatEngine } from "@/server/db/enums";
 import type { SentinelComposerToolTag } from "@/lib/ai/chat/tools/selection/tags";
 import {
-  isUnstableChatEngine,
-  UNSTABLE_CHAT_ENGINE_LABEL,
+  getEngineStabilityNotice,
+  type ChatComposerEngineOption,
 } from "@/components/chat/chat-composer-helpers";
+import { getDriverMeta } from "@/lib/ai/chat/engines/catalog";
 
 import { ContextWindowIndicator } from "./chat-composer/context-window-indicator";
 
@@ -54,18 +55,15 @@ type ComposerToolbarProps = {
     modelContextWindow?: number | null;
     usedPercent: number;
   } | null;
-  engineOptions: Array<{
-    engine: ChatEngine;
-    error: string | null;
-    isAvailable: boolean;
-    label: string;
-  }>;
+  /** One entry per engine instance (several when a driver has several). */
+  engineOptions: ChatComposerEngineOption[];
   hasWorkspace: boolean;
   isBusy: boolean;
   isLocked: boolean;
   modelSelector: ReactNode;
   onPickFiles: () => void;
-  onSelectEngine: (engine: ChatEngine) => void;
+  /** Called with the picked instance id. */
+  onSelectEngine: (instanceId: string) => void;
   onSend: () => void;
   onStop?: () => void;
   onStartVoiceInput?: () => void;
@@ -74,6 +72,7 @@ type ComposerToolbarProps = {
   planModeAvailable: boolean;
   planMode: boolean;
   selectedEngine: ChatEngine;
+  selectedInstanceId: string;
   selectedModelKey: string | null;
   showVoiceInput?: boolean;
   toolTags: SentinelComposerToolTag[];
@@ -99,6 +98,7 @@ export const ComposerToolbar = memo(function ComposerToolbar({
   planModeAvailable,
   planMode,
   selectedEngine,
+  selectedInstanceId,
   selectedModelKey,
   showVoiceInput = false,
   toolTags,
@@ -117,11 +117,18 @@ export const ComposerToolbar = memo(function ComposerToolbar({
   const disabledEngineKeys = useMemo(
     () =>
       engineOptions
-        .filter((engine) => !engine.isAvailable && engine.engine !== "sentinel")
-        .map((engine) => engine.engine),
+        .filter(
+          (engine) =>
+            !engine.isAvailable &&
+            getDriverMeta(engine.engine)?.runtime !== "builtin",
+        )
+        .map((engine) => engine.instanceId),
     [engineOptions],
   );
-  const selectedEngineKeys = useMemo(() => [selectedEngine], [selectedEngine]);
+  const selectedEngineKeys = useMemo(
+    () => [selectedInstanceId],
+    [selectedInstanceId],
+  );
   const showSentinelToolTags = selectedEngine === "sentinel" && !planMode;
   const isToolTagSelected = useCallback(
     (tag: SentinelComposerToolTag) => toolTags.includes(tag),
@@ -297,36 +304,43 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                     onSelectionChange={(keys) => {
                       const key = [...keys][0];
                       if (key != null) {
-                        onSelectEngine(String(key) as ChatEngine);
+                        onSelectEngine(String(key));
                         setEngineSubOpen(false);
                         setComposerMenuOpen(false);
                       }
                     }}
                   >
-                    {engineOptions.map((engine) => (
-                      <ListBox.Item
-                        className="min-h-8 rounded-xl px-2 py-1.5 text-[13px]"
-                        key={engine.engine}
-                        id={engine.engine}
-                        textValue={engine.label}
-                      >
-                        <span className="capitalize">{engine.label}</span>
-                        <span className="ml-auto flex items-center gap-1.5">
-                          {isUnstableChatEngine(engine.engine) ? (
-                            <span className="text-[10px] text-warning">
-                              {UNSTABLE_CHAT_ENGINE_LABEL}
-                            </span>
-                          ) : null}
-                          {!engine.isAvailable &&
-                          engine.engine !== "sentinel" ? (
-                            <span className="text-[10px] text-warning">
-                              Unavailable
-                            </span>
-                          ) : null}
-                        </span>
-                        <ListBox.ItemIndicator />
-                      </ListBox.Item>
-                    ))}
+                    {engineOptions.map((engine) => {
+                      const stability = getEngineStabilityNotice(engine);
+                      return (
+                        <ListBox.Item
+                          className="min-h-8 rounded-xl px-2 py-1.5 text-[13px]"
+                          key={engine.instanceId}
+                          id={engine.instanceId}
+                          textValue={engine.label}
+                        >
+                          <span className="capitalize">{engine.label}</span>
+                          <span className="ml-auto flex items-center gap-1.5">
+                            {stability ? (
+                              <span
+                                className="text-[10px] text-warning"
+                                title={stability.description}
+                              >
+                                {stability.label}
+                              </span>
+                            ) : null}
+                            {!engine.isAvailable &&
+                            getDriverMeta(engine.engine)?.runtime !==
+                              "builtin" ? (
+                              <span className="text-[10px] text-warning">
+                                Unavailable
+                              </span>
+                            ) : null}
+                          </span>
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      );
+                    })}
                   </ListBox>
                 </div>
               ) : null}

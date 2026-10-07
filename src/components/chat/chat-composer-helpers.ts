@@ -1,49 +1,45 @@
-import type { AIProvider, ChatEngine } from "@/server/db/enums";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import {
+  DRIVER_CATALOG,
+  listDefaultInstanceDrivers,
+} from "@/lib/ai/chat/engines/catalog";
+import type {
+  ComposerEngineModel,
+  ComposerEngineOption,
+} from "@/lib/ai/chat/engines/composer-catalog";
 import { isCommittedThreadActionError } from "@/hooks/use-thread-chat";
 
-export type ChatComposerOpenCodeTraits = {
-  agentOptions: Array<{
-    isDefault?: boolean;
-    label: string;
-    value: string;
-  }>;
-  variantOptions: Array<{
-    isDefault?: boolean;
-    label: string;
-    value: string;
-  }>;
-};
+export type ChatComposerOpenCodeTraits = NonNullable<
+  ComposerEngineModel["openCode"]
+>;
 
-export type ChatComposerEngineOption = {
-  engine: ChatEngine;
-  error: string | null;
-  isAvailable: boolean;
-  label: string;
-};
+/** One engine instance in the composer (engines.composerCatalog). */
+export type ChatComposerEngineOption = ComposerEngineOption;
 
-export type ChatComposerModel = {
-  contextWindow?: number;
-  defaultReasoningEffort: ReasoningEffort | null;
-  description: string;
-  displayName: string;
-  modelId: string;
-  engine: ChatEngine;
-  inputModalities: string[];
-  isConnected: boolean;
-  isEnabled: boolean;
-  openCode?: ChatComposerOpenCodeTraits;
-  provider: AIProvider | null;
-  rawModelId: string;
-  supportedReasoningEfforts: ReasoningEffort[];
-};
+/** A model of one engine instance, in the composer shape. */
+export type ChatComposerModel = ComposerEngineModel;
 
-export const UNSTABLE_CHAT_ENGINE_LABEL = "Unstable";
-export const UNSTABLE_CHAT_ENGINE_DESCRIPTION =
-  "Experimental integration; behavior may change or fail unexpectedly.";
+const STABILITY_NOTICES = {
+  beta: {
+    description: "Beta integration; some features may be missing.",
+    label: "Beta",
+  },
+  experimental: {
+    description:
+      "Experimental integration; behavior may change or fail unexpectedly.",
+    label: "Unstable",
+  },
+} as const;
 
-export function isUnstableChatEngine(_engine: ChatEngine | null | undefined) {
-  return false;
+/**
+ * The badge for an engine that is not stable yet (catalog stability).
+ */
+export function getEngineStabilityNotice(
+  option: Pick<ChatComposerEngineOption, "stability"> | null | undefined,
+) {
+  return option && option.stability !== "stable"
+    ? STABILITY_NOTICES[option.stability]
+    : null;
 }
 
 function normalizeOpenCodeTraitToken(value: string) {
@@ -146,44 +142,28 @@ export function resolveOpenCodeTraitValueForThreadMode(
   );
 }
 
-export const FALLBACK_CHAT_ENGINE_OPTIONS: ChatComposerEngineOption[] = [
-  {
-    engine: "sentinel",
-    error: null,
-    isAvailable: true,
-    label: "Sentinel",
-  },
-  {
-    engine: "codex",
-    error: null,
-    isAvailable: true,
-    label: "Codex",
-  },
-  {
-    engine: "claude",
-    error: null,
-    isAvailable: true,
-    label: "Claude",
-  },
-  {
-    engine: "copilot",
-    error: null,
-    isAvailable: true,
-    label: "Copilot",
-  },
-  {
-    engine: "cursor",
-    error: null,
-    isAvailable: true,
-    label: "Cursor",
-  },
-  {
-    engine: "opencode",
-    error: null,
-    isAvailable: true,
-    label: "OpenCode",
-  },
-];
+/**
+ * Offered before the first catalog arrives: every implemented driver's
+ * default instance, assumed available until its snapshot says otherwise.
+ */
+export const FALLBACK_CHAT_ENGINE_OPTIONS: ChatComposerEngineOption[] =
+  listDefaultInstanceDrivers().map((kind) => {
+    const meta = DRIVER_CATALOG[kind];
+    return {
+      accentColor: null,
+      description: meta.description,
+      engine: kind,
+      error: null,
+      instanceId: kind,
+      isAvailable: true,
+      isDefaultInstance: true,
+      label: meta.label,
+      permissionModes: meta.capabilities.permissionModes,
+      settlesUnattendedApprovals: meta.capabilities.supportsUnattendedTools,
+      stability: meta.stability,
+      supportsPlanMode: meta.capabilities.supportsPlanMode,
+    };
+  });
 
 export function filterSelectableModels(models: ChatComposerModel[]) {
   return models.filter((model) => model.isConnected && model.isEnabled);
@@ -203,6 +183,8 @@ export function haveSameEngineOptionSet(
     return (
       nextOption != null &&
       option.engine === nextOption.engine &&
+      option.instanceId === nextOption.instanceId &&
+      option.accentColor === nextOption.accentColor &&
       option.error === nextOption.error &&
       option.isAvailable === nextOption.isAvailable &&
       option.label === nextOption.label
@@ -224,6 +206,7 @@ export function haveSameSelectableModelSet(
     return (
       nextModel != null &&
       model.engine === nextModel.engine &&
+      model.instanceId === nextModel.instanceId &&
       model.modelId === nextModel.modelId &&
       model.provider === nextModel.provider &&
       model.rawModelId === nextModel.rawModelId

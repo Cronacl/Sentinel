@@ -437,6 +437,24 @@ export const TRIPWIRES = [
     pattern: /["'](?:claude|codex|copilot|cursor|opencode)["']/,
     include: /^src\/lib\/automations\/runner\.ts$/,
   },
+  {
+    id: "P10-per-engine-model-queries",
+    description:
+      "The composer, automations and warm-up read engines.composerCatalog (every instance and its models in one query); per-engine model queries and engines.list/refreshStatus are gone",
+    pattern:
+      /\bengines\.models\.(?:useQuery|prefetch|fetch|getData)\(\s*\{\s*engine:\s*["'](?!sentinel["'])|\bengines\.(?:list|refreshStatus)\.(?:useQuery|useMutation|prefetch|fetch|getData|setData|invalidate)\b/,
+    include: /^src\/.*\.tsx?$/,
+    exclude: /\.test\.tsx?$/,
+    multiline: true,
+  },
+  {
+    id: "P10-engine-status-stubs",
+    description:
+      "Engine stability and status come from the catalog and snapshots (getEngineStabilityNotice, components/engines/snapshot-status.ts); the always-false isUnstableChatEngine and the per-engine runtime-status helpers are gone",
+    pattern:
+      /\bisUnstableChatEngine\b|\bget(?:Codex|Claude|Copilot|Cursor|OpenCode)Runtime(?:BadgeLabel|BadgeColor|FallbackMessage)\b/,
+    include: /^src\/.*\.tsx?$/,
+  },
 ];
 
 const DEFAULT_EXCLUDE =

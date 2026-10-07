@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+import { engineInstanceIdSchema } from "@/lib/ai/chat/engines/contract/ids";
+import { engineOptionSelectionSchema } from "@/lib/ai/chat/engines/contract/models";
+import { MAX_ENGINE_OPTION_SELECTIONS } from "@/lib/ai/chat/engines/model-options";
+
 import {
   AUTOMATION_REASONING_EFFORTS,
   AUTOMATION_SCHEDULE_TYPES,
@@ -89,6 +93,12 @@ const automationFieldsSchema = {
   title: z.string().trim().min(1, "Title is required.").max(200),
   prompt: z.string().trim().min(1, "Prompt is required."),
   chatEngine: automationChatEngineSchema.optional(),
+  /**
+   * The instance of chatEngine (null: its default). Applied together with
+   * chatEngine; on update, omitted keeps the stored instance while the
+   * engine is unchanged.
+   */
+  chatEngineInstanceId: engineInstanceIdSchema.nullable().optional(),
   workspaceId: z.string().trim().min(1).nullable().optional(),
   scheduleType: automationScheduleTypeSchema,
   scheduleDayOfWeek: z.number().int().min(0).max(6).nullable().optional(),
@@ -100,6 +110,11 @@ const automationFieldsSchema = {
     .optional(),
   scheduleCron: z.string().trim().min(1).nullable().optional(),
   modelId: z.string().trim().min(1).nullable().optional(),
+  modelOptions: z
+    .array(engineOptionSelectionSchema)
+    .max(MAX_ENGINE_OPTION_SELECTIONS)
+    .nullable()
+    .optional(),
   reasoningEffort: z.enum(AUTOMATION_REASONING_EFFORTS).nullable().optional(),
 } satisfies Record<string, z.ZodType>;
 
@@ -136,12 +151,14 @@ export const updateAutomationSchema = z.object({
   title: automationFieldsSchema.title.optional(),
   prompt: automationFieldsSchema.prompt.optional(),
   chatEngine: automationFieldsSchema.chatEngine,
+  chatEngineInstanceId: automationFieldsSchema.chatEngineInstanceId,
   workspaceId: automationFieldsSchema.workspaceId,
   scheduleType: automationScheduleTypeSchema.optional(),
   scheduleDayOfWeek: automationFieldsSchema.scheduleDayOfWeek,
   scheduleTime: automationFieldsSchema.scheduleTime,
   scheduleCron: automationFieldsSchema.scheduleCron,
   modelId: automationFieldsSchema.modelId,
+  modelOptions: automationFieldsSchema.modelOptions,
   reasoningEffort: automationFieldsSchema.reasoningEffort,
 });
 

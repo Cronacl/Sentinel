@@ -1119,6 +1119,7 @@ function createDatabase() {
 const globalForDb = globalThis as unknown as {
   agentProcessSweepInit: Promise<void> | undefined;
   automationSchedulerInit: Promise<void> | undefined;
+  engineStartupProbesInit: Promise<void> | undefined;
   startupBackupInit: Promise<void> | undefined;
   db: ReturnType<typeof createDatabase> | undefined;
   vectorDb: Database.Database | null | undefined;
@@ -1229,11 +1230,42 @@ function startAgentProcessSweep() {
   return globalForDb.agentProcessSweepInit;
 }
 
+// Probes the engine instances that were installed and usable at their last
+// check (two at a time), so the first composer and settings views are warm.
+// Starts once the orphan sweep is done: it must not race the processes the
+// probes start.
+function startEngineStartupProbes(after: Promise<void> | undefined) {
+  if (shouldSkipStartupTasks || globalForDb.engineStartupProbesInit) {
+    return globalForDb.engineStartupProbesInit;
+  }
+
+  globalForDb.engineStartupProbesInit = Promise.resolve(after)
+    .then(async () => {
+      const [{ getOrCreateLocalProfile }, { getEngineSnapshotService }] =
+        await Promise.all([
+          import("@/server/local-profile"),
+          import("@/lib/ai/chat/engines/platform/snapshot-service"),
+        ]);
+      const user = await getOrCreateLocalProfile();
+      await getEngineSnapshotService().probeAtStartup(user.id);
+    })
+    .catch((error) => {
+      globalForDb.engineStartupProbesInit = undefined;
+      createLogger("Engines").error(
+        `Startup engine probes failed: ${error instanceof Error ? error.message : error}`,
+      );
+    });
+
+  return globalForDb.engineStartupProbesInit;
+}
+
 export async function startDeferredStartupTasks() {
+  const agentSweep = startAgentProcessSweep();
   const tasks = [
-    startAgentProcessSweep(),
+    agentSweep,
     startAutomationScheduler(),
     startStartupBackup(),
+    startEngineStartupProbes(agentSweep),
   ].filter((task): task is Promise<void> => Boolean(task));
 
   await Promise.all(tasks);

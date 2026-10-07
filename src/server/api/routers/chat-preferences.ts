@@ -7,6 +7,8 @@ import { chatSelectionSchema } from "@/schemas/chat-preferences.schema";
 import { users } from "@/server/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
+import { assertEngineInstanceSelection } from "./engines/selection";
+
 export const chatPreferencesRouter = createTRPCRouter({
   get: protectedProcedure.query(async ({ ctx }) => {
     const enabledModels = await getEnabledModels(ctx.user.id);
@@ -14,6 +16,8 @@ export const chatPreferencesRouter = createTRPCRouter({
 
     return {
       engine,
+      // NULL is the engine's default instance, whose id is the engine.
+      engineInstanceId: ctx.user.defaultChatEngineInstanceId ?? engine,
       mode: ctx.user.defaultChatMode ?? null,
       modelId:
         engine === "sentinel"
@@ -41,6 +45,17 @@ export const chatPreferencesRouter = createTRPCRouter({
           : (ctx.user.defaultChatModelId ?? null);
       const currentReasoningEffort =
         ctx.user.defaultChatReasoningEffort ?? null;
+      const currentInstanceId =
+        ctx.user.defaultChatEngineInstanceId ?? currentEngine;
+      const nextEngine =
+        input.engine !== undefined ? (input.engine ?? "sentinel") : null;
+      if (nextEngine) {
+        await assertEngineInstanceSelection(
+          ctx.session.user.id,
+          nextEngine,
+          input.engineInstanceId,
+        );
+      }
 
       ctx.db
         .update(users)
@@ -52,6 +67,7 @@ export const chatPreferencesRouter = createTRPCRouter({
                   engine: input.engine ?? "sentinel",
                   engineColumn: users.defaultChatEngine,
                   instanceColumn: users.defaultChatEngineInstanceId,
+                  instanceId: input.engineInstanceId,
                 }),
               }
             : {}),
@@ -69,10 +85,17 @@ export const chatPreferencesRouter = createTRPCRouter({
         .run();
 
       return {
-        engine:
-          input.engine !== undefined
-            ? (input.engine ?? "sentinel")
-            : currentEngine,
+        engine: nextEngine ?? currentEngine,
+        // Mirrors engineInstanceIdForEngineWrite: an explicit instance (null
+        // for the default) rebinds; otherwise it is kept for the same engine
+        // and reset to the default when the engine changes.
+        engineInstanceId: !nextEngine
+          ? currentInstanceId
+          : input.engineInstanceId !== undefined
+            ? (input.engineInstanceId ?? nextEngine)
+            : nextEngine === currentEngine
+              ? currentInstanceId
+              : nextEngine,
         mode: input.mode !== undefined ? (input.mode ?? null) : currentMode,
         modelId:
           input.modelId !== undefined

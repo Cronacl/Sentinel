@@ -41,8 +41,10 @@ import type { FileUIPart } from "ai";
 import {
   ChatComposer,
   type ChatComposerOpenCodeSelection,
+  type ChatComposerSelectionChange,
   type ChatComposerStartPlanImplementationHandler,
   type ChatComposerThreadSelection,
+  type ComposerSendInput,
 } from "./chat-composer";
 import { ChatMessage } from "./chat-message";
 import { ChatScrollControl, useChatScrollControl } from "./chat-scroll-control";
@@ -489,6 +491,7 @@ export function NewThreadScreen({
       composerContext,
       draftRepoState,
       engine,
+      engineInstanceId,
       files,
       modelId,
       openCode,
@@ -496,24 +499,12 @@ export function NewThreadScreen({
       text,
       threadMode = "chat",
       toolTags,
-    }: {
-      composerContext?: import("@/lib/composer-context/types").ComposerContext;
-      draftRepoState?: Partial<
-        import("@/lib/ai/chat/engines/types").RepoThreadState
-      >;
-      engine: ChatEngine;
-      files?: FileUIPart[];
-      modelId: string;
-      openCode?: { agent?: string | null; variant?: string | null };
-      reasoningEffort?: ReasoningEffort | null;
-      text: string;
-      threadMode?: "chat" | "plan";
-      toolTags?: import("@/lib/ai/chat/tools/selection/tags").SentinelComposerToolTag[];
-    }) => {
+    }: ComposerSendInput) => {
       setChatError(null);
       setDraftThreadMode(threadMode);
       setDraftThreadSelection({
         engine,
+        engineInstanceId: engineInstanceId ?? engine,
         modelId,
         mode: threadMode,
         reasoningEffort: reasoningEffort ?? null,
@@ -521,6 +512,7 @@ export function NewThreadScreen({
       writeThreadRouteHandoffSnapshot(
         {
           engine,
+          engineInstanceId: engineInstanceId ?? engine,
           modelId,
           mode: threadMode,
           reasoningEffort: reasoningEffort ?? null,
@@ -539,7 +531,9 @@ export function NewThreadScreen({
             activeRunId: current?.thread.activeRunId ?? null,
             archivedAt: current?.thread.archivedAt ?? null,
             chatEngine: engine,
+            chatEngineInstanceId: engineInstanceId ?? engine,
             chatModelId: modelId,
+            chatModelOptions: current?.thread.chatModelOptions ?? null,
             chatReasoningEffort: reasoningEffort ?? null,
             createdAt: current?.thread.createdAt ?? now,
             hasCodexThread: current?.thread.hasCodexThread ?? false,
@@ -607,6 +601,7 @@ export function NewThreadScreen({
         composerContext,
         ...(draftRepoState ? { draftRepoState } : {}),
         engine,
+        engineInstanceId,
         files,
         modelId,
         ...(openCode ? { openCode } : {}),
@@ -728,6 +723,7 @@ export function NewThreadScreen({
       composerContext,
       draftRepoState,
       engine,
+      engineInstanceId,
       files,
       modelId,
       openCode,
@@ -735,25 +731,13 @@ export function NewThreadScreen({
       text,
       threadMode = "chat",
       toolTags,
-    }: {
-      composerContext?: import("@/lib/composer-context/types").ComposerContext;
-      draftRepoState?: Partial<
-        import("@/lib/ai/chat/engines/types").RepoThreadState
-      >;
-      engine: ChatEngine;
-      files?: FileUIPart[];
-      modelId: string;
-      openCode?: { agent?: string | null; variant?: string | null };
-      reasoningEffort?: ReasoningEffort | null;
-      text: string;
-      threadMode?: "chat" | "plan";
-      toolTags?: import("@/lib/ai/chat/tools/selection/tags").SentinelComposerToolTag[];
-    }) => {
+    }: ComposerSendInput) => {
       setChatError(null);
       await queueFollowUp({
         composerContext,
         ...(draftRepoState ? { draftRepoState } : {}),
         engine,
+        engineInstanceId,
         files,
         modelId,
         ...(openCode ? { openCode } : {}),
@@ -775,6 +759,7 @@ export function NewThreadScreen({
       composerContext,
       draftRepoState,
       engine,
+      engineInstanceId,
       files,
       modelId,
       openCode,
@@ -782,25 +767,13 @@ export function NewThreadScreen({
       text,
       threadMode = "chat",
       toolTags,
-    }: {
-      composerContext?: import("@/lib/composer-context/types").ComposerContext;
-      draftRepoState?: Partial<
-        import("@/lib/ai/chat/engines/types").RepoThreadState
-      >;
-      engine: ChatEngine;
-      files?: FileUIPart[];
-      modelId: string;
-      openCode?: { agent?: string | null; variant?: string | null };
-      reasoningEffort?: ReasoningEffort | null;
-      text: string;
-      threadMode?: "chat" | "plan";
-      toolTags?: import("@/lib/ai/chat/tools/selection/tags").SentinelComposerToolTag[];
-    }) => {
+    }: ComposerSendInput) => {
       setChatError(null);
       await steerFollowUp({
         composerContext,
         ...(draftRepoState ? { draftRepoState } : {}),
         engine,
+        engineInstanceId,
         files,
         modelId,
         ...(openCode ? { openCode } : {}),
@@ -845,18 +818,17 @@ export function NewThreadScreen({
   const handleSelectionChange = useCallback(
     ({
       engine,
+      engineInstanceId,
       modelId,
       mode,
       reasoningEffort,
-    }: {
-      engine?: ChatEngine;
-      modelId?: string | null;
-      mode?: "chat" | "plan";
-      reasoningEffort?: ReasoningEffort | null;
-    }) => {
+    }: ChatComposerSelectionChange) => {
       setDraftThreadSelection(
         (current: ChatComposerThreadSelection | null) => ({
           engine: engine ?? current?.engine ?? "sentinel",
+          engineInstanceId: engine
+            ? (engineInstanceId ?? engine)
+            : (current?.engineInstanceId ?? current?.engine ?? "sentinel"),
           modelId: modelId !== undefined ? modelId : (current?.modelId ?? null),
           mode: mode ?? current?.mode ?? draftThreadMode ?? "chat",
           reasoningEffort:
@@ -1007,6 +979,10 @@ export function NewThreadScreen({
             threadDetailsQuery.data.thread.chatEngine ??
             draftThreadSelection?.engine ??
             "sentinel",
+          engineInstanceId:
+            threadDetailsQuery.data.thread.chatEngineInstanceId ??
+            draftThreadSelection?.engineInstanceId ??
+            null,
           modelId:
             threadDetailsQuery.data.thread.chatModelId ??
             draftThreadSelection?.modelId ??

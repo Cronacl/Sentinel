@@ -58,6 +58,7 @@ describe("chatPreferencesRouter.updateGlobal", () => {
     });
     expect(result).toEqual({
       engine: "sentinel",
+      engineInstanceId: "sentinel",
       mode: "plan",
       modelId: "openai:gpt-5.2",
       reasoningEffort: "medium",
@@ -92,6 +93,7 @@ describe("chatPreferencesRouter.updateGlobal", () => {
     });
     expect(result).toEqual({
       engine: "codex",
+      engineInstanceId: "codex",
       mode: "chat",
       modelId: "gpt-5-codex",
       reasoningEffort: "high",
@@ -113,9 +115,51 @@ describe("chatPreferencesRouter.updateGlobal", () => {
 
     expect(result).toEqual({
       engine: "sentinel",
+      engineInstanceId: "sentinel",
       mode: "chat",
       modelId: "openai:gpt-5.2",
       reasoningEffort: "medium",
     });
+  });
+
+  it("reports the stored default instance in get", async () => {
+    const result = await chatPreferencesRouter.get({
+      ctx: {
+        user: {
+          defaultChatEngine: "codex",
+          defaultChatEngineInstanceId: "codex-work",
+          defaultChatMode: null,
+          defaultChatModelId: "gpt-5-codex",
+          defaultChatReasoningEffort: null,
+          id: "user-1",
+        },
+      },
+    });
+
+    expect(result.engineInstanceId).toBe("codex-work");
+  });
+
+  it("rebinds the default instance when one is selected", async () => {
+    const result = await chatPreferencesRouter.updateGlobal({
+      ctx: {
+        db: { update },
+        session: { user: { id: "user-1" } },
+        user: {
+          defaultChatEngine: "codex",
+          defaultChatEngineInstanceId: "codex-work",
+          defaultChatMode: "chat",
+          defaultChatModelId: "gpt-5-codex",
+          defaultChatReasoningEffort: null,
+        },
+      },
+      input: { engine: "codex", engineInstanceId: "codex" },
+    });
+
+    expect(set).toHaveBeenLastCalledWith({
+      defaultChatEngine: "codex",
+      // The default instance is stored as NULL.
+      defaultChatEngineInstanceId: null,
+    });
+    expect(result.engineInstanceId).toBe("codex");
   });
 });

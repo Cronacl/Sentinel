@@ -8,8 +8,8 @@ import {
   filterSelectableModels,
   getReasoningEffortLabel,
   haveSameEngineOptionSet,
+  getEngineStabilityNotice,
   haveSameSelectableModelSet,
-  isUnstableChatEngine,
   resolveOpenCodeTraitValueForThreadMode,
   resolveReasoningEffort,
   resolveStableEngineOptions,
@@ -29,9 +29,11 @@ function createModel(
     displayName: "Test model",
     engine: "codex",
     inputModalities: ["text"],
+    instanceId: "codex",
     isConnected: true,
     isEnabled: true,
     modelId: "gpt-5-codex",
+    options: [],
     provider: null,
     rawModelId: "gpt-5-codex",
     supportedReasoningEfforts: ["medium"],
@@ -107,10 +109,45 @@ describe("chat composer model helpers", () => {
     ).toBe(false);
   });
 
-  it("does not mark Cursor as unstable", () => {
-    expect(isUnstableChatEngine("cursor")).toBe(false);
-    expect(isUnstableChatEngine("opencode")).toBe(false);
-    expect(isUnstableChatEngine("codex")).toBe(false);
+  it("tells instances of the same driver apart", () => {
+    expect(
+      haveSameSelectableModelSet(
+        [createModel()],
+        [createModel({ instanceId: "codex-work" })],
+      ),
+    ).toBe(false);
+    expect(
+      haveSameEngineOptionSet(FALLBACK_CHAT_ENGINE_OPTIONS, [
+        ...FALLBACK_CHAT_ENGINE_OPTIONS.slice(0, -1),
+        { ...FALLBACK_CHAT_ENGINE_OPTIONS.at(-1)!, instanceId: "other" },
+      ]),
+    ).toBe(false);
+  });
+
+  it("offers every implemented driver's default instance before the catalog loads", () => {
+    expect(
+      FALLBACK_CHAT_ENGINE_OPTIONS.map((option) => [
+        option.engine,
+        option.instanceId,
+      ]),
+    ).toEqual([
+      ["sentinel", "sentinel"],
+      ["codex", "codex"],
+      ["claude", "claude"],
+      ["copilot", "copilot"],
+      ["cursor", "cursor"],
+      ["opencode", "opencode"],
+    ]);
+  });
+
+  it("flags engines by catalog stability, not a stub", () => {
+    expect(getEngineStabilityNotice({ stability: "stable" })).toBeNull();
+    expect(getEngineStabilityNotice({ stability: "experimental" })).toEqual({
+      description:
+        "Experimental integration; behavior may change or fail unexpectedly.",
+      label: "Unstable",
+    });
+    expect(getEngineStabilityNotice({ stability: "beta" })?.label).toBe("Beta");
   });
 
   it("maps OpenCode plan mode to a matching plan trait when available", () => {
