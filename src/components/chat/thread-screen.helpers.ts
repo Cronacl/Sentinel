@@ -1,5 +1,7 @@
+import { toComposerOptionValues } from "@/components/engines/option-descriptors";
+import type { EngineOptionSelection } from "@/lib/ai/chat/engines/contract";
 import type {
-  ChatComposerOpenCodeSelection,
+  ChatComposerOptionSelection,
   ChatComposerThreadSelection,
 } from "./chat-composer/types";
 import type { DraftProjectMode } from "./draft-thread-project-mode";
@@ -12,6 +14,7 @@ type ThreadScreenThreadState = {
   /** The thread's instance (threads.get reports the default as the engine). */
   chatEngineInstanceId?: string | null;
   chatModelId: string | null;
+  chatModelOptions?: EngineOptionSelection[] | null;
   chatReasoningEffort: string | null;
   mode: "chat" | "plan";
 };
@@ -22,7 +25,7 @@ export type ThreadScreenComposerUiState = {
     path: string;
   } | null;
   draftProjectMode: DraftProjectMode;
-  openCodeSelection: ChatComposerOpenCodeSelection;
+  optionSelection: ChatComposerOptionSelection;
   threadSelection: ChatComposerThreadSelection;
 };
 
@@ -34,10 +37,10 @@ export function resolveInitialThreadComposerUiState(input: {
     draftPreparedWorktree:
       input.initialComposerUiState?.draftPreparedWorktree ?? null,
     draftProjectMode: input.initialComposerUiState?.draftProjectMode ?? "local",
-    openCodeSelection: input.initialComposerUiState?.openCodeSelection ?? {
-      agent: null,
-      variant: null,
-    },
+    // A handoff's selection, else what the thread last ran with.
+    optionSelection:
+      input.initialComposerUiState?.optionSelection ??
+      toComposerOptionValues(input.thread.chatModelOptions),
     threadSelection: input.initialComposerUiState?.threadSelection ?? {
       engine: input.thread.chatEngine,
       ...(input.thread.chatEngineInstanceId

@@ -15,6 +15,7 @@ import type {
 } from "@/lib/ai/messages/types";
 import { extractLastTitle } from "@/components/chat/message-parts/reasoning/reasoning-utils";
 import { SkillIcon } from "@/components/skills/skill-icon";
+import { getDriverMessageActions } from "@/lib/ai/chat/engines/catalog";
 import type { ComposerContext } from "@/lib/composer-context/types";
 import { getDesktopApi } from "@/lib/desktop/client";
 import type { DesktopOpenTarget } from "@/lib/desktop/contracts";
@@ -627,7 +628,7 @@ function AssistantMessage({
   isStreaming: boolean;
   message: ThreadUIMessage;
 }) {
-  const supportsSentinelMessageActions = chatEngine === "sentinel";
+  const messageActions = getDriverMessageActions(chatEngine);
   const assistantText = useMemo(() => getAssistantText(message), [message]);
   const groups = useMemo(
     () => groupMessageParts(message.parts),
@@ -808,7 +809,7 @@ function AssistantMessage({
               <CopyButton text={assistantText} title="Copy answer" />
             ) : null}
             {!isStreaming &&
-            supportsSentinelMessageActions &&
+            messageActions.retry &&
             onRetry &&
             status === "error" ? (
               <MessageActionButton
@@ -818,7 +819,7 @@ function AssistantMessage({
               />
             ) : null}
             {!isStreaming &&
-            supportsSentinelMessageActions &&
+            messageActions.regenerate &&
             onRegenerate &&
             status === "completed" ? (
               <MessageActionButton

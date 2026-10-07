@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import { CHAT_ENGINES } from "@/server/db/enums";
 
 import {
+  getDriverMessageActions,
   AVAILABLE_DRIVER_KINDS,
   BUILTIN_DRIVER_KINDS,
   DEFAULT_DRIVER_PERMISSION_MODES,
@@ -137,5 +138,30 @@ describe("catalog lookups", () => {
     expect(isDefaultInstanceId("codex", "codex")).toBe(true);
     expect(isDefaultInstanceId("codex-work", "codex")).toBe(false);
     expect(isDefaultInstanceId("acp", "acp")).toBe(false);
+  });
+
+  it("offer message actions from capabilities, none for unknown kinds", () => {
+    expect(getDriverMessageActions("sentinel")).toEqual({
+      edit: true,
+      planAnswers: true,
+      regenerate: true,
+      retry: true,
+    });
+    expect(getDriverMessageActions("codex").retry).toBe(false);
+    expect(getDriverMessageActions("gemini")).toEqual({
+      edit: false,
+      planAnswers: false,
+      regenerate: false,
+      retry: false,
+    });
+    expect(getDriverMessageActions(undefined).regenerate).toBe(false);
+  });
+
+  it("let only Cursor and OpenCode settle approvals in unattended runs", () => {
+    expect(
+      CHAT_ENGINES.filter(
+        (kind) => getDriverMeta(kind)?.capabilities.supportsUnattendedTools,
+      ),
+    ).toEqual(["cursor", "opencode"]);
   });
 });

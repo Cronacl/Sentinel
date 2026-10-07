@@ -17,17 +17,7 @@ import type {
   EngineSelectOptionDescriptor,
   EngineSnapshot,
 } from "./contract";
-import {
-  AGENT_OPTION_ID,
-  REASONING_OPTION_ID,
-  VARIANT_OPTION_ID,
-} from "./model-options";
-
-export type ComposerTraitOption = {
-  isDefault?: boolean;
-  label: string;
-  value: string;
-};
+import { REASONING_OPTION_ID } from "./model-options";
 
 /** One selectable engine instance. */
 export type ComposerEngineOption = {
@@ -61,11 +51,7 @@ export type ComposerEngineModel = {
   isConnected: boolean;
   isEnabled: boolean;
   modelId: string;
-  /** Agent and variant choices (OpenCode), from the option descriptors. */
-  openCode?: {
-    agentOptions: ComposerTraitOption[];
-    variantOptions: ComposerTraitOption[];
-  };
+  /** Reasoning, agent, variant, … (components/engines/option-descriptors.ts). */
   options: EngineOptionDescriptor[];
   provider: AIProvider | null;
   rawModelId: string;
@@ -82,16 +68,6 @@ function findSelect(
 ): EngineSelectOptionDescriptor | null {
   const descriptor = options.find((option) => option.id === id);
   return descriptor?.type === "select" ? descriptor : null;
-}
-
-function toTraitOptions(
-  descriptor: EngineSelectOptionDescriptor | null,
-): ComposerTraitOption[] {
-  return (descriptor?.choices ?? []).map((choice) => ({
-    ...(choice.isDefault ? { isDefault: true } : {}),
-    label: choice.label,
-    value: choice.id,
-  }));
 }
 
 /** The reasoning efforts a model's reasoning descriptor offers. */
@@ -119,8 +95,6 @@ export function toComposerEngineModel(
   snapshot: Pick<EngineSnapshot, "driver" | "instanceId" | "models" | "usable">,
   model: EngineModel,
 ): ComposerEngineModel {
-  const agent = findSelect(model.options, AGENT_OPTION_ID);
-  const variant = findSelect(model.options, VARIANT_OPTION_ID);
   const efforts = getModelReasoningEfforts(model);
 
   return {
@@ -136,14 +110,6 @@ export function toComposerEngineModel(
     isConnected: snapshot.usable || snapshot.models.length > 0,
     isEnabled: !model.disabledReason,
     modelId: model.id,
-    ...(agent || variant
-      ? {
-          openCode: {
-            agentOptions: toTraitOptions(agent),
-            variantOptions: toTraitOptions(variant),
-          },
-        }
-      : {}),
     options: model.options,
     provider: null,
     rawModelId: model.runtimeId ?? model.id,

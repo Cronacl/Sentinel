@@ -17,10 +17,15 @@ import type { ReasoningEffort } from "@/lib/ai/providers/models";
 
 import {
   getReasoningEffortLabel,
-  shouldHideOpenCodeAgentSelector,
-  shouldHideOpenCodeTraitSelector,
   type ChatComposerModel,
 } from "./chat-composer-helpers";
+import {
+  isModeMappingOption,
+  toOptionChoices,
+  type ComposerOptionValues,
+  type OptionChoiceLike,
+} from "@/components/engines/option-descriptors";
+import type { EngineSelectOptionDescriptor } from "@/lib/ai/chat/engines/contract";
 
 function ModelIcon({
   children,
@@ -40,13 +45,15 @@ function ModelIcon({
 
 type ModelSelectorProps = {
   availableModels: ChatComposerModel[];
+  /** The selected model's options with their own picker (not effort). */
+  composerOptions: EngineSelectOptionDescriptor[];
+  /** Hide pickers whose choices only mirror the plan toggle. */
+  hideModeMappingOptions: boolean;
   isLoading?: boolean;
   onSelectModel: (modelKey: string) => void;
-  onSelectOpenCodeAgent: (agent: string | null) => void;
-  onSelectOpenCodeVariant: (variant: string | null) => void;
+  onSelectOption: (optionId: string, value: string | null) => void;
   onSelectReasoningEffort: (effort: ReasoningEffort) => void;
-  selectedOpenCodeAgent: string | null;
-  selectedOpenCodeVariant: string | null;
+  optionValues: ComposerOptionValues;
   selectedModel: ChatComposerModel | null;
   selectedModelKey: string | null;
   selectedReasoningEffort: ReasoningEffort | null;
@@ -55,13 +62,13 @@ type ModelSelectorProps = {
 
 export function ModelSelector({
   availableModels,
+  composerOptions,
+  hideModeMappingOptions,
   isLoading = false,
   onSelectModel,
-  onSelectOpenCodeAgent,
-  onSelectOpenCodeVariant,
+  onSelectOption,
   onSelectReasoningEffort,
-  selectedOpenCodeAgent,
-  selectedOpenCodeVariant,
+  optionValues,
   selectedModel,
   selectedModelKey,
   selectedReasoningEffort,
@@ -70,19 +77,14 @@ export function ModelSelector({
   const hasModels = availableModels.length > 0;
   const showLoadingState = isLoading && !hasModels;
   const supportsReasoning = supportedReasoningEfforts.length > 0;
-  const openCodeTraits =
-    selectedModel?.engine === "opencode" ? selectedModel.openCode : undefined;
-  const openCodeAgentOptions = openCodeTraits?.agentOptions ?? [];
-  const openCodeVariantOptions = openCodeTraits?.variantOptions ?? [];
-  const showOpenCodeAgentSelector =
-    openCodeAgentOptions.length > 0 &&
-    !shouldHideOpenCodeAgentSelector(openCodeAgentOptions);
-  const showOpenCodeVariantSelector =
-    openCodeVariantOptions.length > 0 &&
-    !shouldHideOpenCodeTraitSelector(openCodeVariantOptions);
+  const visibleOptions = composerOptions
+    .map((option) => ({ choices: toOptionChoices(option), option }))
+    .filter(
+      ({ choices }) =>
+        !(hideModeMappingOptions && isModeMappingOption(choices)),
+    );
   const [modelOpen, setModelOpen] = useState(false);
-  const [openCodeAgentOpen, setOpenCodeAgentOpen] = useState(false);
-  const [openCodeVariantOpen, setOpenCodeVariantOpen] = useState(false);
+  const [openOptionId, setOpenOptionId] = useState<string | null>(null);
   const [reasoningOpen, setReasoningOpen] = useState(false);
 
   return (
@@ -152,31 +154,19 @@ export function ModelSelector({
         </Popover.Content>
       </Popover.Root>
 
-      {showOpenCodeAgentSelector ? (
-        <OpenCodeTraitSelector
-          ariaLabel="OpenCode agent"
-          isOpen={openCodeAgentOpen}
-          label="Agent"
-          onOpenChange={setOpenCodeAgentOpen}
-          onSelect={onSelectOpenCodeAgent}
-          options={openCodeAgentOptions}
+      {visibleOptions.map(({ choices, option }) => (
+        <OptionSelector
+          ariaLabel={option.label}
+          isOpen={openOptionId === option.id}
+          key={option.id}
+          label={option.label}
+          onOpenChange={(isOpen) => setOpenOptionId(isOpen ? option.id : null)}
+          onSelect={(value) => onSelectOption(option.id, value)}
+          options={choices}
           placement="top"
-          selectedValue={selectedOpenCodeAgent}
+          selectedValue={optionValues[option.id] ?? null}
         />
-      ) : null}
-
-      {showOpenCodeVariantSelector ? (
-        <OpenCodeTraitSelector
-          ariaLabel="OpenCode variant"
-          isOpen={openCodeVariantOpen}
-          label="Mode"
-          onOpenChange={setOpenCodeVariantOpen}
-          onSelect={onSelectOpenCodeVariant}
-          options={openCodeVariantOptions}
-          placement="top"
-          selectedValue={selectedOpenCodeVariant}
-        />
-      ) : null}
+      ))}
 
       {supportsReasoning ? (
         <Popover.Root isOpen={reasoningOpen} onOpenChange={setReasoningOpen}>
@@ -237,7 +227,7 @@ export function ModelSelector({
   );
 }
 
-function OpenCodeTraitSelector({
+function OptionSelector({
   ariaLabel,
   isOpen,
   label,
@@ -252,7 +242,7 @@ function OpenCodeTraitSelector({
   label: string;
   onOpenChange: (isOpen: boolean) => void;
   onSelect: (value: string | null) => void;
-  options: NonNullable<ChatComposerModel["openCode"]>["agentOptions"];
+  options: OptionChoiceLike[];
   placement: "top";
   selectedValue: string | null;
 }) {

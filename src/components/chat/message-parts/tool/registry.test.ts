@@ -1631,4 +1631,23 @@ describe("resolveRenderer", () => {
       }
     }
   });
+
+  it("covers every implemented driver with a tool prefix", () => {
+    expect(Object.keys(ENGINE_TOOL_RENDERING_COVERAGE).sort()).toEqual(
+      ["claude", "codex", "copilot", "cursor", "opencode"].sort(),
+    );
+  });
+
+  it("leaves tools of drivers without a renderer family to the generic renderer", () => {
+    expect(
+      resolveRenderer({
+        input: {},
+        output: {},
+        state: "output-available",
+        toolCallId: "tool-call-grok",
+        toolName: "grok_read",
+        type: "dynamic-tool",
+      } as any),
+    ).toBeUndefined();
+  });
 });

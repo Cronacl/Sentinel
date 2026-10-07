@@ -133,11 +133,23 @@ mock.module("@/lib/skills/registry", () => ({
     name === registryEntry.name ? registryEntry : null,
 }));
 
+const codexManagerInstances: unknown[] = [];
 mock.module("@/lib/ai/chat/engines/codex-app-server", () => ({
-  getCodexAppServerManager: () => ({
-    listSkills: listCodexSkills,
-    writeSkillConfig,
-  }),
+  getCodexAppServerManager: (instance: unknown) => {
+    codexManagerInstances.push(instance);
+    return {
+      listSkills: listCodexSkills,
+      writeSkillConfig,
+    };
+  },
+}));
+
+// The default Codex instance (null: none could be resolved).
+let defaultCodexInstance: { home: string | null; id: string } | null = null;
+mock.module("@/lib/ai/chat/engines/platform/instance-homes", () => ({
+  getInstanceHomeDirectory: (instance: { home: string | null }) =>
+    instance.home,
+  resolveDefaultEngineInstance: async () => defaultCodexInstance,
 }));
 
 const { skillsRouter } = await import("./skills");
@@ -465,6 +477,30 @@ describe("skillsRouter", () => {
     });
 
     expect(writeSkillConfig).not.toHaveBeenCalled();
+  });
+
+  it("installs codex skills in the default Codex instance's home", async () => {
+    defaultCodexInstance = { home: "/tmp/codex-instance-home", id: "codex" };
+    codexManagerInstances.length = 0;
+
+    try {
+      await expect(
+        skillsRouter.install({
+          ctx: {
+            user: { id: "user-1", skillsBasePath: null },
+            workspace: null,
+          },
+          input: { name: "example", scope: "global", target: "codex" },
+        }),
+      ).resolves.toEqual({
+        directory: "/tmp/codex-instance-home/skills/example",
+        installSteps: registryEntry.installSteps,
+        name: "example",
+      });
+      expect(codexManagerInstances).toEqual([defaultCodexInstance]);
+    } finally {
+      defaultCodexInstance = null;
+    }
   });
 
   it("builds default steps for custom skill installs when no override is provided", async () => {

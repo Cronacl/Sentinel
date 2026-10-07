@@ -25,10 +25,14 @@ import { ComposerToolbar } from "../composer-toolbar";
 import { ComposerWorkspaceBar } from "../composer-workspace-bar";
 import { ModelSelector } from "../model-selector";
 import { QueuedMessages } from "../queued-messages";
+import { shouldClearComposerAfterSendError } from "../chat-composer-helpers";
 import {
-  resolveOpenCodeTraitValueForThreadMode,
-  shouldClearComposerAfterSendError,
-} from "../chat-composer-helpers";
+  mapsPlanModeToOptions,
+  resolveOptionValueForThreadMode,
+  toModelOptionSelections,
+  toOptionChoices,
+  type ComposerOptionValues,
+} from "@/components/engines/option-descriptors";
 import { VoiceRecorderPanel } from "./voice-recorder-panel";
 
 import type { ChatComposerProps, ComposerSendInput } from "./types";
@@ -43,7 +47,7 @@ import { resolveComposerContextWindowIndicator } from "./context-window-indicato
 import { resolveThreadSelectionSyncInput } from "./thread-selection-sync";
 
 export type {
-  ChatComposerOpenCodeSelection,
+  ChatComposerOptionSelection,
   ChatComposerProps,
   ChatComposerSelectionChange,
   ChatComposerStartPlanImplementationHandler,
@@ -64,11 +68,11 @@ export function ChatComposer({
   draftThreadId,
   draftMode = null,
   isEditing = false,
-  openCodeSelection = null,
+  optionSelection = null,
   onCancelEdit,
   onDraftPreparedWorktreeChange,
   onDraftProjectModeChange,
-  onOpenCodeSelectionChange,
+  onOptionSelectionChange,
   onQueueFollowUp,
   onRegisterStartPlanImplementation,
   onRemoveQueuedFollowUp,
@@ -141,23 +145,23 @@ export function ChatComposer({
     engineOptions,
     handleSelectEngine,
     handleSelectModel,
-    handleSelectOpenCodeAgent,
-    handleSelectOpenCodeVariant,
+    handleSelectOption,
     handleSelectReasoningEffort,
     modelsQuery,
     selectedEngine,
     selectedInstanceId,
     selectedModel,
     selectedModelKey,
-    selectedOpenCodeAgent,
-    selectedOpenCodeVariant,
+    composerOptions,
+    selectedEngineStatus,
+    selectedOptionValues,
     selectedReasoningEffort,
     supportedReasoningEfforts,
     threadPersistenceReadyRef,
   } = useModelSelection({
     globalSelectionQuery,
-    openCodeSelection,
-    onOpenCodeSelectionChange,
+    optionSelection,
+    onOptionSelectionChange,
     onSelectionChange,
     persistEngineSelection,
     persistSelection,
@@ -165,7 +169,8 @@ export function ChatComposer({
     threadSelection,
   });
 
-  const planModeAvailable = true;
+  // Hidden only for an engine that declares it cannot plan.
+  const planModeAvailable = selectedEngineStatus?.supportsPlanMode !== false;
   const { handleTogglePlanMode, planMode, planModeReady, setPlanMode } =
     usePlanMode({
       canPersistThreadSelection,
@@ -313,19 +318,31 @@ export function ChatComposer({
       threadMessages,
     ],
   );
-  const openCodeTraits =
-    selectedModel?.engine === "opencode" ? selectedModel.openCode : undefined;
-  const effectiveSelectedOpenCodeAgent = resolveOpenCodeTraitValueForThreadMode(
-    openCodeTraits?.agentOptions,
-    selectedOpenCodeAgent,
-    planMode ? "plan" : "chat",
+  // Engines that plan by picking an option (OpenCode's plan agent) follow
+  // the plan toggle through their options.
+  const planMapsToOptions = mapsPlanModeToOptions(
+    selectedEngineStatus?.supportsPlanMode,
   );
-  const effectiveSelectedOpenCodeVariant =
-    resolveOpenCodeTraitValueForThreadMode(
-      openCodeTraits?.variantOptions,
-      selectedOpenCodeVariant,
-      planMode ? "plan" : "chat",
-    );
+  const resolveOptionValuesForMode = useCallback(
+    (threadMode: "chat" | "plan"): ComposerOptionValues =>
+      planMapsToOptions
+        ? Object.fromEntries(
+            composerOptions.map((option) => [
+              option.id,
+              resolveOptionValueForThreadMode(
+                toOptionChoices(option),
+                selectedOptionValues[option.id] ?? null,
+                threadMode,
+              ),
+            ]),
+          )
+        : selectedOptionValues,
+    [composerOptions, planMapsToOptions, selectedOptionValues],
+  );
+  const effectiveOptionValues = useMemo(
+    () => resolveOptionValuesForMode(planMode ? "plan" : "chat"),
+    [planMode, resolveOptionValuesForMode],
+  );
 
   useEffect(() => {
     if (!canPersistThreadSelection || !threadSelection) {
@@ -370,25 +387,22 @@ export function ChatComposer({
   ]);
 
   useEffect(() => {
-    if (selectedModel?.engine !== "opencode") {
+    if (!planMapsToOptions) {
       return;
     }
 
-    if (effectiveSelectedOpenCodeAgent !== selectedOpenCodeAgent) {
-      handleSelectOpenCodeAgent(effectiveSelectedOpenCodeAgent);
-    }
-
-    if (effectiveSelectedOpenCodeVariant !== selectedOpenCodeVariant) {
-      handleSelectOpenCodeVariant(effectiveSelectedOpenCodeVariant);
+    for (const option of composerOptions) {
+      const next = effectiveOptionValues[option.id] ?? null;
+      if (next !== (selectedOptionValues[option.id] ?? null)) {
+        handleSelectOption(option.id, next);
+      }
     }
   }, [
-    effectiveSelectedOpenCodeAgent,
-    effectiveSelectedOpenCodeVariant,
-    handleSelectOpenCodeAgent,
-    handleSelectOpenCodeVariant,
-    selectedModel?.engine,
-    selectedOpenCodeAgent,
-    selectedOpenCodeVariant,
+    composerOptions,
+    effectiveOptionValues,
+    handleSelectOption,
+    planMapsToOptions,
+    selectedOptionValues,
   ]);
 
   const dispatchMessagePayload = useCallback(
@@ -444,14 +458,10 @@ export function ChatComposer({
         engineInstanceId: selectedInstanceId,
         ...(files.length > 0 ? { files } : {}),
         modelId: selectedModelKey,
-        ...(selectedEngine === "opencode"
-          ? {
-              openCode: {
-                agent: effectiveSelectedOpenCodeAgent,
-                variant: effectiveSelectedOpenCodeVariant,
-              },
-            }
-          : {}),
+        modelOptions: toModelOptionSelections(
+          effectiveOptionValues,
+          composerOptions,
+        ),
         reasoningEffort: selectedReasoningEffort,
         text,
         threadMode: (planMode ? "plan" : "chat") as "chat" | "plan",
@@ -501,8 +511,8 @@ export function ChatComposer({
     selectedEngine,
     selectedInstanceId,
     selectedModelKey,
-    effectiveSelectedOpenCodeAgent,
-    effectiveSelectedOpenCodeVariant,
+    composerOptions,
+    effectiveOptionValues,
     selectedReasoningEffort,
     setAttachmentError,
     setPreviewAttachment,
@@ -525,22 +535,11 @@ export function ChatComposer({
       engine: selectedEngine,
       engineInstanceId: selectedInstanceId,
       modelId: selectedModelKey,
-      ...(selectedEngine === "opencode"
-        ? {
-            openCode: {
-              agent: resolveOpenCodeTraitValueForThreadMode(
-                selectedModel?.openCode?.agentOptions,
-                selectedOpenCodeAgent,
-                "chat",
-              ),
-              variant: resolveOpenCodeTraitValueForThreadMode(
-                selectedModel?.openCode?.variantOptions,
-                selectedOpenCodeVariant,
-                "chat",
-              ),
-            },
-          }
-        : {}),
+      // Implementation runs in chat mode, whatever the plan toggle showed.
+      modelOptions: toModelOptionSelections(
+        resolveOptionValuesForMode("chat"),
+        composerOptions,
+      ),
       reasoningEffort: selectedReasoningEffort,
       text: IMPLEMENT_PLAN_PROMPT,
       threadMode: "chat",
@@ -553,10 +552,8 @@ export function ChatComposer({
     selectedEngine,
     selectedInstanceId,
     selectedModelKey,
-    selectedModel?.openCode?.agentOptions,
-    selectedModel?.openCode?.variantOptions,
-    selectedOpenCodeAgent,
-    selectedOpenCodeVariant,
+    composerOptions,
+    resolveOptionValuesForMode,
     selectedReasoningEffort,
     setAttachmentError,
     setPlanMode,
@@ -589,12 +586,12 @@ export function ChatComposer({
       <ModelSelector
         availableModels={availableModels}
         isLoading={modelsQuery.isLoading && availableModels.length === 0}
+        composerOptions={composerOptions}
+        hideModeMappingOptions={planMapsToOptions}
         onSelectModel={handleSelectModel}
-        onSelectOpenCodeAgent={handleSelectOpenCodeAgent}
-        onSelectOpenCodeVariant={handleSelectOpenCodeVariant}
+        onSelectOption={handleSelectOption}
         onSelectReasoningEffort={handleSelectReasoningEffort}
-        selectedOpenCodeAgent={effectiveSelectedOpenCodeAgent}
-        selectedOpenCodeVariant={effectiveSelectedOpenCodeVariant}
+        optionValues={effectiveOptionValues}
         selectedModel={selectedModel}
         selectedModelKey={selectedModelKey}
         selectedReasoningEffort={selectedReasoningEffort}
@@ -603,13 +600,13 @@ export function ChatComposer({
     ),
     [
       availableModels,
+      composerOptions,
+      effectiveOptionValues,
       handleSelectModel,
-      handleSelectOpenCodeAgent,
-      handleSelectOpenCodeVariant,
+      handleSelectOption,
       handleSelectReasoningEffort,
       modelsQuery.isLoading,
-      effectiveSelectedOpenCodeAgent,
-      effectiveSelectedOpenCodeVariant,
+      planMapsToOptions,
       selectedModel,
       selectedModelKey,
       selectedReasoningEffort,

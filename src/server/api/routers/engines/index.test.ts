@@ -306,16 +306,16 @@ describe("enginesRouter.models", () => {
     ]);
   });
 
-  it("returns OpenCode models with their agent and variant traits", async () => {
+  it("returns OpenCode models with their agent and variant options", async () => {
     const [model] = await enginesRouter.models({
       ctx: USER_CTX,
       input: { instanceId: "opencode" },
     });
 
-    expect(model.openCode).toEqual({
-      agentOptions: [{ isDefault: true, label: "Build", value: "build" }],
-      variantOptions: [{ isDefault: true, label: "Medium", value: "medium" }],
-    });
+    expect(model.options.map((option) => option.id)).toEqual([
+      "agent",
+      "variant",
+    ]);
     expect(model.supportedReasoningEfforts).toEqual([]);
   });
 

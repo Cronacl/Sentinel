@@ -37,10 +37,11 @@ import {
 import type { ChatEngine } from "@/server/db/enums";
 import { api } from "@/trpc/react";
 import type { FileUIPart } from "ai";
+import { toComposerOptionValues } from "@/components/engines/option-descriptors";
 
 import {
   ChatComposer,
-  type ChatComposerOpenCodeSelection,
+  type ChatComposerOptionSelection,
   type ChatComposerSelectionChange,
   type ChatComposerStartPlanImplementationHandler,
   type ChatComposerThreadSelection,
@@ -96,11 +97,8 @@ export function NewThreadScreen({
   } | null>(null);
   const [draftThreadSelection, setDraftThreadSelection] =
     useState<ChatComposerThreadSelection | null>(null);
-  const [draftOpenCodeSelection, setDraftOpenCodeSelection] =
-    useState<ChatComposerOpenCodeSelection>({
-      agent: null,
-      variant: null,
-    });
+  const [draftOptionSelection, setDraftOptionSelection] =
+    useState<ChatComposerOptionSelection>({});
   const [draftThreadId, setDraftThreadId] = useState(
     () => threadId ?? crypto.randomUUID(),
   );
@@ -451,7 +449,7 @@ export function NewThreadScreen({
   const writeThreadRouteHandoffSnapshot = useCallback(
     (
       nextThreadSelection?: ChatComposerThreadSelection | null,
-      nextOpenCodeSelection?: ChatComposerOpenCodeSelection,
+      nextOptionSelection?: ChatComposerOptionSelection,
     ) => {
       if (threadId) {
         return;
@@ -466,14 +464,14 @@ export function NewThreadScreen({
       setThreadRouteHandoff({
         draftPreparedWorktree,
         draftProjectMode,
-        openCodeSelection: nextOpenCodeSelection ?? draftOpenCodeSelection,
+        optionSelection: nextOptionSelection ?? draftOptionSelection,
         threadId: draftThreadId,
         threadSelection: resolvedThreadSelection,
         updatedAt: Date.now(),
       });
     },
     [
-      draftOpenCodeSelection,
+      draftOptionSelection,
       draftPreparedWorktree,
       draftProjectMode,
       draftThreadId,
@@ -494,7 +492,7 @@ export function NewThreadScreen({
       engineInstanceId,
       files,
       modelId,
-      openCode,
+      modelOptions,
       reasoningEffort,
       text,
       threadMode = "chat",
@@ -517,10 +515,7 @@ export function NewThreadScreen({
           mode: threadMode,
           reasoningEffort: reasoningEffort ?? null,
         },
-        {
-          agent: openCode?.agent ?? null,
-          variant: openCode?.variant ?? null,
-        },
+        toComposerOptionValues(modelOptions),
       );
       if (selectedWorkspace) {
         const now = new Date();
@@ -604,7 +599,7 @@ export function NewThreadScreen({
         engineInstanceId,
         files,
         modelId,
-        ...(openCode ? { openCode } : {}),
+        ...(modelOptions?.length ? { modelOptions } : {}),
         reasoningEffort,
         text,
         threadMode,
@@ -726,7 +721,7 @@ export function NewThreadScreen({
       engineInstanceId,
       files,
       modelId,
-      openCode,
+      modelOptions,
       reasoningEffort,
       text,
       threadMode = "chat",
@@ -740,7 +735,7 @@ export function NewThreadScreen({
         engineInstanceId,
         files,
         modelId,
-        ...(openCode ? { openCode } : {}),
+        ...(modelOptions?.length ? { modelOptions } : {}),
         reasoningEffort,
         text,
         threadMode,
@@ -762,7 +757,7 @@ export function NewThreadScreen({
       engineInstanceId,
       files,
       modelId,
-      openCode,
+      modelOptions,
       reasoningEffort,
       text,
       threadMode = "chat",
@@ -776,7 +771,7 @@ export function NewThreadScreen({
         engineInstanceId,
         files,
         modelId,
-        ...(openCode ? { openCode } : {}),
+        ...(modelOptions?.length ? { modelOptions } : {}),
         reasoningEffort,
         text,
         threadMode,
@@ -944,10 +939,7 @@ export function NewThreadScreen({
       setDraftProjectMode("local");
       setDraftThreadMode(utils.chatPreferences.get.getData()?.mode ?? null);
       setDraftThreadSelection(null);
-      setDraftOpenCodeSelection({
-        agent: null,
-        variant: null,
-      });
+      setDraftOptionSelection({});
       clearThreadRouteHandoff(draftThreadId);
       setDraftThreadId(crypto.randomUUID());
       setDraftThreadInitialized(false);
@@ -1056,12 +1048,12 @@ export function NewThreadScreen({
                 draftProjectMode={draftProjectMode}
                 draftThreadId={draftThreadId}
                 draftMode={resolvedThreadSelection?.mode ?? draftThreadMode}
-                openCodeSelection={draftOpenCodeSelection}
+                optionSelection={draftOptionSelection}
                 onQueueFollowUp={handleQueueFollowUp}
                 onRemoveQueuedFollowUp={handleRemoveQueuedFollowUp}
                 onDraftPreparedWorktreeChange={setDraftPreparedWorktree}
                 onDraftProjectModeChange={setDraftProjectMode}
-                onOpenCodeSelectionChange={setDraftOpenCodeSelection}
+                onOptionSelectionChange={setDraftOptionSelection}
                 onRegisterStartPlanImplementation={
                   handleRegisterStartPlanImplementation
                 }
@@ -1238,12 +1230,12 @@ export function NewThreadScreen({
               draftProjectMode={draftProjectMode}
               draftThreadId={draftThreadId}
               draftMode={draftThreadMode}
-              openCodeSelection={draftOpenCodeSelection}
+              optionSelection={draftOptionSelection}
               onQueueFollowUp={handleQueueFollowUp}
               onRemoveQueuedFollowUp={handleRemoveQueuedFollowUp}
               onDraftPreparedWorktreeChange={setDraftPreparedWorktree}
               onDraftProjectModeChange={setDraftProjectMode}
-              onOpenCodeSelectionChange={setDraftOpenCodeSelection}
+              onOptionSelectionChange={setDraftOptionSelection}
               onRegisterStartPlanImplementation={
                 handleRegisterStartPlanImplementation
               }

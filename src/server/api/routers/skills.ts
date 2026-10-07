@@ -9,6 +9,10 @@ import {
 } from "@/lib/skills";
 import { getCodexAppServerManager } from "@/lib/ai/chat/engines/codex-app-server";
 import {
+  getInstanceHomeDirectory,
+  resolveDefaultEngineInstance,
+} from "@/lib/ai/chat/engines/platform/instance-homes";
+import {
   executeInstallSteps,
   resolveCodexHome,
   uninstallSkill,
@@ -32,11 +36,28 @@ function resolveGlobalBase(user: { skillsBasePath?: string | null }) {
   return user.skillsBasePath?.trim() || null;
 }
 
+/**
+ * Codex skills live in the default Codex instance's home (its CODEX_HOME
+ * when it sets one) and are toggled through that instance's app-server.
+ */
+async function resolveCodexSkillContext(userId: string) {
+  const instance = await resolveDefaultEngineInstance(userId, "codex");
+  return {
+    codex: getCodexAppServerManager(instance),
+    home:
+      (instance ? getInstanceHomeDirectory(instance) : null) ??
+      resolveCodexHome(),
+  };
+}
+
+type CodexSkillContext = Awaited<ReturnType<typeof resolveCodexSkillContext>>;
+
 function resolveDestRoot(
   user: { skillsBasePath?: string | null },
   scope: "global" | "workspace",
   workspaceRootPath: string | null,
   target: "sentinel" | "codex" | "claude" | "copilot" | "cursor" | "opencode",
+  codexHome: string,
 ) {
   if (target === "codex") {
     if (scope === "workspace") {
@@ -46,7 +67,7 @@ function resolveDestRoot(
       });
     }
 
-    return resolveCodexHome();
+    return codexHome;
   }
 
   if (scope === "workspace") {
@@ -69,8 +90,10 @@ function parseInstallInstructions(value: string) {
     .filter(Boolean);
 }
 
-async function findCodexInstalledSkill(name: string) {
-  const codex = getCodexAppServerManager();
+async function findCodexInstalledSkill(
+  codex: CodexSkillContext["codex"],
+  name: string,
+) {
   const response = await codex.listSkills().catch(() => null);
   const skills = Array.isArray(response?.skills) ? response.skills : [];
   const normalizedName = name.trim().toLowerCase();
@@ -81,8 +104,7 @@ async function findCodexInstalledSkill(name: string) {
   );
 }
 
-async function buildCodexSkillList() {
-  const codexHome = resolveCodexHome();
+async function buildCodexSkillList(codexHome: string) {
   return await discoverCodexSkills({
     globalBase: codexHome,
   });
@@ -109,7 +131,8 @@ export const skillsRouter = createTRPCRouter({
         globalBase: resolveGlobalBase(ctx.user),
       });
 
-      const codexSkills = await buildCodexSkillList().catch(() => []);
+      const { home: codexHome } = await resolveCodexSkillContext(ctx.user.id);
+      const codexSkills = await buildCodexSkillList(codexHome).catch(() => []);
 
       return {
         ...localSnapshot,
@@ -127,7 +150,7 @@ export const skillsRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       if (input.target === "codex") {
         return await loadSkillByName({
-          globalBase: resolveCodexHome(),
+          globalBase: (await resolveCodexSkillContext(ctx.user.id)).home,
           name: input.name,
           target: "codex",
           workspaceRoot: null,
@@ -178,8 +201,9 @@ export const skillsRouter = createTRPCRouter({
         .filter((skill) => skill.target === "opencode")
         .map((s) => s.name.trim().toLowerCase()),
     );
+    const { home: codexHome } = await resolveCodexSkillContext(ctx.user.id);
     const installedCodexNames = new Set(
-      (await buildCodexSkillList().catch(() => [])).map((skill) =>
+      (await buildCodexSkillList(codexHome).catch(() => [])).map((skill) =>
         skill.name.trim().toLowerCase(),
       ),
     );
@@ -217,11 +241,13 @@ export const skillsRouter = createTRPCRouter({
         });
       }
 
+      const codexContext = await resolveCodexSkillContext(ctx.user.id);
       const destRoot = resolveDestRoot(
         ctx.user,
         input.scope,
         ctx.workspace?.rootPath?.trim() || null,
         input.target,
+        codexContext.home,
       );
 
       const result = await executeInstallSteps({
@@ -233,12 +259,12 @@ export const skillsRouter = createTRPCRouter({
       });
 
       if (input.target === "codex") {
-        const codexSkill = await findCodexInstalledSkill(registrySkill.name);
+        const codexSkill = await findCodexInstalledSkill(
+          codexContext.codex,
+          registrySkill.name,
+        );
         if (codexSkill) {
-          await getCodexAppServerManager().writeSkillConfig(
-            codexSkill.id,
-            true,
-          );
+          await codexContext.codex.writeSkillConfig(codexSkill.id, true);
         }
       }
 
@@ -248,11 +274,13 @@ export const skillsRouter = createTRPCRouter({
   installCustom: protectedProcedure
     .input(customSkillInstallFormSchema)
     .mutation(async ({ ctx, input }) => {
+      const codexContext = await resolveCodexSkillContext(ctx.user.id);
       const destRoot = resolveDestRoot(
         ctx.user,
         input.scope,
         ctx.workspace?.rootPath?.trim() || null,
         input.target,
+        codexContext.home,
       );
 
       const installSteps = parseInstallInstructions(input.installInstructions);
@@ -269,12 +297,12 @@ export const skillsRouter = createTRPCRouter({
       });
 
       if (input.target === "codex") {
-        const codexSkill = await findCodexInstalledSkill(input.name);
+        const codexSkill = await findCodexInstalledSkill(
+          codexContext.codex,
+          input.name,
+        );
         if (codexSkill) {
-          await getCodexAppServerManager().writeSkillConfig(
-            codexSkill.id,
-            true,
-          );
+          await codexContext.codex.writeSkillConfig(codexSkill.id, true);
         }
       }
 
@@ -290,16 +318,18 @@ export const skillsRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const codexContext = await resolveCodexSkillContext(ctx.user.id);
       const destRoot = resolveDestRoot(
         ctx.user,
         input.scope,
         ctx.workspace?.rootPath?.trim() || null,
         input.target,
+        codexContext.home,
       );
 
       const installedCodexSkill =
         input.target === "codex"
-          ? await findCodexInstalledSkill(input.name)
+          ? await findCodexInstalledSkill(codexContext.codex, input.name)
           : null;
 
       const result = await uninstallSkill({
@@ -310,7 +340,7 @@ export const skillsRouter = createTRPCRouter({
       });
 
       if (installedCodexSkill) {
-        await getCodexAppServerManager().writeSkillConfig(
+        await codexContext.codex.writeSkillConfig(
           installedCodexSkill.id,
           false,
         );

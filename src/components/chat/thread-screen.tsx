@@ -35,6 +35,8 @@ import { useShell } from "@/components/shell/shell-context";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import { isCommittedThreadActionError } from "@/hooks/use-thread-chat";
 import { moveQueuedFollowUpToFront } from "@/hooks/use-thread-chat";
+import { getDriverMessageActions } from "@/lib/ai/chat/engines/catalog";
+import type { EngineOptionSelection } from "@/lib/ai/chat/engines/contract";
 import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
@@ -58,7 +60,7 @@ import type { FileUIPart } from "ai";
 
 import {
   ChatComposer,
-  type ChatComposerOpenCodeSelection,
+  type ChatComposerOptionSelection,
   type ChatComposerStartPlanImplementationHandler,
   type ChatComposerThreadSelection,
 } from "./chat-composer";
@@ -85,6 +87,7 @@ type ThreadScreenProps = {
     /** The thread's engine instance (the engine itself for the default). */
     chatEngineInstanceId?: string | null;
     chatModelId: string | null;
+    chatModelOptions?: EngineOptionSelection[] | null;
     chatReasoningEffort: string | null;
     hasCodexThread: boolean;
     id: string;
@@ -130,9 +133,9 @@ export function ThreadScreen({
     useState<ChatComposerThreadSelection>(
       resolvedInitialComposerUiState.threadSelection,
     );
-  const [openCodeSelectionState, setOpenCodeSelectionState] =
-    useState<ChatComposerOpenCodeSelection>(
-      resolvedInitialComposerUiState.openCodeSelection,
+  const [optionSelectionState, setOptionSelectionState] =
+    useState<ChatComposerOptionSelection>(
+      resolvedInitialComposerUiState.optionSelection,
     );
   const [draftProjectMode, setDraftProjectMode] = useState<DraftProjectMode>(
     resolvedInitialComposerUiState.draftProjectMode,
@@ -153,7 +156,7 @@ export function ThreadScreen({
 
   useEffect(() => {
     setThreadSelectionState(resolvedInitialComposerUiState.threadSelection);
-    setOpenCodeSelectionState(resolvedInitialComposerUiState.openCodeSelection);
+    setOptionSelectionState(resolvedInitialComposerUiState.optionSelection);
     setDraftProjectMode(resolvedInitialComposerUiState.draftProjectMode);
     setDraftPreparedWorktree(
       resolvedInitialComposerUiState.draftPreparedWorktree,
@@ -468,7 +471,7 @@ export function ThreadScreen({
       files,
       engine,
       modelId,
-      openCode,
+      modelOptions,
       reasoningEffort,
       text,
       threadMode,
@@ -478,7 +481,7 @@ export function ThreadScreen({
       files?: FileUIPart[];
       engine: ChatEngine;
       modelId: string;
-      openCode?: { agent?: string | null; variant?: string | null };
+      modelOptions?: EngineOptionSelection[];
       reasoningEffort?: ReasoningEffort | null;
       text: string;
       threadMode?: "chat" | "plan";
@@ -508,7 +511,7 @@ export function ThreadScreen({
         engine,
         files,
         modelId,
-        ...(openCode ? { openCode } : {}),
+        ...(modelOptions?.length ? { modelOptions } : {}),
         reasoningEffort,
         text,
         threadMode: threadMode ?? threadSelectionState.mode,
@@ -531,7 +534,7 @@ export function ThreadScreen({
       files,
       engine,
       modelId,
-      openCode,
+      modelOptions,
       reasoningEffort,
       text,
       threadMode,
@@ -541,7 +544,7 @@ export function ThreadScreen({
       files?: FileUIPart[];
       engine: ChatEngine;
       modelId: string;
-      openCode?: { agent?: string | null; variant?: string | null };
+      modelOptions?: EngineOptionSelection[];
       reasoningEffort?: ReasoningEffort | null;
       text: string;
       threadMode?: "chat" | "plan";
@@ -553,7 +556,7 @@ export function ThreadScreen({
         engine,
         files,
         modelId,
-        ...(openCode ? { openCode } : {}),
+        ...(modelOptions?.length ? { modelOptions } : {}),
         reasoningEffort,
         text,
         threadMode: threadMode ?? threadSelectionState.mode,
@@ -573,7 +576,7 @@ export function ThreadScreen({
       files,
       engine,
       modelId,
-      openCode,
+      modelOptions,
       reasoningEffort,
       text,
       threadMode,
@@ -583,7 +586,7 @@ export function ThreadScreen({
       files?: FileUIPart[];
       engine: ChatEngine;
       modelId: string;
-      openCode?: { agent?: string | null; variant?: string | null };
+      modelOptions?: EngineOptionSelection[];
       reasoningEffort?: ReasoningEffort | null;
       text: string;
       threadMode?: "chat" | "plan";
@@ -595,7 +598,7 @@ export function ThreadScreen({
         engine,
         files,
         modelId,
-        ...(openCode ? { openCode } : {}),
+        ...(modelOptions?.length ? { modelOptions } : {}),
         reasoningEffort,
         text,
         threadMode: threadMode ?? threadSelectionState.mode,
@@ -1086,7 +1089,7 @@ export function ThreadScreen({
     [],
   );
 
-  const supportsSentinelMessageActions = chatEngine === "sentinel";
+  const messageActions = getDriverMessageActions(chatEngine);
   const isBranchSwitchingDisabled =
     status === "submitted" || status === "streaming";
 
@@ -1272,13 +1275,9 @@ export function ThreadScreen({
                       : undefined
                   }
                   onRegenerate={
-                    supportsSentinelMessageActions
-                      ? handleRegenerate
-                      : undefined
+                    messageActions.regenerate ? handleRegenerate : undefined
                   }
-                  onRetry={
-                    supportsSentinelMessageActions ? handleRetry : undefined
-                  }
+                  onRetry={messageActions.retry ? handleRetry : undefined}
                   onSelectBranch={handleSelectBranch}
                   disableBranchSwitching={isBranchSwitchingDisabled}
                   repoCheckpointAnchorMessageId={
@@ -1315,11 +1314,11 @@ export function ThreadScreen({
               draftPreparedWorktree={draftPreparedWorktree}
               draftProjectMode={draftProjectMode}
               isEditing={editingMessage != null}
-              openCodeSelection={openCodeSelectionState}
+              optionSelection={optionSelectionState}
               onCancelEdit={handleCancelEdit}
               onDraftPreparedWorktreeChange={setDraftPreparedWorktree}
               onDraftProjectModeChange={setDraftProjectMode}
-              onOpenCodeSelectionChange={setOpenCodeSelectionState}
+              onOptionSelectionChange={setOptionSelectionState}
               onQueueFollowUp={handleQueueFollowUp}
               onRemoveQueuedFollowUp={async (id) => {
                 const previousQueue = liveQueuedFollowUps;

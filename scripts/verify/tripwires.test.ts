@@ -587,3 +587,26 @@ describe("P10 snapshot consumer tripwires", () => {
     ).toEqual(["P10-engine-status-stubs:1"]);
   });
 });
+
+describe("P10 composer option tripwire", () => {
+  it("flags OpenCode-only composer traits", () => {
+    expect(
+      hitIds(
+        "src/components/chat/model-selector.tsx",
+        'const traits = selectedModel?.engine === "opencode" ? model.openCode : undefined;',
+      ),
+    ).toEqual(["P10-opencode-composer-traits:1"]);
+    expect(
+      hitIds(
+        "src/components/chat/chat-composer/index.tsx",
+        "resolveOpenCodeTraitValueForThreadMode(options, value, mode)",
+      ),
+    ).toEqual(["P10-opencode-composer-traits:1"]);
+    expect(
+      hitIds(
+        "src/components/chat/chat-composer/index.tsx",
+        "resolveOptionValueForThreadMode(choices, value, mode)",
+      ),
+    ).toEqual([]);
+  });
+});

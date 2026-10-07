@@ -3,6 +3,23 @@ import { describe, expect, it } from "bun:test";
 import { resolveInitialThreadComposerUiState } from "./thread-screen.helpers";
 
 describe("resolveInitialThreadComposerUiState", () => {
+  it("restores the options the thread last ran with", () => {
+    expect(
+      resolveInitialThreadComposerUiState({
+        thread: {
+          chatEngine: "opencode",
+          chatModelId: "openai/gpt-5",
+          chatModelOptions: [
+            { id: "agent", value: "build" },
+            { id: "fast", value: true },
+          ],
+          chatReasoningEffort: null,
+          mode: "chat",
+        },
+      }).optionSelection,
+    ).toEqual({ agent: "build" });
+  });
+
   it("keeps the thread's engine instance in its selection", () => {
     expect(
       resolveInitialThreadComposerUiState({
@@ -36,10 +53,7 @@ describe("resolveInitialThreadComposerUiState", () => {
     ).toEqual({
       draftPreparedWorktree: null,
       draftProjectMode: "local",
-      openCodeSelection: {
-        agent: null,
-        variant: null,
-      },
+      optionSelection: {},
       threadSelection: {
         engine: "codex",
         modelId: "gpt-5.4",
@@ -58,7 +72,7 @@ describe("resolveInitialThreadComposerUiState", () => {
             path: "/repo/.worktrees/thread-1",
           },
           draftProjectMode: "worktree",
-          openCodeSelection: {
+          optionSelection: {
             agent: "builder",
             variant: "max",
           },
@@ -84,7 +98,7 @@ describe("resolveInitialThreadComposerUiState", () => {
         path: "/repo/.worktrees/thread-1",
       },
       draftProjectMode: "worktree",
-      openCodeSelection: {
+      optionSelection: {
         agent: "builder",
         variant: "max",
       },

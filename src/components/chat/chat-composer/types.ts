@@ -1,5 +1,8 @@
 import type { FileUIPart } from "ai";
 
+import type { ComposerOptionValues } from "@/components/engines/option-descriptors";
+import type { EngineOptionSelection } from "@/lib/ai/chat/engines/contract";
+
 import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ComposerContext } from "@/lib/composer-context/types";
@@ -10,10 +13,11 @@ import type { DraftProjectMode } from "../draft-thread-project-mode";
 
 export type { QueuedFollowUpSummary } from "@/lib/ai/chat/session/types";
 
-export type ChatComposerOpenCodeSelection = {
-  agent: string | null;
-  variant: string | null;
-};
+/**
+ * The selected value of each of the model's composer options (OpenCode
+ * agent and variant, …), by option id; null or absent means the default.
+ */
+export type ChatComposerOptionSelection = ComposerOptionValues;
 
 export type ChatComposerThreadSelection = {
   engine?: ChatEngine;
@@ -41,10 +45,8 @@ export type ComposerSendInput = {
   engineInstanceId?: string;
   files?: FileUIPart[];
   modelId: string;
-  openCode?: {
-    agent?: string | null;
-    variant?: string | null;
-  };
+  /** The model's option selections (reasoning effort travels apart). */
+  modelOptions?: EngineOptionSelection[];
   reasoningEffort?: ReasoningEffort | null;
   text: string;
   threadMode?: "chat" | "plan";
@@ -67,16 +69,14 @@ export type ChatComposerProps = {
   } | null;
   draftThreadId?: string;
   draftProjectMode?: DraftProjectMode;
-  openCodeSelection?: ChatComposerOpenCodeSelection | null;
+  optionSelection?: ChatComposerOptionSelection | null;
   onQueueFollowUp?: (input: ComposerSendInput) => Promise<void> | void;
   onRemoveQueuedFollowUp?: (id: string) => Promise<void> | void;
   onDraftPreparedWorktreeChange?: (
     worktree: { branch: string; path: string } | null,
   ) => void;
   onDraftProjectModeChange?: (mode: DraftProjectMode) => void;
-  onOpenCodeSelectionChange?: (
-    selection: ChatComposerOpenCodeSelection,
-  ) => void;
+  onOptionSelectionChange?: (selection: ChatComposerOptionSelection) => void;
   onSelectionChange?: (input: ChatComposerSelectionChange) => void;
   onStop?: () => void;
   onSend?: (input: ComposerSendInput) => Promise<unknown> | unknown;

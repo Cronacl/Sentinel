@@ -9,10 +9,6 @@ import type {
 } from "@/lib/ai/chat/engines/composer-catalog";
 import { isCommittedThreadActionError } from "@/hooks/use-thread-chat";
 
-export type ChatComposerOpenCodeTraits = NonNullable<
-  ComposerEngineModel["openCode"]
->;
-
 /** One engine instance in the composer (engines.composerCatalog). */
 export type ChatComposerEngineOption = ComposerEngineOption;
 
@@ -40,106 +36,6 @@ export function getEngineStabilityNotice(
   return option && option.stability !== "stable"
     ? STABILITY_NOTICES[option.stability]
     : null;
-}
-
-function normalizeOpenCodeTraitToken(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "");
-}
-
-function matchesOpenCodePlanTrait(option: { label: string; value: string }) {
-  const normalizedLabel = normalizeOpenCodeTraitToken(option.label);
-  const normalizedValue = normalizeOpenCodeTraitToken(option.value);
-
-  return (
-    normalizedLabel.includes("plan") ||
-    normalizedValue.includes("plan") ||
-    normalizedLabel.includes("max") ||
-    normalizedValue.includes("max")
-  );
-}
-
-function matchesOpenCodeBuildTrait(option: { label: string; value: string }) {
-  const normalizedLabel = normalizeOpenCodeTraitToken(option.label);
-  const normalizedValue = normalizeOpenCodeTraitToken(option.value);
-
-  return (
-    normalizedLabel.includes("build") ||
-    normalizedValue.includes("build") ||
-    normalizedLabel.includes("chat") ||
-    normalizedValue.includes("chat") ||
-    normalizedLabel.includes("default") ||
-    normalizedValue.includes("default") ||
-    normalizedLabel.includes("medium") ||
-    normalizedValue.includes("medium") ||
-    normalizedLabel.includes("high") ||
-    normalizedValue.includes("high") ||
-    normalizedLabel.includes("implement") ||
-    normalizedValue.includes("implement")
-  );
-}
-
-export function shouldHideOpenCodeTraitSelector(
-  options:
-    Array<{ isDefault?: boolean; label: string; value: string }> | undefined,
-) {
-  if (!options || options.length < 2) {
-    return false;
-  }
-
-  const hasPlanOption = options.some(matchesOpenCodePlanTrait);
-  const hasBuildOption = options.some(matchesOpenCodeBuildTrait);
-  const onlyContainsModeMappings = options.every(
-    (option) =>
-      matchesOpenCodePlanTrait(option) || matchesOpenCodeBuildTrait(option),
-  );
-
-  return hasPlanOption && hasBuildOption && onlyContainsModeMappings;
-}
-
-export function shouldHideOpenCodeAgentSelector(
-  options:
-    Array<{ isDefault?: boolean; label: string; value: string }> | undefined,
-) {
-  return shouldHideOpenCodeTraitSelector(options);
-}
-
-export function resolveOpenCodeTraitValueForThreadMode(
-  options:
-    Array<{ isDefault?: boolean; label: string; value: string }> | undefined,
-  currentValue: string | null | undefined,
-  threadMode: "chat" | "plan",
-) {
-  if (!options || options.length === 0) {
-    return null;
-  }
-
-  const currentOption = currentValue
-    ? (options.find((option) => option.value === currentValue) ?? null)
-    : null;
-  const fallbackOption =
-    options.find((option) => option.isDefault) ?? options[0] ?? null;
-
-  if (threadMode === "plan") {
-    return (
-      options.find(matchesOpenCodePlanTrait)?.value ??
-      currentOption?.value ??
-      fallbackOption?.value ??
-      null
-    );
-  }
-
-  if (currentOption && !matchesOpenCodePlanTrait(currentOption)) {
-    return currentOption.value;
-  }
-
-  return (
-    options.find(matchesOpenCodeBuildTrait)?.value ??
-    fallbackOption?.value ??
-    null
-  );
 }
 
 /**

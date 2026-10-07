@@ -1,3 +1,9 @@
+import {
+  BUILTIN_DRIVER_KINDS,
+  DRIVER_CATALOG,
+  type BuiltinDriverKind,
+} from "@/lib/ai/chat/engines/catalog";
+
 import { getToolName, type ToolPart } from "../types";
 import type { Renderer } from "./renderer";
 import { FileTool } from "./renderers/file";
@@ -667,52 +673,16 @@ export const KNOWN_OPENCODE_RENDERER_TOOL_NAMES = Object.freeze(
   Object.keys(openCodeRenderers).sort(),
 );
 
-export const ENGINE_TOOL_RENDERING_COVERAGE = Object.freeze({
-  claude: KNOWN_CLAUDE_RENDERER_TOOL_NAMES,
-  codex: KNOWN_CODEX_RENDERER_TOOL_NAMES,
-  copilot: KNOWN_COPILOT_RENDERER_TOOL_NAMES,
-  cursor: KNOWN_CURSOR_RENDERER_TOOL_NAMES,
-  opencode: KNOWN_OPENCODE_RENDERER_TOOL_NAMES,
-});
-
 function normalizeLooseToolName(name: string) {
   return name.replace(/[^a-z0-9]+/gi, "").toLowerCase();
 }
 
-function isStructuredUserInputToolName(name: string) {
-  const normalized = normalizeLooseToolName(name);
-  const withoutClaudePrefix = normalized.startsWith("claude")
-    ? normalized.slice("claude".length)
-    : normalized;
-  const withoutCopilotPrefix = normalized.startsWith("copilot")
-    ? normalized.slice("copilot".length)
-    : normalized;
-  const withoutCursorPrefix = normalized.startsWith("cursor")
-    ? normalized.slice("cursor".length)
-    : normalized;
-  const withoutOpenCodePrefix = normalized.startsWith("opencode")
-    ? normalized.slice("opencode".length)
-    : normalized;
-
-  return (
-    normalized === "askuserquestion" ||
-    normalized === "askuser" ||
-    normalized === "requestuserinput" ||
-    withoutClaudePrefix === "askuserquestion" ||
-    withoutClaudePrefix === "requestuserinput" ||
-    withoutCopilotPrefix === "askuser" ||
-    withoutCopilotPrefix === "askuserquestion" ||
-    withoutCopilotPrefix === "requestuserinput" ||
-    withoutCursorPrefix === "askquestion" ||
-    withoutCursorPrefix === "askuser" ||
-    withoutCursorPrefix === "askuserquestion" ||
-    withoutCursorPrefix === "requestuserinput" ||
-    withoutOpenCodePrefix === "askquestion" ||
-    withoutOpenCodePrefix === "askuser" ||
-    withoutOpenCodePrefix === "askuserquestion" ||
-    withoutOpenCodePrefix === "requestuserinput"
-  );
-}
+/** Unprefixed names that always ask the user a structured question. */
+const GENERIC_USER_INPUT_TOOL_NAMES = new Set([
+  "askuser",
+  "askuserquestion",
+  "requestuserinput",
+]);
 
 function isIntegrationToolName(name: string) {
   return (
@@ -874,38 +844,132 @@ function resolveOpenCodeRenderer(name: string): Renderer {
   return OpenCodeRuntimeTool;
 }
 
+/**
+ * How one driver's tools render, found by the driver's tool-name prefix
+ * (catalog toolPrefix, e.g. "cursor_"). A driver without a family renders
+ * its tools with the generic renderer.
+ */
+type EngineRendererFamily = {
+  /** Tools of this driver without an exact renderer. */
+  fallback(name: string): Renderer;
+  /** Exact tool names. */
+  renderers: Readonly<Record<string, Renderer>>;
+  /** Structured questions to the user. */
+  userInputRenderer?: Renderer;
+  /** Loose tool names (after the prefix) that ask the user a question. */
+  userInputSuffixes?: readonly string[];
+};
+
+const ENGINE_RENDERER_FAMILIES = {
+  claude: {
+    fallback: () => ClaudeRuntimeTool,
+    renderers: claudeRenderers,
+    userInputRenderer: ClaudeUserInputTool,
+    userInputSuffixes: ["askuserquestion", "requestuserinput"],
+  },
+  codex: {
+    fallback: () => CodexRuntimeTool,
+    renderers: codexRenderers,
+  },
+  copilot: {
+    fallback: () => CopilotRuntimeTool,
+    renderers: copilotRenderers,
+    userInputRenderer: CopilotUserInputTool,
+    userInputSuffixes: ["askuser", "askuserquestion", "requestuserinput"],
+  },
+  cursor: {
+    fallback: resolveCursorRenderer,
+    renderers: cursorRenderers,
+    userInputRenderer: CursorUserInputTool,
+    userInputSuffixes: [
+      "askquestion",
+      "askuser",
+      "askuserquestion",
+      "requestuserinput",
+    ],
+  },
+  opencode: {
+    fallback: resolveOpenCodeRenderer,
+    renderers: openCodeRenderers,
+    userInputRenderer: OpenCodeUserInputTool,
+    userInputSuffixes: [
+      "askquestion",
+      "askuser",
+      "askuserquestion",
+      "requestuserinput",
+    ],
+  },
+} satisfies Partial<Record<BuiltinDriverKind, EngineRendererFamily>>;
+
+type FamilyKind = keyof typeof ENGINE_RENDERER_FAMILIES;
+
+const FAMILY_PREFIXES = BUILTIN_DRIVER_KINDS.flatMap((kind) => {
+  const prefix = DRIVER_CATALOG[kind].toolPrefix;
+  return prefix && Object.hasOwn(ENGINE_RENDERER_FAMILIES, kind)
+    ? [
+        {
+          family: ENGINE_RENDERER_FAMILIES[
+            kind as FamilyKind
+          ] as EngineRendererFamily,
+          kind: kind as FamilyKind,
+          loosePrefix: normalizeLooseToolName(prefix),
+          prefix,
+        },
+      ]
+    : [];
+});
+
+/** Every tool name each driver renders on purpose (tests check them). */
+export const ENGINE_TOOL_RENDERING_COVERAGE = Object.freeze(
+  Object.fromEntries(
+    FAMILY_PREFIXES.map(({ family, kind }) => [
+      kind,
+      Object.freeze(Object.keys(family.renderers).sort()),
+    ]),
+  ) as Record<FamilyKind, readonly string[]>,
+);
+
+function findFamilyByPrefix(name: string) {
+  return FAMILY_PREFIXES.find(({ prefix }) => name.startsWith(prefix)) ?? null;
+}
+
+function findFamilyByLoosePrefix(normalized: string) {
+  return (
+    FAMILY_PREFIXES.find(({ loosePrefix }) =>
+      normalized.startsWith(loosePrefix),
+    ) ?? null
+  );
+}
+
+function isStructuredUserInputToolName(name: string) {
+  const normalized = normalizeLooseToolName(name);
+  if (GENERIC_USER_INPUT_TOOL_NAMES.has(normalized)) {
+    return true;
+  }
+
+  return FAMILY_PREFIXES.some(
+    ({ family, loosePrefix }) =>
+      normalized.startsWith(loosePrefix) &&
+      (family.userInputSuffixes?.includes(
+        normalized.slice(loosePrefix.length),
+      ) ??
+        false),
+  );
+}
+
 function resolveEngineRenderer(name: string): Renderer | undefined {
-  if (name.startsWith("codex_")) {
-    return codexRenderers[name] ?? CodexRuntimeTool;
-  }
-
-  if (name.startsWith("claude_")) {
-    return claudeRenderers[name] ?? ClaudeRuntimeTool;
-  }
-
-  if (name.startsWith("copilot_")) {
-    return copilotRenderers[name] ?? CopilotRuntimeTool;
-  }
-
-  if (name.startsWith("cursor_")) {
-    return resolveCursorRenderer(name);
-  }
-
-  if (name.startsWith("opencode_")) {
-    return resolveOpenCodeRenderer(name);
-  }
-
-  return undefined;
+  const match = findFamilyByPrefix(name);
+  if (!match) return undefined;
+  return match.family.renderers[name] ?? match.family.fallback(name);
 }
 
 function resolveStructuredUserInputRenderer(name: string) {
   if (!isStructuredUserInputToolName(name)) return undefined;
 
-  if (name.startsWith("copilot_")) return CopilotUserInputTool;
-  if (name.startsWith("cursor_")) return CursorUserInputTool;
-  if (name.startsWith("opencode_")) return OpenCodeUserInputTool;
-
-  return ClaudeUserInputTool;
+  return (
+    findFamilyByLoosePrefix(normalizeLooseToolName(name))?.family
+      .userInputRenderer ?? ClaudeUserInputTool
+  );
 }
 
 function resolveToolNameRenderer(name: string): Renderer | undefined {

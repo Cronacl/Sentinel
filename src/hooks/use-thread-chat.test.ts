@@ -882,15 +882,14 @@ describe("buildThreadEngineRequestFields", () => {
         engineInstanceId: "opencode-work",
         modelId: "openai/gpt-5",
         modelOptions: [{ id: "agent", value: "plan" }],
-        openCode: { agent: "plan", variant: null },
         reasoningEffort: null,
       }),
     ).toEqual({
       engine: "opencode",
       engineInstanceId: "opencode-work",
       modelId: "openai/gpt-5",
+      // The server derives the OpenCode agent/variant fields from these.
       modelOptions: [{ id: "agent", value: "plan" }],
-      openCode: { agent: "plan", variant: null },
     });
   });
 });

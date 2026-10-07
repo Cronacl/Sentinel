@@ -129,6 +129,16 @@ export const ComposerToolbar = memo(function ComposerToolbar({
     () => [selectedInstanceId],
     [selectedInstanceId],
   );
+  // Drivers with several instances show which instance each entry is.
+  const driversWithSeveralInstances = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const option of engineOptions) {
+      counts.set(option.engine, (counts.get(option.engine) ?? 0) + 1);
+    }
+    return new Set(
+      [...counts].filter(([, count]) => count > 1).map(([engine]) => engine),
+    );
+  }, [engineOptions]);
   const showSentinelToolTags = selectedEngine === "sentinel" && !planMode;
   const isToolTagSelected = useCallback(
     (tag: SentinelComposerToolTag) => toolTags.includes(tag),
@@ -319,7 +329,20 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                           id={engine.instanceId}
                           textValue={engine.label}
                         >
-                          <span className="capitalize">{engine.label}</span>
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            {driversWithSeveralInstances.has(engine.engine) ? (
+                              <span
+                                aria-hidden
+                                className="size-2 shrink-0 rounded-full bg-muted"
+                                style={
+                                  engine.accentColor
+                                    ? { backgroundColor: engine.accentColor }
+                                    : undefined
+                                }
+                              />
+                            ) : null}
+                            <span className="capitalize">{engine.label}</span>
+                          </span>
                           <span className="ml-auto flex items-center gap-1.5">
                             {stability ? (
                               <span

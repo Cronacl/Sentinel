@@ -106,7 +106,7 @@ function createHandoffState(
       path: "/repo/.worktrees/thread-1",
     },
     draftProjectMode: "worktree",
-    openCodeSelection: {
+    optionSelection: {
       agent: "builder",
       variant: "max",
     },

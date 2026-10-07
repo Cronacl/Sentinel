@@ -419,6 +419,24 @@ export function getDriverPermissionModes(
   );
 }
 
+const NO_MESSAGE_ACTIONS = {
+  edit: false,
+  planAnswers: false,
+  regenerate: false,
+  retry: false,
+} as const;
+
+/**
+ * Which message actions (retry, regenerate, edit, plan answers) the UI
+ * offers on a thread of this driver. Unknown kinds offer none.
+ */
+export function getDriverMessageActions(kind: DriverKind | null | undefined) {
+  return (
+    (kind ? getDriverMeta(kind)?.capabilities.messageActions : null) ??
+    NO_MESSAGE_ACTIONS
+  );
+}
+
 /** Driver kinds whose default instance is synthesized when no row exists. */
 export function listDefaultInstanceDrivers() {
   return AVAILABLE_DRIVER_KINDS.filter(

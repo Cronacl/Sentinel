@@ -455,6 +455,14 @@ export const TRIPWIRES = [
       /\bisUnstableChatEngine\b|\bget(?:Codex|Claude|Copilot|Cursor|OpenCode)Runtime(?:BadgeLabel|BadgeColor|FallbackMessage)\b/,
     include: /^src\/.*\.tsx?$/,
   },
+  {
+    id: "P10-opencode-composer-traits",
+    description:
+      "Composer options come from model option descriptors (components/engines/option-descriptors.ts); the OpenCode-only trait helpers and engine checks are gone",
+    pattern:
+      /\b(?:shouldHideOpenCode(?:Trait|Agent)Selector|resolveOpenCodeTrait(?:ValueForThreadMode|SelectionValue)|ChatComposerOpenCodeSelection)\b|\bengine\s*===\s*["']opencode["']/,
+    include: /^src\/components\/.*\.tsx?$/,
+  },
 ];
 
 const DEFAULT_EXCLUDE =

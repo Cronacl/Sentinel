@@ -5,7 +5,7 @@ import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ChatEngine } from "@/server/db/enums";
 import { api } from "@/trpc/react";
 import type {
-  ChatComposerOpenCodeSelection,
+  ChatComposerOptionSelection,
   ChatComposerSelectionChange,
   ChatComposerThreadSelection,
 } from "./types";
@@ -21,10 +21,13 @@ import {
   type ChatComposerEngineOption,
   type ChatComposerModel,
 } from "../chat-composer-helpers";
+import { findPreferredModel } from "./use-model-selection.helpers";
 import {
-  findPreferredModel,
-  resolveOpenCodeTraitSelectionValue,
-} from "./use-model-selection.helpers";
+  getComposerSelectOptions,
+  resolveOptionSelectionValue,
+  toOptionChoices,
+  type ComposerOptionValues,
+} from "@/components/engines/option-descriptors";
 
 import type { usePersistSelection } from "./use-persist-selection";
 
@@ -67,8 +70,8 @@ function filterSelectableModelsByInstance(models: ModelsByInstance) {
  */
 export function useModelSelection({
   globalSelectionQuery,
-  openCodeSelection,
-  onOpenCodeSelectionChange,
+  optionSelection,
+  onOptionSelectionChange,
   onSelectionChange,
   persistEngineSelection,
   persistSelection,
@@ -76,10 +79,8 @@ export function useModelSelection({
   threadSelection,
 }: {
   globalSelectionQuery: PersistSelectionReturn["globalSelectionQuery"];
-  openCodeSelection?: ChatComposerOpenCodeSelection | null;
-  onOpenCodeSelectionChange?: (
-    selection: ChatComposerOpenCodeSelection,
-  ) => void;
+  optionSelection?: ChatComposerOptionSelection | null;
+  onOptionSelectionChange?: (selection: ChatComposerOptionSelection) => void;
   onSelectionChange?: (input: ChatComposerSelectionChange) => void;
   persistEngineSelection: PersistSelectionReturn["persistEngineSelection"];
   persistSelection: PersistSelectionReturn["persistSelection"];
@@ -124,8 +125,10 @@ export function useModelSelection({
   const preferredReasoningEffort = hasThreadSelection
     ? (threadSelection?.reasoningEffort ?? null)
     : ((globalSelection?.reasoningEffort as ReasoningEffort | null) ?? null);
-  const preferredOpenCodeAgent = openCodeSelection?.agent ?? null;
-  const preferredOpenCodeVariant = openCodeSelection?.variant ?? null;
+  const preferredOptionValues = useMemo<ComposerOptionValues>(
+    () => optionSelection ?? {},
+    [optionSelection],
+  );
   const [selectedEngine, setSelectedEngine] = useState<ChatEngine>(
     () => preferredEngine,
   );
@@ -137,12 +140,8 @@ export function useModelSelection({
   );
   const [selectedReasoningEffort, setSelectedReasoningEffort] =
     useState<ReasoningEffort | null>(() => preferredReasoningEffort);
-  const [selectedOpenCodeAgent, setSelectedOpenCodeAgent] = useState<
-    string | null
-  >(() => preferredOpenCodeAgent);
-  const [selectedOpenCodeVariant, setSelectedOpenCodeVariant] = useState<
-    string | null
-  >(() => preferredOpenCodeVariant);
+  const [selectedOptionValues, setSelectedOptionValues] =
+    useState<ComposerOptionValues>(() => preferredOptionValues);
   const preferencesReady =
     Boolean(threadSelection?.engine) ||
     hasThreadSelection ||
@@ -202,51 +201,35 @@ export function useModelSelection({
   const supportedReasoningEfforts =
     selectedModel?.supportedReasoningEfforts ?? [];
 
-  useEffect(() => {
-    if (!selectedModel?.openCode) {
-      if (selectedOpenCodeAgent !== null) {
-        setSelectedOpenCodeAgent(null);
-      }
-      if (selectedOpenCodeVariant !== null) {
-        setSelectedOpenCodeVariant(null);
-      }
-      return;
-    }
-
-    const nextAgent = resolveOpenCodeTraitSelectionValue(
-      selectedModel.openCode.agentOptions,
-      selectedOpenCodeAgent,
-      preferredOpenCodeAgent,
-    );
-    const nextVariant = resolveOpenCodeTraitSelectionValue(
-      selectedModel.openCode.variantOptions,
-      selectedOpenCodeVariant,
-      preferredOpenCodeVariant,
-    );
-
-    if (nextAgent !== selectedOpenCodeAgent) {
-      setSelectedOpenCodeAgent(nextAgent);
-    }
-
-    if (nextVariant !== selectedOpenCodeVariant) {
-      setSelectedOpenCodeVariant(nextVariant);
-    }
-  }, [
-    preferredOpenCodeAgent,
-    preferredOpenCodeVariant,
-    selectedModel,
-    selectedOpenCodeAgent,
-    selectedOpenCodeVariant,
-  ]);
+  const composerOptions = useMemo(
+    () => getComposerSelectOptions(selectedModel?.options),
+    [selectedModel?.options],
+  );
+  // Each composer option holds the current value while the model still
+  // offers it, else the preferred one, else the option's default.
+  const effectiveOptionValues = useMemo<ComposerOptionValues>(
+    () =>
+      Object.fromEntries(
+        composerOptions.map((option) => [
+          option.id,
+          resolveOptionSelectionValue(
+            toOptionChoices(option),
+            selectedOptionValues[option.id] ?? null,
+            preferredOptionValues[option.id] ?? null,
+          ),
+        ]),
+      ),
+    [composerOptions, preferredOptionValues, selectedOptionValues],
+  );
+  const effectiveOptionValuesKey = JSON.stringify(effectiveOptionValues);
 
   useEffect(() => {
     if (initializedSelectionScopeRef.current !== selectionScopeKey) {
       initializedSelectionScopeRef.current = null;
       threadPersistenceReadyRef.current = false;
-      setSelectedOpenCodeAgent(preferredOpenCodeAgent);
-      setSelectedOpenCodeVariant(preferredOpenCodeVariant);
+      setSelectedOptionValues(preferredOptionValues);
     }
-  }, [preferredOpenCodeAgent, preferredOpenCodeVariant, selectionScopeKey]);
+  }, [preferredOptionValues, selectionScopeKey]);
 
   useEffect(() => {
     setCachedEngineOptions((currentCache) => {
@@ -640,39 +623,23 @@ export function useModelSelection({
     ],
   );
 
-  const handleSelectOpenCodeAgent = useCallback((agent: string | null) => {
-    setSelectedOpenCodeAgent(agent);
-  }, []);
-
-  const handleSelectOpenCodeVariant = useCallback((variant: string | null) => {
-    setSelectedOpenCodeVariant(variant);
-  }, []);
-
-  const effectiveSelectedOpenCodeAgent = selectedModel?.openCode
-    ? resolveOpenCodeTraitSelectionValue(
-        selectedModel.openCode.agentOptions,
-        selectedOpenCodeAgent,
-        preferredOpenCodeAgent,
-      )
-    : null;
-  const effectiveSelectedOpenCodeVariant = selectedModel?.openCode
-    ? resolveOpenCodeTraitSelectionValue(
-        selectedModel.openCode.variantOptions,
-        selectedOpenCodeVariant,
-        preferredOpenCodeVariant,
-      )
-    : null;
+  /** Sets one composer option (by id); null returns it to its default. */
+  const handleSelectOption = useCallback(
+    (optionId: string, value: string | null) => {
+      setSelectedOptionValues((current) =>
+        current[optionId] === value
+          ? current
+          : { ...current, [optionId]: value },
+      );
+    },
+    [],
+  );
 
   useEffect(() => {
-    onOpenCodeSelectionChange?.({
-      agent: effectiveSelectedOpenCodeAgent,
-      variant: effectiveSelectedOpenCodeVariant,
-    });
-  }, [
-    effectiveSelectedOpenCodeAgent,
-    effectiveSelectedOpenCodeVariant,
-    onOpenCodeSelectionChange,
-  ]);
+    onOptionSelectionChange?.(effectiveOptionValues);
+    // Keyed by content: the map is rebuilt on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- effectiveOptionValues is tracked by its key
+  }, [effectiveOptionValuesKey, onOptionSelectionChange]);
 
   return {
     availableModels,
@@ -680,15 +647,14 @@ export function useModelSelection({
     enginesQuery: catalogQuery,
     handleSelectEngine,
     handleSelectModel,
-    handleSelectOpenCodeAgent,
-    handleSelectOpenCodeVariant,
+    handleSelectOption,
     handleSelectReasoningEffort,
     modelsQuery: catalogQuery,
     selectedEngine,
     selectedEngineStatus,
     selectedInstanceId,
-    selectedOpenCodeAgent: effectiveSelectedOpenCodeAgent,
-    selectedOpenCodeVariant: effectiveSelectedOpenCodeVariant,
+    composerOptions,
+    selectedOptionValues: effectiveOptionValues,
     selectedModel,
     selectedModelKey,
     selectedReasoningEffort,

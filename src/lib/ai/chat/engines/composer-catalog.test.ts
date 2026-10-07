@@ -50,7 +50,7 @@ describe("toComposerEngineModels", () => {
     ]);
   });
 
-  it("derives OpenCode agent and variant traits from option descriptors", () => {
+  it("carries OpenCode agent and variant choices as option descriptors", () => {
     const [model] = toComposerEngineModels(
       makeFakeSnapshot({
         driver: "opencode",
@@ -76,13 +76,16 @@ describe("toComposerEngineModels", () => {
       }),
     );
 
-    expect(model!.openCode).toEqual({
-      agentOptions: [
-        { isDefault: true, label: "Build", value: "build" },
-        { label: "Plan", value: "plan" },
-      ],
-      variantOptions: [{ label: "High", value: "high" }],
-    });
+    expect(
+      model!.options.map((option) =>
+        option.type === "select"
+          ? [option.id, option.choices.map((choice) => choice.id)]
+          : [option.id],
+      ),
+    ).toEqual([
+      ["agent", ["build", "plan"]],
+      ["variant", ["high"]],
+    ]);
     expect(model!.supportedReasoningEfforts).toEqual([]);
     expect(model!.rawModelId).toBe("openai/gpt-5");
   });

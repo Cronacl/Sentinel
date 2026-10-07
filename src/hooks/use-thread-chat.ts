@@ -54,12 +54,8 @@ type SendThreadMessageInput = {
   engineInstanceId?: string;
   files?: FileUIPart[];
   modelId: string;
-  /** The model's option selections (reasoning, agent, variant, …). */
+  /** The model's option selections (agent, variant, …). */
   modelOptions?: EngineOptionSelection[] | null;
-  openCode?: {
-    agent?: string | null;
-    variant?: string | null;
-  };
   reasoningEffort?: ReasoningEffort | null;
   text: string;
   threadMode?: ThreadMode;
@@ -126,7 +122,6 @@ export function buildThreadEngineRequestFields(
     | "engineInstanceId"
     | "modelId"
     | "modelOptions"
-    | "openCode"
     | "reasoningEffort"
   >,
 ) {
@@ -137,7 +132,6 @@ export function buildThreadEngineRequestFields(
       : {}),
     modelId: input.modelId,
     ...(input.modelOptions?.length ? { modelOptions: input.modelOptions } : {}),
-    ...(input.openCode ? { openCode: input.openCode } : {}),
     ...(input.reasoningEffort
       ? { reasoningEffort: input.reasoningEffort }
       : {}),
@@ -1578,7 +1572,6 @@ export function useThreadChat({
       files,
       modelId,
       modelOptions,
-      openCode,
       reasoningEffort,
       text,
       threadMode,
@@ -1605,7 +1598,6 @@ export function useThreadChat({
               engineInstanceId,
               modelId,
               modelOptions,
-              openCode,
               reasoningEffort,
             }),
             id: threadId,
@@ -1636,7 +1628,6 @@ export function useThreadChat({
       files,
       modelId,
       modelOptions,
-      openCode,
       reasoningEffort,
       targetMessageId,
       text,
@@ -1662,7 +1653,6 @@ export function useThreadChat({
               engineInstanceId,
               modelId,
               modelOptions,
-              openCode,
               reasoningEffort,
             }),
             id: threadId,
@@ -1693,7 +1683,6 @@ export function useThreadChat({
       files,
       modelId,
       modelOptions,
-      openCode,
       reasoningEffort,
       text,
       threadMode,
@@ -1718,7 +1707,6 @@ export function useThreadChat({
             engineInstanceId,
             modelId,
             modelOptions,
-            openCode,
             reasoningEffort,
           }),
           id: threadId,
@@ -1745,7 +1733,6 @@ export function useThreadChat({
       files,
       modelId,
       modelOptions,
-      openCode,
       reasoningEffort,
       text,
       threadMode,
@@ -1770,7 +1757,6 @@ export function useThreadChat({
             engineInstanceId,
             modelId,
             modelOptions,
-            openCode,
             reasoningEffort,
           }),
           id: threadId,
