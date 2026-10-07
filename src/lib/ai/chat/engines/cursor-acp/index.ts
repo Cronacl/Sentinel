@@ -982,8 +982,16 @@ export class CursorAcpClient {
     return await this.call("session/prompt", input);
   }
 
-  async cancel(sessionId: string) {
-    await this.call("session/cancel", { sessionId });
+  /**
+   * ACP defines `session/cancel` as a notification: the agent never replies,
+   * it finishes the pending `session/prompt` with `stopReason: "cancelled"`.
+   */
+  cancel(sessionId: string) {
+    if (this.closed) {
+      return;
+    }
+
+    this.notify("session/cancel", { sessionId });
   }
 
   async setSessionConfigOption(input: {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -38,6 +38,7 @@ mock.module("@/lib/runtime/local-runtime-env", () => ({
 
 const {
   buildCursorThreadState,
+  CursorAcpClient,
   parseCursorShellLookupOutput,
   resetCursorRuntimeCache,
   resolveCursorRuntime,
@@ -142,4 +143,48 @@ describe("resolveCursorRuntime", () => {
     expect(runtime.cliPath).toBe(scriptPath);
     expect(process.env.SENTINEL_CURSOR_PATH).toBe(scriptPath);
   });
+});
+
+describe("CursorAcpClient.cancel", () => {
+  it.skipIf(process.platform === "win32")(
+    "sends session/cancel as a notification and never waits for a reply",
+    async () => {
+      const tempRoot = await mkdtemp(
+        path.join(os.tmpdir(), "cursor-acp-cancel-test-"),
+      );
+      tempRoots.push(tempRoot);
+      const recordPath = path.join(tempRoot, "stdin.jsonl");
+      const scriptPath = path.join(tempRoot, "agent");
+      // Records stdin and never answers, like an agent that ignores cancel.
+      await writeFile(scriptPath, `#!/bin/sh\ncat > "${recordPath}"\n`);
+      await chmod(scriptPath, 0o755);
+
+      const client = new CursorAcpClient({
+        command: scriptPath,
+        cwd: tempRoot,
+        env: process.env,
+      });
+
+      try {
+        expect(client.cancel("cursor-session-1")).toBeUndefined();
+
+        let recorded = "";
+        for (let attempt = 0; attempt < 100 && !recorded.trim(); attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          recorded = await readFile(recordPath, "utf8").catch(() => "");
+        }
+
+        expect(JSON.parse(recorded.trim())).toEqual({
+          jsonrpc: "2.0",
+          method: "session/cancel",
+          params: { sessionId: "cursor-session-1" },
+        });
+      } finally {
+        client.close();
+      }
+
+      // After close the client is inert; cancel must not throw.
+      expect(() => client.cancel("cursor-session-1")).not.toThrow();
+    },
+  );
 });

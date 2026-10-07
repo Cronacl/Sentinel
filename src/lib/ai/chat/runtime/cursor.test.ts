@@ -115,7 +115,7 @@ mock.module("./workspace", () => ({
   getWorkspaceRootPath,
 }));
 
-const { runCursorThreadChat } = await import("./cursor");
+const { runCursorThreadChat, stopCursorThreadRun } = await import("./cursor");
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -313,6 +313,75 @@ describe("runCursorThreadChat", () => {
     expect(setThreadStatus).not.toHaveBeenCalledWith(
       "thread-1",
       "awaiting_approval",
+    );
+  });
+});
+
+describe("stopCursorThreadRun", () => {
+  it("cancels with a session/cancel notification and finishes without waiting for a reply", async () => {
+    getToolPermissionMode.mockImplementation(async () => "default");
+    // A cancel that never settles stands in for an agent that never replies;
+    // Stop must not wait on it.
+    const cancel = mock(() => new Promise<never>(() => {}));
+    const close = mock(() => {});
+    startCursorAcpSession.mockImplementation(async () => ({
+      client: {
+        cancel,
+        close,
+        prompt: mock(() => new Promise(() => {})),
+      },
+      configOptions: {},
+      sessionId: "cursor-session-stop",
+    }));
+
+    await runCursorThreadChat(
+      {
+        message: {
+          id: "user-stop",
+          metadata: {},
+          parts: [{ text: "Run the tests", type: "text" }],
+          role: "user",
+        },
+        modelId: "gpt-5.2",
+        threadId: "thread-stop",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      } as any,
+      null,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const permission = latestCursorSessionOptions.onRequestPermission({
+      options: [
+        { kind: "reject_once", optionId: "deny" },
+        { kind: "allow_once", optionId: "allow" },
+      ],
+      sessionId: "cursor-session-stop",
+      toolCall: { kind: "execute", title: "Bash", toolCallId: "tool-stop" },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    setThreadStatus.mockClear();
+
+    const response = await Promise.race([
+      stopCursorThreadRun(
+        { threadId: "thread-stop", trigger: "stop" } as any,
+        null,
+      ),
+      new Promise<"hung">((resolve) => setTimeout(() => resolve("hung"), 500)),
+    ]);
+
+    expect(response).not.toBe("hung");
+    expect((response as Response).status).toBe(204);
+    expect(cancel).toHaveBeenCalledWith("cursor-session-stop");
+    expect(await permission).toEqual({ outcome: { outcome: "cancelled" } });
+    expect(setThreadStatus).toHaveBeenCalledWith("thread-stop", "idle");
+    expect(close).toHaveBeenCalled();
+    expect(upsertMessage.mock.calls.at(-1)?.[1]).toEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ status: "cancelled" }),
+        role: "assistant",
+      }),
     );
   });
 });

@@ -305,6 +305,13 @@ export const TRIPWIRES = [
       /\bOPENCODE_SERVER_READY_PREFIX\b|startsWith\(\s*["'`]opencode server listening/,
     include: /^src\/.*\.[cm]?[jt]sx?$/,
   },
+  {
+    id: "P9-acp-session-cancel-request",
+    description:
+      "ACP session/cancel is a notification; never send it as a request",
+    pattern: /\b(?:call|request)\(\s*["']session\/cancel["']/,
+    include: /\.[cm]?[jt]sx?$/,
+  },
 ];
 
 const DEFAULT_EXCLUDE =

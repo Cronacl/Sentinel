@@ -934,9 +934,22 @@ export async function stopCursorThreadRun(
     return new Response(null, { status: 204 });
   }
 
-  await activeControl.session.client
-    .cancel(activeControl.state.sessionId)
-    .catch(() => undefined);
+  // Fire-and-forget: `session/cancel` is a notification, so waiting for a
+  // reply would hang Stop. Pending permission prompts are answered
+  // `cancelled` as ACP requires, then the run finishes as cancelled.
+  try {
+    activeControl.session.client.cancel(activeControl.state.sessionId);
+  } catch (error) {
+    log.warn("cursor_cancel_failed", {
+      error,
+      runId: activeControl.runId,
+      threadId: request.threadId,
+    });
+  }
+  for (const pendingApproval of activeControl.pendingApprovals.values()) {
+    pendingApproval.resolve({ outcome: { outcome: "cancelled" } });
+  }
+  activeControl.pendingApprovals.clear();
   await finishCursorRun(activeControl, {
     errorMessage: "Generation stopped.",
     finishReason: null,
