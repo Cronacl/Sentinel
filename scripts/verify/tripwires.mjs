@@ -102,6 +102,15 @@ export const TRIPWIRES = [
     pattern: /\bcreateGoogleGenerativeAI\b/,
     include: /\.[cm]?[jt]sx?$/,
   },
+  {
+    id: "P7-ai-v4-tool-result-shape",
+    description:
+      "Tool results carry .output since AI SDK 5 (the AI SDK 4 .result shape)",
+    // One line at a time: `toolResult(s)` followed by `.result`, or
+    // `result.result` when iterating over step.toolResults.
+    pattern: /\btoolResults?\b.*\.result\b|\bresult\??\.result\b/,
+    include: /\.[cm]?[jt]sx?$/,
+  },
 ];
 
 const DEFAULT_EXCLUDE =

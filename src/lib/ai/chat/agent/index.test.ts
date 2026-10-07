@@ -808,6 +808,20 @@ describe("createThreadAgent", () => {
     };
   }
 
+  function manageTaskResult(id: string, status: string) {
+    return {
+      input: {},
+      output: {
+        action: "update",
+        planId: "plan-1",
+        task: { description: null, id, status, title: id },
+      },
+      toolCallId: `call-${id}-${status}`,
+      toolName: "manage_task",
+      type: "tool-result",
+    };
+  }
+
   it("returns the full instructions on every step so directives do not carry forward", async () => {
     const prepared = await prepareWith(chatAgentOptions("instructions-reset"));
     const { allowSystemInMessages, prepareStep } = aiTestState.agentConfig;
@@ -847,5 +861,59 @@ describe("createThreadAgent", () => {
       steps: [mutationStep, { toolCalls: [], toolResults: [] }],
     });
     expect(followUpStep.instructions).toBe(prepared.instructions);
+  });
+
+  it("tracks manage_task tool outputs for step progress and the stop condition", async () => {
+    await prepareWith(chatAgentOptions("task-tracking"));
+    const { prepareStep, stopWhen } = aiTestState.agentConfig;
+    const allTasksResolved = stopWhen.find(
+      (condition) => typeof condition === "function",
+    );
+
+    const inProgressSteps = [
+      {
+        toolCalls: [{ toolName: "manage_task" }, { toolName: "manage_task" }],
+        toolResults: [
+          manageTaskResult("task-1", "completed"),
+          manageTaskResult("task-2", "in_progress"),
+        ],
+      },
+    ];
+    expect(allTasksResolved({ steps: inProgressSteps })).toBe(false);
+
+    const progressStep = await prepareStep({
+      runtimeContext: undefined,
+      stepNumber: 1,
+      steps: inProgressSteps,
+    });
+    expect(progressStep.instructions).toContain("## Step Progress (step 1)");
+    expect(progressStep.instructions).toContain(
+      "Tasks: 1/2 completed, 1 remaining.",
+    );
+
+    const resolvedSteps = [
+      ...inProgressSteps,
+      {
+        toolCalls: [{ toolName: "manage_task" }],
+        toolResults: [manageTaskResult("task-2", "blocked")],
+      },
+    ];
+    expect(allTasksResolved({ steps: resolvedSteps })).toBe(true);
+
+    // The AI SDK 4 `result` shape is not a tool result in AI SDK 5 and later.
+    expect(
+      allTasksResolved({
+        steps: [
+          {
+            toolResults: [
+              {
+                result: manageTaskResult("task-3", "completed").output,
+                toolName: "manage_task",
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe(false);
   });
 });

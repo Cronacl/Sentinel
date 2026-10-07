@@ -76,12 +76,12 @@ function extractTaskState(steps: Array<{ toolResults?: unknown[] }>) {
   for (const step of steps) {
     for (const result of (step.toolResults ?? []) as Array<{
       toolName?: string;
-      result?: { action?: string; task?: TaskSnapshot | null };
+      output?: { action?: string; task?: TaskSnapshot | null };
     }>) {
       if (result.toolName !== "manage_task") continue;
-      const task = result.result?.task;
+      const task = result.output?.task;
       if (!task?.id) continue;
-      if (result.result?.action === "delete") {
+      if (result.output?.action === "delete") {
         tasks.delete(task.id);
       } else {
         tasks.set(task.id, task.status);

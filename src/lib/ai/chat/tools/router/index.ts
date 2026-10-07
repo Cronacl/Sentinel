@@ -260,14 +260,6 @@ export function buildToolRoutingEvidence(
 
     for (const toolResult of step.toolResults ?? []) {
       const serialized = JSON.stringify(toolResult);
-      const resultPayload =
-        toolResult &&
-        typeof toolResult === "object" &&
-        "result" in toolResult &&
-        toolResult.result &&
-        typeof toolResult.result === "object"
-          ? toolResult.result
-          : toolResult;
 
       if (projectMarkerPattern.test(serialized)) {
         projectContextFound = true;
@@ -280,13 +272,13 @@ export function buildToolRoutingEvidence(
       }
 
       if (
-        resultPayload &&
-        typeof resultPayload === "object" &&
-        "output" in resultPayload &&
-        resultPayload.output &&
-        typeof resultPayload.output === "object"
+        toolResult &&
+        typeof toolResult === "object" &&
+        "output" in toolResult &&
+        toolResult.output &&
+        typeof toolResult.output === "object"
       ) {
-        const output = resultPayload.output as Record<string, unknown>;
+        const output = toolResult.output as Record<string, unknown>;
         if (typeof output.exitCode === "number") {
           lastExitCode = output.exitCode;
           if (output.exitCode !== 0) {
