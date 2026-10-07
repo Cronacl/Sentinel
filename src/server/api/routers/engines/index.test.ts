@@ -369,6 +369,11 @@ describe("enginesRouter.composerCatalog", () => {
   it("lists pickable instances and their models in one query", async () => {
     const result = await enginesRouter.composerCatalog({ ctx: USER_CTX });
 
+    // Known snapshots answer at once; nothing waits on a probe.
+    expect(snapshotService.peekAll).toHaveBeenCalledWith("user-1");
+    expect(snapshotService.getAll).not.toHaveBeenCalled();
+    expect(snapshotService.getSnapshot).not.toHaveBeenCalled();
+
     expect(result.options.map((option) => option.instanceId)).toEqual([
       "sentinel",
       "codex",
@@ -397,6 +402,30 @@ describe("enginesRouter.composerCatalog", () => {
     expect(result.modelsByInstance.claude[0].rawModelId).toBe(
       "claude-sonnet-4-5-20250929",
     );
+  });
+
+  it("waits only for instances that were never checked", async () => {
+    const fresh = makeFakeSnapshot({ driver: "codex" });
+    snapshotService.peekAll.mockImplementationOnce(async () => [
+      makeFakeSnapshot({ driver: "sentinel", models: [] }),
+      makeFakeSnapshot({
+        driver: "codex",
+        models: [],
+        status: "checking",
+        usable: false,
+      }),
+    ]);
+    snapshotService.getSnapshot.mockImplementationOnce(async () => fresh);
+
+    const result = await enginesRouter.composerCatalog({ ctx: USER_CTX });
+
+    expect(snapshotService.getSnapshot).toHaveBeenCalledTimes(1);
+    expect(snapshotService.getSnapshot).toHaveBeenCalledWith("user-1", "codex");
+    expect(result.modelsByInstance.codex).toHaveLength(1);
+    expect(
+      result.options.find((option) => option.instanceId === "codex")
+        ?.isAvailable,
+    ).toBe(true);
   });
 });
 

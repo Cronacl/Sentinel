@@ -115,11 +115,24 @@ export const enginesRouter = createTRPCRouter({
 
   /**
    * Everything the composer's engine and model pickers show, in one query:
-   * the pickable instances and each one's models.
+   * the pickable instances and each one's models. Instances with a known
+   * snapshot (cached, or persisted from an earlier run) answer at once and
+   * refresh in the background, pushing changes through onEvents; only
+   * instances never checked before are waited for. The built-in engine
+   * never waits on an external one.
    */
   composerCatalog: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+    const service = getEngineSnapshotService();
     const snapshots = (
-      await getEngineSnapshotService().getAll(ctx.session.user.id)
+      await Promise.all(
+        (await service.peekAll(userId)).map(async (snapshot) =>
+          snapshot.status === "checking"
+            ? ((await service.getSnapshot(userId, snapshot.instanceId)) ??
+              snapshot)
+            : snapshot,
+        ),
+      )
     ).filter(isPickableEngineSnapshot);
     const models = await Promise.all(
       snapshots.map(
