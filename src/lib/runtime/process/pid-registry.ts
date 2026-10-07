@@ -37,9 +37,15 @@ const STATE_DIRECTORY_MODE = 0o700;
 const FILE_MODE = 0o600;
 const STALE_OWNER_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 const COMMAND_LINE_TIMEOUT_MS = 2_000;
+// A cold PowerShell start alone often takes longer than 2 s.
+const WINDOWS_COMMAND_LINE_TIMEOUT_MS = 10_000;
 const DEFAULT_GRACE_MS = 1_500;
 
 const agentPidEntrySchema = z.object({
+  /**
+   * The agent's own command and arguments as the caller asked for them
+   * (on Windows, the .cmd shim, not the cmd.exe that runs it).
+   */
   args: z.array(z.string()),
   command: z.string().min(1),
   /** The pid leads its own process group (spawned detached). */
@@ -164,7 +170,13 @@ export function readProcessCommandLine(
     execFile(
       command,
       args,
-      { timeout: COMMAND_LINE_TIMEOUT_MS, windowsHide: true },
+      {
+        timeout:
+          platform === "win32"
+            ? WINDOWS_COMMAND_LINE_TIMEOUT_MS
+            : COMMAND_LINE_TIMEOUT_MS,
+        windowsHide: true,
+      },
       (error, stdout) => {
         const value = String(stdout ?? "").trim();
         resolve(error || !value ? null : value);
@@ -175,6 +187,32 @@ export function readProcessCommandLine(
 
 function basenameOf(value: string) {
   return value.split(/[\\/]/).filter(Boolean).at(-1) ?? value;
+}
+
+/**
+ * Shells and interpreters run anything: their name alone says nothing
+ * about which program a pid runs.
+ */
+const GENERIC_EXECUTABLES = new Set([
+  "bash",
+  "bun",
+  "cmd",
+  "dash",
+  "deno",
+  "fish",
+  "node",
+  "powershell",
+  "pwsh",
+  "python",
+  "python3",
+  "sh",
+  "zsh",
+]);
+
+function isGenericExecutable(name: string) {
+  return GENERIC_EXECUTABLES.has(
+    name.toLowerCase().replace(/\.(?:exe|com|cmd|bat)$/, ""),
+  );
 }
 
 /**
@@ -190,7 +228,10 @@ export function commandLineMatchesEntry(
 ) {
   const normalize = (value: string) =>
     platform === "win32" ? value.toLowerCase() : value;
-  const haystack = normalize(commandLine);
+  // cmd.exe runs a .cmd shim with ^-escaped arguments (spawn.ts).
+  const haystack = normalize(
+    platform === "win32" ? commandLine.replaceAll("^", "") : commandLine,
+  );
   const names = [entry.command, entry.realCommand]
     .filter((value): value is string => Boolean(value))
     .map((value) => normalize(basenameOf(value)));
@@ -204,10 +245,19 @@ export function commandLineMatchesEntry(
     return false;
   }
 
-  return entry.args
+  const significantArgs = entry.args
     .slice(0, 3)
-    .filter((arg) => arg.length >= 3)
-    .every((arg) => haystack.includes(normalize(arg)));
+    .filter((arg) => arg.length >= 3);
+  if (
+    significantArgs.length === 0 &&
+    names.every((name) => isGenericExecutable(name))
+  ) {
+    // A bare `cmd.exe` or `node` matches any shell or script on the
+    // machine; never kill on that.
+    return false;
+  }
+
+  return significantArgs.every((arg) => haystack.includes(normalize(arg)));
 }
 
 export function createAgentPidRegistry(
@@ -416,15 +466,27 @@ export function createAgentPidRegistry(
       }
 
       const toKill: AgentPidEntry[] = [];
+      const undecided = new Set<AgentPidEntry>();
       for (const entry of stale) {
         if (!isAlive(entry.pid)) {
           continue;
         }
         const commandLine = await readCommandLine(entry.pid);
-        if (
-          commandLine &&
-          commandLineMatchesEntry(entry, commandLine, platform)
-        ) {
+        if (commandLine === null) {
+          // Unreadable (a slow or blocked PowerShell, say) while still
+          // running: try again at the next start instead of forgetting an
+          // orphan, for as long as an owner could have lived.
+          const startedAt = Date.parse(entry.startedAt);
+          if (
+            isAlive(entry.pid) &&
+            Number.isFinite(startedAt) &&
+            current - startedAt < STALE_OWNER_MAX_AGE_MS
+          ) {
+            undecided.add(entry);
+          }
+          continue;
+        }
+        if (commandLineMatchesEntry(entry, commandLine, platform)) {
           toKill.push(entry);
         }
       }
@@ -433,14 +495,15 @@ export function createAgentPidRegistry(
         toKill,
         options?.graceMs ?? DEFAULT_GRACE_MS,
       );
-      const staleKeys = new Set(
-        stale.map((entry) => `${entry.ownerPid}:${entry.pid}`),
+      const pruned = stale.filter((entry) => !undecided.has(entry));
+      const prunedKeys = new Set(
+        pruned.map((entry) => `${entry.ownerPid}:${entry.pid}`),
       );
       // persist() already drops entries carrying this server's pid that it
       // does not own.
-      persist((entry) => !staleKeys.has(`${entry.ownerPid}:${entry.pid}`));
+      persist((entry) => !prunedKeys.has(`${entry.ownerPid}:${entry.pid}`));
 
-      return { killed: signalled, pruned: stale.length };
+      return { killed: signalled, pruned: pruned.length };
     },
 
     unregister(pid) {

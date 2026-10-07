@@ -168,9 +168,11 @@ export function spawnManagedProcess(
     if (!options.registry) {
       installAgentShutdownHandlers();
     }
+    // The agent's own command line, not cmd.exe's: the stale-pid sweep
+    // matches on it, and a bare cmd.exe would match any shell.
     registry.register({
-      args: invocation.args,
-      command: invocation.command,
+      args: [...(options.args ?? [])],
+      command: options.command,
       group,
       instanceId: options.instanceId ?? null,
       isRunning: () => child.exitCode === null && child.signalCode === null,

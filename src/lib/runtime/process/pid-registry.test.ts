@@ -14,6 +14,7 @@ mock.module("server-only", () => ({}));
 
 const { commandLineMatchesEntry, createAgentPidRegistry, getAgentPidFilePath } =
   await import("./pid-registry");
+const { buildSpawnInvocation } = await import("./spawn");
 
 let root: string;
 let filePath: string;
@@ -242,6 +243,37 @@ describe("agent pid registry", () => {
     expect(readFile().entries.map((entry) => entry.pid)).toEqual([71]);
   });
 
+  it("keeps a live orphan whose command line cannot be read for the next sweep", async () => {
+    const fake = createFakeProcesses();
+    const previous = createRegistry(fake, { ownerPid: 900 }).registry;
+    fake.alive.add(81);
+    previous.register({
+      args: ["app-server"],
+      command: "codex",
+      group: true,
+      pid: 81,
+    });
+
+    // No command line (the read timed out) while 81 still runs.
+    const { registry } = createRegistry(fake);
+    expect(await registry.sweepStale({ graceMs: 0 })).toEqual({
+      killed: 0,
+      pruned: 0,
+    });
+    expect(fake.signals).toEqual([]);
+    expect(readFile().entries.map((entry) => entry.pid)).toEqual([81]);
+
+    // A week later it is forgotten rather than kept forever.
+    const later = createRegistry(fake, {
+      now: () => new Date("2026-10-15T12:00:00.000Z"),
+    }).registry;
+    expect(await later.sweepStale({ graceMs: 0 })).toEqual({
+      killed: 0,
+      pruned: 1,
+    });
+    expect(readFile().entries).toEqual([]);
+  });
+
   it("treats an unreadable or foreign file as empty", () => {
     const fake = createFakeProcesses();
     const { registry } = createRegistry(fake);
@@ -278,6 +310,58 @@ describe("commandLineMatchesEntry", () => {
     expect(
       commandLineMatchesEntry(entry, "/usr/bin/top app-server", "linux"),
     ).toBe(false);
+  });
+
+  it("matches a .cmd shim run by cmd.exe as spawnManagedProcess starts it", () => {
+    const shim = "C:\\Users\\me\\AppData\\Roaming\\npm\\codex.cmd";
+    const invocation = buildSpawnInvocation(shim, ["app-server"], {
+      comSpec: "C:\\WINDOWS\\system32\\cmd.exe",
+      platform: "win32",
+    });
+    const commandLine = [`"${invocation.command}"`, ...invocation.args].join(
+      " ",
+    );
+    const entry = { args: ["app-server"], command: shim, realCommand: null };
+
+    expect(commandLineMatchesEntry(entry, commandLine, "win32")).toBe(true);
+    // Another cmd.exe that reused the pid is left alone.
+    expect(
+      commandLineMatchesEntry(
+        entry,
+        '"C:\\WINDOWS\\system32\\cmd.exe" /k build.bat',
+        "win32",
+      ),
+    ).toBe(false);
+  });
+
+  it("never matches a shell or interpreter by its name alone", () => {
+    const cmd = {
+      args: ["/d", "/s", "/c"],
+      command: "C:\\WINDOWS\\system32\\cmd.exe",
+      realCommand: null,
+    };
+    expect(
+      commandLineMatchesEntry(
+        cmd,
+        '"C:\\WINDOWS\\system32\\cmd.exe" /k build.bat',
+        "win32",
+      ),
+    ).toBe(false);
+    expect(
+      commandLineMatchesEntry(
+        { args: [], command: "node", realCommand: null },
+        "node server.js",
+        "linux",
+      ),
+    ).toBe(false);
+    // A specific agent binary still matches on its name.
+    expect(
+      commandLineMatchesEntry(
+        { args: [], command: "/usr/local/bin/opencode", realCommand: null },
+        "/usr/local/bin/opencode",
+        "linux",
+      ),
+    ).toBe(true);
   });
 
   it("compares case-insensitively on Windows and accepts the shim's base name", () => {

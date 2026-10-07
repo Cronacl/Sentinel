@@ -191,8 +191,14 @@ describe("spawnManagedProcess", () => {
         windowsVerbatimArguments: true,
       }),
     );
+    // Recorded as the agent, not as the cmd.exe that runs it.
     expect(registry.register.mock.calls[0]?.[0]).toEqual(
-      expect.objectContaining({ command: "cmd.exe", group: false, pid: 503 }),
+      expect.objectContaining({
+        args: ["serve"],
+        command: "C:\\npm\\opencode.cmd",
+        group: false,
+        pid: 503,
+      }),
     );
 
     child.kill();
