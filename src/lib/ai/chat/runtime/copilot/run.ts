@@ -62,6 +62,7 @@ import {
   type CopilotPromptResponse,
 } from "./event-helpers";
 import { buildPlanModePromptPreamble } from "../plan-mode-instructions";
+import { isUnattendedRun } from "../unattended";
 import {
   buildCopilotPermissionToolName,
   buildCopilotRejectedPermission,
@@ -1530,6 +1531,7 @@ export async function runCopilotThreadChat(
       threadId: request.threadId,
     });
 
+    const unattended = isUnattendedRun(request);
     // Every permission kind (shell, file, URL, memory, MCP, custom tool, hook,
     // extension, workflow) goes through the same Sentinel approval flow.
     const onPermissionRequest = async (
@@ -1548,6 +1550,11 @@ export async function runCopilotThreadChat(
         })
       ) {
         return COPILOT_AUTO_APPROVED_PERMISSION;
+      }
+      // Nobody answers an unattended run (an automation): what would ask
+      // the user is answered as such, and Copilot declines it.
+      if (unattended) {
+        return COPILOT_USER_UNAVAILABLE_PERMISSION;
       }
 
       upsertCopilotTool(mirror, {
@@ -1580,6 +1587,10 @@ export async function runCopilotThreadChat(
     const onUserInputRequest: CopilotUserInputHandler = async (
       inputRequest,
     ) => {
+      if (unattended) {
+        // The same empty answer a run that ended before the user replied gets.
+        return { answer: "", wasFreeform: true };
+      }
       const approvalId = crypto.randomUUID();
       upsertCopilotTool(mirror, {
         approval: {

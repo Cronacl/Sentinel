@@ -456,6 +456,39 @@ describe("createThreadAgent", () => {
   - keeps webfetch available without a workspace root.
   */
 
+  it("declines what would ask the user only in unattended runs", async () => {
+    const base = {
+      defaultDirectory: "/tmp/workspace",
+      memoryRuntime: defaultMemoryRuntime,
+      permissionMode: "default",
+      searchProviders: {},
+      searchSettings: {
+        defaultProvider: "exa",
+        defaultResultCount: 5,
+        maxResultCount: 10,
+      },
+      sourceMessageId: "user-message-unattended",
+      systemPrompt: "System prompt",
+      threadId: "thread-unattended",
+      threadMode: "chat",
+      userId: "user-1",
+      toolApprovalPolicies: getDefaultToolApprovalPolicies(),
+      toolsEnabled: true,
+      webFetchSettings: { batchEnabled: false, batchLimit: 10 },
+      workspaceId: "workspace-1",
+    };
+    const { declineUserApprovalsWhenUnattended } =
+      await import("./unattended-approval");
+
+    expect((await prepareWith(base)).toolApproval).toBeUndefined();
+    expect(
+      (await prepareWith({ ...base, interactive: true })).toolApproval,
+    ).toBeUndefined();
+    expect(
+      (await prepareWith({ ...base, interactive: false })).toolApproval,
+    ).toBe(declineUserApprovalsWhenUnattended);
+  });
+
   it("hides memory tools when memory runtime is unavailable", async () => {
     const prepared = await prepareWith({
       defaultDirectory: "/tmp/workspace",

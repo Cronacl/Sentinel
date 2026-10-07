@@ -141,8 +141,8 @@ export const DRIVER_CATALOG = {
       supportsResume: "native",
       supportsSteer: true,
       supportsTextGeneration: true,
-      // Approval requests wait in the automation's thread.
-      supportsUnattendedTools: false,
+      // Unattended runs decline what would ask (runtime/unattended.ts).
+      supportsUnattendedTools: true,
       supportsUserInput: true,
     },
     config: emptyConfigSchema,
@@ -168,8 +168,6 @@ export const DRIVER_CATALOG = {
   codex: {
     capabilities: {
       ...EXTERNAL_CAPABILITIES,
-      // Approval requests wait in the automation's thread.
-      supportsUnattendedTools: false,
       // Typed literally so the runtime's mapping is checked when this widens.
       permissionModes: DEFAULT_DRIVER_PERMISSION_MODES,
       reportsContextWindow: true,
@@ -200,8 +198,6 @@ export const DRIVER_CATALOG = {
   claude: {
     capabilities: {
       ...EXTERNAL_CAPABILITIES,
-      // Approval requests wait in the automation's thread.
-      supportsUnattendedTools: false,
       // Typed literally so the runtime's mapping is checked when this widens.
       permissionModes: DEFAULT_DRIVER_PERMISSION_MODES,
       planModeChangeRequiresNewSession: true,
@@ -234,8 +230,6 @@ export const DRIVER_CATALOG = {
   copilot: {
     capabilities: {
       ...EXTERNAL_CAPABILITIES,
-      // Approval requests wait in the automation's thread.
-      supportsUnattendedTools: false,
       // Typed literally so the runtime's mapping is checked when this widens.
       permissionModes: DEFAULT_DRIVER_PERMISSION_MODES,
       supportsTextGeneration: true,

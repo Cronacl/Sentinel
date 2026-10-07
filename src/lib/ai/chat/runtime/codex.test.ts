@@ -22,7 +22,8 @@ const loadThread = mock(async () => ({ chatEngineState: null }));
 const loadThreadMessages = mock(async () => []);
 const updateThreadRepoState = mock(() => {});
 const updateThreadChatSettings = mock(async () => {});
-const updateCodexThreadState = mock(() => {});
+const updateCodexThreadState = mock((..._args: unknown[]) => {});
+const ensureThread = mock(async (..._args: unknown[]) => ({ created: true }));
 const updateClaudeThreadState = mock(() => {});
 const updateCopilotThreadState = mock(() => {});
 const updateThreadTitle = mock((_threadId: string, title: string) => {
@@ -68,6 +69,7 @@ const codexManager = {
     }),
   ),
   respondToUserInput: mock(async () => {}),
+  declineServerRequest: mock((_requestId: string) => true),
   resumeThread: mock(async (threadId: string) => ({
     cwd: "/tmp/workspace",
     model: "gpt-5.4",
@@ -117,13 +119,15 @@ mock.module("@/lib/logger", () => ({
   }),
 }));
 
+const getCodexAppServerManager = mock((_instance?: unknown) => codexManager);
+
 mock.module("@/lib/ai/chat/engines/codex-app-server", () => ({
-  getCodexAppServerManager: () => codexManager,
+  getCodexAppServerManager,
 }));
 
 const persistenceModuleMock = () => ({
   clearActiveStream,
-  ensureThread: mock(async () => ({ created: true })),
+  ensureThread,
   loadThread,
   loadThreadMessages,
   setActiveMessage,
@@ -178,6 +182,8 @@ mock.module("./workspace", () => ({
 }));
 
 const { runCodexThreadChat } = await import("./codex");
+const { makeFakeInstance } = await import("../engines/contract/testing");
+const { UNATTENDED_DECLINE_MESSAGE } = await import("./unattended");
 
 async function emitCodexEvent(event: {
   id?: string;
@@ -1556,5 +1562,132 @@ describe("runCodexThreadChat 0.160 protocol mapping", () => {
       ],
       threadId: "codex-thread-1",
     });
+  });
+});
+
+describe("runCodexThreadChat instances and unattended runs", () => {
+  beforeEach(() => {
+    ensureThread.mockClear();
+    getCodexAppServerManager.mockClear();
+    setThreadStatus.mockClear();
+    updateCodexThreadState.mockClear();
+    upsertMessage.mockClear();
+    codexManager.declineServerRequest.mockClear();
+    codexManager.getDefaultModel.mockImplementation(() => null);
+    codexManager.getKnownModel.mockImplementation(() => null);
+    codexManager.respondToApproval.mockClear();
+    codexManager.respondToUserInput.mockClear();
+    codexManager.startThread.mockClear();
+    codexManager.startTurn.mockClear();
+    codexManager.supportsCollaborationMode.mockImplementation(() => true);
+    codexSubscriptionHandler = null;
+  });
+
+  function userMessage(threadId: string) {
+    return {
+      id: `${threadId}-user`,
+      metadata: {},
+      parts: [{ text: "Do the thing", type: "text" as const }],
+      role: "user" as const,
+    };
+  }
+
+  it("binds a new thread to its instance and runs that instance's app-server", async () => {
+    const instance = makeFakeInstance({
+      continuationKey: "codex:home:/tmp/codex-work",
+      driver: "codex",
+      id: "codex-work",
+    });
+
+    const response = await runCodexThreadChat(
+      {
+        message: userMessage("thread-instance"),
+        modelId: "gpt-6-astra",
+        threadId: "thread-instance",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      { chatEngineState: null, mode: "chat", status: "idle" } as any,
+      instance,
+    );
+
+    expect(response.status).toBe(202);
+    expect(ensureThread.mock.calls[0]?.at(-1)).toBe("codex-work");
+    expect(getCodexAppServerManager).toHaveBeenCalled();
+    for (const call of getCodexAppServerManager.mock.calls) {
+      expect(call[0]).toBe(instance);
+    }
+    expect(updateCodexThreadState).toHaveBeenCalledWith(
+      "thread-instance",
+      expect.objectContaining({ codexThreadId: "codex-thread-1" }),
+      instance,
+    );
+  });
+
+  it("declines approvals and questions at once when nobody can answer", async () => {
+    const response = await runCodexThreadChat(
+      {
+        interactive: false,
+        message: userMessage("thread-unattended"),
+        modelId: "gpt-6-astra",
+        threadId: "thread-unattended",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      { chatEngineState: null, mode: "chat", status: "idle" } as any,
+    );
+    expect(response.status).toBe(202);
+
+    await emitCodexEvent({
+      id: "61",
+      method: "item/permissions/requestApproval",
+      params: {
+        cwd: "/tmp/workspace",
+        itemId: "perm-item",
+        permissions: { network: { enabled: true } },
+        reason: "Needs network",
+        threadId: "codex-thread-1",
+        turnId: "turn-1",
+      },
+      type: "approval-request",
+    });
+    await emitCodexEvent({
+      id: "62",
+      method: "item/tool/requestUserInput",
+      params: {
+        itemId: "ask-1",
+        questions: [
+          {
+            header: "Approach",
+            id: "approach",
+            options: [{ description: "Small patch", label: "Patch" }],
+            question: "How should I fix it?",
+          },
+        ],
+        threadId: "codex-thread-1",
+        turnId: "turn-1",
+      },
+      type: "user-input-request",
+    });
+
+    expect(codexManager.declineServerRequest.mock.calls).toEqual([
+      ["61"],
+      ["62"],
+    ]);
+    expect(codexManager.respondToApproval).not.toHaveBeenCalled();
+    expect(codexManager.respondToUserInput).not.toHaveBeenCalled();
+    expect(findPart("codex_permissions_request")).toMatchObject({
+      state: "output-denied",
+    });
+    expect(JSON.stringify(findPart("codex_permissions_request"))).toContain(
+      UNATTENDED_DECLINE_MESSAGE,
+    );
+    expect(findPart("codex_user_input")?.state).not.toBe("approval-requested");
+    expect(setThreadStatus).not.toHaveBeenCalledWith(
+      "thread-unattended",
+      "awaiting_approval",
+    );
   });
 });

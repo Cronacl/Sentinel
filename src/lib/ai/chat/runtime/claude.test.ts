@@ -19,6 +19,12 @@ const updateOpenCodeThreadState = mock(() => {});
 const updateThreadTitle = mock(() => {});
 const updateMessageMetadata = mock(async () => {});
 const beginThreadRepoCheckpointRun = mock(async () => {});
+const ensureThread = mock(async (..._args: unknown[]) => ({ created: true }));
+const updateClaudeThreadState = mock((..._args: unknown[]) => {});
+const resolveClaudeCodeRuntime = mock(async (_input: unknown) => ({
+  env: process.env,
+  executablePath: null,
+}));
 const getToolPermissionMode = mock(async (): Promise<"default" | "full"> => {
   return "default";
 });
@@ -43,7 +49,7 @@ mock.module("@anthropic-ai/claude-agent-sdk", () => ({
 
 mock.module("../persistence", () => ({
   clearActiveStream,
-  ensureThread: mock(async () => ({ created: true })),
+  ensureThread,
   loadThreadMessages,
   loadThread,
   claimNextThreadFollowUp: mock(() => null),
@@ -52,7 +58,7 @@ mock.module("../persistence", () => ({
   setActiveStream: mock(() => {}),
   setThreadStatus,
   updateCodexThreadState,
-  updateClaudeThreadState: mock(() => {}),
+  updateClaudeThreadState,
   updateCopilotThreadState,
   updateCursorThreadState,
   updateMessageMetadata,
@@ -91,10 +97,7 @@ mock.module("@/lib/ai/chat/engines/claude-sdk", async () => {
     ...actual,
     buildClaudeSdkBaseOptions: mock((options: unknown) => options),
     buildClaudeThreadState: mock((input: unknown) => input),
-    resolveClaudeCodeRuntime: mock(async () => ({
-      env: process.env,
-      executablePath: null,
-    })),
+    resolveClaudeCodeRuntime,
   };
 });
 
@@ -113,6 +116,8 @@ mock.module("./workspace", () => ({
 }));
 
 const { ThreadChatConflictError } = await import("../errors");
+const { makeFakeInstance } = await import("../engines/contract/testing");
+const { UNATTENDED_DECLINE_MESSAGE } = await import("./unattended");
 const { runClaudeThreadChat } = await import("./claude");
 const { getLatestClaudeRateLimits, resetClaudeRateLimits } =
   await import("./claude/rate-limits");
@@ -1458,6 +1463,91 @@ describe("runClaudeThreadChat approvals", () => {
         claudeSessionId: "session-2",
         tasks: [{ id: "1", status: "pending", subject: "New 1" }],
       }),
+    );
+  });
+});
+
+describe("runClaudeThreadChat instances and unattended runs", () => {
+  beforeEach(() => {
+    capturedClaudeQueryInput = null;
+    queryMessages = [];
+    ensureThread.mockClear();
+    resolveClaudeCodeRuntime.mockClear();
+    setThreadStatus.mockClear();
+    updateClaudeThreadState.mockClear();
+    if (!(globalThis as any).__sentinelActiveClaudeRunControls) {
+      (globalThis as any).__sentinelActiveClaudeRunControls = new Map();
+    }
+    (globalThis as any).__sentinelActiveClaudeRunControls.clear();
+  });
+
+  afterEach(() => {
+    (globalThis as any).__sentinelActiveClaudeRunControls?.clear();
+  });
+
+  it("binds a new thread to its instance and runs that instance's Claude Code", async () => {
+    const instance = makeFakeInstance({
+      continuationKey: "claude:home:/tmp/claude-work",
+      driver: "claude",
+      id: "claude-work",
+    });
+
+    const response = await runClaudeThreadChat(
+      {
+        message: createUserMessage("Hello"),
+        threadId: "thread-instance",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      null,
+      instance,
+    );
+    await flushClaudeRun();
+
+    expect(response.status).toBe(202);
+    expect(ensureThread.mock.calls[0]?.at(-1)).toBe("claude-work");
+    expect(resolveClaudeCodeRuntime).toHaveBeenCalledWith({ instance });
+    expect(updateClaudeThreadState).toHaveBeenCalledWith(
+      "thread-instance",
+      expect.objectContaining({ sessionId: expect.any(String) }),
+      instance,
+    );
+  });
+
+  it("declines permission requests at once when nobody can answer", async () => {
+    await runClaudeThreadChat(
+      {
+        interactive: false,
+        message: createUserMessage("Run the nightly check"),
+        threadId: "thread-unattended",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      null,
+    );
+
+    const canUseTool = capturedClaudeQueryInput?.options
+      ?.canUseTool as CanUseToolMock;
+    for (const toolName of ["Bash", "AskUserQuestion"]) {
+      await expect(
+        canUseTool(
+          toolName,
+          { command: "rm -rf build" },
+          {
+            signal: new AbortController().signal,
+            toolUseID: `approval-${toolName}`,
+          },
+        ),
+      ).resolves.toEqual({
+        behavior: "deny",
+        message: UNATTENDED_DECLINE_MESSAGE,
+      });
+    }
+    expect(setThreadStatus).not.toHaveBeenCalledWith(
+      "thread-unattended",
+      "awaiting_approval",
     );
   });
 });

@@ -87,6 +87,7 @@ import {
   extractClaudeUserToolResults,
 } from "./tool-output";
 import { buildPlanModePromptPreamble } from "../plan-mode-instructions";
+import { isUnattendedRun, UNATTENDED_DECLINE_MESSAGE } from "../unattended";
 import { serializeComposerContextToText } from "@/lib/composer-context/serialize";
 import { getToolPermissionMode, getWorkspaceRootPath } from "../workspace";
 import {
@@ -1809,6 +1810,7 @@ export async function runClaudeThreadChat(
       request,
     });
 
+    const unattended = isUnattendedRun(request);
     const pendingApprovals = new Map<
       string,
       {
@@ -1829,6 +1831,15 @@ export async function runClaudeThreadChat(
           ? { resume: existingClaudeState!.sessionId }
           : { sessionId }),
         canUseTool: async (toolName, input, permissionOptions) => {
+          // Nobody answers an unattended run (an automation). Full access
+          // bypasses permissions, so only what would ask the user lands here.
+          if (unattended) {
+            return buildClaudePermissionResult({
+              approved: false,
+              message: UNATTENDED_DECLINE_MESSAGE,
+            });
+          }
+
           return await new Promise<PermissionResult>((resolve) => {
             const approvalId = permissionOptions.toolUseID;
             const normalizedToolName = normalizeClaudeSdkToolName(toolName);

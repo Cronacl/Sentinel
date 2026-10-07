@@ -636,6 +636,39 @@ describe("CodexAppServerManager unclaimed server requests", () => {
   });
 });
 
+describe("CodexAppServerManager declined server requests", () => {
+  it("declines a pending approval or question for an unattended run", async () => {
+    const manager = createManager();
+    collectEvents(manager);
+    await emitFromPeer(manager, [
+      {
+        id: 121,
+        jsonrpc: "2.0",
+        method: "item/commandExecution/requestApproval",
+        params: { itemId: "cmd", startedAtMs: 1, threadId: "thr", turnId: "t" },
+      },
+      {
+        id: 122,
+        jsonrpc: "2.0",
+        method: "item/tool/requestUserInput",
+        params: { itemId: "ask", questions: [], threadId: "thr", turnId: "t" },
+      },
+    ]);
+
+    expect(manager.declineServerRequest("121")).toBe(true);
+    expect(manager.declineServerRequest("122")).toBe(true);
+    // Answered once: a late answer or a second decline is refused.
+    expect(manager.declineServerRequest("121")).toBe(false);
+
+    const frames = await receivedFrames(manager);
+    expect(findReply(frames, 121)?.result).toEqual({ decision: "decline" });
+    expect(findReply(frames, 122)?.result).toEqual({ answers: {} });
+    await expect(manager.respondToUserInput("122", "x")).rejects.toThrow(
+      "no longer active",
+    );
+  });
+});
+
 describe("CodexAppServerManager client requests", () => {
   it("reverts turns by paging thread/turns/list and calling thread/revert", async () => {
     const manager = createManager({

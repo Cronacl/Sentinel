@@ -157,11 +157,11 @@ describe("catalog lookups", () => {
     expect(getDriverMessageActions(undefined).regenerate).toBe(false);
   });
 
-  it("let only Cursor and OpenCode settle approvals in unattended runs", () => {
+  it("settles approvals of unattended runs on every implemented engine", () => {
     expect(
       CHAT_ENGINES.filter(
-        (kind) => getDriverMeta(kind)?.capabilities.supportsUnattendedTools,
+        (kind) => !getDriverMeta(kind)?.capabilities.supportsUnattendedTools,
       ),
-    ).toEqual(["cursor", "opencode"]);
+    ).toEqual([]);
   });
 });

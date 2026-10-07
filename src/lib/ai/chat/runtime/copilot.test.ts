@@ -44,19 +44,22 @@ const copilotManager = {
   })),
 };
 let toolPermissionMode: "default" | "full" = "default";
+const getCopilotClientManager = mock((_instance?: unknown) => copilotManager);
+const ensureThread = mock(async (..._args: unknown[]) => ({ created: true }));
+const updateCopilotThreadState = mock((..._args: unknown[]) => {});
 
 mock.module("server-only", () => ({}));
 
 mock.module("@/lib/ai/chat/engines/copilot-sdk", () => ({
   buildCopilotThreadState: mock((input: unknown) => input),
-  getCopilotClientManager: () => copilotManager,
+  getCopilotClientManager,
   normalizeCopilotErrorMessage: (error: unknown) =>
     error instanceof Error ? error.message : String(error),
 }));
 
 mock.module("../persistence", () => ({
   clearActiveStream,
-  ensureThread: mock(async () => ({ created: true })),
+  ensureThread,
   loadThread: mock(async () => null),
   loadThreadMessages,
   setActiveMessage,
@@ -64,7 +67,7 @@ mock.module("../persistence", () => ({
   setThreadStatus,
   updateClaudeThreadState,
   updateCodexThreadState,
-  updateCopilotThreadState: mock(() => {}),
+  updateCopilotThreadState,
   updateMessageMetadata,
   updateThreadChatSettings,
   updateThreadRepoState,
@@ -110,6 +113,7 @@ mock.module("./workspace", workspaceRuntimeMock);
 mock.module("./workspace.ts", workspaceRuntimeMock);
 
 const { runCopilotThreadChat } = await import("./copilot");
+const { makeFakeInstance } = await import("../engines/contract/testing");
 
 function createUserMessage(text: string) {
   return {
@@ -803,5 +807,94 @@ describe("Copilot SDK 1.x session wiring", () => {
 
     expect(control.state.text).toBe("Found it.");
     expect(control.state.reasoningText).toBe("Plan the lookup");
+  });
+});
+
+describe("runCopilotThreadChat instances and unattended runs", () => {
+  beforeEach(() => {
+    sentPayloads = [];
+    copilotManager.createSession.mockClear();
+    copilotManager.resumeSession.mockClear();
+    ensureThread.mockClear();
+    getCopilotClientManager.mockClear();
+    setThreadStatus.mockClear();
+    updateCopilotThreadState.mockClear();
+    toolPermissionMode = "default";
+    if (!(globalThis as any).__sentinelActiveCopilotRunControls) {
+      (globalThis as any).__sentinelActiveCopilotRunControls = new Map();
+    }
+    (globalThis as any).__sentinelActiveCopilotRunControls.clear();
+  });
+
+  afterEach(() => {
+    (globalThis as any).__sentinelActiveCopilotRunControls?.clear();
+  });
+
+  it("binds a new thread to its instance and runs that instance's client", async () => {
+    const instance = makeFakeInstance({
+      continuationKey: "copilot:home:/tmp/copilot-work",
+      driver: "copilot",
+      id: "copilot-work",
+    });
+
+    const response = await runCopilotThreadChat(
+      {
+        message: createUserMessage("Hello"),
+        modelId: "gpt-5.4",
+        threadId: "thread-instance",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      null,
+      instance,
+    );
+
+    expect(response.status).toBe(202);
+    expect(ensureThread.mock.calls[0]?.at(-1)).toBe("copilot-work");
+    expect(getCopilotClientManager).toHaveBeenCalled();
+    for (const call of getCopilotClientManager.mock.calls) {
+      expect(call[0]).toBe(instance);
+    }
+    expect(updateCopilotThreadState).toHaveBeenCalledWith(
+      "thread-instance",
+      expect.objectContaining({ sessionId: "session-1" }),
+      instance,
+    );
+  });
+
+  it("answers permission requests and questions at once when nobody can", async () => {
+    await runCopilotThreadChat(
+      {
+        interactive: false,
+        message: createUserMessage("Run the nightly check"),
+        modelId: "gpt-5.4",
+        threadId: "thread-unattended",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      null,
+    );
+
+    const config = copilotManager.createSession.mock.calls[0]?.[0] as {
+      onPermissionRequest: (request: unknown) => Promise<unknown>;
+      onUserInputRequest: (request: unknown) => Promise<unknown>;
+    };
+    await expect(
+      config.onPermissionRequest({
+        fullCommandText: "rm -rf build",
+        intention: "Clean the build",
+        kind: "shell",
+        toolCallId: "tool-1",
+      }),
+    ).resolves.toEqual({ kind: "user-not-available" });
+    await expect(
+      config.onUserInputRequest({ question: "Which branch?" }),
+    ).resolves.toEqual({ answer: "", wasFreeform: true });
+    expect(setThreadStatus).not.toHaveBeenCalledWith(
+      "thread-unattended",
+      "awaiting_approval",
+    );
   });
 });

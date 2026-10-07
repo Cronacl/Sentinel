@@ -103,19 +103,30 @@ function getEngineModelDescription(engine: string) {
 }
 
 /**
- * Automations run unattended (interactive: false). Below full access, an
- * action that needs approval is either declined (engines that settle
- * approvals themselves) or waits in the automation's thread. The form says
- * which, from the engine's capabilities.
+ * Automations run unattended (interactive: false). Engines that settle
+ * approvals themselves decline what would ask the user; full access already
+ * approves what an external engine asks about. The built-in engine asks per
+ * tool (approval policies, whatever the access mode), so its declines apply
+ * under full access too. Engines without the capability leave a request
+ * waiting in the automation's thread.
  */
 export function getAutomationUnattendedNotice(
   permissionMode: PermissionMode | null | undefined,
   engine:
-    | Pick<ChatComposerEngineOption, "settlesUnattendedApprovals">
+    | Pick<ChatComposerEngineOption, "engine" | "settlesUnattendedApprovals">
     | null
     | undefined,
 ) {
-  if (permissionMode === "full" || !engine) {
+  if (!engine) {
+    return null;
+  }
+  if (
+    engine.settlesUnattendedApprovals &&
+    getDriverMeta(engine.engine)?.runtime === "builtin"
+  ) {
+    return "Automations run unattended: tools whose approval policy asks first are declined.";
+  }
+  if (permissionMode === "full") {
     return null;
   }
   return engine.settlesUnattendedApprovals

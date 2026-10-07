@@ -793,6 +793,9 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
               globalSkillsBasePath: skillsBasePath,
               imageGenerationRuntime,
               integrationTools,
+              ...(run.request.interactive === false
+                ? { interactive: false }
+                : {}),
               mcpTools: mcpRuntime.tools,
               memoryRuntime,
               permissionMode,

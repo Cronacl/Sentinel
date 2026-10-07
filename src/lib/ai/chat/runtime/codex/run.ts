@@ -79,6 +79,7 @@ import {
   type CodexPromptResponse,
 } from "./event-helpers";
 import { activeCodexRunControls, findActiveCodexRunForThread } from "./state";
+import { isUnattendedRun, UNATTENDED_DECLINE_MESSAGE } from "../unattended";
 import {
   applyCodexTokenUsageUpdate,
   createCodexTokenUsageTracker,
@@ -1758,10 +1759,19 @@ function getNumber(record: Record<string, unknown> | null, key: string) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+/**
+ * How an unattended run (an automation, `interactive: false`) answers the
+ * requests nobody can: declined on the spot, never left waiting.
+ */
+type CodexUnattendedRun = {
+  decline(requestId: string): boolean;
+};
+
 async function handleCodexServerEvent(
   event: CodexServerEvent,
   runId: string,
   state: CodexMirrorState,
+  unattended: CodexUnattendedRun | null = null,
 ) {
   const eventThreadId = getCodexEventThreadId(event);
 
@@ -1771,6 +1781,17 @@ async function handleCodexServerEvent(
     }
 
     applyApprovalRequest(state, event.method, event.id, event.params);
+    if (unattended) {
+      if (unattended.decline(event.id)) {
+        applyPromptResponseToMirror(
+          state,
+          { approvalId: event.id, decision: "decline", kind: "approval" },
+          { declinedReason: UNATTENDED_DECLINE_MESSAGE },
+        );
+      }
+      emitAssistantMessageUpdate(state, runId, "streaming");
+      return;
+    }
     persist.setThreadStatus(state.threadId, "awaiting_approval");
     emitAssistantMessageUpdate(state, runId, "streaming");
     await emitLatestSnapshot(runId, state.threadId);
@@ -1783,6 +1804,17 @@ async function handleCodexServerEvent(
     }
 
     applyUserInputRequest(state, event);
+    if (unattended) {
+      if (unattended.decline(event.id)) {
+        applyPromptResponseToMirror(state, {
+          kind: "user-input",
+          requestId: event.id,
+          response: "",
+        });
+      }
+      emitAssistantMessageUpdate(state, runId, "streaming");
+      return;
+    }
     persist.setThreadStatus(state.threadId, "awaiting_approval");
     emitAssistantMessageUpdate(state, runId, "streaming");
     await emitLatestSnapshot(runId, state.threadId);
@@ -2402,8 +2434,13 @@ export async function runCodexThreadChat(
       threadId: request.threadId,
     });
 
+    // Nobody answers an unattended run (an automation): what would ask the
+    // user is declined. Full access never asks for command or file changes.
+    const unattended: CodexUnattendedRun | null = isUnattendedRun(request)
+      ? { decline: (requestId) => codex.declineServerRequest(requestId) }
+      : null;
     const unsubscribe = codex.subscribe((event) => {
-      void handleCodexServerEvent(event, runId, mirror);
+      void handleCodexServerEvent(event, runId, mirror, unattended);
     });
 
     activeCodexRunControls.set(runId, {

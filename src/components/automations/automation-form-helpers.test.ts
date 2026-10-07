@@ -125,11 +125,13 @@ describe("automation form helpers", () => {
   it("explains what happens to approvals in unattended runs", () => {
     expect(
       getAutomationUnattendedNotice("full", {
+        engine: "codex",
         settlesUnattendedApprovals: true,
       }),
     ).toBeNull();
     expect(
       getAutomationUnattendedNotice("default", {
+        engine: "codex",
         settlesUnattendedApprovals: true,
       }),
     ).toBe(
@@ -137,11 +139,30 @@ describe("automation form helpers", () => {
     );
     expect(
       getAutomationUnattendedNotice("default", {
+        engine: "acp",
         settlesUnattendedApprovals: false,
       }),
     ).toBe(
       "Actions that need approval wait in the automation's thread until you answer, unless the workspace allows full access.",
     );
+    // The built-in engine asks per tool policy, whatever the access mode.
+    for (const mode of ["default", "full"] as const) {
+      expect(
+        getAutomationUnattendedNotice(mode, {
+          engine: "sentinel",
+          settlesUnattendedApprovals: true,
+        }),
+      ).toBe(
+        "Automations run unattended: tools whose approval policy asks first are declined.",
+      );
+    }
+    expect(getAutomationUnattendedNotice("default", null)).toBeNull();
+  });
+
+  it("settles approvals of unattended runs on every implemented engine", () => {
+    for (const option of FALLBACK_CHAT_ENGINE_OPTIONS) {
+      expect(option.settlesUnattendedApprovals).toBe(true);
+    }
   });
 
   it("keeps model options safe when models are unavailable", () => {

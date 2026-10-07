@@ -124,7 +124,7 @@ describe("toComposerEngineOption", () => {
       isDefaultInstance: false,
       label: "Codex (work)",
       permissionModes: ["default", "full"],
-      settlesUnattendedApprovals: false,
+      settlesUnattendedApprovals: true,
       stability: "stable",
       supportsPlanMode: "native",
     });

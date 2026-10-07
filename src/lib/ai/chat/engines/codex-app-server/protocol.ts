@@ -608,6 +608,24 @@ export function mapCodexUserInputAnswers(
   );
 }
 
+/**
+ * The `result` that declines a server request nobody can answer: approvals
+ * are declined and questions get no answers. Sent for requests no run
+ * listens to, and in unattended runs (automations).
+ */
+export function buildCodexDeclinedServerRequestResult(
+  method: CodexApprovalRequestMethod | CodexUserInputRequestMethod,
+  paramsValue: unknown,
+) {
+  if (isCodexApprovalRequestMethod(method)) {
+    return buildCodexApprovalResult(method, paramsValue, "decline");
+  }
+
+  return method === "tool/requestUserInput"
+    ? { response: "" }
+    : { answers: {} };
+}
+
 export function buildCodexUserInputResult(
   method: CodexUserInputRequestMethod,
   paramsValue: unknown,

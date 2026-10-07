@@ -29,6 +29,7 @@ import {
 } from "../platform/runtime/resolve-binary";
 import {
   buildCodexApprovalResult,
+  buildCodexDeclinedServerRequestResult,
   buildCodexInitializeParams,
   buildCodexUserInputResult,
   CODEX_METHOD_NOT_FOUND_ERROR_CODE,
@@ -1436,6 +1437,29 @@ export class CodexAppServerManager {
     };
   }
 
+  /**
+   * Declines a pending approval or question without an answer from the
+   * user, the way an unclaimed request is declined. Unattended runs
+   * (automations) use it: nobody could answer. False when the request is no
+   * longer pending.
+   */
+  declineServerRequest(requestId: string) {
+    const pending = this.pendingServerRequests.get(requestId);
+    if (!pending) {
+      return false;
+    }
+
+    this.pendingServerRequests.delete(requestId);
+    this.writeMessage({
+      id: pending.id,
+      result: buildCodexDeclinedServerRequestResult(
+        pending.method,
+        pending.params,
+      ),
+    });
+    return true;
+  }
+
   async respondToUserInput(requestId: string, response: string) {
     await this.ensureStarted();
 
@@ -1628,11 +1652,10 @@ export class CodexAppServerManager {
       });
       this.writeMessage({
         id: message.id,
-        result: isCodexApprovalRequestMethod(message.method)
-          ? buildCodexApprovalResult(message.method, message.params, "decline")
-          : message.method === "tool/requestUserInput"
-            ? { response: "" }
-            : { answers: {} },
+        result: buildCodexDeclinedServerRequestResult(
+          message.method,
+          message.params,
+        ),
       });
       return;
     }

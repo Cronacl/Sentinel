@@ -26,6 +26,7 @@ import { computeLatentToolSummary } from "../tools/selection";
 import { buildToolRoutingEvidence, routeToolExposure } from "../tools/router";
 import { buildTools } from "../tools";
 import { buildThreadAgentInstructions } from "../context/instructions";
+import { declineUserApprovalsWhenUnattended } from "./unattended-approval";
 
 // ---------------------------------------------------------------------------
 // Call options schema
@@ -39,6 +40,8 @@ const threadAgentCallOptionsSchema = z.object({
   globalSkillsBasePath: z.string().nullable().optional(),
   imageGenerationRuntime: z.custom<ImageGenerationRuntime>(),
   integrationTools: z.custom<ToolSet>().optional(),
+  /** False in unattended runs (automations): approvals are declined. */
+  interactive: z.boolean().optional(),
   memoryRuntime: z.custom<MemoryRuntimeState>(),
   mcpTools: z.custom<ToolSet>().optional(),
   permissionMode: z.custom<PermissionMode>(),
@@ -336,6 +339,10 @@ export function createThreadAgent({
           ...settings.runtimeContext,
           toolRouting: initialRouting.audit,
         },
+        // Nobody answers an unattended run: what would ask is declined.
+        ...(options.interactive === false
+          ? { toolApproval: declineUserApprovalsWhenUnattended }
+          : {}),
         tools,
       };
     },
