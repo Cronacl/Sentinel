@@ -12,7 +12,6 @@ import {
 } from "react";
 import { Button } from "@heroui/react";
 import { DEFAULT_FOLLOW_UP_BEHAVIOR } from "@/schemas/general-settings.schema";
-import { getExactContextWindowUsage } from "@/lib/ai/chat/context/context-window";
 import type { SentinelComposerToolTag } from "@/lib/ai/chat/tools/selection/tags";
 import {
   extractComposerContext,
@@ -39,6 +38,7 @@ import { usePersistSelection } from "./use-persist-selection";
 import { usePlanMode } from "./use-plan-mode";
 import { useVoiceInput } from "./use-voice-input";
 import { shouldShowVoiceInputControl } from "./voice-input.helpers";
+import { resolveComposerContextWindowIndicator } from "./context-window-indicator.helpers";
 import { resolveThreadSelectionSyncInput } from "./thread-selection-sync";
 
 export type {
@@ -292,17 +292,23 @@ export function ChatComposer({
       ? (utils.threads.get.getData({ threadId })?.messages ?? [])
       : [];
 
-  const contextWindowIndicator =
-    selectedEngine === "sentinel" && selectedModelKey && selectedModel
-      ? getExactContextWindowUsage({
-          contextWindow: selectedModel.contextWindow,
-          fixedWindowSize:
-            generalSettingsQuery.data?.contextCompactionFixedWindowSize,
-          messages: threadMessages,
-          useFixedWindow:
-            generalSettingsQuery.data?.contextCompactionUseFixedWindow,
-        })
-      : null;
+  const contextWindowIndicator = useMemo(
+    () =>
+      resolveComposerContextWindowIndicator({
+        engine: selectedEngine,
+        generalSettings: generalSettingsQuery.data,
+        hasSelectedModel: Boolean(selectedModelKey && selectedModel),
+        messages: threadMessages,
+        modelContextWindow: selectedModel?.contextWindow,
+      }),
+    [
+      generalSettingsQuery.data,
+      selectedEngine,
+      selectedModel,
+      selectedModelKey,
+      threadMessages,
+    ],
+  );
   const openCodeTraits =
     selectedModel?.engine === "opencode" ? selectedModel.openCode : undefined;
   const effectiveSelectedOpenCodeAgent = resolveOpenCodeTraitValueForThreadMode(
@@ -567,28 +573,6 @@ export function ChatComposer({
         .
       </>
     ) : null;
-  const contextWindowIndicatorProps = useMemo(
-    () =>
-      contextWindowIndicator
-        ? {
-            compactionEnabled:
-              generalSettingsQuery.data?.contextCompactionEnabled ?? false,
-            contextWindowMode: contextWindowIndicator.source,
-            compactionWindowPercent:
-              generalSettingsQuery.data?.contextCompactionWindowPercent ?? 70,
-            contextWindow: contextWindowIndicator.contextWindow,
-            inputTokens: contextWindowIndicator.inputTokens,
-            modelContextWindow: selectedModel?.contextWindow,
-            usedPercent: contextWindowIndicator.usedPercent,
-          }
-        : null,
-    [
-      contextWindowIndicator,
-      generalSettingsQuery.data?.contextCompactionEnabled,
-      generalSettingsQuery.data?.contextCompactionWindowPercent,
-      selectedModel?.contextWindow,
-    ],
-  );
   const modelSelectorNode = useMemo(
     () => (
       <ModelSelector
@@ -846,7 +830,7 @@ export function ChatComposer({
           ) : (
             <ComposerToolbar
               canSend={canSend}
-              contextWindowIndicator={contextWindowIndicatorProps}
+              contextWindowIndicator={contextWindowIndicator}
               engineOptions={engineOptions}
               hasWorkspace={hasWorkspace}
               isBusy={isBusy}

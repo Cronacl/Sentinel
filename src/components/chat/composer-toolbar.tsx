@@ -46,6 +46,7 @@ type ComposerToolbarProps = {
   canSend: boolean;
   contextWindowIndicator?: {
     compactionEnabled: boolean;
+    compactionNote?: string;
     compactionWindowPercent: number;
     contextWindow: number;
     contextWindowMode: "fixed" | "model" | "provider";
@@ -389,6 +390,7 @@ export const ComposerToolbar = memo(function ComposerToolbar({
         {contextWindowIndicator ? (
           <ContextWindowIndicator
             compactionEnabled={contextWindowIndicator.compactionEnabled}
+            compactionNote={contextWindowIndicator.compactionNote}
             compactionWindowPercent={
               contextWindowIndicator.compactionWindowPercent
             }
