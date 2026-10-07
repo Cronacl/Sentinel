@@ -101,7 +101,7 @@ type GenerateClaudeDependencies = {
     args: string[];
     cwd: string;
     env: NodeJS.ProcessEnv;
-  }) => ChildProcessLike;
+  }) => ChildProcessLike | Promise<ChildProcessLike>;
 };
 
 type CopilotCommitSessionLike = {
@@ -426,6 +426,47 @@ async function cleanupTempDirectory(directory: string) {
   await rm(directory, { force: true, recursive: true }).catch(() => undefined);
 }
 
+async function loadClaudeSdkEngine() {
+  return await import("@/lib/ai/chat/engines/claude-sdk");
+}
+
+/**
+ * Runs the Claude Code CLI Sentinel resolved for the Claude engine (not a bare
+ * `claude` from PATH, which GUI launches often lack), through the same
+ * launcher the engine uses so npm-shim installs work without `node` on PATH.
+ */
+async function spawnResolvedClaudeCli(input: {
+  args: string[];
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+}) {
+  const { buildClaudeCliLaunch, resolveClaudeCodeRuntime } =
+    await loadClaudeSdkEngine();
+  const runtime = await resolveClaudeCodeRuntime();
+  if (!runtime.executablePath) {
+    throw new Error("Claude Code is not installed or not available on PATH.");
+  }
+
+  const launch = buildClaudeCliLaunch({
+    args: input.args,
+    command: runtime.executablePath,
+    // The runtime env carries the managed PATH/HOME the binary was verified
+    // with; keep it over the caller's copy of process.env.
+    env: {
+      ...input.env,
+      ...runtime.env,
+      CLAUDE_AGENT_SDK_CLIENT_APP:
+        input.env.CLAUDE_AGENT_SDK_CLIENT_APP ?? "sentinel",
+    },
+  });
+  return spawn(launch.command, launch.args, {
+    cwd: input.cwd,
+    env: launch.env as NodeJS.ProcessEnv,
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+  }) as ChildProcessWithoutNullStreams;
+}
+
 async function loadSpawnCodexCli() {
   const { spawnCodexCli } = await import("@/lib/ai/chat/engines/codex-cli");
   return spawnCodexCli;
@@ -523,26 +564,10 @@ export async function generateClaudeCommitMessage(
   input: GenerateClaudeCommitMessageInput,
   dependencies?: GenerateClaudeDependencies,
 ) {
-  const spawnProcess =
-    dependencies?.spawnProcess ??
-    (({
-      args,
-      cwd,
-      env,
-    }: {
-      args: string[];
-      cwd: string;
-      env: NodeJS.ProcessEnv;
-    }) =>
-      spawn("claude", args, {
-        cwd,
-        env,
-        stdio: ["pipe", "pipe", "pipe"],
-        windowsHide: true,
-      }) as ChildProcessWithoutNullStreams);
+  const spawnProcess = dependencies?.spawnProcess ?? spawnResolvedClaudeCli;
 
   const mappedEffort = mapClaudeEffort(input.reasoningEffort ?? null);
-  const child = spawnProcess({
+  const child = await spawnProcess({
     args: [
       "-p",
       "--output-format",

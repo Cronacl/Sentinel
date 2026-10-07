@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import {
+  buildClaudeFallbackModels,
   type ClaudeEngineStatus,
   getClaudeEngineStatus,
   isClaudeEngineAvailable,
@@ -146,29 +147,6 @@ function shouldExposeRuntimeModels(options: {
   isAvailable: boolean;
 }) {
   return options.isAvailable || options.availableModelsCount > 0;
-}
-
-function buildFallbackClaudeModels() {
-  return getModelsForProvider("anthropic").map((model) => ({
-    contextWindow: model.contextWindow,
-    defaultReasoningEffort: getDefaultReasoningEffort("anthropic", model.id),
-    description: model.description,
-    displayName: model.displayName,
-    id: model.id,
-    inputModalities: model.capabilities.includes("vision")
-      ? ["text", "image"]
-      : ["text"],
-    isDefault: model.id === "claude-sonnet-4-5",
-    model: model.id,
-    supportedReasoningEfforts: getSupportedReasoningEfforts(
-      "anthropic",
-      model.id,
-    ).map((effort) => ({
-      description: `${model.displayName} supports ${effort} reasoning effort.`,
-      effort,
-      label: effort[0]!.toUpperCase() + effort.slice(1),
-    })),
-  }));
 }
 
 function buildFallbackCopilotModels() {
@@ -406,7 +384,7 @@ export const enginesRouter = createTRPCRouter({
       if (input.engine === "claude") {
         const status = await runtimeStatuses.claude();
         const models = canUseClaudeFallbackModels(status)
-          ? buildFallbackClaudeModels()
+          ? buildClaudeFallbackModels()
           : status.availableModels;
         const isConnected = shouldExposeRuntimeModels({
           availableModelsCount: models.length,

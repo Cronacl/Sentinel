@@ -19,6 +19,9 @@ const updateOpenCodeThreadState = mock(() => {});
 const updateThreadTitle = mock(() => {});
 const updateMessageMetadata = mock(async () => {});
 const beginThreadRepoCheckpointRun = mock(async () => {});
+const getToolPermissionMode = mock(async (): Promise<"default" | "full"> => {
+  return "default";
+});
 const loadThreadSessionSnapshot = mock(async (threadId: string) => ({
   activeRunId: "run-1",
   chatEngine: "claude",
@@ -105,12 +108,74 @@ mock.module("@/lib/streams", () => ({
 
 mock.module("./workspace", () => ({
   getToolApprovalPolicies: mock(async () => ({})),
-  getToolPermissionMode: mock(async () => "default"),
+  getToolPermissionMode,
   getWorkspaceRootPath: mock(async () => "/tmp/workspace"),
 }));
 
 const { ThreadChatConflictError } = await import("../errors");
 const { runClaudeThreadChat } = await import("./claude");
+const { getLatestClaudeRateLimits, resetClaudeRateLimits } =
+  await import("./claude/rate-limits");
+
+type CanUseToolMock = (
+  toolName: string,
+  input: Record<string, unknown>,
+  permissionOptions: {
+    decisionReason?: string;
+    signal: AbortSignal;
+    toolUseID: string;
+  },
+) => Promise<unknown>;
+
+function createSuccessResult(overrides: Record<string, unknown> = {}) {
+  return {
+    duration_api_ms: 1,
+    duration_ms: 1,
+    errors: [],
+    is_error: false,
+    modelUsage: {},
+    num_turns: 1,
+    permission_denials: [],
+    result: "",
+    session_id: "session-1",
+    stop_reason: "end_turn",
+    subtype: "success",
+    total_cost_usd: 0,
+    type: "result",
+    usage: {
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+      server_tool_use: {},
+      service_tier: "standard",
+    },
+    uuid: "result-1",
+    ...overrides,
+  };
+}
+
+function getLatestMirroredAssistant() {
+  return upsertMessage.mock.calls
+    .map((call: any[]) => call[1])
+    .findLast((message: any) => message?.role === "assistant") as
+    | {
+        metadata?: Record<string, unknown>;
+        parts?: Array<Record<string, unknown>>;
+      }
+    | undefined;
+}
+
+function getOnlyActiveRun() {
+  const activeRuns = (globalThis as any)
+    .__sentinelActiveClaudeRunControls as Map<string, any>;
+  const [runId, control] = [...activeRuns.entries()][0] ?? [];
+  return { control, runId: runId as string };
+}
+
+async function flushClaudeRun() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 function createQueryMock() {
   const messages = [...queryMessages];
@@ -180,6 +245,8 @@ describe("runClaudeThreadChat approvals", () => {
     updateThreadRepoState.mockClear();
     updateThreadTitle.mockClear();
     upsertMessage.mockClear();
+    getToolPermissionMode.mockClear();
+    resetClaudeRateLimits();
     if (!(globalThis as any).__sentinelActiveClaudeRunControls) {
       (globalThis as any).__sentinelActiveClaudeRunControls = new Map();
     }
@@ -190,7 +257,7 @@ describe("runClaudeThreadChat approvals", () => {
     (globalThis as any).__sentinelActiveClaudeRunControls?.clear();
   });
 
-  it("mirrors AskUserQuestion as claude_user_input from the permission callback and resumes with the submitted response", async () => {
+  it("mirrors AskUserQuestion as claude_user_input and answers it through canUseTool updatedInput", async () => {
     const response = await runClaudeThreadChat(
       {
         message: createUserMessage("Help me plan this."),
@@ -349,20 +416,22 @@ describe("runClaudeThreadChat approvals", () => {
     expect(approvalResponse.status).toBe(204);
     await expect(permissionPromise).resolves.toEqual({
       behavior: "allow",
-      updatedInput: userQuestionInput,
+      updatedInput: {
+        ...userQuestionInput,
+        answers: {
+          "Which improvements would you like to prioritize first?":
+            "Critical fixes",
+        },
+      },
     });
 
-    await expect(promptIterator?.next()).resolves.toEqual({
-      done: false,
-      value: expect.objectContaining({
-        parent_tool_use_id: "approval-ask",
-        tool_use_result: {
-          action: "accept",
-          answers: { response: "Critical fixes" },
-        },
-        type: "user",
-      }),
-    });
+    // The answer travels only through canUseTool; no user message is queued.
+    await expect(
+      Promise.race([
+        promptIterator?.next(),
+        new Promise((resolve) => setTimeout(() => resolve("pending"), 20)),
+      ]),
+    ).resolves.toBe("pending");
     expect(setThreadStatus).toHaveBeenCalledWith("thread-1", "streaming");
   });
 
@@ -866,5 +935,426 @@ describe("runClaudeThreadChat approvals", () => {
       ]),
     );
     expect(JSON.stringify(promptParts)).not.toContain("<proposed_plan>");
+  });
+  it("holds an AskUserQuestion answer that arrives before canUseTool", async () => {
+    await runClaudeThreadChat(
+      {
+        message: createUserMessage("Plan it."),
+        threadId: "thread-early",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      { chatEngineState: null, mode: "chat", status: "idle" } as any,
+    );
+    const { control, runId } = getOnlyActiveRun();
+    // The assistant tool_use block was mirrored before Claude Code asked.
+    control.pendingQuestions.set("question-early", {
+      toolCallId: "question-early",
+    });
+
+    const answered = await runClaudeThreadChat(
+      {
+        threadId: "thread-early",
+        toolApprovalResponse: {
+          approved: true,
+          id: "question-early",
+          response: "Option B",
+        },
+        trigger: "submit-tool-approval",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      { activeStreamId: runId, status: "awaiting_approval" } as any,
+    );
+    expect(answered.status).toBe(204);
+
+    const questionInput = {
+      questions: [
+        {
+          header: "Option",
+          multiSelect: false,
+          options: [
+            { description: "First", label: "Option A" },
+            { description: "Second", label: "Option B" },
+          ],
+          question: "Which option?",
+        },
+      ],
+    };
+    const canUseTool = capturedClaudeQueryInput?.options
+      ?.canUseTool as CanUseToolMock;
+    await expect(
+      canUseTool("AskUserQuestion", questionInput, {
+        signal: new AbortController().signal,
+        toolUseID: "question-early",
+      }),
+    ).resolves.toEqual({
+      behavior: "allow",
+      updatedInput: {
+        ...questionInput,
+        answers: { "Which option?": "Option B" },
+      },
+    });
+    expect(control.pendingQuestions.has("question-early")).toBe(false);
+  });
+
+  it("passes explicit run options for Claude Agent SDK 0.3", async () => {
+    await runClaudeThreadChat(
+      {
+        message: createUserMessage("Hi"),
+        modelId: "claude-opus-5-5",
+        reasoningEffort: "xhigh",
+        threadId: "thread-options",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      { chatEngineState: null, mode: "chat", status: "idle" } as any,
+    );
+
+    expect(capturedClaudeQueryInput?.options).toEqual(
+      expect.objectContaining({
+        effort: "xhigh",
+        model: "claude-opus-5-5",
+        permissionMode: "default",
+        sandbox: expect.objectContaining({
+          autoAllowBashIfSandboxed: true,
+          enabled: true,
+          failIfUnavailable: false,
+        }),
+        settings: { showThinkingSummaries: true },
+        thinking: { display: "summarized", type: "adaptive" },
+        toolConfig: { askUserQuestion: { previewFormat: "markdown" } },
+      }),
+    );
+    expect(
+      capturedClaudeQueryInput?.options?.allowDangerouslySkipPermissions,
+    ).toBeUndefined();
+  });
+
+  it("uses bypassPermissions without a sandbox in full mode and maps Sentinel-only efforts", async () => {
+    getToolPermissionMode.mockResolvedValueOnce("full");
+
+    await runClaudeThreadChat(
+      {
+        message: createUserMessage("Hi"),
+        reasoningEffort: "minimal",
+        threadId: "thread-full",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      { chatEngineState: null, mode: "chat", status: "idle" } as any,
+    );
+
+    expect(capturedClaudeQueryInput?.options).toEqual(
+      expect.objectContaining({
+        allowDangerouslySkipPermissions: true,
+        effort: "low",
+        permissionMode: "bypassPermissions",
+      }),
+    );
+    expect(capturedClaudeQueryInput?.options?.sandbox).toBeUndefined();
+  });
+
+  it("omits effort when none was requested", async () => {
+    await runClaudeThreadChat(
+      {
+        message: createUserMessage("Hi"),
+        threadId: "thread-no-effort",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      { chatEngineState: null, mode: "chat", status: "idle" } as any,
+    );
+
+    expect(capturedClaudeQueryInput?.options?.effort).toBeUndefined();
+  });
+
+  it("records rate_limit_event messages and finishes the run normally", async () => {
+    queryMessages = [
+      {
+        rate_limit_info: {
+          rateLimitType: "five_hour",
+          resetsAt: 1_790_000_000,
+          status: "allowed_warning",
+          utilization: 0.82,
+        },
+        session_id: "session-1",
+        type: "rate_limit_event",
+        uuid: "rate-limit-1",
+      },
+      createSuccessResult({ result: "Done." }),
+    ];
+
+    await runClaudeThreadChat(
+      {
+        message: createUserMessage("Hi"),
+        threadId: "thread-rate-limit",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      { chatEngineState: null, mode: "chat", status: "idle" } as any,
+    );
+    await flushClaudeRun();
+
+    expect(getLatestClaudeRateLimits()).toEqual([
+      expect.objectContaining({
+        info: expect.objectContaining({
+          rateLimitType: "five_hour",
+          status: "allowed_warning",
+        }),
+        sessionId: "session-1",
+      }),
+    ]);
+    expect(getLatestMirroredAssistant()?.metadata?.status).toBe("completed");
+    expect(setThreadStatus).toHaveBeenCalledWith("thread-rate-limit", "idle");
+  });
+
+  it("fails the run when a success result carries is_error", async () => {
+    queryMessages = [
+      createSuccessResult({
+        is_error: true,
+        result: "Invalid API key · Please run /login",
+      }),
+    ];
+
+    await runClaudeThreadChat(
+      {
+        message: createUserMessage("Hi"),
+        threadId: "thread-api-error",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      { chatEngineState: null, mode: "chat", status: "idle" } as any,
+    );
+    await flushClaudeRun();
+
+    const assistant = getLatestMirroredAssistant();
+    expect(assistant?.metadata).toEqual(
+      expect.objectContaining({
+        errorMessage: "Invalid API key · Please run /login",
+        status: "error",
+      }),
+    );
+    expect(JSON.stringify(assistant?.parts)).not.toContain("Invalid API key");
+  });
+
+  it("accumulates Task tool results by task id onto the tool parts", async () => {
+    queryMessages = [
+      {
+        message: {
+          content: [
+            {
+              id: "tool-create",
+              input: {
+                activeForm: "Running tests",
+                description: "Run the unit tests",
+                subject: "Run tests",
+              },
+              name: "TaskCreate",
+              type: "tool_use",
+            },
+          ],
+          model: "claude-opus-5-5",
+        },
+        parent_tool_use_id: null,
+        session_id: "session-1",
+        type: "assistant",
+        uuid: "assistant-1",
+      },
+      {
+        message: {
+          content: [
+            {
+              content: "Task #1 created successfully: Run tests",
+              tool_use_id: "tool-create",
+              type: "tool_result",
+            },
+          ],
+          role: "user",
+        },
+        parent_tool_use_id: null,
+        session_id: "session-1",
+        tool_use_result: { task: { id: "1", subject: "Run tests" } },
+        type: "user",
+      },
+      {
+        message: {
+          content: [
+            {
+              id: "tool-update",
+              input: { status: "in_progress", taskId: "1" },
+              name: "TaskUpdate",
+              type: "tool_use",
+            },
+          ],
+          model: "claude-opus-5-5",
+        },
+        parent_tool_use_id: null,
+        session_id: "session-1",
+        type: "assistant",
+        uuid: "assistant-2",
+      },
+      {
+        message: {
+          content: [
+            {
+              content: "Updated task #1 status",
+              tool_use_id: "tool-update",
+              type: "tool_result",
+            },
+          ],
+          role: "user",
+        },
+        parent_tool_use_id: null,
+        session_id: "session-1",
+        tool_use_result: {
+          statusChange: { from: "pending", to: "in_progress" },
+          success: true,
+          taskId: "1",
+          updatedFields: ["status"],
+        },
+        type: "user",
+      },
+      createSuccessResult(),
+    ];
+
+    await runClaudeThreadChat(
+      {
+        message: createUserMessage("Run the tests"),
+        threadId: "thread-tasks",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      { chatEngineState: null, mode: "chat", status: "idle" } as any,
+    );
+    await flushClaudeRun();
+
+    const parts = getLatestMirroredAssistant()?.parts ?? [];
+    const createPart = parts.find((part) => part.toolCallId === "tool-create");
+    const updatePart = parts.find((part) => part.toolCallId === "tool-update");
+    const runTests = {
+      activeForm: "Running tests",
+      description: "Run the unit tests",
+      id: "1",
+    };
+
+    expect(createPart).toEqual(
+      expect.objectContaining({
+        output: {
+          task: { id: "1", subject: "Run tests" },
+          tasks: [{ ...runTests, status: "pending", subject: "Run tests" }],
+        },
+        state: "output-available",
+        toolName: "claude_taskcreate",
+      }),
+    );
+    expect(updatePart).toEqual(
+      expect.objectContaining({
+        output: expect.objectContaining({
+          success: true,
+          tasks: [{ ...runTests, status: "in_progress", subject: "Run tests" }],
+        }),
+        toolName: "claude_taskupdate",
+      }),
+    );
+  });
+
+  it("continues the thread's task list when resuming the Claude session", async () => {
+    loadThreadMessages.mockResolvedValueOnce([
+      {
+        createdAt: new Date(1),
+        id: "db-assistant-1",
+        messageId: "assistant-1",
+        metadata: {},
+        parts: [
+          {
+            input: { subject: "Write docs" },
+            output: {
+              task: { id: "7", subject: "Write docs" },
+              tasks: [{ id: "7", status: "pending", subject: "Write docs" }],
+            },
+            state: "output-available",
+            toolCallId: "tool-old",
+            toolName: "claude_taskcreate",
+            type: "dynamic-tool",
+          },
+        ],
+        role: "assistant",
+        updatedAt: new Date(1),
+      },
+    ]);
+    queryMessages = [
+      {
+        message: {
+          content: [
+            {
+              id: "tool-update",
+              input: { status: "completed", taskId: "7" },
+              name: "TaskUpdate",
+              type: "tool_use",
+            },
+          ],
+        },
+        parent_tool_use_id: null,
+        session_id: "session-1",
+        type: "assistant",
+        uuid: "assistant-2",
+      },
+      {
+        message: {
+          content: [
+            { content: "ok", tool_use_id: "tool-update", type: "tool_result" },
+          ],
+          role: "user",
+        },
+        parent_tool_use_id: null,
+        session_id: "session-1",
+        tool_use_result: {
+          success: true,
+          taskId: "7",
+          updatedFields: ["status"],
+        },
+        type: "user",
+      },
+      createSuccessResult(),
+    ];
+
+    await runClaudeThreadChat(
+      {
+        message: createUserMessage("Finish the docs"),
+        threadId: "thread-resume-tasks",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      {
+        chatEngineState: {
+          claude: {
+            cwd: "/tmp/workspace",
+            modelId: null,
+            permissionMode: "default",
+            sessionId: "session-1",
+          },
+        },
+        mode: "chat",
+        status: "idle",
+      } as any,
+    );
+    await flushClaudeRun();
+
+    expect(capturedClaudeQueryInput?.options?.resume).toBe("session-1");
+    const updatePart = (getLatestMirroredAssistant()?.parts ?? []).find(
+      (part) => part.toolCallId === "tool-update",
+    );
+    expect((updatePart?.output as { tasks?: unknown })?.tasks).toEqual([
+      { id: "7", status: "completed", subject: "Write docs" },
+    ]);
   });
 });

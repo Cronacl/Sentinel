@@ -1,16 +1,14 @@
 import "server-only";
 
-import { execFile, spawn, type ChildProcessByStdio } from "node:child_process";
+import { execFile } from "node:child_process";
 import { constants as fsConstants } from "node:fs";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
-import type { Readable, Writable } from "node:stream";
 import {
   query,
   type AccountInfo,
-  type ModelInfo,
   type Options,
+  type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 
 import { createLogger } from "@/lib/logger";
@@ -28,7 +26,27 @@ import type {
   ClaudePermissionMode,
   ClaudeThreadState,
 } from "@/lib/ai/chat/engines/types";
-import type { ReasoningEffort } from "@/lib/ai/providers/models";
+
+import {
+  buildClaudeCliLaunch,
+  createClaudeNodeScriptSpawner,
+  isClaudeNodeScript,
+  resolveClaudeWindowsLauncherShim,
+} from "./executable";
+import { toClaudeModelInfo, type ClaudeModelInfo } from "./models";
+
+export {
+  buildClaudeCliLaunch,
+  isClaudeNodeScript,
+  resolveClaudeWindowsLauncherShim,
+} from "./executable";
+export {
+  buildClaudeFallbackModels,
+  resolveClaudeContextWindow,
+  resolveClaudeSdkEffort,
+  toClaudeModelInfo,
+  type ClaudeModelInfo,
+} from "./models";
 
 const log = createLogger("ClaudeSdk");
 const CLAUDE_STATUS_CACHE_TTL_MS = 15_000;
@@ -46,7 +64,6 @@ const LOCAL_STATE_DIRECTORY_MODE = 0o700;
 const LOCAL_STATE_FILE_MODE = 0o600;
 const CLAUDE_STATUS_SNAPSHOT_FILE = "claude-status.json";
 
-type ClaudeSdkEffort = "low" | "medium" | "high" | "max";
 export type ClaudeEngineState =
   | "auth_unavailable"
   | "error"
@@ -64,22 +81,6 @@ export type ResolvedClaudeCodeRuntime = {
   binaryVersion: string | null;
   env: NodeJS.ProcessEnv;
   executablePath: string | null;
-};
-
-export type ClaudeModelInfo = {
-  contextWindow?: number;
-  defaultReasoningEffort: ReasoningEffort;
-  description: string;
-  displayName: string;
-  id: string;
-  inputModalities: string[];
-  isDefault: boolean;
-  model: string;
-  supportedReasoningEfforts: Array<{
-    description: string;
-    effort: ReasoningEffort;
-    label: string;
-  }>;
 };
 
 export type ClaudeEngineStatus = {
@@ -250,85 +251,6 @@ async function readClaudeStatusSnapshot(options: { binaryPath: string }) {
   }
 }
 
-function normalizeClaudeEffort(effort: ClaudeSdkEffort): ReasoningEffort {
-  switch (effort) {
-    case "low":
-    case "medium":
-    case "high":
-      return effort;
-    case "max":
-      return "high";
-  }
-}
-
-function normalizeClaudeReasoningEfforts(model: ModelInfo) {
-  const levels = (model.supportedEffortLevels ?? ["low", "medium", "high"])
-    .map(normalizeClaudeEffort)
-    .filter(
-      (effort, index, array) =>
-        array.indexOf(effort) === index &&
-        (effort === "low" || effort === "medium" || effort === "high"),
-    );
-
-  return levels.map((effort) => ({
-    description: `${model.displayName} supports ${effort} reasoning effort.`,
-    effort,
-    label: effort[0]!.toUpperCase() + effort.slice(1),
-  }));
-}
-
-function getClaudeModelInputModalities(model: ModelInfo) {
-  return model.description.toLowerCase().includes("vision")
-    ? ["text", "image"]
-    : ["text"];
-}
-
-const CLAUDE_CONTEXT_WINDOWS: Record<string, number> = {
-  "claude-opus-4-6": 1_000_000,
-  "claude-sonnet-4-6": 1_000_000,
-  "claude-opus-4-5": 200_000,
-  "claude-haiku-4-5": 200_000,
-  "claude-sonnet-4-5": 200_000,
-  "claude-sonnet-4-5-20250929": 200_000,
-  "claude-opus-4-1": 200_000,
-  "claude-opus-4-0": 200_000,
-  "claude-sonnet-4-0": 200_000,
-  "claude-4-sonnet-20250514": 200_000,
-  "claude-3-7-sonnet-latest": 200_000,
-  "claude-3-7-sonnet-20250219": 200_000,
-  "claude-3-5-sonnet-20241022": 200_000,
-  "claude-3-5-haiku-latest": 200_000,
-  "claude-3-5-haiku-20241022": 200_000,
-};
-
-function resolveClaudeContextWindow(model: ModelInfo) {
-  return CLAUDE_CONTEXT_WINDOWS[model.value];
-}
-
-function toClaudeModelInfo(model: ModelInfo): ClaudeModelInfo {
-  const supportedReasoningEfforts = normalizeClaudeReasoningEfforts(model);
-
-  return {
-    contextWindow: resolveClaudeContextWindow(model),
-    defaultReasoningEffort: supportedReasoningEfforts[0]?.effort ?? "medium",
-    description: model.description,
-    displayName: model.displayName,
-    id: model.value,
-    inputModalities: getClaudeModelInputModalities(model),
-    isDefault: false,
-    model: model.value,
-    supportedReasoningEfforts,
-  };
-}
-
-export function resolveClaudeSdkExecutable(command: string) {
-  if (command === "node" || command === "bun") {
-    return process.execPath;
-  }
-
-  return command;
-}
-
 function getExecutableNames(command: string) {
   if (process.platform !== "win32") {
     return [command];
@@ -389,23 +311,44 @@ async function findExecutableInPath(
   return null;
 }
 
+async function isReadable(candidatePath: string) {
+  try {
+    await access(candidatePath, fsConstants.R_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function verifyClaudeExecutable(
   candidatePath: string,
   env: NodeJS.ProcessEnv,
 ) {
-  if (!(await isExecutable(candidatePath))) {
+  // The SDK cannot spawn Windows npm shims (.cmd), so follow them to the
+  // package entry first; this is a no-op elsewhere.
+  const executablePath = resolveClaudeWindowsLauncherShim(candidatePath);
+  // Node scripts run under process.execPath, so they only need to be readable.
+  const isLaunchable = isClaudeNodeScript(executablePath)
+    ? await isReadable(executablePath)
+    : await isExecutable(executablePath);
+  if (!isLaunchable) {
     return null;
   }
 
+  const launch = buildClaudeCliLaunch({
+    args: ["--version"],
+    command: executablePath,
+    env,
+  });
   const output = await new Promise<{
     stderr: string;
     stdout: string;
   } | null>((resolve) => {
     execFile(
-      candidatePath,
-      ["--version"],
+      launch.command,
+      launch.args,
       {
-        env,
+        env: launch.env as NodeJS.ProcessEnv,
         timeout: CLAUDE_BINARY_VERIFY_TIMEOUT_MS,
         windowsHide: true,
       },
@@ -432,7 +375,7 @@ async function verifyClaudeExecutable(
 
   return {
     binaryVersion: version,
-    executablePath: candidatePath,
+    executablePath,
   };
 }
 
@@ -792,51 +735,66 @@ export function resetClaudeEngineStatusCache() {
   backgroundStatusRefreshGeneration += 1;
 }
 
-export function buildClaudeSdkBaseOptions(options?: Partial<Options>): Options {
-  const baseEnv = options?.env ?? process.env;
-  const runtimeEnv = {
-    ...baseEnv,
+/**
+ * Built-in tools Sentinel always keeps in the session's tool surface. Since
+ * Agent SDK 0.3.162 native builds search through Bash `find`/`grep` unless
+ * Grep/Glob are named, and since 0.3.233/0.3.268 the Task* tools are off by
+ * default on Opus 4.8, Sonnet 5 and newer. Naming them in `allowedTools`
+ * keeps them registered on top of the `claude_code` preset (an explicit
+ * `tools` list would freeze the surface at today's tool names). All six are
+ * read-only or session-local, so pre-approving them adds no new reach: in
+ * chat mode the sandboxed Bash fallback already searches without a prompt.
+ */
+export const CLAUDE_SDK_ALWAYS_ENABLED_TOOLS = [
+  "Glob",
+  "Grep",
+  "TaskCreate",
+  "TaskGet",
+  "TaskList",
+  "TaskUpdate",
+] as const;
+
+/**
+ * `options.env` replaces the CLI's environment since Agent SDK 0.2.113, so
+ * always start from process.env and layer the runtime env on top.
+ */
+export function buildClaudeSdkEnv(
+  env?: Options["env"],
+): NonNullable<Options["env"]> {
+  const mergedEnv = { ...process.env, ...env };
+
+  return {
+    ...mergedEnv,
     CLAUDE_AGENT_SDK_CLIENT_APP:
-      baseEnv.CLAUDE_AGENT_SDK_CLIENT_APP ??
-      process.env.CLAUDE_AGENT_SDK_CLIENT_APP ??
-      "sentinel",
+      mergedEnv.CLAUDE_AGENT_SDK_CLIENT_APP ?? "sentinel",
   };
+}
+
+export function buildClaudeSdkBaseOptions(options?: Partial<Options>): Options {
+  const executablePath = options?.pathToClaudeCodeExecutable;
+  // Native binaries are spawned by the SDK itself; only Node-script CLIs (npm
+  // shims, cli.js) need Sentinel's launcher.
+  const nodeScriptSpawner =
+    !options?.spawnClaudeCodeProcess &&
+    executablePath &&
+    isClaudeNodeScript(executablePath)
+      ? createClaudeNodeScriptSpawner({ onStderr: options?.stderr })
+      : null;
 
   return {
     ...options,
+    allowedTools: [
+      ...new Set([
+        ...CLAUDE_SDK_ALWAYS_ENABLED_TOOLS,
+        ...(options?.allowedTools ?? []),
+      ]),
+    ],
     cwd: options?.cwd ?? process.cwd(),
-    env: runtimeEnv,
-    spawnClaudeCodeProcess: (spawnOptions) => {
-      const child: ChildProcessByStdio<Writable, Readable, null> = spawn(
-        resolveClaudeSdkExecutable(spawnOptions.command),
-        spawnOptions.args,
-        {
-          cwd: spawnOptions.cwd,
-          env: {
-            ...spawnOptions.env,
-            NODE_ENV: spawnOptions.env.NODE_ENV ?? process.env.NODE_ENV,
-          } as NodeJS.ProcessEnv,
-          signal: spawnOptions.signal,
-          stdio: ["pipe", "pipe", "ignore"],
-          windowsHide: true,
-        },
-      );
-
-      return {
-        stdin: child.stdin,
-        stdout: child.stdout,
-        get killed() {
-          return child.killed;
-        },
-        get exitCode() {
-          return child.exitCode;
-        },
-        kill: child.kill.bind(child),
-        on: child.on.bind(child),
-        once: child.once.bind(child),
-        off: child.off.bind(child),
-      };
-    },
+    env: buildClaudeSdkEnv(options?.env),
+    // Omitted, the CLI follows the settings `defaultMode` (possibly `auto`)
+    // since Agent SDK 0.3.286; Sentinel always chooses the mode itself.
+    permissionMode: options?.permissionMode ?? "default",
+    ...(nodeScriptSpawner ? { spawnClaudeCodeProcess: nodeScriptSpawner } : {}),
     persistSession: options?.persistSession ?? true,
     settingSources: options?.settingSources ?? [...CLAUDE_SETTING_SOURCES],
     systemPrompt: options?.systemPrompt ?? {
@@ -845,6 +803,48 @@ export function buildClaudeSdkBaseOptions(options?: Partial<Options>): Options {
     },
     tools: options?.tools ?? { type: "preset", preset: "claude_code" },
   };
+}
+
+/**
+ * A prompt stream that never yields: the status probe only needs the CLI's
+ * initialize response, and must never send a turn to the API.
+ */
+function createIdleClaudePrompt(
+  signal: AbortSignal,
+): AsyncIterable<SDKUserMessage> {
+  return {
+    [Symbol.asyncIterator]() {
+      return {
+        next: () =>
+          new Promise<IteratorResult<SDKUserMessage>>((resolve) => {
+            const finish = () => resolve({ done: true, value: undefined });
+            if (signal.aborted) {
+              finish();
+              return;
+            }
+            signal.addEventListener("abort", finish, { once: true });
+          }),
+        return: () => Promise.resolve({ done: true, value: undefined }),
+      };
+    },
+  };
+}
+
+/**
+ * Models from the last successful status probe of this binary, without
+ * probing. Null when no snapshot exists yet.
+ */
+export async function getCachedClaudeModels(
+  executablePath: string | null | undefined,
+) {
+  if (!executablePath) {
+    return null;
+  }
+
+  const snapshot = await readClaudeStatusSnapshot({
+    binaryPath: executablePath,
+  });
+  return snapshot?.availableModels ?? null;
 }
 
 async function readClaudeStatus(options?: {
@@ -923,17 +923,31 @@ async function probeClaudeStatus(input: {
   runtime: ResolvedClaudeCodeRuntime;
 }): Promise<ClaudeEngineStatus> {
   let claudeQuery: ReturnType<typeof query> | null = null;
+  // Ends the idle prompt stream once the probe is done.
+  const promptAbortController = new AbortController();
 
   try {
     claudeQuery = query({
-      prompt: "",
+      prompt: createIdleClaudePrompt(promptAbortController.signal),
       options: buildClaudeSdkBaseOptions({
         cwd: process.cwd(),
-        env: input.runtime.env,
+        // The probe runs on every status refresh: keep it from connecting
+        // MCP servers or IDEs, or running the user's hooks (t3code
+        // ClaudeProvider.ts buildClaudeCapabilitiesProbeQueryOptions, MIT).
+        env: {
+          ...input.runtime.env,
+          CLAUDE_CODE_AUTO_CONNECT_IDE: "0",
+          CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL: "1",
+          ENABLE_CLAUDEAI_MCP_SERVERS: "false",
+        },
         includePartialMessages: false,
         maxTurns: 1,
+        mcpServers: {},
         pathToClaudeCodeExecutable: input.runtime.executablePath ?? undefined,
         persistSession: false,
+        settings: { disableAllHooks: true },
+        stderr: () => {},
+        strictMcpConfig: true,
       }),
     });
 
@@ -1041,6 +1055,7 @@ async function probeClaudeStatus(input: {
     });
   } finally {
     claudeQuery?.close();
+    promptAbortController.abort();
   }
 }
 

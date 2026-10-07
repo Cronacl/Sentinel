@@ -135,3 +135,79 @@ describe("P8 model catalog tripwires", () => {
     ]);
   });
 });
+
+describe("P9 Claude Agent SDK tripwires", () => {
+  it("flags the synthetic AskUserQuestion answer message", () => {
+    expect(
+      hitIds(
+        "src/lib/ai/chat/runtime/claude/run.ts",
+        [
+          "function buildClaudeQuestionResponse(input) {",
+          "  return {",
+          "    tool_use_result: {",
+          '      action: "accept",',
+          "      answers: { response: input.response },",
+          "    },",
+          "  };",
+          "}",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "P9-claude-synthetic-question-answer:1",
+      "P9-claude-synthetic-question-answer:3",
+    ]);
+    expect(
+      hitIds(
+        "src/lib/ai/chat/runtime/claude/permissions.ts",
+        'return { behavior: "allow", updatedInput: { ...toolInput, answers } };',
+      ),
+    ).toEqual([]);
+  });
+
+  it("flags Claude renderers that handle TodoWrite without the Task* tools", () => {
+    const registry = "src/components/chat/message-parts/tool/registry.ts";
+
+    expect(
+      hitIds(
+        registry,
+        "const claudeRenderers = {\n  claude_todoread: ClaudeTodoWriteTool,\n  claude_todowrite: ClaudeTodoWriteTool,\n};",
+      ),
+    ).toEqual(["P9-claude-todowrite-only-renderers:3"]);
+    expect(
+      hitIds(
+        registry,
+        "const claudeRenderers = {\n  claude_taskcreate: ClaudeTaskTool,\n  claude_todowrite: ClaudeTodoWriteTool,\n};",
+      ),
+    ).toEqual([]);
+  });
+
+  it("flags Claude SDK env built from process.env only as a fallback", () => {
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/claude-sdk/index.ts",
+        "const baseEnv = options?.env ?? process.env;",
+      ),
+    ).toEqual(["P9-claude-sdk-env-fallback:1"]);
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/claude-sdk/index.ts",
+        "const mergedEnv = { ...process.env, ...env };",
+      ),
+    ).toEqual([]);
+  });
+
+  it("flags spawning `claude` from PATH", () => {
+    expect(
+      hitIds(
+        "src/lib/git/commit-message.ts",
+        'spawn("claude", args, { cwd, env });',
+      ),
+    ).toEqual(["P9-claude-bare-cli-spawn:1"]);
+    expect(
+      hitIds(
+        "src/lib/git/commit-message.ts",
+        "spawn(launch.command, launch.args, { cwd });",
+      ),
+    ).toEqual([]);
+  });
+});

@@ -185,7 +185,11 @@ mock.module("@/lib/ai/chat/engines/codex-app-server", () => ({
   resetCodexEngineStatusCache,
 }));
 
+const { buildClaudeFallbackModels } =
+  await import("@/lib/ai/chat/engines/claude-sdk/models");
+
 mock.module("@/lib/ai/chat/engines/claude-sdk", () => ({
+  buildClaudeFallbackModels,
   getClaudeEngineStatus,
   isClaudeEngineAvailable: (status: any) =>
     status.state === "ready" || status.state === "timeout_no_cache",
@@ -928,13 +932,21 @@ describe("enginesRouter.models", () => {
       input: { engine: "claude" },
     });
 
+    expect(result.map((model: any) => model.modelId)).toEqual([
+      "claude-opus-5-5",
+      "claude-sonnet-5-5",
+      "claude-fable-5-1",
+      "claude-haiku-4-5",
+    ]);
     expect(result).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          displayName: "Claude Sonnet 4.5",
+          contextWindow: 200_000,
+          displayName: "Claude Fable 5.1",
           isConnected: true,
           isEnabled: true,
-          modelId: "claude-sonnet-4-5",
+          modelId: "claude-fable-5-1",
+          supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
         }),
       ]),
     );

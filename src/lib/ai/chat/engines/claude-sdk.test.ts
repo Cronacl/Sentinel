@@ -59,6 +59,7 @@ mock.module("@/lib/runtime/local-runtime-env", () => ({
 }));
 
 const {
+  buildClaudeSdkBaseOptions,
   parseClaudeShellLookupOutput,
   resetClaudeCodeRuntimeCache,
   resolveClaudeCodeRuntime,
@@ -70,8 +71,14 @@ const originalHome = process.env.HOME;
 const originalSentinelClaudePath = process.env.SENTINEL_CLAUDE_PATH;
 const originalClaudePath = process.env.CLAUDE_PATH;
 const originalSentinelStatePath = process.env.SENTINEL_STATE_PATH;
+const originalTestMarker = process.env.SENTINEL_CLAUDE_TEST_MARKER;
 
 afterEach(async () => {
+  if (originalTestMarker) {
+    process.env.SENTINEL_CLAUDE_TEST_MARKER = originalTestMarker;
+  } else {
+    delete process.env.SENTINEL_CLAUDE_TEST_MARKER;
+  }
   process.env.PATH = originalPath;
   process.env.HOME = originalHome;
   if (originalSentinelClaudePath) {
@@ -185,6 +192,100 @@ describe("resolveClaudeCodeRuntime", () => {
       expect(resolved.binaryVersion).toBeNull();
       expect(resolved.executablePath).toBeNull();
       expect(process.env.SENTINEL_CLAUDE_PATH).toBe(executablePath);
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("verifies an npm node shim through process.execPath when PATH has no node", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
+    const executablePath = path.join(tempRoot, "claude");
+
+    try {
+      await writeFile(
+        executablePath,
+        [
+          "#!/usr/bin/env node",
+          'console.log("2.1.292 (Claude Code) " + (process.env.ELECTRON_RUN_AS_NODE ?? "direct"));',
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await chmod(executablePath, 0o755);
+      process.env.HOME = tempRoot;
+      process.env.PATH = tempRoot;
+      process.env.SENTINEL_CLAUDE_PATH = executablePath;
+      delete process.env.CLAUDE_PATH;
+      delete process.env.SENTINEL_STATE_PATH;
+
+      const resolved = await resolveClaudeCodeRuntime({ forceRefresh: true });
+
+      expect(resolved.executablePath).toBe(executablePath);
+      expect(resolved.binaryVersion).toBe("2.1.292 (Claude Code) 1");
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("buildClaudeSdkBaseOptions", () => {
+  it("merges the runtime env over process.env because options.env replaces it", () => {
+    process.env.SENTINEL_CLAUDE_TEST_MARKER = "inherited";
+
+    const options = buildClaudeSdkBaseOptions({
+      env: { PATH: "/managed/bin" },
+    });
+
+    expect(options.env).toEqual(
+      expect.objectContaining({
+        CLAUDE_AGENT_SDK_CLIENT_APP: "sentinel",
+        PATH: "/managed/bin",
+        SENTINEL_CLAUDE_TEST_MARKER: "inherited",
+      }),
+    );
+  });
+
+  it("always sets a permission mode and keeps Task, Grep and Glob tools available", () => {
+    const options = buildClaudeSdkBaseOptions({
+      allowedTools: ["Read"],
+    });
+
+    expect(options.permissionMode).toBe("default");
+    expect(options.tools).toEqual({ preset: "claude_code", type: "preset" });
+    expect(options.allowedTools).toEqual([
+      "Glob",
+      "Grep",
+      "TaskCreate",
+      "TaskGet",
+      "TaskList",
+      "TaskUpdate",
+      "Read",
+    ]);
+    expect(
+      buildClaudeSdkBaseOptions({ permissionMode: "plan" }).permissionMode,
+    ).toBe("plan");
+  });
+
+  it("installs Sentinel's spawner only for Node-script CLIs", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
+    const nativePath = path.join(tempRoot, "claude");
+
+    try {
+      await writeFile(nativePath, "#!/bin/sh\nexit 0\n", "utf8");
+      await chmod(nativePath, 0o755);
+
+      expect(
+        buildClaudeSdkBaseOptions({ pathToClaudeCodeExecutable: nativePath })
+          .spawnClaudeCodeProcess,
+      ).toBeUndefined();
+      expect(
+        buildClaudeSdkBaseOptions({
+          pathToClaudeCodeExecutable: path.join(tempRoot, "cli.js"),
+        }).spawnClaudeCodeProcess,
+      ).toBeFunction();
+      expect(
+        buildClaudeSdkBaseOptions().spawnClaudeCodeProcess,
+      ).toBeUndefined();
     } finally {
       await rm(tempRoot, { force: true, recursive: true });
     }

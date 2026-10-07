@@ -132,6 +132,7 @@ import { ClaudeRuntimeTool } from "./renderers/claude-runtime";
 import { ClaudeGlobTool, ClaudeGrepTool } from "./renderers/claude-search";
 import { ClaudeSessionUtilityTool } from "./renderers/claude-session";
 import { ClaudeShellTool } from "./renderers/claude-shell";
+import { ClaudeTaskTool } from "./renderers/claude-tasks";
 import { ClaudeTodoWriteTool } from "./renderers/claude-todo";
 import { ClaudeUserInputTool } from "./renderers/claude-user-input";
 import {
@@ -464,8 +465,13 @@ const claudeRenderers: Record<string, Renderer> = {
   claude_subscribemcpresource: ClaudeMcpResourceTool,
   claude_subscribepolling: ClaudeMcpResourceTool,
   claude_task: ClaudeAgentTool,
+  claude_taskcreate: ClaudeTaskTool,
+  claude_taskget: ClaudeTaskTool,
+  claude_tasklist: ClaudeTaskTool,
   claude_taskoutput: ClaudeSessionUtilityTool,
   claude_taskstop: ClaudeSessionUtilityTool,
+  claude_taskupdate: ClaudeTaskTool,
+  // TodoWrite predates the Task* tools; kept for persisted messages.
   claude_todoread: ClaudeTodoWriteTool,
   claude_todowrite: ClaudeTodoWriteTool,
   claude_toolsearch: ClaudeToolSearchTool,

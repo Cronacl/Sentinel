@@ -34,6 +34,7 @@ import { ClaudeRuntimeTool } from "./renderers/claude-runtime";
 import { ClaudeSessionUtilityTool } from "./renderers/claude-session";
 import { ClaudeGlobTool, ClaudeGrepTool } from "./renderers/claude-search";
 import { ClaudeShellTool } from "./renderers/claude-shell";
+import { ClaudeTaskTool } from "./renderers/claude-tasks";
 import { ClaudeTodoWriteTool } from "./renderers/claude-todo";
 import { ClaudeUserInputTool } from "./renderers/claude-user-input";
 import {
@@ -767,6 +768,25 @@ describe("resolveRenderer", () => {
     expect(renderer).toBe(ClaudeShellTool);
   });
 
+  it("uses the ClaudeTaskTool renderer for every Claude Task* tool", () => {
+    for (const toolName of [
+      "claude_taskcreate",
+      "claude_taskget",
+      "claude_tasklist",
+      "claude_taskupdate",
+    ]) {
+      const renderer = resolveRenderer({
+        input: {},
+        state: "output-available",
+        toolCallId: `tool-call-${toolName}`,
+        toolName,
+        type: "dynamic-tool",
+      } as any);
+
+      expect(renderer).toBe(ClaudeTaskTool);
+    }
+  });
+
   it("uses the ClaudeTodoWriteTool renderer for claude_todowrite", () => {
     const renderer = resolveRenderer({
       input: {
@@ -1320,8 +1340,12 @@ describe("resolveRenderer", () => {
       "ReadMcpResource",
       "SubscribeMcpResource",
       "SubscribePolling",
+      "TaskCreate",
+      "TaskGet",
+      "TaskList",
       "TaskOutput",
       "TaskStop",
+      "TaskUpdate",
       "TodoWrite",
       "UnsubscribeMcpResource",
       "UnsubscribePolling",

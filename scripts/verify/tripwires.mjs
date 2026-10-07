@@ -198,6 +198,40 @@ export const TRIPWIRES = [
     include: /^desktop\//,
     multiline: true,
   },
+  {
+    id: "P9-claude-synthetic-question-answer",
+    description:
+      "Claude AskUserQuestion answers go through canUseTool updatedInput.answers, not a synthetic tool_use_result user message",
+    pattern:
+      /\bbuildClaudeQuestionResponse\b|tool_use_result:\s*\{\s*action:\s*["']accept["']/,
+    include: /^src\/lib\/ai\/chat\/runtime\/claude/,
+    multiline: true,
+  },
+  {
+    id: "P9-claude-todowrite-only-renderers",
+    description:
+      "Claude Agent SDK 0.3 replaced TodoWrite with the Task* tools; register claude_task* renderers alongside claude_todowrite",
+    // claude_todowrite with no claude_taskcreate anywhere in the file. The
+    // lookarounds run only where the literal matches.
+    pattern:
+      /\bclaude_todowrite\s*:(?<!\bclaude_taskcreate\s*:[\s\S]*)(?![\s\S]*\bclaude_taskcreate\s*:)/,
+    include: /^src\/components\/chat\/message-parts\/tool\/registry\.ts$/,
+    multiline: true,
+  },
+  {
+    id: "P9-claude-sdk-env-fallback",
+    description:
+      "Agent SDK options.env replaces process.env since 0.2.113; merge it in (buildClaudeSdkEnv)",
+    pattern: /\benv\s*\?\?\s*process\.env\b/,
+    include: /^src\/lib\/ai\/chat\/(?:engines\/claude-sdk|runtime\/claude)/,
+  },
+  {
+    id: "P9-claude-bare-cli-spawn",
+    description:
+      "Run the resolved Claude Code binary (resolveClaudeCodeRuntime), not `claude` from PATH",
+    pattern: /\b(?:exec|execFile|spawn)\(\s*["']claude["']/,
+    include: /^src\//,
+  },
 ];
 
 const DEFAULT_EXCLUDE =
