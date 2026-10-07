@@ -53,7 +53,15 @@ if (process.platform === "win32") {
   env.HOMEPATH = buildHome.replace(/^[A-Za-z]:/, "");
 }
 
-const child = spawn(process.execPath, [nextBin, "build"], {
+// Next 16 builds with Turbopack by default. Keep webpack for production until
+// Turbopack's standalone output (aliased serverExternalPackages, symlinks) is
+// verified against desktop packaging; SENTINEL_NEXT_BUNDLER=turbopack opts in.
+const bundlerFlag =
+  process.env.SENTINEL_NEXT_BUNDLER === "turbopack"
+    ? "--turbopack"
+    : "--webpack";
+
+const child = spawn(process.execPath, [nextBin, "build", bundlerFlag], {
   env,
   stdio: "inherit",
 });

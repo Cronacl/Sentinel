@@ -111,6 +111,18 @@ export const TRIPWIRES = [
     pattern: /\btoolResults?\b.*\.result\b|\bresult\??\.result\b/,
     include: /\.[cm]?[jt]sx?$/,
   },
+  {
+    id: "P5-next-turbo-flag",
+    description: "Turbopack is the Next 16 dev default; --turbo is redundant",
+    pattern: /--turbo\b/,
+    include: /^(package\.json|scripts\/.*\.(c|m)?js|\.github\/.*\.ya?ml)$/,
+  },
+  {
+    id: "P5-next-eslint-config",
+    description: "Next 16 removed the eslint key from next.config",
+    pattern: /(^|[{,\s])"?eslint"?\s*[:,}]/,
+    include: /^next\.config\.(c|m)?(j|t)s$/,
+  },
 ];
 
 const DEFAULT_EXCLUDE =
