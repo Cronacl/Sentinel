@@ -39,14 +39,16 @@ import { getInstanceRuntimeKey } from "./runtime/resolve-binary";
 
 // One place that turns driver probes into the snapshots the UI, composer,
 // automations and skills read (design/driver-contract.md §2, §6):
-// - per-driver TTL and full/cheap probe cadence, in-flight dedupe;
+// - per-driver TTL and full/cheap probe cadence (a cheap probe gets the
+//   last full result to carry forward), in-flight dedupe, and results
+//   stored in the order their probes started;
 // - a timeout that aborts the probe (drivers kill their children) and
 //   serves the last snapshot, marked stale;
 // - the last good snapshot persisted per instance
 //   (<state root>/engines/<id>/status.json, 7 days), served stale on a
 //   cold start until the first probe settles;
 // - enrichment hooks (manifest, custom models, compatibility, update state,
-//   usage) that P11 fills in;
+//   usage) that P11 fills in, bounded by their own deadline;
 // - change events on the engine event bus.
 
 const SNAPSHOT_FILE = "status.json";
@@ -54,6 +56,7 @@ const SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 const STATE_DIRECTORY_MODE = 0o700;
 const FILE_MODE = 0o600;
 const DEFAULT_STARTUP_CONCURRENCY = 2;
+const DEFAULT_ENRICH_TIMEOUT_MS = 5_000;
 
 /** Reasons that always ask the driver for a full probe. */
 const FULL_PROBE_REASONS = new Set<EngineProbeReason>([
@@ -88,7 +91,9 @@ export type EngineSnapshotEnrichmentInput = {
  * Adds what the driver does not know to a fresh snapshot: manifest models
  * and classifications, the instance's custom models, version and
  * compatibility advisories, update state, usage limits. Must not throw (a
- * failing enricher is skipped).
+ * failing enricher is skipped). Enrichment as a whole has a deadline
+ * (`enrichTimeoutMs`): `signal` aborts when it passes, the remaining
+ * enrichers are skipped and the snapshot keeps what finished in time.
  */
 export type EngineSnapshotEnricher = {
   enrich(
@@ -131,6 +136,8 @@ export type EngineSnapshotServiceDeps = {
   /** Driver lookup by kind (default: platform/drivers.ts). */
   drivers?: (kind: string) => EngineDriver | null;
   enrichers?: readonly EngineSnapshotEnricher[];
+  /** Deadline for all enrichers of one snapshot (default 5 s). */
+  enrichTimeoutMs?: number;
   /** Ends an instance's long-lived processes (default: instance resources). */
   disposeInstance?: (instanceId: string) => Promise<void>;
   emit?: (event: EngineEventInput) => void;
@@ -195,6 +202,8 @@ export interface EngineSnapshotService {
 type CachedProbe = {
   checkedAt: number;
   fullCheckedAt: number | null;
+  /** The last full probe's own result, carried forward by cheap probes. */
+  fullResult: EngineProbeResult | null;
   runtimeKey: string;
   snapshot: EngineSnapshot;
 };
@@ -209,7 +218,12 @@ type Entry = {
     promise: Promise<EngineSnapshot>;
   } | null;
   instanceId: string;
+  /** Persists run one after another, newest result last. */
+  persistQueue: Promise<void>;
   persistedLoaded: boolean;
+  /** Sequence of the last probe started, and of the last result stored. */
+  probeSeq: number;
+  storedSeq: number;
   userId: string;
 };
 
@@ -543,6 +557,7 @@ export function createEngineSnapshotService(
   const enrichers = deps.enrichers ?? DEFAULT_ENGINE_SNAPSHOT_ENRICHERS;
   const emit = deps.emit ?? ((event) => void emitEngineEvent(event));
   const disposeInstance = deps.disposeInstance ?? disposeInstanceResources;
+  const enrichTimeoutMs = deps.enrichTimeoutMs ?? DEFAULT_ENRICH_TIMEOUT_MS;
   const entries = new Map<string, Entry>();
 
   const reportError = (
@@ -570,7 +585,10 @@ export function createEngineSnapshotService(
         generation: 0,
         inFlight: null,
         instanceId,
+        persistQueue: Promise.resolve(),
         persistedLoaded: false,
+        probeSeq: 0,
+        storedSeq: 0,
         userId,
       };
       entries.set(key, entry);
@@ -614,6 +632,7 @@ export function createEngineSnapshotService(
     entry.cached = {
       checkedAt: Number.NEGATIVE_INFINITY,
       fullCheckedAt: null,
+      fullResult: null,
       runtimeKey: persisted.runtimeKey,
       snapshot: { ...snapshot, stale: true },
     };
@@ -653,22 +672,55 @@ export function createEngineSnapshotService(
     }
   }
 
-  async function enrich(
-    input: EngineSnapshotEnrichmentInput,
-    signal: AbortSignal,
-  ) {
-    let snapshot = input.snapshot;
-    for (const enricher of enrichers) {
-      try {
-        snapshot = await enricher.enrich({ ...input, snapshot }, { signal });
-      } catch (error) {
-        reportError(error, {
+  /**
+   * Runs the enrichers in order within `enrichTimeoutMs`. A hung enricher
+   * cannot hold the probe (and every caller sharing it): at the deadline
+   * the signal aborts and the snapshot keeps what finished in time.
+   */
+  async function enrich(input: EngineSnapshotEnrichmentInput) {
+    const controller = new AbortController();
+    let current = input.snapshot;
+    let timer: unknown = null;
+    const deadline = new Promise<void>((resolve) => {
+      timer = clock.setTimeout(() => {
+        controller.abort(new Error("Engine snapshot enrichment timed out."));
+        reportError(controller.signal.reason, {
           instanceId: input.instance.id,
-          stage: `enrich:${enricher.id}`,
+          stage: "enrich",
         });
+        resolve();
+      }, enrichTimeoutMs);
+    });
+    const work = (async () => {
+      for (const enricher of enrichers) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        try {
+          const next = await enricher.enrich(
+            { ...input, snapshot: current },
+            { signal: controller.signal },
+          );
+          if (!controller.signal.aborted) {
+            current = next;
+          }
+        } catch (error) {
+          reportError(error, {
+            instanceId: input.instance.id,
+            stage: `enrich:${enricher.id}`,
+          });
+        }
+      }
+    })();
+
+    try {
+      await Promise.race([work, deadline]);
+    } finally {
+      if (timer !== null) {
+        clock.clearTimeout(timer);
       }
     }
-    return withUsable(snapshot);
+    return withUsable(current);
   }
 
   function store(entry: Entry, cached: CachedProbe) {
@@ -697,7 +749,9 @@ export function createEngineSnapshotService(
     const fullTtl =
       driver.fullProbeTtlMs ?? driver.snapshotTtlMs ?? DEFAULT_SNAPSHOT_TTL_MS;
     const fullCheckedAt = entry.cached?.fullCheckedAt ?? null;
-    return fullCheckedAt !== null && clock.now() - fullCheckedAt < fullTtl
+    return fullCheckedAt !== null &&
+      entry.cached?.fullResult &&
+      clock.now() - fullCheckedAt < fullTtl
       ? "cheap"
       : "full";
   }
@@ -709,8 +763,12 @@ export function createEngineSnapshotService(
     options: SnapshotRequestOptions,
   ): Promise<EngineSnapshot> {
     const generation = entry.generation;
+    entry.probeSeq += 1;
+    const seq = entry.probeSeq;
     const depth = chooseDepth(entry, driver, options);
     const previous = entry.cached?.snapshot ?? null;
+    const previousFull =
+      depth === "cheap" ? (entry.cached?.fullResult ?? null) : null;
     const controller = new AbortController();
     const startedAt = clock.now();
     let timer: unknown = null;
@@ -731,6 +789,7 @@ export function createEngineSnapshotService(
             driver.probe(instance, {
               depth,
               forceRefresh: options.forceRefresh ?? false,
+              previous: previousFull,
               reason: options.reason ?? "user",
               signal: controller.signal,
             }),
@@ -775,10 +834,7 @@ export function createEngineSnapshotService(
       });
     }
 
-    snapshot = await enrich(
-      { driver, instance, probe, snapshot },
-      controller.signal,
-    );
+    snapshot = await enrich({ driver, instance, probe, snapshot });
 
     if (entry.generation !== generation) {
       // Invalidated while probing (the instance changed): the result
@@ -786,12 +842,22 @@ export function createEngineSnapshotService(
       return snapshot;
     }
 
+    if (seq < entry.storedSeq) {
+      // A probe that started later (a forced refresh after a login) has
+      // already stored its answer; this older one must not replace it.
+      return entry.cached
+        ? overlayIdentity(entry.cached.snapshot, instance)
+        : snapshot;
+    }
+    entry.storedSeq = seq;
+
+    const fullProbe = probe !== null && depth === "full";
     store(entry, {
       checkedAt,
-      fullCheckedAt:
-        probe && depth === "full"
-          ? startedAt
-          : (entry.cached?.fullCheckedAt ?? null),
+      fullCheckedAt: fullProbe
+        ? startedAt
+        : (entry.cached?.fullCheckedAt ?? null),
+      fullResult: fullProbe ? probe : (entry.cached?.fullResult ?? null),
       runtimeKey: getInstanceRuntimeKey(instance),
       snapshot,
     });
@@ -802,7 +868,14 @@ export function createEngineSnapshotService(
       (snapshot.status === "ready" || snapshot.status === "warning") &&
       !snapshot.stale
     ) {
-      await persist(instance, snapshot);
+      // One write at a time per instance, skipped once a newer result was
+      // stored, so the file never ends up older than the cache.
+      entry.persistQueue = entry.persistQueue.then(() =>
+        entry.storedSeq === seq && entry.generation === generation
+          ? persist(instance, snapshot)
+          : undefined,
+      );
+      await entry.persistQueue;
     }
 
     return snapshot;
@@ -1059,9 +1132,13 @@ export function createEngineSnapshotService(
         entry.generation += 1;
         entry.inFlight = null;
         if (entry.cached) {
+          // Forgotten probes include the full one a cheap probe would
+          // carry forward: the next probe is full.
           entry.cached = {
             ...entry.cached,
             checkedAt: Number.NEGATIVE_INFINITY,
+            fullCheckedAt: null,
+            fullResult: null,
           };
         }
       }

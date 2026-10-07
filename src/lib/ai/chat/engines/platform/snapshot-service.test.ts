@@ -350,6 +350,90 @@ describe("getSnapshot", () => {
     ).toEqual(["full", "cheap", "full"]);
   });
 
+  it("hands a cheap probe the last full result and goes full again after invalidate", async () => {
+    let version = 0;
+    const { driver, probe } = createDriver(
+      async (_instance, options) =>
+        options.depth === "cheap"
+          ? { ...options.previous!, message: "carried" }
+          : readyProbe({ message: `full ${++version}` }),
+      { fullProbeTtlMs: 10 * 60 * 1_000 },
+    );
+    const { clock, service } = createService({
+      drivers: { codex: driver },
+      instances: [instance()],
+    });
+
+    await service.getSnapshot(USER, "codex");
+    clock.advance(20_000);
+    const cheap = await service.getSnapshot(USER, "codex", {
+      reason: "interval",
+    });
+    clock.advance(20_000);
+    await service.getSnapshot(USER, "codex", { reason: "interval" });
+
+    const options = probe.mock.calls.map(
+      (call: [Instance, ProbeOptions]) => call[1],
+    );
+    expect(options[0]?.previous).toBeNull();
+    // Always the full probe's own result, never a carried one.
+    expect(options[1]?.previous?.message).toBe("full 1");
+    expect(options[2]?.previous?.message).toBe("full 1");
+    expect(cheap?.message).toBe("carried");
+
+    service.invalidate("codex");
+    await service.getSnapshot(USER, "codex", { reason: "interval" });
+    expect(probe.mock.calls.at(-1)?.[1].depth).toBe("full");
+  });
+
+  it("never lets an older probe overwrite a newer one that finished first", async () => {
+    const pending: Array<(result: EngineProbeResult) => void> = [];
+    const { driver, probe } = createDriver(
+      () =>
+        new Promise<EngineProbeResult>((resolve) => {
+          pending.push(resolve);
+        }),
+    );
+    const { events, service } = createService({
+      drivers: { codex: driver },
+      instances: [instance()],
+    });
+    const unauthenticated = readyProbe({
+      auth: { ...readyProbe().auth, status: "unauthenticated" },
+      status: "warning",
+    });
+
+    const background = service.getSnapshot(USER, "codex");
+    await waitFor(() => probe.mock.calls.length === 1);
+    const forced = service.refresh(USER, "codex", "auth");
+    await waitFor(() => probe.mock.calls.length === 2);
+
+    // The forced probe (after a login) answers first, the older one later.
+    pending[1]!(readyProbe());
+    expect((await forced)?.auth.status).toBe("authenticated");
+    pending[0]!(unauthenticated);
+    expect((await background)?.auth.status).toBe("authenticated");
+
+    expect((await service.getSnapshot(USER, "codex"))?.auth.status).toBe(
+      "authenticated",
+    );
+    expect(probe).toHaveBeenCalledTimes(2);
+    expect(
+      events.map(
+        (event) =>
+          (event as { snapshot: { auth: { status: string } } }).snapshot.auth
+            .status,
+      ),
+    ).toEqual(["authenticated"]);
+    const persisted = JSON.parse(
+      await readFile(
+        path.join(root, "engines", "codex", "status.json"),
+        "utf8",
+      ),
+    ) as { snapshot: { auth: { status: string } } };
+    expect(persisted.snapshot.auth.status).toBe("authenticated");
+  });
+
   it("does not probe disabled instances and reports unknown ones as null", async () => {
     const { driver, probe } = createDriver(async () => readyProbe());
     const { service } = createService({
@@ -594,6 +678,50 @@ describe("events and enrichment", () => {
     expect(snapshot?.badgeLabel).toBe("Beta");
     // usable is recomputed after enrichment.
     expect(snapshot?.usable).toBe(false);
+  });
+
+  it("gives up on enrichers that miss their deadline and keeps what finished", async () => {
+    const { driver } = createDriver(async () => readyProbe());
+    const signals: AbortSignal[] = [];
+    const errors: string[] = [];
+    const clock = createClock();
+    const { registry } = createRegistry([instance()]);
+    const service = createEngineSnapshotService({
+      clock,
+      drivers: () => driver,
+      emit: () => {},
+      enrichTimeoutMs: 500,
+      enrichers: [
+        {
+          enrich: ({ snapshot }) => ({ ...snapshot, badgeLabel: "Beta" }),
+          id: "manifest",
+        },
+        {
+          enrich: async (_input, { signal }) => {
+            signals.push(signal);
+            return await new Promise<never>(() => {});
+          },
+          id: "usage",
+        },
+        {
+          enrich: ({ snapshot }) => ({ ...snapshot, badgeLabel: "Late" }),
+          id: "after-hung",
+        },
+      ],
+      onError: (_error, context) => errors.push(context.stage),
+      registry,
+    });
+
+    const pending = service.getSnapshot(USER, "codex");
+    await waitFor(() => signals.length === 1);
+    clock.advance(500);
+    const snapshot = await pending;
+
+    expect(signals[0]?.aborted).toBe(true);
+    expect(snapshot).toEqual(
+      expect.objectContaining({ badgeLabel: "Beta", status: "ready" }),
+    );
+    expect(errors).toEqual(["enrich"]);
   });
 
   it("merges usage windows sparsely by id", async () => {

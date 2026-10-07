@@ -13,7 +13,11 @@ import { DRIVER_CATALOG } from "../catalog";
 import type { EngineInstallSource, EngineProbeResult } from "../contract";
 import { defineEngineDriver } from "../platform/driver";
 import { buildFallbackOpenCodeModels } from "./fallback-models";
-import { fromLegacyStatus, NO_LEGACY_ACCOUNT } from "./legacy-status";
+import {
+  carryForwardLegacyProbe,
+  fromLegacyStatus,
+  NO_LEGACY_ACCOUNT,
+} from "./legacy-status";
 
 export function fromOpenCodeStatus(
   status: OpenCodeEngineStatus,
@@ -49,6 +53,23 @@ export const openCodeDriver = defineEngineDriver({
   kind: "opencode",
   meta: DRIVER_CATALOG.opencode,
   async probe(instance, options) {
+    // Cheap: `--version` only (cached by the engine), the last full probe
+    // carried forward while the binary is unchanged.
+    if (options.depth === "cheap") {
+      const runtime = await resolveOpenCodeRuntime({ instance });
+      const carried = carryForwardLegacyProbe(options.previous, {
+        installed: runtime.cliDetected,
+        path: runtime.cliPath,
+        source: runtime.cliDetected ? runtime.source : null,
+        version: runtime.cliVersion,
+      });
+      if (carried) {
+        return carried;
+      }
+    }
+
+    // OpenCode answers within its 4 s window and kills the `opencode serve`
+    // it started by its 20 s deadline; the platform's timeout is a backstop.
     const status = await getOpenCodeEngineStatus({
       forceRefresh: options.forceRefresh,
       instance,
@@ -58,7 +79,8 @@ export const openCodeDriver = defineEngineDriver({
       : null;
     return fromOpenCodeStatus(status, runtime?.source ?? null);
   },
-  // The probe starts an `opencode serve`: keep a full probe for 10 minutes.
+  // A full probe starts an `opencode serve`: trust one for 10 minutes and
+  // probe cheaply in between.
   fullProbeTtlMs: 10 * 60 * 1_000,
   // Above the 4 s status window plus binary resolution.
   probeTimeoutMs: 15_000,

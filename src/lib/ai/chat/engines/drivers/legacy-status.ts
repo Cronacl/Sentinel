@@ -287,6 +287,30 @@ export function fromLegacyStatus(
   return result;
 }
 
+/**
+ * A cheap probe for a legacy engine whose full probe spawns its runtime:
+ * while the binary still resolves to the path and version the last full
+ * probe saw, that result carries forward with the fresh install details.
+ * Null means probe fully (no full result yet, or the binary changed or
+ * went away).
+ */
+export function carryForwardLegacyProbe(
+  previous: EngineProbeResult | null | undefined,
+  install: EngineProbeResult["install"],
+): EngineProbeResult | null {
+  if (
+    !previous ||
+    !previous.install.installed ||
+    !install.installed ||
+    previous.install.path !== install.path ||
+    previous.install.version !== install.version
+  ) {
+    return null;
+  }
+
+  return { ...previous, install };
+}
+
 export const NO_LEGACY_ACCOUNT: LegacyStatus["account"] = {
   email: null,
   label: null,

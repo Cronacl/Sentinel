@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import { engineProbeResultSchema } from "../contract";
 import {
+  carryForwardLegacyProbe,
   fromLegacyStatus,
   NO_LEGACY_ACCOUNT,
   toEngineModel,
@@ -106,6 +107,45 @@ describe("toEngineModel", () => {
         type: "select",
       },
     ]);
+  });
+});
+
+describe("carryForwardLegacyProbe", () => {
+  const install = {
+    installed: true,
+    path: "/usr/local/bin/agent",
+    source: "managed-path" as const,
+    version: "agent 1.0.0",
+  };
+
+  it("carries the last full result while the binary is unchanged", () => {
+    const previous = fromLegacyStatus(status());
+    const fresh = { ...install, source: "login-shell" as const };
+
+    expect(carryForwardLegacyProbe({ ...previous, install }, fresh)).toEqual({
+      ...previous,
+      install: fresh,
+    });
+  });
+
+  it("asks for a full probe without history or when the binary changed", () => {
+    const previous = { ...fromLegacyStatus(status()), install };
+
+    expect(carryForwardLegacyProbe(null, install)).toBeNull();
+    expect(
+      carryForwardLegacyProbe(previous, { ...install, version: "agent 1.1.0" }),
+    ).toBeNull();
+    expect(
+      carryForwardLegacyProbe(previous, { ...install, path: "/opt/agent" }),
+    ).toBeNull();
+    expect(
+      carryForwardLegacyProbe(previous, {
+        installed: false,
+        path: null,
+        source: null,
+        version: null,
+      }),
+    ).toBeNull();
   });
 });
 

@@ -138,13 +138,16 @@ const getOpenCodeEngineStatus = mock(async (_options?: unknown) => ({
   state: "error",
   usedCachedStatus: false,
 }));
+const resolveOpenCodeRuntime = mock(async (_options?: unknown) => ({
+  source: "login-shell",
+}));
 mock.module("@/lib/ai/chat/engines/opencode-sdk", () => ({
   getOpenCodeEngineStatus,
   isOpenCodeEngineAvailable: (status: { state: string }) =>
     status.state === "ready" || status.state === "timeout_no_cache",
   resetOpenCodeEngineStatusCache: () => {},
   resetOpenCodeRuntimeCache: () => {},
-  resolveOpenCodeRuntime: async () => ({ source: "login-shell" }),
+  resolveOpenCodeRuntime,
 }));
 
 const { AVAILABLE_DRIVER_KINDS, DRIVER_CATALOG } = await import("../catalog");
@@ -300,6 +303,67 @@ describe("legacy drivers", () => {
     expect(result.status).toBe("error");
     expect(result.message).toBe("Cursor Agent was not found in PATH.");
     expect(resolveCursorRuntime).not.toHaveBeenCalled();
+  });
+
+  it("answers cheap Cursor and OpenCode probes from the last full result while the binary is unchanged", async () => {
+    for (const kind of ["cursor", "opencode"] as const) {
+      const instance = makeFakeInstance({ driver: kind, id: kind });
+      const status =
+        kind === "cursor" ? getCursorEngineStatus : getOpenCodeEngineStatus;
+      const resolve = (kind === "cursor"
+        ? resolveCursorRuntime
+        : resolveOpenCodeRuntime) as unknown as {
+        mockImplementationOnce(fn: () => Promise<unknown>): unknown;
+      };
+      const install = {
+        installed: true,
+        path: `/usr/local/bin/${kind}`,
+        source: "managed-path" as const,
+        version: "1.0.0",
+      };
+      const previous = {
+        auth: {
+          canLogin: false,
+          canLogout: false,
+          email: null,
+          label: null,
+          method: null,
+          plan: null,
+          status: "authenticated" as const,
+        },
+        install,
+        models: [],
+        status: "ready" as const,
+      };
+      const runtime = (version: string) => ({
+        cliDetected: true,
+        cliPath: install.path,
+        cliVersion: version,
+        source: "login-shell",
+      });
+      status.mockClear();
+
+      resolve.mockImplementationOnce(async () => runtime("1.0.0"));
+      const carried = await getEngineDriver(kind)!.probe(instance, {
+        ...probeOptions(),
+        depth: "cheap",
+        previous,
+      });
+      expect(carried).toEqual({
+        ...previous,
+        install: { ...install, source: "login-shell" },
+      });
+      expect(status).not.toHaveBeenCalled();
+
+      // An updated binary is probed fully.
+      resolve.mockImplementationOnce(async () => runtime("1.1.0"));
+      await getEngineDriver(kind)!.probe(instance, {
+        ...probeOptions(),
+        depth: "cheap",
+        previous,
+      });
+      expect(status).toHaveBeenCalledTimes(1);
+    }
   });
 
   it("keeps OpenCode's compatibility advisory", async () => {

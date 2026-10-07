@@ -34,6 +34,12 @@ export type ProbeOptions = {
    */
   depth: EngineProbeDepth;
   forceRefresh: boolean;
+  /**
+   * With depth "cheap": the last full probe's result (null otherwise). A
+   * cheap probe re-checks the binary and carries the rest of it forward
+   * while the binary is unchanged.
+   */
+  previous?: EngineProbeResult | null;
   reason: EngineProbeReason;
   /** Aborted on timeout: a probe MUST stop and kill what it started. */
   signal: AbortSignal;
@@ -65,7 +71,8 @@ export interface EngineDriver<
   /**
    * How long a full probe's result is trusted before a cheap refresh
    * (interval, focus) is upgraded to a full one (default: snapshotTtlMs).
-   * Drivers whose full probe spawns a process use minutes here.
+   * Drivers whose full probe spawns a process use minutes here, and must
+   * then answer depth "cheap" without talking to the runtime.
    */
   readonly fullProbeTtlMs?: number;
 
