@@ -41,6 +41,8 @@ export type EngineUpdateCommand = {
   args: string[];
   /** The exact command, as the user confirms it. */
   display: string;
+  /** Variables set for this command (the CLI's own updater may need some). */
+  env?: Record<string, string>;
   executable: string;
   /** Updates with the same key never run at the same time. */
   lockKey: string;
@@ -251,11 +253,16 @@ export async function resolveUpdatePlan(
       ? name.replace(/\.(?:exe|cmd|bat)$/i, "")
       : binaryPath;
   })();
+  const nativeEnv =
+    input.definition.nativeUpdate?.env?.(realCommandPath) ??
+    input.definition.nativeUpdate?.env?.(binaryPath) ??
+    null;
   const native: EngineUpdatePlan | null = nativeArgs
     ? {
         command: {
           args: [...nativeArgs],
           display: formatCommand(nativeDisplayName, nativeArgs, platform),
+          ...(nativeEnv ? { env: nativeEnv } : {}),
           executable: binaryPath,
           lockKey: `${input.driver}-native:${normalizeCommandPath(realCommandPath)}`,
         },

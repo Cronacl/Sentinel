@@ -9,6 +9,7 @@ import {
   type MaintenanceInspectDeps,
   type MaintenanceInspection,
 } from "./inspect";
+import { buildMaintenanceEnv } from "./env";
 import { getLatestVersionLookup } from "./latest-version";
 import { getMaintenanceRunner, type MaintenanceRunner } from "./runner";
 
@@ -118,7 +119,7 @@ export function createUpdateStateEnricher(
       const inspection = await inspectMaintenance(
         {
           driver,
-          env: instance.env,
+          env: buildMaintenanceEnv(instance),
           latestMode: "cache",
           signal,
           snapshot,

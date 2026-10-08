@@ -21,6 +21,7 @@ import { findExecutableInPath } from "../runtime/resolve-binary";
 import { getEngineSnapshotService } from "../snapshot-service";
 import { getEngineMaintenanceDefinition } from "./definitions";
 import { getMaintenanceInspectDeps } from "./enricher";
+import { buildMaintenanceEnv } from "./env";
 import {
   inspectMaintenance,
   MANAGED_INSTALL_OPTION_ID,
@@ -40,7 +41,8 @@ import {
 // the user confirmed it, and the command the user confirmed must still be
 // the one Sentinel would run when the request arrives (ownership is derived
 // again at that moment); otherwise the request is refused and the UI shows
-// the new command for another confirmation.
+// the new command for another confirmation. Commands run with Sentinel's
+// own environment, not the instance's home and secrets (env.ts).
 
 export type EngineMaintenanceErrorCode =
   "busy" | "changed" | "not_found" | "unavailable";
@@ -103,6 +105,8 @@ type InstanceLookup = {
 };
 
 export type EngineMaintenanceServiceDeps = {
+  /** The server environment instance overrides are reset to (tests). */
+  baseEnv?: Record<string, string | undefined>;
   /** Ends the instance's long-lived runtimes so the new binary is used. */
   disposeInstance: (instanceId: string) => Promise<void>;
   drivers: (kind: string) => EngineDriver | null | Promise<EngineDriver | null>;
@@ -174,7 +178,12 @@ export function createEngineMaintenanceService(
         "unavailable",
       );
     }
-    return { driver, instance: lookup.instance, snapshot };
+    return {
+      driver,
+      env: buildMaintenanceEnv(lookup.instance, deps.baseEnv),
+      instance: lookup.instance,
+      snapshot,
+    };
   }
 
   async function inspect(
@@ -184,7 +193,7 @@ export function createEngineMaintenanceService(
     return await inspectMaintenance(
       {
         driver: loaded.driver,
-        env: loaded.instance.env,
+        env: loaded.env,
         freshPlan: options.fresh,
         latestMode: options.latest,
         snapshot: loaded.snapshot,
@@ -310,7 +319,7 @@ export function createEngineMaintenanceService(
 
     async install(userId, instanceId, input) {
       const loaded = await load(userId, instanceId);
-      const { driver, instance, snapshot } = loaded;
+      const { driver, env, instance, snapshot } = loaded;
       if (snapshot.install.installed) {
         throw new EngineMaintenanceError(
           `${instance.label} is already installed.`,
@@ -376,14 +385,14 @@ export function createEngineMaintenanceService(
           )!;
           const tools: Record<string, string> = {};
           for (const tool of choice.requires) {
-            tools[tool] = await resolveExecutable(tool, instance.env);
+            tools[tool] = await resolveExecutable(tool, env);
           }
           const command = choice.command(tools);
           runner().runCommand({
             action: "install",
             args: command.args,
             display: command.display,
-            env: instance.env,
+            env,
             executable: command.executable,
             instanceId,
             label: instance.label,
@@ -406,7 +415,7 @@ export function createEngineMaintenanceService(
 
     async update(userId, instanceId, input) {
       const loaded = await load(userId, instanceId);
-      const { instance, snapshot } = loaded;
+      const { env, instance, snapshot } = loaded;
       if (!snapshot.install.installed) {
         throw new EngineMaintenanceError(
           `${instance.label} is not installed.`,
@@ -432,16 +441,13 @@ export function createEngineMaintenanceService(
       }
 
       const target = inspection.latestVersion;
-      const executable = await resolveExecutable(
-        plan.command.executable,
-        instance.env,
-      );
+      const executable = await resolveExecutable(plan.command.executable, env);
       try {
         runner().runCommand({
           action: "update",
           args: plan.command.args,
           display: plan.command.display,
-          env: instance.env,
+          env: { ...env, ...plan.command.env },
           executable,
           instanceId,
           label: instance.label,

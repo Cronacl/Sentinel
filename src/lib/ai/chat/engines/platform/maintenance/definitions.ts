@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import type { ManagedInstallProgress } from "@/lib/runtime/managed-install/install";
 
 import type {
@@ -41,6 +43,12 @@ export type EngineInstallOption = {
 export type EngineNativeUpdate = {
   /** The updater's arguments; null when it cannot run (needs a target). */
   args(input: { targetVersion: string | null }): readonly string[] | null;
+  /**
+   * Variables the updater needs, from where the binary lives (Codex: the
+   * CODEX_HOME whose standalone tree holds it). Maintenance commands run
+   * without the instance's own home and variables (env.ts).
+   */
+  env?: (commandPath: string) => Record<string, string> | null;
   /** Paths the CLI's own installer owns: its updater runs first there. */
   ownsPath?: (commandPath: string) => boolean;
 };
@@ -83,6 +91,20 @@ const POSIX: readonly NodeJS.Platform[] = ["darwin", "linux"];
 
 export function normalizeCommandPath(commandPath: string) {
   return commandPath.replaceAll("\\", "/").toLowerCase();
+}
+
+const CODEX_STANDALONE_SEGMENT = "/packages/standalone/";
+
+/**
+ * The CODEX_HOME a standalone Codex install lives in: its installer lays
+ * out `<CODEX_HOME>/packages/standalone/…`, and `codex update` replaces the
+ * tree under CODEX_HOME, which is not always ~/.codex (t3code
+ * CodexDriver.ts, MIT).
+ */
+export function codexHomeFromStandalonePath(commandPath: string) {
+  const slashed = commandPath.replaceAll("\\", "/");
+  const index = slashed.toLowerCase().indexOf(CODEX_STANDALONE_SEGMENT);
+  return index > 0 ? path.normalize(slashed.slice(0, index)) : null;
 }
 
 function npmGlobalInstall(input: {
@@ -195,9 +217,13 @@ export const ENGINE_MAINTENANCE_DEFINITIONS: Record<
     installHint: "Install the Codex CLI: npm install -g @openai/codex",
     nativeUpdate: {
       args: updateArgs("update"),
+      env: (commandPath) => {
+        const home = codexHomeFromStandalonePath(commandPath);
+        return home ? { CODEX_HOME: home } : null;
+      },
       // The standalone installer's tree under CODEX_HOME.
       ownsPath: (commandPath) =>
-        normalizeCommandPath(commandPath).includes("/packages/standalone/"),
+        normalizeCommandPath(commandPath).includes(CODEX_STANDALONE_SEGMENT),
     },
     packageName: () => "@openai/codex",
   },

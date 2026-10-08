@@ -40,6 +40,7 @@ type FakeChild = EventEmitter & {
 let snapshots: Record<string, EngineSnapshot>;
 let children: FakeChild[];
 let spawned: Array<{ args: readonly string[]; command: string }>;
+let spawnedEnv: Array<Record<string, string | undefined>>;
 
 function codexSnapshot(version: string) {
   return makeFakeSnapshot({
@@ -62,7 +63,11 @@ function createHarness() {
   });
   const runner = createMaintenanceRunner({
     emit: () => {},
-    spawn: ((options: { args?: readonly string[]; command: string }) => {
+    spawn: ((options: {
+      args?: readonly string[];
+      command: string;
+      env?: Record<string, string | undefined>;
+    }) => {
       const child = new EventEmitter() as FakeChild;
       child.stdout = new PassThrough();
       child.stderr = new PassThrough();
@@ -72,6 +77,7 @@ function createHarness() {
       };
       children.push(child);
       spawned.push({ args: options.args ?? [], command: options.command });
+      spawnedEnv.push(options.env ?? {});
       return child;
     }) as never,
   });
@@ -80,6 +86,22 @@ function createHarness() {
       driver: "codex",
       env: { PATH: "/usr/local/bin" },
     }),
+    // A second Codex account: its own home and API key.
+    "codex-work": makeFakeInstance({
+      driver: "codex",
+      env: {
+        CODEX_HOME: "/Users/me/.codex-work",
+        HTTPS_PROXY: "http://proxy.test:8080",
+        OPENAI_API_KEY: "sk-test-work",
+        PATH: "/usr/local/bin",
+      },
+      envOverrides: {
+        CODEX_HOME: "/Users/me/.codex-work",
+        HTTPS_PROXY: "http://proxy.test:8080",
+        OPENAI_API_KEY: "sk-test-work",
+      },
+      id: "codex-work",
+    }),
     opencode: makeFakeInstance({
       driver: "opencode",
       env: { PATH: "/usr/local/bin" },
@@ -87,6 +109,7 @@ function createHarness() {
   };
 
   const service = createEngineMaintenanceService({
+    baseEnv: { HOME: "/Users/me", PATH: "/usr/local/bin" },
     disposeInstance: dispose,
     drivers: (kind) =>
       kind === "codex" || kind === "opencode"
@@ -108,7 +131,9 @@ function createHarness() {
         realpath: async (target: string) =>
           target === "/usr/local/bin/codex"
             ? "/usr/local/lib/node_modules/@openai/codex/bin/codex.js"
-            : target,
+            : target === "/Users/me/.local/bin/codex"
+              ? "/Users/me/.codex/packages/standalone/current/bin/codex"
+              : target,
         which: async () => null,
       },
       planCache: new Map(),
@@ -153,6 +178,7 @@ beforeEach(() => {
   };
   children = [];
   spawned = [];
+  spawnedEnv = [];
 });
 
 describe("engine maintenance service", () => {
@@ -217,6 +243,42 @@ describe("engine maintenance service", () => {
     expect(runner.get("codex")?.updateState).toEqual(
       expect.objectContaining({ status: "unchanged" }),
     );
+  });
+
+  it("updates the shared install without the instance's home or secrets", async () => {
+    const { runner, service } = createHarness();
+    snapshots["codex-work"] = makeFakeSnapshot({
+      driver: "codex",
+      install: {
+        installed: true,
+        path: "/Users/me/.local/bin/codex",
+        source: "managed-path",
+        version: "codex-cli 0.160.1",
+      },
+    });
+
+    const status = await service.status(USER, "codex-work");
+    expect(status.updateCommand).toBe("/Users/me/.local/bin/codex update");
+    await service.update(USER, "codex-work", {
+      expectedCommand: "/Users/me/.local/bin/codex update",
+    });
+    await until(() => children.length === 1);
+
+    expect(spawned[0]).toEqual({
+      args: ["update"],
+      command: "/Users/me/.local/bin/codex",
+    });
+    const env = spawnedEnv[0]!;
+    // The standalone tree's own CODEX_HOME, not the instance's.
+    expect(env.CODEX_HOME).toBe("/Users/me/.codex");
+    // Unset explicitly, so the spawn does not fill it in either.
+    expect("OPENAI_API_KEY" in env).toBe(true);
+    expect(env.OPENAI_API_KEY).toBeUndefined();
+    expect(env.HTTPS_PROXY).toBe("http://proxy.test:8080");
+    expect(env.PATH).toBe("/usr/local/bin");
+
+    children[0]!.emit("close", 0);
+    await runner.whenSettled("codex-work");
   });
 
   it("refuses a command the user did not confirm", async () => {
