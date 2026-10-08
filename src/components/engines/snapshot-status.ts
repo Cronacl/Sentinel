@@ -181,7 +181,7 @@ export function getComposerUnavailableMessage(snapshot: SnapshotLike) {
     return `${label} is being checked.`;
   }
   if (snapshot.auth.status === "unauthenticated") {
-    return `${label} needs authentication before it can be used here.`;
+    return `${label} needs authentication before it can be used here. Sign in from Settings → Engines.`;
   }
   if (!snapshot.install.installed) {
     return `${label} runtime was not detected in this Sentinel session.`;

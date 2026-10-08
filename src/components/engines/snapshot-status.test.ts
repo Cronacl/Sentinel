@@ -198,7 +198,9 @@ describe("getComposerUnavailableMessage", () => {
       getComposerUnavailableMessage(
         makeFakeSnapshot({ auth: unauthenticated, driver: "claude" }),
       ),
-    ).toBe("Claude needs authentication before it can be used here.");
+    ).toBe(
+      "Claude needs authentication before it can be used here. Sign in from Settings → Engines.",
+    );
     expect(
       getComposerUnavailableMessage(
         makeFakeSnapshot({
