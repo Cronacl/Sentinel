@@ -76,8 +76,11 @@ describe("DRIVER_CATALOG", () => {
 
   it("keeps today's permission modes for every existing driver", () => {
     for (const kind of CHAT_ENGINES) {
+      // Cursor runs on the shared ACP engine, which also maps accept_edits.
       expect(getDriverPermissionModes(kind)).toEqual(
-        DEFAULT_DRIVER_PERMISSION_MODES,
+        kind === "cursor"
+          ? ["default", "accept_edits", "full"]
+          : DEFAULT_DRIVER_PERMISSION_MODES,
       );
     }
     expect(getDriverPermissionModes("gemini")).toEqual(

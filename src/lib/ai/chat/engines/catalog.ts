@@ -262,8 +262,13 @@ export const DRIVER_CATALOG = {
   cursor: {
     capabilities: {
       ...EXTERNAL_CAPABILITIES,
-      // Typed literally so the runtime's mapping is checked when this widens.
-      permissionModes: DEFAULT_DRIVER_PERMISSION_MODES,
+      // The shared ACP engine maps each mode (runtime/external/permissions.ts).
+      permissionModes: ["default", "accept_edits", "full"],
+      reportsSlashCommands: true,
+      supportsImages: true,
+      supportsMcpInjection: true,
+      // Cursor's own plan mode (session/set_mode), else the plan preamble.
+      supportsPlanMode: "acp-mode",
       supportsUserInput: true,
     },
     config: binaryConfigSchema,

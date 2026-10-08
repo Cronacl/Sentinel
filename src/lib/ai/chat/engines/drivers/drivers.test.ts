@@ -96,28 +96,26 @@ mock.module("@/lib/ai/chat/engines/copilot-sdk", () => ({
   resolveCopilotRuntime: async () => ({ installSource: "sdk-bundled" }),
 }));
 
-const getCursorEngineStatus = mock(async (_options?: unknown) => ({
-  authReady: false,
-  availableModels: [],
-  cliDetected: false,
-  cliPath: null,
-  cliVersion: null,
-  engine: "cursor",
-  error: "Cursor Agent was not found in PATH.",
-  lastSuccessfulProbeAt: null,
-  parameterizedModelPicker: false,
-  state: "missing_runtime",
-  usedCachedStatus: false,
-}));
-const resolveCursorRuntime = mock(async () => ({ source: "managed-path" }));
-mock.module("@/lib/ai/chat/engines/cursor-acp", () => ({
-  getCursorEngineStatus,
-  isCursorEngineAvailable: (status: { authReady: boolean; state: string }) =>
-    status.state === "ready" && status.authReady,
-  resetCursorEngineStatusCache: () => {},
-  resetCursorRuntimeCache: () => {},
-  resolveCursorRuntime,
-}));
+const cursorProbeResult = {
+  auth: {
+    canLogin: false,
+    canLogout: false,
+    email: null,
+    label: null,
+    method: null,
+    plan: null,
+    status: "unknown" as const,
+  },
+  install: { installed: false, path: null, source: null, version: null },
+  message: "Cursor Agent was not found in PATH.",
+  models: [],
+  status: "error" as const,
+};
+const probeAcpAgent = mock(
+  async (_descriptor: unknown, _instance: unknown, _options: unknown) =>
+    cursorProbeResult,
+);
+mock.module("@/lib/ai/chat/engines/acp/probe", () => ({ probeAcpAgent }));
 
 const openCodeAdvisory = {
   message: "OpenCode 1.0.1 is too old for Sentinel.",
@@ -286,33 +284,26 @@ describe("legacy drivers", () => {
     ).toEqual([]);
   });
 
-  it("reports a missing Cursor Agent without resolving it again", async () => {
+  it("probes Cursor through the shared ACP probe with its descriptor", async () => {
     const instance = makeFakeInstance({ driver: "cursor", id: "cursor" });
+    const options = probeOptions();
 
-    const result = await getEngineDriver("cursor")!.probe(
-      instance,
-      probeOptions(),
-    );
+    const result = await getEngineDriver("cursor")!.probe(instance, options);
 
-    expect(result.install).toEqual({
-      installed: false,
-      path: null,
-      source: null,
-      version: null,
-    });
-    expect(result.status).toBe("error");
-    expect(result.message).toBe("Cursor Agent was not found in PATH.");
-    expect(resolveCursorRuntime).not.toHaveBeenCalled();
+    expect(result).toBe(cursorProbeResult);
+    expect(probeAcpAgent).toHaveBeenCalledTimes(1);
+    const [descriptor, probedInstance, probedOptions] =
+      probeAcpAgent.mock.calls[0]!;
+    expect((descriptor as { id: string }).id).toBe("cursor");
+    expect(probedInstance).toBe(instance);
+    expect(probedOptions).toBe(options);
   });
 
-  it("answers cheap Cursor and OpenCode probes from the last full result while the binary is unchanged", async () => {
-    for (const kind of ["cursor", "opencode"] as const) {
+  it("answers cheap OpenCode probes from the last full result while the binary is unchanged", async () => {
+    for (const kind of ["opencode"] as const) {
       const instance = makeFakeInstance({ driver: kind, id: kind });
-      const status =
-        kind === "cursor" ? getCursorEngineStatus : getOpenCodeEngineStatus;
-      const resolve = (kind === "cursor"
-        ? resolveCursorRuntime
-        : resolveOpenCodeRuntime) as unknown as {
+      const status = getOpenCodeEngineStatus;
+      const resolve = resolveOpenCodeRuntime as unknown as {
         mockImplementationOnce(fn: () => Promise<unknown>): unknown;
       };
       const install = {

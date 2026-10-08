@@ -323,6 +323,13 @@ export const TRIPWIRES = [
     exclude: /^scripts\/verify\/tripwires\.test\.ts$/,
   },
   {
+    id: "P12-hand-rolled-acp-client",
+    description:
+      "Cursor runs on the shared ACP engine (engines/acp on @agentclientprotocol/sdk); the hand-rolled CursorAcpClient and its cursor-acp module are gone",
+    pattern: /\bCursorAcpClient\b|engines\/cursor-acp\b/,
+    include: /^src\/.*\.[cm]?[jt]sx?$/,
+  },
+  {
     id: "P9-codex-config-write-params",
     description:
       "Codex 0.160 config writes take keyPath/mergeStrategy and edits[], not key or values",
@@ -413,7 +420,7 @@ export const TRIPWIRES = [
     pattern: /["'`][a-z0-9-]+-status\.json["'`]/,
     include: /^src\/lib\/ai\/chat\/engines\/.*\.[cm]?[jt]sx?$/,
     exclude:
-      /^src\/lib\/ai\/chat\/engines\/(?:claude-sdk|codex-app-server|copilot-sdk|cursor-acp|opencode-sdk)\/|\.test\.[cm]?[jt]sx?$/,
+      /^src\/lib\/ai\/chat\/engines\/(?:claude-sdk|codex-app-server|copilot-sdk|opencode-sdk)\/|\.test\.[cm]?[jt]sx?$/,
   },
   {
     id: "fixtures-in-app-code",

@@ -11,14 +11,11 @@ const { isClaudeEngineAvailable } =
   await import("@/lib/ai/chat/engines/claude-sdk");
 const { isCopilotEngineAvailable } =
   await import("@/lib/ai/chat/engines/copilot-sdk");
-const { isCursorEngineAvailable } =
-  await import("@/lib/ai/chat/engines/cursor-acp");
 const { isOpenCodeEngineAvailable } =
   await import("@/lib/ai/chat/engines/opencode-sdk");
 const { fromClaudeStatus } = await import("./claude");
 const { fromCodexStatus } = await import("./codex");
 const { fromCopilotStatus } = await import("./copilot");
-const { fromCursorStatus } = await import("./cursor");
 const { fromOpenCodeStatus } = await import("./opencode");
 
 import type { EngineProbeResult } from "../contract";
@@ -171,32 +168,6 @@ describe("legacy availability parity", () => {
     }
   });
 
-  it("keeps Cursor's availability", () => {
-    for (const variant of variants()) {
-      const status = {
-        authReady: variant.authReady,
-        availableModels: variant.models ? [MODEL as never] : [],
-        cliDetected: variant.installed,
-        cliPath: "/usr/local/bin/agent",
-        cliVersion: "agent 1.0.0",
-        engine: "cursor" as const,
-        error: variant.state === "ready" ? null : "x",
-        lastSuccessfulProbeAt: null,
-        parameterizedModelPicker: false,
-        state: variant.state === "missing" ? "missing_runtime" : variant.state,
-        usedCachedStatus: false,
-      } as const;
-
-      expect([
-        describeVariant("cursor", variant),
-        usable(fromCursorStatus(status, "managed-path")),
-      ]).toEqual([
-        describeVariant("cursor", variant),
-        expected(isCursorEngineAvailable(status), variant),
-      ]);
-    }
-  });
-
   it("keeps OpenCode's availability", () => {
     for (const variant of variants()) {
       const status = {
@@ -228,34 +199,5 @@ describe("legacy availability parity", () => {
         expected(isOpenCodeEngineAvailable(status), variant),
       ]);
     }
-  });
-
-  it("keeps the cause of an unavailable timeout as the message", () => {
-    const result = fromCursorStatus(
-      {
-        authReady: false,
-        availableModels: [],
-        cliDetected: true,
-        cliPath: "/usr/local/bin/agent",
-        cliVersion: "agent 1.0.0",
-        engine: "cursor",
-        error: "Cursor Agent took too long to respond.",
-        lastSuccessfulProbeAt: null,
-        parameterizedModelPicker: false,
-        state: "timeout_no_cache",
-        usedCachedStatus: false,
-      },
-      "managed-path",
-    );
-
-    expect(result).toEqual(
-      expect.objectContaining({
-        message: "Cursor Agent took too long to respond.",
-        stale: true,
-        status: "error",
-      }),
-    );
-    // The fallback models are still listed, as the router did.
-    expect(result.models.length).toBeGreaterThan(0);
   });
 });

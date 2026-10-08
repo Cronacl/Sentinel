@@ -98,13 +98,46 @@ mock.module("@/lib/ai/chat/engines/copilot-sdk", () => ({
   resetCopilotRuntimeCache: () => {},
   resolveCopilotRuntime: async () => runtimeFor("copilot"),
 }));
-mock.module("@/lib/ai/chat/engines/cursor-acp", () => ({
-  getCursorEngineStatus: () =>
-    statusFor("cursor", { parameterizedModelPicker: true }),
-  isCursorEngineAvailable: isReady,
-  resetCursorEngineStatusCache: () => {},
-  resetCursorRuntimeCache: () => {},
-  resolveCursorRuntime: async () => runtimeFor("cursor"),
+// Cursor runs on the shared ACP engine: its probe is faked at that seam.
+mock.module("@/lib/ai/chat/engines/acp/probe", () => ({
+  probeAcpAgent: async () => {
+    const mode = modeOf("cursor");
+    if (mode === "hang") {
+      return never();
+    }
+    const installed = mode === "installed";
+    return {
+      auth: {
+        canLogin: false,
+        canLogout: false,
+        email: null,
+        label: null,
+        method: "Cursor Login",
+        plan: null,
+        status: installed ? "authenticated" : "unknown",
+      },
+      install: {
+        installed,
+        path: installed ? "/usr/local/bin/cursor-agent" : null,
+        source: installed ? "managed-path" : null,
+        version: installed ? "2026.08.04" : null,
+      },
+      ...(installed ? {} : { message: "Cursor Agent was not found in PATH." }),
+      models: installed
+        ? [
+            {
+              id: "fake-model",
+              inputModalities: ["text"],
+              isCustom: false,
+              name: "Fake Model",
+              options: [],
+              source: "live",
+            },
+          ]
+        : [],
+      status: installed ? "ready" : "error",
+    };
+  },
 }));
 mock.module("@/lib/ai/chat/engines/opencode-sdk", () => ({
   getOpenCodeEngineStatus: () =>

@@ -651,4 +651,13 @@ describe("P12 ACP engine tripwires", () => {
       ),
     ).toEqual([]);
   });
+
+  it("flags the hand-rolled Cursor ACP client", () => {
+    expect(
+      hitIds(
+        "src/lib/ai/chat/runtime/cursor/run.ts",
+        'import { CursorAcpClient } from "@/lib/ai/chat/engines/cursor-acp";',
+      ),
+    ).toEqual(["P12-hand-rolled-acp-client:1"]);
+  });
 });

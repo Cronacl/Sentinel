@@ -52,26 +52,6 @@ export function buildFallbackCopilotModels() {
   ];
 }
 
-export function buildFallbackCursorModels() {
-  return [
-    {
-      contextWindow: undefined,
-      defaultReasoningEffort: "medium" as const,
-      description: "Default Cursor Agent model.",
-      displayName: "Auto",
-      id: "default",
-      inputModalities: ["text"] as string[],
-      isDefault: true,
-      model: "default",
-      supportedReasoningEfforts: effortOptions("Cursor Auto", [
-        "low",
-        "medium",
-        "high",
-      ]),
-    },
-  ];
-}
-
 export function buildFallbackOpenCodeModels() {
   return [
     {
