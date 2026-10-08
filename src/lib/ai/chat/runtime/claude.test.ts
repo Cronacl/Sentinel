@@ -1080,6 +1080,48 @@ describe("runClaudeThreadChat approvals", () => {
     expect(capturedClaudeQueryInput?.options?.effort).toBeUndefined();
   });
 
+  it("sends a Claude skill chip as Claude Code's own slash command", async () => {
+    queryMessages = [createSuccessResult({ result: "Done." })];
+
+    await runClaudeThreadChat(
+      {
+        message: {
+          ...createUserMessage("ok, now $review the diff"),
+          metadata: {
+            composerContext: {
+              paths: [],
+              skills: [
+                {
+                  engine: "claude",
+                  name: "review",
+                  sourceKind: "claude",
+                  target: "claude",
+                },
+              ],
+            },
+          },
+        },
+        threadId: "thread-skill",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      { chatEngineState: null, mode: "chat", status: "idle" } as any,
+    );
+
+    const prompt = (
+      capturedClaudeQueryInput as unknown as {
+        prompt: AsyncIterable<{ message: { content: any[] } }>;
+      }
+    ).prompt;
+    const first = await prompt[Symbol.asyncIterator]().next();
+    const content = first.value.message.content;
+    expect(content.at(-1)).toEqual({ text: "/review the diff", type: "text" });
+    expect(content[0].text).toContain('<skill name="review" />');
+    expect(content[0].text).toEndWith("ok, now");
+    await flushClaudeRun();
+  });
+
   it("records rate_limit_event messages and finishes the run normally", async () => {
     queryMessages = [
       {

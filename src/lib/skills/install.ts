@@ -61,11 +61,17 @@ async function validateInstalledSkillDirectory(dest: string) {
   validateFrontmatter(content);
 }
 
+/**
+ * Where a skill goes. `globalSkillsDirectory` is the global skills folder of
+ * the engine instance being installed for when its home moves it (Claude's
+ * CLAUDE_CONFIG_DIR/skills, Copilot's COPILOT_HOME/skills).
+ */
 function resolveSkillDestination(
   destRoot: string,
   name: string,
   target: SkillInstallTarget,
   scope: "global" | "workspace",
+  globalSkillsDirectory?: string | null,
 ) {
   const normalizedName = name.trim();
   if (!SKILL_DIRECTORY_NAME_PATTERN.test(normalizedName)) {
@@ -75,21 +81,23 @@ function resolveSkillDestination(
   }
 
   const skillsDir =
-    target === "codex"
-      ? path.resolve(destRoot, "skills")
-      : target === "claude"
-        ? path.resolve(destRoot, ".claude", "skills")
-        : target === "copilot"
-          ? scope === "workspace"
-            ? path.resolve(destRoot, ".github", "skills")
-            : path.resolve(destRoot, ".copilot", "skills")
-          : target === "cursor"
-            ? path.resolve(destRoot, ".cursor", "skills")
-            : target === "opencode"
-              ? scope === "workspace"
-                ? path.resolve(destRoot, ".opencode", "skills")
-                : path.resolve(destRoot, ".config", "opencode", "skills")
-              : path.resolve(destRoot, ".sentinel", "skills");
+    scope === "global" && globalSkillsDirectory?.trim()
+      ? path.resolve(globalSkillsDirectory.trim())
+      : target === "codex"
+        ? path.resolve(destRoot, "skills")
+        : target === "claude"
+          ? path.resolve(destRoot, ".claude", "skills")
+          : target === "copilot"
+            ? scope === "workspace"
+              ? path.resolve(destRoot, ".github", "skills")
+              : path.resolve(destRoot, ".copilot", "skills")
+            : target === "cursor"
+              ? path.resolve(destRoot, ".cursor", "skills")
+              : target === "opencode"
+                ? scope === "workspace"
+                  ? path.resolve(destRoot, ".opencode", "skills")
+                  : path.resolve(destRoot, ".config", "opencode", "skills")
+                : path.resolve(destRoot, ".sentinel", "skills");
   const dest = path.resolve(skillsDir, normalizedName);
 
   if (path.dirname(dest) !== skillsDir) {
@@ -119,12 +127,14 @@ export async function executeInstallSteps({
   name,
   installSteps,
   destRoot,
+  globalSkillsDirectory,
   target = "sentinel",
   scope = "global",
 }: {
   name: string;
   installSteps: string[];
   destRoot: string;
+  globalSkillsDirectory?: string | null;
   target?: SkillInstallTarget;
   scope?: "global" | "workspace";
 }): Promise<SkillInstallResult> {
@@ -133,6 +143,7 @@ export async function executeInstallSteps({
     name,
     target,
     scope,
+    globalSkillsDirectory,
   );
 
   if (await pathExists(dest)) {
@@ -186,15 +197,23 @@ export async function executeInstallSteps({
 export async function uninstallSkill({
   name,
   destRoot,
+  globalSkillsDirectory,
   target = "sentinel",
   scope = "global",
 }: {
   name: string;
   destRoot: string;
+  globalSkillsDirectory?: string | null;
   target?: SkillInstallTarget;
   scope?: "global" | "workspace";
 }) {
-  const { dest } = resolveSkillDestination(destRoot, name, target, scope);
+  const { dest } = resolveSkillDestination(
+    destRoot,
+    name,
+    target,
+    scope,
+    globalSkillsDirectory,
+  );
 
   if (!(await pathExists(dest))) {
     throw new Error(`Skill "${name}" is not installed at ${dest}.`);

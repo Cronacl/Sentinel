@@ -207,8 +207,19 @@ export function ChatComposer({
         }
       : undefined;
 
+  // Another instance of a driver can keep its skills in its own home
+  // (CLAUDE_CONFIG_DIR, COPILOT_HOME, CODEX_HOME): list that one's.
+  const skillsInstanceId =
+    selectedEngineStatus && !selectedEngineStatus.isDefaultInstance
+      ? selectedInstanceId
+      : undefined;
   const skillsQuery = api.skills.list.useQuery(
-    activeWorkspace?.id ? { workspaceId: activeWorkspace.id } : undefined,
+    activeWorkspace?.id || skillsInstanceId
+      ? {
+          ...(skillsInstanceId ? { instanceId: skillsInstanceId } : {}),
+          ...(activeWorkspace?.id ? { workspaceId: activeWorkspace.id } : {}),
+        }
+      : undefined,
     {
       staleTime: 30_000,
     },

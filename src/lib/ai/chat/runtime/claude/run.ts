@@ -73,6 +73,10 @@ import {
   resolveClaudePermissionInput,
 } from "./permissions";
 import {
+  getClaudeDispatchSkillNames,
+  planClaudeSkillDispatch,
+} from "./skill-dispatch";
+import {
   recordClaudeRateLimitEvent,
   reportClaudeRateLimitUsage,
   type ClaudeRateLimitRecord,
@@ -507,12 +511,20 @@ function buildClaudeUserPrompt(
   );
 
   const content: ClaudeUserContentBlock[] = [];
-  let text = textParts
+  const userText = textParts
     .map((part) => part.text.trim())
     .filter(Boolean)
     .join("\n\n");
 
   const composerContext = message.metadata?.composerContext;
+  // A Claude skill chip ($name) becomes Claude Code's own `/name` command,
+  // sent as the last text block (skill-dispatch.ts).
+  const dispatch = planClaudeSkillDispatch(
+    userText,
+    getClaudeDispatchSkillNames(composerContext),
+  );
+  let text = dispatch ? (dispatch.leadingText ?? "") : userText;
+
   if (
     composerContext &&
     ((composerContext.paths?.length ?? 0) > 0 ||
@@ -566,6 +578,10 @@ function buildClaudeUserPrompt(
       },
       type: "image",
     });
+  }
+
+  if (dispatch) {
+    content.push({ text: dispatch.commandText, type: "text" });
   }
 
   return {
