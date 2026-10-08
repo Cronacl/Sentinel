@@ -26,6 +26,11 @@ export function createUsageLimitsEnricher(
 ): EngineSnapshotEnricher {
   return {
     enrich({ driver, instance, probe, snapshot, userId }) {
+      if (snapshot.auth.status === "unauthenticated") {
+        // Signed out: the last account's usage no longer applies.
+        store.clear(userId, instance.id);
+        return { ...snapshot, usageLimits: null };
+      }
       if (probe?.usageLimits) {
         store.seed(userId, instance.id, probe.usageLimits);
       }

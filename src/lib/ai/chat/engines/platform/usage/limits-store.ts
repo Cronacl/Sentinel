@@ -42,6 +42,8 @@ export type EngineUsageReadTarget = {
 };
 
 export interface EngineUsageLimitsStore {
+  /** Forget one user's limits for an instance (signed out). */
+  clear(userId: string, instanceId: string): void;
   /** Forget an instance's limits (removed, or reconfigured). */
   forget(instanceId: string): void;
   /** Whether a full read is due: never read, or older than its TTL. */
@@ -210,6 +212,16 @@ export function createEngineUsageLimitsStore(
   }
 
   const store: EngineUsageLimitsStore = {
+    clear(userId, instanceId) {
+      const key = keyOf(userId, instanceId);
+      const entry = entries.get(key);
+      if (entry) {
+        generation += 1;
+        entry.generation = generation;
+        entries.delete(key);
+      }
+    },
+
     forget(instanceId) {
       generation += 1;
       for (const [key, entry] of entries) {

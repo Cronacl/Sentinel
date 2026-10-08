@@ -207,6 +207,17 @@ describe("usage limits store", () => {
     expect(store.peek(USER, "codex")).toBeNull();
   });
 
+  it("clears one user's limits only", () => {
+    const { store } = setup(async () => limits([]));
+    store.report(USER, "codex", [window()]);
+    store.report("user-2", "codex", [window()]);
+
+    store.clear(USER, "codex");
+
+    expect(store.peek(USER, "codex")).toBeNull();
+    expect(store.peek("user-2", "codex")).not.toBeNull();
+  });
+
   it("has nothing to read for drivers without a reader", async () => {
     const { instance, store } = setup(async () => limits([]));
     const driver = {};

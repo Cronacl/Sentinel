@@ -169,6 +169,26 @@ describe("snapshots with usage limits", () => {
     expect(read).not.toHaveBeenCalled();
   });
 
+  it("drops the usage of an account that signed out", async () => {
+    let signedIn = true;
+    const { service, snapshotEvents, usageLimits } = setup({
+      probe: async () =>
+        signedIn
+          ? readyProbe()
+          : readyProbe({
+              auth: { ...readyProbe().auth, status: "unauthenticated" },
+            }),
+    });
+    await service.getSnapshot(USER, "codex");
+    await waitFor(() => snapshotEvents().some(hasUsage));
+
+    signedIn = false;
+    const snapshot = await service.refresh(USER, "codex");
+
+    expect(snapshot?.usageLimits).toBeNull();
+    expect(usageLimits.peek(USER, "codex")).toBeNull();
+  });
+
   it("takes a probe's own limits as the read", async () => {
     const { read, service } = setup({
       probe: async () =>
