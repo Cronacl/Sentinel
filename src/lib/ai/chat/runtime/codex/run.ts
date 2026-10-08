@@ -2379,11 +2379,13 @@ export async function runCodexThreadChat(
     existingThread?.mode != null &&
     normalizeThreadMode(existingThread.mode) !== threadMode;
   const resumableCodexState = didThreadModeChange ? null : existingCodexState;
-  // No thread to resume (another instance or home, or no stored state): the
-  // fresh Codex thread gets the conversation so far in its first prompt.
-  const historyReplayPrefix = existingCodexState?.codexThreadId
-    ? null
-    : buildHistoryReplayPrefix(getReplayHistory(transcript, request));
+  // A fresh Codex thread (another instance or home, no stored state, or a
+  // mode change such as "Implement plan") gets the conversation so far in
+  // its first prompt.
+  const historyReplayPrefix =
+    resumableCodexState?.codexThreadId != null
+      ? null
+      : buildHistoryReplayPrefix(getReplayHistory(transcript, request));
   const codexInput = await buildCodexUserInput(request.message, {
     promptPrefix: historyReplayPrefix,
   });
@@ -2529,11 +2531,12 @@ export async function runCodexThreadChat(
       input:
         !nativeCollaborationMode && threadMode === "plan"
           ? await buildCodexUserInput(request.message, {
+              // The replayed history ends by introducing the new message.
               promptPrefix: joinPromptPrefixes(
-                historyReplayPrefix,
                 buildPlanModePromptPreamble(
                   "Native Codex collaboration mode is unavailable in this Codex CLI version. Apply the full Plan Mode contract below for this turn instead.",
                 ),
+                historyReplayPrefix,
               ),
             })
           : codexInput,

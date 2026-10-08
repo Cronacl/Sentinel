@@ -1725,6 +1725,63 @@ describe("runClaudeThreadChat instances and unattended runs", () => {
     expect(await readFirstPromptText()).toBe("Document it");
   });
 
+  it("replays the conversation into the fresh session a mode change starts", async () => {
+    loadThreadMessages.mockResolvedValueOnce(priorRecords as any);
+
+    await runClaudeThreadChat(
+      {
+        message: { ...createUserMessage("Implement Plan"), id: "user-2" },
+        threadId: "thread-implement",
+        threadMode: "chat",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      { ...threadOnHome("/tmp/old-home"), mode: "plan" },
+      makeFakeInstance({
+        continuationKey: "claude:home:/tmp/old-home",
+        driver: "claude",
+        id: "claude-work",
+      }),
+    );
+
+    expect(capturedClaudeQueryInput?.options?.resume).toBeUndefined();
+    const prompt = await readFirstPromptText();
+    expect(prompt).toContain(
+      "<conversation_history>\nUSER: Add a cache\n\nASSISTANT: The cache is in place.\n</conversation_history>",
+    );
+    expect(prompt.endsWith("New message:\n\nImplement Plan")).toBe(true);
+  });
+
+  it("puts the plan preamble before the replayed history", async () => {
+    loadThreadMessages.mockResolvedValueOnce(priorRecords as any);
+
+    await runClaudeThreadChat(
+      {
+        message: { ...createUserMessage("Plan the docs"), id: "user-2" },
+        threadId: "thread-plan-moved",
+        threadMode: "plan",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      { ...threadOnHome("/tmp/old-home"), mode: "plan" },
+      makeFakeInstance({
+        continuationKey: "claude:home:/tmp/new-home",
+        driver: "claude",
+        id: "claude-work",
+      }),
+    );
+
+    const prompt = await readFirstPromptText();
+    expect(prompt.indexOf("<proposed_plan>")).toBeGreaterThan(-1);
+    expect(prompt.indexOf("<proposed_plan>")).toBeLessThan(
+      prompt.indexOf("<conversation_history>"),
+    );
+    // The history introduces the user's own words, with nothing between.
+    expect(prompt.endsWith("New message:\n\nPlan the docs")).toBe(true);
+  });
+
   it("declines permission requests at once when nobody can answer", async () => {
     await runClaudeThreadChat(
       {

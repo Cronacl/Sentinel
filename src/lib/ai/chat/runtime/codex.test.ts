@@ -1706,7 +1706,7 @@ describe("runCodexThreadChat instances and unattended runs", () => {
     expect(text.endsWith("New message:\n\nDo the thing")).toBe(true);
   });
 
-  it("replays before the plan preamble on app-servers without collaboration mode", async () => {
+  it("puts the plan preamble before the replayed history on app-servers without collaboration mode", async () => {
     loadThreadMessages.mockResolvedValueOnce(priorRecords as any);
     codexManager.supportsCollaborationMode.mockImplementation(() => false);
 
@@ -1729,11 +1729,45 @@ describe("runCodexThreadChat instances and unattended runs", () => {
     );
 
     const text = firstTurnText();
-    expect(text.indexOf("</conversation_history>")).toBeGreaterThan(-1);
-    expect(text.indexOf("</conversation_history>")).toBeLessThan(
+    expect(
       text.indexOf("Native Codex collaboration mode is unavailable"),
+    ).toBeGreaterThan(-1);
+    expect(
+      text.indexOf("Native Codex collaboration mode is unavailable"),
+    ).toBeLessThan(text.indexOf("<conversation_history>"));
+    // The history introduces the user's own words, with nothing between.
+    expect(text.endsWith("New message:\n\nDo the thing")).toBe(true);
+  });
+
+  it("replays the conversation into the fresh Codex thread a mode change starts", async () => {
+    loadThreadMessages.mockResolvedValueOnce(priorRecords as any);
+    codexManager.resumeThread.mockClear();
+
+    await runCodexThreadChat(
+      {
+        message: { ...userMessage("thread-implement"), id: "user-2" },
+        modelId: "gpt-6-astra",
+        threadId: "thread-implement",
+        threadMode: "chat",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      { ...threadOnHome("/tmp/old-home"), mode: "plan" },
+      makeFakeInstance({
+        continuationKey: "codex:home:/tmp/old-home",
+        driver: "codex",
+        id: "codex-work",
+      }),
     );
-    expect(text.endsWith("Do the thing")).toBe(true);
+
+    expect(codexManager.resumeThread).not.toHaveBeenCalled();
+    expect(codexManager.startThread).toHaveBeenCalledTimes(1);
+    const text = firstTurnText();
+    expect(text).toContain(
+      "<conversation_history>\nUSER: Add a cache\n\nASSISTANT: The cache is in place.\n</conversation_history>",
+    );
+    expect(text.endsWith("New message:\n\nDo the thing")).toBe(true);
   });
 
   it("resumes the Codex thread without replaying when the home is unchanged", async () => {
