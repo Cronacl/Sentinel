@@ -183,6 +183,8 @@ mock.module("./workspace", () => ({
 
 const { runCodexThreadChat } = await import("./codex");
 const { makeFakeInstance } = await import("../engines/contract/testing");
+const { getEngineUsageLimitsStore } =
+  await import("../engines/platform/usage/limits-store");
 const { UNATTENDED_DECLINE_MESSAGE } = await import("./unattended");
 
 async function emitCodexEvent(event: {
@@ -1689,5 +1691,71 @@ describe("runCodexThreadChat instances and unattended runs", () => {
       "thread-unattended",
       "awaiting_approval",
     );
+  });
+});
+
+describe("runCodexThreadChat usage limits", () => {
+  beforeEach(() => {
+    codexManager.getDefaultModel.mockImplementation(() => null);
+    codexManager.getKnownModel.mockImplementation(() => null);
+    codexManager.supportsCollaborationMode.mockImplementation(() => true);
+    codexSubscriptionHandler = null;
+  });
+
+  it("hands account/rateLimits/updated to the instance's usage limits", async () => {
+    const instance = makeFakeInstance({ driver: "codex", id: "codex-work" });
+    await runCodexThreadChat(
+      {
+        message: {
+          id: "thread-usage-user",
+          metadata: {},
+          parts: [{ text: "Do the thing", type: "text" }],
+          role: "user",
+        },
+        threadId: "thread-usage",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      null,
+      instance,
+    );
+
+    await emitCodexEvent({
+      method: "account/rateLimits/updated",
+      params: {
+        rateLimits: {
+          limitId: "codex",
+          primary: {
+            resetsAt: 1_790_000_000,
+            usedPercent: 42,
+            windowDurationMins: 300,
+          },
+        },
+      },
+      type: "notification",
+    });
+    // Another allowance (Spark) never replaces the main windows.
+    await emitCodexEvent({
+      method: "account/rateLimits/updated",
+      params: {
+        rateLimits: { limitId: "spark", primary: { usedPercent: 99 } },
+      },
+      type: "notification",
+    });
+
+    expect(
+      getEngineUsageLimitsStore().peek("user-1", "codex-work")?.windows,
+    ).toEqual([
+      {
+        id: "primary",
+        kind: "session",
+        label: "Session",
+        resetsAt: new Date(1_790_000_000_000).toISOString(),
+        usedPercent: 42,
+        windowDurationMins: 300,
+      },
+    ]);
+    expect(getEngineUsageLimitsStore().peek("user-1", "codex")).toBeNull();
   });
 });

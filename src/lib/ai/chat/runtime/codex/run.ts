@@ -3,7 +3,12 @@ import "server-only";
 import { generateId } from "ai";
 
 import { DRIVER_CATALOG } from "@/lib/ai/chat/engines/catalog";
-import type { ResolvedEngineInstance } from "@/lib/ai/chat/engines/contract";
+import {
+  defaultInstanceIdForDriver,
+  type ResolvedEngineInstance,
+} from "@/lib/ai/chat/engines/contract";
+import { reportEngineUsageLimits } from "@/lib/ai/chat/engines/platform/usage/limits-store";
+import { codexRateLimitsNotificationToWindows } from "@/lib/ai/chat/engines/usage/codex";
 import { resolveSupportedPermissionMode } from "@/lib/security";
 import { getCodexAppServerManager } from "@/lib/ai/chat/engines/codex-app-server";
 import type {
@@ -2439,7 +2444,19 @@ export async function runCodexThreadChat(
     const unattended: CodexUnattendedRun | null = isUnattendedRun(request)
       ? { decline: (requestId) => codex.declineServerRequest(requestId) }
       : null;
+    const usageInstanceId = instance?.id ?? defaultInstanceIdForDriver("codex");
     const unsubscribe = codex.subscribe((event) => {
+      if (
+        event.type === "notification" &&
+        event.method === "account/rateLimits/updated"
+      ) {
+        // Sparse by contract: windows it omits keep their last values.
+        reportEngineUsageLimits(
+          request.userId,
+          usageInstanceId,
+          codexRateLimitsNotificationToWindows(event.params),
+        );
+      }
       void handleCodexServerEvent(event, runId, mirror, unattended);
     });
 

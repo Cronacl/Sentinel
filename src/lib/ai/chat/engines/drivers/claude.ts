@@ -11,6 +11,7 @@ import {
   resolveClaudeCodeRuntime,
   type ClaudeEngineStatus,
 } from "@/lib/ai/chat/engines/claude-sdk";
+import { readClaudeUsageLimits } from "@/lib/ai/chat/engines/claude-sdk/usage";
 
 import { DRIVER_CATALOG } from "../catalog";
 import type { EngineInstallSource, EngineProbeResult } from "../contract";
@@ -76,6 +77,9 @@ export const claudeDriver = defineEngineDriver({
   },
   // Above the SDK initialize timeout plus binary verification.
   probeTimeoutMs: 15_000,
+  usageLimits: {
+    read: (instance, { signal }) => readClaudeUsageLimits(instance, { signal }),
+  },
   thread: legacyThreadHandlers(async () => {
     const runtime = await import("@/lib/ai/chat/runtime/claude");
     return {

@@ -3,6 +3,12 @@ import type {
   SDKRateLimitInfo,
 } from "@anthropic-ai/claude-agent-sdk";
 
+import { reportEngineUsageLimits } from "@/lib/ai/chat/engines/platform/usage/limits-store";
+import {
+  claudeRateLimitEventToWindows,
+  getClaudeScopedLimitNames,
+} from "@/lib/ai/chat/engines/usage/claude";
+
 // Latest Claude subscription rate-limit state per window, from the
 // `rate_limit_event` messages Claude Code streams during runs (five_hour,
 // seven_day, seven_day_opus, ...). Kept in memory for the usage-limit UI.
@@ -50,4 +56,22 @@ export function getLatestClaudeRateLimits() {
 
 export function resetClaudeRateLimits() {
   latestClaudeRateLimits.clear();
+}
+
+/**
+ * Hands one `rate_limit_event` to the usage-limit store as a sparse update
+ * for the run's instance; events that name no known window are dropped.
+ */
+export function reportClaudeRateLimitUsage(input: {
+  info: SDKRateLimitInfo;
+  instanceId: string;
+  userId: string;
+}) {
+  const windows = claudeRateLimitEventToWindows(
+    input.info,
+    getClaudeScopedLimitNames(input.instanceId),
+  );
+  if (windows) {
+    reportEngineUsageLimits(input.userId, input.instanceId, windows);
+  }
 }

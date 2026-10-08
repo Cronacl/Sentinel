@@ -11,10 +11,24 @@ import {
   resolveCodexCli,
 } from "@/lib/ai/chat/engines/codex-cli";
 
+import { withTimeout } from "@/lib/runtime/process/with-timeout";
+
 import { DRIVER_CATALOG } from "../catalog";
-import type { EngineInstallSource, EngineProbeResult } from "../contract";
+import type {
+  EngineInstallSource,
+  EngineProbeResult,
+  EngineSnapshot,
+  EngineUsageLimits,
+  ResolvedEngineInstance,
+} from "../contract";
 import { defineEngineDriver, legacyThreadHandlers } from "../platform/driver";
 import { codexAuth } from "./auth/codex";
+import {
+  codexAccountHasNoPlanUsage,
+  codexRateLimitsToLimits,
+  makeCodexNoPlanUsage,
+  makeCodexUsageReadFailure,
+} from "../usage/codex";
 import { buildFallbackCodexModels } from "./fallback-models";
 import { fromLegacyStatus, NO_LEGACY_ACCOUNT } from "./legacy-status";
 
@@ -70,6 +84,47 @@ export function fromCodexStatus(
   );
 }
 
+type CodexRateLimitsReader = Pick<
+  ReturnType<typeof getCodexAppServerManager>,
+  "readRateLimits"
+>;
+
+/**
+ * Plan usage through the instance's app-server (`account/rateLimits/read`).
+ * API-key and Bedrock sign-ins have no plan windows.
+ */
+export async function readCodexUsageLimits(
+  instance: ResolvedEngineInstance,
+  options: {
+    now?: () => number;
+    reader?: CodexRateLimitsReader;
+    signal: AbortSignal;
+    snapshot?: Pick<EngineSnapshot, "auth"> | null;
+  },
+): Promise<EngineUsageLimits> {
+  const checkedAt = () => new Date((options.now ?? Date.now)()).toISOString();
+  if (codexAccountHasNoPlanUsage(options.snapshot?.auth.method ?? null)) {
+    return makeCodexNoPlanUsage(checkedAt());
+  }
+
+  const reader = options.reader ?? getCodexAppServerManager(instance);
+  try {
+    const response = await withTimeout(reader.readRateLimits(), 15_000, {
+      signal: options.signal,
+    });
+    if (!response) {
+      return makeCodexUsageReadFailure(checkedAt());
+    }
+    return codexRateLimitsToLimits({
+      checkedAt: checkedAt(),
+      rateLimits: response.rateLimits,
+      rateLimitsByLimitId: response.rateLimitsByLimitId ?? null,
+    });
+  } catch {
+    return makeCodexUsageReadFailure(checkedAt());
+  }
+}
+
 /** Codex through its app-server, one process per instance. */
 export const codexDriver = defineEngineDriver({
   auth: codexAuth,
@@ -91,6 +146,10 @@ export const codexDriver = defineEngineDriver({
   },
   // Above the app-server's own resolution, version and query timeouts.
   probeTimeoutMs: 15_000,
+  usageLimits: {
+    read: (instance, { signal, snapshot }) =>
+      readCodexUsageLimits(instance, { signal, snapshot }),
+  },
   thread: legacyThreadHandlers(async () => {
     const runtime = await import("@/lib/ai/chat/runtime/codex");
     return {

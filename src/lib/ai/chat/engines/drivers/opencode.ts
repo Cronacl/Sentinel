@@ -13,6 +13,7 @@ import { DRIVER_CATALOG } from "../catalog";
 import type { EngineInstallSource, EngineProbeResult } from "../contract";
 import { defineEngineDriver, legacyThreadHandlers } from "../platform/driver";
 import { openCodeAuth } from "./auth/opencode";
+import { readOpenCodeGoUsageLimits } from "../usage/opencode-go";
 import { buildFallbackOpenCodeModels } from "./fallback-models";
 import {
   carryForwardLegacyProbe,
@@ -86,6 +87,11 @@ export const openCodeDriver = defineEngineDriver({
   fullProbeTtlMs: 10 * 60 * 1_000,
   // Above the 4 s status window plus binary resolution.
   probeTimeoutMs: 15_000,
+  // OpenCode Go plan usage, only when Go is configured in OpenCode.
+  usageLimits: {
+    read: (instance, { signal }) =>
+      readOpenCodeGoUsageLimits({ env: instance.env, signal }),
+  },
   thread: legacyThreadHandlers(async () => {
     const runtime = await import("@/lib/ai/chat/runtime/opencode");
     return {

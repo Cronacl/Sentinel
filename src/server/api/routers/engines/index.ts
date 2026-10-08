@@ -23,6 +23,7 @@ import { engineCodexRouter } from "./codex";
 import { engineInstancesRouter } from "./instances";
 import { engineMaintenanceRouter } from "./maintenance";
 import { listSentinelModels } from "./sentinel-models";
+import { engineUsageRouter } from "./usage";
 
 // api.engines: generic over every driver. Snapshots come from the platform
 // snapshot service (platform/snapshot-service.ts); nothing here names an
@@ -182,4 +183,5 @@ export const enginesRouter = createTRPCRouter({
   maintenance: engineMaintenanceRouter,
   acpRegistry: engineAcpRegistryRouter,
   codex: engineCodexRouter,
+  usage: engineUsageRouter,
 });

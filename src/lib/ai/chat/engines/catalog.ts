@@ -173,6 +173,7 @@ export const DRIVER_CATALOG = {
       reportsContextWindow: true,
       reportsNativeSkills: true,
       reportsSlashCommands: true,
+      reportsUsageLimits: true,
       supportsConversationRollback: true,
       supportsImages: true,
       supportsPlanMode: "native",
@@ -202,6 +203,7 @@ export const DRIVER_CATALOG = {
       permissionModes: DEFAULT_DRIVER_PERMISSION_MODES,
       planModeChangeRequiresNewSession: true,
       reportsContextWindow: true,
+      reportsUsageLimits: true,
       supportsImages: true,
       supportsPlanMode: "native",
       supportsTextGeneration: true,
@@ -269,6 +271,7 @@ export const DRIVER_CATALOG = {
       supportsMcpInjection: true,
       // Cursor's own plan mode (session/set_mode), else the plan preamble.
       supportsPlanMode: "acp-mode",
+      reportsUsageLimits: true,
       supportsUserInput: true,
     },
     config: binaryConfigSchema,
@@ -296,6 +299,8 @@ export const DRIVER_CATALOG = {
       ...EXTERNAL_CAPABILITIES,
       // Typed literally so the runtime's mapping is checked when this widens.
       permissionModes: DEFAULT_DRIVER_PERMISSION_MODES,
+      // OpenCode Go plan usage, when Go is configured.
+      reportsUsageLimits: true,
       supportsPlanMode: "agent-select",
       // A new OpenCode session is created every turn; history is replayed.
       supportsResume: "replay",

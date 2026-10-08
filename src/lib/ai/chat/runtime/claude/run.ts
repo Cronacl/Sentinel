@@ -13,7 +13,10 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 
 import { DRIVER_CATALOG } from "@/lib/ai/chat/engines/catalog";
-import type { ResolvedEngineInstance } from "@/lib/ai/chat/engines/contract";
+import {
+  defaultInstanceIdForDriver,
+  type ResolvedEngineInstance,
+} from "@/lib/ai/chat/engines/contract";
 import { resolveSupportedPermissionMode } from "@/lib/security";
 import {
   buildClaudeSdkBaseOptions,
@@ -71,6 +74,7 @@ import {
 } from "./permissions";
 import {
   recordClaudeRateLimitEvent,
+  reportClaudeRateLimitUsage,
   type ClaudeRateLimitRecord,
 } from "./rate-limits";
 import {
@@ -245,6 +249,8 @@ export type ActiveClaudeRunControl = {
   inputQueue: ClaudeInputQueue<SDKUserMessage>;
   // Latest rate_limit_event of this run, for usage-limit surfaces.
   latestRateLimit: ClaudeRateLimitRecord | null;
+  /** The engine instance whose account the run's rate limits belong to. */
+  usageInstanceId: string;
   pendingResponseWatchers: Set<string>;
   pendingApprovals: Map<
     string,
@@ -1493,6 +1499,11 @@ async function consumeClaudeQuery(control: ActiveClaudeRunControl) {
           break;
         case "rate_limit_event":
           control.latestRateLimit = recordClaudeRateLimitEvent(message);
+          reportClaudeRateLimitUsage({
+            info: message.rate_limit_info,
+            instanceId: control.usageInstanceId,
+            userId: control.userId,
+          });
           log.debug("claude_rate_limit_event", {
             rateLimitType: message.rate_limit_info.rateLimitType,
             resetsAt: message.rate_limit_info.resetsAt,
@@ -1910,6 +1921,7 @@ export async function runClaudeThreadChat(
       sessionId,
       state: mirror,
       threadId: request.threadId,
+      usageInstanceId: instance?.id ?? defaultInstanceIdForDriver("claude"),
       userId: request.userId,
       workspaceId: request.workspaceId,
     };

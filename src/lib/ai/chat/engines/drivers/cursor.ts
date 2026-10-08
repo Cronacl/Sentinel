@@ -5,6 +5,11 @@ import { disposeAcpInstanceProcesses } from "../acp/launch";
 import { probeAcpAgent } from "../acp/probe";
 import { DRIVER_CATALOG } from "../catalog";
 import { cursorAuth } from "./auth/cursor";
+import { readCursorUsageLimits } from "../usage/cursor";
+import {
+  forgetCursorKeychainToken,
+  getCursorKeychainToken,
+} from "../usage/cursor-keychain";
 import {
   defineEngineDriver,
   LEGACY_EXTERNAL_THREAD_TRIGGERS,
@@ -48,5 +53,19 @@ export const cursorDriver = defineEngineDriver({
       return await runtime.stopCursorThreadRun(request, thread, instance);
     },
     triggers: LEGACY_EXTERNAL_THREAD_TRIGGERS,
+  },
+  usageLimits: {
+    async read(instance, { signal }) {
+      const result = await readCursorUsageLimits({
+        env: instance.env,
+        keychainToken: getCursorKeychainToken(instance.id),
+        signal,
+      });
+      if (result.rejected && result.source === "keychain") {
+        // Expired or signed out: the user reads the Keychain again.
+        forgetCursorKeychainToken(instance.id);
+      }
+      return result.limits;
+    },
   },
 });

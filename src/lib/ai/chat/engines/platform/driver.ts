@@ -13,6 +13,7 @@ import type {
   EngineProbeResult,
   EngineSkill,
   EngineSlashCommand,
+  EngineSnapshot,
   EngineUsageLimits,
   ResolvedEngineInstance,
 } from "../contract";
@@ -181,10 +182,20 @@ export interface EngineDriver<
     instance: ResolvedEngineInstance<C>,
     options: ProbeOptions & { cwd: string },
   ): Promise<{ skills: EngineSkill[]; slashCommands: EngineSlashCommand[] }>;
+  /**
+   * Plan usage of the instance's account (platform/usage/limits-store.ts
+   * calls it at most once per `ttlMs`, default 5 minutes, and only while
+   * the instance is usable). MUST honour `signal`; a failed read resolves
+   * `unavailable: probeFailed` rather than throwing.
+   */
   usageLimits?: {
     read(
       instance: ResolvedEngineInstance<C>,
-      options: { signal: AbortSignal },
+      options: {
+        signal: AbortSignal;
+        /** The instance's current snapshot (auth method, plan), if known. */
+        snapshot?: EngineSnapshot | null;
+      },
     ): Promise<EngineUsageLimits>;
     ttlMs?: number;
   };

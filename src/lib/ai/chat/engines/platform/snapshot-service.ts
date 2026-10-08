@@ -13,8 +13,8 @@ import { applyPrivateFsMode } from "@/lib/runtime/local-state";
 
 import { getDriverMeta } from "../catalog";
 import {
+  applyEngineUsageLimitsUpdate,
   computeEngineSnapshotUsable,
-  mergeEngineUsageWindows,
   parseEngineSnapshot,
   type EngineCapabilities,
   type EngineInstanceSummary,
@@ -22,6 +22,7 @@ import {
   type EngineProbeReason,
   type EngineProbeResult,
   type EngineSnapshot,
+  type EngineUsageLimits,
   type EngineUsageWindow,
   type ResolvedEngineInstance,
 } from "../contract";
@@ -46,6 +47,11 @@ import {
   createManifestEnricher,
 } from "./manifest/enrichers";
 import { getInstanceRuntimeKey } from "./runtime/resolve-binary";
+import { createUsageLimitsEnricher, withUsageLimits } from "./usage/enricher";
+import {
+  getEngineUsageLimitsStore,
+  type EngineUsageLimitsStore,
+} from "./usage/limits-store";
 
 // One place that turns driver probes into the snapshots the UI, composer,
 // automations and skills read (design/driver-contract.md §2, §6):
@@ -98,6 +104,8 @@ export type EngineSnapshotEnrichmentInput = {
   /** The probe the snapshot was built from; null when it timed out. */
   probe: EngineProbeResult | null;
   snapshot: EngineSnapshot;
+  /** Whose instance it is (instances, accounts and usage are per user). */
+  userId: string;
 };
 
 /**
@@ -183,6 +191,12 @@ export type EngineSnapshotServiceDeps = {
     context: { instanceId: string; stage: string },
   ) => void;
   registry: Pick<EngineInstanceRegistry, "get" | "list" | "listSummaries">;
+  /**
+   * Where usage limits live (platform/usage/limits-store.ts). When set, it
+   * provides the "usage" enricher, live reports go through it, and its
+   * changes are republished on the snapshots.
+   */
+  usageLimits?: EngineUsageLimitsStore;
 };
 
 export type SnapshotRequestOptions = {
@@ -590,7 +604,16 @@ export function createEngineSnapshotService(
   const clock = deps.clock ?? systemClock;
   const fs = deps.fs ?? nodeFs;
   const drivers = deps.drivers ?? getEngineDriver;
-  const enrichers = deps.enrichers ?? DEFAULT_ENGINE_SNAPSHOT_ENRICHERS;
+  const usageStore = deps.usageLimits ?? null;
+  const enrichers = (deps.enrichers ?? DEFAULT_ENGINE_SNAPSHOT_ENRICHERS).map(
+    (enricher) =>
+      usageStore && enricher.id === "usage"
+        ? createUsageLimitsEnricher(usageStore, {
+            onError: (error, context) =>
+              reportError(error, { ...context, stage: "usage" }),
+          })
+        : enricher,
+  );
   const emit = deps.emit ?? ((event) => void emitEngineEvent(event));
   const disposeInstance = deps.disposeInstance ?? disposeInstanceResources;
   const retireInstance = deps.retireInstance ?? retireInstanceResources;
@@ -780,6 +803,17 @@ export function createEngineSnapshotService(
 
   function store(entry: Entry, cached: CachedProbe) {
     const previous = entry.cached?.snapshot ?? null;
+    if (usageStore) {
+      // A usage read that landed while this probe ran is newer than what
+      // the probe's enrichment saw.
+      cached = {
+        ...cached,
+        snapshot: withUsageLimits(
+          cached.snapshot,
+          usageStore.peek(entry.userId, entry.instanceId),
+        ),
+      };
+    }
     entry.cached = cached;
     if (
       !previous ||
@@ -892,7 +926,13 @@ export function createEngineSnapshotService(
       });
     }
 
-    snapshot = await enrich({ driver, instance, probe, snapshot });
+    snapshot = await enrich({
+      driver,
+      instance,
+      probe,
+      snapshot,
+      userId: entry.userId,
+    });
 
     if (entry.generation !== generation) {
       // Invalidated while probing (the instance changed): the result
@@ -1134,6 +1174,8 @@ export function createEngineSnapshotService(
     },
 
     handleInstanceChange(change) {
+      // Another home or account, or gone: its usage is read again.
+      usageStore?.forget(change.instanceId);
       for (const entry of [...entries.values()]) {
         if (entry.instanceId !== change.instanceId) {
           continue;
@@ -1283,28 +1325,44 @@ export function createEngineSnapshotService(
     },
 
     reportUsageLimits(userId, instanceId, windows) {
-      const entry = [...entries.values()].find(
-        (candidate) =>
-          candidate.userId === userId && candidate.instanceId === instanceId,
-      );
-      if (!entry?.cached || windows.length === 0) {
+      if (usageStore) {
+        // The store merges and notifies; publishUsageLimits follows.
+        usageStore.report(userId, instanceId, windows);
         return;
       }
 
-      const current = entry.cached.snapshot.usageLimits;
-      store(entry, {
-        ...entry.cached,
-        snapshot: {
-          ...entry.cached.snapshot,
-          usageLimits: {
-            ...(current ?? {}),
-            checkedAt: toIso(clock.now()),
-            windows: mergeEngineUsageWindows(current?.windows ?? [], windows),
-          },
-        },
-      });
+      const entry = entries.get(entryKey(userId, instanceId));
+      if (!entry?.cached || windows.length === 0) {
+        return;
+      }
+      publishUsageLimits(
+        entry,
+        applyEngineUsageLimitsUpdate({
+          checkedAt: toIso(clock.now()),
+          previous: entry.cached.snapshot.usageLimits,
+          windows,
+        }),
+      );
     },
   };
+
+  /** Replaces the usage on an instance's cached snapshot (and emits). */
+  function publishUsageLimits(entry: Entry, limits: EngineUsageLimits | null) {
+    if (!entry.cached || entry.cached.snapshot.usageLimits === limits) {
+      return;
+    }
+    store(entry, {
+      ...entry.cached,
+      snapshot: { ...entry.cached.snapshot, usageLimits: limits },
+    });
+  }
+
+  usageStore?.subscribe((change) => {
+    const entry = entries.get(entryKey(change.userId, change.instanceId));
+    if (entry) {
+      publishUsageLimits(entry, change.limits);
+    }
+  });
 
   return service;
 }
@@ -1321,6 +1379,7 @@ export function getEngineSnapshotService(): EngineSnapshotService {
   if (!globalForSnapshots.__sentinelEngineSnapshotService) {
     const service = createEngineSnapshotService({
       registry: getEngineInstanceRegistry(),
+      usageLimits: getEngineUsageLimitsStore(),
     });
     subscribeToEngineInstanceChanges((change) =>
       service.handleInstanceChange(change),

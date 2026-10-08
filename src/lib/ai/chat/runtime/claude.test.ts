@@ -119,6 +119,8 @@ const { ThreadChatConflictError } = await import("../errors");
 const { makeFakeInstance } = await import("../engines/contract/testing");
 const { UNATTENDED_DECLINE_MESSAGE } = await import("./unattended");
 const { runClaudeThreadChat } = await import("./claude");
+const { getEngineUsageLimitsStore } =
+  await import("../engines/platform/usage/limits-store");
 const { getLatestClaudeRateLimits, resetClaudeRateLimits } =
   await import("./claude/rate-limits");
 
@@ -1115,6 +1117,21 @@ describe("runClaudeThreadChat approvals", () => {
         sessionId: "session-1",
       }),
     ]);
+    // The run's instance (the default one here) gets the live window.
+    expect(getEngineUsageLimitsStore().peek("user-1", "claude")).toEqual(
+      expect.objectContaining({
+        windows: [
+          {
+            id: "five_hour",
+            kind: "session",
+            label: "Session",
+            resetsAt: new Date(1_790_000_000_000).toISOString(),
+            usedPercent: 82,
+            windowDurationMins: 300,
+          },
+        ],
+      }),
+    );
     expect(getLatestMirroredAssistant()?.metadata?.status).toBe("completed");
     expect(setThreadStatus).toHaveBeenCalledWith("thread-rate-limit", "idle");
   });

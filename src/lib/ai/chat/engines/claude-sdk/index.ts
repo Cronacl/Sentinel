@@ -590,7 +590,7 @@ export function buildClaudeSdkBaseOptions(options?: Partial<Options>): Options {
  * A prompt stream that never yields: the status probe only needs the CLI's
  * initialize response, and must never send a turn to the API.
  */
-function createIdleClaudePrompt(
+export function createIdleClaudePrompt(
   signal: AbortSignal,
 ): AsyncIterable<SDKUserMessage> {
   return {
@@ -711,6 +711,35 @@ async function readClaudeStatus(options: {
   });
 }
 
+/**
+ * Options for a query that only talks to the CLI (status probe, usage
+ * read) and never sends a turn: no MCP servers, IDE or hooks.
+ */
+export function buildClaudeIdleQueryOptions(
+  runtime: Pick<ResolvedClaudeCodeRuntime, "env" | "executablePath">,
+) {
+  return buildClaudeSdkBaseOptions({
+    cwd: process.cwd(),
+    // The probe runs on every status refresh: keep it from connecting
+    // MCP servers or IDEs, or running the user's hooks (t3code
+    // ClaudeProvider.ts buildClaudeCapabilitiesProbeQueryOptions, MIT).
+    env: {
+      ...runtime.env,
+      CLAUDE_CODE_AUTO_CONNECT_IDE: "0",
+      CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL: "1",
+      ENABLE_CLAUDEAI_MCP_SERVERS: "false",
+    },
+    includePartialMessages: false,
+    maxTurns: 1,
+    mcpServers: {},
+    pathToClaudeCodeExecutable: runtime.executablePath ?? undefined,
+    persistSession: false,
+    settings: { disableAllHooks: true },
+    stderr: () => {},
+    strictMcpConfig: true,
+  });
+}
+
 async function probeClaudeStatus(input: {
   fallbackSnapshot: ClaudeStatusSnapshot | null;
   runtime: ResolvedClaudeCodeRuntime;
@@ -723,26 +752,7 @@ async function probeClaudeStatus(input: {
   try {
     claudeQuery = query({
       prompt: createIdleClaudePrompt(promptAbortController.signal),
-      options: buildClaudeSdkBaseOptions({
-        cwd: process.cwd(),
-        // The probe runs on every status refresh: keep it from connecting
-        // MCP servers or IDEs, or running the user's hooks (t3code
-        // ClaudeProvider.ts buildClaudeCapabilitiesProbeQueryOptions, MIT).
-        env: {
-          ...input.runtime.env,
-          CLAUDE_CODE_AUTO_CONNECT_IDE: "0",
-          CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL: "1",
-          ENABLE_CLAUDEAI_MCP_SERVERS: "false",
-        },
-        includePartialMessages: false,
-        maxTurns: 1,
-        mcpServers: {},
-        pathToClaudeCodeExecutable: input.runtime.executablePath ?? undefined,
-        persistSession: false,
-        settings: { disableAllHooks: true },
-        stderr: () => {},
-        strictMcpConfig: true,
-      }),
+      options: buildClaudeIdleQueryOptions(input.runtime),
     });
 
     // A failure counts as no answer, like a timeout; `finally` closes the
