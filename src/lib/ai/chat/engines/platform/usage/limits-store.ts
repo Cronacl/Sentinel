@@ -16,7 +16,7 @@ import type { EngineDriver } from "../driver";
 
 // The one place usage limits live per (user, instance), so a full read and
 // a turn's live updates land on the same windows (driver-contract.md §2.5,
-// §6). Full reads come from the driver's `usageLimits.read`, at most once
+// §6). Full reads come from the driver's `usageLimits.read`, about once
 // per TTL (5 minutes by default, one minute after a failed read) and one at
 // a time per instance; runtimes push sparse updates in between. Snapshots
 // carry a copy: the usage enricher overlays it on every probe, and the
@@ -27,6 +27,12 @@ export const USAGE_LIMITS_RETRY_AFTER_FAILURE_MS = 60_000;
 /** An account that cannot report (API key) is asked again rarely. */
 export const USAGE_LIMITS_UNSUPPORTED_TTL_MS = 30 * 60_000;
 export const DEFAULT_USAGE_READ_TIMEOUT_MS = 20_000;
+/**
+ * A read is due a little before its TTL: background reads start when the
+ * 5-minute refresh tick's probe finishes, so two ticks can land a few
+ * seconds short of the TTL apart, which would skip every other tick.
+ */
+export const USAGE_LIMITS_DUE_SLACK_RATIO = 0.1;
 
 export type EngineUsageLimitsChange = {
   instanceId: string;
@@ -46,7 +52,10 @@ export interface EngineUsageLimitsStore {
   clear(userId: string, instanceId: string): void;
   /** Forget an instance's limits (removed, or reconfigured). */
   forget(instanceId: string): void;
-  /** Whether a full read is due: never read, or older than its TTL. */
+  /**
+   * Whether a full read is due: never read, or its TTL (less a small
+   * slack, USAGE_LIMITS_DUE_SLACK_RATIO) passed since the last one began.
+   */
   isDue(
     userId: string,
     instanceId: string,
@@ -88,12 +97,15 @@ export type EngineUsageLimitsStoreDeps = {
 };
 
 type Entry = {
+  /** When the last full read started (its answer is at least this fresh). */
   fetchedAt: number | null;
   /** Bumped by forget(): a read that started before must not store. */
   generation: number;
   inFlight: Promise<EngineUsageLimits | null> | null;
   lastRead: "failed" | "ok" | "unsupported";
   limits: EngineUsageLimits | null;
+  /** A runtime reported windows since the last full read. */
+  liveSinceRead: boolean;
 };
 
 function readOutcome(limits: EngineUsageLimits): Entry["lastRead"] {
@@ -133,6 +145,7 @@ export function createEngineUsageLimitsStore(
         inFlight: null,
         lastRead: "ok",
         limits: null,
+        liveSinceRead: false,
       };
       entries.set(key, entry);
     }
@@ -170,6 +183,7 @@ export function createEngineUsageLimitsStore(
   ) {
     const reader = target.driver.usageLimits!;
     const startedGeneration = entry.generation;
+    const startedAt = clock.now();
     const checkedAt = () => new Date(clock.now()).toISOString();
     let read: EngineUsageLimits | null;
     try {
@@ -200,14 +214,19 @@ export function createEngineUsageLimitsStore(
       // Forgotten while reading: the answer describes the old instance.
       return entry.limits;
     }
-    entry.fetchedAt = clock.now();
+    entry.fetchedAt = startedAt;
     entry.lastRead = readOutcome(read);
     publish(
       userId,
       target.instance.id,
       entry,
-      resolveEngineUsageLimitsAfterRead({ published: entry.limits, read }),
+      resolveEngineUsageLimitsAfterRead({
+        liveSinceLastRead: entry.liveSinceRead,
+        published: entry.limits,
+        read,
+      }),
     );
+    entry.liveSinceRead = false;
     return entry.limits;
   }
 
@@ -246,7 +265,10 @@ export function createEngineUsageLimitsStore(
           : entry.lastRead === "unsupported"
             ? USAGE_LIMITS_UNSUPPORTED_TTL_MS
             : (driver.usageLimits.ttlMs ?? DEFAULT_USAGE_LIMITS_TTL_MS);
-      return clock.now() - entry.fetchedAt >= ttl;
+      return (
+        clock.now() - entry.fetchedAt >=
+        ttl * (1 - USAGE_LIMITS_DUE_SLACK_RATIO)
+      );
     },
 
     peek(userId, instanceId) {
@@ -280,6 +302,7 @@ export function createEngineUsageLimitsStore(
         return;
       }
       const entry = getEntry(userId, instanceId);
+      entry.liveSinceRead = true;
       const next = applyEngineUsageLimitsUpdate({
         checkedAt: new Date(clock.now()).toISOString(),
         previous: entry.limits,
@@ -299,11 +322,13 @@ export function createEngineUsageLimitsStore(
         instanceId,
         entry,
         resolveEngineUsageLimitsAfterRead({
+          liveSinceLastRead: entry.liveSinceRead,
           published: entry.limits,
           read: limits,
         }),
         { silent: true },
       );
+      entry.liveSinceRead = false;
     },
 
     subscribe(listener) {

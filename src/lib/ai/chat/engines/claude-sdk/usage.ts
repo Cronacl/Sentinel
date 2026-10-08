@@ -25,7 +25,10 @@ import {
 // Claude plan usage through the Agent SDK's usage control request, on an
 // idle query like the status probe (no turn is ever sent). The request is
 // experimental in the SDK, so it is looked up at run time: an SDK without
-// it reports usage as unsupported instead of failing.
+// it reports usage as unsupported instead of failing, once (no Claude Code
+// process is started for it again). Live `rate_limit_event`s still fill
+// the windows during runs: the usage store lets them replace an
+// unsupported read (contract/usage-limits.ts).
 
 const INITIALIZE_TIMEOUT_MS = 8_000;
 const USAGE_TIMEOUT_MS = 10_000;
@@ -39,6 +42,21 @@ type UsageCapableQuery = {
     skipBehaviors?: boolean;
   }) => Promise<SDKControlGetUsageResponse>;
 };
+
+type ClaudeQueryFactory = NonNullable<ClaudeUsageReadDeps["query"]>;
+
+// Query factories whose queries lacked the usage request (the bundled SDK
+// is fixed for the process, so asking again cannot change the answer).
+const queriesWithoutUsage = new WeakSet<ClaudeQueryFactory>();
+
+function makeNoUsageRequest(checkedAt: string) {
+  return makeUnavailableEngineUsageLimits({
+    checkedAt,
+    message:
+      "This Claude Code SDK cannot read plan usage on demand; it shows during runs.",
+    reason: "unsupported",
+  });
+}
 
 export type ClaudeUsageReadDeps = {
   now?: () => number;
@@ -62,6 +80,11 @@ export async function readClaudeUsageLimits(
       reason: "probeFailed",
     });
 
+  const createQuery = deps.query ?? (sdkQuery as never as ClaudeQueryFactory);
+  if (queriesWithoutUsage.has(createQuery)) {
+    return makeNoUsageRequest(checkedAt());
+  }
+
   const runtime = await (deps.resolveRuntime ?? resolveClaudeCodeRuntime)({
     instance,
   });
@@ -72,17 +95,14 @@ export async function readClaudeUsageLimits(
   const promptAbortController = new AbortController();
   let claudeQuery: UsageCapableQuery | null = null;
   try {
-    claudeQuery = (deps.query ?? (sdkQuery as never))({
+    claudeQuery = createQuery({
       options: buildClaudeIdleQueryOptions(runtime),
       prompt: createIdleClaudePrompt(promptAbortController.signal),
     });
     const readUsage = claudeQuery[USAGE_METHOD];
     if (typeof readUsage !== "function") {
-      return makeUnavailableEngineUsageLimits({
-        checkedAt: checkedAt(),
-        message: "This Claude Code SDK does not report plan usage.",
-        reason: "unsupported",
-      });
+      queriesWithoutUsage.add(createQuery);
+      return makeNoUsageRequest(checkedAt());
     }
 
     const initialized = await withTimeout(

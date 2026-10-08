@@ -67,15 +67,24 @@ describe("readClaudeUsageLimits", () => {
     );
   });
 
-  it("reports an SDK without the usage request as unsupported", async () => {
+  it("reports an SDK without the usage request once, without starting Claude again", async () => {
+    // Unsupported here only means "no read on demand": the usage store
+    // still lets the runs' rate_limit_events fill the windows.
     const { close, query } = fakeQuery();
-    const limits = await readClaudeUsageLimits(
-      instance,
-      { signal: new AbortController().signal },
-      { query, resolveRuntime: resolveRuntime as never },
-    );
+    const read = () =>
+      readClaudeUsageLimits(
+        instance,
+        { signal: new AbortController().signal },
+        { query, resolveRuntime: resolveRuntime as never },
+      );
+
+    const limits = await read();
     expect(limits.unavailable?.reason).toBe("unsupported");
-    expect(close).toHaveBeenCalled();
+    expect(limits.unavailable?.message).toContain("shows during runs");
+    expect(close).toHaveBeenCalledTimes(1);
+
+    expect((await read()).unavailable?.reason).toBe("unsupported");
+    expect(query).toHaveBeenCalledTimes(1);
   });
 
   it("reports failures without throwing", async () => {

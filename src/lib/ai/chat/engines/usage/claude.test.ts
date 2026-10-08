@@ -66,8 +66,34 @@ describe("Claude usage mapping", () => {
       claudeUsageResponseToLimits({
         checkedAt: AT,
         response: { rate_limits: null, rate_limits_available: false },
+      }).limits.unavailable,
+    ).toEqual({
+      message: "Plan usage is only reported for Claude subscription logins.",
+      reason: "unsupported",
+    });
+  });
+
+  it("says when a subscription login cannot be read on demand", () => {
+    // A token without the profile scope: runs still stream rate limits.
+    expect(
+      claudeUsageResponseToLimits({
+        checkedAt: AT,
+        response: {
+          rate_limits: null,
+          rate_limits_available: false,
+          subscription_type: "max",
+        },
+      }).limits.unavailable?.message,
+    ).toContain("shows during runs");
+  });
+
+  it("treats plan limits that did not come back as a failed read", () => {
+    expect(
+      claudeUsageResponseToLimits({
+        checkedAt: AT,
+        response: { rate_limits: null, rate_limits_available: true },
       }).limits.unavailable?.reason,
-    ).toBe("unsupported");
+    ).toBe("probeFailed");
   });
 
   it("maps streamed events onto the same window ids", () => {

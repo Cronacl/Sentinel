@@ -105,7 +105,9 @@ describe("applyEngineUsageLimitsUpdate", () => {
     ).toBe(previous);
   });
 
-  it("keeps an unsupported account unsupported and starts from nothing", () => {
+  it("lets live windows replace an unsupported read, and starts from nothing", () => {
+    // A read can miss plan limits (an SDK without the usage request, a
+    // token the usage endpoint refuses) that the runtime still streams.
     const unsupported = makeUnavailableEngineUsageLimits({
       checkedAt: AT,
       reason: "unsupported",
@@ -115,6 +117,13 @@ describe("applyEngineUsageLimitsUpdate", () => {
         checkedAt: LATER,
         previous: unsupported,
         windows: [window()],
+      }),
+    ).toEqual({ checkedAt: LATER, windows: [window()] });
+    expect(
+      applyEngineUsageLimitsUpdate({
+        checkedAt: LATER,
+        previous: unsupported,
+        windows: [],
       }),
     ).toBe(unsupported);
     expect(
@@ -165,6 +174,13 @@ describe("resolveEngineUsageLimitsAfterRead", () => {
     expect(
       resolveEngineUsageLimitsAfterRead({ published: good, read: unsupported }),
     ).toBe(unsupported);
+    expect(
+      resolveEngineUsageLimitsAfterRead({
+        liveSinceLastRead: false,
+        published: good,
+        read: unsupported,
+      }),
+    ).toBe(unsupported);
     const next = makeEngineUsageLimits({
       checkedAt: LATER,
       windows: [window({ usedPercent: 50 })],
@@ -172,6 +188,31 @@ describe("resolveEngineUsageLimitsAfterRead", () => {
     expect(
       resolveEngineUsageLimitsAfterRead({ published: good, read: next }),
     ).toBe(next);
+  });
+});
+
+describe("resolveEngineUsageLimitsAfterRead after live reports", () => {
+  it("keeps windows a runtime reported since the last read over an unsupported read", () => {
+    const live = makeEngineUsageLimits({ checkedAt: AT, windows: [window()] });
+    const unsupported = makeUnavailableEngineUsageLimits({
+      checkedAt: LATER,
+      reason: "unsupported",
+    });
+    expect(
+      resolveEngineUsageLimitsAfterRead({
+        liveSinceLastRead: true,
+        published: live,
+        read: unsupported,
+      }),
+    ).toBe(live);
+    // Nothing to keep: the read stands.
+    expect(
+      resolveEngineUsageLimitsAfterRead({
+        liveSinceLastRead: true,
+        published: null,
+        read: unsupported,
+      }),
+    ).toBe(unsupported);
   });
 });
 

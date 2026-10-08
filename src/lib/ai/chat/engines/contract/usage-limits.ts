@@ -57,8 +57,12 @@ export type EngineUsageUnavailableAction =
 
 // Merge rules below follow t3code's providerUsageLimits.ts (MIT): windows
 // keep stable ids so a turn-driven update lands on the row a full read
-// drew, `unsupported` is authoritative, and a failed read never wipes bars
-// a previous read or a turn established.
+// drew, and a failed read never wipes bars a previous read or a turn
+// established. Unlike t3code, an `unsupported` read does not silence a
+// runtime's live windows: a read can fail to see plan limits the account
+// has (an SDK without the usage request, a subscription token the usage
+// endpoint refuses) while its runs still stream rate-limit events, and an
+// account without plan limits never streams windows at all.
 
 const WINDOW_KIND_ORDER: Record<EngineUsageWindowKind, number> = {
   monthly: 2,
@@ -156,8 +160,8 @@ export function mergeEngineUsageWindows(
 /**
  * Folds a runtime's sparse update into the published limits. Returns
  * `previous` itself when nothing changed (Codex repeats unchanged numbers
- * with every token tick), and leaves an `unsupported` account unsupported:
- * an API-key sign-in does not start reporting windows mid-turn.
+ * with every token tick). Windows a runtime reports are first-hand, so
+ * they replace an unavailable read of either kind, `unsupported` included.
  */
 export function applyEngineUsageLimitsUpdate(input: {
   checkedAt: string;
@@ -165,7 +169,7 @@ export function applyEngineUsageLimitsUpdate(input: {
   windows: readonly EngineUsageWindow[];
 }): EngineUsageLimits | null {
   const { previous, windows } = input;
-  if (windows.length === 0 || previous?.unavailable?.reason === "unsupported") {
+  if (windows.length === 0) {
     return previous;
   }
 
@@ -195,16 +199,23 @@ export function applyEngineUsageLimitsUpdate(input: {
 
 /**
  * What to publish after a full read. A read that failed this time keeps
- * the last good windows; `unsupported` (and every successful read) is
- * authoritative and replaces them.
+ * the last good windows. `unsupported` replaces them, unless a runtime
+ * reported windows since the previous read (`liveSinceLastRead`): those
+ * prove the account has plan limits the read could not see. A successful
+ * read always replaces what was there.
  */
 export function resolveEngineUsageLimitsAfterRead(input: {
+  liveSinceLastRead?: boolean;
   published: EngineUsageLimits | null;
   read: EngineUsageLimits;
 }): EngineUsageLimits {
   const { published, read } = input;
+  const keepsPublished =
+    read.unavailable?.reason === "probeFailed" ||
+    (read.unavailable?.reason === "unsupported" &&
+      input.liveSinceLastRead === true);
   if (
-    read.unavailable?.reason === "probeFailed" &&
+    keepsPublished &&
     published &&
     !published.unavailable &&
     published.windows.length > 0

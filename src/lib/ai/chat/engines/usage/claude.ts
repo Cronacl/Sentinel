@@ -181,24 +181,42 @@ export function claudeRateLimitEventToWindows(
 
 /**
  * A usage read as limits, with the scoped bucket names it carried for the
- * event mapper. API-key, Bedrock and Vertex sessions have no plan limits.
+ * event mapper. API-key, Bedrock and Vertex sessions have no plan limits;
+ * neither can a subscription token without the profile scope be read on
+ * demand, though its runs still stream rate-limit events (the store lets
+ * those replace an unsupported read). Plan limits that apply but did not
+ * come back (the usage endpoint failed) are a failed read, not unsupported.
  */
 export function claudeUsageResponseToLimits(input: {
   checkedAt: string;
   response: Pick<
     SDKControlGetUsageResponse,
     "rate_limits" | "rate_limits_available"
-  >;
+  > &
+    Partial<Pick<SDKControlGetUsageResponse, "subscription_type">>;
 }): { limits: EngineUsageLimits; names: ClaudeScopedLimitNames } {
   const { checkedAt, response } = input;
-  if (!response.rate_limits_available || !response.rate_limits) {
+  const noNames = { overageIncluded: null };
+  if (!response.rate_limits_available) {
     return {
       limits: makeUnavailableEngineUsageLimits({
         checkedAt,
-        message: "Plan usage is only reported for Claude subscription logins.",
+        message: response.subscription_type
+          ? "Claude Code cannot read plan usage for this login on demand; it shows during runs."
+          : "Plan usage is only reported for Claude subscription logins.",
         reason: "unsupported",
       }),
-      names: { overageIncluded: null },
+      names: noNames,
+    };
+  }
+  if (!response.rate_limits) {
+    return {
+      limits: makeUnavailableEngineUsageLimits({
+        checkedAt,
+        message: "Claude Code did not report usage.",
+        reason: "probeFailed",
+      }),
+      names: noNames,
     };
   }
 

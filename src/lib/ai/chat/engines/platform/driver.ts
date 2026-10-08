@@ -184,7 +184,7 @@ export interface EngineDriver<
   ): Promise<{ skills: EngineSkill[]; slashCommands: EngineSlashCommand[] }>;
   /**
    * Plan usage of the instance's account (platform/usage/limits-store.ts
-   * calls it at most once per `ttlMs`, default 5 minutes, and only while
+   * calls it about once per `ttlMs`, default 5 minutes, and only while
    * the instance is usable). MUST honour `signal`; a failed read resolves
    * `unavailable: probeFailed` rather than throwing.
    */
