@@ -31,7 +31,10 @@ export class EngineUsageError extends Error {
 export type EngineUsageServiceDeps = {
   drivers: (kind: string) => Pick<EngineDriver, "kind" | "usageLimits"> | null;
   /** Reads the Cursor CLI's Keychain login (macOS prompt): explicit only. */
-  readCursorKeychainToken: (instanceId: string) => Promise<unknown>;
+  readCursorKeychainToken: (
+    userId: string,
+    instanceId: string,
+  ) => Promise<unknown>;
   registry: Pick<EngineInstanceRegistry, "get">;
   snapshots: Pick<EngineSnapshotService, "getSnapshot">;
   store?: EngineUsageLimitsStore;
@@ -130,7 +133,7 @@ export function createEngineUsageService(deps: EngineUsageServiceDeps) {
           "Only Cursor keeps a login Sentinel can read from the Keychain.",
         );
       }
-      await deps.readCursorKeychainToken(instanceId);
+      await deps.readCursorKeychainToken(userId, instanceId);
       return await store.read(userId, target, { force: true });
     },
   };

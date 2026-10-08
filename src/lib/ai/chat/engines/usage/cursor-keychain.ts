@@ -7,9 +7,10 @@ import { execFile as nodeExecFile } from "node:child_process";
 // the system `security` tool, and ONLY when the user asks for it from
 // Settings → Engines: macOS then asks them to allow the access. Nothing
 // reads the Keychain on its own (probes, refresh loops, usage reads).
-// The token stays in this process's memory, per instance, until Cursor
-// refuses it or Sentinel restarts; it is never persisted or sent anywhere
-// but Cursor's own endpoint.
+// The token stays in this process's memory, per user and instance, until
+// Cursor refuses it, the account signs out, the instance changes or
+// Sentinel restarts; it is never persisted or sent anywhere but Cursor's
+// own endpoint.
 
 const KEYCHAIN_SERVICE = "cursor-access-token";
 const KEYCHAIN_ACCOUNT = "cursor-user";
@@ -43,9 +44,14 @@ declare global {
   var __sentinelCursorKeychainTokens: Map<string, string> | undefined;
 }
 
+// Keyed by user and instance: another user's default "cursor" instance
+// never reuses a login they did not let Sentinel read.
 const tokens =
   globalThis.__sentinelCursorKeychainTokens ??
   (globalThis.__sentinelCursorKeychainTokens = new Map<string, string>());
+
+const tokenKey = (userId: string, instanceId: string) =>
+  `${userId}\u0000${instanceId}`;
 
 export class CursorKeychainUnavailableError extends Error {
   constructor(message: string) {
@@ -54,24 +60,43 @@ export class CursorKeychainUnavailableError extends Error {
   }
 }
 
-/** The token the user let Sentinel read for this instance, if any. */
-export function getCursorKeychainToken(instanceId: string) {
-  return tokens.get(instanceId) ?? null;
-}
-
-export function forgetCursorKeychainToken(instanceId?: string) {
-  if (instanceId === undefined) {
-    tokens.clear();
-    return;
-  }
-  tokens.delete(instanceId);
+/** The token this user let Sentinel read for this instance, if any. */
+export function getCursorKeychainToken(
+  userId: string | undefined,
+  instanceId: string,
+) {
+  return userId ? (tokens.get(tokenKey(userId, instanceId)) ?? null) : null;
 }
 
 /**
- * Reads the Cursor CLI login from the macOS Keychain for one instance.
- * Call only from an explicit user action: it may show a macOS prompt.
+ * Drops kept logins: one user's for an instance, every user's for an
+ * instance (no `userId`), or all of them (no arguments).
+ */
+export function forgetCursorKeychainToken(
+  input: { instanceId?: string; userId?: string } = {},
+) {
+  if (input.instanceId === undefined) {
+    tokens.clear();
+    return;
+  }
+  if (input.userId !== undefined) {
+    tokens.delete(tokenKey(input.userId, input.instanceId));
+    return;
+  }
+  for (const key of [...tokens.keys()]) {
+    if (key.endsWith(`\u0000${input.instanceId}`)) {
+      tokens.delete(key);
+    }
+  }
+}
+
+/**
+ * Reads the Cursor CLI login from the macOS Keychain for one user's
+ * instance. Call only from an explicit user action: it may show a macOS
+ * prompt.
  */
 export async function readCursorKeychainToken(
+  userId: string,
   instanceId: string,
   deps: { execFile?: ExecFileRunner; platform?: NodeJS.Platform } = {},
 ) {
@@ -107,6 +132,6 @@ export async function readCursorKeychainToken(
       "The Keychain has no Cursor login. Sign in with the Cursor CLI first.",
     );
   }
-  tokens.set(instanceId, token);
+  tokens.set(tokenKey(userId, instanceId), token);
   return token;
 }

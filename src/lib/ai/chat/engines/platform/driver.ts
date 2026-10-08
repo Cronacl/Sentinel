@@ -189,12 +189,20 @@ export interface EngineDriver<
    * `unavailable: probeFailed` rather than throwing.
    */
   usageLimits?: {
+    /**
+     * Drops what the reader keeps beyond the usage store (a login the user
+     * let Sentinel read): for one user when that account signs out, for
+     * every user when no `userId` is given (the instance changed).
+     */
+    forget?(instanceId: string, userId?: string): void;
     read(
       instance: ResolvedEngineInstance<C>,
       options: {
         signal: AbortSignal;
         /** The instance's current snapshot (auth method, plan), if known. */
         snapshot?: EngineSnapshot | null;
+        /** Whose account is read (instances and logins are per user). */
+        userId?: string;
       },
     ): Promise<EngineUsageLimits>;
     ttlMs?: number;

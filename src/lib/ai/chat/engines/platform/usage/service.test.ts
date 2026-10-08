@@ -30,7 +30,9 @@ function setup(
       ],
     }),
   );
-  const keychain = mock(async (_instanceId: string) => "token");
+  const keychain = mock(
+    async (_userId: string, _instanceId: string) => "token",
+  );
   const store = createEngineUsageLimitsStore();
   const service = createEngineUsageService({
     drivers: (kind) =>
@@ -92,7 +94,7 @@ describe("usage service", () => {
   it("reads the Cursor Keychain only for Cursor, then reads usage", async () => {
     const cursor = setup({ driver: "cursor" });
     await cursor.service.readCursorKeychain(USER, "cursor");
-    expect(cursor.keychain).toHaveBeenCalledWith("cursor");
+    expect(cursor.keychain).toHaveBeenCalledWith(USER, "cursor");
     expect(cursor.read).toHaveBeenCalledTimes(1);
 
     const codex = setup();

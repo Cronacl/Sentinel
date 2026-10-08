@@ -84,13 +84,49 @@ describe("Cursor usage reader", () => {
       env: { HOME: "/nonexistent-home" },
       id: "cursor",
     });
-    globalThis.__sentinelCursorKeychainTokens?.set("cursor", "old-token");
-    globalThis.fetch = (async () =>
-      new Response("{}", { status: 401 })) as unknown as typeof fetch;
+    globalThis.__sentinelCursorKeychainTokens?.set(
+      "user-1\u0000cursor",
+      "old-token",
+    );
+    globalThis.__sentinelCursorKeychainTokens?.set(
+      "user-2\u0000cursor",
+      "other-token",
+    );
+    const requests: Array<string | null> = [];
+    globalThis.fetch = (async (_url: string, init?: RequestInit) => {
+      requests.push(new Headers(init?.headers).get("authorization"));
+      return new Response("{}", { status: 401 });
+    }) as unknown as typeof fetch;
 
-    const limits = await cursorDriver.usageLimits!.read(instance, { signal });
+    const limits = await cursorDriver.usageLimits!.read(instance, {
+      signal,
+      userId: "user-1",
+    });
 
     expect(limits.unavailable?.reason).toBe("probeFailed");
-    expect(getCursorKeychainToken("cursor")).toBeNull();
+    // Only this user's login was sent, and only it is dropped.
+    expect(requests).toEqual(["Bearer old-token"]);
+    expect(getCursorKeychainToken("user-1", "cursor")).toBeNull();
+    expect(getCursorKeychainToken("user-2", "cursor")).toBe("other-token");
+  });
+
+  it("forgets kept logins on sign-out and when the instance changes", () => {
+    const tokens = globalThis.__sentinelCursorKeychainTokens!;
+    tokens.set("user-1\u0000cursor", "a");
+    tokens.set("user-2\u0000cursor", "b");
+    tokens.set("user-1\u0000cursor-work", "c");
+
+    cursorDriver.usageLimits!.forget!("cursor", "user-1");
+    expect(getCursorKeychainToken("user-1", "cursor")).toBeNull();
+    expect(getCursorKeychainToken("user-2", "cursor")).toBe("b");
+
+    cursorDriver.invalidate!({ driver: "cursor", id: "cursor" });
+    expect(getCursorKeychainToken("user-2", "cursor")).toBeNull();
+    expect(getCursorKeychainToken("user-1", "cursor-work")).toBe("c");
+  });
+
+  it("uses no Keychain login without a user", () => {
+    globalThis.__sentinelCursorKeychainTokens?.set("user-1\u0000cursor", "a");
+    expect(getCursorKeychainToken(undefined, "cursor")).toBeNull();
   });
 });

@@ -33,8 +33,11 @@ export const cursorDriver = defineEngineDriver({
   // A full probe spawns `agent acp`: trust one for 10 minutes and answer
   // interval and focus refreshes cheaply in between.
   fullProbeTtlMs: 10 * 60 * 1_000,
-  invalidate() {
+  invalidate(instance) {
     cursorAcpAgent.invalidate?.();
+    // Reconfigured or removed: a Keychain login read for it may belong to
+    // another account now.
+    forgetCursorKeychainToken({ instanceId: instance.id });
   },
   kind: "cursor",
   meta: DRIVER_CATALOG.cursor,
@@ -55,15 +58,18 @@ export const cursorDriver = defineEngineDriver({
     triggers: LEGACY_EXTERNAL_THREAD_TRIGGERS,
   },
   usageLimits: {
-    async read(instance, { signal }) {
+    forget(instanceId, userId) {
+      forgetCursorKeychainToken({ instanceId, userId });
+    },
+    async read(instance, { signal, userId }) {
       const result = await readCursorUsageLimits({
         env: instance.env,
-        keychainToken: getCursorKeychainToken(instance.id),
+        keychainToken: getCursorKeychainToken(userId, instance.id),
         signal,
       });
-      if (result.rejected && result.source === "keychain") {
+      if (result.rejected && result.source === "keychain" && userId) {
         // Expired or signed out: the user reads the Keychain again.
-        forgetCursorKeychainToken(instance.id);
+        forgetCursorKeychainToken({ instanceId: instance.id, userId });
       }
       return result.limits;
     },

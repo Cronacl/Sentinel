@@ -92,13 +92,14 @@ function setup(input: {
           ],
         })),
   );
+  const forget = mock((_instanceId: string, _userId?: string) => {});
   const driver: EngineDriver = {
     capabilities: DRIVER_CATALOG.codex.capabilities,
     kind: "codex",
     meta: DRIVER_CATALOG.codex,
     probe: input.probe ?? (async () => readyProbe()),
     probeTimeoutMs: 1_000,
-    usageLimits: { read },
+    usageLimits: { forget, read },
   };
   const events: EngineEvent[] = [];
   const usageLimits = createEngineUsageLimitsStore();
@@ -114,7 +115,7 @@ function setup(input: {
   });
   const snapshotEvents = () =>
     events.flatMap((event) => (event.type === "snapshot" ? [event] : []));
-  return { events, read, service, snapshotEvents, usageLimits };
+  return { events, forget, read, service, snapshotEvents, usageLimits };
 }
 
 const hasUsage = (event: { snapshot: { usageLimits: unknown } }) =>
@@ -171,7 +172,7 @@ describe("snapshots with usage limits", () => {
 
   it("drops the usage of an account that signed out", async () => {
     let signedIn = true;
-    const { service, snapshotEvents, usageLimits } = setup({
+    const { forget, read, service, snapshotEvents, usageLimits } = setup({
       probe: async () =>
         signedIn
           ? readyProbe()
@@ -181,12 +182,19 @@ describe("snapshots with usage limits", () => {
     });
     await service.getSnapshot(USER, "codex");
     await waitFor(() => snapshotEvents().some(hasUsage));
+    // The reader learns whose account it reads.
+    expect((read.mock.calls[0] as unknown[] | undefined)?.[1]).toMatchObject({
+      userId: USER,
+    });
+    expect(forget).not.toHaveBeenCalled();
 
     signedIn = false;
     const snapshot = await service.refresh(USER, "codex");
 
     expect(snapshot?.usageLimits).toBeNull();
     expect(usageLimits.peek(USER, "codex")).toBeNull();
+    // A login the reader kept for that account goes too.
+    expect(forget).toHaveBeenCalledWith("codex", USER);
   });
 
   it("takes a probe's own limits as the read", async () => {

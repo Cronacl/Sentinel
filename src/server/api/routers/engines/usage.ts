@@ -32,8 +32,8 @@ async function getUsageService() {
       await import("@/lib/ai/chat/engines/platform/drivers");
     service = createEngineUsageService({
       drivers: getEngineDriver,
-      readCursorKeychainToken: (instanceId) =>
-        readCursorKeychainToken(instanceId),
+      readCursorKeychainToken: (userId, instanceId) =>
+        readCursorKeychainToken(userId, instanceId),
       registry: getEngineInstanceRegistry(),
       snapshots: getEngineSnapshotService(),
     });

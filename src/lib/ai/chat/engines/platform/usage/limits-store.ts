@@ -192,6 +192,7 @@ export function createEngineUsageLimitsStore(
           reader.read(target.instance, {
             signal,
             snapshot: target.snapshot ?? null,
+            userId,
           }),
         readTimeoutMs,
         { clearTimeout: clock.clearTimeout, setTimeout: clock.setTimeout },
