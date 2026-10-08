@@ -60,10 +60,16 @@ export function EngineNetworkSettings() {
     onError: (error) => sileo.error({ description: error.message }),
     onSuccess: (next) => {
       onSettled(next);
-      if (next.manifest.lastError && next.manifest.source === "bundled") {
-        sileo.error({ description: next.manifest.lastError });
-      } else {
+      const { lastError, source } = next.manifest;
+      if (!lastError) {
         sileo.success({ description: "Engine manifest refreshed." });
+      } else if (source === "bundled") {
+        sileo.error({ description: lastError });
+      } else {
+        // The fetch failed, but an earlier copy is still in effect.
+        sileo.warning({
+          description: `${lastError} Sentinel keeps using the copy it fetched before.`,
+        });
       }
     },
   });
