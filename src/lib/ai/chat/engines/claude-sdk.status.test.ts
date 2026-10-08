@@ -312,7 +312,7 @@ describe("getClaudeEngineStatus", () => {
     }
   });
 
-  it("reports xhigh effort and context windows from Claude Code 2.1 model info", async () => {
+  it("reports xhigh and max effort and context windows from Claude Code 2.1 model info", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
 
     try {
@@ -341,6 +341,7 @@ describe("getClaudeEngineStatus", () => {
             expect.objectContaining({ effort: "medium" }),
             expect.objectContaining({ effort: "high" }),
             expect.objectContaining({ effort: "xhigh" }),
+            expect.objectContaining({ effort: "max" }),
           ],
         }),
       ]);

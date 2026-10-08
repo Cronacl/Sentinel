@@ -60,10 +60,16 @@ const CLAUDE_MODEL_PROFILES: Record<string, ClaudeModelProfile> = {
   "claude-3-5-haiku-20241022": { contextWindow: 200_000 },
 };
 
-// Claude effort levels Sentinel offers. ReasoningEffort carries `max` since
-// the engine platform widened it, but Claude keeps today's options until the
-// composer moves to per-model option descriptors.
-const CLAUDE_SENTINEL_EFFORTS = ["low", "medium", "high", "xhigh"] as const;
+// Claude effort levels Sentinel offers: every level the CLI reports for a
+// model, `max` included now that requests, follow-ups and automations carry
+// it and the composer reads per-model option descriptors.
+const CLAUDE_SENTINEL_EFFORTS = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
 type ClaudeSentinelEffort = (typeof CLAUDE_SENTINEL_EFFORTS)[number];
 
 // Every level the SDK accepts, lowest first.
@@ -78,6 +84,7 @@ const CLAUDE_SDK_EFFORT_ORDER: readonly EffortLevel[] = [
 const CLAUDE_EFFORT_LABELS: Record<ClaudeSentinelEffort, string> = {
   high: "High",
   low: "Low",
+  max: "Max",
   medium: "Medium",
   xhigh: "Extra high",
 };
@@ -199,19 +206,19 @@ const CLAUDE_FALLBACK_MODELS: Array<
   {
     description: "Most capable Claude model for complex, long-running work.",
     displayName: "Claude Opus 5.5",
-    efforts: ["low", "medium", "high", "xhigh"],
+    efforts: ["low", "medium", "high", "xhigh", "max"],
     value: "claude-opus-5-5",
   },
   {
     description: "Fast, capable Claude model for everyday coding.",
     displayName: "Claude Sonnet 5.5",
-    efforts: ["low", "medium", "high", "xhigh"],
+    efforts: ["low", "medium", "high", "xhigh", "max"],
     value: "claude-sonnet-5-5",
   },
   {
     description: "Claude Code's default model for coding tasks.",
     displayName: "Claude Fable 5.1",
-    efforts: ["low", "medium", "high", "xhigh"],
+    efforts: ["low", "medium", "high", "xhigh", "max"],
     value: "claude-fable-5-1",
   },
   {

@@ -8,7 +8,7 @@ import {
 } from "./claude-sdk/models";
 
 describe("toClaudeModelInfo", () => {
-  it("keeps xhigh, drops max until Sentinel can carry it, and defaults from the manifest", () => {
+  it("offers every level the CLI reports, max included, and defaults from the manifest", () => {
     const model = toClaudeModelInfo({
       description: "Opus 5.5 · Most capable for complex work",
       displayName: "Opus 5.5",
@@ -19,8 +19,9 @@ describe("toClaudeModelInfo", () => {
 
     expect(
       model.supportedReasoningEfforts.map((option) => option.effort),
-    ).toEqual(["low", "medium", "high", "xhigh"]);
+    ).toEqual(["low", "medium", "high", "xhigh", "max"]);
     expect(model.supportedReasoningEfforts[3]?.label).toBe("Extra high");
+    expect(model.supportedReasoningEfforts[4]?.label).toBe("Max");
     expect(model.defaultReasoningEffort).toBe("medium");
     expect(model.contextWindow).toBe(200_000);
   });
@@ -111,6 +112,11 @@ describe("buildClaudeFallbackModels", () => {
         inputModalities: ["text", "image"],
       }),
     );
+    expect(
+      models
+        .find((model) => model.id === "claude-fable-5-1")
+        ?.supportedReasoningEfforts.map((option) => option.effort),
+    ).toEqual(["low", "medium", "high", "xhigh", "max"]);
   });
 });
 
@@ -154,6 +160,13 @@ describe("resolveClaudeSdkEffort", () => {
         reasoningEffort: "xhigh",
       }),
     ).toBe("xhigh");
+    expect(
+      resolveClaudeSdkEffort({
+        modelId: "claude-opus-5-5",
+        models,
+        reasoningEffort: "max",
+      }),
+    ).toBe("max");
   });
 
   it("clamps to the highest supported level at or below the request", () => {
