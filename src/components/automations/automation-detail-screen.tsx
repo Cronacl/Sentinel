@@ -58,8 +58,8 @@ import {
   pruneAutomationOptionValues,
   resolveAutomationEngine,
   resolveAutomationInstanceId,
+  resolveAutomationModelOptionsForSave,
   resolveAutomationSelection,
-  toAutomationModelOptions,
   toAutomationOptionValues,
 } from "@/components/automations/automation-form-helpers";
 import { isLikelyCronExpression } from "@/schemas/automation.schema";
@@ -520,13 +520,11 @@ export function AutomationDetailScreen({
           scheduleTime,
           scheduleCron,
           modelId: values.modelId === "__default__" ? null : values.modelId,
-          modelOptions:
-            values.modelId === "__default__"
-              ? null
-              : toAutomationModelOptions(
-                  values.modelOptionValues,
-                  optionDescriptors,
-                ),
+          modelOptions: resolveAutomationModelOptionsForSave(
+            values.modelId,
+            values.modelOptionValues,
+            availableModels,
+          ),
           reasoningEffort: selectedReasoning,
         });
 
@@ -547,8 +545,8 @@ export function AutomationDetailScreen({
     },
     [
       automation,
+      availableModels,
       catalogOptions,
-      optionDescriptors,
       updateMutation,
       automationQuery,
       utils,

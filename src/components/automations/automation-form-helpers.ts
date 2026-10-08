@@ -216,6 +216,29 @@ export function getAutomationModelOptionChoices(
 }
 
 /**
+ * The model_options a save writes: null for "Use default model", the picks
+ * the selected model offers, or undefined (keep what is stored) while that
+ * model is not in the catalog, so an unloaded or unavailable catalog never
+ * wipes stored picks.
+ */
+export function resolveAutomationModelOptionsForSave(
+  modelId: string,
+  values: Readonly<Record<string, string>>,
+  models: readonly AutomationEngineModel[],
+): EngineOptionSelection[] | null | undefined {
+  if (modelId === "__default__") {
+    return null;
+  }
+  const model = models.find((candidate) => candidate.modelId === modelId);
+  return model
+    ? toAutomationModelOptions(
+        values,
+        getAutomationModelOptionDescriptors(model),
+      )
+    : undefined;
+}
+
+/**
  * The form's option values from an automation's stored model_options
  * (string values only; malformed entries are dropped).
  */

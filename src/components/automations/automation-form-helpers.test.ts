@@ -16,6 +16,7 @@ import {
   pickAutomationInstanceForDriver,
   pruneAutomationOptionValues,
   resolveAutomationEngine,
+  resolveAutomationModelOptionsForSave,
   resolveAutomationInstanceId,
   resolveAutomationSelection,
   shouldShowAutomationInstancePicker,
@@ -405,6 +406,36 @@ describe("automation model options", () => {
     ).toEqual({ agent: "plan" });
     expect(toAutomationOptionValues(null)).toEqual({});
     expect(toAutomationOptionValues("not json")).toEqual({});
+  });
+
+  it("keeps stored picks while the selected model is not in the catalog", () => {
+    const openCodeModel = {
+      ...sentinelModel,
+      engine: "opencode",
+      instanceId: "opencode",
+      modelId: "anthropic/claude-5",
+      options: [agent, variant],
+    };
+
+    expect(
+      resolveAutomationModelOptionsForSave(
+        "anthropic/claude-5",
+        { agent: "plan" },
+        [openCodeModel],
+      ),
+    ).toEqual([{ id: "agent", value: "plan" }]);
+    expect(
+      resolveAutomationModelOptionsForSave(
+        "anthropic/claude-5",
+        { agent: "plan" },
+        [],
+      ),
+    ).toBeUndefined();
+    expect(
+      resolveAutomationModelOptionsForSave("__default__", { agent: "plan" }, [
+        openCodeModel,
+      ]),
+    ).toBeNull();
   });
 
   it("drops values the newly selected model does not offer", () => {

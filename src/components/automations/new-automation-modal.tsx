@@ -42,10 +42,10 @@ import {
   pruneAutomationOptionValues,
   resolveAutomationEngine,
   resolveAutomationInstanceId,
+  resolveAutomationModelOptionsForSave,
   resolveAutomationSelection,
-  toAutomationModelOptions,
+  type AutomationEngineModel,
 } from "@/components/automations/automation-form-helpers";
-import type { EngineSelectOptionDescriptor } from "@/lib/ai/chat/engines/contract";
 import {
   createAutomationSchema,
   type CreateAutomationInput,
@@ -203,7 +203,7 @@ function createDefaultValues(
 function normalizeCreateInput(
   values: AutomationFormValues,
   chatEngine: ChatEngine,
-  optionDescriptors: readonly EngineSelectOptionDescriptor[],
+  models: readonly AutomationEngineModel[],
 ): CreateAutomationInput {
   const scheduleTime =
     values.scheduleType === "daily" ||
@@ -236,9 +236,11 @@ function normalizeCreateInput(
     scheduleCron,
     modelId: values.modelId === "__default__" ? null : values.modelId,
     modelOptions:
-      values.modelId === "__default__"
-        ? null
-        : toAutomationModelOptions(values.modelOptionValues, optionDescriptors),
+      resolveAutomationModelOptionsForSave(
+        values.modelId,
+        values.modelOptionValues,
+        models,
+      ) ?? null,
     reasoningEffort: selectedReasoning,
   };
 }
@@ -541,7 +543,7 @@ export function NewAutomationModal({
         setSubmitError(AUTOMATION_ENGINE_UNAVAILABLE_MESSAGE);
         return;
       }
-      const input = normalizeCreateInput(values, chatEngine, optionDescriptors);
+      const input = normalizeCreateInput(values, chatEngine, availableModels);
       const validated = createAutomationSchema.safeParse(input);
       if (!validated.success) {
         setSubmitError(
