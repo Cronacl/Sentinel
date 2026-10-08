@@ -28,12 +28,14 @@ import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import { AUTOMATION_SCHEDULE_TYPES, type ChatEngine } from "@/server/db/enums";
 import type { AutomationTemplate } from "@/components/automations/automation-templates";
 import {
+  AUTOMATION_ENGINE_UNAVAILABLE_MESSAGE,
   getAvailableAutomationModels,
   getAutomationEngineOptions,
   getAutomationModelOptions,
   getAutomationModelsForInstance,
   getAutomationReasoningOptions,
   getAutomationUnattendedNotice,
+  resolveAutomationEngine,
   resolveAutomationInstanceId,
   resolveAutomationSelection,
 } from "@/components/automations/automation-form-helpers";
@@ -189,7 +191,7 @@ function createDefaultValues(
 
 function normalizeCreateInput(
   values: AutomationFormValues,
-  engineOf: (instanceId: string) => ChatEngine,
+  chatEngine: ChatEngine,
 ): CreateAutomationInput {
   const scheduleTime =
     values.scheduleType === "daily" ||
@@ -212,7 +214,7 @@ function normalizeCreateInput(
   return {
     title: values.title,
     prompt: values.prompt,
-    chatEngine: engineOf(values.engineInstanceId),
+    chatEngine,
     chatEngineInstanceId: values.engineInstanceId,
     workspaceId:
       values.workspaceId === "__current__" ? null : values.workspaceId,
@@ -280,9 +282,15 @@ export function NewAutomationModal({
   );
   const engineOf = useCallback(
     (instanceId: string) =>
-      (catalogOptions.find((option) => option.instanceId === instanceId)
-        ?.engine ?? instanceId) as ChatEngine,
-    [catalogOptions],
+      resolveAutomationEngine(instanceId, catalogOptions, {
+        chatEngine: chatPreferencesQuery.data?.engine,
+        chatEngineInstanceId: chatPreferencesQuery.data?.engineInstanceId,
+      }),
+    [
+      catalogOptions,
+      chatPreferencesQuery.data?.engine,
+      chatPreferencesQuery.data?.engineInstanceId,
+    ],
   );
   const globalDefaults = useMemo(() => {
     const preferredInstanceId = resolveAutomationInstanceId({
@@ -501,7 +509,12 @@ export function NewAutomationModal({
     setSubmitError("");
 
     try {
-      const input = normalizeCreateInput(values, engineOf);
+      const chatEngine = engineOf(values.engineInstanceId);
+      if (!chatEngine) {
+        setSubmitError(AUTOMATION_ENGINE_UNAVAILABLE_MESSAGE);
+        return;
+      }
+      const input = normalizeCreateInput(values, chatEngine);
       const validated = createAutomationSchema.safeParse(input);
       if (!validated.success) {
         setSubmitError(

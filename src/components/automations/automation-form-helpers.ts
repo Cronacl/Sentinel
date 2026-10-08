@@ -1,6 +1,10 @@
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import { getDriverLabel, getDriverMeta } from "@/lib/ai/chat/engines/catalog";
-import type { PermissionMode } from "@/server/db/enums";
+import {
+  CHAT_ENGINES,
+  type ChatEngine,
+  type PermissionMode,
+} from "@/server/db/enums";
 
 import {
   getEngineStabilityNotice,
@@ -62,6 +66,48 @@ export function resolveAutomationInstanceId(selection: {
 }) {
   return selection.chatEngineInstanceId ?? selection.chatEngine ?? "sentinel";
 }
+
+function isChatEngine(value: string | null | undefined): value is ChatEngine {
+  return (CHAT_ENGINES as readonly string[]).includes(value ?? "");
+}
+
+/**
+ * The engine (driver kind) an automation's instance belongs to: the
+ * catalog's answer, else the stored automation or preference that names
+ * this instance, else the instance id itself when it is a default instance
+ * (its id is the driver kind). Null when nothing says, such as a removed
+ * instance before the catalog loads: the form then asks for another engine
+ * instead of sending the instance id as an engine.
+ */
+export function resolveAutomationEngine(
+  instanceId: string,
+  catalogOptions: readonly Pick<
+    ChatComposerEngineOption,
+    "engine" | "instanceId"
+  >[],
+  known?: {
+    chatEngine?: string | null;
+    chatEngineInstanceId?: string | null;
+  } | null,
+): ChatEngine | null {
+  const fromCatalog = catalogOptions.find(
+    (option) => option.instanceId === instanceId,
+  )?.engine;
+  if (isChatEngine(fromCatalog)) {
+    return fromCatalog;
+  }
+  if (
+    known &&
+    isChatEngine(known.chatEngine) &&
+    resolveAutomationInstanceId(known) === instanceId
+  ) {
+    return known.chatEngine;
+  }
+  return isChatEngine(instanceId) ? instanceId : null;
+}
+
+export const AUTOMATION_ENGINE_UNAVAILABLE_MESSAGE =
+  "This engine instance is no longer available. Pick another engine.";
 
 export function getAutomationModelOptions(
   models: AutomationEngineModel[] | null | undefined,

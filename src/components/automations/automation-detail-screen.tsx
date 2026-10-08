@@ -42,14 +42,16 @@ import {
 import { SidebarToggle, useShell } from "@/components/shell";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
-import { AUTOMATION_SCHEDULE_TYPES, type ChatEngine } from "@/server/db/enums";
+import { AUTOMATION_SCHEDULE_TYPES } from "@/server/db/enums";
 import {
+  AUTOMATION_ENGINE_UNAVAILABLE_MESSAGE,
   getAvailableAutomationModels,
   getAutomationEngineOptions,
   getAutomationModelOptions,
   getAutomationModelsForInstance,
   getAutomationReasoningOptions,
   getAutomationUnattendedNotice,
+  resolveAutomationEngine,
   resolveAutomationInstanceId,
   resolveAutomationSelection,
 } from "@/components/automations/automation-form-helpers";
@@ -474,14 +476,21 @@ export function AutomationDetailScreen({
           values.reasoningEffort.trim().length > 0
             ? (values.reasoningEffort as ReasoningEffort)
             : null;
+        const chatEngine = resolveAutomationEngine(
+          values.engineInstanceId,
+          catalogOptions,
+          automation,
+        );
+        if (!chatEngine) {
+          setSubmitError(AUTOMATION_ENGINE_UNAVAILABLE_MESSAGE);
+          return;
+        }
 
         const updated = await updateMutation.mutateAsync({
           id: automation.id,
           title: values.title,
           prompt: values.prompt,
-          chatEngine: (catalogOptions.find(
-            (option) => option.instanceId === values.engineInstanceId,
-          )?.engine ?? values.engineInstanceId) as ChatEngine,
+          chatEngine,
           chatEngineInstanceId: values.engineInstanceId,
           workspaceId:
             values.workspaceId === "__current__" ? null : values.workspaceId,

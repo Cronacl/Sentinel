@@ -8,6 +8,7 @@ import {
   getAutomationModelOptions,
   getAutomationModelsForInstance,
   getAutomationUnattendedNotice,
+  resolveAutomationEngine,
   resolveAutomationInstanceId,
   resolveAutomationSelection,
 } from "./automation-form-helpers";
@@ -120,6 +121,29 @@ describe("automation form helpers", () => {
       }),
     ).toBe("codex");
     expect(resolveAutomationInstanceId({})).toBe("sentinel");
+  });
+
+  it("names the engine of an instance without sending the instance id as one", () => {
+    const catalog = [{ engine: "codex", instanceId: "codex-work" }];
+
+    expect(resolveAutomationEngine("codex-work", catalog)).toBe("codex");
+    // A default instance's id is its driver kind.
+    expect(resolveAutomationEngine("claude", [])).toBe("claude");
+    // The stored automation still names a removed instance's engine.
+    expect(
+      resolveAutomationEngine("codex-gone", [], {
+        chatEngine: "codex",
+        chatEngineInstanceId: "codex-gone",
+      }),
+    ).toBe("codex");
+    // Nothing says which engine "codex-gone" belongs to: the form asks.
+    expect(resolveAutomationEngine("codex-gone", catalog)).toBeNull();
+    expect(
+      resolveAutomationEngine("codex-gone", [], {
+        chatEngine: "codex",
+        chatEngineInstanceId: "codex-work",
+      }),
+    ).toBeNull();
   });
 
   it("explains what happens to approvals in unattended runs", () => {
