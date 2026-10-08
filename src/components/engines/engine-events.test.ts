@@ -4,6 +4,7 @@ import { makeFakeSnapshot } from "@/lib/ai/chat/engines/contract/testing";
 
 import {
   applyEngineEvent,
+  createComposerViewTracker,
   ENGINE_SNAPSHOT_CHECKING_POLL_MS,
   ENGINE_SNAPSHOT_IDLE_POLL_MS,
   getEngineEventsConnection,
@@ -85,6 +86,73 @@ describe("applyEngineEvent", () => {
         version: 6,
       }).changed,
     ).toBe(false);
+  });
+});
+
+describe("createComposerViewTracker", () => {
+  const snapshotEvent = (
+    overrides: Parameters<typeof makeFakeSnapshot>[0],
+    version: number,
+  ) => ({
+    snapshot: makeFakeSnapshot({ driver: "codex", ...overrides }),
+    type: "snapshot" as const,
+    version,
+  });
+
+  it("asks for a refetch only when what the composer shows changes", () => {
+    const tracker = createComposerViewTracker();
+
+    // First sight of an instance (a connect replays every one).
+    expect(tracker.observe(snapshotEvent({}, 1))).toBe(true);
+    // A probe that only moves its times.
+    expect(
+      tracker.observe(
+        snapshotEvent(
+          {
+            checkedAt: "2026-10-07T12:05:00.000Z",
+            lastSuccessfulProbeAt: "2026-10-07T12:05:00.000Z",
+          },
+          2,
+        ),
+      ),
+    ).toBe(false);
+    // Usability, labels and models do.
+    expect(tracker.observe(snapshotEvent({ usable: false }, 3))).toBe(true);
+    expect(tracker.observe(snapshotEvent({ usable: false }, 4))).toBe(false);
+    expect(
+      tracker.observe(
+        snapshotEvent({ label: "Codex (home)", usable: false }, 5),
+      ),
+    ).toBe(true);
+    expect(
+      tracker.observe(
+        snapshotEvent({ label: "Codex (home)", models: [], usable: false }, 6),
+      ),
+    ).toBe(true);
+  });
+
+  it("tracks instances apart and refetches on removal only", () => {
+    const tracker = createComposerViewTracker();
+    expect(tracker.observe(snapshotEvent({}, 1))).toBe(true);
+    expect(
+      tracker.observe(snapshotEvent({ instanceId: "codex-work" }, 2)),
+    ).toBe(true);
+    expect(tracker.observe(snapshotEvent({}, 3))).toBe(false);
+
+    expect(
+      tracker.observe({
+        instanceId: "codex-work",
+        type: "snapshot-removed",
+        version: 4,
+      }),
+    ).toBe(true);
+    expect(
+      tracker.observe({ instanceId: "codex", type: "maintenance", version: 5 }),
+    ).toBe(false);
+    // A removed instance that comes back is new again.
+    expect(
+      tracker.observe(snapshotEvent({ instanceId: "codex-work" }, 6)),
+    ).toBe(true);
   });
 });
 

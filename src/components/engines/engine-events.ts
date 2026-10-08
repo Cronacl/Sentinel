@@ -1,3 +1,8 @@
+import {
+  isPickableEngineSnapshot,
+  toComposerEngineModels,
+  toComposerEngineOption,
+} from "@/lib/ai/chat/engines/composer-catalog";
 import type {
   EngineEvent,
   EngineSnapshot,
@@ -54,9 +59,9 @@ export function getEngineSnapshotPollInterval(
 }
 
 /**
- * The snapshots list after one event, and whether anything the composer
- * shows (models, usability, labels) changed. Unrelated events leave the
- * list untouched.
+ * The snapshots list after one event, and whether the list changed (any
+ * field, probe times included). Unrelated events leave the list untouched.
+ * Whether the composer must refetch is createComposerViewTracker's call.
  */
 export function applyEngineEvent(
   snapshots: EngineSnapshot[] | undefined,
@@ -97,4 +102,43 @@ export function applyEngineEvent(
   const updated = [...snapshots];
   updated[index] = next;
   return { changed: true, snapshots: updated };
+}
+
+/** What the composer catalog shows of one instance (engines.composerCatalog). */
+function composerViewKey(snapshot: EngineSnapshot) {
+  return JSON.stringify([
+    isPickableEngineSnapshot(snapshot),
+    toComposerEngineOption(snapshot),
+    toComposerEngineModels(snapshot),
+  ]);
+}
+
+/**
+ * Tells, per event, whether the composer catalog is out of date: an
+ * instance seen for the first time, removed, or whose picker entry or
+ * models changed. A probe that only moves checkedAt (every refresh does)
+ * changes nothing the composer shows. Kept apart from the snapshots cache,
+ * which pages that only read the composer catalog never load.
+ */
+export function createComposerViewTracker() {
+  const seen = new Map<string, string>();
+
+  return {
+    observe(event: EngineEvent) {
+      if (event.type === "snapshot-removed") {
+        seen.delete(event.instanceId);
+        return true;
+      }
+      if (event.type !== "snapshot") {
+        return false;
+      }
+
+      const key = composerViewKey(event.snapshot);
+      if (seen.get(event.snapshot.instanceId) === key) {
+        return false;
+      }
+      seen.set(event.snapshot.instanceId, key);
+      return true;
+    },
+  };
 }

@@ -1,16 +1,20 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { api } from "@/trpc/react";
 
 import {
   applyEngineEvent,
+  createComposerViewTracker,
   getEngineEventsConnection,
   getEngineSnapshotPollInterval,
   setEngineEventsConnection,
   subscribeToEngineEventsConnection,
 } from "./engine-events";
+
+/** Coalesces the composer refetches a burst of events asks for. */
+const COMPOSER_INVALIDATE_DELAY_MS = 150;
 
 /** True while engines.onEvents delivers events. */
 export function useEngineEventsLive() {
@@ -39,26 +43,39 @@ export function useEngineSnapshots() {
 
 /**
  * Subscribes to engines.onEvents once for the app and folds each event into
- * the snapshots cache; composer queries are invalidated when an instance's
- * snapshot changes. Mounted once in the app shell.
+ * the snapshots cache; composer queries are invalidated when what the
+ * composer shows of an instance changes. Mounted once in the app shell.
  */
 export function EngineEventsBridge() {
   const utils = api.useUtils();
+  const [composerView] = useState(createComposerViewTracker);
+  const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const subscription = api.engines.onEvents.useSubscription(undefined, {
     onData: ({ data: event }) => {
-      let changed = false;
-      utils.engines.snapshots.setData(undefined, (current) => {
-        const result = applyEngineEvent(current, event);
-        changed = result.changed;
-        return result.snapshots;
-      });
-      if (changed) {
-        void utils.engines.composerCatalog.invalidate();
-        void utils.engines.models.invalidate();
+      utils.engines.snapshots.setData(
+        undefined,
+        (current) => applyEngineEvent(current, event).snapshots,
+      );
+      // A (re)connect replays every instance: one refetch for the burst.
+      if (composerView.observe(event) && !invalidateTimerRef.current) {
+        invalidateTimerRef.current = setTimeout(() => {
+          invalidateTimerRef.current = null;
+          void utils.engines.composerCatalog.invalidate();
+          void utils.engines.models.invalidate();
+        }, COMPOSER_INVALIDATE_DELAY_MS);
       }
     },
   });
+
+  useEffect(
+    () => () => {
+      if (invalidateTimerRef.current) {
+        clearTimeout(invalidateTimerRef.current);
+      }
+    },
+    [],
+  );
 
   // "pending" is a connected stream; while it reconnects ("connecting") or
   // after it gave up ("error"), the snapshots query polls instead.
