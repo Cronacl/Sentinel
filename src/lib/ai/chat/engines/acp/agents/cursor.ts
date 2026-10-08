@@ -21,6 +21,11 @@ import {
   toPlanTasks,
   type PlanTask,
 } from "@/lib/ai/chat/runtime/external/acp-updates";
+import {
+  isReadOnlyKind,
+  resolvePermissionDisposition,
+  type PermissionDispositionInput,
+} from "@/lib/ai/chat/runtime/external/permissions";
 import { UNATTENDED_DECLINE_MESSAGE } from "@/lib/ai/chat/runtime/unattended";
 import type { ExternalQuestion } from "@/lib/ai/chat/runtime/external/user-input";
 
@@ -56,6 +61,10 @@ import {
 //   `thought_level`) come as separate config options;
 // - `cursor/list_available_models` lists every model with its parameters
 //   without a session (the probe uses it instead of setting every model);
+// - session/request_permission covers writes (kind edit with a diff),
+//   deletes (kind edit, title "Delete `path`", no content), shell commands
+//   (execute), MCP tools (other), web fetches (fetch) and web searches
+//   (search), each only when Cursor's own allowlist did not approve it;
 // - extension requests (verbatim method names): cursor/ask_question answered
 //   `{outcome:{outcome:"answered", answers:[{questionId,
 //   selectedOptionIds}]}}` (or skipped / cancelled), cursor/create_plan
@@ -373,6 +382,19 @@ export async function showCursorImage(params: unknown, context: AcpExtContext) {
   }
 }
 
+/**
+ * Cursor asks only for what its own permission settings did not allow, and
+ * never for a local read: a request of kind search is a web search, fetch a
+ * web fetch. The shared policy's automatic approval of read-only kinds
+ * therefore never applies; everything else follows the shared policy
+ * (deletes come as kind edit with no file, so accept_edits still asks).
+ */
+export function cursorPermissionDisposition(input: PermissionDispositionInput) {
+  return isReadOnlyKind(input.kind)
+    ? resolvePermissionDisposition({ ...input, kind: "other" })
+    : null;
+}
+
 /** cursor/list_available_models → catalog models with their effort options. */
 export function readCursorModelList(result: unknown): AcpCatalogModel[] {
   return (readArray(result, "models") ?? []).flatMap((model) => {
@@ -422,6 +444,7 @@ export const cursorAcpAgent: AcpAgentDescriptor = {
   invalidate: () => resolutions.clear(),
   label: "Cursor",
   launchArgs: ["acp"],
+  permissionDisposition: cursorPermissionDisposition,
   permissionModes: DRIVER_CATALOG.cursor.capabilities.permissionModes,
   planMode: "native",
   probe: {

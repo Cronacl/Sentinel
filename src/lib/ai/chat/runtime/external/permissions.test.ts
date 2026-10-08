@@ -100,9 +100,35 @@ describe("resolvePermissionDisposition", () => {
       [{ kind: "search" as const }, "allow"],
       [{ permissionMode: "full" as const }, "allow"],
       [
-        { permissionMode: "accept_edits" as const, kind: "edit" as const },
+        {
+          editScope: "inside" as const,
+          kind: "edit" as const,
+          permissionMode: "accept_edits" as const,
+        },
         "allow",
       ],
+      [
+        {
+          editScope: "inside" as const,
+          kind: "delete" as const,
+          permissionMode: "auto" as const,
+        },
+        "allow",
+      ],
+      // An edit outside the workspace, or naming no file (Cursor's deletes).
+      [
+        {
+          editScope: "outside" as const,
+          kind: "edit" as const,
+          permissionMode: "accept_edits" as const,
+        },
+        "ask",
+      ],
+      [
+        { kind: "edit" as const, permissionMode: "accept_edits" as const },
+        "ask",
+      ],
+      [{ editScope: "inside" as const, kind: "edit" as const }, "ask"],
       [{ permissionMode: "accept_edits" as const }, "ask"],
       [{ toolsEnabled: false, permissionMode: "full" as const }, "deny"],
       [{ interactive: false }, "deny"],

@@ -160,6 +160,77 @@ describe("runAcpThreadChat", () => {
     });
   });
 
+  const editPermission = (toolCall: Record<string, unknown>): Scenario => ({
+    prompts: [{ steps: [{ toolCall, type: "requestPermission" }] }],
+  });
+
+  it("approves an edit inside the workspace on its own under accept_edits", async () => {
+    h.settings.permissionMode = "accept_edits";
+    const instance = await run(
+      editPermission({
+        content: [
+          {
+            newText: "b",
+            oldText: "a",
+            path: path.join(h.settings.workspaceDir, "a.md"),
+            type: "diff",
+          },
+        ],
+        kind: "edit",
+        title: "Edit a.md",
+        toolCallId: "w1",
+      }),
+      "edit",
+    );
+    await h.waitFor(h.finished, "finish");
+    expect(h.clientResponses(instance.logPath)).toContainEqual({
+      outcome: { optionId: "allow-once", outcome: "selected" },
+    });
+  });
+
+  it("asks under accept_edits before an edit outside the workspace", async () => {
+    h.settings.permissionMode = "accept_edits";
+    const instance = await run(
+      editPermission({
+        content: [
+          { newText: "x", oldText: null, path: "/etc/hosts", type: "diff" },
+        ],
+        kind: "edit",
+        title: "Edit /etc/hosts",
+        toolCallId: "w2",
+      }),
+      "edit",
+    );
+    await awaitingUser();
+    await h.submit(descriptor, instance, { approved: false });
+    await h.waitFor(h.finished, "finish");
+    expect(h.clientResponses(instance.logPath)).toContainEqual({
+      outcome: { optionId: "reject-once", outcome: "selected" },
+    });
+  });
+
+  it("asks under accept_edits before an edit naming no file (Cursor's deletes)", async () => {
+    h.settings.permissionMode = "accept_edits";
+    const instance = await run(
+      editPermission({
+        kind: "edit",
+        status: "pending",
+        title: "Delete `a.md`",
+        toolCallId: "w3",
+      }),
+      "delete",
+    );
+    await awaitingUser();
+    await h.submit(descriptor, instance, {
+      approved: true,
+      decision: "accept",
+    });
+    await h.waitFor(h.finished, "finish");
+    expect(h.clientResponses(instance.logPath)).toContainEqual({
+      outcome: { optionId: "allow-once", outcome: "selected" },
+    });
+  });
+
   it("declines at once in an unattended run", async () => {
     const instance = await run(signedIn(), "edit please", {
       interactive: false,

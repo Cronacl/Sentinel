@@ -5,6 +5,10 @@ import type {
 } from "@/lib/ai/chat/engines/contract";
 import type { ExternalAssistantMirror } from "@/lib/ai/chat/runtime/external/mirror";
 import type {
+  PermissionDisposition,
+  PermissionDispositionInput,
+} from "@/lib/ai/chat/runtime/external/permissions";
+import type {
   ExternalQuestion,
   ExternalQuestionResponse,
 } from "@/lib/ai/chat/runtime/external/user-input";
@@ -119,6 +123,13 @@ export interface AcpAgentDescriptor {
    */
   readonly planMode: "hidden" | "native" | "preamble";
   readonly permissionModes: readonly PermissionMode[];
+  /**
+   * Settles one permission request instead of the shared policy
+   * (runtime/external/permissions.ts); null leaves it to the policy.
+   */
+  permissionDisposition?(
+    input: PermissionDispositionInput,
+  ): PermissionDisposition | null;
 
   /** Models offered before the agent listed any (Cursor: its Auto model). */
   readonly fallbackModels?: readonly AcpCatalogModel[];

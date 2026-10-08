@@ -1,9 +1,12 @@
 import "server-only";
 
+import path from "node:path";
+
 import { RequestError } from "@agentclientprotocol/sdk";
 
 import {
   readClientTextFile,
+  resolveAllowedPath,
   writeClientTextFile,
   type ClientFsPolicy,
 } from "@/lib/ai/chat/engines/acp/client-fs";
@@ -38,9 +41,11 @@ import {
   autoApproveOutcome,
   autoDenyOutcome,
   CANCELLED_PERMISSION_OUTCOME,
+  isEditKind,
   resolvePermissionDisposition,
   selectPermissionOutcome,
   toExternalDecision,
+  type EditScope,
   type PermissionOutcome,
 } from "../external/permissions";
 import {
@@ -97,6 +102,57 @@ function editPathsOf(
   ];
 }
 
+/** The permission mode's answer, or the descriptor's own (Cursor). */
+function dispositionFor(
+  control: AcpRunControl,
+  input: { editScope?: EditScope; kind: ExternalToolKind },
+) {
+  const request = {
+    editScope: input.editScope,
+    interactive: control.interactive,
+    kind: input.kind,
+    permissionMode: control.permissionMode,
+    toolsEnabled: control.toolsEnabled,
+  };
+  return (
+    control.descriptor.permissionDisposition?.(request) ??
+    resolvePermissionDisposition(request)
+  );
+}
+
+/**
+ * Where an edit's files are, only when the permission mode approves edits
+ * by scope (accept_edits, auto): every file inside the workspace (symlinks
+ * resolved; relative paths are the session's cwd), else outside, and
+ * unknown when the request names none.
+ */
+async function editScopeOf(
+  control: AcpRunControl,
+  kind: ExternalToolKind,
+  paths: readonly string[],
+): Promise<EditScope> {
+  if (
+    !isEditKind(kind) ||
+    (control.permissionMode !== "accept_edits" &&
+      control.permissionMode !== "auto")
+  ) {
+    return "unknown";
+  }
+  if (paths.length === 0) {
+    return "unknown";
+  }
+  for (const filePath of new Set(paths)) {
+    try {
+      await resolveAllowedPath(path.resolve(control.workspaceRoot, filePath), {
+        roots: [control.workspaceRoot],
+      });
+    } catch {
+      return "outside";
+    }
+  }
+  return "inside";
+}
+
 function recordGrant(
   control: AcpRunControl,
   kind: ExternalToolKind,
@@ -145,11 +201,14 @@ export async function handlePermissionRequest(
   if (!existing && !patch.kind) {
     patch.kind = kind;
   }
-  const disposition = resolvePermissionDisposition({
-    interactive: control.interactive,
+  const disposition = dispositionFor(control, {
+    editScope: await editScopeOf(control, kind, [
+      ...editPathsOf(patch.content ?? existing?.content, patch),
+      ...(patch.locations ? [] : (existing?.locations ?? [])).map(
+        (location) => location.path,
+      ),
+    ]),
     kind,
-    permissionMode: control.permissionMode,
-    toolsEnabled: control.toolsEnabled,
   });
 
   if (disposition === "allow") {
@@ -314,11 +373,10 @@ async function requestGate(
     title: string;
   },
 ): Promise<boolean> {
-  const disposition = resolvePermissionDisposition({
-    interactive: control.interactive,
+  // Sentinel's own writes are inside the workspace already (client-fs).
+  const disposition = dispositionFor(control, {
+    editScope: input.grantKey.editPath ? "inside" : "unknown",
     kind: input.kind,
-    permissionMode: control.permissionMode,
-    toolsEnabled: control.toolsEnabled,
   });
   if (disposition === "allow") return true;
   if (disposition === "deny") return false;

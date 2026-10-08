@@ -12,7 +12,7 @@ import { setupAcpRunHarness, toolParts } from "../acp/__tests__/run-harness";
 // Cursor's ACP extensions on the shared runtime, against the mock agent
 // playing Cursor's recorded wire traits (scripts/fixtures/agents/acp
 // cursorProfile): cursor/ask_question, cursor/create_plan and
-// cursor/update_todos.
+// cursor/update_todos; Cursor's own permission policy.
 
 const h = await setupAcpRunHarness();
 const { cursorAcpAgent } =
@@ -25,6 +25,7 @@ const descriptor = h.support.mockDescriptor({
   clientCapabilitiesMeta: cursorAcpAgent.clientCapabilitiesMeta,
   extNotifications: cursorAcpAgent.extNotifications,
   extRequests: cursorAcpAgent.extRequests,
+  permissionDisposition: cursorAcpAgent.permissionDisposition,
 });
 
 beforeEach(() => h.reset());
@@ -106,6 +107,57 @@ describe("Cursor extensions", () => {
     ).toEqual(["in_progress", "pending"]);
     expect(h.clientResponses(instance.logPath)).toContainEqual({
       outcome: { outcome: "accepted" },
+    });
+  });
+
+  it("asks before a web search, which Cursor requests as kind search", async () => {
+    const instance = await h.run(
+      descriptor,
+      {
+        ...signedIn(),
+        prompts: [
+          {
+            steps: [
+              {
+                options: [
+                  {
+                    kind: "allow_once",
+                    name: "Allow once",
+                    optionId: "allow-once",
+                  },
+                  {
+                    kind: "allow_always",
+                    name: "Allow always",
+                    optionId: "allow-always",
+                  },
+                  {
+                    kind: "reject_once",
+                    name: "Reject",
+                    optionId: "reject-once",
+                  },
+                ],
+                toolCall: {
+                  kind: "search",
+                  status: "pending",
+                  title: "Web search: sentinel acp",
+                  toolCallId: "web_search_1",
+                },
+                type: "requestPermission",
+              },
+            ],
+          },
+        ],
+      },
+      "search the web",
+    );
+    await h.waitFor(
+      () => h.store.thread?.status === "awaiting_approval",
+      "the approval",
+    );
+    await h.submit(descriptor, instance, { approved: false });
+    await h.waitFor(h.finished, "finish");
+    expect(h.clientResponses(instance.logPath)).toContainEqual({
+      outcome: { optionId: "reject-once", outcome: "selected" },
     });
   });
 

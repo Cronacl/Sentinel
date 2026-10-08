@@ -313,3 +313,44 @@ describe("Cursor wire shapes", () => {
     );
   });
 });
+
+describe("cursorPermissionDisposition", () => {
+  const base = {
+    interactive: true,
+    permissionMode: "default" as const,
+    toolsEnabled: true,
+  };
+
+  it("asks before a web search or fetch, which Cursor sends as search and fetch", () => {
+    for (const kind of ["search", "read", "think"] as const) {
+      expect(cursor.cursorPermissionDisposition({ ...base, kind })).toBe("ask");
+      expect(
+        cursor.cursorPermissionDisposition({
+          ...base,
+          kind,
+          permissionMode: "accept_edits",
+        }),
+      ).toBe("ask");
+      expect(
+        cursor.cursorPermissionDisposition({
+          ...base,
+          interactive: false,
+          kind,
+        }),
+      ).toBe("deny");
+      expect(
+        cursor.cursorPermissionDisposition({
+          ...base,
+          kind,
+          permissionMode: "full",
+        }),
+      ).toBe("allow");
+    }
+  });
+
+  it("leaves every other kind to the shared policy", () => {
+    for (const kind of ["edit", "execute", "fetch", "other"] as const) {
+      expect(cursor.cursorPermissionDisposition({ ...base, kind })).toBeNull();
+    }
+  });
+});
