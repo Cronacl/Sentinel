@@ -13,7 +13,7 @@ import {
   Mic02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, ListBox, Popover, Switch } from "@heroui/react";
+import { Button, Header, ListBox, Popover, Switch } from "@heroui/react";
 import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
 
 import type { ChatEngine } from "@/server/db/enums";
@@ -25,6 +25,10 @@ import {
 import { getDriverMeta } from "@/lib/ai/chat/engines/catalog";
 
 import { ContextWindowIndicator } from "./chat-composer/context-window-indicator";
+import {
+  getSelectedEngineSummary,
+  groupComposerEngineOptions,
+} from "./chat-composer/engine-menu.helpers";
 
 const NO_DISABLED_KEYS: string[] = [];
 const PLAN_MODE_DISABLED_KEYS = ["plan-mode"];
@@ -82,6 +86,56 @@ type ComposerToolbarProps = {
   showEngineSelector: boolean;
 };
 
+function EngineAccentDot({ color }: { color: string | null }) {
+  return (
+    <span
+      aria-hidden
+      className="size-2 shrink-0 rounded-full bg-muted"
+      style={color ? { backgroundColor: color } : undefined}
+    />
+  );
+}
+
+/** One engine instance in the composer's engine menu. */
+function renderEngineItem(
+  engine: ChatComposerEngineOption,
+  inDriverSection: boolean,
+) {
+  const stability = getEngineStabilityNotice(engine);
+  return (
+    <ListBox.Item
+      className={`min-h-8 rounded-xl py-1.5 text-[13px] ${
+        inDriverSection ? "pl-4 pr-2" : "px-2"
+      }`}
+      id={engine.instanceId}
+      key={engine.instanceId}
+      textValue={engine.label}
+    >
+      <span className="flex min-w-0 items-center gap-1.5">
+        {inDriverSection ? (
+          <EngineAccentDot color={engine.accentColor} />
+        ) : null}
+        <span className="truncate">{engine.label}</span>
+      </span>
+      <span className="ml-auto flex items-center gap-1.5">
+        {stability ? (
+          <span
+            className="text-[10px] text-warning"
+            title={stability.description}
+          >
+            {stability.label}
+          </span>
+        ) : null}
+        {!engine.isAvailable &&
+        getDriverMeta(engine.engine)?.runtime !== "builtin" ? (
+          <span className="text-[10px] text-warning">Unavailable</span>
+        ) : null}
+      </span>
+      <ListBox.ItemIndicator />
+    </ListBox.Item>
+  );
+}
+
 export const ComposerToolbar = memo(function ComposerToolbar({
   canSend,
   contextWindowIndicator,
@@ -132,16 +186,20 @@ export const ComposerToolbar = memo(function ComposerToolbar({
     () => [selectedInstanceId],
     [selectedInstanceId],
   );
-  // Drivers with several instances show which instance each entry is.
-  const driversWithSeveralInstances = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const option of engineOptions) {
-      counts.set(option.engine, (counts.get(option.engine) ?? 0) + 1);
-    }
-    return new Set(
-      [...counts].filter(([, count]) => count > 1).map(([engine]) => engine),
-    );
-  }, [engineOptions]);
+  // A driver with several instances is a section of its instances.
+  const engineMenuEntries = useMemo(
+    () => groupComposerEngineOptions(engineOptions),
+    [engineOptions],
+  );
+  const selectedEngineSummary = useMemo(
+    () =>
+      getSelectedEngineSummary(
+        engineOptions,
+        selectedInstanceId,
+        selectedEngine,
+      ),
+    [engineOptions, selectedEngine, selectedInstanceId],
+  );
   const showSentinelToolTags = selectedEngine === "sentinel" && !planMode;
   const isToolTagSelected = useCallback(
     (tag: SentinelComposerToolTag) => toolTags.includes(tag),
@@ -259,8 +317,15 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                       strokeWidth={1.5}
                     />
                     <span className="flex-1">Engine</span>
-                    <span className="flex items-center gap-1.5 text-[12px] capitalize text-foreground/60">
-                      <span>{selectedEngine}</span>
+                    <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-foreground/60">
+                      {selectedEngineSummary.showAccent ? (
+                        <EngineAccentDot
+                          color={selectedEngineSummary.accentColor}
+                        />
+                      ) : null}
+                      <span className="max-w-24 truncate">
+                        {selectedEngineSummary.label}
+                      </span>
                     </span>
                     <HugeiconsIcon
                       color="currentColor"
@@ -323,50 +388,20 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                       }
                     }}
                   >
-                    {engineOptions.map((engine) => {
-                      const stability = getEngineStabilityNotice(engine);
-                      return (
-                        <ListBox.Item
-                          className="min-h-8 rounded-xl px-2 py-1.5 text-[13px]"
-                          key={engine.instanceId}
-                          id={engine.instanceId}
-                          textValue={engine.label}
-                        >
-                          <span className="flex min-w-0 items-center gap-1.5">
-                            {driversWithSeveralInstances.has(engine.engine) ? (
-                              <span
-                                aria-hidden
-                                className="size-2 shrink-0 rounded-full bg-muted"
-                                style={
-                                  engine.accentColor
-                                    ? { backgroundColor: engine.accentColor }
-                                    : undefined
-                                }
-                              />
-                            ) : null}
-                            <span className="capitalize">{engine.label}</span>
-                          </span>
-                          <span className="ml-auto flex items-center gap-1.5">
-                            {stability ? (
-                              <span
-                                className="text-[10px] text-warning"
-                                title={stability.description}
-                              >
-                                {stability.label}
-                              </span>
-                            ) : null}
-                            {!engine.isAvailable &&
-                            getDriverMeta(engine.engine)?.runtime !==
-                              "builtin" ? (
-                              <span className="text-[10px] text-warning">
-                                Unavailable
-                              </span>
-                            ) : null}
-                          </span>
-                          <ListBox.ItemIndicator />
-                        </ListBox.Item>
-                      );
-                    })}
+                    {engineMenuEntries.map((entry) =>
+                      entry.kind === "option" ? (
+                        renderEngineItem(entry.option, false)
+                      ) : (
+                        <ListBox.Section key={`driver-${entry.driver}`}>
+                          <Header className="px-2 pb-0.5 pt-1.5 text-[11px] font-medium text-muted">
+                            {entry.label}
+                          </Header>
+                          {entry.options.map((option) =>
+                            renderEngineItem(option, true),
+                          )}
+                        </ListBox.Section>
+                      ),
+                    )}
                   </ListBox>
                 </div>
               ) : null}
