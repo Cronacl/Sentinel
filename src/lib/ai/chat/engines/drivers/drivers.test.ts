@@ -148,7 +148,12 @@ mock.module("@/lib/ai/chat/engines/opencode-sdk", () => ({
   resolveOpenCodeRuntime,
 }));
 
-const { AVAILABLE_DRIVER_KINDS, DRIVER_CATALOG } = await import("../catalog");
+const {
+  AVAILABLE_DRIVER_KINDS,
+  BUILTIN_DRIVER_KINDS,
+  DRIVER_CATALOG,
+  PLANNED_DRIVER_KINDS,
+} = await import("../catalog");
 const { makeFakeInstance } = await import("../contract/testing");
 const { engineProbeResultSchema } = await import("../contract");
 const { getEngineDriver, SERVER_DRIVERS } = await import("../platform/drivers");
@@ -163,9 +168,9 @@ function probeOptions(forceRefresh = false) {
 }
 
 describe("server driver registry", () => {
-  it("has exactly one driver per implemented kind, consistent with the catalog", () => {
+  it("has exactly one driver per builtin kind, consistent with the catalog", () => {
     expect(SERVER_DRIVERS.map((driver) => driver.kind)).toEqual([
-      ...AVAILABLE_DRIVER_KINDS,
+      ...BUILTIN_DRIVER_KINDS,
     ]);
 
     for (const driver of SERVER_DRIVERS) {
@@ -179,12 +184,19 @@ describe("server driver registry", () => {
       if (meta.toolPrefix) {
         expect(meta.toolPrefix).toMatch(/^[a-z][a-z0-9]*_$/);
       }
-      expect(getEngineDriver(driver.kind)).toBe(driver);
     }
   });
 
-  it("has no driver for planned or unknown kinds", () => {
-    expect(getEngineDriver("grok")).toBeNull();
+  it("serves implemented kinds only", () => {
+    for (const driver of SERVER_DRIVERS) {
+      expect(getEngineDriver(driver.kind)).toBe(
+        AVAILABLE_DRIVER_KINDS.includes(driver.kind as never) ? driver : null,
+      );
+    }
+    // A planned kind keeps its stub registered but is never served.
+    for (const kind of PLANNED_DRIVER_KINDS) {
+      expect(getEngineDriver(kind)).toBeNull();
+    }
     expect(getEngineDriver("gemini")).toBeNull();
     expect(getEngineDriver("__proto__")).toBeNull();
   });

@@ -5,6 +5,7 @@ import {
   toComposerEngineModels,
   toComposerEngineOption,
 } from "./composer-catalog";
+import { PLANNED_DRIVER_KINDS } from "./catalog";
 import { makeFakeModel, makeFakeSnapshot } from "./contract/testing";
 import { toEngineModel } from "./drivers/legacy-status";
 
@@ -148,9 +149,11 @@ describe("toComposerEngineOption", () => {
     expect(isPickableEngineSnapshot(makeFakeSnapshot({ enabled: false }))).toBe(
       false,
     );
-    expect(isPickableEngineSnapshot(makeFakeSnapshot({ driver: "grok" }))).toBe(
-      false,
-    );
+    for (const driver of PLANNED_DRIVER_KINDS) {
+      expect(isPickableEngineSnapshot(makeFakeSnapshot({ driver }))).toBe(
+        false,
+      );
+    }
     expect(
       isPickableEngineSnapshot(makeFakeSnapshot({ driver: "gemini" })),
     ).toBe(false);

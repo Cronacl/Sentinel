@@ -19,6 +19,8 @@ const {
 } = await import("./instances");
 const { EngineInstanceError, EngineInstanceUnavailableError } =
   await import("./errors");
+const { listDefaultInstanceDrivers, PLANNED_DRIVER_KINDS } =
+  await import("../catalog");
 
 const USER_ID = "user-1";
 
@@ -91,8 +93,11 @@ beforeEach(() => {
 describe("listing", () => {
   it("synthesizes a default instance per implemented driver", async () => {
     const summaries = await createRegistry().listSummaries(USER_ID);
+    const ids = summaries.map((summary) => summary.id);
 
-    expect(summaries.map((summary) => summary.id)).toEqual([
+    expect(ids).toEqual([...listDefaultInstanceDrivers()]);
+    // Kinds that land later join after these, in catalog order.
+    expect(ids.slice(0, 6)).toEqual([
       "sentinel",
       "codex",
       "claude",
@@ -113,10 +118,13 @@ describe("listing", () => {
   });
 
   it("keeps rows of unknown or planned drivers as unavailable", async () => {
+    // Rows a newer build wrote for every kind still planned here.
+    const plannedRows = PLANNED_DRIVER_KINDS.map(
+      (kind) => `, ('${kind}', '${USER_ID}', '${kind}', 1, 1)`,
+    ).join("");
     sqlite.exec(`
       INSERT INTO "engine_instance" ("id", "user_id", "driver", "created_at", "updated_at")
-        VALUES ('gemini-cli', '${USER_ID}', 'gemini', 1, 1),
-               ('grok', '${USER_ID}', 'grok', 1, 1);
+        VALUES ('gemini-cli', '${USER_ID}', 'gemini', 1, 1)${plannedRows};
     `);
     const registry = createRegistry();
     const summaries = await registry.listSummaries(USER_ID);
@@ -126,7 +134,7 @@ describe("listing", () => {
         .filter((summary) => summary.availability === "unavailable")
         .map((summary) => [summary.id, summary.unavailableReason]),
     ).toEqual([
-      ["grok", "driver-planned"],
+      ...PLANNED_DRIVER_KINDS.map((kind) => [kind, "driver-planned"]),
       ["gemini-cli", "driver-unknown"],
     ]);
     expect((await registry.list(USER_ID)).map((i) => i.id)).not.toContain(
@@ -191,9 +199,11 @@ describe("create", () => {
     await expect(
       registry.create(USER_ID, { driver: "gemini" }),
     ).rejects.toMatchObject({ code: "invalid" });
-    await expect(
-      registry.create(USER_ID, { driver: "grok" }),
-    ).rejects.toMatchObject({ code: "unsupported" });
+    for (const driver of PLANNED_DRIVER_KINDS) {
+      await expect(registry.create(USER_ID, { driver })).rejects.toMatchObject({
+        code: "unsupported",
+      });
+    }
     await expect(
       registry.create(USER_ID, { driver: "sentinel" }),
     ).rejects.toMatchObject({ code: "unsupported" });
@@ -598,7 +608,10 @@ describe("resolve", () => {
       [{ driver: "codex", instanceId: "codex-gone" }, "missing"],
       [{ driver: "claude", instanceId: created.id }, "driver-mismatch"],
       [{ driver: "codex", instanceId: "codex-broken" }, "config-invalid"],
-      [{ driver: "acp" }, "driver-planned"],
+      ...PLANNED_DRIVER_KINDS.map((driver): [{ driver: string }, string] => [
+        { driver },
+        "driver-planned",
+      ]),
       [{ driver: "gemini" }, "driver-unknown"],
     ];
 

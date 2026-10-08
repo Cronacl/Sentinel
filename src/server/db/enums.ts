@@ -22,6 +22,10 @@ export const AI_PROVIDERS = [
 ] as const;
 export type AIProvider = (typeof AI_PROVIDERS)[number];
 
+// Every driver kind this build knows (contract/ids.ts BUILTIN_DRIVER_KINDS),
+// implemented or not: rows and requests naming a planned kind still parse,
+// and the engine catalog's status decides what is offered and dispatched.
+// Stored as plain text (no CHECK constraint), so widening needs no migration.
 export const CHAT_ENGINES = [
   "sentinel",
   "codex",
@@ -29,6 +33,10 @@ export const CHAT_ENGINES = [
   "copilot",
   "cursor",
   "opencode",
+  "grok",
+  "antigravity",
+  "pi",
+  "acp",
 ] as const;
 export type ChatEngine = (typeof CHAT_ENGINES)[number];
 

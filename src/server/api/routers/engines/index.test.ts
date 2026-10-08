@@ -58,6 +58,7 @@ mock.module("@/lib/ai/providers/model-selection", () => ({
 
 const { makeFakeModel, makeFakeSnapshot } =
   await import("@/lib/ai/chat/engines/contract/testing");
+const { PLANNED_DRIVER_KINDS } = await import("@/lib/ai/chat/engines/catalog");
 const { toEngineModel } =
   await import("@/lib/ai/chat/engines/drivers/legacy-status");
 const { EngineInstanceError, EngineInstanceUnavailableError } =
@@ -219,7 +220,8 @@ beforeEach(() => {
       usable: false,
     }),
     makeFakeSnapshot({ driver: "copilot", enabled: false, status: "disabled" }),
-    makeFakeSnapshot({ driver: "grok" }),
+    // Kinds still planned in this build are never pickable.
+    ...PLANNED_DRIVER_KINDS.map((driver) => makeFakeSnapshot({ driver })),
   ];
   streamedEvents = [];
   ownedThread = {

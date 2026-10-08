@@ -14,6 +14,7 @@ import {
   isAvailableDriverKind,
   isDefaultInstanceId,
   listDefaultInstanceDrivers,
+  PLANNED_DRIVER_KINDS,
 } from "./catalog";
 import { ENGINE_SLUG, engineCapabilitiesSchema } from "./contract";
 
@@ -36,9 +37,12 @@ describe("DRIVER_CATALOG", () => {
     }
   });
 
-  it("implements exactly the engines threads and requests accept today", () => {
-    expect([...AVAILABLE_DRIVER_KINDS]).toEqual([...CHAT_ENGINES]);
-    for (const kind of ["grok", "antigravity", "pi", "acp"]) {
+  it("accepts every builtin kind in rows and requests, implemented or not", () => {
+    expect([...CHAT_ENGINES]).toEqual([...BUILTIN_DRIVER_KINDS]);
+    expect([...AVAILABLE_DRIVER_KINDS, ...PLANNED_DRIVER_KINDS].sort()).toEqual(
+      [...BUILTIN_DRIVER_KINDS].sort(),
+    );
+    for (const kind of PLANNED_DRIVER_KINDS) {
       expect(isAvailableDriverKind(kind)).toBe(false);
       expect(getDriverMeta(kind)?.status).toBe("planned");
     }
@@ -75,7 +79,14 @@ describe("DRIVER_CATALOG", () => {
   });
 
   it("keeps today's permission modes for every existing driver", () => {
-    for (const kind of CHAT_ENGINES) {
+    for (const kind of [
+      "sentinel",
+      "codex",
+      "claude",
+      "copilot",
+      "cursor",
+      "opencode",
+    ] as const) {
       // Cursor runs on the shared ACP engine, which also maps accept_edits.
       expect(getDriverPermissionModes(kind)).toEqual(
         kind === "cursor"
@@ -137,7 +148,14 @@ describe("catalog lookups", () => {
   });
 
   it("synthesize default instances for implemented drivers only", () => {
-    expect(listDefaultInstanceDrivers()).toEqual([...CHAT_ENGINES]);
+    expect(listDefaultInstanceDrivers()).toEqual(
+      AVAILABLE_DRIVER_KINDS.filter(
+        (kind) => DRIVER_CATALOG[kind].defaultInstance,
+      ),
+    );
+    for (const kind of PLANNED_DRIVER_KINDS) {
+      expect(listDefaultInstanceDrivers()).not.toContain(kind);
+    }
     expect(isDefaultInstanceId("codex", "codex")).toBe(true);
     expect(isDefaultInstanceId("codex-work", "codex")).toBe(false);
     expect(isDefaultInstanceId("acp", "acp")).toBe(false);
@@ -162,7 +180,7 @@ describe("catalog lookups", () => {
 
   it("settles approvals of unattended runs on every implemented engine", () => {
     expect(
-      CHAT_ENGINES.filter(
+      AVAILABLE_DRIVER_KINDS.filter(
         (kind) => !getDriverMeta(kind)?.capabilities.supportsUnattendedTools,
       ),
     ).toEqual([]);

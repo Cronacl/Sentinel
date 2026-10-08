@@ -98,10 +98,11 @@ mock.module("@/lib/ai/chat/engines/copilot-sdk", () => ({
   resetCopilotRuntimeCache: () => {},
   resolveCopilotRuntime: async () => runtimeFor("copilot"),
 }));
-// Cursor runs on the shared ACP engine: its probe is faked at that seam.
+// Cursor and the other ACP agents (Grok, Antigravity, registry agents) probe
+// through the shared ACP engine: faked at that seam, per descriptor driver.
 mock.module("@/lib/ai/chat/engines/acp/probe", () => ({
-  probeAcpAgent: async () => {
-    const mode = modeOf("cursor");
+  probeAcpAgent: async (descriptor: { driver: string; label: string }) => {
+    const mode = modeOf(descriptor.driver);
     if (mode === "hang") {
       return never();
     }
@@ -112,17 +113,19 @@ mock.module("@/lib/ai/chat/engines/acp/probe", () => ({
         canLogout: false,
         email: null,
         label: null,
-        method: "Cursor Login",
+        method: `${descriptor.label} Login`,
         plan: null,
         status: installed ? "authenticated" : "unknown",
       },
       install: {
         installed,
-        path: installed ? "/usr/local/bin/cursor-agent" : null,
+        path: installed ? `/usr/local/bin/${descriptor.driver}-agent` : null,
         source: installed ? "managed-path" : null,
         version: installed ? "2026.08.04" : null,
       },
-      ...(installed ? {} : { message: "Cursor Agent was not found in PATH." }),
+      ...(installed
+        ? {}
+        : { message: `${descriptor.label} was not found in PATH.` }),
       models: installed
         ? [
             {
@@ -169,16 +172,32 @@ mock.module("@/lib/ai/chat/engines/opencode-sdk", () => ({
 
 // Each external runtime module is faked under its own path, so a driver
 // whose handlers loaded another engine's runtime (or swapped run and stop)
-// records the wrong runtime or action.
+// records the wrong runtime or action. Planned kinds have their slots here
+// already: a driver that lands with these module and export names needs no
+// edit in this file.
 const runtimeCalls: RecordedThreadRuntimeCall[] = [];
-const RUNTIME_EXPORTS = {
-  claude: ["runClaudeThreadChat", "stopClaudeThreadRun"],
-  codex: ["runCodexThreadChat", "stopCodexThreadRun"],
-  copilot: ["runCopilotThreadChat", "stopCopilotThreadRun"],
-  cursor: ["runCursorThreadChat", "stopCursorThreadRun"],
-  opencode: ["runOpenCodeThreadChat", "stopOpenCodeThreadRun"],
-} as const;
-for (const [kind, [runName, stopName]] of Object.entries(RUNTIME_EXPORTS)) {
+const RUNTIME_MODULES: Record<
+  string,
+  [module: string, run: string, stop: string]
+> = {
+  claude: ["claude", "runClaudeThreadChat", "stopClaudeThreadRun"],
+  codex: ["codex", "runCodexThreadChat", "stopCodexThreadRun"],
+  copilot: ["copilot", "runCopilotThreadChat", "stopCopilotThreadRun"],
+  cursor: ["cursor", "runCursorThreadChat", "stopCursorThreadRun"],
+  opencode: ["opencode", "runOpenCodeThreadChat", "stopOpenCodeThreadRun"],
+  grok: ["grok", "runGrokThreadChat", "stopGrokThreadRun"],
+  antigravity: [
+    "antigravity",
+    "runAntigravityThreadChat",
+    "stopAntigravityThreadRun",
+  ],
+  pi: ["pi", "runPiThreadChat", "stopPiThreadRun"],
+  // Not runtime/acp/, which is the shared ACP runtime every agent uses.
+  acp: ["acp-registry", "runAcpRegistryThreadChat", "stopAcpRegistryThreadRun"],
+};
+for (const [kind, [module, runName, stopName]] of Object.entries(
+  RUNTIME_MODULES,
+)) {
   const record =
     (action: "run" | "stop") =>
     async (request: never, thread: unknown, instance?: unknown) => {
@@ -191,15 +210,16 @@ for (const [kind, [runName, stopName]] of Object.entries(RUNTIME_EXPORTS)) {
       });
       return new Response(null, { status: 204 });
     };
-  mock.module(`@/lib/ai/chat/runtime/${kind}`, () => ({
+  mock.module(`@/lib/ai/chat/runtime/${module}`, () => ({
     [runName]: record("run"),
     [stopName]: record("stop"),
   }));
 }
 
-const { AVAILABLE_DRIVER_KINDS } = await import("../catalog");
-const { SERVER_DRIVERS } = await import("../platform/drivers");
-const { describeDriverConformance } =
+const { AVAILABLE_DRIVER_KINDS, BUILTIN_DRIVER_KINDS, isAvailableDriverKind } =
+  await import("../catalog");
+const { getEngineDriver, SERVER_DRIVERS } = await import("../platform/drivers");
+const { describeDriverConformance, describePlannedDriverConformance } =
   await import("../platform/testing/driver-conformance");
 
 // What each runtime writes to chat_engine_state (before stamping).
@@ -209,17 +229,35 @@ const STATE_SAMPLES: Record<string, object[]> = {
   copilot: [{ cwd: "/repo", sessionId: "s-1" }],
   cursor: [{ cwd: "/repo", sessionId: "s-1" }],
   opencode: [{ selectedAgent: "build", sessionId: "s-1" }],
+  grok: [{ cwd: "/repo", modeId: "default", sessionId: "s-1" }],
+  antigravity: [{ cwd: "/repo", sessionId: "s-1" }],
+  pi: [{ cwd: "/repo", sessionPath: "/repo/.pi/sessions/s-1.jsonl" }],
+  acp: [{ agentId: "gemini", cwd: "/repo", sessionId: "s-1" }],
 };
 
 describe("server driver registry", () => {
-  it("registers a conforming driver for every implemented kind", () => {
-    expect(SERVER_DRIVERS.map((driver) => driver.kind).sort()).toEqual(
-      [...AVAILABLE_DRIVER_KINDS].sort(),
-    );
+  it("lists one driver per builtin kind, in catalog order", () => {
+    expect(SERVER_DRIVERS.map((driver) => driver.kind)).toEqual([
+      ...BUILTIN_DRIVER_KINDS,
+    ]);
+  });
+
+  it("serves a conforming driver for every implemented kind only", () => {
+    expect(
+      SERVER_DRIVERS.filter((driver) => getEngineDriver(driver.kind)).map(
+        (driver) => driver.kind,
+      ),
+    ).toEqual([...AVAILABLE_DRIVER_KINDS]);
   });
 });
 
 for (const driver of SERVER_DRIVERS) {
+  // Planned kinds keep their stub until they land; they then run the full
+  // suite below with the fakes above.
+  if (!isAvailableDriverKind(driver.kind)) {
+    describePlannedDriverConformance(driver);
+    continue;
+  }
   const external = driver.meta.runtime === "external";
   describeDriverConformance(driver, {
     installed: () => {

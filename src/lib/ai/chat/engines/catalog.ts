@@ -402,6 +402,14 @@ export const AVAILABLE_DRIVER_KINDS = BUILTIN_DRIVER_KINDS.filter(
   (kind) => DRIVER_CATALOG[kind].status === "available",
 );
 
+/**
+ * Declared but not implemented yet: hidden from pickers, never dispatched.
+ * Each lands by flipping its own catalog entry to "available".
+ */
+export const PLANNED_DRIVER_KINDS = BUILTIN_DRIVER_KINDS.filter(
+  (kind) => DRIVER_CATALOG[kind].status === "planned",
+);
+
 export function isAvailableDriverKind(kind: string) {
   return getDriverMeta(kind)?.status === "available";
 }

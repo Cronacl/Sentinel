@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { ThreadActionError } from "@/hooks/use-thread-chat";
+import { listDefaultInstanceDrivers } from "@/lib/ai/chat/engines/catalog";
 
 import type { ChatComposerModel } from "./chat-composer-helpers";
 import {
@@ -122,12 +123,16 @@ describe("chat composer model helpers", () => {
   });
 
   it("offers every implemented driver's default instance before the catalog loads", () => {
-    expect(
-      FALLBACK_CHAT_ENGINE_OPTIONS.map((option) => [
-        option.engine,
-        option.instanceId,
-      ]),
-    ).toEqual([
+    const options = FALLBACK_CHAT_ENGINE_OPTIONS.map((option) => [
+      option.engine,
+      option.instanceId,
+    ]);
+
+    expect(options).toEqual(
+      listDefaultInstanceDrivers().map((kind) => [kind, kind]),
+    );
+    // Kinds that land later join after these, in catalog order.
+    expect(options.slice(0, 6)).toEqual([
       ["sentinel", "sentinel"],
       ["codex", "codex"],
       ["claude", "claude"],

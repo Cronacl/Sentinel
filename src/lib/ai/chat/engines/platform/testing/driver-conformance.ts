@@ -18,7 +18,10 @@ import {
 } from "../../state/registry";
 import type { ThreadChatRequest } from "../../../types";
 import type { EngineDriver, ProbeOptions } from "../driver";
-import { EngineTriggerUnsupportedError } from "../errors";
+import {
+  EngineInstanceUnavailableError,
+  EngineTriggerUnsupportedError,
+} from "../errors";
 import { createEngineSnapshotService } from "../snapshot-service";
 
 // The checks every server driver passes (design/driver-contract.md §7.2).
@@ -103,6 +106,74 @@ function createManualClock() {
       return id;
     },
   };
+}
+
+/**
+ * The checks a planned kind's stub passes (drivers/planned.ts): it matches
+ * the catalog, probes into a clean "not available yet" result and refuses
+ * every turn with the typed driver-planned error. The kind runs the full
+ * suite instead once its catalog entry is "available".
+ */
+export function describePlannedDriverConformance(driver: EngineDriver) {
+  describe(`${driver.kind} planned driver slot`, () => {
+    const instance = () =>
+      makeFakeInstance({ driver: driver.kind, id: `${driver.kind}-planned` });
+
+    it("declares itself consistently with the catalog", () => {
+      const meta = getDriverMeta(driver.kind);
+      expect(meta).not.toBeNull();
+      expect(meta!.status).toBe("planned");
+      expect(driver.meta).toBe(
+        DRIVER_CATALOG[driver.kind as keyof typeof DRIVER_CATALOG],
+      );
+      expect(driver.capabilities).toBe(meta!.capabilities);
+      expect(Boolean(driver.thread)).toBe(meta!.runtime === "external");
+    });
+
+    it("probes into a valid result that is never usable, without throwing", async () => {
+      for (const depth of ["cheap", "full"] as const) {
+        const controller = new AbortController();
+        controller.abort();
+        const result = await driver.probe(
+          instance(),
+          probeOptions({ depth, signal: controller.signal }),
+        );
+
+        expect(engineProbeResultSchema.safeParse(result).success).toBe(true);
+        expect(result.install.installed).toBe(false);
+        expect(result.status).toBe("error");
+        expect(result.models).toEqual([]);
+        expect(result.message).toContain("not available");
+      }
+    });
+
+    it("refuses to run or stop a turn with the typed error", async () => {
+      const request: ThreadChatRequest = {
+        threadId: "thread-1",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      };
+      const thread = { chatEngine: driver.kind, id: "thread-1" } as never;
+
+      for (const attempt of [
+        driver.thread!.run({ instance: instance(), request, thread }),
+        driver.thread!.stop({ instance: instance(), request, thread }),
+        driver.thread!.stop({ instance: null, request, thread }),
+      ]) {
+        const error = await attempt.then(
+          () => null,
+          (reason: unknown) => reason,
+        );
+        expect(error).toBeInstanceOf(EngineInstanceUnavailableError);
+        expect(error).toMatchObject({
+          code: "engine_unavailable",
+          driver: driver.kind,
+          reason: "driver-planned",
+        });
+      }
+    });
+  });
 }
 
 function summaryOf(instance: ResolvedEngineInstance): EngineInstanceSummary {

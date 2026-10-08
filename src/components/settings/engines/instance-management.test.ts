@@ -4,6 +4,7 @@ import {
   makeFakeModel,
   makeFakeSnapshot,
 } from "@/lib/ai/chat/engines/contract/testing";
+import { PLANNED_DRIVER_KINDS } from "@/lib/ai/chat/engines/catalog";
 import type { EngineInstanceSummary } from "@/lib/ai/chat/engines/contract";
 
 import {
@@ -69,7 +70,9 @@ describe("drivers and isolation", () => {
     expect(canAddEngineInstance("codex")).toBe(true);
     expect(canAddEngineInstance("cursor")).toBe(true);
     expect(canAddEngineInstance("sentinel")).toBe(false);
-    expect(canAddEngineInstance("grok")).toBe(false);
+    for (const kind of PLANNED_DRIVER_KINDS) {
+      expect(canAddEngineInstance(kind)).toBe(false);
+    }
     expect(canAddEngineInstance("gemini")).toBe(false);
   });
 

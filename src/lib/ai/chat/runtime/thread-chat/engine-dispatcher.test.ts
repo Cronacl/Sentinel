@@ -9,7 +9,8 @@ mock.module("server-only", () => ({}));
 // @ts-expect-error Bun test-only cache-busting import of the real module.
 const { ensureTables } = await import("@/server/db/index.ts?dispatch-actual");
 
-const { DRIVER_CATALOG } = await import("@/lib/ai/chat/engines/catalog");
+const { DRIVER_CATALOG, PLANNED_DRIVER_KINDS } =
+  await import("@/lib/ai/chat/engines/catalog");
 const { createEngineInstanceRegistry } =
   await import("@/lib/ai/chat/engines/platform/instances");
 const { EngineInstanceUnavailableError, EngineTriggerUnsupportedError } =
@@ -233,9 +234,11 @@ describe("engine dispatcher", () => {
     await expect(
       dispatcher.run({ driver: "gemini", instanceId: null }, request(), null),
     ).rejects.toMatchObject({ reason: "driver-unknown" });
-    await expect(
-      dispatcher.run({ driver: "grok", instanceId: null }, request(), null),
-    ).rejects.toMatchObject({ reason: "driver-planned" });
+    for (const driver of PLANNED_DRIVER_KINDS) {
+      await expect(
+        dispatcher.run({ driver, instanceId: null }, request(), null),
+      ).rejects.toMatchObject({ reason: "driver-planned" });
+    }
   });
 
   it("rejects instances of another driver", async () => {

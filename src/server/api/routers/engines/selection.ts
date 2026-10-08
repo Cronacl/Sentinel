@@ -1,5 +1,9 @@
 import { TRPCError } from "@trpc/server";
 
+import {
+  getDriverLabel,
+  isAvailableDriverKind,
+} from "@/lib/ai/chat/engines/catalog";
 import { toStoredEngineInstanceId } from "@/lib/ai/chat/engines/contract/ids";
 
 // Engine selections written from the UI (user default, thread settings, new
@@ -8,15 +12,24 @@ import { toStoredEngineInstanceId } from "@/lib/ai/chat/engines/contract/ids";
 // would only fail later, at dispatch, so it is refused when written.
 
 /**
- * Throws BAD_REQUEST unless `instanceId` is absent, the engine's default
- * instance, or an existing instance of `engine`. The registry is loaded on
- * demand: callers' modules stay importable without the database layer.
+ * Throws BAD_REQUEST unless `engine` is implemented in this build (stored
+ * engine values also name planned kinds) and `instanceId` is absent, the
+ * engine's default instance, or an existing instance of `engine`. The
+ * registry is loaded on demand: callers' modules stay importable without
+ * the database layer.
  */
 export async function assertEngineInstanceSelection(
   userId: string,
   engine: string,
   instanceId: string | null | undefined,
 ) {
+  if (!isAvailableDriverKind(engine)) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `${getDriverLabel(engine)} is not available in this build yet.`,
+    });
+  }
+
   if (instanceId == null || instanceId === engine) {
     return;
   }
