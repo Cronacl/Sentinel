@@ -8,6 +8,7 @@ import {
 import { makeFakeSnapshot } from "@/lib/ai/chat/engines/contract/testing";
 
 import {
+  describeUsageCheckedAt,
   describeUsageReset,
   formatUsagePercent,
   formatUsageResetIn,
@@ -16,6 +17,7 @@ import {
   getUsageTone,
   getUsageWindows,
   isUsageLimitsSnapshot,
+  isUsageLimitsStale,
   syncUsageLimitsFromEvent,
 } from "./usage-limits";
 
@@ -143,6 +145,62 @@ describe("usage presentation", () => {
     expect(
       getUsageLimitsNotice(makeFakeSnapshot({ label: "Codex", usable: false })),
     ).toBe("Codex needs to be ready before it can report usage.");
+  });
+});
+
+describe("usage age", () => {
+  const ago = (ms: number) => new Date(NOW - ms).toISOString();
+
+  it("says when limits were read, with the day once it is not today", () => {
+    const timeOf = (iso: string) =>
+      new Date(iso).toLocaleTimeString(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    const today = new Date(NOW).toISOString();
+    expect(describeUsageCheckedAt(today, NOW)).toBe(`Read at ${timeOf(today)}`);
+    const old = ago(3 * 86_400_000);
+    const day = new Date(old).toLocaleDateString(undefined, {
+      day: "numeric",
+      month: "short",
+    });
+    expect(describeUsageCheckedAt(old, NOW)).toBe(
+      `Read ${day}, ${timeOf(old)}`,
+    );
+    expect(describeUsageCheckedAt(undefined, NOW)).toBeNull();
+    expect(describeUsageCheckedAt("not a date", NOW)).toBeNull();
+  });
+
+  it("flags windows carried over or read long ago", () => {
+    const limitsAt = (checkedAt: string) =>
+      makeEngineUsageLimits({ checkedAt, windows: [window()] });
+    const fresh = limitsAt(ago(4 * 60_000));
+    expect(isUsageLimitsStale({ usable: true, usageLimits: fresh }, NOW)).toBe(
+      false,
+    );
+    // Not usable: whatever is shown came from an earlier read.
+    expect(isUsageLimitsStale({ usable: false, usageLimits: fresh }, NOW)).toBe(
+      true,
+    );
+    expect(
+      isUsageLimitsStale(
+        { usable: true, usageLimits: limitsAt(ago(3 * 86_400_000)) },
+        NOW,
+      ),
+    ).toBe(true);
+    // Nothing drawn, nothing stale.
+    expect(
+      isUsageLimitsStale(
+        {
+          usable: false,
+          usageLimits: makeUnavailableEngineUsageLimits({
+            checkedAt: AT,
+            reason: "unsupported",
+          }),
+        },
+        NOW,
+      ),
+    ).toBe(false);
   });
 });
 

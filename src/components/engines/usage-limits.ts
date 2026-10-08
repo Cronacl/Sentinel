@@ -61,6 +61,52 @@ export function describeUsageReset(
       : `Resets in ${resetIn}`;
 }
 
+/** Windows older than this may no longer match the account's usage. */
+export const USAGE_LIMITS_STALE_AFTER_MS = 15 * MINUTE_MS;
+
+/**
+ * When the limits were read: `Read at 14:32` today, `Read Oct 5, 14:32`
+ * before (carried-over limits can be days old). Absolute, so the label
+ * stays true however long the page stays open. Null without a usable time.
+ */
+export function describeUsageCheckedAt(
+  checkedAt: string | undefined,
+  now: number,
+): string | null {
+  if (!checkedAt) return null;
+  const at = Date.parse(checkedAt);
+  if (!Number.isFinite(at)) return null;
+  const date = new Date(at);
+  const time = date.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  if (new Date(now).toDateString() === date.toDateString()) {
+    return `Read at ${time}`;
+  }
+  const day = date.toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+  });
+  return `Read ${day}, ${time}`;
+}
+
+/**
+ * Whether drawn windows may be out of date: the instance cannot read
+ * usage now (they were carried over from an earlier run), or the last
+ * read is older than USAGE_LIMITS_STALE_AFTER_MS.
+ */
+export function isUsageLimitsStale(
+  snapshot: Pick<EngineSnapshot, "usable" | "usageLimits">,
+  now: number,
+) {
+  const limits = snapshot.usageLimits;
+  if (!limits || getUsageWindows(limits).length === 0) return false;
+  if (!snapshot.usable) return true;
+  const at = Date.parse(limits.checkedAt);
+  return !Number.isFinite(at) || now - at > USAGE_LIMITS_STALE_AFTER_MS;
+}
+
 /** Windows worth drawing (an unavailable read has none). */
 export function getUsageWindows(
   limits: EngineUsageLimits | null | undefined,

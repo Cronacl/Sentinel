@@ -7,8 +7,10 @@ import { sileo } from "sileo";
 import { EngineIcon } from "@/components/engines/descriptors";
 import { UsageLimitsWindows } from "@/components/engines/usage-limits-chip";
 import {
+  describeUsageCheckedAt,
   getUsageLimitsNotice,
   isUsageLimitsSnapshot,
+  isUsageLimitsStale,
 } from "@/components/engines/usage-limits";
 import type {
   EngineSnapshot,
@@ -16,15 +18,10 @@ import type {
 } from "@/lib/ai/chat/engines/contract";
 import { api } from "@/trpc/react";
 
-function formatCheckedAt(checkedAt: string | undefined) {
-  if (!checkedAt) return null;
+function formatCheckedAtTitle(checkedAt: string | undefined) {
+  if (!checkedAt) return undefined;
   const date = new Date(checkedAt);
-  return Number.isNaN(date.getTime())
-    ? null
-    : date.toLocaleTimeString(undefined, {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+  return Number.isNaN(date.getTime()) ? undefined : date.toLocaleString();
 }
 
 function useApplyUsageLimits() {
@@ -53,7 +50,9 @@ function UsageLimitsRow({ snapshot }: { snapshot: EngineSnapshot }) {
 
   const limits = snapshot.usageLimits;
   const notice = getUsageLimitsNotice(snapshot);
-  const checkedAt = formatCheckedAt(limits?.checkedAt);
+  const now = Date.now();
+  const checkedAt = describeUsageCheckedAt(limits?.checkedAt, now);
+  const isStale = isUsageLimitsStale(snapshot, now);
   const canReadKeychain = limits?.unavailable?.action === "read-keychain";
   const isBusy = refresh.isPending || readKeychain.isPending;
 
@@ -102,7 +101,12 @@ function UsageLimitsRow({ snapshot }: { snapshot: EngineSnapshot }) {
             {snapshot.label}
           </span>
           {checkedAt && !limits?.unavailable ? (
-            <span className="text-muted text-[11px]">Read at {checkedAt}</span>
+            <span
+              className={`text-[11px] ${isStale ? "text-warning" : "text-muted"}`}
+              title={formatCheckedAtTitle(limits?.checkedAt)}
+            >
+              {checkedAt}
+            </span>
           ) : null}
         </div>
         <div className="flex items-center gap-1.5">
@@ -134,7 +138,17 @@ function UsageLimitsRow({ snapshot }: { snapshot: EngineSnapshot }) {
         {notice ? (
           <p className="text-muted text-[11px]">{notice}</p>
         ) : limits ? (
-          <UsageLimitsWindows limits={limits} now={Date.now()} />
+          <>
+            <div className={isStale ? "opacity-60" : undefined}>
+              <UsageLimitsWindows limits={limits} now={now} />
+            </div>
+            {isStale && !snapshot.usable ? (
+              <p className="text-muted mt-1.5 text-[11px]">
+                Last known usage: {snapshot.label} needs to be ready to read it
+                again.
+              </p>
+            ) : null}
+          </>
         ) : null}
       </div>
 

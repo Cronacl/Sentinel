@@ -7,6 +7,7 @@ import type { EngineUsageLimits } from "@/lib/ai/chat/engines/contract";
 
 import { useEngineUsageLimits } from "./use-engine-usage-limits";
 import {
+  describeUsageCheckedAt,
   describeUsageReset,
   driverReportsUsageLimits,
   formatUsagePercent,
@@ -115,7 +116,12 @@ export const EngineUsageLimitsChip = memo(function EngineUsageLimitsChip({
 
       <Tooltip.Content className="w-[240px]" offset={12} placement="top">
         <div className="space-y-2">
-          <p className="text-xs font-medium text-muted">Plan usage</p>
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-xs font-medium text-muted">Plan usage</p>
+            <span className="text-[11px] text-muted">
+              {describeUsageCheckedAt(limits.checkedAt, now)}
+            </span>
+          </div>
           <UsageLimitsWindows limits={limits} now={now} />
         </div>
       </Tooltip.Content>
