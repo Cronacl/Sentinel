@@ -87,6 +87,37 @@ describe("applyEngineEvent", () => {
       }).changed,
     ).toBe(false);
   });
+
+  it("folds install and update progress into the instance's snapshot", () => {
+    const codex = makeFakeSnapshot({ driver: "codex" });
+    const claude = makeFakeSnapshot({ driver: "claude" });
+    const updateState = {
+      finishedAt: null,
+      message: "Updating Codex",
+      output: null,
+      startedAt: "2026-10-08T12:00:00.000Z",
+      status: "running" as const,
+    };
+
+    const result = applyEngineEvent([codex, claude], {
+      instanceId: "codex",
+      type: "maintenance",
+      updateState,
+      version: 7,
+    });
+    expect(result.changed).toBe(true);
+    expect(result.snapshots?.[0]).toEqual({ ...codex, updateState });
+    expect(result.snapshots?.[1]).toBe(claude);
+
+    expect(
+      applyEngineEvent([claude], {
+        instanceId: "codex",
+        type: "maintenance",
+        updateState,
+        version: 8,
+      }).changed,
+    ).toBe(false);
+  });
 });
 
 describe("createComposerViewTracker", () => {

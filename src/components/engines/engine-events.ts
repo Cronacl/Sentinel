@@ -79,6 +79,32 @@ export function applyEngineEvent(
     };
   }
 
+  if (event.type === "maintenance") {
+    // Install and update progress lands on the instance's snapshot at once;
+    // the re-probe after it finishes brings the rest.
+    const index =
+      snapshots?.findIndex((item) => item.instanceId === event.instanceId) ??
+      -1;
+    if (
+      !snapshots ||
+      index === -1 ||
+      (event.updateState === undefined && event.installState === undefined)
+    ) {
+      return { changed: false, snapshots };
+    }
+    const updated = [...snapshots];
+    updated[index] = {
+      ...snapshots[index]!,
+      ...(event.installState !== undefined
+        ? { installState: event.installState }
+        : {}),
+      ...(event.updateState !== undefined
+        ? { updateState: event.updateState }
+        : {}),
+    };
+    return { changed: true, snapshots: updated };
+  }
+
   if (event.type !== "snapshot") {
     return { changed: false, snapshots };
   }

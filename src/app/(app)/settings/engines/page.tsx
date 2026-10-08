@@ -7,6 +7,7 @@ import { sileo } from "sileo";
 import { useEngineSnapshots } from "@/components/engines/use-engine-snapshots";
 import { EngineInstanceCard } from "@/components/settings/engines/engine-instance-card";
 import { EngineModelsList } from "@/components/settings/engines/engine-models-list";
+import { EngineNetworkSettings } from "@/components/settings/engines/engine-network-settings";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { getDriverMeta } from "@/lib/ai/chat/engines/catalog";
 import type { EngineSnapshot } from "@/lib/ai/chat/engines/contract";
@@ -111,6 +112,8 @@ export default function EnginesPage() {
             </div>
 
             <EngineModelsList snapshots={snapshots} />
+
+            <EngineNetworkSettings />
           </div>
         </>
       )}

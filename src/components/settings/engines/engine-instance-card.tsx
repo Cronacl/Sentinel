@@ -15,6 +15,12 @@ import {
 import { getDriverMeta } from "@/lib/ai/chat/engines/catalog";
 import type { EngineSnapshot } from "@/lib/ai/chat/engines/contract";
 
+import { EngineAdvisoryBadges } from "./engine-advisory-badges";
+import {
+  EngineMaintenanceButton,
+  EngineMaintenanceProgress,
+} from "./engine-maintenance-actions";
+
 const MASKED_VALUE = "••••••••";
 
 const STABILITY_DESCRIPTIONS = {
@@ -96,8 +102,10 @@ export function EngineInstanceCard({
               {stability === "beta" ? "Beta" : "Unstable"}
             </Chip>
           ) : null}
+          <EngineAdvisoryBadges snapshot={snapshot} />
         </div>
         <div className="flex items-center gap-1.5">
+          <EngineMaintenanceButton snapshot={snapshot} />
           <Button
             className="h-6 min-w-0 px-2 text-[11px]"
             isDisabled={isRefreshing || snapshot.availability === "unavailable"}
@@ -121,6 +129,7 @@ export function EngineInstanceCard({
           </div>
         ))}
       </div>
+      <EngineMaintenanceProgress snapshot={snapshot} />
       {notice ? (
         <p className="border-warning/20 bg-warning-soft text-warning-soft-foreground mt-2 rounded-lg border px-2 py-1 text-[11px]">
           {notice}
