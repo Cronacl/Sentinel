@@ -1,12 +1,22 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { makeFakeSnapshot } from "@/lib/ai/chat/engines/contract/testing";
 
-import { EngineEnvEditor } from "./engine-env-editor";
-import { EngineInstanceCard } from "./engine-instance-card";
-import { EngineDriverSection } from "./engine-instance-manager";
-import { toEnvVarDrafts } from "./instance-management";
+// The card also hosts the sign-in panel and the install/update controls,
+// which talk to tRPC; they have their own tests, so render them as stubs.
+mock.module("./engine-auth-panel", () => ({
+  EngineAuthPanel: () => null,
+}));
+mock.module("./engine-maintenance-actions", () => ({
+  EngineMaintenanceButton: () => null,
+  EngineMaintenanceProgress: () => null,
+}));
+
+const { EngineEnvEditor } = await import("./engine-env-editor");
+const { EngineInstanceCard } = await import("./engine-instance-card");
+const { EngineDriverSection } = await import("./engine-instance-manager");
+const { toEnvVarDrafts } = await import("./instance-management");
 
 describe("EngineEnvEditor", () => {
   const markup = renderToStaticMarkup(
