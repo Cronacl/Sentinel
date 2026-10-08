@@ -55,6 +55,7 @@ describe("update-state enricher", () => {
         instance: makeFakeInstance({ driver: "claude" }),
         probe: null,
         snapshot,
+        userId: "user-1",
       },
       { signal },
     );
@@ -80,6 +81,7 @@ describe("update-state enricher", () => {
         instance: makeFakeInstance({ driver: "claude" }),
         probe: null,
         snapshot,
+        userId: "user-1",
       },
       { signal },
     );

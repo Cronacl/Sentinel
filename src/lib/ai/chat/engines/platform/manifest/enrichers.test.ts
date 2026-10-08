@@ -58,6 +58,7 @@ describe("platform enrichers", () => {
         instance: makeFakeInstance({ driver: "claude" }),
         probe: NO_PROBE,
         snapshot,
+        userId: "user-1",
       },
       { signal },
     );
@@ -82,6 +83,7 @@ describe("platform enrichers", () => {
         instance,
         probe: NO_PROBE,
         snapshot: makeFakeSnapshot({ driver: "codex" }),
+        userId: "user-1",
       },
       { signal },
     );
@@ -104,6 +106,7 @@ describe("platform enrichers", () => {
           instance,
           probe: NO_PROBE,
           snapshot: builtin,
+          userId: "user-1",
         },
         { signal },
       ),
@@ -141,6 +144,7 @@ describe("platform enrichers", () => {
           status: "ready",
         },
         snapshot: { ...snapshot, compatibilityAdvisory: runtimeAdvisory },
+        userId: "user-1",
       },
       { signal },
     );
