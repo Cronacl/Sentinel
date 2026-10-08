@@ -574,6 +574,23 @@ function killAllTerminalSessions() {
   }
 }
 
+// A command terminal belongs to the page that started it: after a reload
+// or a navigation nothing can reattach to it, so its sign-in command ends
+// (the server-side flow can then be cancelled or started again).
+function killCommandTerminalSessions() {
+  for (const [sessionId, session] of terminalSessions.entries()) {
+    if (session.kind !== "command") {
+      continue;
+    }
+    try {
+      session.pty.kill();
+    } catch (error) {
+      console.warn(`[electron] failed to kill terminal ${sessionId}`, error);
+      cleanupTerminalSession(sessionId);
+    }
+  }
+}
+
 function createTerminalSession(cwd) {
   const sessionId = randomUUID();
   ensureNodePtySpawnHelperExecutable();
@@ -1053,6 +1070,15 @@ function createWindow() {
 
   mainWindow.webContents.on("did-attach-webview", (_event, guestContents) => {
     configureBrowserGuestContents(guestContents, resolvedTheme);
+  });
+
+  mainWindow.webContents.on("did-start-navigation", (details) => {
+    if (details.isMainFrame && !details.isSameDocument) {
+      killCommandTerminalSessions();
+    }
+  });
+  mainWindow.webContents.on("render-process-gone", () => {
+    killCommandTerminalSessions();
   });
 
   mainWindow.webContents.on(

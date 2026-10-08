@@ -141,7 +141,8 @@ function CredentialsForm({
   );
 }
 
-function FlowStep({
+/** The running flow's current step (exported for tests). */
+export function EngineAuthFlowStep({
   embedTerminal,
   isResponding,
   onCancel,
@@ -157,6 +158,12 @@ function FlowStep({
   const [terminalError, setTerminalError] = useState<{
     id: string;
     message: string;
+  } | null>(null);
+  // The embedded command's exit, kept so it can be sent again when the
+  // first answer did not reach the server.
+  const [terminalExit, setTerminalExit] = useState<{
+    exitCode: number;
+    id: string;
   } | null>(null);
   const interaction = state.interaction;
   const cancelButton = (
@@ -228,18 +235,36 @@ function FlowStep({
       const failed =
         terminalError?.id === interaction.id ? terminalError.message : null;
       if (embedTerminal && interaction.launch && !failed) {
+        const exit = terminalExit?.id === interaction.id ? terminalExit : null;
         return (
           <div className="mt-2">
             <div className="flex items-center justify-between gap-2">
               <FlowMessage>{state.message}</FlowMessage>
-              {cancelButton}
+              <div className="flex gap-1.5">
+                {cancelButton}
+                {exit ? (
+                  <Button
+                    className={ACTION_BUTTON}
+                    isPending={isResponding}
+                    onPress={() =>
+                      onRespond({ exitCode: exit.exitCode, type: "terminal" })
+                    }
+                    size="sm"
+                  >
+                    Check sign-in
+                  </Button>
+                ) : null}
+              </div>
             </div>
             <EngineAuthTerminal
               interaction={interaction}
               onError={(message) =>
                 setTerminalError({ id: interaction.id, message })
               }
-              onExit={(exitCode) => onRespond({ exitCode, type: "terminal" })}
+              onExit={(exitCode) => {
+                setTerminalExit({ exitCode, id: interaction.id });
+                onRespond({ exitCode, type: "terminal" });
+              }}
             />
           </div>
         );
@@ -472,7 +497,7 @@ export function EngineAuthPanel({ snapshot }: { snapshot: EngineSnapshot }) {
       ) : null}
 
       {view.active && state ? (
-        <FlowStep
+        <EngineAuthFlowStep
           embedTerminal={embedTerminal}
           isResponding={respond.isPending}
           key={state.flowId ?? "flow"}
