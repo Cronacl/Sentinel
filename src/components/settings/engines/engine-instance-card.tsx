@@ -55,10 +55,13 @@ function AccountValue({ snapshot }: { snapshot: EngineSnapshot }) {
 
 /** One engine instance in Settings → Engines, rendered from its snapshot. */
 export function EngineInstanceCard({
+  actions,
   isRefreshing,
   onRefresh,
   snapshot,
 }: {
+  /** The instance's management menu (edit, disable, remove, …). */
+  actions?: ReactNode;
   isRefreshing: boolean;
   onRefresh: () => void;
   snapshot: EngineSnapshot;
@@ -85,6 +88,13 @@ export function EngineInstanceCard({
             driver={snapshot.driver}
             iconUrl={snapshot.iconUrl}
           />
+          {snapshot.accentColor ? (
+            <span
+              aria-hidden
+              className="size-2 shrink-0 rounded-full"
+              style={{ backgroundColor: snapshot.accentColor }}
+            />
+          ) : null}
           <span className="text-foreground truncate text-[13px] font-medium">
             {snapshot.label}
           </span>
@@ -120,6 +130,7 @@ export function EngineInstanceCard({
           <Chip color={badge.color} size="sm" variant="soft">
             {badge.label}
           </Chip>
+          {actions}
         </div>
       </div>
       <div className="mt-1.5 space-y-0.5 text-[11px]">

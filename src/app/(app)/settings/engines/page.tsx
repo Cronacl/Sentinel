@@ -6,6 +6,11 @@ import { sileo } from "sileo";
 
 import { useEngineSnapshots } from "@/components/engines/use-engine-snapshots";
 import { EngineInstanceCard } from "@/components/settings/engines/engine-instance-card";
+import {
+  EngineDriverSection,
+  useEngineInstanceManager,
+} from "@/components/settings/engines/engine-instance-manager";
+import { groupEngineSnapshotsByDriver } from "@/components/settings/engines/instance-management";
 import { EngineModelsList } from "@/components/settings/engines/engine-models-list";
 import { EngineNetworkSettings } from "@/components/settings/engines/engine-network-settings";
 import { EngineUsageLimitsSection } from "@/components/settings/engines/engine-usage-limits";
@@ -37,6 +42,7 @@ export default function EnginesPage() {
   const utils = api.useUtils();
   const [actionError, setActionError] = useState("");
   const [refreshing, setRefreshing] = useState<string | null>(null);
+  const instances = useEngineInstanceManager();
 
   const snapshots = (snapshotsQuery.data ?? []).filter(isRuntimeSnapshot);
 
@@ -87,7 +93,7 @@ export default function EnginesPage() {
 
   return (
     <SettingsPageWrapper
-      subtitle="Inspect local coding engines, detected runtimes, and engine-specific model options."
+      subtitle="Inspect local coding engines and their runtimes, and add instances with their own home, environment and models."
       title="Engines"
     >
       {snapshotsQuery.isPending && !snapshotsQuery.data ? (
@@ -101,16 +107,27 @@ export default function EnginesPage() {
           ) : null}
 
           <div className="flex flex-col gap-3">
-            <div className="grid gap-1.5">
-              {snapshots.map((snapshot) => (
-                <EngineInstanceCard
-                  isRefreshing={refreshing === snapshot.instanceId}
-                  key={snapshot.instanceId}
-                  onRefresh={() => void handleRefresh(snapshot)}
-                  snapshot={snapshot}
-                />
-              ))}
-            </div>
+            {groupEngineSnapshotsByDriver(snapshots).map((group) => (
+              <EngineDriverSection
+                driver={group.driver}
+                key={group.driver}
+                onAdd={
+                  instances.canAdd(group.driver)
+                    ? () => instances.openCreate(group.driver)
+                    : undefined
+                }
+              >
+                {group.snapshots.map((snapshot) => (
+                  <EngineInstanceCard
+                    actions={instances.renderActions(snapshot)}
+                    isRefreshing={refreshing === snapshot.instanceId}
+                    key={snapshot.instanceId}
+                    onRefresh={() => void handleRefresh(snapshot)}
+                    snapshot={snapshot}
+                  />
+                ))}
+              </EngineDriverSection>
+            ))}
 
             <EngineUsageLimitsSection snapshots={snapshots} />
 
@@ -118,6 +135,7 @@ export default function EnginesPage() {
 
             <EngineNetworkSettings />
           </div>
+          {instances.dialogs}
         </>
       )}
     </SettingsPageWrapper>
