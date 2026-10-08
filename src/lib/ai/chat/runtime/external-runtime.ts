@@ -29,6 +29,8 @@ function formatTranscriptMessage(message: ThreadUIMessage) {
 }
 
 export function buildExternalRuntimePromptText(input: {
+  /** Heading of the earlier turns (default "Conversation so far:"). */
+  historyHeading?: string;
   /**
    * Include the earlier turns (default true). False when the agent's own
    * session already holds them (a loaded or resumed session).
@@ -64,7 +66,9 @@ export function buildExternalRuntimePromptText(input: {
       `Current mode: ${input.threadMode}.`,
       `Workspace root: ${input.workspaceRoot ?? "unavailable"}.`,
     ].join("\n"),
-    history ? `Conversation so far:\n${history}` : null,
+    history
+      ? `${input.historyHeading ?? "Conversation so far:"}\n${history}`
+      : null,
     latestText ? `Latest user request:\n${latestText}` : null,
   ];
 

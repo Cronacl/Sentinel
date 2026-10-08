@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
+
 import { generateId } from "ai";
 
 import { updateAcpCatalog } from "@/lib/ai/chat/engines/acp/catalog-cache";
@@ -14,6 +16,8 @@ import {
   AcpRequestCancelledError,
   AcpRequestTimeoutError,
   getErrorMessage,
+  isAuthRequiredError,
+  isUnknownSessionError,
 } from "@/lib/ai/chat/engines/acp/errors";
 import {
   acpLaunchFingerprint,
@@ -22,7 +26,10 @@ import {
   getAcpProcessPool,
   startAcpProcess,
 } from "@/lib/ai/chat/engines/acp/launch";
-import { buildAcpMcpServers } from "@/lib/ai/chat/engines/acp/mcp-forwarding";
+import {
+  buildAcpMcpServers,
+  type AcpMcpForwarding,
+} from "@/lib/ai/chat/engines/acp/mcp-forwarding";
 import type { AcpSessionUpdateEnvelope } from "@/lib/ai/chat/engines/acp/schema";
 import {
   applyAcpModelSelection,
@@ -92,6 +99,7 @@ import {
   setStatusLabel,
   type AcpRunControl,
 } from "./control";
+import { MISSED_TURNS_HEADING, planAcpHistory } from "./history";
 import { createRunHandlers, toInteractionAnswer } from "./interactions";
 import { buildAcpPromptBlocks } from "./prompt";
 import { activeAcpRunControls, resolveActiveAcpRunControl } from "./state";
@@ -100,10 +108,11 @@ import { activeAcpRunControls, resolveActiveAcpRunControl } from "./state";
 // every ACP descriptor (Cursor today). The agent process lives per
 // (instance, thread) in the process pool and is reused across turns; the
 // session is reused while the process lives, else loaded or resumed by its
-// persisted id, else created — and only a new session gets the transcript,
-// so a resumed agent never sees the history twice. Updates stream into the
-// shared mirror; approvals and questions park until the user answers; Stop
-// sends session/cancel (a notification) and the turn ends as cancelled.
+// persisted id, else created. A new session gets the transcript once; an
+// existing one only the turns it missed (history.ts), so a resumed agent
+// never sees the history twice. Updates stream into the shared mirror;
+// approvals and questions park until the user answers; Stop sends
+// session/cancel (a notification) and the turn ends as cancelled.
 
 const log = createLogger("ThreadChatAcp");
 
@@ -373,8 +382,8 @@ function addSetupNotice(control: AcpRunControl, id: string, message: string) {
   });
 }
 
-/** The user's MCP servers for session/new|load, with a notice for skipped ones. */
-async function forwardMcpServers(
+/** The user's MCP servers for session/new|load, and their fingerprint. */
+async function resolveMcpServers(
   control: AcpRunControl,
   init: Awaited<ReturnType<typeof initializeAcpAgent>>,
 ) {
@@ -387,25 +396,38 @@ async function forwardMcpServers(
       resolveOAuthToken: (entry) => resolveOAuthToken(control.userId, entry),
     },
   );
-  if (mcp.skipped.length > 0) {
-    const title = "Some MCP servers were not passed to the agent";
-    control.mirror.upsertTool({
-      id: "mcp-forwarding",
-      input: {},
-      kind: "notice",
-      meta: { severity: "warning" },
-      output: {
-        description: mcp.skipped
-          .map((server) => `${server.name}: ${server.reason}`)
-          .join("\n"),
-        severity: "warning",
-        title,
-      },
-      status: "completed",
-      title,
-    });
+  // A live session keeps the servers it was opened with: a changed list
+  // (a server added, edited or turned off) reopens the session.
+  const key = createHash("sha256")
+    .update(JSON.stringify(mcp.servers))
+    .digest("hex");
+  return { ...mcp, key };
+}
+
+/** Says which MCP servers a newly opened session did not get. */
+function addMcpSkippedNotice(
+  control: AcpRunControl,
+  skipped: AcpMcpForwarding["skipped"],
+) {
+  if (skipped.length === 0) {
+    return;
   }
-  return mcp.servers;
+  const title = "Some MCP servers were not passed to the agent";
+  control.mirror.upsertTool({
+    id: "mcp-forwarding",
+    input: {},
+    kind: "notice",
+    meta: { severity: "warning" },
+    output: {
+      description: skipped
+        .map((server) => `${server.name}: ${server.reason}`)
+        .join("\n"),
+      severity: "warning",
+      title,
+    },
+    status: "completed",
+    title,
+  });
 }
 
 async function startTurn(
@@ -449,14 +471,18 @@ async function startTurn(
     descriptor,
     signal,
   });
+  const mcp = await resolveMcpServers(control, init);
 
-  // MCP servers only matter when a session is opened; a live session keeps
-  // the ones it was opened with.
-  const live = getLiveSession(process);
-  const mcpServers =
-    live && live.cwd === control.workspaceRoot
-      ? []
-      : await forwardMcpServers(control, init);
+  const history = planAcpHistory({
+    currentMessageId: input.message?.id ?? null,
+    state: input.state,
+    transcript: input.modelTranscript,
+  });
+  if (history.type === "diverged") {
+    // The agent's session holds turns the thread no longer has (an edited
+    // message, a checkpoint restore): a new session gets the transcript.
+    forgetLiveSession(process);
+  }
 
   setStatusLabel(control, `Starting ${descriptor.label} session...`);
   const opened = await openAcpSession(process, {
@@ -470,7 +496,8 @@ async function startTurn(
     cwd: control.workspaceRoot,
     descriptor,
     init,
-    mcpServers,
+    mcpKey: mcp.key,
+    mcpServers: mcp.servers,
     onReplay: (replaying) => {
       control.replaying = replaying;
     },
@@ -479,10 +506,14 @@ async function startTurn(
         error: getErrorMessage(error),
         runId: control.runId,
       }),
-    persistedSessionId: input.state?.sessionId ?? null,
+    persistedSessionId:
+      history.type === "diverged" ? null : (input.state?.sessionId ?? null),
   });
   const session = opened.session;
   control.sessionId = session.sessionId;
+  if (!opened.reused) {
+    addMcpSkippedNotice(control, mcp.skipped);
+  }
   if (!opened.historyDelivered) {
     // The agent's own default, before a model is picked for this turn.
     learnCatalog(control, session, { currentIsDefault: true });
@@ -526,17 +557,34 @@ async function startTurn(
   }
   learnCatalog(control, session);
 
+  // What the session lacks: everything for a new session, else what the
+  // history plan found (nothing, or the turns it missed).
+  const historyMessages = !opened.historyDelivered
+    ? input.modelTranscript
+    : history.type === "full"
+      ? input.modelTranscript
+      : history.type === "since"
+        ? history.messages
+        : [];
+  const sendsMissedTurns = opened.historyDelivered && history.type === "since";
+
+  // Until this turn's prompt succeeds, the session holds what it held.
   const baseState: AcpThreadState = {
     agentId: descriptor.id,
     agentVersion: init.agentInfo.version ?? binary.version ?? null,
     buildModeId: plan.buildModeId,
     cwd: control.workspaceRoot,
-    historyDelivered: opened.historyDelivered,
+    historyDelivered: opened.historyDelivered
+      ? (input.state?.historyDelivered ?? null)
+      : false,
     modeId: plan.modeId,
     modelId: input.request.modelId ?? null,
     protocolVersion: init.protocolVersion,
     reasoningEffort: input.request.reasoningEffort ?? null,
     sessionId: session.sessionId,
+    syncedMessageId: opened.historyDelivered
+      ? (input.state?.syncedMessageId ?? null)
+      : null,
   };
   writeThreadState(control, baseState);
 
@@ -553,11 +601,12 @@ async function startTurn(
     forceImagePrompts: descriptor.forceImagePrompts,
     message: input.message,
     text: buildExternalRuntimePromptText({
-      includeHistory: !opened.historyDelivered,
+      ...(sendsMissedTurns ? { historyHeading: MISSED_TURNS_HEADING } : {}),
+      includeHistory: historyMessages.length > 0,
       message: promptMessage,
       planPreamble: plan.usePreamble,
       threadMode: control.threadMode,
-      transcript: input.modelTranscript,
+      transcript: historyMessages,
       workspaceRoot: control.workspaceRoot,
     }),
   });
@@ -577,8 +626,12 @@ async function runPrompt(
       prompt: turn.prompt,
       sessionId: turn.session.sessionId,
     });
-    // The session now holds this turn.
-    writeThreadState(control, { ...turn.baseState, historyDelivered: true });
+    // The session now holds this turn and everything before it.
+    writeThreadState(control, {
+      ...turn.baseState,
+      historyDelivered: true,
+      syncedMessageId: control.assistantId,
+    });
     if (result.usage) {
       control.mirror.setUsage({
         ...(result.usage.cachedReadTokens != null
@@ -617,7 +670,10 @@ async function runPrompt(
       return;
     }
     const exited = turn.process.exitError();
-    if (exited) {
+    if (exited || isAuthRequiredError(error) || isUnknownSessionError(error)) {
+      // A dead process, a sign-in the agent lost or a session it no longer
+      // has: the next turn starts a fresh process, which signs in lazily and
+      // loads (or replaces) the session.
       await evictProcess(control);
     }
     await finishRun(control, {

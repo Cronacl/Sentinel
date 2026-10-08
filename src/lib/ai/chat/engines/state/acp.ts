@@ -26,6 +26,13 @@ export const acpThreadStateSchema = z.object({
   protocolVersion: z.number().int().nullish(),
   reasoningEffort: z.enum(REASONING_EFFORTS).nullish(),
   sessionId: z.string(),
+  /**
+   * The last thread message the agent's session holds (the assistant
+   * message of its latest turn). Turns after it reached the thread some
+   * other way (another engine, a failed turn) and are sent next turn; a
+   * thread without it (an edit, a checkpoint restore) needs a new session.
+   */
+  syncedMessageId: z.string().nullish(),
 });
 
 export type AcpThreadState = z.infer<typeof acpThreadStateSchema>;

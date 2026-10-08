@@ -258,6 +258,32 @@ describe("session selection", () => {
     expect(methodsCalled(started.logPath)).not.toContain("session/new");
   });
 
+  it("reopens a live session through load when its MCP servers changed", async () => {
+    const started = start({
+      session: { ids: ["s-1"], load: { knownSessionIds: ["s-1"] } },
+    });
+    const first = await open(started, { mcpKey: "a" });
+    const same = await open(started, {
+      mcpKey: "a",
+      persistedSessionId: "s-1",
+    });
+    expect(same.reused).toBe(true);
+    const changed = await open(started, {
+      mcpKey: "b",
+      mcpServers: [{ args: [], command: "mcp", env: [], name: "tools" }],
+      persistedSessionId: first.session.sessionId,
+    });
+    expect(changed).toEqual(
+      expect.objectContaining({ historyDelivered: true, reused: false }),
+    );
+    expect(changed.session.origin).toBe("load");
+    expect(
+      methodsCalled(started.logPath).filter((method) =>
+        method.startsWith("session/"),
+      ),
+    ).toEqual(["session/new", "session/load"]);
+  });
+
   it("resumes when the descriptor prefers it and the agent supports it", async () => {
     const started = start({ session: { resume: { knownSessionIds: ["s"] } } });
     const init = await session.initializeAcpAgent(started.process, {

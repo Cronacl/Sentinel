@@ -36,7 +36,12 @@ export async function setupAcpRunHarness() {
     order: [] as string[],
     thread: null as StoredThread | null,
   };
-  const settings = { permissionMode: "default", workspaceDir: "" };
+  const settings = {
+    /** The user's MCP servers (runtime entries). */
+    mcpServers: [] as unknown[],
+    permissionMode: "default",
+    workspaceDir: "",
+  };
   const drains: unknown[] = [];
 
   const { stampThreadState } =
@@ -163,7 +168,7 @@ export async function setupAcpRunHarness() {
   }));
 
   mock.module("@/lib/ai/chat/runtime/workspace", () => ({
-    getMcpServerRuntime: async () => [],
+    getMcpServerRuntime: async () => settings.mcpServers,
     getToolPermissionMode: async () => settings.permissionMode,
     getWorkspaceRootPath: async () => settings.workspaceDir,
   }));
@@ -283,6 +288,7 @@ export async function setupAcpRunHarness() {
       store.order = [];
       store.thread = null;
       drains.length = 0;
+      settings.mcpServers = [];
       settings.permissionMode = "default";
       settings.workspaceDir = support.makeTempDir("ws");
       dirs.push(settings.workspaceDir);
@@ -303,6 +309,39 @@ export async function setupAcpRunHarness() {
         instance,
       );
       return instance;
+    },
+    /** A turn another engine answered (stored like the thread's own turns). */
+    addForeignTurn(question: string, answer: string) {
+      const parent = store.order.at(-1) ?? null;
+      const userId = `foreign-user-${store.order.length}`;
+      const assistantId = `foreign-assistant-${store.order.length}`;
+      for (const message of [
+        {
+          id: userId,
+          metadata: {
+            branchId: userId,
+            isActive: true,
+            parentMessageId: parent,
+            status: "completed" as const,
+          },
+          parts: [{ text: question, type: "text" as const }],
+          role: "user" as const,
+        },
+        {
+          id: assistantId,
+          metadata: {
+            branchId: assistantId,
+            isActive: true,
+            parentMessageId: userId,
+            status: "completed" as const,
+          },
+          parts: [{ text: answer, type: "text" as const }],
+          role: "assistant" as const,
+        },
+      ]) {
+        store.order.push(message.id);
+        store.messages.set(message.id, message);
+      }
     },
     runAcpThreadChat: runtime.runAcpThreadChat,
     settings,

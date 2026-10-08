@@ -140,6 +140,8 @@ export type AcpLiveSession = {
   configOptions: AcpConfigOptionInfo[];
   cwd: string;
   legacyModels: ReturnType<typeof readLegacyModelState>;
+  /** Fingerprint of the MCP servers the session was opened with. */
+  mcpKey: string | null;
   modes: AcpModeState | null;
   /** How the session was opened in this process. */
   origin: "load" | "new" | "resume";
@@ -289,6 +291,8 @@ export type OpenSessionResult = {
    * it holds the turns it was given; false for a session just created.
    */
   historyDelivered: boolean;
+  /** The live session was reused without any request. */
+  reused: boolean;
   session: AcpLiveSession;
 };
 
@@ -297,6 +301,7 @@ function readSessionSetup(
   sessionId: string,
   cwd: string,
   origin: AcpLiveSession["origin"],
+  mcpKey: string | null,
 ): AcpLiveSession {
   const record = (raw ?? {}) as JsonRecord;
   return {
@@ -304,6 +309,7 @@ function readSessionSetup(
     configOptions: readConfigOptions(record.configOptions),
     cwd,
     legacyModels: readLegacyModelState(record.models),
+    mcpKey,
     modes: readModeState(record.modes),
     origin,
     sessionId,
@@ -331,8 +337,10 @@ function isSessionRefusal(error: unknown, signal: AbortSignal | undefined) {
  *     capabilities (updates replayed by load are dropped by the caller via
  *     `onReplay`); an unknown id falls back to a new session;
  *   otherwise session/new.
- * A new session never inherits the old one's history: `historyDelivered`
- * false tells the caller to include the transcript once.
+ * A live session opened with other MCP servers (`mcpKey`) is reopened
+ * through load or resume. A new session never inherits the old one's
+ * history: `historyDelivered` false tells the caller to include the
+ * transcript once.
  */
 export async function openAcpSession(
   process: AcpAgentProcess,
@@ -341,6 +349,8 @@ export async function openAcpSession(
     cwd: string;
     descriptor: AcpAgentDescriptor;
     init: AcpInitializeInfo;
+    /** Fingerprint of `mcpServers` (null: not tracked). */
+    mcpKey?: string | null;
     mcpServers: AcpMcpServer[];
     /** Called with true before a session/load and false once its replay is over. */
     onReplay?: (replaying: boolean) => void;
@@ -350,9 +360,10 @@ export async function openAcpSession(
     timeoutMs?: number;
   },
 ): Promise<OpenSessionResult> {
+  const mcpKey = input.mcpKey ?? null;
   const live = getLiveSession(process);
-  if (live && live.cwd === input.cwd) {
-    return { historyDelivered: true, session: live };
+  if (live && live.cwd === input.cwd && live.mcpKey === mcpKey) {
+    return { historyDelivered: true, reused: true, session: live };
   }
 
   const { capabilities } = input.init;
@@ -408,9 +419,15 @@ export async function openAcpSession(
             { signal: input.auth.signal, timeoutMs },
           );
         });
-        const session = readSessionSetup(raw, persisted, input.cwd, kind);
+        const session = readSessionSetup(
+          raw,
+          persisted,
+          input.cwd,
+          kind,
+          mcpKey,
+        );
         setLiveSession(process, session);
-        return { historyDelivered: true, session };
+        return { historyDelivered: true, reused: false, session };
       } catch (error) {
         if (!isSessionRefusal(error, input.auth.signal)) {
           throw error;
@@ -435,9 +452,9 @@ export async function openAcpSession(
       `${input.descriptor.processLabel} created a session without an id.`,
     );
   }
-  const session = readSessionSetup(raw, sessionId, input.cwd, "new");
+  const session = readSessionSetup(raw, sessionId, input.cwd, "new", mcpKey);
   setLiveSession(process, session);
-  return { historyDelivered: false, session };
+  return { historyDelivered: false, reused: false, session };
 }
 
 /** Drops the process's session (its cwd changed, or it failed). */

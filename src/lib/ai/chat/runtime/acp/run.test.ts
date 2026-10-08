@@ -371,7 +371,8 @@ describe("crashes", () => {
     const scenario: Scenario = {
       prompts: [
         {
-          match: "crash",
+          // Only this turn's own request (not the history sent later).
+          match: "request:\ncrash",
           steps: [{ code: 9, stderr: "fatal: model gone", type: "exit" }],
         },
         { steps: [{ text: "back", type: "text" }] },
@@ -391,6 +392,29 @@ describe("crashes", () => {
       "the second turn",
     );
     expect(h.assistant()?.metadata?.status).toBe("completed");
+    // The session never finished a turn, so it gets the transcript again.
+    const prompts = h.agentRequests(instance.logPath, "session/prompt");
+    expect(
+      (prompts.at(-1) as { params: { prompt: Array<{ text?: string }> } })
+        .params.prompt[0]?.text,
+    ).toContain("USER:\ncrash now");
+  });
+
+  it("drops the process when the agent loses its sign-in mid-session", async () => {
+    const instance = await run(
+      {
+        prompts: [
+          { error: { code: -32000, message: "Authentication required" } },
+        ],
+      },
+      "go",
+    );
+    const failed = await h.waitFor(h.finished, "finish");
+    expect(failed.metadata?.status).toBe("error");
+    // The next turn starts a process that signs in again when asked.
+    expect(
+      h.getAcpProcessPool().peek(h.acpPoolKey(instance.id, "thread-1")),
+    ).toBeNull();
   });
 
   it("fails a turn whose agent crashes while starting", async () => {
@@ -448,6 +472,89 @@ describe("session continuity", () => {
     const text = promptTexts(forgetful.logPath).at(-1) ?? "";
     expect(text).toContain("Conversation so far");
     expect(text.match(/first question/g)).toHaveLength(1);
+  });
+
+  it("sends a loaded session the turns another engine answered, once", async () => {
+    const scenario: Scenario = {
+      session: { ids: ["s-1"], load: { knownSessionIds: ["s-1"] } },
+    };
+    const instance = await run(scenario, "first question");
+    await h.waitFor(h.finished, "turn 1");
+    h.addForeignTurn("claude question", "claude answer");
+
+    await h.getAcpProcessPool().disposeAll();
+    await run(scenario, "third question", {}, instance);
+    await h.waitFor(() => h.store.order.length === 6 && h.finished(), "turn 2");
+    expect(h.agentRequests(instance.logPath, "session/load")).toHaveLength(1);
+    const text = promptTexts(instance.logPath).at(-1) ?? "";
+    expect(text).toContain("Conversation since your last reply");
+    expect(text).toContain("USER:\nclaude question");
+    expect(text).toContain("ASSISTANT:\nclaude answer");
+    expect(text).not.toContain("first question");
+
+    await run(scenario, "fourth question", {}, instance);
+    await h.waitFor(() => h.store.order.length === 8 && h.finished(), "turn 3");
+    expect(promptTexts(instance.logPath).at(-1)).not.toContain(
+      "claude question",
+    );
+  });
+
+  it("replaces the session, with the transcript, when an edit drops turns it holds", async () => {
+    const scenario: Scenario = {
+      session: {
+        ids: ["s-1", "s-2"],
+        load: { knownSessionIds: ["s-1", "s-2"] },
+      },
+    };
+    const instance = await run(scenario, "first question");
+    await h.waitFor(h.finished, "turn 1");
+    await run(scenario, "second question", {}, instance);
+    await h.waitFor(() => h.store.order.length === 4 && h.finished(), "turn 2");
+
+    await run(
+      scenario,
+      "second question, edited",
+      { messageId: h.store.order[2], trigger: "edit-user-message" },
+      instance,
+    );
+    await h.waitFor(() => h.store.order.length === 6 && h.finished(), "edit");
+    expect(h.agentRequests(instance.logPath, "session/new")).toHaveLength(2);
+    const text = promptTexts(instance.logPath).at(-1) ?? "";
+    expect(text).toContain("Conversation so far");
+    expect(text).toContain("USER:\nfirst question");
+    expect(text).not.toContain("USER:\nsecond question");
+  });
+
+  it("reloads a live session when the user's MCP servers changed", async () => {
+    const scenario: Scenario = {
+      session: { ids: ["s-1"], load: { knownSessionIds: ["s-1"] } },
+    };
+    const instance = await run(scenario, "first question");
+    await h.waitFor(h.finished, "turn 1");
+    h.settings.mcpServers = [
+      {
+        config: {
+          args: [],
+          command: "mcp-server",
+          envPassthrough: [],
+          envVars: [],
+        },
+        id: "1",
+        isEnabled: true,
+        name: "Tools",
+        transport: "stdio",
+      },
+    ];
+    await run(scenario, "second question", {}, instance);
+    await h.waitFor(() => h.store.order.length === 4 && h.finished(), "turn 2");
+    const loads = h.agentRequests(instance.logPath, "session/load");
+    expect(loads).toHaveLength(1);
+    expect(
+      (loads[0] as { params: { mcpServers: unknown } }).params.mcpServers,
+    ).toEqual([{ args: [], command: "mcp-server", env: [], name: "Tools" }]);
+    expect(promptTexts(instance.logPath).at(-1)).not.toContain(
+      "Conversation so far",
+    );
   });
 });
 
