@@ -38,6 +38,7 @@ mock.module("@anthropic-ai/claude-agent-sdk", () => ({
 }));
 
 const {
+  forgetClaudeEngineStatus,
   getClaudeEngineStatus,
   resetClaudeCodeRuntimeCache,
   resetClaudeEngineStatusCache,
@@ -262,6 +263,38 @@ describe("getClaudeEngineStatus", () => {
           usedCachedStatus: true,
         }),
       );
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("reports a sign-out once the last-known-good status is forgotten", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
+
+    try {
+      await createClaudeExecutable(tempRoot);
+      const readyStatus = await getClaudeEngineStatus({ forceRefresh: true });
+      expect(readyStatus.account).toEqual({ email: "claude@example.com" });
+
+      // `claude auth logout`: the SDK answers without models or account.
+      initializationResultFactory = async () => ({ account: null, models: [] });
+      await forgetClaudeEngineStatus();
+
+      const status = await getClaudeEngineStatus({ forceRefresh: true });
+      expect(status).toEqual(
+        expect.objectContaining({
+          account: null,
+          authReady: false,
+          error: "Claude Code is not authenticated.",
+          state: "auth_unavailable",
+          usedCachedStatus: false,
+        }),
+      );
+      await expect(
+        readFile(path.join(tempRoot, ".sentinel", "claude-status.json")),
+      ).rejects.toThrow();
+      // Nothing to forget is fine too.
+      await forgetClaudeEngineStatus();
     } finally {
       await rm(tempRoot, { force: true, recursive: true });
     }

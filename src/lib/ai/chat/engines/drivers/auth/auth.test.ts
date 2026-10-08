@@ -15,7 +15,9 @@ const runtimes = {
   opencode: null,
 };
 
+const forgetClaudeEngineStatus = mock(async () => {});
 mock.module("@/lib/ai/chat/engines/claude-sdk", () => ({
+  forgetClaudeEngineStatus,
   resolveClaudeCodeRuntime: mock(async () => runtimes.claude),
 }));
 mock.module("@/lib/ai/chat/engines/codex-cli", () => ({
@@ -112,6 +114,7 @@ beforeEach(() => {
   };
   copilotManager.dispose.mockClear();
   copilotClient.rpc.account.logout.mockClear();
+  forgetClaudeEngineStatus.mockClear();
 });
 
 describe("Claude", () => {
@@ -135,6 +138,8 @@ describe("Claude", () => {
   it("runs the CLI's own sign-in in the terminal", async () => {
     const { calls, context } = createContext();
     await claudeAuth.login(instance, "cli-login", context);
+    // The probe that verifies it must not answer from the old snapshot.
+    expect(forgetClaudeEngineStatus).toHaveBeenCalledWith(instance);
 
     expect(calls).toEqual([
       [
@@ -195,6 +200,7 @@ describe("Claude", () => {
     expect(result).toEqual({
       message: "Signed out and removed this instance's API key.",
     });
+    expect(forgetClaudeEngineStatus).toHaveBeenCalledWith(instance);
 
     const failing = createContext({ exitCode: 1 });
     await expect(claudeAuth.logout(instance, failing.context)).rejects.toThrow(

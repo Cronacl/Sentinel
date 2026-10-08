@@ -1,6 +1,6 @@
 import "server-only";
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   query,
@@ -498,6 +498,24 @@ export function resetClaudeEngineStatusCache() {
     state.backgroundRefresh = null;
     state.generation += 1;
   }
+}
+
+/**
+ * Forgets an instance's last-known-good status: the in-memory caches and the
+ * on-disk snapshot. A probe answers an empty model list or a failure (how a
+ * signed-out Claude Code looks) from that snapshot for up to 7 days, so after
+ * a sign-in or sign-out the next probe must report what Claude Code says now.
+ */
+export async function forgetClaudeEngineStatus(
+  instance?: ClaudeRuntimeInstance | null,
+) {
+  const state = statusStates.get(getInstanceRuntimeKey(instance));
+  if (state) {
+    state.cachedStatus = null;
+    state.backgroundRefresh = null;
+    state.generation += 1;
+  }
+  await rm(getClaudeStatusSnapshotPath(instance), { force: true });
 }
 
 /**

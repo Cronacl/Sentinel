@@ -31,6 +31,17 @@ async function resolveClaudeCli(instance: ResolvedEngineInstance) {
   return runtime.binaryDetected && runtime.executablePath ? runtime : null;
 }
 
+/**
+ * The status probe answers a signed-out Claude Code (no models, or an
+ * error) from its last-known-good snapshot for days: after a sign-in or
+ * sign-out the refresh that verifies it must ask Claude Code again.
+ */
+async function forgetClaudeStatus(instance: ResolvedEngineInstance) {
+  const { forgetClaudeEngineStatus } =
+    await import("@/lib/ai/chat/engines/claude-sdk");
+  await forgetClaudeEngineStatus(instance);
+}
+
 async function claudeLaunch(executablePath: string, args: string[]) {
   const { buildClaudeCliLaunch } =
     await import("@/lib/ai/chat/engines/claude-sdk/executable");
@@ -68,6 +79,7 @@ export const claudeAuth: EngineAuthController = {
         name: API_KEY_VARIABLE,
         secret: true,
       });
+      await forgetClaudeStatus(instance);
       return;
     }
 
@@ -87,33 +99,39 @@ export const claudeAuth: EngineAuthController = {
         title: "Claude Code sign-in",
       }),
     );
+    await forgetClaudeStatus(instance);
   },
 
   async logout(instance, context) {
     const cleared = await context.clearInstanceSecrets([API_KEY_VARIABLE]);
     const runtime = await resolveClaudeCli(instance);
 
+    let exitCode: number | null = null;
     if (runtime?.executablePath) {
       const launch = await claudeLaunch(runtime.executablePath, [
         "auth",
         "logout",
       ]);
-      const { exitCode } = await context.runBackgroundCommand({
+      ({ exitCode } = await context.runBackgroundCommand({
         args: launch.args,
         command: launch.command,
         env: {
           ...(runtime.env.PATH ? { PATH: runtime.env.PATH } : {}),
           ...stringEnv(launch.env),
         },
-      });
-      if (exitCode !== 0 && cleared.length === 0) {
-        throw new EngineAuthError(
-          `\`claude auth logout\` did not finish (exit code ${exitCode ?? "unknown"}).`,
-        );
-      }
-    } else if (cleared.length === 0) {
+      }));
+    }
+    // Whatever was signed out, the cached status still says signed in.
+    await forgetClaudeStatus(instance);
+
+    if (!runtime?.executablePath && cleared.length === 0) {
       throw new EngineAuthError(
         "Claude Code was not found, so Sentinel cannot sign it out.",
+      );
+    }
+    if (exitCode !== 0 && cleared.length === 0) {
+      throw new EngineAuthError(
+        `\`claude auth logout\` did not finish (exit code ${exitCode ?? "unknown"}).`,
       );
     }
 
