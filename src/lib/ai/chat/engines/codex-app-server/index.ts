@@ -709,6 +709,10 @@ export class CodexAppServerManager {
 
   private listeners = new Set<(event: CodexServerEvent) => void>();
 
+  private notificationListeners = new Set<
+    (event: CodexNotificationEvent) => void
+  >();
+
   private initializeResult: CodexInitializeResult | null = null;
 
   private lastKnownModels: CodexModelInfo[] = [];
@@ -747,6 +751,18 @@ export class CodexAppServerManager {
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
+    };
+  }
+
+  /**
+   * Notifications only (account/login/completed…), for listeners that are
+   * not a run: unlike `subscribe`, they do not count as someone who can
+   * answer Codex's approval requests.
+   */
+  subscribeNotifications(listener: (event: CodexNotificationEvent) => void) {
+    this.notificationListeners.add(listener);
+    return () => {
+      this.notificationListeners.delete(listener);
     };
   }
 
@@ -1628,11 +1644,15 @@ export class CodexAppServerManager {
         }
       }
 
-      this.emit({
+      const event: CodexNotificationEvent = {
         method: message.method,
         params: message.params,
         type: "notification",
-      });
+      };
+      this.emit(event);
+      for (const listener of this.notificationListeners) {
+        listener(event);
+      }
     }
   }
 

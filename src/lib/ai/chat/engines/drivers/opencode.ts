@@ -12,6 +12,7 @@ import {
 import { DRIVER_CATALOG } from "../catalog";
 import type { EngineInstallSource, EngineProbeResult } from "../contract";
 import { defineEngineDriver, legacyThreadHandlers } from "../platform/driver";
+import { openCodeAuth } from "./auth/opencode";
 import { buildFallbackOpenCodeModels } from "./fallback-models";
 import {
   carryForwardLegacyProbe,
@@ -45,6 +46,7 @@ export function fromOpenCodeStatus(
 
 /** OpenCode through `opencode serve` and its SDK. */
 export const openCodeDriver = defineEngineDriver({
+  auth: openCodeAuth,
   capabilities: DRIVER_CATALOG.opencode.capabilities,
   invalidate() {
     resetOpenCodeRuntimeCache();

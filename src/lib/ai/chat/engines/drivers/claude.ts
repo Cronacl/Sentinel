@@ -15,6 +15,7 @@ import {
 import { DRIVER_CATALOG } from "../catalog";
 import type { EngineInstallSource, EngineProbeResult } from "../contract";
 import { defineEngineDriver, legacyThreadHandlers } from "../platform/driver";
+import { claudeAuth } from "./auth/claude";
 import { fromLegacyStatus, NO_LEGACY_ACCOUNT } from "./legacy-status";
 
 function toClaudeAccount(account: AccountInfo | null) {
@@ -55,6 +56,7 @@ export function fromClaudeStatus(
 
 /** Claude Code through the Agent SDK. */
 export const claudeDriver = defineEngineDriver({
+  auth: claudeAuth,
   capabilities: DRIVER_CATALOG.claude.capabilities,
   invalidate() {
     resetClaudeCodeRuntimeCache();

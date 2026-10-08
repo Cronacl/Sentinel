@@ -636,6 +636,47 @@ describe("CodexAppServerManager unclaimed server requests", () => {
   });
 });
 
+describe("CodexAppServerManager notification listeners", () => {
+  it("hears notifications without claiming Codex's requests", async () => {
+    const manager = createManager();
+    const notifications: Array<{ method: string; params: unknown }> = [];
+    const unsubscribe = manager.subscribeNotifications(
+      (event: { method: string; params: unknown }) =>
+        notifications.push({ method: event.method, params: event.params }),
+    );
+    await emitFromPeer(manager, [
+      {
+        jsonrpc: "2.0",
+        method: "account/login/completed",
+        params: { error: null, loginId: "login-1", success: true },
+      },
+      {
+        id: 131,
+        jsonrpc: "2.0",
+        method: "item/commandExecution/requestApproval",
+        params: { itemId: "cmd", startedAtMs: 1, threadId: "thr", turnId: "t" },
+      },
+    ]);
+
+    const frames = await receivedFrames(manager);
+    expect(notifications).toEqual([
+      {
+        method: "account/login/completed",
+        params: { error: null, loginId: "login-1", success: true },
+      },
+    ]);
+    // A sign-in listening is no run: the approval is still declined.
+    expect(findReply(frames, 131)?.result).toEqual({ decision: "decline" });
+
+    unsubscribe();
+    await emitFromPeer(manager, [
+      { jsonrpc: "2.0", method: "account/updated", params: {} },
+    ]);
+    await receivedFrames(manager);
+    expect(notifications).toHaveLength(1);
+  });
+});
+
 describe("CodexAppServerManager declined server requests", () => {
   it("declines a pending approval or question for an unattended run", async () => {
     const manager = createManager();

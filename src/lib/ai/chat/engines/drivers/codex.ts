@@ -14,6 +14,7 @@ import {
 import { DRIVER_CATALOG } from "../catalog";
 import type { EngineInstallSource, EngineProbeResult } from "../contract";
 import { defineEngineDriver, legacyThreadHandlers } from "../platform/driver";
+import { codexAuth } from "./auth/codex";
 import { buildFallbackCodexModels } from "./fallback-models";
 import { fromLegacyStatus, NO_LEGACY_ACCOUNT } from "./legacy-status";
 
@@ -71,6 +72,7 @@ export function fromCodexStatus(
 
 /** Codex through its app-server, one process per instance. */
 export const codexDriver = defineEngineDriver({
+  auth: codexAuth,
   capabilities: DRIVER_CATALOG.codex.capabilities,
   invalidate() {
     resetCodexCliResolutionCache();

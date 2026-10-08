@@ -810,6 +810,84 @@ export async function resolveCopilotRuntime(options?: {
 
 export function resetCopilotRuntimeCache() {
   cachedRuntimes.clear();
+  cachedLoginClis.clear();
+}
+
+export type CopilotLoginCli = {
+  cliPath: string;
+  env: NodeJS.ProcessEnv;
+  /** A JavaScript entry point, run under the server's Node runtime. */
+  nodeScript: boolean;
+};
+
+const cachedLoginClis = new Map<
+  string,
+  { expiresAt: number; promise: Promise<CopilotLoginCli | null> }
+>();
+
+async function resolveCopilotLoginCliUncached(
+  instance: CopilotRuntimeInstance | null | undefined,
+): Promise<CopilotLoginCli | null> {
+  const toLoginCli = (
+    resolved: Pick<ResolvedCopilotRuntime, "cliPath" | "env"> | null,
+  ) =>
+    resolved?.cliPath
+      ? {
+          cliPath: resolved.cliPath,
+          env: resolved.env,
+          nodeScript: isNodeScriptPath(resolved.cliPath),
+        }
+      : null;
+
+  const runtime = await resolveCopilotRuntime({ instance });
+  if (runtime.cliDetected && runtime.source !== "bundled") {
+    return toLoginCli(runtime);
+  }
+
+  const baseEnv = getInstanceProcessEnv(instance);
+  const managedPath = await buildManagedExecutablePathValue(baseEnv.PATH, {
+    env: baseEnv,
+  });
+  const env = { ...baseEnv, PATH: managedPath };
+  const direct = await findExecutableInPath(
+    "copilot",
+    managedPath,
+    COPILOT_NAME_OPTIONS,
+  );
+  const verified = direct ? await verifyCopilotExecutable(direct, env) : null;
+  if (verified) {
+    return toLoginCli({ cliPath: verified, env });
+  }
+
+  return toLoginCli(
+    (await resolveCopilotCliFromWindowsWhere(baseEnv)) ??
+      (await resolveCopilotCliFromShell(baseEnv)),
+  );
+}
+
+/**
+ * The user's own Copilot CLI, for `copilot login`: the runtime bundled with
+ * the SDK only serves the SDK and has no interactive sign-in. The
+ * instance's runtime when it is a CLI, else `copilot` on the managed PATH,
+ * `where` on Windows or the login shell. Null when none is installed.
+ */
+export async function resolveCopilotLoginCli(options?: {
+  instance?: CopilotRuntimeInstance | null;
+}) {
+  const key = getInstanceRuntimeKey(options?.instance);
+  const cached = cachedLoginClis.get(key);
+  if (cached && cached.expiresAt > Date.now()) {
+    return await cached.promise;
+  }
+
+  const promise = resolveCopilotLoginCliUncached(options?.instance).catch(
+    () => null,
+  );
+  cachedLoginClis.set(key, {
+    expiresAt: Date.now() + COPILOT_RUNTIME_CACHE_TTL_MS,
+    promise,
+  });
+  return await promise;
 }
 
 // Sentinel's own secrets stay out of the runtime and of the shell commands,

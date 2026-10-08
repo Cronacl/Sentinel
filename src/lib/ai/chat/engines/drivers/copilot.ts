@@ -13,6 +13,7 @@ import {
 import { DRIVER_CATALOG } from "../catalog";
 import type { EngineInstallSource, EngineProbeResult } from "../contract";
 import { defineEngineDriver, legacyThreadHandlers } from "../platform/driver";
+import { copilotAuth } from "./auth/copilot";
 import { buildFallbackCopilotModels } from "./fallback-models";
 import { fromLegacyStatus, NO_LEGACY_ACCOUNT } from "./legacy-status";
 
@@ -56,6 +57,7 @@ export function fromCopilotStatus(
 
 /** GitHub Copilot through its SDK, one client and runtime per instance. */
 export const copilotDriver = defineEngineDriver({
+  auth: copilotAuth,
   capabilities: DRIVER_CATALOG.copilot.capabilities,
   invalidate() {
     resetCopilotRuntimeCache();

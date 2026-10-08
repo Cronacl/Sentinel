@@ -4,6 +4,7 @@ import { cursorAcpAgent } from "../acp/agents/cursor";
 import { disposeAcpInstanceProcesses } from "../acp/launch";
 import { probeAcpAgent } from "../acp/probe";
 import { DRIVER_CATALOG } from "../catalog";
+import { cursorAuth } from "./auth/cursor";
 import {
   defineEngineDriver,
   LEGACY_EXTERNAL_THREAD_TRIGGERS,
@@ -19,6 +20,7 @@ async function loadRuntime() {
 }
 
 export const cursorDriver = defineEngineDriver({
+  auth: cursorAuth,
   capabilities: DRIVER_CATALOG.cursor.capabilities,
   async dispose(instance) {
     await disposeAcpInstanceProcesses(instance.id);
