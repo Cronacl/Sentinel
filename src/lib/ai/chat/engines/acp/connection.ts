@@ -5,7 +5,10 @@ import type { ChildProcess } from "node:child_process";
 import { RequestError } from "@agentclientprotocol/sdk";
 import type * as acp from "@agentclientprotocol/sdk";
 
-import { terminateProcessTree } from "@/lib/runtime/process/kill-tree";
+import {
+  endProcessGroup,
+  terminateProcessTree,
+} from "@/lib/runtime/process/kill-tree";
 import { createLineSplitter } from "@/lib/runtime/process/line-splitter";
 import {
   spawnManagedProcess,
@@ -313,7 +316,9 @@ export class AcpAgentProcess {
   /**
    * A request to the agent. Rejects with AcpProcessExitedError when the
    * process dies first, AcpRequestTimeoutError after `timeoutMs` (the
-   * request is then cancelled), or the agent's JSON-RPC error.
+   * request is then cancelled), AcpRequestCancelledError when `signal`
+   * aborts (an already aborted signal sends nothing), or the agent's
+   * JSON-RPC error.
    */
   async request<T = unknown>(
     method: string,
@@ -324,12 +329,14 @@ export class AcpAgentProcess {
     if (exited) {
       throw exited;
     }
+    if (options.signal?.aborted) {
+      throw new AcpRequestCancelledError(method, {
+        cause: options.signal.reason,
+      });
+    }
 
     const controller = new AbortController();
     const abort = () => controller.abort(options.signal?.reason);
-    if (options.signal?.aborted) {
-      abort();
-    }
     options.signal?.addEventListener("abort", abort, { once: true });
     let timer: unknown = null;
 
@@ -349,9 +356,7 @@ export class AcpAgentProcess {
       const aborted = new Promise<never>((_resolve, reject) => {
         const fail = () =>
           reject(
-            signal.reason instanceof Error
-              ? signal.reason
-              : new AcpRequestCancelledError(method),
+            new AcpRequestCancelledError(method, { cause: signal.reason }),
           );
         if (signal.aborted) {
           fail();
@@ -416,7 +421,9 @@ export class AcpAgentProcess {
   /**
    * Ends the agent: closes the connection and stdin (agents exit on EOF),
    * then SIGTERM to the process group and SIGKILL after the grace period.
-   * Idempotent.
+   * What the agent started stays in its group after it exits (a shell
+   * tool's background server, an MCP server ignoring EOF), so the group is
+   * ended even when the agent left on EOF. Idempotent.
    */
   async dispose() {
     if (this.disposed) {
@@ -440,6 +447,9 @@ export class AcpAgentProcess {
     }
     if (!this.exitState) {
       await terminateProcessTree(this.child, { graceMs: CLOSE_GRACE_MS });
+    }
+    if (this.child.pid != null) {
+      await endProcessGroup(this.child.pid, { graceMs: CLOSE_GRACE_MS });
     }
   }
 }

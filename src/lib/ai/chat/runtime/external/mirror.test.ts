@@ -141,6 +141,34 @@ describe("createMirrorEmitter", () => {
     timers[0]!();
     expect(emitted).toEqual([1, 2]);
   });
+
+  it("never writes again once closed, even from a flush already scheduled", () => {
+    const timers: Array<() => void> = [];
+    const persisted: string[] = [];
+    const emitter = createMirrorEmitter({
+      emit: () => {},
+      persist: () => {
+        persisted.push("streaming");
+        return { id: "a", metadata: {}, parts: [], role: "assistant" };
+      },
+      timers: {
+        clearTimeout: () => {},
+        setTimeout: (callback) => {
+          timers.push(callback);
+          return timers.length;
+        },
+      },
+    });
+    emitter.schedule();
+    emitter.close();
+    // The run persists its final message itself; a late timer, schedule or
+    // flush (an extension notification) must not overwrite it.
+    timers[0]!();
+    emitter.schedule();
+    emitter.flush();
+    expect(timers).toHaveLength(1);
+    expect(persisted).toEqual([]);
+  });
 });
 
 describe("outcomeFromStopReason", () => {

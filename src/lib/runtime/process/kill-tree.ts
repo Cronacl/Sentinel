@@ -304,3 +304,74 @@ export async function terminateProcessTree(
     );
   });
 }
+
+export type EndProcessGroupOptions = Pick<
+  TerminateOptions,
+  "clearTimeout" | "graceMs" | "kill" | "platform" | "setTimeout"
+> & {
+  /** How often to check whether the group is gone (default 50 ms). */
+  pollMs?: number;
+};
+
+function processGroupExists(
+  pid: number,
+  kill: NonNullable<KillTreeDeps["kill"]>,
+) {
+  try {
+    kill(-pid, 0);
+    return true;
+  } catch (error) {
+    return errorCode(error) === "EPERM";
+  }
+}
+
+/**
+ * Ends what is left of the POSIX process group `pid` led, once the leader
+ * itself is gone: processes it started stay in its group (a shell tool's
+ * background server, an MCP server that ignores stdin EOF). SIGTERM, then
+ * SIGKILL after `graceMs` while any member remains. Resolves false when
+ * there was nothing to end. Windows has no groups (taskkill /T needs the
+ * live root), so it is a no-op there.
+ */
+export async function endProcessGroup(
+  pid: number,
+  options: EndProcessGroupOptions = {},
+): Promise<boolean> {
+  const platform = options.platform ?? process.platform;
+  if (platform === "win32" || !Number.isInteger(pid) || pid <= 0) {
+    return false;
+  }
+  const kill = options.kill ?? defaultKill;
+  if (!processGroupExists(pid, kill)) {
+    return false;
+  }
+  try {
+    kill(-pid, "SIGTERM");
+  } catch {
+    return false;
+  }
+
+  const schedule =
+    options.setTimeout ??
+    ((callback: () => void, ms: number) => {
+      const timer = setTimeout(callback, ms);
+      timer.unref?.();
+      return timer;
+    });
+  const graceMs = options.graceMs ?? 3_000;
+  const pollMs = Math.max(1, options.pollMs ?? 50);
+  for (let waited = 0; waited < graceMs; waited += pollMs) {
+    await new Promise<void>((resolve) => {
+      schedule(resolve, pollMs);
+    });
+    if (!processGroupExists(pid, kill)) {
+      return true;
+    }
+  }
+  try {
+    kill(-pid, "SIGKILL");
+  } catch {
+    // Gone in the meantime.
+  }
+  return true;
+}

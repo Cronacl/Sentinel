@@ -14,7 +14,11 @@ import {
 } from "./config-options";
 import { readAgentCapabilities, readAuthMethods } from "./schema";
 import { isJsonFrameLine } from "./stdout-filter";
-import { buildAcpMcpServers, wrapStdioCommand } from "./mcp-forwarding";
+import {
+  buildAcpMcpServers,
+  resolveForwardedStdioCwd,
+  wrapStdioCommand,
+} from "./mcp-forwarding";
 
 const OPTIONS = readConfigOptions([
   {
@@ -105,7 +109,13 @@ describe("config options", () => {
   });
 
   it("learns the catalog from a session's options", () => {
-    const catalog = catalogFromConfigOptions(OPTIONS);
+    // A model picked for a thread is not the agent's default.
+    expect(
+      catalogFromConfigOptions(OPTIONS).map((model) => model.isDefault),
+    ).toEqual([undefined, undefined]);
+    const catalog = catalogFromConfigOptions(OPTIONS, {
+      currentIsDefault: true,
+    });
     expect(
       catalog.map((model) => [model.id, model.isDefault ?? false]),
     ).toEqual([
@@ -220,6 +230,7 @@ describe("MCP forwarding", () => {
     const result = await buildAcpMcpServers([stdio, http], {
       capabilities: { mcpHttp: true },
       env: { API: "secret", TOKEN: "t" },
+      exists: () => true,
       platform: "darwin",
     });
     expect(result.skipped).toEqual([]);
@@ -263,6 +274,21 @@ describe("MCP forwarding", () => {
       "My Server",
       "Remote",
     ]);
+  });
+
+  it("resolves a server's cwd like Sentinel's own MCP client", () => {
+    const withCwd = (cwd: string) => ({ config: { ...stdio.config, cwd } });
+    const options = {
+      exists: (directory: string) => directory !== "/gone",
+      homeDir: "/Users/me",
+    };
+    expect(resolveForwardedStdioCwd(withCwd("~/tools/x"), options)).toBe(
+      "/Users/me/tools/x",
+    );
+    expect(resolveForwardedStdioCwd(withCwd("~"), options)).toBe("/Users/me");
+    // Missing: the agent starts it in the session's cwd, the workspace.
+    expect(resolveForwardedStdioCwd(withCwd("/gone"), options)).toBeNull();
+    expect(resolveForwardedStdioCwd(withCwd("  "), options)).toBeNull();
   });
 
   it("leaves commands without a cwd alone and wraps with cmd on Windows", () => {

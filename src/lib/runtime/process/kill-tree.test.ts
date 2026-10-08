@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 
 import { describe, expect, it, mock } from "bun:test";
@@ -5,6 +6,7 @@ import { describe, expect, it, mock } from "bun:test";
 mock.module("server-only", () => ({}));
 
 const {
+  endProcessGroup,
   installTreeKill,
   isProcessAlive,
   killProcessTree,
@@ -275,4 +277,84 @@ describe("terminateProcessTree", () => {
 
     expect(kill).not.toHaveBeenCalled();
   });
+});
+
+describe("endProcessGroup", () => {
+  /** A fake group that lives for `polls` liveness checks after SIGTERM. */
+  function fakeGroup(polls: number) {
+    const signals: Array<NodeJS.Signals | number | undefined> = [];
+    let remaining = polls;
+    let terminated = false;
+    const kill = (pid: number, signal?: NodeJS.Signals | number) => {
+      expect(pid).toBe(-77);
+      if (signal === 0) {
+        if (terminated && remaining-- <= 0) {
+          throw errnoError("ESRCH");
+        }
+        return true;
+      }
+      signals.push(signal);
+      terminated = true;
+      return true;
+    };
+    return { kill, signals };
+  }
+  const immediate = (callback: () => void) => {
+    queueMicrotask(callback);
+    return 0;
+  };
+
+  it("terminates what is left of the group, without SIGKILL when it leaves", async () => {
+    const group = fakeGroup(2);
+    expect(
+      await endProcessGroup(77, {
+        graceMs: 1_000,
+        kill: group.kill,
+        platform: "darwin",
+        pollMs: 100,
+        setTimeout: immediate,
+      }),
+    ).toBe(true);
+    expect(group.signals).toEqual(["SIGTERM"]);
+  });
+
+  it("escalates to SIGKILL when a member outlives the grace period", async () => {
+    const group = fakeGroup(Number.POSITIVE_INFINITY);
+    await endProcessGroup(77, {
+      graceMs: 300,
+      kill: group.kill,
+      platform: "linux",
+      pollMs: 100,
+      setTimeout: immediate,
+    });
+    expect(group.signals).toEqual(["SIGTERM", "SIGKILL"]);
+  });
+
+  it("does nothing when the group is gone, and on Windows", async () => {
+    const kill = mock((_pid: number, _signal?: NodeJS.Signals | number) => {
+      throw errnoError("ESRCH");
+    });
+    expect(await endProcessGroup(77, { kill, platform: "linux" })).toBe(false);
+    expect(kill).toHaveBeenCalledTimes(1);
+    expect(await endProcessGroup(77, { kill, platform: "win32" })).toBe(false);
+    expect(kill).toHaveBeenCalledTimes(1);
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "ends a background child that outlived its group leader",
+    async () => {
+      const leader = spawn("/bin/sh", ["-c", "sleep 30 & echo $!"], {
+        detached: true,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      let output = "";
+      leader.stdout.on("data", (chunk) => (output += String(chunk)));
+      await new Promise((resolve) => leader.once("exit", resolve));
+      const childPid = Number(output.trim());
+      expect(isProcessAlive(childPid)).toBe(true);
+
+      expect(await endProcessGroup(leader.pid!, { graceMs: 2_000 })).toBe(true);
+      expect(isProcessAlive(childPid)).toBe(false);
+    },
+  );
 });

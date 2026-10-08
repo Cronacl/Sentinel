@@ -1,3 +1,7 @@
+import { existsSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import type {
   McpHttpRuntimeEntry,
   McpServerRuntimeEntry,
@@ -38,6 +42,10 @@ export type AcpMcpForwardingOptions = {
   capabilities: Pick<AcpAgentCapabilityFlags, "mcpHttp">;
   /** The environment variables are read from (passthrough, header env). */
   env: Record<string, string | undefined>;
+  /** Whether a configured cwd exists (default fs.existsSync). */
+  exists?: (directory: string) => boolean;
+  /** What `~` in a configured cwd means (default os.homedir()). */
+  homeDir?: string;
   platform?: NodeJS.Platform;
   /** An OAuth server's access token, or null when it cannot be resolved. */
   resolveOAuthToken?: (entry: McpHttpRuntimeEntry) => Promise<string | null>;
@@ -111,6 +119,30 @@ export function wrapStdioCommand(
   };
 }
 
+/**
+ * The directory a stdio server starts in, as Sentinel's own MCP client
+ * resolves it (lib/mcp/tools.ts getResolvedStdioCwd): `~` expanded, and a
+ * directory that does not exist replaced by the session's cwd (no wrapper:
+ * the agent starts servers there).
+ */
+export function resolveForwardedStdioCwd(
+  entry: Pick<McpStdioRuntimeEntry, "config">,
+  options: Pick<AcpMcpForwardingOptions, "exists" | "homeDir">,
+) {
+  const configured = entry.config.cwd?.trim();
+  if (!configured) {
+    return null;
+  }
+  const home = options.homeDir ?? os.homedir();
+  const expanded =
+    configured === "~"
+      ? home
+      : configured.startsWith("~/")
+        ? path.join(home, configured.slice(2))
+        : configured;
+  return (options.exists ?? existsSync)(expanded) ? expanded : null;
+}
+
 function stdioServer(
   entry: McpStdioRuntimeEntry,
   name: string,
@@ -130,7 +162,7 @@ function stdioServer(
     {
       args: entry.config.args,
       command: entry.config.command,
-      cwd: entry.config.cwd,
+      cwd: resolveForwardedStdioCwd(entry, options),
     },
     options.platform,
   );

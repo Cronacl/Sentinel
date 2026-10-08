@@ -108,11 +108,12 @@ export class AcpRequestTimeoutError extends Error {
   }
 }
 
+/** The caller aborted the request (Stop, a probe abort); `cause` is the abort reason. */
 export class AcpRequestCancelledError extends Error {
   readonly method: string;
 
-  constructor(method: string) {
-    super(`${method} was cancelled.`);
+  constructor(method: string, options?: { cause?: unknown }) {
+    super(`${method} was cancelled.`, options);
     this.name = "AcpRequestCancelledError";
     this.method = method;
   }

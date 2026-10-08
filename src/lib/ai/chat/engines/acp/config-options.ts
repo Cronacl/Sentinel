@@ -346,10 +346,13 @@ export function toAcpEngineModels(
 
 /**
  * The models a session's options describe: every value of the model option,
- * the current one with the session's effort option.
+ * the current one with the session's effort option. The current model is
+ * the agent's default only in a session nobody picked a model for yet
+ * (`currentIsDefault`); otherwise it is just the thread's choice.
  */
 export function catalogFromConfigOptions(
   options: readonly AcpConfigOptionInfo[],
+  input: { currentIsDefault?: boolean } = {},
 ): AcpCatalogModel[] {
   const modelOption = findModelOption(options);
   if (!modelOption) {
@@ -358,7 +361,7 @@ export function catalogFromConfigOptions(
   const effortOption = findEffortOption(options);
   return modelOption.values.map((entry) => ({
     ...(entry.value === modelOption.currentValue
-      ? { effortOption, isDefault: true }
+      ? { effortOption, ...(input.currentIsDefault ? { isDefault: true } : {}) }
       : {}),
     id: entry.value,
     name: entry.name,

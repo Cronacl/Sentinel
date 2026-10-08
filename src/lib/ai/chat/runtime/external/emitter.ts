@@ -21,6 +21,12 @@ export type MirrorEmitter = {
   schedule(): void;
   /** Cancels a pending flush (the run finished through another path). */
   cancel(): void;
+  /**
+   * Cancels a pending flush and ignores every later one: the run is
+   * ending and persists its final message itself, which a late flush
+   * (an extension notification, an auto-approval) must never overwrite.
+   */
+  close(): void;
 };
 
 const systemTimers: MirrorEmitterTimers = {
@@ -40,6 +46,7 @@ export function createMirrorEmitter(input: {
   const timers = input.timers ?? systemTimers;
   const flushMs = input.flushMs ?? 50;
   let timer: unknown = null;
+  let closed = false;
 
   const cancel = () => {
     if (timer !== null) {
@@ -50,14 +57,21 @@ export function createMirrorEmitter(input: {
 
   const flush = () => {
     cancel();
+    if (closed) {
+      return;
+    }
     input.emit(input.persist());
   };
 
   return {
     cancel,
+    close() {
+      closed = true;
+      cancel();
+    },
     flush,
     schedule() {
-      if (timer === null) {
+      if (timer === null && !closed) {
         timer = timers.setTimeout(() => {
           timer = null;
           flush();

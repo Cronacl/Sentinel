@@ -6,7 +6,8 @@ import type { AcpSessionUpdateEnvelope } from "./schema";
 // mock agent over real stdio.
 mock.module("server-only", () => ({}));
 
-const { AcpAuthRequiredError } = await import("./errors");
+const { AcpAuthRequiredError, AcpRequestCancelledError } =
+  await import("./errors");
 const session = await import("./session");
 const support = await import("./__tests__/mock-agent");
 const { cursorProfile } =
@@ -206,6 +207,55 @@ describe("session selection", () => {
       "session/load",
       "session/new",
     ]);
+  });
+
+  it("keeps the persisted session when the sign-in during its load fails", async () => {
+    const started = start({
+      auth: { acceptMethodIds: ["other"], requireAuth: true },
+      initialize: {
+        authMethods: [{ id: "cursor_login", name: "Cursor Login" }],
+      },
+      session: { load: { knownSessionIds: ["persisted"] } },
+    });
+    const lost: unknown[] = [];
+    const error = await open(started, {
+      onSessionLost: (caught) => lost.push(caught),
+      persistedSessionId: "persisted",
+    }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(AcpAuthRequiredError);
+    expect((error as Error).message).toContain("sign-in did not complete");
+    expect(lost).toEqual([]);
+    expect(methodsCalled(started.logPath)).toEqual([
+      "initialize",
+      "session/load",
+      "authenticate",
+    ]);
+  });
+
+  it("stops on Stop during a load instead of starting a new session", async () => {
+    const started = start({
+      faults: { hangMethods: ["session/load"] },
+      session: { load: { knownSessionIds: ["persisted"] } },
+    });
+    const controller = new AbortController();
+    const pending = open(started, {
+      auth: {
+        binaryPath: null,
+        interactive: true,
+        signal: controller.signal,
+      },
+      persistedSessionId: "persisted",
+    });
+    for (let tries = 0; tries < 200; tries += 1) {
+      if (methodsCalled(started.logPath).includes("session/load")) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    controller.abort(new Error("Generation stopped."));
+    expect(await pending.catch((caught: unknown) => caught)).toBeInstanceOf(
+      AcpRequestCancelledError,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(methodsCalled(started.logPath)).not.toContain("session/new");
   });
 
   it("resumes when the descriptor prefers it and the agent supports it", async () => {

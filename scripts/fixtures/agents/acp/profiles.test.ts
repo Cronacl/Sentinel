@@ -54,8 +54,8 @@ describe("ACP agent profiles", () => {
           "cursor/ask_question": () => ({
             answers: { db: "pg", extras: ["auth"] },
           }),
+          "cursor/update_todos": () => ({}),
         },
-        extNotifications: ["cursor/update_todos"],
       });
       const init = await harness.initialize({
         clientCapabilities: { _meta: { parameterizedModelPicker: true } },

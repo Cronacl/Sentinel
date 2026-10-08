@@ -21,7 +21,8 @@ import {
   AcpProcessExitedError,
   AcpProtocolError,
   AcpRequestCancelledError,
-  AcpRequestTimeoutError,
+  getErrorMessage,
+  getRpcErrorCode,
   isAuthRequiredError,
 } from "./errors";
 import type { AcpMcpServer } from "./mcp-forwarding";
@@ -203,6 +204,42 @@ function authRequiredError(
   );
 }
 
+/**
+ * `authenticate` with `method`. A sign-in that fails or never finishes (the
+ * user closed the browser) is AcpAuthRequiredError, so nothing mistakes it
+ * for an agent refusing the session; an exit or Stop stays as it is.
+ */
+async function authenticate(
+  process: AcpAgentProcess,
+  descriptor: AcpAgentDescriptor,
+  init: AcpInitializeInfo,
+  method: AcpAuthMethodInfo,
+  options: AcpAuthOptions,
+) {
+  options.onAuthenticating?.(method);
+  try {
+    await process.request(
+      process.methods.authenticate,
+      { methodId: method.id },
+      {
+        signal: options.signal,
+        timeoutMs: descriptor.auth.timeoutMs ?? ACP_AUTHENTICATE_TIMEOUT_MS,
+      },
+    );
+  } catch (error) {
+    if (
+      error instanceof AcpProcessExitedError ||
+      error instanceof AcpRequestCancelledError
+    ) {
+      throw error;
+    }
+    throw new AcpAuthRequiredError(
+      `${descriptor.label} sign-in did not complete: ${getErrorMessage(error)}`,
+      init.authMethods,
+    );
+  }
+}
+
 export type AcpAuthOptions = {
   binaryPath: string | null;
   /** False for unattended runs: never start an interactive sign-in. */
@@ -234,15 +271,7 @@ export async function withLazyAuth<T>(
     if (!method || method.kind !== "agent" || !options.interactive) {
       throw authRequiredError(descriptor, init, method, options);
     }
-    options.onAuthenticating?.(method);
-    await process.request(
-      process.methods.authenticate,
-      { methodId: method.id },
-      {
-        signal: options.signal,
-        timeoutMs: descriptor.auth.timeoutMs ?? ACP_AUTHENTICATE_TIMEOUT_MS,
-      },
-    );
+    await authenticate(process, descriptor, init, method, options);
     try {
       return await operation();
     } catch (retryError) {
@@ -255,7 +284,10 @@ export async function withLazyAuth<T>(
 }
 
 export type OpenSessionResult = {
-  /** The agent's session already holds the thread's earlier turns. */
+  /**
+   * The session existed before this turn (reused, loaded or resumed), so
+   * it holds the turns it was given; false for a session just created.
+   */
   historyDelivered: boolean;
   session: AcpLiveSession;
 };
@@ -276,6 +308,20 @@ function readSessionSetup(
     origin,
     sessionId,
   };
+}
+
+/**
+ * The agent answered a load or resume with an error of its own (an unknown
+ * or unreadable session): a new session may replace it. Anything else (an
+ * exit, a timeout, Stop, a sign-in that failed) ends the turn instead, so
+ * the persisted session is never abandoned for it.
+ */
+function isSessionRefusal(error: unknown, signal: AbortSignal | undefined) {
+  return (
+    !signal?.aborted &&
+    getRpcErrorCode(error) !== null &&
+    !isAuthRequiredError(error)
+  );
 }
 
 /**
@@ -319,15 +365,12 @@ export async function openAcpSession(
   if (input.descriptor.auth.strategy === "eager" && input.auth.interactive) {
     const method = authMethodFor(input.descriptor, input.init);
     if (method?.kind === "agent") {
-      input.auth.onAuthenticating?.(method);
-      await process.request(
-        methods.authenticate,
-        { methodId: method.id },
-        {
-          signal: input.auth.signal,
-          timeoutMs:
-            input.descriptor.auth.timeoutMs ?? ACP_AUTHENTICATE_TIMEOUT_MS,
-        },
+      await authenticate(
+        process,
+        input.descriptor,
+        input.init,
+        method,
+        input.auth,
       );
     }
   }
@@ -369,12 +412,7 @@ export async function openAcpSession(
         setLiveSession(process, session);
         return { historyDelivered: true, session };
       } catch (error) {
-        if (
-          error instanceof AcpAuthRequiredError ||
-          error instanceof AcpProcessExitedError ||
-          error instanceof AcpRequestCancelledError ||
-          error instanceof AcpRequestTimeoutError
-        ) {
+        if (!isSessionRefusal(error, input.auth.signal)) {
           throw error;
         }
         // The agent no longer knows (or cannot restore) the session: start

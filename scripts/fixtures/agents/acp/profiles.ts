@@ -112,14 +112,17 @@ export function cursorProfile(): AcpMockScenario {
             },
           },
           {
-            type: "extNotification",
+            // A request whose answer Cursor ignores (extMethod), like
+            // cursor/task and cursor/generate_image.
+            type: "extRequest",
             method: "cursor/update_todos",
             params: {
               toolCallId: "cursor-todos-1",
               todos: [
-                { content: "Split", status: "in_progress" },
-                { content: "Test", status: "pending" },
+                { id: "1", content: "Split", status: "in_progress" },
+                { id: "2", content: "Test", status: "pending" },
               ],
+              merge: false,
             },
           },
         ],

@@ -12,8 +12,11 @@ import type { AcpSessionUpdateEnvelope } from "./schema";
 mock.module("server-only", () => ({}));
 
 const { AcpAgentProcess } = await import("./connection");
-const { AcpProcessExitedError, AcpRequestTimeoutError } =
-  await import("./errors");
+const {
+  AcpProcessExitedError,
+  AcpRequestCancelledError,
+  AcpRequestTimeoutError,
+} = await import("./errors");
 const { cancelAcpSession, initializeAcpAgent } = await import("./session");
 const support = await import("./__tests__/mock-agent");
 const { startAcpHarness } =
@@ -380,7 +383,31 @@ describe("ACP connection", () => {
       { signal: controller.signal },
     );
     controller.abort();
-    await expect(pending).rejects.toBeDefined();
+    await expect(pending).rejects.toBeInstanceOf(AcpRequestCancelledError);
+  });
+
+  it("never sends a request whose caller already stopped", async () => {
+    const { dir, logPath, process } = start({});
+    await initializeAcpAgent(process, { context: "session", descriptor });
+    const controller = new AbortController();
+    controller.abort(new Error("Generation stopped."));
+    const error = await process
+      .request(
+        "session/new",
+        { cwd: dir, mcpServers: [] },
+        { signal: controller.signal },
+      )
+      .catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(AcpRequestCancelledError);
+    expect((error as Error).cause).toEqual(new Error("Generation stopped."));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(
+      support
+        .readMockLog(logPath)
+        .some(
+          (entry) => entry.kind === "request" && entry.method === "session/new",
+        ),
+    ).toBe(false);
   });
 
   it("refuses an agent that answers another protocol version", async () => {

@@ -165,8 +165,16 @@ async function resolveOAuthToken(
   return tokens?.access_token ?? null;
 }
 
-function learnCatalog(control: AcpRunControl, session: AcpLiveSession) {
-  const models = catalogFromConfigOptions(session.configOptions);
+/**
+ * Stores the session's models and commands for the probe. Only a session
+ * just created, before Sentinel picks a model, tells the agent's default.
+ */
+function learnCatalog(
+  control: AcpRunControl,
+  session: AcpLiveSession,
+  options: { currentIsDefault?: boolean } = {},
+) {
+  const models = catalogFromConfigOptions(session.configOptions, options);
   if (models.length === 0 && session.availableCommands.length === 0) {
     return;
   }
@@ -271,7 +279,8 @@ async function finishRun(
   if (control.finished) {
     return;
   }
-  control.emitter.cancel();
+  // The final message is persisted below; nothing may flush after it.
+  control.emitter.close();
   cancelPendingInteractions(control);
   control.mirror.closeOpenSegments();
   control.mirror.finishDanglingTools(
@@ -340,9 +349,10 @@ async function acquireProcess(
 }
 
 /** Errors that end the turn even during best-effort setup steps. */
-function rethrowIfFatal(process: AcpAgentProcess, error: unknown) {
+function rethrowIfFatal(control: AcpRunControl, error: unknown) {
   if (
-    process.exitError() ||
+    control.process?.exitError() ||
+    control.abort.signal.aborted ||
     error instanceof AcpRequestCancelledError ||
     error instanceof AcpRequestTimeoutError
   ) {
@@ -473,6 +483,10 @@ async function startTurn(
   });
   const session = opened.session;
   control.sessionId = session.sessionId;
+  if (!opened.historyDelivered) {
+    // The agent's own default, before a model is picked for this turn.
+    learnCatalog(control, session, { currentIsDefault: true });
+  }
 
   // The model, effort and mode are best effort: a value the agent refuses
   // leaves the turn on the agent's current setting instead of failing it.
@@ -487,7 +501,7 @@ async function startTurn(
       signal,
     );
   } catch (error) {
-    rethrowIfFatal(process, error);
+    rethrowIfFatal(control, error);
     addSetupNotice(
       control,
       "model",
@@ -503,7 +517,7 @@ async function startTurn(
       threadMode: control.threadMode,
     });
   } catch (error) {
-    rethrowIfFatal(process, error);
+    rethrowIfFatal(control, error);
     plan = {
       buildModeId: input.state?.buildModeId ?? null,
       modeId: input.state?.modeId ?? null,

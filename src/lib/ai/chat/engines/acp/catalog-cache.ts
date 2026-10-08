@@ -64,18 +64,25 @@ export async function readAcpCatalog(
 /**
  * The learned list wins (the agent's current models, in its order); a
  * model keeps the effort option an earlier source knew when the new one
- * has none (a session only reports the current model's efforts).
+ * has none (a session only reports the current model's efforts), and the
+ * default stays where an earlier source put it unless the learned list
+ * names one (only a fresh session tells the agent's default).
  */
 export function mergeCatalogModels(
   existing: readonly AcpCatalogModel[],
   learned: readonly AcpCatalogModel[],
 ): AcpCatalogModel[] {
   const previous = new Map(existing.map((model) => [model.id, model]));
+  const learnedDefault = learned.some((model) => model.isDefault);
   return learned.map((model) => {
     const known = previous.get(model.id);
-    return model.effortOption || !known?.effortOption
-      ? model
-      : { ...model, effortOption: known.effortOption };
+    const merged =
+      model.effortOption || !known?.effortOption
+        ? model
+        : { ...model, effortOption: known.effortOption };
+    return !learnedDefault && known?.isDefault && !merged.isDefault
+      ? { ...merged, isDefault: true }
+      : merged;
   });
 }
 

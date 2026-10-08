@@ -1,3 +1,6 @@
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
+
 import {
   afterAll,
   afterEach,
@@ -11,8 +14,9 @@ import { setupAcpRunHarness, toolParts } from "../acp/__tests__/run-harness";
 
 // Cursor's ACP extensions on the shared runtime, against the mock agent
 // playing Cursor's recorded wire traits (scripts/fixtures/agents/acp
-// cursorProfile): cursor/ask_question, cursor/create_plan and
-// cursor/update_todos; Cursor's own permission policy.
+// cursorProfile): cursor/ask_question, cursor/create_plan, and the
+// cursor/update_todos, cursor/task and cursor/generate_image requests;
+// Cursor's own permission policy.
 
 const h = await setupAcpRunHarness();
 const { cursorAcpAgent } =
@@ -108,6 +112,101 @@ describe("Cursor extensions", () => {
     expect(h.clientResponses(instance.logPath)).toContainEqual({
       outcome: { outcome: "accepted" },
     });
+    // cursor/update_todos arrives as a request (Cursor's extMethod): answered.
+    expect(h.clientResponses(instance.logPath)).toContainEqual({});
+  });
+
+  it("serves cursor/task, cursor/generate_image and merged todos as the requests Cursor sends", async () => {
+    const image = path.join(h.settings.workspaceDir, "cat.png");
+    await writeFile(image, Buffer.from("89504e470d0a1a0a", "hex"));
+    const todos = (merge: boolean, todo: Record<string, string>) => ({
+      method: "cursor/update_todos",
+      params: { merge, todos: [todo], toolCallId: "t1" },
+      type: "extRequest" as const,
+    });
+    const instance = await h.run(
+      descriptor,
+      {
+        ...signedIn(),
+        prompts: [
+          {
+            steps: [
+              {
+                kind: "other",
+                status: "pending",
+                title: "Task",
+                toolCallId: "task-1",
+                type: "toolCall",
+              },
+              {
+                method: "cursor/task",
+                params: {
+                  agentId: "sub-1",
+                  description: "Explore the repo",
+                  durationMs: 1200,
+                  model: "composer-2",
+                  prompt: "Find the entry point",
+                  subagentType: "explore",
+                  toolCallId: "task-1",
+                },
+                type: "extRequest",
+              },
+              {
+                method: "cursor/generate_image",
+                params: {
+                  description: "A cat",
+                  filePath: image,
+                  referenceImagePaths: [],
+                  toolCallId: "image-1",
+                },
+                type: "extRequest",
+              },
+              todos(false, { content: "Split", id: "1", status: "pending" }),
+              todos(true, { content: "Test", id: "2", status: "in_progress" }),
+              todos(true, { content: "Split", id: "1", status: "completed" }),
+            ],
+          },
+        ],
+      },
+      "go",
+    );
+    const message = await h.waitFor(h.finished, "finish");
+    expect(message.metadata?.status).toBe("completed");
+    expect(
+      h
+        .clientResponses(instance.logPath)
+        .filter(
+          (result) =>
+            typeof result === "object" &&
+            result !== null &&
+            Object.keys(result).length === 0,
+        ),
+    ).toHaveLength(5);
+
+    const cards = toolParts(message);
+    const task = cards.find((part) => part.toolCallId === "task-1");
+    expect(task?.callProviderMetadata.sentinel.kind).toBe("subagent");
+    expect(task?.input).toEqual({
+      description: "Explore the repo",
+      prompt: "Find the entry point",
+    });
+    const plan = cards.find((part) => part.toolName === "update_plan");
+    expect(
+      plan?.output.tasks.map((entry: { status: string; title: string }) => [
+        entry.title,
+        entry.status,
+      ]),
+    ).toEqual([
+      ["Split", "completed"],
+      ["Test", "in_progress"],
+    ]);
+    expect(message.parts).toContainEqual(
+      expect.objectContaining({
+        filename: "cat.png",
+        mediaType: "image/png",
+        type: "file",
+      }),
+    );
   });
 
   it("asks before a web search, which Cursor requests as kind search", async () => {
