@@ -4,13 +4,23 @@ import { FALLBACK_CHAT_ENGINE_OPTIONS } from "@/components/chat/chat-composer-he
 
 import type { AutomationEngineModel } from "./automation-form-helpers";
 import {
-  getAutomationEngineOptions,
+  AUTOMATION_INSTANCE_MISSING_DESCRIPTION,
+  AUTOMATION_OPTION_DEFAULT,
+  getAutomationDriverOptions,
+  getAutomationInstanceOptions,
+  getAutomationModelOptionChoices,
+  getAutomationModelOptionDescriptors,
   getAutomationModelOptions,
   getAutomationModelsForInstance,
   getAutomationUnattendedNotice,
+  pickAutomationInstanceForDriver,
+  pruneAutomationOptionValues,
   resolveAutomationEngine,
   resolveAutomationInstanceId,
   resolveAutomationSelection,
+  shouldShowAutomationInstancePicker,
+  toAutomationModelOptions,
+  toAutomationOptionValues,
 } from "./automation-form-helpers";
 
 const sentinelModel: AutomationEngineModel = {
@@ -33,11 +43,57 @@ const sentinelModel: AutomationEngineModel = {
 const cursorOption = FALLBACK_CHAT_ENGINE_OPTIONS.find(
   (option) => option.engine === "cursor",
 )!;
+const codexOption = FALLBACK_CHAT_ENGINE_OPTIONS.find(
+  (option) => option.engine === "codex",
+)!;
+const codexWork = {
+  ...codexOption,
+  accentColor: "#16a34a",
+  instanceId: "codex-work",
+  isDefaultInstance: false,
+  label: "Codex work",
+};
+const codexBroken = {
+  ...codexOption,
+  error: "Codex is not signed in.",
+  instanceId: "codex-broken",
+  isAvailable: false,
+  isDefaultInstance: false,
+  label: "Codex broken",
+};
+
+const agent = {
+  choices: [
+    { id: "build", isDefault: true, label: "Build" },
+    { id: "plan", label: "Plan" },
+  ],
+  id: "agent",
+  label: "Agent",
+  role: "agent" as const,
+  type: "select" as const,
+};
+const variant = {
+  choices: [
+    { id: "low", label: "Low" },
+    { id: "high", label: "High" },
+  ],
+  id: "variant",
+  label: "Variant",
+  role: "variant" as const,
+  type: "select" as const,
+};
+const effort = {
+  choices: [{ id: "high", isDefault: true, label: "High" }],
+  id: "effort",
+  label: "Reasoning",
+  role: "reasoning" as const,
+  type: "select" as const,
+};
 
 describe("automation form helpers", () => {
-  it("lists one option per engine instance, keyed by instance id", () => {
+  it("lists one engine option per driver, disabled when no instance can run", () => {
     expect(
-      getAutomationEngineOptions([
+      getAutomationDriverOptions([
         cursorOption,
         {
           ...cursorOption,
@@ -46,6 +102,7 @@ describe("automation form helpers", () => {
           isDefaultInstance: false,
           label: "Cursor (work)",
         },
+        { ...codexOption, isAvailable: false },
       ]),
     ).toEqual([
       {
@@ -55,21 +112,111 @@ describe("automation form helpers", () => {
         value: "cursor",
       },
       {
-        description: "Use the locally configured Cursor Agent runtime.",
+        description: "Use the Codex CLI already configured on this machine.",
         isDisabled: true,
-        label: "Cursor (work)",
-        value: "cursor-work",
+        label: "Codex",
+        value: "codex",
       },
     ]);
   });
 
+  it("keeps a stored engine the catalog no longer lists, disabled", () => {
+    expect(getAutomationDriverOptions([cursorOption], "codex")).toContainEqual({
+      description: "No instance of this engine is available.",
+      isDisabled: true,
+      label: "Codex",
+      value: "codex",
+    });
+  });
+
   it("appends the stability notice of engines that are not stable yet", () => {
     expect(
-      getAutomationEngineOptions([
+      getAutomationDriverOptions([
         { ...cursorOption, stability: "experimental" },
       ])[0]?.description,
     ).toBe(
       "Use the locally configured Cursor Agent runtime. Experimental integration; behavior may change or fail unexpectedly.",
+    );
+  });
+
+  it("lists a driver's instances with their accent colours", () => {
+    expect(
+      getAutomationInstanceOptions(
+        [cursorOption, codexOption, codexWork, codexBroken],
+        "codex",
+        "codex-work",
+      ),
+    ).toEqual([
+      {
+        accentColor: null,
+        description: "Default instance",
+        isDisabled: false,
+        label: "Codex",
+        value: "codex",
+      },
+      {
+        accentColor: "#16a34a",
+        description: "codex-work",
+        isDisabled: false,
+        label: "Codex work",
+        value: "codex-work",
+      },
+      {
+        accentColor: null,
+        description: "Codex is not signed in.",
+        isDisabled: true,
+        label: "Codex broken",
+        value: "codex-broken",
+      },
+    ]);
+    expect(
+      getAutomationInstanceOptions([codexOption], "codex", "codex-gone").at(-1),
+    ).toEqual({
+      accentColor: null,
+      description: AUTOMATION_INSTANCE_MISSING_DESCRIPTION,
+      isDisabled: true,
+      label: "codex-gone",
+      value: "codex-gone",
+    });
+  });
+
+  it("picks an instance when the engine changes", () => {
+    const catalog = [cursorOption, codexOption, codexWork];
+
+    expect(
+      pickAutomationInstanceForDriver(catalog, "codex", "codex-work"),
+    ).toBe("codex-work");
+    expect(pickAutomationInstanceForDriver(catalog, "codex", "cursor")).toBe(
+      "codex",
+    );
+    expect(
+      pickAutomationInstanceForDriver(
+        [{ ...codexOption, isAvailable: false }, codexWork],
+        "codex",
+        "cursor",
+      ),
+    ).toBe("codex-work");
+    expect(pickAutomationInstanceForDriver([], "claude", "cursor")).toBe(
+      "claude",
+    );
+  });
+
+  it("shows the instance picker for several instances or a non-default one", () => {
+    expect(
+      shouldShowAutomationInstancePicker([codexOption], "codex", "codex"),
+    ).toBe(false);
+    expect(
+      shouldShowAutomationInstancePicker(
+        [codexOption, codexWork],
+        "codex",
+        "codex",
+      ),
+    ).toBe(true);
+    expect(
+      shouldShowAutomationInstancePicker([codexWork], "codex", "codex-work"),
+    ).toBe(true);
+    expect(shouldShowAutomationInstancePicker([], null, "codex-gone")).toBe(
+      false,
     );
   });
 
@@ -206,5 +353,63 @@ describe("automation form helpers", () => {
       modelId: "__default__",
       reasoningEffort: null,
     });
+  });
+});
+
+describe("automation model options", () => {
+  it("offers a picker for every option but the reasoning effort", () => {
+    expect(
+      getAutomationModelOptionDescriptors({
+        options: [effort, agent, variant],
+      }).map((descriptor) => descriptor.id),
+    ).toEqual(["agent", "variant"]);
+    expect(getAutomationModelOptionDescriptors(null)).toEqual([]);
+  });
+
+  it("leads each option's choices with the model default", () => {
+    expect(getAutomationModelOptionChoices(agent)).toEqual([
+      {
+        description: "Whatever the model uses when nothing is picked.",
+        label: "Model default (Build)",
+        value: AUTOMATION_OPTION_DEFAULT,
+      },
+      { label: "Build", value: "build" },
+      { label: "Plan", value: "plan" },
+    ]);
+    expect(getAutomationModelOptionChoices(variant, "max").at(-1)).toEqual({
+      description: "Currently saved value is unavailable.",
+      isDisabled: true,
+      label: "max",
+      value: "max",
+    });
+  });
+
+  it("stores only values the selected model offers", () => {
+    expect(
+      toAutomationModelOptions({ agent: "plan", variant: "max" }, [
+        agent,
+        variant,
+      ]),
+    ).toEqual([{ id: "agent", value: "plan" }]);
+    expect(toAutomationModelOptions({}, [agent, variant])).toBeNull();
+    expect(toAutomationModelOptions({ agent: "plan" }, [])).toBeNull();
+  });
+
+  it("reads stored model options back into the form", () => {
+    expect(
+      toAutomationOptionValues([
+        { id: "agent", value: "plan" },
+        { id: "fast", value: true },
+        { id: "", value: "dropped" },
+      ]),
+    ).toEqual({ agent: "plan" });
+    expect(toAutomationOptionValues(null)).toEqual({});
+    expect(toAutomationOptionValues("not json")).toEqual({});
+  });
+
+  it("drops values the newly selected model does not offer", () => {
+    expect(
+      pruneAutomationOptionValues({ agent: "plan", variant: "high" }, [agent]),
+    ).toEqual({ agent: "plan" });
   });
 });

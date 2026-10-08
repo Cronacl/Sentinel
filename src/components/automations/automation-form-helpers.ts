@@ -13,30 +13,261 @@ import {
   type ChatComposerEngineOption,
   type ChatComposerModel,
 } from "@/components/chat/chat-composer-helpers";
+import {
+  getComposerSelectOptions,
+  toComposerOptionValues,
+  toModelOptionSelections,
+} from "@/components/engines/option-descriptors";
 import type { SelectOption } from "@/components/forms/controlled-fields";
+import { parseEngineOptionSelections } from "@/lib/ai/chat/engines/model-options";
+import type {
+  EngineOptionSelection,
+  EngineSelectOptionDescriptor,
+} from "@/lib/ai/chat/engines/contract";
 
 export type AutomationEngineModel = ChatComposerModel;
 
-/**
- * One option per engine instance (engines.composerCatalog). The value is the
- * instance id; the driver kind comes from the option itself.
- */
-export function getAutomationEngineOptions(
-  engines: readonly ChatComposerEngineOption[],
-): SelectOption[] {
-  return engines.map((engine) => {
-    const stability = getEngineStabilityNotice(engine);
-    const descriptionSuffix = engine.description.endsWith(".") ? " " : ". ";
+function withStabilityNotice(
+  engine: Pick<ChatComposerEngineOption, "description" | "stability">,
+  description: string,
+) {
+  const stability = getEngineStabilityNotice(engine);
+  if (!stability) {
+    return description;
+  }
+  const separator = description.endsWith(".") ? " " : ". ";
+  return `${description}${separator}${stability.description}`;
+}
 
+/**
+ * One option per driver of the catalog's instances (engines.composerCatalog),
+ * in catalog order; the value is the driver kind. A driver none of whose
+ * instances can run is disabled.
+ */
+export function getAutomationDriverOptions(
+  engines: readonly ChatComposerEngineOption[],
+  selectedDriver?: string | null,
+): SelectOption[] {
+  const byDriver = new Map<string, ChatComposerEngineOption[]>();
+  for (const engine of engines) {
+    byDriver.set(engine.engine, [
+      ...(byDriver.get(engine.engine) ?? []),
+      engine,
+    ]);
+  }
+
+  const options: SelectOption[] = [...byDriver].map(([driver, instances]) => {
+    const first = instances[0]!;
+    const meta = getDriverMeta(driver);
     return {
-      description: stability
-        ? `${engine.description}${descriptionSuffix}${stability.description}`
-        : engine.description,
+      description: withStabilityNotice(
+        first,
+        meta?.description ?? first.description,
+      ),
+      isDisabled: !instances.some((instance) => instance.isAvailable),
+      label: meta?.label ?? getDriverLabel(driver),
+      value: driver,
+    };
+  });
+  if (selectedDriver && !byDriver.has(selectedDriver)) {
+    options.push({
+      description: "No instance of this engine is available.",
+      isDisabled: true,
+      label: getDriverLabel(selectedDriver),
+      value: selectedDriver,
+    });
+  }
+  return options;
+}
+
+export type AutomationInstanceOption = SelectOption & {
+  accentColor: string | null;
+};
+
+export const AUTOMATION_INSTANCE_MISSING_DESCRIPTION =
+  "No longer available. Pick another instance.";
+
+/**
+ * A driver's instances; the value is the instance id. A selected instance
+ * missing from the catalog (removed or disabled) stays listed, disabled.
+ */
+export function getAutomationInstanceOptions(
+  engines: readonly ChatComposerEngineOption[],
+  driver: string | null,
+  selectedInstanceId?: string | null,
+): AutomationInstanceOption[] {
+  const options: AutomationInstanceOption[] = engines
+    .filter((engine) => engine.engine === driver)
+    .map((engine) => ({
+      accentColor: engine.accentColor,
+      description: engine.isAvailable
+        ? engine.isDefaultInstance
+          ? "Default instance"
+          : engine.instanceId
+        : (engine.error ?? "Unavailable"),
       isDisabled: !engine.isAvailable,
       label: engine.label,
       value: engine.instanceId,
-    };
-  });
+    }));
+
+  if (
+    selectedInstanceId &&
+    !options.some((option) => option.value === selectedInstanceId)
+  ) {
+    options.push({
+      accentColor: null,
+      description: AUTOMATION_INSTANCE_MISSING_DESCRIPTION,
+      isDisabled: true,
+      label: selectedInstanceId,
+      value: selectedInstanceId,
+    });
+  }
+  return options;
+}
+
+/**
+ * The instance to use after picking a driver: the current one when it is
+ * the driver's, else the driver's default instance when it can run, else
+ * its first instance that can, else its first. The driver kind (its default
+ * instance's id) when the catalog lists none.
+ */
+export function pickAutomationInstanceForDriver(
+  engines: readonly ChatComposerEngineOption[],
+  driver: string,
+  currentInstanceId?: string | null,
+) {
+  const instances = engines.filter((engine) => engine.engine === driver);
+  if (
+    currentInstanceId &&
+    instances.some((engine) => engine.instanceId === currentInstanceId)
+  ) {
+    return currentInstanceId;
+  }
+  return (
+    instances.find((engine) => engine.isDefaultInstance && engine.isAvailable)
+      ?.instanceId ??
+    instances.find((engine) => engine.isAvailable)?.instanceId ??
+    instances[0]?.instanceId ??
+    driver
+  );
+}
+
+/**
+ * Whether the form shows the instance picker: the driver has several
+ * instances, or the automation uses one that is not the default.
+ */
+export function shouldShowAutomationInstancePicker(
+  engines: readonly ChatComposerEngineOption[],
+  driver: string | null,
+  selectedInstanceId: string | null | undefined,
+) {
+  if (!driver) {
+    return false;
+  }
+  const instances = engines.filter((engine) => engine.engine === driver);
+  return (
+    instances.length > 1 ||
+    (Boolean(selectedInstanceId) && selectedInstanceId !== driver)
+  );
+}
+
+/** Model option pickers: every select option but the reasoning effort. */
+export function getAutomationModelOptionDescriptors(
+  model: Pick<AutomationEngineModel, "options"> | null | undefined,
+) {
+  return getComposerSelectOptions(model?.options);
+}
+
+export const AUTOMATION_OPTION_DEFAULT = "__default__";
+
+/** One option's choices, led by the model's own default. */
+export function getAutomationModelOptionChoices(
+  descriptor: EngineSelectOptionDescriptor,
+  selectedValue?: string | null,
+): SelectOption[] {
+  const defaultChoice = descriptor.choices.find((choice) => choice.isDefault);
+  const options: SelectOption[] = [
+    {
+      description: "Whatever the model uses when nothing is picked.",
+      label: defaultChoice
+        ? `Model default (${defaultChoice.label})`
+        : "Model default",
+      value: AUTOMATION_OPTION_DEFAULT,
+    },
+    ...descriptor.choices.map((choice) => ({
+      ...(choice.description ? { description: choice.description } : {}),
+      label: choice.label,
+      value: choice.id,
+    })),
+  ];
+  if (
+    selectedValue &&
+    selectedValue !== AUTOMATION_OPTION_DEFAULT &&
+    !options.some((option) => option.value === selectedValue)
+  ) {
+    options.push({
+      description: "Currently saved value is unavailable.",
+      isDisabled: true,
+      label: selectedValue,
+      value: selectedValue,
+    });
+  }
+  return options;
+}
+
+/**
+ * The form's option values from an automation's stored model_options
+ * (string values only; malformed entries are dropped).
+ */
+export function toAutomationOptionValues(
+  stored: unknown,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(
+      toComposerOptionValues(parseEngineOptionSelections(stored)),
+    ).flatMap(([id, value]) => (value ? [[id, value]] : [])),
+  );
+}
+
+/** Values still offered by the selected model's options. */
+export function pruneAutomationOptionValues(
+  values: Readonly<Record<string, string>>,
+  descriptors: readonly EngineSelectOptionDescriptor[],
+): Record<string, string> {
+  return Object.fromEntries(
+    descriptors.flatMap((descriptor) => {
+      const value = values[descriptor.id];
+      return value && descriptor.choices.some((choice) => choice.id === value)
+        ? [[descriptor.id, value]]
+        : [];
+    }),
+  );
+}
+
+/**
+ * What an automation stores as model_options: a value per option of the
+ * selected model that is still offered; null when every option is left to
+ * the model.
+ */
+export function toAutomationModelOptions(
+  values: Readonly<Record<string, string>>,
+  descriptors: readonly EngineSelectOptionDescriptor[],
+): EngineOptionSelection[] | null {
+  const selections = toModelOptionSelections(
+    Object.fromEntries(
+      descriptors.map((descriptor) => {
+        const value = values[descriptor.id];
+        return [
+          descriptor.id,
+          value && descriptor.choices.some((choice) => choice.id === value)
+            ? value
+            : null,
+        ];
+      }),
+    ),
+    descriptors,
+  );
+  return selections.length > 0 ? selections : null;
 }
 
 export function getAvailableAutomationModels(

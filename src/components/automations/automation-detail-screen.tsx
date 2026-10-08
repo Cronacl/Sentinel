@@ -44,16 +44,23 @@ import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import { AUTOMATION_SCHEDULE_TYPES } from "@/server/db/enums";
 import {
+  AutomationEngineFields,
+  AutomationModelOptionFields,
+} from "@/components/automations/automation-engine-fields";
+import {
   AUTOMATION_ENGINE_UNAVAILABLE_MESSAGE,
   getAvailableAutomationModels,
-  getAutomationEngineOptions,
+  getAutomationModelOptionDescriptors,
   getAutomationModelOptions,
   getAutomationModelsForInstance,
   getAutomationReasoningOptions,
   getAutomationUnattendedNotice,
+  pruneAutomationOptionValues,
   resolveAutomationEngine,
   resolveAutomationInstanceId,
   resolveAutomationSelection,
+  toAutomationModelOptions,
+  toAutomationOptionValues,
 } from "@/components/automations/automation-form-helpers";
 import { isLikelyCronExpression } from "@/schemas/automation.schema";
 import { sileo } from "sileo";
@@ -128,6 +135,8 @@ const editFormSchema = z
     /** The engine instance; its driver kind is sent as chatEngine. */
     engineInstanceId: z.string().trim().min(1, "Engine is required."),
     modelId: z.string().trim().min(1, "Model is required."),
+    /** The selected model's option picks (agent, variant, …) by option id. */
+    modelOptionValues: z.record(z.string(), z.string()),
     reasoningEffort: z.string(),
   })
   .superRefine((data, ctx) => {
@@ -299,6 +308,7 @@ export function AutomationDetailScreen({
       scheduleTime: automation.scheduleTime ?? "09:00",
       scheduleCron: automation.scheduleCron ?? "",
       modelId: automation.modelId ?? selection.modelId,
+      modelOptionValues: toAutomationOptionValues(automation.modelOptions),
       reasoningEffort:
         (automation.reasoningEffort as ReasoningEffort | null) ??
         selection.reasoningEffort ??
@@ -352,10 +362,6 @@ export function AutomationDetailScreen({
     ];
   }, [workspacesQuery.data]);
 
-  const engineOptions = useMemo(
-    () => getAutomationEngineOptions(catalogOptions),
-    [catalogOptions],
-  );
   const availableModels = useMemo(
     () =>
       getAutomationModelsForInstance(
@@ -404,6 +410,21 @@ export function AutomationDetailScreen({
     () => getAutomationReasoningOptions(supportedReasoningEfforts),
     [supportedReasoningEfforts],
   );
+  const optionDescriptors = useMemo(
+    () => getAutomationModelOptionDescriptors(selectedModel),
+    [selectedModel],
+  );
+
+  useEffect(() => {
+    if (!selectedModel) {
+      return;
+    }
+    const current = form.getValues("modelOptionValues") ?? {};
+    const pruned = pruneAutomationOptionValues(current, optionDescriptors);
+    if (JSON.stringify(pruned) !== JSON.stringify(current)) {
+      form.setValue("modelOptionValues", pruned);
+    }
+  }, [form, optionDescriptors, selectedModel]);
 
   useEffect(() => {
     const currentModelKey = form.getValues("modelId");
@@ -499,6 +520,13 @@ export function AutomationDetailScreen({
           scheduleTime,
           scheduleCron,
           modelId: values.modelId === "__default__" ? null : values.modelId,
+          modelOptions:
+            values.modelId === "__default__"
+              ? null
+              : toAutomationModelOptions(
+                  values.modelOptionValues,
+                  optionDescriptors,
+                ),
           reasoningEffort: selectedReasoning,
         });
 
@@ -517,7 +545,15 @@ export function AutomationDetailScreen({
         );
       }
     },
-    [automation, catalogOptions, updateMutation, automationQuery, utils, form],
+    [
+      automation,
+      catalogOptions,
+      optionDescriptors,
+      updateMutation,
+      automationQuery,
+      utils,
+      form,
+    ],
   );
 
   const handleRunNow = async () => {
@@ -991,18 +1027,23 @@ export function AutomationDetailScreen({
                   options={workspaceOptions}
                 />
 
-                <div className="flex flex-col gap-1.5">
-                  <ControlledSelectField
-                    control={form.control}
-                    description="Choose which engine and runtime this automation should use."
-                    label="Engine"
-                    name="engineInstanceId"
-                    options={engineOptions}
-                  />
-                  {unattendedNotice ? (
-                    <p className="text-muted text-xs">{unattendedNotice}</p>
-                  ) : null}
-                </div>
+                <Controller
+                  control={form.control}
+                  name="engineInstanceId"
+                  render={({ field }) => (
+                    <AutomationEngineFields
+                      catalogOptions={catalogOptions}
+                      driver={resolveAutomationEngine(
+                        field.value,
+                        catalogOptions,
+                        automation,
+                      )}
+                      instanceId={field.value}
+                      notice={unattendedNotice}
+                      onInstanceChange={field.onChange}
+                    />
+                  )}
+                />
 
                 <ControlledSelectField
                   control={form.control}
@@ -1021,6 +1062,18 @@ export function AutomationDetailScreen({
                   selectProps={{
                     isDisabled: reasoningOptions.length === 0,
                   }}
+                />
+
+                <Controller
+                  control={form.control}
+                  name="modelOptionValues"
+                  render={({ field }) => (
+                    <AutomationModelOptionFields
+                      descriptors={optionDescriptors}
+                      onChange={field.onChange}
+                      values={field.value ?? {}}
+                    />
+                  )}
                 />
               </div>
             </div>

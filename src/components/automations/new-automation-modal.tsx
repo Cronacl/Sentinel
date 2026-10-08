@@ -28,17 +28,24 @@ import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import { AUTOMATION_SCHEDULE_TYPES, type ChatEngine } from "@/server/db/enums";
 import type { AutomationTemplate } from "@/components/automations/automation-templates";
 import {
+  AutomationEngineFields,
+  AutomationModelOptionFields,
+} from "@/components/automations/automation-engine-fields";
+import {
   AUTOMATION_ENGINE_UNAVAILABLE_MESSAGE,
   getAvailableAutomationModels,
-  getAutomationEngineOptions,
+  getAutomationModelOptionDescriptors,
   getAutomationModelOptions,
   getAutomationModelsForInstance,
   getAutomationReasoningOptions,
   getAutomationUnattendedNotice,
+  pruneAutomationOptionValues,
   resolveAutomationEngine,
   resolveAutomationInstanceId,
   resolveAutomationSelection,
+  toAutomationModelOptions,
 } from "@/components/automations/automation-form-helpers";
+import type { EngineSelectOptionDescriptor } from "@/lib/ai/chat/engines/contract";
 import {
   createAutomationSchema,
   type CreateAutomationInput,
@@ -62,6 +69,8 @@ const automationFormSchema = z
     /** The engine instance; its driver kind is sent as chatEngine. */
     engineInstanceId: z.string().trim().min(1, "Engine is required."),
     modelId: z.string().trim().min(1, "Model is required."),
+    /** The selected model's option picks (agent, variant, …) by option id. */
+    modelOptionValues: z.record(z.string(), z.string()),
     reasoningEffort: z.string(),
   })
   .superRefine((data, ctx) => {
@@ -171,6 +180,7 @@ function createDefaultValues(
       scheduleCron: template.defaults.scheduleCron ?? "",
       engineInstanceId: defaultInstanceId,
       modelId: defaultModelId,
+      modelOptionValues: {},
       reasoningEffort: defaultReasoningEffort,
     };
   }
@@ -185,6 +195,7 @@ function createDefaultValues(
     scheduleCron: "",
     engineInstanceId: defaultInstanceId,
     modelId: defaultModelId,
+    modelOptionValues: {},
     reasoningEffort: defaultReasoningEffort,
   };
 }
@@ -192,6 +203,7 @@ function createDefaultValues(
 function normalizeCreateInput(
   values: AutomationFormValues,
   chatEngine: ChatEngine,
+  optionDescriptors: readonly EngineSelectOptionDescriptor[],
 ): CreateAutomationInput {
   const scheduleTime =
     values.scheduleType === "daily" ||
@@ -223,6 +235,10 @@ function normalizeCreateInput(
     scheduleTime,
     scheduleCron,
     modelId: values.modelId === "__default__" ? null : values.modelId,
+    modelOptions:
+      values.modelId === "__default__"
+        ? null
+        : toAutomationModelOptions(values.modelOptionValues, optionDescriptors),
     reasoningEffort: selectedReasoning,
   };
 }
@@ -397,10 +413,6 @@ export function NewAutomationModal({
     ];
   }, [workspacesQuery.data]);
 
-  const engineOptions = useMemo(
-    () => getAutomationEngineOptions(catalogOptions),
-    [catalogOptions],
-  );
   const availableModels = useMemo(
     () =>
       getAutomationModelsForInstance(
@@ -449,6 +461,21 @@ export function NewAutomationModal({
     () => getAutomationReasoningOptions(supportedReasoningEfforts),
     [supportedReasoningEfforts],
   );
+  const optionDescriptors = useMemo(
+    () => getAutomationModelOptionDescriptors(selectedModel),
+    [selectedModel],
+  );
+
+  useEffect(() => {
+    if (!selectedModel) {
+      return;
+    }
+    const current = form.getValues("modelOptionValues");
+    const pruned = pruneAutomationOptionValues(current, optionDescriptors);
+    if (JSON.stringify(pruned) !== JSON.stringify(current)) {
+      form.setValue("modelOptionValues", pruned);
+    }
+  }, [form, optionDescriptors, selectedModel]);
 
   useEffect(() => {
     const currentModelKey = form.getValues("modelId");
@@ -514,7 +541,7 @@ export function NewAutomationModal({
         setSubmitError(AUTOMATION_ENGINE_UNAVAILABLE_MESSAGE);
         return;
       }
-      const input = normalizeCreateInput(values, chatEngine);
+      const input = normalizeCreateInput(values, chatEngine, optionDescriptors);
       const validated = createAutomationSchema.safeParse(input);
       if (!validated.success) {
         setSubmitError(
@@ -604,18 +631,19 @@ export function NewAutomationModal({
                     options={SCHEDULE_OPTIONS}
                   />
 
-                  <div className="flex flex-col gap-1.5">
-                    <ControlledSelectField
-                      control={form.control}
-                      description="Choose which engine and runtime this automation should use."
-                      label="Engine"
-                      name="engineInstanceId"
-                      options={engineOptions}
-                    />
-                    {unattendedNotice ? (
-                      <p className="text-muted text-xs">{unattendedNotice}</p>
-                    ) : null}
-                  </div>
+                  <Controller
+                    control={form.control}
+                    name="engineInstanceId"
+                    render={({ field }) => (
+                      <AutomationEngineFields
+                        catalogOptions={catalogOptions}
+                        driver={engineOf(field.value)}
+                        instanceId={field.value}
+                        notice={unattendedNotice}
+                        onInstanceChange={field.onChange}
+                      />
+                    )}
+                  />
 
                   {scheduleType === "weekly" ? (
                     <div className="grid gap-4 sm:grid-cols-2">
@@ -714,6 +742,18 @@ export function NewAutomationModal({
                     name="reasoningEffort"
                     options={reasoningOptions}
                     selectProps={{ isDisabled: reasoningOptions.length === 0 }}
+                  />
+
+                  <Controller
+                    control={form.control}
+                    name="modelOptionValues"
+                    render={({ field }) => (
+                      <AutomationModelOptionFields
+                        descriptors={optionDescriptors}
+                        onChange={field.onChange}
+                        values={field.value}
+                      />
+                    )}
                   />
                 </div>
               </Modal.Body>
