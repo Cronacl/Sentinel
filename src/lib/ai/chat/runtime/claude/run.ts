@@ -55,6 +55,11 @@ import {
   type ThreadEventChannel,
 } from "../thread-chat/run-state";
 import {
+  buildHistoryReplayPrefix,
+  getReplayHistory,
+  joinPromptPrefixes,
+} from "../history-replay";
+import {
   buildActiveThreadMessages,
   buildFirstUserMessageTitle,
   getFirstUserText,
@@ -1760,6 +1765,11 @@ export async function runClaudeThreadChat(
           "Plan Mode is active for this fresh Claude session. Follow the full contract below for the first response and continue honoring it until the mode changes.",
         )
       : null;
+  // No session to resume (another instance or home, or no stored state):
+  // the fresh session gets the conversation so far in its first prompt.
+  const historyReplayPrefix = existingClaudeState?.sessionId
+    ? null
+    : buildHistoryReplayPrefix(getReplayHistory(transcript, request));
   const { options, permissionMode } = await buildClaudeRuntimeOptions({
     cwd,
     instance: instance ?? null,
@@ -1956,7 +1966,10 @@ export async function runClaudeThreadChat(
     }
     inputQueue.enqueue(
       buildClaudeUserPrompt(request.message!, sessionId, {
-        promptPrefix: planModePromptPrefix,
+        promptPrefix: joinPromptPrefixes(
+          historyReplayPrefix,
+          planModePromptPrefix,
+        ),
         // The environment the CLI was started with (instance home included).
         skillRoots: getClaudeSkillRoots({ cwd, env: options.env ?? {} }),
       }),

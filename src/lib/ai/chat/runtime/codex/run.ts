@@ -63,6 +63,11 @@ import {
   type ThreadEventChannel,
 } from "../thread-chat/run-state";
 import {
+  buildHistoryReplayPrefix,
+  getReplayHistory,
+  joinPromptPrefixes,
+} from "../history-replay";
+import {
   buildActiveThreadMessages,
   getFirstUserText,
   getUserParentMessageId,
@@ -2365,7 +2370,6 @@ export async function runCodexThreadChat(
   const sandboxMode = getCodexSandboxMode(permissionMode, workspaceRoot);
   const sandboxPolicy = buildCodexSandboxPolicy(sandboxMode, workspaceRoot);
   const codex = getCodexAppServerManager(instance);
-  const codexInput = await buildCodexUserInput(request.message);
   // Null under another instance or home: a fresh Codex thread starts.
   const existingCodexState = getCodexThreadState(
     existingThread?.chatEngineState,
@@ -2375,6 +2379,14 @@ export async function runCodexThreadChat(
     existingThread?.mode != null &&
     normalizeThreadMode(existingThread.mode) !== threadMode;
   const resumableCodexState = didThreadModeChange ? null : existingCodexState;
+  // No thread to resume (another instance or home, or no stored state): the
+  // fresh Codex thread gets the conversation so far in its first prompt.
+  const historyReplayPrefix = existingCodexState?.codexThreadId
+    ? null
+    : buildHistoryReplayPrefix(getReplayHistory(transcript, request));
+  const codexInput = await buildCodexUserInput(request.message, {
+    promptPrefix: historyReplayPrefix,
+  });
   const runId = generateId();
   const assistantId = crypto.randomUUID();
   const eventChannel = await createThreadEventChannel(runId);
@@ -2517,8 +2529,11 @@ export async function runCodexThreadChat(
       input:
         !nativeCollaborationMode && threadMode === "plan"
           ? await buildCodexUserInput(request.message, {
-              promptPrefix: buildPlanModePromptPreamble(
-                "Native Codex collaboration mode is unavailable in this Codex CLI version. Apply the full Plan Mode contract below for this turn instead.",
+              promptPrefix: joinPromptPrefixes(
+                historyReplayPrefix,
+                buildPlanModePromptPreamble(
+                  "Native Codex collaboration mode is unavailable in this Codex CLI version. Apply the full Plan Mode contract below for this turn instead.",
+                ),
               ),
             })
           : codexInput,

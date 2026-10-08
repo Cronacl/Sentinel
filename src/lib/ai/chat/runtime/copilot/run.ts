@@ -61,7 +61,7 @@ import {
   resolveCopilotPromptResponse,
   type CopilotPromptResponse,
 } from "./event-helpers";
-import { buildPlanModePromptPreamble } from "../plan-mode-instructions";
+import { buildTranscriptBootstrapPrompt } from "../history-replay";
 import { isUnattendedRun } from "../unattended";
 import {
   buildCopilotPermissionToolName,
@@ -530,69 +530,6 @@ function buildCopilotMessagePayload(input: {
     mode: "immediate" as const,
     prompt: prompt || "Continue.",
   };
-}
-
-function formatCopilotTranscriptMessage(message: ThreadUIMessage) {
-  const text = message.parts
-    .map((part) => {
-      if (part.type === "text") {
-        return part.text.trim();
-      }
-
-      if (part.type === "file") {
-        return `[Attachment: ${part.filename ?? part.mediaType}]`;
-      }
-
-      if (part.type === "reasoning") {
-        return `[Reasoning omitted]`;
-      }
-
-      if (part.type === "dynamic-tool" || part.type.startsWith("tool-")) {
-        return `[Tool: ${"toolName" in part ? part.toolName : part.type.slice(5)}]`;
-      }
-
-      return "";
-    })
-    .filter(Boolean)
-    .join("\n\n")
-    .trim();
-
-  if (!text) {
-    return null;
-  }
-
-  return `${message.role.toUpperCase()}: ${text}`;
-}
-
-function buildTranscriptBootstrapPrompt(
-  transcript: ThreadUIMessage[],
-  threadMode: "chat" | "plan",
-) {
-  const renderedTranscript = transcript
-    .map(formatCopilotTranscriptMessage)
-    .filter((entry): entry is string => Boolean(entry))
-    .join("\n\n");
-
-  const planModePreamble =
-    threadMode === "plan"
-      ? buildPlanModePromptPreamble(
-          "Plan Mode is active for this fresh Copilot session. Follow the full contract below for the first response and continue honoring it until the mode changes.",
-        )
-      : null;
-
-  if (!renderedTranscript) {
-    return planModePreamble;
-  }
-
-  return [
-    "Continue this Sentinel conversation faithfully.",
-    ...(planModePreamble
-      ? [planModePreamble]
-      : [`Current mode: ${threadMode}.`]),
-    "The prior transcript follows. Use it as conversation context, then continue naturally from the final user message.",
-    "",
-    renderedTranscript,
-  ].join("\n");
 }
 
 function upsertCopilotTool(
@@ -1449,7 +1386,9 @@ export async function runCopilotThreadChat(
     !existingCopilotState?.sessionId;
   const bootstrapPrompt =
     shouldCreateFreshSession && request.message
-      ? buildTranscriptBootstrapPrompt(modelTranscript, threadMode)
+      ? buildTranscriptBootstrapPrompt(modelTranscript, threadMode, {
+          engineLabel: "Copilot",
+        })
       : null;
 
   const requestedReasoningEffort =

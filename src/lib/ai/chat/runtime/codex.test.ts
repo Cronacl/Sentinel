@@ -1627,6 +1627,142 @@ describe("runCodexThreadChat instances and unattended runs", () => {
     );
   });
 
+  const priorRecords = [
+    {
+      createdAt: new Date(1),
+      id: "db-user-1",
+      messageId: "user-1",
+      metadata: {},
+      parts: [{ text: "Add a cache", type: "text" }],
+      role: "user",
+      updatedAt: new Date(1),
+    },
+    {
+      createdAt: new Date(2),
+      id: "db-assistant-1",
+      messageId: "assistant-1",
+      metadata: { parentMessageId: "user-1" },
+      parts: [{ text: "The cache is in place.", type: "text" }],
+      role: "assistant",
+      updatedAt: new Date(2),
+    },
+  ];
+
+  function threadOnHome(home: string) {
+    return {
+      chatEngineState: {
+        codex: {
+          codexThreadId: "codex-thread-old-home",
+          continuationKey: `codex:home:${home}`,
+          cwd: "/tmp/workspace",
+          instanceId: "codex-work",
+          modelId: "gpt-6-astra",
+        },
+      },
+      mode: "chat",
+      status: "idle",
+    } as any;
+  }
+
+  function firstTurnText() {
+    const input = (codexManager.startTurn.mock.calls[0] as any)?.[0]?.input as
+      Array<{ text?: string; type: string }> | undefined;
+    return (input ?? [])
+      .filter((item) => item.type === "text")
+      .map((item) => item.text)
+      .join("\n");
+  }
+
+  it("replays the conversation into a fresh Codex thread when the instance's home changed", async () => {
+    loadThreadMessages.mockResolvedValueOnce(priorRecords as any);
+    codexManager.resumeThread.mockClear();
+    const instance = makeFakeInstance({
+      continuationKey: "codex:home:/tmp/new-home",
+      driver: "codex",
+      id: "codex-work",
+    });
+
+    const response = await runCodexThreadChat(
+      {
+        message: { ...userMessage("thread-moved"), id: "user-2" },
+        modelId: "gpt-6-astra",
+        threadId: "thread-moved",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      threadOnHome("/tmp/old-home"),
+      instance,
+    );
+
+    expect(response.status).toBe(202);
+    expect(codexManager.resumeThread).not.toHaveBeenCalled();
+    expect(codexManager.startThread).toHaveBeenCalledTimes(1);
+    const text = firstTurnText();
+    expect(text).toContain("<conversation_history>");
+    expect(text).toContain(
+      "USER: Add a cache\n\nASSISTANT: The cache is in place.",
+    );
+    expect(text.endsWith("New message:\n\nDo the thing")).toBe(true);
+  });
+
+  it("replays before the plan preamble on app-servers without collaboration mode", async () => {
+    loadThreadMessages.mockResolvedValueOnce(priorRecords as any);
+    codexManager.supportsCollaborationMode.mockImplementation(() => false);
+
+    await runCodexThreadChat(
+      {
+        message: { ...userMessage("thread-moved-plan"), id: "user-2" },
+        modelId: "gpt-6-astra",
+        threadId: "thread-moved-plan",
+        threadMode: "plan",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      { ...threadOnHome("/tmp/old-home"), mode: "plan" },
+      makeFakeInstance({
+        continuationKey: "codex:home:/tmp/new-home",
+        driver: "codex",
+        id: "codex-work",
+      }),
+    );
+
+    const text = firstTurnText();
+    expect(text.indexOf("</conversation_history>")).toBeGreaterThan(-1);
+    expect(text.indexOf("</conversation_history>")).toBeLessThan(
+      text.indexOf("Native Codex collaboration mode is unavailable"),
+    );
+    expect(text.endsWith("Do the thing")).toBe(true);
+  });
+
+  it("resumes the Codex thread without replaying when the home is unchanged", async () => {
+    loadThreadMessages.mockResolvedValueOnce(priorRecords as any);
+    codexManager.resumeThread.mockClear();
+
+    await runCodexThreadChat(
+      {
+        message: { ...userMessage("thread-kept"), id: "user-2" },
+        modelId: "gpt-6-astra",
+        threadId: "thread-kept",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      threadOnHome("/tmp/old-home"),
+      makeFakeInstance({
+        continuationKey: "codex:home:/tmp/old-home",
+        driver: "codex",
+        id: "codex-work",
+      }),
+    );
+
+    expect(codexManager.resumeThread).toHaveBeenCalledWith(
+      "codex-thread-old-home",
+    );
+    expect(firstTurnText()).toBe("Do the thing");
+  });
+
   it("declines approvals and questions at once when nobody can answer", async () => {
     const response = await runCodexThreadChat(
       {

@@ -1620,6 +1620,111 @@ describe("runClaudeThreadChat instances and unattended runs", () => {
     );
   });
 
+  async function readFirstPromptText() {
+    const { control } = getOnlyActiveRun();
+    const prompt =
+      await control?.inputQueue.stream[Symbol.asyncIterator]().next();
+    return ((prompt?.value as any)?.message?.content ?? [])
+      .filter((part: { type: string }) => part.type === "text")
+      .map((part: { text: string }) => part.text)
+      .join("\n");
+  }
+
+  const priorRecords = [
+    {
+      createdAt: new Date(1),
+      id: "db-user-1",
+      messageId: "user-1",
+      metadata: {},
+      parts: [{ text: "Add a cache", type: "text" }],
+      role: "user",
+      updatedAt: new Date(1),
+    },
+    {
+      createdAt: new Date(2),
+      id: "db-assistant-1",
+      messageId: "assistant-1",
+      metadata: { parentMessageId: "user-1" },
+      parts: [{ text: "The cache is in place.", type: "text" }],
+      role: "assistant",
+      updatedAt: new Date(2),
+    },
+  ];
+
+  function threadOnHome(home: string) {
+    return {
+      chatEngineState: {
+        claude: {
+          continuationKey: `claude:home:${home}`,
+          cwd: "/tmp/workspace",
+          instanceId: "claude-work",
+          modelId: null,
+          permissionMode: "default",
+          sessionId: "session-old-home",
+        },
+      },
+      mode: "chat",
+      status: "idle",
+    } as any;
+  }
+
+  it("replays the conversation into a fresh session when the instance's home changed", async () => {
+    loadThreadMessages.mockResolvedValueOnce(priorRecords as any);
+    const instance = makeFakeInstance({
+      continuationKey: "claude:home:/tmp/new-home",
+      driver: "claude",
+      id: "claude-work",
+    });
+
+    const response = await runClaudeThreadChat(
+      {
+        message: { ...createUserMessage("Document it"), id: "user-2" },
+        threadId: "thread-moved",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      threadOnHome("/tmp/old-home"),
+      instance,
+    );
+
+    expect(response.status).toBe(202);
+    expect(capturedClaudeQueryInput?.options?.resume).toBeUndefined();
+    expect(capturedClaudeQueryInput?.options?.sessionId).not.toBe(
+      "session-old-home",
+    );
+    const prompt = await readFirstPromptText();
+    expect(prompt).toContain("<conversation_history>");
+    expect(prompt).toContain(
+      "USER: Add a cache\n\nASSISTANT: The cache is in place.",
+    );
+    expect(prompt.endsWith("New message:\n\nDocument it")).toBe(true);
+  });
+
+  it("resumes the session without replaying when the home is unchanged", async () => {
+    loadThreadMessages.mockResolvedValueOnce(priorRecords as any);
+    const instance = makeFakeInstance({
+      continuationKey: "claude:home:/tmp/old-home",
+      driver: "claude",
+      id: "claude-work",
+    });
+
+    await runClaudeThreadChat(
+      {
+        message: { ...createUserMessage("Document it"), id: "user-2" },
+        threadId: "thread-kept",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      threadOnHome("/tmp/old-home"),
+      instance,
+    );
+
+    expect(capturedClaudeQueryInput?.options?.resume).toBe("session-old-home");
+    expect(await readFirstPromptText()).toBe("Document it");
+  });
+
   it("declines permission requests at once when nobody can answer", async () => {
     await runClaudeThreadChat(
       {
