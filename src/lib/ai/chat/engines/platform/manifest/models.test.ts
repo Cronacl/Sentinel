@@ -62,7 +62,7 @@ describe("applyManifestModels", () => {
     expect(opus55).toEqual(
       expect.objectContaining({
         badge: "new",
-        contextWindow: 200_000,
+        contextWindow: 1_000_000,
         name: "Opus 5.5",
         source: "live",
       }),

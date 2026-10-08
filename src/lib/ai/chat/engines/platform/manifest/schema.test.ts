@@ -4,6 +4,7 @@ import bundledManifestJson from "../../../../../../../manifests/engine-manifest.
 import { BUILTIN_DRIVER_KINDS } from "../../catalog";
 import { ENGINE_MODEL_ID_PATTERN } from "../../contract";
 import { resolveEngineCompatibility } from "./compatibility";
+import { findManifestModel } from "./models";
 import {
   engineManifestSchema,
   getManifestUpdatedAtMs,
@@ -85,11 +86,85 @@ describe("bundled engine manifest", () => {
     expect(opus.options.map((option) => option.id)).toEqual([
       "effort",
       "fastMode",
-      "contextWindow",
     ]);
     expect(
       claude.models.find((model) => model.id === "claude-opus-4-8")?.status,
     ).toBe("legacy");
+  });
+
+  it("describes Claude models as Claude Code's own model registry does", () => {
+    // From the bundled Claude Code CLI's model registry (context.window,
+    // native_1m, the effort/max_effort/xhigh_effort/fast_mode capabilities)
+    // and its first-party aliases.
+    const claude = bundled.drivers.claude!;
+    const profileOf = (id: string) => {
+      const model = claude.models.find((entry) => entry.id === id)!;
+      return claude.profiles[model.profile!]!;
+    };
+    const efforts = (id: string) => {
+      const effort = profileOf(id).options.find(
+        (option) => option.id === "effort",
+      );
+      return effort?.type === "select"
+        ? effort.choices.map((choice) => choice.id)
+        : [];
+    };
+    const optionIds = (id: string) =>
+      profileOf(id).options.map((option) => option.id);
+
+    const native1m = [
+      "claude-fable-5-1",
+      "claude-fable-5",
+      "claude-opus-5-5",
+      "claude-opus-5",
+      "claude-opus-4-8",
+      "claude-opus-4-7",
+      "claude-sonnet-5-5",
+      "claude-sonnet-5",
+    ];
+    for (const id of native1m) {
+      expect([id, profileOf(id).contextWindow]).toEqual([id, 1_000_000]);
+      expect([id, optionIds(id).includes("contextWindow")]).toEqual([
+        id,
+        false,
+      ]);
+    }
+    for (const id of ["claude-opus-4-6", "claude-sonnet-4-6"]) {
+      expect(profileOf(id).contextWindow).toBe(200_000);
+      expect(optionIds(id)).toContain("contextWindow");
+    }
+
+    expect(efforts("claude-opus-4-5")).toEqual(["low", "medium", "high"]);
+    expect(efforts("claude-sonnet-4-6")).toEqual([
+      "low",
+      "medium",
+      "high",
+      "max",
+    ]);
+    expect(efforts("claude-opus-4-6")).toEqual([
+      "low",
+      "medium",
+      "high",
+      "max",
+    ]);
+
+    const fast = claude.models
+      .filter((model) => optionIds(model.id).includes("fastMode"))
+      .map((model) => model.id);
+    expect(fast).toEqual([
+      "claude-opus-5-5",
+      "claude-opus-5",
+      "claude-opus-4-8",
+    ]);
+
+    for (const [alias, id] of [
+      ["opus", "claude-opus-5-5"],
+      ["sonnet", "claude-sonnet-5-5"],
+      ["haiku", "claude-haiku-4-5"],
+      ["fable", "claude-fable-5-1"],
+    ] as const) {
+      expect(findManifestModel(claude, [alias])?.id).toBe(id);
+    }
   });
 
   it("keeps the OpenCode policy in step with the runtime's own floors", () => {
@@ -111,6 +186,21 @@ describe("bundled engine manifest", () => {
         status: "graceful",
       }),
     );
+  });
+
+  it("warns about old Codex versions without making them unusable", () => {
+    // Sentinel's Codex runtime has fallbacks below its 0.156 baseline and no
+    // known failure below 0.149: nothing marks a Codex version broken.
+    const status = (version: string) =>
+      resolveEngineCompatibility({
+        driver: "codex",
+        policies: bundled.compatibility,
+        version,
+      })?.status;
+    expect(status("codex-cli 0.160.1")).toBe("supported");
+    expect(status("codex-cli 0.150.0")).toBe("graceful");
+    expect(status("codex-cli 0.148.0")).toBe("unsupported");
+    expect(status("codex-cli 0.98.0")).toBe("unsupported");
   });
 });
 
@@ -170,7 +260,7 @@ describe("parseEngineManifest", () => {
       parsed!.drivers.claude!.profiles["opus-5-5"]!.options.map(
         (option) => option.id,
       ),
-    ).toEqual(["effort", "fastMode", "contextWindow"]);
+    ).toEqual(["effort", "fastMode"]);
   });
 
   it("reads updatedAt", () => {

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-10-08T00:00:00.000Z",
+  "updatedAt": "2026-10-08T12:00:00.000Z",
   "compatibility": [
     {
       "driver": "codex",
@@ -18,7 +18,8 @@
         },
         {
           "range": "<0.149.0",
-          "status": "broken"
+          "status": "unsupported",
+          "message": "Codex {version} is older than the versions Sentinel is tested with, and some features may not work. Update Codex to {recommended}."
         }
       ]
     },
@@ -155,7 +156,7 @@
       },
       "profiles": {
         "opus-5-5": {
-          "contextWindow": 200000,
+          "contextWindow": 1000000,
           "inputModalities": ["text", "image"],
           "options": [
             {
@@ -193,28 +194,11 @@
               "label": "Fast mode",
               "role": "fast",
               "defaultValue": false
-            },
-            {
-              "type": "select",
-              "id": "contextWindow",
-              "label": "Context window",
-              "role": "context",
-              "choices": [
-                {
-                  "id": "200k",
-                  "label": "200K",
-                  "isDefault": true
-                },
-                {
-                  "id": "1m",
-                  "label": "1M"
-                }
-              ]
             }
           ]
         },
         "sonnet-5-5": {
-          "contextWindow": 200000,
+          "contextWindow": 1000000,
           "inputModalities": ["text", "image"],
           "options": [
             {
@@ -243,30 +227,13 @@
                 {
                   "id": "max",
                   "label": "Max"
-                }
-              ]
-            },
-            {
-              "type": "select",
-              "id": "contextWindow",
-              "label": "Context window",
-              "role": "context",
-              "choices": [
-                {
-                  "id": "200k",
-                  "label": "200K",
-                  "isDefault": true
-                },
-                {
-                  "id": "1m",
-                  "label": "1M"
                 }
               ]
             }
           ]
         },
         "fable-5": {
-          "contextWindow": 200000,
+          "contextWindow": 1000000,
           "inputModalities": ["text", "image"],
           "options": [
             {
@@ -297,28 +264,11 @@
                   "label": "Max"
                 }
               ]
-            },
-            {
-              "type": "select",
-              "id": "contextWindow",
-              "label": "Context window",
-              "role": "context",
-              "choices": [
-                {
-                  "id": "200k",
-                  "label": "200K",
-                  "isDefault": true
-                },
-                {
-                  "id": "1m",
-                  "label": "1M"
-                }
-              ]
             }
           ]
         },
         "opus-5": {
-          "contextWindow": 200000,
+          "contextWindow": 1000000,
           "inputModalities": ["text", "image"],
           "options": [
             {
@@ -356,28 +306,11 @@
               "label": "Fast mode",
               "role": "fast",
               "defaultValue": false
-            },
-            {
-              "type": "select",
-              "id": "contextWindow",
-              "label": "Context window",
-              "role": "context",
-              "choices": [
-                {
-                  "id": "200k",
-                  "label": "200K",
-                  "isDefault": true
-                },
-                {
-                  "id": "1m",
-                  "label": "1M"
-                }
-              ]
             }
           ]
         },
         "sonnet-5": {
-          "contextWindow": 200000,
+          "contextWindow": 1000000,
           "inputModalities": ["text", "image"],
           "options": [
             {
@@ -406,23 +339,6 @@
                 {
                   "id": "max",
                   "label": "Max"
-                }
-              ]
-            },
-            {
-              "type": "select",
-              "id": "contextWindow",
-              "label": "Context window",
-              "role": "context",
-              "choices": [
-                {
-                  "id": "200k",
-                  "label": "200K",
-                  "isDefault": true
-                },
-                {
-                  "id": "1m",
-                  "label": "1M"
                 }
               ]
             }
@@ -502,13 +418,6 @@
                   "label": "Max"
                 }
               ]
-            },
-            {
-              "type": "boolean",
-              "id": "fastMode",
-              "label": "Fast mode",
-              "role": "fast",
-              "defaultValue": false
             }
           ]
         },
@@ -540,13 +449,6 @@
                   "label": "Max"
                 }
               ]
-            },
-            {
-              "type": "boolean",
-              "id": "fastMode",
-              "label": "Fast mode",
-              "role": "fast",
-              "defaultValue": false
             },
             {
               "type": "select",
@@ -589,19 +491,8 @@
                   "id": "high",
                   "label": "High",
                   "isDefault": true
-                },
-                {
-                  "id": "max",
-                  "label": "Max"
                 }
               ]
-            },
-            {
-              "type": "boolean",
-              "id": "fastMode",
-              "label": "Fast mode",
-              "role": "fast",
-              "defaultValue": false
             }
           ]
         },
@@ -627,6 +518,10 @@
                   "id": "high",
                   "label": "High",
                   "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
                 }
               ]
             },
@@ -670,7 +565,7 @@
           "status": "current",
           "profile": "opus-5-5",
           "badge": "new",
-          "aliases": ["opus-5.5", "claude-opus-5.5"],
+          "aliases": ["opus", "opus-5.5", "claude-opus-5.5"],
           "minRuntimeVersion": "2.1.280",
           "description": "Most capable Claude model for complex, long-running work."
         },
@@ -680,7 +575,7 @@
           "status": "current",
           "profile": "sonnet-5-5",
           "badge": "new",
-          "aliases": ["sonnet-5.5", "claude-sonnet-5.5"],
+          "aliases": ["sonnet", "sonnet-5.5", "claude-sonnet-5.5"],
           "minRuntimeVersion": "2.1.284",
           "description": "Fast, capable Claude model for everyday coding."
         },
@@ -689,7 +584,7 @@
           "name": "Claude Fable 5.1",
           "status": "current",
           "profile": "fable-5",
-          "aliases": ["fable-5.1", "claude-fable-5.1"],
+          "aliases": ["fable", "fable-5.1", "claude-fable-5.1"],
           "minRuntimeVersion": "2.1.257",
           "description": "Claude Code's default model for coding tasks."
         },
@@ -699,6 +594,7 @@
           "status": "current",
           "profile": "haiku-4-5",
           "aliases": [
+            "haiku",
             "haiku-4.5",
             "claude-haiku-4.5",
             "claude-haiku-4-5-20251001"
