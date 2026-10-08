@@ -20,6 +20,7 @@ import {
   EngineMaintenanceButton,
   EngineMaintenanceProgress,
 } from "./engine-maintenance-actions";
+import { EngineAuthPanel } from "./engine-auth-panel";
 
 const MASKED_VALUE = "••••••••";
 
@@ -135,6 +136,7 @@ export function EngineInstanceCard({
           {notice}
         </p>
       ) : null}
+      <EngineAuthPanel snapshot={snapshot} />
     </div>
   );
 }

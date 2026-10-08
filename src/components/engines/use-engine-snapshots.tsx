@@ -53,6 +53,12 @@ export function EngineEventsBridge() {
 
   const subscription = api.engines.onEvents.useSubscription(undefined, {
     onData: ({ data: event }) => {
+      // Auth events carry the phase only; the flow is read back per user.
+      if (event.type === "auth") {
+        void utils.engines.auth.status.invalidate({
+          instanceId: event.state.instanceId,
+        });
+      }
       utils.engines.snapshots.setData(
         undefined,
         (current) => applyEngineEvent(current, event).snapshots,
