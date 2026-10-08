@@ -182,6 +182,33 @@ describe("inspectMaintenance", () => {
       }),
     );
     expect(lookups).toEqual([]);
+
+    // Turned off after a version was found: what was found is not offered.
+    let checks = true;
+    const warm = harness({
+      latest: { "@openai/codex": "0.161.0" },
+      realpaths: NPM_CODEX.realpaths,
+    });
+    const inspectWarm = () =>
+      inspectMaintenance(
+        {
+          driver: "codex",
+          env: {},
+          latestMode: "wait",
+          snapshot: installed("codex", "/usr/local/bin/codex", "0.160.1"),
+          waitMs: 1_000,
+        },
+        { ...warm.deps, updateChecksEnabled: async () => checks },
+      );
+    expect((await inspectWarm()).versionStatus).toBe("behind_latest");
+    checks = false;
+    expect(await inspectWarm()).toEqual(
+      expect.objectContaining({
+        latestVersion: null,
+        versionStatus: "unknown",
+      }),
+    );
+    expect(warm.lookups).toHaveLength(1);
   });
 
   it("blocks an update to a release this Sentinel does not support", async () => {

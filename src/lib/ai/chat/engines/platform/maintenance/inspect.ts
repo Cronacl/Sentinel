@@ -295,8 +295,9 @@ export async function inspectMaintenance(
         ? { kind: "npm", packageName }
         : null;
 
-  let latest = source ? deps.latest.peek(source) : null;
   const checksEnabled = source ? await deps.updateChecksEnabled() : false;
+  // With checks off, nothing found before they were turned off is offered.
+  let latest = source && checksEnabled ? deps.latest.peek(source) : null;
   if (source && checksEnabled) {
     if (input.latestMode === "force") {
       latest = {
