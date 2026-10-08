@@ -1,6 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
-import { BUILTIN_DRIVER_KINDS } from "@/lib/ai/chat/engines/catalog";
+import {
+  BUILTIN_DRIVER_KINDS,
+  DRIVER_CATALOG,
+} from "@/lib/ai/chat/engines/catalog";
 
 import {
   ENGINE_CLIENT_DESCRIPTORS,
@@ -15,6 +18,15 @@ describe("engine client descriptors", () => {
     );
     for (const kind of BUILTIN_DRIVER_KINDS) {
       expect(ENGINE_CLIENT_DESCRIPTORS[kind].kind).toBe(kind);
+    }
+  });
+
+  it("give every external kind, planned ones included, its own icon", () => {
+    const generic = getEngineClientDescriptor(null).Icon;
+    for (const kind of BUILTIN_DRIVER_KINDS) {
+      if (DRIVER_CATALOG[kind].runtime === "external") {
+        expect(ENGINE_CLIENT_DESCRIPTORS[kind].Icon).not.toBe(generic);
+      }
     }
   });
 

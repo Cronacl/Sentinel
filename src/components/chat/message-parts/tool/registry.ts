@@ -5,6 +5,7 @@ import {
 } from "@/lib/ai/chat/engines/catalog";
 
 import { getToolName, type ToolPart } from "../types";
+import { GenericTool } from "./generic";
 import type { Renderer } from "./renderer";
 import { FileTool } from "./renderers/file";
 import { GlobTool } from "./renderers/glob";
@@ -863,6 +864,25 @@ type EngineRendererFamily = {
   userInputSuffixes?: readonly string[];
 };
 
+/**
+ * Agents on the shared external runtime (runtime/external) without
+ * renderers of their own. Their parts carry callProviderMetadata.sentinel
+ * and render by kind (resolveExternalAgentRenderer); this family only names
+ * their questions and catches a part without that metadata. A driver that
+ * brings exact renderers gives its kind a family of its own.
+ */
+const EXTERNAL_AGENT_FAMILY: EngineRendererFamily = {
+  fallback: () => GenericTool,
+  renderers: {},
+  userInputRenderer: ExternalUserInputTool,
+  userInputSuffixes: [
+    "askquestion",
+    "askuser",
+    "askuserquestion",
+    "requestuserinput",
+  ],
+};
+
 const ENGINE_RENDERER_FAMILIES = {
   claude: {
     fallback: () => ClaudeRuntimeTool,
@@ -902,6 +922,10 @@ const ENGINE_RENDERER_FAMILIES = {
       "requestuserinput",
     ],
   },
+  grok: EXTERNAL_AGENT_FAMILY,
+  antigravity: EXTERNAL_AGENT_FAMILY,
+  pi: EXTERNAL_AGENT_FAMILY,
+  acp: EXTERNAL_AGENT_FAMILY,
 } satisfies Partial<Record<BuiltinDriverKind, EngineRendererFamily>>;
 
 type FamilyKind = keyof typeof ENGINE_RENDERER_FAMILIES;

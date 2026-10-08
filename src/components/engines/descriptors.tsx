@@ -6,6 +6,10 @@ import { HugeiconsIcon } from "@hugeicons/react";
 
 import { ClaudeIcon } from "@/components/icons/claude-icon";
 import { CopilotIcon } from "@/components/icons/copilot-icon";
+import { AcpEngineIcon } from "@/components/icons/engines/acp";
+import { AntigravityEngineIcon } from "@/components/icons/engines/antigravity";
+import { GrokEngineIcon } from "@/components/icons/engines/grok";
+import { PiEngineIcon } from "@/components/icons/engines/pi";
 import {
   CursorOpenIcon,
   OpenCodeIcon,
@@ -54,14 +58,15 @@ export const ENGINE_CLIENT_DESCRIPTORS = {
     kind: "opencode",
     rendererFamily: "external",
   },
-  grok: { Icon: GenericEngineIcon, kind: "grok", rendererFamily: "acp" },
+  // Planned kinds: each icon lives in its own file (components/icons/engines).
+  grok: { Icon: GrokEngineIcon, kind: "grok", rendererFamily: "acp" },
   antigravity: {
-    Icon: GenericEngineIcon,
+    Icon: AntigravityEngineIcon,
     kind: "antigravity",
     rendererFamily: "acp",
   },
-  pi: { Icon: GenericEngineIcon, kind: "pi", rendererFamily: "pi" },
-  acp: { Icon: GenericEngineIcon, kind: "acp", rendererFamily: "acp" },
+  pi: { Icon: PiEngineIcon, kind: "pi", rendererFamily: "pi" },
+  acp: { Icon: AcpEngineIcon, kind: "acp", rendererFamily: "acp" },
 } as const satisfies Record<BuiltinDriverKind, EngineClientDescriptor>;
 
 export function getEngineClientDescriptor(

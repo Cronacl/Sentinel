@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  BUILTIN_DRIVER_KINDS,
+  DRIVER_CATALOG,
+} from "@/lib/ai/chat/engines/catalog";
+
+import {
   ENGINE_TOOL_RENDERING_COVERAGE,
   KNOWN_CODEX_RENDERER_TOOL_NAMES,
   KNOWN_CLAUDE_RENDERER_TOOL_NAMES,
@@ -1671,10 +1676,43 @@ describe("resolveRenderer", () => {
     }
   });
 
-  it("covers every implemented driver with a tool prefix", () => {
+  it("covers every driver with a tool prefix, planned ones included", () => {
     expect(Object.keys(ENGINE_TOOL_RENDERING_COVERAGE).sort()).toEqual(
-      ["claude", "codex", "copilot", "cursor", "opencode"].sort(),
+      BUILTIN_DRIVER_KINDS.filter(
+        (kind) => DRIVER_CATALOG[kind].toolPrefix !== null,
+      ).sort(),
     );
+  });
+
+  it("renders agents on the shared external runtime through its family", () => {
+    // Kinds without exact renderers of their own use the shared family.
+    const sharedFamilyKinds = Object.entries(ENGINE_TOOL_RENDERING_COVERAGE)
+      .filter(([, toolNames]) => toolNames.length === 0)
+      .map(([kind]) => kind);
+
+    for (const kind of sharedFamilyKinds) {
+      const part = (toolName: string, metaKind?: string) =>
+        ({
+          callProviderMetadata: metaKind
+            ? { sentinel: { agentLabel: "Agent", kind: metaKind } }
+            : undefined,
+          input: {},
+          output: {},
+          state: "output-available",
+          toolCallId: `tool-call-${toolName}`,
+          toolName,
+          type: "dynamic-tool",
+        }) as any;
+
+      expect(resolveRenderer(part(`${kind}_read`, "read"))).toBe(
+        ExternalAgentTool,
+      );
+      expect(resolveRenderer(part(`${kind}_ask_user`))).toBe(
+        ExternalUserInputTool,
+      );
+      // A part without the kind metadata gets the generic card.
+      expect(resolveRenderer(part(`${kind}_read`))).toBe(GenericTool);
+    }
   });
 
   it("leaves tools of drivers without a renderer family to the generic renderer", () => {
@@ -1683,8 +1721,8 @@ describe("resolveRenderer", () => {
         input: {},
         output: {},
         state: "output-available",
-        toolCallId: "tool-call-grok",
-        toolName: "grok_read",
+        toolCallId: "tool-call-gemini",
+        toolName: "gemini_read",
         type: "dynamic-tool",
       } as any),
     ).toBeUndefined();
