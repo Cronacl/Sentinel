@@ -517,10 +517,6 @@ describe("not-yet-built engine services", () => {
         ctx: USER_CTX,
         input: { instanceId: "claude" },
       }),
-      await enginesRouter.maintenance.update({
-        ctx: USER_CTX,
-        input: { instanceId: "claude" },
-      }),
       await enginesRouter.acpRegistry.list({ ctx: USER_CTX }),
     ]) {
       expect(result).toEqual(

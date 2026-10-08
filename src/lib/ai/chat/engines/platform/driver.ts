@@ -16,6 +16,7 @@ import type {
   EngineUsageLimits,
   ResolvedEngineInstance,
 } from "../contract";
+import type { EngineMaintenanceDefinition } from "./maintenance/definitions";
 
 // The server half of an engine: what the platform needs to know about an
 // instance of it. Drivers stay small and stateless: they probe, and the
@@ -193,6 +194,12 @@ export interface EngineDriver<
    * engine: the dispatcher then leaves the run to the orchestrator.
    */
   readonly thread?: EngineThreadHandlers;
+  /**
+   * Install and update commands (P11 maintenance service). Built-in drivers
+   * are described in maintenance/definitions.ts; a driver added later may
+   * carry its own.
+   */
+  readonly maintenance?: EngineMaintenanceDefinition;
 }
 
 export function defineEngineDriver<C extends BaseInstanceConfig>(

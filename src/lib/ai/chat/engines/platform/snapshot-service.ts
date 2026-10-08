@@ -38,6 +38,7 @@ import {
   type EngineInstanceChange,
   type EngineInstanceRegistry,
 } from "./instances";
+import { createUpdateStateEnricher } from "./maintenance/enricher";
 import {
   createCompatibilityEnricher,
   createCustomModelsEnricher,
@@ -127,7 +128,7 @@ export const DEFAULT_ENGINE_SNAPSHOT_ENRICHERS: readonly EngineSnapshotEnricher[
     createManifestEnricher(),
     createCustomModelsEnricher(),
     createCompatibilityEnricher(),
-    passthroughEnricher("update-state"),
+    createUpdateStateEnricher(),
     passthroughEnricher("usage"),
   ];
 
