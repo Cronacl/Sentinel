@@ -266,6 +266,16 @@ export function createEngineMaintenanceService(
     return found;
   }
 
+  /** The cached snapshot picks up the final state with a second probe. */
+  function settleHook(userId: string, instanceId: string) {
+    return () => {
+      void deps
+        .snapshots()
+        .refresh(userId, instanceId, "update")
+        .catch(() => undefined);
+    };
+  }
+
   function busy(error: unknown): never {
     if (error instanceof MaintenanceBusyError) {
       throw new EngineMaintenanceError(error.message, "busy");
@@ -277,7 +287,11 @@ export function createEngineMaintenanceService(
     async cancel(userId, instanceId) {
       const loaded = await load(userId, instanceId);
       runner().cancel(instanceId);
-      await runner().whenSettled(instanceId);
+      // A queued operation is settled at once; a running one once its
+      // process tree has ended.
+      if (runner().isRunning(instanceId)) {
+        await runner().whenSettled(instanceId);
+      }
       return await toStatus(loaded, await inspect(loaded, { latest: "wait" }));
     },
 
@@ -351,6 +365,7 @@ export function createEngineMaintenanceService(
             instanceId,
             label: instance.label,
             lockKey: `${instance.driver}-managed`,
+            onSettled: settleHook(userId, instanceId),
             run: ({ onProgress, signal }) =>
               managed.run({ instance, onProgress, signal }),
             verify,
@@ -372,7 +387,9 @@ export function createEngineMaintenanceService(
             executable: command.executable,
             instanceId,
             label: instance.label,
-            lockKey: `install:${instance.driver}:${choice.id}`,
+            // Installs through the same program (npm) run one at a time.
+            lockKey: `install:${choice.requires[0] ?? choice.id}`,
+            onSettled: settleHook(userId, instanceId),
             verify,
           });
         }
@@ -429,6 +446,7 @@ export function createEngineMaintenanceService(
           instanceId,
           label: instance.label,
           lockKey: plan.command.lockKey,
+          onSettled: settleHook(userId, instanceId),
           verify: async () => {
             const after = await reprobe(userId, loaded);
             if (!after?.install.installed) {

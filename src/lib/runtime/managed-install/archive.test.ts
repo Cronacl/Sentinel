@@ -83,6 +83,7 @@ describe("toSafeRelativePath", () => {
       "c:evil",
       "a\0b",
       "..\\evil",
+      "bin/agent:stream",
     ]) {
       expect(() => toSafeRelativePath(name)).toThrow(ArchiveError);
     }

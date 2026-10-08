@@ -55,6 +55,11 @@ export type MaintenanceCommandRun = {
   /** "Claude", for messages. */
   label: string;
   lockKey: string;
+  /**
+   * After the final state is recorded (any outcome): lets the snapshot
+   * pick it up (the re-probe in `verify` ran while it was still running).
+   */
+  onSettled?: () => void;
   verify(): Promise<MaintenanceVerification>;
 };
 
@@ -62,6 +67,7 @@ export type MaintenanceManagedRun = {
   instanceId: string;
   label: string;
   lockKey: string;
+  onSettled?: () => void;
   run(input: {
     onProgress(progress: ManagedInstallProgress): void;
     signal: AbortSignal;
@@ -147,6 +153,14 @@ export function createMaintenanceRunner(
     emit({ installState: state, instanceId, type: "maintenance" });
   }
 
+  function settled(run: { onSettled?: () => void }) {
+    try {
+      run.onSettled?.();
+    } catch {
+      // A settle hook never changes the outcome.
+    }
+  }
+
   /** Runs `task` once the lock is free; the lock is held until it settles. */
   function withLock(lockKey: string, task: () => Promise<void>) {
     const previous = locks.get(lockKey);
@@ -188,6 +202,7 @@ export function createMaintenanceRunner(
   function execute(
     run: MaintenanceCommandRun,
     operation: Operation,
+    startedAt: string,
   ): Promise<{
     code: number | null;
     error: string | null;
@@ -199,7 +214,6 @@ export function createMaintenanceRunner(
       let lastEmit = Number.NEGATIVE_INFINITY;
       let settled = false;
       let reason: "cancelled" | "exit" | "timeout" = "exit";
-      const startedAt = iso();
       const running = (message: string): EngineUpdateState => ({
         finishedAt: null,
         message,
@@ -325,6 +339,7 @@ export function createMaintenanceRunner(
             startedAt,
             status,
           });
+          settled(run);
         };
 
         if (operation.controller.signal.aborted) {
@@ -336,7 +351,7 @@ export function createMaintenanceRunner(
 
         try {
           startedAt = iso();
-          const result = await execute(run, operation);
+          const result = await execute(run, operation, startedAt);
           const output = result.output.trim() || null;
           if (result.reason === "cancelled") {
             finish("failed", "Cancelled.", output);
@@ -414,6 +429,7 @@ export function createMaintenanceRunner(
         ) => {
           record.running = false;
           setInstallState(run.instanceId, record, state(phase, message));
+          settled(run);
         };
         if (operation.controller.signal.aborted) {
           finish("cancelled", "Cancelled before it started.");

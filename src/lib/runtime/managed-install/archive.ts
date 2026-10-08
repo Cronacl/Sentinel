@@ -86,6 +86,10 @@ export function toSafeRelativePath(name: string): string | null {
   if (segments.some((part) => part === "..")) {
     throw new ArchiveError(`Archive member "${name}" escapes the archive.`);
   }
+  // NTFS reads "name:stream" as an alternate data stream.
+  if (segments.some((part) => part.includes(":"))) {
+    throw new ArchiveError(`Archive member "${name}" has an invalid name.`);
+  }
   return segments.length > 0 ? segments.join("/") : null;
 }
 

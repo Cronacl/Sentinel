@@ -131,6 +131,19 @@ describe("maintenance runner", () => {
     ).toBe(true);
   });
 
+  it("calls the settle hook once the final state is recorded", async () => {
+    const { children, runner } = createHarness();
+    const states: Array<string | undefined> = [];
+    const run = command({
+      onSettled: () => states.push(runner.get("copilot")?.updateState?.status),
+    });
+    runner.runCommand(run);
+    await until(() => children.length === 1);
+    children[0]!.exit(2);
+    await runner.whenSettled("copilot");
+    expect(states).toEqual(["failed"]);
+  });
+
   it("reports a failing command with its output and skips verification", async () => {
     const { children, runner } = createHarness();
     const run = command();
