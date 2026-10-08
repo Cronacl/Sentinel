@@ -177,7 +177,8 @@ function createService(input: {
     },
     drivers: (kind) => input.drivers[kind] ?? null,
     emit: (event) => events.push(event),
-    enrichers: input.enrichers,
+    // The platform enrichers (manifest, maintenance) have their own tests.
+    enrichers: input.enrichers ?? [],
     registry,
   });
   return { clock, disposed, events, retired, service, state };

@@ -38,6 +38,11 @@ import {
   type EngineInstanceChange,
   type EngineInstanceRegistry,
 } from "./instances";
+import {
+  createCompatibilityEnricher,
+  createCustomModelsEnricher,
+  createManifestEnricher,
+} from "./manifest/enrichers";
 import { getInstanceRuntimeKey } from "./runtime/resolve-binary";
 
 // One place that turns driver probes into the snapshots the UI, composer,
@@ -106,12 +111,25 @@ export type EngineSnapshotEnricher = {
   id: EngineSnapshotEnricherId;
 };
 
-/** The hooks P11 implements; each passes the snapshot through for now. */
+function passthroughEnricher(
+  id: EngineSnapshotEnricherId,
+): EngineSnapshotEnricher {
+  return { enrich: ({ snapshot }) => snapshot, id };
+}
+
+/**
+ * The platform's enrichers, in the order they run (one per
+ * ENGINE_SNAPSHOT_ENRICHER_IDS entry). Hooks no service fills yet pass the
+ * snapshot through.
+ */
 export const DEFAULT_ENGINE_SNAPSHOT_ENRICHERS: readonly EngineSnapshotEnricher[] =
-  ENGINE_SNAPSHOT_ENRICHER_IDS.map((id) => ({
-    enrich: ({ snapshot }) => snapshot,
-    id,
-  }));
+  [
+    createManifestEnricher(),
+    createCustomModelsEnricher(),
+    createCompatibilityEnricher(),
+    passthroughEnricher("update-state"),
+    passthroughEnricher("usage"),
+  ];
 
 export type EngineSnapshotClock = {
   clearTimeout(handle: unknown): void;

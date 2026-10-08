@@ -72,6 +72,12 @@ function runTestFile(testFile, { captureOutput }) {
     SENTINEL_STATE_PATH: path.join(stateRoot, "state.json"),
     SENTINEL_DB_PATH: path.join(stateRoot, "sentinel.db"),
     SENTINEL_MEDIA_PATH: path.join(stateRoot, "media"),
+    // The engine platform never reaches the network on its own in tests
+    // (remote manifest, CLI version checks); their tests inject fetch.
+    SENTINEL_DISABLE_REMOTE_MANIFEST:
+      process.env.SENTINEL_DISABLE_REMOTE_MANIFEST ?? "1",
+    SENTINEL_DISABLE_ENGINE_UPDATE_CHECKS:
+      process.env.SENTINEL_DISABLE_ENGINE_UPDATE_CHECKS ?? "1",
   };
 
   return new Promise((resolve) => {
