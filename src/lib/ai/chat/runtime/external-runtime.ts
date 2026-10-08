@@ -29,7 +29,14 @@ function formatTranscriptMessage(message: ThreadUIMessage) {
 }
 
 export function buildExternalRuntimePromptText(input: {
+  /**
+   * Include the earlier turns (default true). False when the agent's own
+   * session already holds them (a loaded or resumed session).
+   */
+  includeHistory?: boolean;
   message: ThreadUIMessage;
+  /** Prepend the plan-mode preamble (default: in plan mode). */
+  planPreamble?: boolean;
   threadMode: "chat" | "plan";
   transcript: ThreadUIMessage[];
   workspaceRoot: string | null;
@@ -38,14 +45,19 @@ export function buildExternalRuntimePromptText(input: {
     ? serializeComposerContextToText(input.message.metadata.composerContext)
     : null;
   const latestText = getTextContent(input.message);
-  const history = input.transcript
-    .filter((message) => message.id !== input.message.id)
-    .map(formatTranscriptMessage)
-    .filter(Boolean)
-    .join("\n\n");
+  const history =
+    input.includeHistory === false
+      ? ""
+      : input.transcript
+          .filter((message) => message.id !== input.message.id)
+          .map(formatTranscriptMessage)
+          .filter(Boolean)
+          .join("\n\n");
 
   const sections = [
-    input.threadMode === "plan" ? buildPlanModePromptPreamble() : null,
+    (input.planPreamble ?? input.threadMode === "plan")
+      ? buildPlanModePromptPreamble()
+      : null,
     composerContextText,
     [
       "External runtime context:",

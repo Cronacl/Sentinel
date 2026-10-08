@@ -316,8 +316,11 @@ export const TRIPWIRES = [
     id: "P9-acp-session-cancel-request",
     description:
       "ACP session/cancel is a notification; never send it as a request",
-    pattern: /\b(?:call|request)\(\s*["']session\/cancel["']/,
+    pattern:
+      /\b(?:call|request)(?:<[^>]*>)?\(\s*(?:["']session\/cancel["']|[\w.]*\.sessionCancel\b)/,
     include: /\.[cm]?[jt]sx?$/,
+    // Its own tests quote the forbidden calls.
+    exclude: /^scripts\/verify\/tripwires\.test\.ts$/,
   },
   {
     id: "P9-codex-config-write-params",
@@ -426,7 +429,7 @@ export const TRIPWIRES = [
     description:
       "Thread turns dispatch through the server driver registry (platform/drivers.ts); the orchestrator and queue never import an engine runtime directly",
     pattern:
-      /\bfrom\s+["'](?:\.\.\/|@\/lib\/ai\/chat\/runtime\/)(?:claude|codex|copilot|cursor|opencode)(?:\/[^"']*)?["']/,
+      /\bfrom\s+["'](?:\.\.\/|@\/lib\/ai\/chat\/runtime\/)(?:acp|claude|codex|copilot|cursor|external|opencode)(?:\/[^"']*)?["']/,
     include: /^src\/lib\/ai\/chat\/runtime\/thread-chat\/.*\.[cm]?[jt]sx?$/,
     exclude: /\.test\.[cm]?[jt]sx?$/,
   },

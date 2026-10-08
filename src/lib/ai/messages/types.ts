@@ -97,7 +97,10 @@ export const threadMessageMetadataSchema = z
       .optional(),
     usage: z
       .object({
+        cachedInputTokens: z.number().optional(),
         contextWindow: z.number().optional(),
+        /** Cumulative session cost an agent reports (ACP usage_update). */
+        cost: z.object({ amount: z.number(), currency: z.string() }).optional(),
         inputTokens: z.number().optional(),
         maxOutputTokens: z.number().optional(),
         outputTokens: z.number().optional(),

@@ -147,6 +147,32 @@ export function getInstanceResources<R>(
 }
 
 /**
+ * Ties resources a module keeps outside these maps (the ACP process pool,
+ * one process per instance and thread) to the instance lifecycle: `dispose`
+ * runs when the instance is removed or disabled, `disposeAll` at shutdown.
+ * Configuration changes need no retire: such pools compare a launch
+ * fingerprint and replace stale processes themselves.
+ */
+export function registerInstanceResourceHooks(
+  namespace: string,
+  hooks: {
+    dispose(slot: string): Promise<void>;
+    disposeAll(): Promise<void>;
+  },
+) {
+  getRegistry().set(namespace, {
+    dispose: hooks.dispose,
+    disposeAll: hooks.disposeAll,
+    get: () => {
+      throw new Error(`${namespace} resources are not created through get().`);
+    },
+    peek: () => null,
+    retire: async () => {},
+    values: () => [],
+  });
+}
+
+/**
  * Ends an instance's runtimes for older configurations once its change is
  * handled; the runtime for `keepKey` (the current configuration) stays.
  */

@@ -627,3 +627,28 @@ describe("P10 thread selection tripwire", () => {
     ).toEqual([]);
   });
 });
+
+describe("P12 ACP engine tripwires", () => {
+  it("flags session/cancel sent as a request, through literals or the method table", () => {
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/acp/session.ts",
+        [
+          'await process.request("session/cancel", { sessionId });',
+          "await process.request<unknown>(process.methods.sessionCancel, params);",
+          "await connection.agent.request(methods.sessionCancel, params);",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      "P9-acp-session-cancel-request:1",
+      "P9-acp-session-cancel-request:2",
+      "P9-acp-session-cancel-request:3",
+    ]);
+    expect(
+      hitIds(
+        "src/lib/ai/chat/engines/acp/session.ts",
+        "await process.notify(process.methods.sessionCancel, params);",
+      ),
+    ).toEqual([]);
+  });
+});
