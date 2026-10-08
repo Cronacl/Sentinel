@@ -15,6 +15,7 @@ import type {
   EngineOptionDescriptor,
   EnginePlanModeSupport,
   EngineSelectOptionDescriptor,
+  EngineSlashCommand,
   EngineSnapshot,
 } from "./contract";
 import { REASONING_OPTION_ID } from "./model-options";
@@ -34,6 +35,8 @@ export type ComposerEngineOption = {
   permissionModes: readonly PermissionMode[];
   /** Unattended runs decline approval requests instead of waiting. */
   settlesUnattendedApprovals: boolean;
+  /** The composer's slash menu; absent until the instance reports any. */
+  slashCommands?: EngineSlashCommand[];
   stability: "beta" | "experimental" | "stable";
   supportsPlanMode: EnginePlanModeSupport;
 };
@@ -159,6 +162,9 @@ export function toComposerEngineOption(
     label: snapshot.label,
     permissionModes: snapshot.capabilities.permissionModes,
     settlesUnattendedApprovals: snapshot.capabilities.supportsUnattendedTools,
+    ...(snapshot.slashCommands.length > 0
+      ? { slashCommands: snapshot.slashCommands }
+      : {}),
     stability: meta?.stability ?? "experimental",
     supportsPlanMode: snapshot.capabilities.supportsPlanMode,
   };

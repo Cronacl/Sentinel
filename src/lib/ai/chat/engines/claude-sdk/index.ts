@@ -100,10 +100,19 @@ export type ResolvedClaudeCodeRuntime = {
   source: EngineInstallSource | null;
 };
 
+/** A slash command the CLI's initialize response lists for the session. */
+export type ClaudeSlashCommandInfo = {
+  argumentHint?: string;
+  description: string;
+  name: string;
+};
+
 export type ClaudeEngineStatus = {
   account: AccountInfo | null;
   authReady: boolean;
   availableModels: ClaudeModelInfo[];
+  /** Slash commands (and skills) the CLI offers; absent when unknown. */
+  commands?: ClaudeSlashCommandInfo[];
   binaryDetected: boolean;
   binaryPath: string | null;
   binaryVersion: string | null;
@@ -118,6 +127,7 @@ export type ClaudeEngineStatus = {
 type ClaudeStatusSnapshot = {
   account: AccountInfo | null;
   availableModels: ClaudeModelInfo[];
+  commands?: ClaudeSlashCommandInfo[];
   binaryPath: string;
   binaryVersion: string | null;
   recordedAt: string;
@@ -200,9 +210,11 @@ async function readClaudeStatusSnapshot(
       return null;
     }
 
+    const commands = toClaudeSlashCommandInfos(parsed.commands);
     return {
       account: (parsed.account as AccountInfo | null | undefined) ?? null,
       availableModels: parsed.availableModels as ClaudeModelInfo[],
+      ...(commands.length > 0 ? { commands } : {}),
       binaryPath: parsed.binaryPath,
       binaryVersion:
         typeof parsed.binaryVersion === "string" ? parsed.binaryVersion : null,
@@ -264,10 +276,40 @@ async function verifyClaudeExecutable(
   };
 }
 
+/**
+ * The initialize response's `commands`, kept to what the composer can use:
+ * a name, a description and an argument hint.
+ */
+export function toClaudeSlashCommandInfos(
+  commands: unknown,
+): ClaudeSlashCommandInfo[] {
+  if (!Array.isArray(commands)) {
+    return [];
+  }
+  return commands.flatMap((command): ClaudeSlashCommandInfo[] => {
+    const record = command as Record<string, unknown> | null;
+    if (typeof record?.name !== "string" || !record.name.trim()) {
+      return [];
+    }
+    return [
+      {
+        ...(typeof record.argumentHint === "string" &&
+        record.argumentHint.trim()
+          ? { argumentHint: record.argumentHint.trim() }
+          : {}),
+        description:
+          typeof record.description === "string" ? record.description : "",
+        name: record.name.trim(),
+      },
+    ];
+  });
+}
+
 function buildClaudeEngineStatus(input: {
   account: AccountInfo | null;
   authReady: boolean;
   availableModels: ClaudeModelInfo[];
+  commands?: ClaudeSlashCommandInfo[];
   binaryDetected: boolean;
   binaryPath: string | null;
   binaryVersion: string | null;
@@ -283,6 +325,9 @@ function buildClaudeEngineStatus(input: {
     binaryDetected: input.binaryDetected,
     binaryPath: input.binaryPath,
     binaryVersion: input.binaryVersion,
+    ...(input.commands && input.commands.length > 0
+      ? { commands: input.commands }
+      : {}),
     engine: "claude" as const,
     error: input.error,
     lastSuccessfulProbeAt: input.lastSuccessfulProbeAt,
@@ -302,6 +347,7 @@ function buildCachedClaudeStatus(input: {
     authReady: input.snapshot.availableModels.length > 0,
     availableModels: input.snapshot.availableModels,
     binaryDetected: true,
+    commands: input.snapshot.commands,
     binaryPath: input.binaryPath,
     binaryVersion: input.binaryVersion,
     error: null,
@@ -812,10 +858,12 @@ async function probeClaudeStatus(input: {
     }
 
     const availableModels = models.map(toClaudeModelInfo);
+    const commands = toClaudeSlashCommandInfos(initialization.commands);
     const recordedAt = new Date().toISOString();
     await writeClaudeStatusSnapshot(input.snapshotPath, {
       account,
       availableModels,
+      ...(commands.length > 0 ? { commands } : {}),
       binaryPath: input.runtime.executablePath!,
       binaryVersion: input.runtime.binaryVersion,
       recordedAt,
@@ -826,6 +874,7 @@ async function probeClaudeStatus(input: {
       authReady: true,
       availableModels,
       binaryDetected: true,
+      commands,
       binaryPath: input.runtime.executablePath,
       binaryVersion: input.runtime.binaryVersion,
       error: null,

@@ -37,6 +37,7 @@ import { isCommittedThreadActionError } from "@/hooks/use-thread-chat";
 import { moveQueuedFollowUpToFront } from "@/hooks/use-thread-chat";
 import { getDriverMessageActions } from "@/lib/ai/chat/engines/catalog";
 import type { EngineOptionSelection } from "@/lib/ai/chat/engines/contract";
+import { canRunSentinelSlashCommands } from "@/lib/ai/chat/engines/slash-commands";
 import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
@@ -1365,7 +1366,10 @@ export function ThreadScreen({
               promptSeed={editingPromptSeed}
               promptSeedKey={editingMessage?.id ?? "__composer-empty__"}
               queuedFollowUps={liveQueuedFollowUps}
-              providerSlashCommandsEnabled={canRunCodexAppCommands}
+              providerSlashCommandsEnabled={canRunSentinelSlashCommands({
+                driver: chatEngine,
+                hasCodexThread: thread.hasCodexThread,
+              })}
               repoThreadId={thread.id}
               showBranchSwitcher={!isQuickChat}
               status={status}

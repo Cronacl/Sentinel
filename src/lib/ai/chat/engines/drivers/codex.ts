@@ -23,6 +23,7 @@ import type {
 } from "../contract";
 import { defineEngineDriver, legacyThreadHandlers } from "../platform/driver";
 import { codexAuth } from "./auth/codex";
+import { CODEX_SLASH_COMMANDS } from "../slash-commands";
 import {
   codexAccountHasNoPlanUsage,
   codexRateLimitsToLimits,
@@ -62,7 +63,7 @@ export function fromCodexStatus(
   status: CodexEngineStatus,
   source: EngineInstallSource | null,
 ): EngineProbeResult {
-  return fromLegacyStatus(
+  const result = fromLegacyStatus(
     {
       account: toCodexAccount(status.account),
       authReady: status.authReady,
@@ -82,6 +83,10 @@ export function fromCodexStatus(
       fallbackModels: buildFallbackCodexModels,
     },
   );
+  // Run by Sentinel through the thread's app-server (api.engines.codex).
+  return status.cliDetected
+    ? { ...result, slashCommands: [...CODEX_SLASH_COMMANDS] }
+    : result;
 }
 
 type CodexRateLimitsReader = Pick<

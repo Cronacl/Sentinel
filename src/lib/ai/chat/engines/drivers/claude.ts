@@ -14,6 +14,7 @@ import {
 import { readClaudeUsageLimits } from "@/lib/ai/chat/engines/claude-sdk/usage";
 
 import { DRIVER_CATALOG } from "../catalog";
+import { normalizeEngineSlashCommands } from "../slash-commands";
 import type { EngineInstallSource, EngineProbeResult } from "../contract";
 import { defineEngineDriver, legacyThreadHandlers } from "../platform/driver";
 import { claudeAuth } from "./auth/claude";
@@ -36,7 +37,7 @@ export function fromClaudeStatus(
   status: ClaudeEngineStatus,
   source: EngineInstallSource | null,
 ): EngineProbeResult {
-  return fromLegacyStatus(
+  const result = fromLegacyStatus(
     {
       account: toClaudeAccount(status.account),
       authReady: status.authReady,
@@ -53,6 +54,16 @@ export function fromClaudeStatus(
       fallbackModels: buildClaudeFallbackModels,
     },
   );
+  // The commands (skills included) the CLI's initialize response listed.
+  const slashCommands = normalizeEngineSlashCommands(
+    (status.commands ?? []).map((command) => ({
+      description: command.description,
+      inputHint: command.argumentHint,
+      name: command.name,
+    })),
+    "native",
+  );
+  return slashCommands.length > 0 ? { ...result, slashCommands } : result;
 }
 
 /** Claude Code through the Agent SDK. */

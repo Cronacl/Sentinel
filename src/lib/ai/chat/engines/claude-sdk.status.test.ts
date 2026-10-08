@@ -146,6 +146,41 @@ describe("getClaudeEngineStatus", () => {
     }
   });
 
+  it("keeps the slash commands Claude lists, also from the snapshot", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
+
+    try {
+      await createClaudeExecutable(tempRoot);
+      const ready = await initializationResultFactory();
+      initializationResultFactory = async () =>
+        ({
+          ...ready,
+          commands: [
+            {
+              argumentHint: "<pr>",
+              description: "Review a PR",
+              name: "review",
+            },
+            { description: 3, name: "  " },
+          ],
+        }) as never;
+
+      const status = await getClaudeEngineStatus({ forceRefresh: true });
+      expect(status.commands).toEqual([
+        { argumentHint: "<pr>", description: "Review a PR", name: "review" },
+      ]);
+
+      initializationResultFactory = () => new Promise(() => undefined);
+      resetClaudeCodeRuntimeCache();
+      resetClaudeEngineStatusCache();
+      const cached = await getClaudeEngineStatus();
+      expect(cached.usedCachedStatus).toBe(true);
+      expect(cached.commands).toEqual(status.commands);
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+
   it("reuses cached models when the live probe times out", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
 

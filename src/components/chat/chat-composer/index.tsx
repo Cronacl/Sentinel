@@ -12,6 +12,7 @@ import {
 } from "react";
 import { Button } from "@heroui/react";
 import { getDriverPermissionModes } from "@/lib/ai/chat/engines/catalog";
+import { resolveComposerSlashCommands } from "@/lib/ai/chat/engines/slash-commands";
 import { DEFAULT_FOLLOW_UP_BEHAVIOR } from "@/schemas/general-settings.schema";
 import type { SentinelComposerToolTag } from "@/lib/ai/chat/tools/selection/tags";
 import {
@@ -242,36 +243,45 @@ export function ChatComposer({
     }));
   }, [skillsQuery.data]);
 
+  // Commands Sentinel runs itself ("sentinel" source), per driver; the
+  // rest go to the runtime as prompt text.
+  const sentinelSlashActions = useMemo<
+    Partial<Record<string, Record<string, (threadId: string) => void>>>
+  >(
+    () => ({
+      codex: {
+        compact: (id) => codexCompact.mutate({ threadId: id }),
+        review: (id) => codexReview.mutate({ threadId: id }),
+        rollback: (id) => codexRollback.mutate({ count: 1, threadId: id }),
+      },
+    }),
+    [codexCompact, codexReview, codexRollback],
+  );
+  const slashCommands = useMemo(
+    () =>
+      resolveComposerSlashCommands({
+        driver: selectedEngine,
+        slashCommands: selectedEngineStatus?.slashCommands,
+      }).filter(
+        (command) =>
+          command.mode === "insert" ||
+          Boolean(sentinelSlashActions[selectedEngine]?.[command.command]),
+      ),
+    [selectedEngine, selectedEngineStatus?.slashCommands, sentinelSlashActions],
+  );
+
   const handleSlashCommand = useCallback(
     (command: string) => {
-      if (
-        selectedEngine !== "codex" ||
-        !threadId ||
-        !providerSlashCommandsEnabled
-      ) {
+      const action = sentinelSlashActions[selectedEngine]?.[command];
+      if (!action || !threadId || !providerSlashCommandsEnabled) {
         return;
       }
-
-      if (command === "compact") {
-        codexCompact.mutate({ threadId });
-        return;
-      }
-
-      if (command === "review") {
-        codexReview.mutate({ threadId });
-        return;
-      }
-
-      if (command === "rollback") {
-        codexRollback.mutate({ count: 1, threadId });
-      }
+      action(threadId);
     },
     [
-      codexCompact,
-      codexReview,
-      codexRollback,
       providerSlashCommandsEnabled,
       selectedEngine,
+      sentinelSlashActions,
       threadId,
     ],
   );
@@ -294,6 +304,7 @@ export function ChatComposer({
     promptSeed,
     promptSeedKey,
     selectedEngine,
+    slashCommands,
   });
   const voiceInput = useVoiceInput({ editor });
 

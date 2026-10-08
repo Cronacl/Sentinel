@@ -229,6 +229,12 @@ describe("legacy drivers", () => {
     );
     expect(result.models.length).toBeGreaterThan(0);
     expect(result.models.every((model) => model.source === "live")).toBe(true);
+    // Run by Sentinel through the app-server.
+    expect(result.slashCommands?.map((command) => command.source)).toEqual([
+      "sentinel",
+      "sentinel",
+      "sentinel",
+    ]);
 
     getEngineDriver("codex")!.invalidate?.({ driver: "codex", id: "codex" });
     expect(resetCodexCliResolutionCache).toHaveBeenCalled();
@@ -258,6 +264,32 @@ describe("legacy drivers", () => {
     });
     expect(result.install.source).toBe("config");
     expect(result.status).toBe("warning");
+    expect(result.slashCommands).toBeUndefined();
+  });
+
+  it("reports the slash commands Claude's initialize listed", async () => {
+    getClaudeEngineStatus.mockImplementationOnce(async () => ({
+      ...(await getClaudeEngineStatus.getMockImplementation()!()),
+      commands: [
+        { argumentHint: "<pr>", description: "Review a PR", name: "review" },
+        { description: "", name: "compact" },
+      ],
+    }));
+
+    const result = await getEngineDriver("claude")!.probe(
+      makeFakeInstance({ driver: "claude", id: "claude" }),
+      probeOptions(),
+    );
+
+    expect(result.slashCommands).toEqual([
+      {
+        description: "Review a PR",
+        inputHint: "<pr>",
+        name: "review",
+        source: "native",
+      },
+      { name: "compact", source: "native" },
+    ]);
   });
 
   it("offers Copilot's fallback model only once signed in", async () => {
